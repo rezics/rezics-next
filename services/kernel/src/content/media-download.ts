@@ -91,7 +91,7 @@ export async function downloadMedia(
         },
         { pool: dependencies.pool, deadline: context.deadline },
       );
-      return snapshot(r, async (client) => {
+      return await snapshot(r, async (client) => {
         const current = await point(client, mediaId, slot);
         if (!current || !usable(current) || signature(current) !== signature(initial) || !(await check(client)))
           return denied;
@@ -187,7 +187,7 @@ export async function downloadMedia(
       );
       const currentFence = await fenceAtHome();
       if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return denied;
-      return snapshot(r, async (client) => {
+      return await snapshot(r, async (client) => {
         const current = await point(client, mediaId, slot);
         if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client)))
           return denied;
@@ -282,7 +282,7 @@ export async function downloadMedia(
       return current !== null && signature(current) === signature(board) && (await boardCheck(client));
     });
     if (!boardVisible) return denied;
-    return snapshot(r, async (client) => {
+    return await snapshot(r, async (client) => {
       const current = await point(client, mediaId, slot);
       if (!current || !usable(current) || signature(current) !== signature(initial)) return denied;
       const currentChain = await mediaParentChain(client, current.container_id);

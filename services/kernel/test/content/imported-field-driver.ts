@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { releaseDigest } from '@rezics/definitions';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchReference } from '@rezics/definitions/bulk';
 import type {
@@ -28,7 +29,7 @@ import {
   type WorkerProcess,
 } from './support/imported-field-fixtures.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { setupSemantic } from '../../src/semantic/setup.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, AccountActor } from '../../src/request/access.ts';
@@ -39,20 +40,38 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import insertProposalRevision from '../../src/semantic/candidates-insert-proposal-revision.sql';
 import { slotId } from '../../src/semantic/slots.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import { assertGrowth, measure, openGrowthDatabase, seed, type Cost, type Population } from '../support/growth.ts';
+import {
+  assertGrowth,
+  checkGrowth,
+  measure,
+  openGrowthDatabase,
+  seed,
+  type Cost,
+  type Population,
+} from '../support/growth.ts';
 import { transformImage } from '../../src/content/image-transform.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
-import permissionCheckStatement from '../../src/access/permission-check.sql';
 
 const HASH = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const sourceRevisionInsert = insertProposalRevision.sql;
-const permissionCheck = permissionCheckStatement.sql;
 const control = new AsyncLocalStorage<string>();
 type ActorCredential = { bearer: string; actor: AccountActor };
 type RequestSpan = { start: number; end: number; method: string; path: string; body?: unknown };
 type RecordedAuthorization = Trace['authorization'][number];
+
+function growthSubjectId(route: number, ordinal: number): string {
+  const id = Buffer.from(newId(route).replaceAll('-', ''), 'hex');
+  id.writeUIntBE(1_893_456_000_000 + ordinal, 0, 6);
+  id[6] = (id[6]! & 0x0f) | 0x70;
+  id[8] = (id[8]! & 0x3f) | 0x80;
+  id[10] = route >>> 8;
+  id[11] = route & 0xff;
+  const hex = id.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 function decodeJson(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -172,6 +191,19 @@ function growthExternalIds(routeKey: Uint8Array, source: string, partition: numb
   return ids;
 }
 
+function growthExternalIdForPartition(
+  routeKey: Uint8Array,
+  source: string,
+  partition: number,
+  ordinal: number,
+): string {
+  for (let attempt = 0; ; attempt++) {
+    const externalId = `catalog-${ordinal}-${attempt}`;
+    const route = tupleRoute(routeKey, source, externalId);
+    if (route !== null && partitionOf(route) === partition) return externalId;
+  }
+}
+
 export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -190,6 +222,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
   const refreshTuples = new Map<string, Tuple>();
   const mediaByKey = new Map<string, string>();
   const mediaInputs = new Map<string, ImageInput>();
+  const rightsTakedownTuples = new Set<string>();
   const knownDocuments = new Set<string>();
   const fixtureKeys = new Set<string>();
   const API_BASE = 'https://content.test';
@@ -234,7 +267,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
   try {
     const pool = native.database.pool;
     const authPool = native.database.authPool;
-    await setupSemantic(pool, bundledRelease);
+    await bootstrapRelease(pool, bundledRelease, () => new Date(commandTime));
     const sourceServer = await createSourceServer();
     const objectStore = createObjectStore();
     sources = sourceServer;
@@ -341,7 +374,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
       }
     }
     if (!seedExternalId) throw new Error('Could not anchor the portable subject apart from its imported tuple');
-    const created = await batch(importer, [
+    const created = await batch(governance, [
       {
         op: 'create',
         key: requestKey(),
@@ -471,6 +504,28 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
     };
     const ensureWorker = async () => {
       if (!worker) worker = await startNativeWorker(workerOptions);
+    };
+    const waitForProjections = async () => {
+      if (!worker) return;
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        const pending = await pool.query<{ pending: boolean }>(
+          `WITH consumers(consumer) AS (VALUES ('effects'::text), ('semantic_links'))
+           SELECT EXISTS (
+             SELECT 1
+             FROM core.partition partition CROSS JOIN consumers
+             LEFT JOIN core.consumer_checkpoint checkpoint
+               ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = consumers.consumer
+             WHERE partition.position > 0
+               AND (checkpoint.epoch IS NULL OR checkpoint.epoch < partition.epoch
+                 OR (checkpoint.epoch = partition.epoch AND checkpoint.position < partition.position))
+           ) AS pending`,
+        );
+        if (pending.rows[0]?.pending !== true) return;
+        if (Date.now() >= deadline)
+          throw new Error('Native outbox projections did not reach their current partition heads');
+        await Bun.sleep(20);
+      }
     };
     const importedDriver: ImportedFieldDriver = {
       importerId: importer.actor.accountId,
@@ -712,6 +767,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         return { nativeDigest, mismatchedWriteRejected };
       },
       async effects() {
+        await waitForProjections();
         const tables = [
           'content.imported_field',
           'content.media',
@@ -1197,7 +1253,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
       async cover(as, mediaId, key, fault) {
         const permissionBarrier =
           fault === 'before-commit'
-            ? observer!.hold({ statement: permissionCheck, occurrence: 2 }, 'before')
+            ? observer!.hold({ statement: 'BEGIN ISOLATION LEVEL SERIALIZABLE' }, 'before')
             : undefined;
         const field = mediaInputs.get([...mediaByKey.entries()].find(([, value]) => value === mediaId)?.[0] ?? '');
         if (!field) throw new Error('Cover proposal lacks its actual URL import provenance');
@@ -1241,6 +1297,18 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           throw new Error(
             `Native cover command failed (${status}): ${JSON.stringify(result.body)}; request=${JSON.stringify(spans.get(key))}; authorization=${JSON.stringify(authorization.get(key) ?? [])}`,
           );
+        const sourceTuple = JSON.stringify({
+          source: field.provenance.source,
+          externalId: field.provenance.externalId,
+          fieldGroup: field.provenance.fieldGroup,
+        });
+        if (rightsTakedownTuples.has(sourceTuple) && status !== 409) {
+          const span = spans.get(key);
+          const executions = observer!.records.slice(span?.start ?? 0, span?.end ?? observer!.records.length);
+          console.error(
+            `Cover proposal replay after rights takedown returned ${status}: response=${JSON.stringify(result.body)}; request=${JSON.stringify(span)}; authorization=${JSON.stringify(authorization.get(key) ?? [])}; sql=${JSON.stringify(executions.map(({ statement, parameters }) => ({ statement, parameters })))}`,
+          );
+        }
         if (fault === 'before-commit' && status >= 200 && status < 300)
           console.error(
             `Native cover authorization unexpectedly allowed: response=${JSON.stringify(result.body)}; request=${JSON.stringify(spans.get(key))}; authorization=${JSON.stringify(authorization.get(key) ?? [])}`,
@@ -1335,6 +1403,14 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         if (taken.status !== 200) throw new Error(`Native media takedown failed (${taken.status})`);
         const fence = await this.fence('governance', tuple, requestKey());
         if (fence.status !== 200) throw new Error(`Native tuple source fence failed (${fence.status})`);
+        const confirmation = await this.check('importer', tuple);
+        if (confirmation.status !== 200 || decodeJson(confirmation.body).fenced !== true)
+          throw new Error(
+            `Native tuple source fence was not visible after takedown (${confirmation.status}): ${JSON.stringify(confirmation.body)}`,
+          );
+        rightsTakedownTuples.add(
+          JSON.stringify({ source: tuple.source, externalId: tuple.externalId, fieldGroup: tuple.fieldGroup }),
+        );
         if (!store!.objects.has(`m/${mediaId}/original`) && media.bytes.length > 0)
           throw new Error('Media takedown discarded appeal bytes');
       },
@@ -1381,7 +1457,13 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             attribution: 'via Bangumi',
           },
         };
-        const growthField = (source: string, externalId: string): Field => ({ ...template, source, externalId });
+        const growthSubjects = new Map<string, string>();
+        const growthField = (source: string, externalId: string): Field => ({
+          ...template,
+          source,
+          externalId,
+          subjectId: growthSubjects.get(`${source}\0${externalId}`) ?? subjectId,
+        });
         const transformed = await transformImage(sources!.validBytes);
         const webp320 = transformed.variants.find((variant) => variant.format === 'webp' && variant.width === 320);
         if (!webp320) throw new Error('The shared Sharp pipeline produced no 320px WebP growth variant');
@@ -1407,9 +1489,9 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         }[] = [];
         const seededScales = new Set<number>();
         const tuplePartition = container.partition;
+        const growthRoute = container.route;
         const unresolvedAccountRoute = routeOf(importer.actor.accountId);
         if (unresolvedAccountRoute === null) throw new Error('Importer account has no routable Access partition');
-        const accountRoute = unresolvedAccountRoute;
         const bodyDigest = createHash('sha256').update(documentBuffer).digest();
         const bodyHex = bodyDigest.toString('hex');
         const imageDigest = HASH(sources!.validBytes);
@@ -1444,6 +1526,8 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
 
         const populationOffsets = new Map<string, number>();
         const seededFenceSources = new Set<string>();
+        const firstGrowthSubjectByRoute = new Map<number, string>();
+        const growthSource = 'growth_fixture';
         function population(
           source: string,
           externalIds: readonly string[],
@@ -1461,19 +1545,26 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             name: `imported-field-growth-${populationKey}`,
             hotPartition: tuplePartition,
             hotShare: 1,
-            rows: ({ ordinal }) => {
-              const externalId = externalIds[ordinal];
-              if (!externalId) throw new Error(`Growth source range exceeded its anchors for ${source}`);
-              const route = container.route;
+            rows: ({ ordinal, partition, route, hot }) => {
+              const externalId =
+                hot && externalIds[ordinal] !== undefined
+                  ? externalIds[ordinal]!
+                  : growthExternalIdForPartition(native.routeKey, source, partition, ordinal);
               const fenceRoute = tupleRoute(native.routeKey, source, externalId);
-              if (fenceRoute === null || partitionOf(fenceRoute) !== tuplePartition)
-                throw new Error('Growth source fixture escaped its anchored partition');
-              const subjectId = newId(route);
-              const candidateId = newId(route);
-              const documentId = newId(route);
-              const transactionId = newId(route);
-              const mediaId = newId(route);
-              const accountId = newId(accountRoute);
+              if (fenceRoute === null || partitionOf(fenceRoute) !== partition)
+                throw new Error('Growth source fixture escaped its seeded partition');
+              const rowRoute = growthRoute;
+              const subjectId = growthSubjectId(rowRoute, ordinal);
+              const firstSubjectId = firstGrowthSubjectByRoute.get(rowRoute);
+              const seedFirstSubject = firstSubjectId === undefined;
+              const redirectTargetId = firstSubjectId ?? growthSubjectId(rowRoute, ordinal - 1);
+              if (seedFirstSubject) firstGrowthSubjectByRoute.set(rowRoute, redirectTargetId);
+              growthSubjects.set(`${source}\0${externalId}`, subjectId);
+              const candidateId = newId(rowRoute);
+              const documentId = newId(rowRoute);
+              const transactionId = newId(rowRoute);
+              const mediaId = newId(rowRoute);
+              const accountId = newId(rowRoute);
               const revisionSource = {
                 source,
                 external_id: externalId,
@@ -1503,19 +1594,31 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
               };
               const seedTransaction = transactionId;
               const mediaByteCount = sources!.validBytes.byteLength;
+              const facts = itemFacts(subjectId, { labels: { en: `Growth fixture ${ordinal}` } });
               const filler: Record<string, readonly Record<string, unknown>[]> = {
                 'semantic.subject': [
                   {
-                    route,
+                    route: rowRoute,
                     subject_id: subjectId,
                     type: 'schema:Book',
                     recorded_transaction_id: seedTransaction,
                     current_release: bundledDigest,
                   },
+                  ...(seedFirstSubject
+                    ? [
+                        {
+                          route: rowRoute,
+                          subject_id: redirectTargetId,
+                          type: 'schema:Book',
+                          recorded_transaction_id: seedTransaction,
+                          current_release: bundledDigest,
+                        },
+                      ]
+                    : []),
                 ],
                 'semantic.revision': [
                   {
-                    route,
+                    route: rowRoute,
                     subject_id: subjectId,
                     revision: 1,
                     kind: 'propose',
@@ -1526,7 +1629,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'semantic.candidate': [
                   {
-                    route,
+                    route: rowRoute,
                     subject_id: subjectId,
                     candidate_id: candidateId,
                     slot_id: slotId(subjectId, 'schema:description'),
@@ -1538,9 +1641,27 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                     origin: 'proposal',
                   },
                 ],
+                'semantic.fact': facts.map((fact) => ({
+                  route: rowRoute,
+                  subject_id: subjectId,
+                  ...fact,
+                  recorded_transaction_id: seedTransaction,
+                  release: null,
+                })),
+                ...(ordinal < 512 || ordinal >= 544
+                  ? {}
+                  : {
+                      'semantic.redirect': Array.from({ length: 16 }, (_, index) => ({
+                        route: rowRoute,
+                        subject_id: subjectId,
+                        sequence: index + 1,
+                        target: redirectTargetId,
+                        recorded_transaction_id: seedTransaction,
+                      })),
+                    }),
                 'semantic.source_candidate': [
                   {
-                    route,
+                    route: rowRoute,
                     subject_id: subjectId,
                     source,
                     external_id: externalId,
@@ -1561,7 +1682,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'content.imported_field': [
                   {
-                    route,
+                    route: rowRoute,
                     id: documentId,
                     subject: subjectId,
                     candidate: candidateId,
@@ -1576,9 +1697,9 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'content.media': [
                   {
-                    route,
+                    route: rowRoute,
                     media_id: mediaId,
-                    container_id: container.id,
+                    container_id: subjectId,
                     uploader_id: importer.actor.accountId,
                     reservation_request_id: `growth-${populationKey}-${ordinal}`,
                     purpose: 'post-image',
@@ -1596,7 +1717,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'content.media_variant': [
                   {
-                    route,
+                    route: rowRoute,
                     media_id: mediaId,
                     format: webp320.format,
                     width: webp320.width,
@@ -1610,7 +1731,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'access.account': [
                   {
-                    route: accountRoute,
+                    route: rowRoute,
                     account_id: accountId,
                     kind: 'actor',
                     state: 'active',
@@ -1620,12 +1741,12 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'access.membership_inverse': [
                   {
-                    route: accountRoute,
+                    route: rowRoute,
                     account_id: accountId,
                     kind: 'organization',
-                    group_id: newId(accountRoute),
-                    reservation_id: newId(accountRoute),
-                    transaction_id: newId(accountRoute),
+                    group_id: newId(rowRoute),
+                    reservation_id: newId(rowRoute),
+                    transaction_id: newId(rowRoute),
                   },
                 ],
                 'access.resource_grant': [
@@ -1666,7 +1787,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'core.receipt': [
                   {
-                    partition_no: tuplePartition,
+                    partition_no: partition,
                     principal_kind: 'account',
                     principal_id: importer.actor.accountId,
                     command_kind: 'content.growth-seed',
@@ -1680,7 +1801,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 ],
                 'editorial.write_basis': [
                   {
-                    partition_no: tuplePartition,
+                    partition_no: partition,
                     transaction_id: seedTransaction,
                     epoch: 1,
                     position: positionBase + ordinal,
@@ -1723,35 +1844,28 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           operation: (typeof growthOperations)[number];
           source: string;
           externalIds: string[];
-          operationIds: string[];
+          groupIndex: number;
           population: Population;
           referenceDocument?: { id: string; revision: string };
         }[] = [];
-        let addCheckpoints = true;
-        const growthSource = 'growth_fixture';
-        const growthExternalIdList = growthExternalIds(native.routeKey, growthSource, tuplePartition, 2_610);
+        const growthExternalIdList = growthExternalIds(native.routeKey, growthSource, tuplePartition, 2_800);
+        const sharedPopulation = population(growthSource, growthExternalIdList, true, 'shared');
         for (const changedRows of input.changedRows) {
           for (const operation of growthOperations) {
             const source = growthSource;
             const externalIds = growthExternalIdList;
-            const operationIndex = growthOperations.indexOf(operation);
-            const populationKey = `${changedRows}-${operation}`;
-            const populationRows = population(source, externalIds, addCheckpoints, populationKey);
-            addCheckpoints = false;
-            const changedRowsIndex = input.changedRows.indexOf(changedRows);
-            const operationStart = 2_560 + changedRowsIndex * 25 + operationIndex * 5;
-            const operationIds = externalIds.slice(operationStart, operationStart + changedRows);
             const group: (typeof groups)[number] = {
               changedRows,
               operation,
               source,
               externalIds,
-              operationIds,
-              population: populationRows,
+              groupIndex: groups.length,
+              population: sharedPopulation,
             };
             if (operation === 'reference') {
               const key = requestKey();
-              const reply = await this.refresh('importer', growthField(source, operationIds[0]!), key);
+              const referenceId = externalIds[input.changedRows.indexOf(changedRows)]!;
+              const reply = await this.refresh('importer', growthField(source, referenceId), key);
               if (reply.status < 200 || reply.status >= 300)
                 throw new Error(`Growth reference anchor failed (${reply.status}): ${JSON.stringify(reply.body)}`);
               const contribution = await this.contribution(key);
@@ -1761,11 +1875,34 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           }
         }
 
-        const growthPopulation = groups[0]?.population;
-        if (!growthPopulation) throw new Error('Imported-field growth has no anchored population');
+        await ensureWorker();
+        await waitForProjections();
 
-        const measuredCosts = new Map<string, Cost[]>();
-        const groupKey = (group: (typeof groups)[number]) => `${group.changedRows}:${group.operation}`;
+        const workerCosts = new Map<string, Cost>();
+        const measuredCosts = new Map<string, Cost>();
+        const runIds = (group: (typeof groups)[number], scale: number, repetition: number) => {
+          const scaleIndex = scales.indexOf(scale);
+          if (scaleIndex < 0) throw new Error(`Unexpected imported-field growth scale ${scale}`);
+          if (group.operation === 'reference') {
+            const referenceIndex = input.changedRows.indexOf(group.changedRows);
+            const externalId = group.externalIds[referenceIndex];
+            if (!externalId) throw new Error('Growth reference run lacks its exact seeded document');
+            return Array.from({ length: group.changedRows }, () => externalId);
+          }
+          let start = 2;
+          for (const prior of groups) {
+            if (prior.groupIndex === group.groupIndex) break;
+            if (prior.operation === 'hook') start += prior.changedRows * 12;
+            else if (prior.operation !== 'reference') start += prior.changedRows * 3;
+          }
+          if (group.operation === 'hook')
+            start += scaleIndex * group.changedRows * 4 + (repetition % 4) * group.changedRows;
+          else start += scaleIndex * group.changedRows;
+          const ids = Array.from({ length: group.changedRows }, (_, index) => group.externalIds[start + index]);
+          if (ids.some((id) => id === undefined))
+            throw new Error('Growth operation identifiers exceeded their anchors');
+          return ids;
+        };
         const waitForImports = async (ids: readonly string[]) => {
           const deadline = Date.now() + 60_000;
           let terminal = false;
@@ -1785,184 +1922,434 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           }
           if (!terminal)
             throw new Error(`Native DBOS growth jobs timed out; ${worker?.diagnostics() ?? 'worker stopped'}`);
+          const workflowDeadline = Date.now() + 10_000;
+          const completed = new Set<string>();
+          let lastWorkflowStatuses: { mediaId: string; count: string; statuses: string[] }[] = [];
+          const workflowsPerImport = 4;
+          while (completed.size < ids.length && Date.now() < workflowDeadline) {
+            const statuses = await growth.admin.query<{
+              media_id: string;
+              workflow_count: string;
+              statuses: string[];
+            }>(
+              `SELECT requested.media_id,
+                      count(workflow.workflow_uuid)::text AS workflow_count,
+                      COALESCE(array_agg(workflow.status ORDER BY workflow.workflow_uuid)
+                        FILTER (WHERE workflow.workflow_uuid IS NOT NULL), ARRAY[]::text[]) AS statuses
+               FROM unnest($1::text[]) AS requested(media_id)
+               LEFT JOIN LATERAL (
+                 SELECT DISTINCT workflow.workflow_uuid, workflow.status
+                 FROM dbos.workflow_status AS workflow
+                 LEFT JOIN dbos.workflow_input AS workflow_input USING (workflow_uuid)
+                 WHERE workflow.workflow_uuid LIKE '%' || requested.media_id || '%'
+                    OR workflow_input.inputs::text LIKE '%' || requested.media_id || '%'
+               ) AS workflow ON true
+               GROUP BY requested.media_id`,
+              [ids],
+            );
+            lastWorkflowStatuses = statuses.rows.map((row) => ({
+              mediaId: row.media_id,
+              count: row.workflow_count,
+              statuses: row.statuses,
+            }));
+            for (const row of statuses.rows) {
+              const failed = row.statuses.find((status) =>
+                ['ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(status),
+              );
+              if (failed) throw new Error(`Native DBOS growth workflow ended ${failed}: ${row.media_id}`);
+              if (
+                Number(row.workflow_count) >= workflowsPerImport &&
+                row.statuses.length === Number(row.workflow_count) &&
+                row.statuses.every((status) => status === 'SUCCESS')
+              )
+                completed.add(row.media_id);
+            }
+            if (completed.size < ids.length) await Bun.sleep(25);
+          }
+          if (completed.size !== ids.length)
+            throw new Error(
+              `Native DBOS growth workflows did not settle after media availability: ${JSON.stringify(lastWorkflowStatuses)}`,
+            );
+        };
+        const perform = async (group: (typeof groups)[number], scale: number, repetition: number) => {
+          const { changedRows, operation, source } = group;
+          const usedIds = runIds(group, scale, repetition);
+          const samePartition = usedIds.every(
+            (externalId) => partitionOf(tupleRoute(native.routeKey, source, externalId)) === tuplePartition,
+          );
+          if (!samePartition) throw new Error(`Growth ${operation} escaped its native partition`);
+          const runImports = async (): Promise<{ keys: string[]; ids: string[] }> => {
+            const imports = await Promise.all(
+              usedIds.map(async (externalId) => {
+                const key = requestKey();
+                const fixture = await this.fetchFixture('valid');
+                const cover: ImageInput = {
+                  ...fixture,
+                  provenance: { ...fixture.provenance, source, externalId, fieldGroup: 'cover' },
+                };
+                const reply = await this.importUrl('importer', cover, key);
+                if (reply.status < 200 || reply.status >= 300)
+                  throw new Error(`Growth media import failed (${reply.status}): ${JSON.stringify(reply.body)}`);
+                const mediaId = String(decodeJson(decodeJson(reply.body).media).id ?? '');
+                if (!mediaId) throw new Error('Native import response did not return the reserved media id');
+                return { key, mediaId };
+              }),
+            );
+            return { keys: imports.map(({ key }) => key), ids: imports.map(({ mediaId }) => mediaId) };
+          };
+
+          let capturedWorker: WorkerProcess | undefined;
+          if (operation === 'job') {
+            await ensureWorker();
+            capturedWorker = worker;
+            await capturedWorker!.beginCapture();
+          }
+          try {
+            if (operation === 'hook') {
+              const commands = usedIds.map((externalId) => {
+                const field = growthField(source, externalId);
+                return {
+                  op: 'propose',
+                  key: requestKey(),
+                  source: sourceRecord(field),
+                  subject: field.subjectId,
+                  statement: {
+                    property: { id: 'schema:abstract' },
+                    value: { type: 'value', content: { language: 'en', document: field.document } },
+                    references: field.references.map(urlReference),
+                  },
+                  rights: {
+                    license: field.rights.spdx,
+                    obligations: field.rights.obligations,
+                    attribution: field.rights.attribution,
+                  },
+                };
+              });
+              const reply = await batch(importer, commands);
+              const outcomes = Array.isArray(reply.body.results) ? reply.body.results.map(decodeJson) : [];
+              if (reply.status < 200 || reply.status >= 300 || outcomes.length !== changedRows)
+                throw new Error(`Growth hook batch failed (${reply.status}): ${JSON.stringify(reply.body)}`);
+              for (const outcome of outcomes) {
+                const status = Number(outcome.status ?? reply.status);
+                if (status < 200 || status >= 300)
+                  throw new Error(`Growth hook command failed (${status}): ${JSON.stringify(outcome)}`);
+              }
+              return undefined;
+            }
+            if (operation === 'fence') {
+              await Promise.all(
+                usedIds.map(async (externalId) => {
+                  const reply = await this.fence(
+                    'governance',
+                    { source, externalId, fieldGroup: 'summary' },
+                    requestKey(),
+                  );
+                  if (reply.status < 200 || reply.status >= 300)
+                    throw new Error(`Growth fence failed (${reply.status}): ${JSON.stringify(reply.body)}`);
+                }),
+              );
+              return undefined;
+            }
+            if (operation === 'reference') {
+              const referenceDocument = group.referenceDocument;
+              if (!referenceDocument) throw new Error('Growth reference document was not anchored');
+              await Promise.all(
+                Array.from({ length: changedRows }, async () => {
+                  const reply = await this.exact('importer', referenceDocument.id, referenceDocument.revision);
+                  if (reply.status < 200 || reply.status >= 300)
+                    throw new Error(`Growth reference read failed (${reply.status}): ${JSON.stringify(reply.body)}`);
+                }),
+              );
+              return undefined;
+            }
+
+            const imported = await runImports();
+            if (operation === 'import') {
+              if (repetition % 2 === 0) {
+                await ensureWorker();
+                await waitForImports(imported.ids);
+              }
+              return imported;
+            }
+            await waitForImports(imported.ids);
+            const states = await Promise.all(imported.keys.map(async (key) => (await this.media(key)).state));
+            if (states.some((state) => state !== 'available'))
+              throw new Error(`Native DBOS growth jobs did not publish valid images: ${states.join(',')}`);
+            await waitForProjections();
+            return undefined;
+          } finally {
+            if (capturedWorker) {
+              const cost = await capturedWorker.endCapture();
+              if (operation === 'job' && !(cost.rows > 0 && cost.statements > 0 && cost.blocks > 0))
+                throw new Error(
+                  `Native content job capture lacked rows, statements and buffers: ${JSON.stringify(cost)}; ${capturedWorker.diagnostics().slice(-8_000)}`,
+                );
+              if (repetition % 2 === 1) workerCosts.set(`${group.groupIndex}:${scale}:${repetition}`, cost);
+            }
+          }
+        };
+        const workflowHistoryPrefix = `imported-field-growth-history:${randomUUID()}`;
+        const seedNativeWorkflowHistory = async (database: Awaited<ReturnType<typeof openGrowthDatabase>>) => {
+          const client = await database.admin.connect();
+          try {
+            await client.query('BEGIN');
+            const partitionHead = await client.query<{ epoch: number; position: string }>(
+              'SELECT epoch, position::text FROM core.partition WHERE partition_no=$1 FOR UPDATE',
+              [tuplePartition],
+            );
+            const head = partitionHead.rows[0];
+            if (!head) throw new Error('Growth partition is missing its native head');
+            const firstPosition = BigInt(head.position) + 1n;
+            const lastPosition = firstPosition + 511n;
+            const outboxHistory = Array.from({ length: 512 }, (_, index) => {
+              const id = growthSubjectId(growthRoute, 10_000 + index);
+              return {
+                partition_no: tuplePartition,
+                position: (firstPosition + BigInt(index)).toString(),
+                event_seq: 0,
+                event_count: 1,
+                epoch: head.epoch,
+                id: newId(0),
+                type: 'com.rezics.subject.created.v1',
+                subject: id,
+                data: { id },
+              };
+            });
+            await client.query(
+              `INSERT INTO core.outbox (
+                 partition_no, position, event_seq, event_count, epoch, id, type, subject, data
+               )
+               SELECT partition_no, position, event_seq, event_count, epoch, id, type, subject, data
+               FROM jsonb_populate_recordset(NULL::core.outbox, $1::jsonb)`,
+              [JSON.stringify(outboxHistory)],
+            );
+            await client.query(
+              'UPDATE core.partition SET position=$1 WHERE partition_no=$2 AND epoch=$3 AND position=$4',
+              [lastPosition.toString(), tuplePartition, head.epoch, head.position],
+            );
+            await client.query(
+              `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+               VALUES ($1, 'effects', $2, $3), ($1, 'semantic_links', $2, $3)
+               ON CONFLICT (partition_no, consumer) DO UPDATE
+               SET epoch=EXCLUDED.epoch, position=EXCLUDED.position, updated_at=now()`,
+              [tuplePartition, head.epoch, lastPosition.toString()],
+            );
+            const definitionHistory = Array.from({ length: 512 }, (_, index) => {
+              const body = {
+                format: bundledRelease.format,
+                catalogue: { id: bundledRelease.catalogue.id, version: `growth-fixture-${index + 2}` },
+                generator: { name: 'rezics-growth-fixture', version: '1' },
+                prefixes: {},
+                types: {},
+                properties: {},
+              } as typeof bundledRelease;
+              return {
+                route: 0,
+                digest: releaseDigest(body),
+                body,
+                recorded_transaction_id: newId(0),
+              };
+            });
+            await client.query(
+              `INSERT INTO semantic.definition_release (route, digest, body, recorded_transaction_id)
+               SELECT route, digest, body, recorded_transaction_id
+               FROM jsonb_to_recordset($1::jsonb)
+                 AS definition(route integer, digest text, body jsonb, recorded_transaction_id uuid)`,
+              [JSON.stringify(definitionHistory)],
+            );
+            await client.query(
+              `INSERT INTO semantic.definition_activation (route, head, digest, recorded_transaction_id)
+               SELECT 0, head, $1, $2::uuid FROM generate_series(2, 513) AS head`,
+              [bundledDigest, newId(0)],
+            );
+            await client.query(
+              `INSERT INTO dbos.workflow_status (
+                 workflow_uuid, status, name, queue_name, authenticated_user, assumed_role, authenticated_roles,
+                 executor_id, application_id, created_at, updated_at, recovery_attempts, inputs,
+                 queue_partition_key, serialization
+               )
+               SELECT $1 || ':' || n::text, 'SUCCESS', 'content.importFromUrl', 'import', '', '', '',
+                      'imported-field-growth-fixture', 'rezics-kernel', n, n, 0, '[]',
+                      CASE WHEN n % 10 = 0 THEN $2::text ELSE ($2::int + n % 400)::text END, 'JSON'
+               FROM generate_series(1, $3::int) AS n`,
+              [workflowHistoryPrefix, tuplePartition, 4_096],
+            );
+            await client.query(
+              `INSERT INTO dbos.workflow_input (workflow_uuid, inputs)
+               SELECT $1 || ':' || n::text, '[]' FROM generate_series(1, $2::int) AS n`,
+              [workflowHistoryPrefix, 4_096],
+            );
+            await client.query(
+              `INSERT INTO dbos.workflow_output (workflow_uuid, output, error)
+               SELECT $1 || ':' || n::text, 'null', '' FROM generate_series(1, $2::int) AS n`,
+              [workflowHistoryPrefix, 4_096],
+            );
+            await client.query(
+              `INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
+               SELECT $1 || ':' || n::text, 1, 'content.importFromUrl', 'null', ''
+               FROM generate_series(1, $2::int) AS n`,
+              [workflowHistoryPrefix, 4_096],
+            );
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+          } finally {
+            client.release();
+          }
+        };
+        let secondaryGrowth: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
+        const selectGrowthPool = (database: Awaited<ReturnType<typeof openGrowthDatabase>>) => {
+          appPool.query = database.pool.query.bind(database.pool) as typeof appPool.query;
+          appPool.connect = database.pool.connect.bind(database.pool) as typeof appPool.connect;
         };
         try {
-          appPool.query = growth.pool.query.bind(growth.pool) as typeof appPool.query;
-          appPool.connect = growth.pool.connect.bind(growth.pool) as typeof appPool.connect;
-          let previous = 0;
-          for (const scale of scales) {
-            const from = previous === 0 ? 0 : 512 + previous;
-            await seed({ pool: growth.pool, admin: growth.admin }, growthPopulation, { from, to: 512 + scale });
-            seededScales.add(scale);
-            previous = scale;
-
-            for (const group of groups) {
-              const { changedRows, operation, source, operationIds } = group;
-              const usedIds = operationIds.slice(0, changedRows);
-              const samePartition = usedIds.every(
-                (externalId) => partitionOf(tupleRoute(native.routeKey, source, externalId)) === tuplePartition,
-              );
-              if (!samePartition) throw new Error(`Growth ${operation} escaped its native partition`);
-
-              const runImports = async (): Promise<{ keys: string[]; ids: string[] }> => {
-                return Promise.all(
-                  usedIds.map(async (externalId) => {
-                    const key = requestKey();
-                    const fixture = await this.fetchFixture('valid');
-                    const cover: ImageInput = {
-                      ...fixture,
-                      provenance: { ...fixture.provenance, source, externalId, fieldGroup: 'cover' },
+          selectGrowthPool(growth);
+          secondaryGrowth = await openGrowthDatabase(databaseUrl);
+          const report = await checkGrowth(growth, {
+            name: 'imported fields across source, document, media and job reads',
+            scales: [32, 256, 2048],
+            bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+            repetitions: 3,
+            warmups: 1,
+            grow: async (database, scale, previous) => {
+              if (previous === 0) await seedNativeWorkflowHistory(database);
+              const from = previous === 0 ? 0 : 512 + previous;
+              await seed({ pool: database.pool, admin: database.admin }, sharedPopulation, {
+                from,
+                to: 512 + scale,
+              });
+              seededScales.add(scale);
+            },
+            warmup: async (_database, scale, repetition) => {
+              const warmupRepetition = repetition;
+              const measuredRepetition = repetition + 1;
+              const additionalGroups = groups.slice(1);
+              const hookCommands = groups
+                .filter(({ operation }) => operation === 'hook')
+                .flatMap((group) =>
+                  runIds(group, scale, warmupRepetition).map((externalId) => {
+                    const field = growthField(group.source, externalId!);
+                    return {
+                      op: 'propose',
+                      key: requestKey(),
+                      source: sourceRecord(field),
+                      subject: field.subjectId,
+                      statement: {
+                        property: { id: 'schema:abstract' },
+                        value: { type: 'value', content: { language: 'en', document: field.document } },
+                        references: field.references.map(urlReference),
+                      },
+                      rights: {
+                        license: field.rights.spdx,
+                        obligations: field.rights.obligations,
+                        attribution: field.rights.attribution,
+                      },
                     };
-                    const reply = await this.importUrl('importer', cover, key);
-                    if (reply.status < 200 || reply.status >= 300)
-                      throw new Error(`Growth media import failed (${reply.status}): ${JSON.stringify(reply.body)}`);
-                    const mediaId = String(decodeJson(decodeJson(reply.body).media).id ?? '');
-                    if (!mediaId) throw new Error('Native import response did not return the reserved media id');
-                    return { key, mediaId };
                   }),
-                ).then((imports) => ({
-                  keys: imports.map(({ key }) => key),
-                  ids: imports.map(({ mediaId }) => mediaId),
-                }));
-              };
-
-              let workerCost: Cost | undefined;
-              let capturedWorker: WorkerProcess | undefined;
-              if (operation === 'job') {
-                await ensureWorker();
-                capturedWorker = worker;
-                await capturedWorker!.beginCapture();
-              }
-              let measured: { value: unknown; cost: Cost };
-              try {
-                measured = await measure(growth, async () => {
-                  if (operation === 'hook') {
-                    const commands = usedIds.map((externalId) => {
-                      const field = growthField(source, externalId);
-                      return {
-                        op: 'propose',
-                        key: requestKey(),
-                        source: sourceRecord(field),
-                        subject: field.subjectId,
-                        statement: {
-                          property: { id: 'schema:abstract' },
-                          value: { type: 'value', content: { language: 'en', document: field.document } },
-                          references: field.references.map(urlReference),
-                        },
-                        rights: {
-                          license: field.rights.spdx,
-                          obligations: field.rights.obligations,
-                          attribution: field.rights.attribution,
-                        },
-                      };
-                    });
-                    const reply = await batch(importer, commands);
-                    const outcomes = Array.isArray(reply.body.results) ? reply.body.results.map(decodeJson) : [];
-                    if (reply.status < 200 || reply.status >= 300 || outcomes.length !== changedRows)
-                      throw new Error(`Growth hook batch failed (${reply.status}): ${JSON.stringify(reply.body)}`);
-                    for (const outcome of outcomes) {
-                      const status = Number(outcome.status ?? reply.status);
-                      if (status < 200 || status >= 300)
-                        throw new Error(`Growth hook command failed (${status}): ${JSON.stringify(outcome)}`);
-                    }
-                    return undefined;
+                );
+              const warmedHooks = await batch(importer, hookCommands);
+              const hookOutcomes = Array.isArray(warmedHooks.body.results)
+                ? warmedHooks.body.results.map(decodeJson)
+                : [];
+              if (
+                warmedHooks.status < 200 ||
+                warmedHooks.status >= 300 ||
+                hookOutcomes.length !== hookCommands.length ||
+                hookOutcomes.some(
+                  (outcome) =>
+                    Number(outcome.status ?? warmedHooks.status) < 200 ||
+                    Number(outcome.status ?? warmedHooks.status) >= 300,
+                )
+              )
+                throw new Error(
+                  `Growth hook warmup failed (${warmedHooks.status}): ${JSON.stringify(warmedHooks.body)}`,
+                );
+              for (const group of additionalGroups) {
+                if (group.operation === 'job') {
+                  await perform(group, scale, measuredRepetition);
+                  continue;
+                }
+                const measured = await measure(secondaryGrowth!, async () => {
+                  selectGrowthPool(secondaryGrowth!);
+                  try {
+                    return await perform(group, scale, measuredRepetition);
+                  } finally {
+                    selectGrowthPool(growth);
                   }
-                  if (operation === 'fence') {
-                    await Promise.all(
-                      usedIds.map(async (externalId) => {
-                        const reply = await this.fence(
-                          'governance',
-                          { source, externalId, fieldGroup: 'summary' },
-                          requestKey(),
-                        );
-                        if (reply.status < 200 || reply.status >= 300)
-                          throw new Error(`Growth fence failed (${reply.status}): ${JSON.stringify(reply.body)}`);
-                      }),
-                    );
-                    return undefined;
-                  }
-                  if (operation === 'reference') {
-                    const referenceDocument = group.referenceDocument;
-                    if (!referenceDocument) throw new Error('Growth reference document was not anchored');
-                    await Promise.all(
-                      Array.from({ length: changedRows }, async () => {
-                        const reply = await this.exact('importer', referenceDocument.id, referenceDocument.revision);
-                        if (reply.status < 200 || reply.status >= 300)
-                          throw new Error(
-                            `Growth reference read failed (${reply.status}): ${JSON.stringify(reply.body)}`,
-                          );
-                      }),
-                    );
-                    return undefined;
-                  }
-
-                  const imported = await runImports();
-                  if (operation === 'import') return imported;
+                });
+                if (group.operation === 'import') {
+                  const imported = measured.value as { keys: string[]; ids: string[] };
+                  await ensureWorker();
                   await waitForImports(imported.ids);
                   const states = await Promise.all(imported.keys.map(async (key) => (await this.media(key)).state));
                   if (states.some((state) => state !== 'available'))
                     throw new Error(`Native DBOS growth jobs did not publish valid images: ${states.join(',')}`);
-                  return undefined;
-                });
-              } finally {
-                if (operation === 'job' && capturedWorker) workerCost = await capturedWorker.endCapture();
+                  await waitForProjections();
+                }
+                if (group.operation !== 'job')
+                  measuredCosts.set(`${group.groupIndex}:${scale}:${measuredRepetition}`, measured.cost);
               }
-
-              if (operation === 'import') {
-                const imported = measured.value as { keys: string[]; ids: string[] };
-                await ensureWorker();
-                await waitForImports(imported.ids);
-                for (const key of imported.keys)
-                  if ((await this.media(key)).state !== 'available')
-                    throw new Error('The native import worker did not make a valid growth image available');
-              }
-
-              const relations: Record<string, Cost['relations'][string]> = {
-                ...(measured.cost.relations ?? {}),
-              };
-              for (const [relation, cost] of Object.entries(workerCost?.relations ?? {})) {
+            },
+            operation: (_database, scale, repetition) => perform(groups[0]!, scale, repetition),
+          });
+          const recordSamples = (group: (typeof groups)[number], samples: readonly { scale: number; cost: Cost }[]) => {
+            const combined = samples.map(({ scale, cost }) => {
+              const repetition = scales.indexOf(scale) * 4 + 1;
+              const workerCost =
+                group.operation === 'job' ? undefined : workerCosts.get(`${group.groupIndex}:${scale}:${repetition}`);
+              const relations: Record<string, Cost['relations'][string]> = { ...(cost.relations ?? {}) };
+              for (const [relation, workerRelation] of Object.entries(workerCost?.relations ?? {})) {
                 const prior = relations[relation];
                 relations[relation] = {
-                  rows: (prior?.rows ?? 0) + cost.rows,
-                  blocks: (prior?.blocks ?? 0) + cost.blocks,
-                  nodes: (prior?.nodes ?? 0) + cost.nodes,
-                  sequentialScans: (prior?.sequentialScans ?? 0) + cost.sequentialScans,
+                  rows: (prior?.rows ?? 0) + workerRelation.rows,
+                  blocks: (prior?.blocks ?? 0) + workerRelation.blocks,
+                  nodes: (prior?.nodes ?? 0) + workerRelation.nodes,
+                  sequentialScans: (prior?.sequentialScans ?? 0) + workerRelation.sequentialScans,
                 };
               }
-              const cost: Cost = {
-                rows: measured.cost.rows + (workerCost?.rows ?? 0),
-                statements: measured.cost.statements + (workerCost?.statements ?? 0),
-                controlStatements: measured.cost.controlStatements + (workerCost?.controlStatements ?? 0),
-                catalogStatements: measured.cost.catalogStatements + (workerCost?.catalogStatements ?? 0),
-                plans: measured.cost.plans + (workerCost?.plans ?? 0),
-                blocks: measured.cost.blocks + (workerCost?.blocks ?? 0),
-                sharedHit: measured.cost.sharedHit + (workerCost?.sharedHit ?? 0),
-                sharedRead: measured.cost.sharedRead + (workerCost?.sharedRead ?? 0),
-                relations,
+              return {
+                scale,
+                cost: {
+                  ...cost,
+                  rows: cost.rows + (workerCost?.rows ?? 0),
+                  statements: cost.statements + (workerCost?.statements ?? 0),
+                  blocks: cost.blocks + (workerCost?.blocks ?? 0),
+                  relations,
+                } satisfies Cost,
               };
-              const costs = measuredCosts.get(groupKey(group)) ?? [];
-              costs.push(cost);
-              measuredCosts.set(groupKey(group), costs);
+            });
+            try {
+              assertGrowth(combined, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
+            } catch (error) {
+              if (error instanceof Error) error.message = `Growth ${group.operation}/${group.changedRows}: ${error.message}`;
+              throw error;
             }
-          }
-
-          for (const group of groups) {
-            const operation = group.operation;
-            const combined = (measuredCosts.get(groupKey(group)) ?? []).map((cost, index) => ({
-              scale: scales[index]!,
-              cost,
+            const costSignatures = combined.map(({ scale, cost }) => ({
+              scale,
+              rows: cost.rows,
+              statements: cost.statements,
+              blocks: cost.blocks,
+              relations: cost.relations,
             }));
-            assertGrowth(combined, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
+            if (
+              combined.some(
+                ({ cost }) => cost.rows !== combined[0]!.cost.rows || cost.statements !== combined[0]!.cost.statements,
+              )
+            )
+              throw new Error(
+                `Growth ${group.operation}/${group.changedRows} has scale-dependent measured cost: ${JSON.stringify(costSignatures)}`,
+              );
             for (const sample of combined) {
               for (const [relation, relationCost] of Object.entries(sample.cost.relations ?? {}))
                 if (relation.startsWith('content.') && (relationCost.sequentialScans ?? 0) > 0)
-                  throw new Error(`Growth ${operation} used a content sequential scan on ${relation}`);
+                  throw new Error(`Growth ${group.operation} used a content sequential scan on ${relation}`);
               if (!(sample.cost.rows > 0 && sample.cost.statements > 0 && sample.cost.blocks > 0))
-                throw new Error(`Growth ${operation} did not observe native SQL rows, statements and buffers`);
+                throw new Error(`Growth ${group.operation} did not observe native SQL rows, statements and buffers`);
               sampleRows.push({
                 scale: sample.scale,
                 changedRows: group.changedRows,
-                operation,
+                operation: group.operation,
                 rows: sample.cost.rows,
                 statements: sample.cost.statements,
                 buffers: sample.cost.blocks,
@@ -1971,12 +2358,28 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                 samePartition: tuplePartition === container.partition,
               });
             }
+            return combined;
+          };
+          for (const group of groups) {
+            const samples = scales.map((scale, index) => {
+              const repetition = index * 4 + 1;
+              const cost =
+                group.operation === 'job'
+                  ? workerCosts.get(`${group.groupIndex}:${scale}:${repetition}`)
+                  : group.groupIndex === 0
+                    ? report.samples[index]!.cost
+                    : measuredCosts.get(`${group.groupIndex}:${scale}:${repetition}`);
+              if (!cost) throw new Error(`Growth ${group.operation} lacks a measured native SQL capture`);
+              return { scale, cost };
+            });
+            recordSamples(group, samples);
           }
         } finally {
           if (queryDescriptor) Object.defineProperty(appPool, 'query', queryDescriptor);
           else Reflect.deleteProperty(appPool, 'query');
           if (connectDescriptor) Object.defineProperty(appPool, 'connect', connectDescriptor);
           else Reflect.deleteProperty(appPool, 'connect');
+          await secondaryGrowth?.close();
           await growth.close();
         }
         sampleRows.sort((left, right) => {

@@ -19,11 +19,32 @@ if (process.argv.includes('--imported-field-native-worker')) {
   const routeKey = Buffer.from(process.env.IMPORTED_FIELD_ROUTE_KEY!, 'base64url');
   const authPool = new Pool({ connectionString: authUrl, max: 2 });
   type WorkerCapture = { statements: string[]; plans: unknown[] };
+  type QueryTag = { workflow: string | undefined };
   let activeCapture: WorkerCapture | undefined;
+  const importedPipelineWorkflow = (workflowID = DBOS.workflowID) => {
+    return (
+      workflowID !== undefined &&
+      (workflowID.includes(':content_url_import') ||
+        workflowID.includes(':content_import_from_url_') ||
+        workflowID.includes(':content_media_image') ||
+        workflowID.endsWith(':content_image'))
+    );
+  };
   const instrumented = new WeakSet<object>();
   const configureClient = async (client: PoolClient): Promise<void> => {
     if (instrumented.has(client)) return;
     instrumented.add(client);
+    const queryTags = new Map<string, QueryTag[]>();
+    const signature = (text: string, values: unknown[] | undefined) =>
+      `${text}\0${JSON.stringify(values ?? [], (_key, value: unknown) =>
+        Buffer.isBuffer(value)
+          ? { buffer: value.toString('base64') }
+          : value instanceof Date
+            ? value.toISOString()
+            : typeof value === 'bigint'
+              ? value.toString(10)
+              : value,
+      )}`;
     const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
     client.on('notice', (notice) => {
       const message = notice.message;
@@ -35,7 +56,23 @@ if (process.argv.includes('--imported-field-native-worker')) {
         !message.includes(marker)
       )
         return;
-      activeCapture.plans.push(JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown);
+      const activeQuery = (
+        client as PoolClient & { _getActiveQuery?: () => { text?: string; values?: unknown[] } | null }
+      )._getActiveQuery?.();
+      if (!activeQuery?.text) return;
+      const tags = queryTags.get(signature(activeQuery.text, activeQuery.values));
+      if (!tags?.length || !importedPipelineWorkflow(tags[0]!.workflow)) return;
+      const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
+      const entries = Array.isArray(plan) ? plan : [plan];
+      const matchesCapturedStatement = entries.some(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          'Query Text' in entry &&
+          typeof entry['Query Text'] === 'string' &&
+          activeCapture.statements.includes(entry['Query Text']),
+      );
+      if (matchesCapturedStatement) activeCapture.plans.push(plan);
     });
     for (const statement of [
       "LOAD 'auto_explain'",
@@ -60,9 +97,31 @@ if (process.argv.includes('--imported-field-native-worker')) {
           : command && typeof command === 'object' && 'text' in command && typeof command.text === 'string'
             ? command.text
             : undefined;
-      if (activeCapture && DBOS.workflowID !== undefined && typeof text === 'string')
-        activeCapture.statements.push(text);
-      return query(...args);
+      const values =
+        command && typeof command === 'object' && 'values' in command && Array.isArray(command.values)
+          ? command.values
+          : Array.isArray(args[1])
+            ? args[1]
+            : undefined;
+      const workflow = DBOS.workflowID;
+      if (!activeCapture || !importedPipelineWorkflow(workflow) || typeof text !== 'string') return query(...args);
+      activeCapture.statements.push(text);
+      const key = signature(text, values);
+      const tags = queryTags.get(key) ?? [];
+      const tag: QueryTag = { workflow };
+      tags.push(tag);
+      queryTags.set(key, tags);
+      const result = query(...args);
+      const removeTag = () => {
+        const current = queryTags.get(key);
+        if (!current) return;
+        const index = current.indexOf(tag);
+        if (index >= 0) current.splice(index, 1);
+        if (current.length === 0) queryTags.delete(key);
+      };
+      if (result && typeof result === 'object' && 'then' in result && typeof result.then === 'function')
+        void Promise.resolve(result).then(removeTag, removeTag);
+      return result;
     }) as typeof client.query;
   };
   type NativePool = InstanceType<typeof Pool>;
