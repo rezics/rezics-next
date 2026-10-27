@@ -33,7 +33,7 @@ test('signup refuses invalid claims before staging, Turnstile or Access', async 
       fetch: (async () => {
         effects++;
         throw new Error('Unexpected Siteverify call');
-      }) as typeof fetch,
+      }) as unknown as typeof fetch,
     },
   });
   try {

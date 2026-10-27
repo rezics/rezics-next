@@ -128,13 +128,16 @@ test('all registry entries refuse every unprivileged reservation, regardless of 
   expect(RESERVED_HANDLES).toHaveLength(25);
   for (const kind of ['actor', 'organization'] as const) {
     const id = await account(kind);
+    const owner = kind === 'organization' ? await account() : id;
+    await grant(owner, id, 'account:manage');
+    await grant(owner, id, 'account:update');
     for (const { handle } of RESERVED_HANDLES) {
       for (const spelling of [handle, handle.toUpperCase()]) {
         await expect(internal.reserveHandle({ accountId: id, handle: spelling, key: key() })).rejects.toBeInstanceOf(
           LifecycleDeniedError,
         );
         await expect(
-          internal.reserveHandle({ accountId: id, handle: spelling, key: key() }, await context(id)),
+          internal.reserveHandle({ accountId: id, handle: spelling, key: key() }, await context(owner)),
         ).rejects.toBeInstanceOf(LifecycleDeniedError);
       }
     }
