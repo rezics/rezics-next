@@ -73,18 +73,19 @@ function clauseKey(clause: FactClause): string {
 function filterPlan(filter: FilterDocument) {
   const leaves: FactClause[] = [];
   const indices = new Map<string, number>();
+  const positive = new Set<number>();
   type Evaluate = (values: readonly boolean[]) => boolean;
-  function visit(node: FilterDocument): Evaluate {
+  function visit(node: FilterDocument, negated = false): Evaluate {
     if ('and' in node) {
-      const children = node.and.map(visit);
+      const children = node.and.map((child) => visit(child, negated));
       return (values) => children.every((child) => child(values));
     }
     if ('or' in node) {
-      const children = node.or.map(visit);
+      const children = node.or.map((child) => visit(child, negated));
       return (values) => children.some((child) => child(values));
     }
     if ('not' in node) {
-      const child = visit(node.not);
+      const child = visit(node.not, !negated);
       return (values) => !child(values);
     }
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
@@ -104,11 +105,12 @@ function filterPlan(filter: FilterDocument) {
       indices.set(key, index);
       leaves.push(clause);
     }
+    if (!negated) positive.add(index);
     const leaf = index;
     return (values) => values[leaf]!;
   }
   const evaluate = visit(filter);
-  return { leaves, indices, evaluate };
+  return { leaves, indices, positive, evaluate };
 }
 
 /** Recheck candidates against current anchor snapshots; any failed read rejects the whole page. */
@@ -116,13 +118,15 @@ export async function checkHits(
   source: SubjectSource,
   hits: readonly Hit[],
   clauses: ReadonlyMap<string, FactClause>,
-  options?: { concurrency?: number; filter?: FilterDocument },
-): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number }> {
+  options?: { concurrency?: number; filter?: FilterDocument; relationProperties?: readonly string[] },
+): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
   const concurrency = options?.concurrency ?? 8;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     throw new RangeError('Concurrency must be a positive safe integer');
 
   const plan = options?.filter === undefined ? undefined : filterPlan(options.filter);
+  const relationProperties = new Set(options?.relationProperties);
+  let relationRejected = false;
   const hints = new Map<string, number>();
   if (plan) {
     for (const [name, clause] of clauses) {
@@ -158,7 +162,7 @@ export async function checkHits(
       const subjects = new Map(snapshot.subjects.map((subject) => [subject.id, subject]));
       type Point = { probe: RelationFacetProbe; result?: boolean };
       const points = new Map<string, Point>();
-      const evaluations = new Map<string, () => boolean>();
+      const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
       const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
       for (const { hit, index } of group.candidates) {
         const subject = subjects.get(hit.id);
@@ -184,9 +188,11 @@ export async function checkHits(
           for (const leaf of order) {
             const clause = plan.leaves[leaf]!;
             const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
-            if (clause.facet === 'statement' && overflow && clause.qualifiers !== undefined)
+            const live =
+              clause.facet === 'statement' && relationProperties.has(clause.property) && plan.positive.has(leaf);
+            if (clause.facet === 'statement' && (overflow || live) && clause.qualifiers !== undefined)
               throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
-            if (clause.facet !== 'statement' || !('values' in clause) || !overflow) {
+            if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live)) {
               values[leaf] = holds(subject, clause);
               continue;
             }
@@ -205,11 +211,19 @@ export async function checkHits(
               return point;
             });
           }
-          evaluations.set(subject.id, () =>
-            plan.evaluate(
-              values.map((value) => (typeof value === 'boolean' ? value : value.some((p) => p.result === true))),
-            ),
-          );
+          evaluations.set(subject.id, () => {
+            const resolved = values.map((value) =>
+              typeof value === 'boolean' ? value : value.some((point) => point.result === true),
+            );
+            const passed = plan.evaluate(resolved);
+            return {
+              passed,
+              // Rejection after live positive-leaf evaluation invalidates the candidate total.
+              // A shared leaf's true proof can also reject its negative occurrence.
+              relationRejected:
+                !passed && values.some((value, leaf) => Array.isArray(value) && plan.positive.has(leaf)),
+            };
+          });
           continue;
         }
         if (
@@ -223,7 +237,7 @@ export async function checkHits(
       }
       const pending = [...points.values()];
       for (let offset = 0; offset < pending.length; offset += MAX_RELATION_FACET_PROBES) {
-        if (!source.matchRelationFacets) throw new Error('Overflow disclosure requires relation facet probes');
+        if (!source.matchRelationFacets) throw new Error('Relation disclosure requires relation facet probes');
         const batch = pending.slice(offset, offset + MAX_RELATION_FACET_PROBES);
         const results = await source.matchRelationFacets(
           partition,
@@ -238,12 +252,14 @@ export async function checkHits(
         }
       }
       for (const { hit, subject, index } of eligible) {
-        if (evaluations.get(subject.id)!()) checked[index] = { hit, subject };
+        const result = evaluations.get(subject.id)!();
+        if (result.passed) checked[index] = { hit, subject };
+        relationRejected ||= result.relationRejected;
       }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, groups.size) }, () => worker()));
   const passed = checked.filter((entry) => entry !== undefined);
-  return { passed, dropped: hits.length - passed.length };
+  return { passed, dropped: hits.length - passed.length, ...(relationRejected ? { relationRejected: true } : {}) };
 }

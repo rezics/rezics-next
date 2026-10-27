@@ -393,8 +393,10 @@ test('overflow search fails the whole response closed when a point probe fails',
   env.fail(true);
   for (const filter of [value(), { and: [booksOnly, { not: value() }] }]) {
     const response = await env.request('search', { filter });
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('1');
     const body = await response.json();
+    expect(body).toMatchObject({ code: 'semantic_not_ready', retryable: true });
     expect(body.subjects).toBeUndefined();
     expect(env.probes).toHaveLength(1);
   }
@@ -417,7 +419,15 @@ test('search preserves exact totals without relevant overflow and sees off-page 
   expect(env.probes).toEqual([]);
   const exact = await deployment([book(1, [by(target)]), book(2, [by(target)])]);
   expect((await exact.search(value(), { limit: 1 })).total).toEqual({ value: 2, relation: 'exact' });
-  expect(exact.probes).toEqual([]);
+  expect(exact.probes).toEqual([
+    {
+      partition: 10,
+      probes: [
+        { subject: id(1), property: author, value: target },
+        { subject: id(2), property: author, value: target },
+      ],
+    },
+  ]);
 });
 
 test('current checked overflow downgrades totals even when the indexed marker is absent', async () => {
@@ -461,7 +471,7 @@ test('overflow service work stays bounded at stored degrees 128, 512 and 2048', 
     expect(env.probes).toEqual([]);
   }
   expect(operations).toEqual([
-    { rounds: 1, reads: 1, subjects: 3, batches: 0, probes: 0 },
+    { rounds: 1, reads: 1, subjects: 3, batches: 1, probes: 3 },
     { rounds: 1, reads: 1, subjects: 3, batches: 1, probes: 3 },
     { rounds: 1, reads: 1, subjects: 3, batches: 1, probes: 3 },
   ]);

@@ -1,4 +1,11 @@
-import { admitFilter, FilterError, parseFilter, positiveFilter, type FilterRelease } from '@rezics/filter';
+import {
+  admitFilter,
+  FilterError,
+  parseFilter,
+  positiveFilter,
+  relationFacetProperty,
+  type FilterRelease,
+} from '@rezics/filter';
 import type { Pool } from 'pg';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
@@ -54,6 +61,16 @@ function unsupported(pointer: string, code: FieldErrorCode = 'unsupported'): nev
 
 function indexNotReady(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+}
+
+/** Unavailable current evidence must fail the response, including under negation. */
+async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProblemError) throw error;
+    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+  }
 }
 
 function project(subject: IndexedSubject): Result {
@@ -245,8 +262,15 @@ export function createSearchService({
       const admitted = await admitQuery(text, filter, current ?? undefined);
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
-      const cursor =
-        request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
+      // Preserve a known unsafe candidate total across continuations in the signed
+      // scope; the request/principal binding and keyset payload stay unchanged.
+      const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
+      let inexact = false;
+      let cursor = request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
+      if (cursor && !cursor.ok && cursor.reason === 'invalid') {
+        cursor = decodeSearchCursor(cursors, lowerBoundBinding, request.cursor!, now);
+        inexact = cursor.ok;
+      }
       if (cursor && !cursor.ok) {
         if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
         invalid('/cursor', 'invalid_format');
@@ -257,6 +281,7 @@ export function createSearchService({
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
+      const relationProperties = overflowProperties.filter((property) => relationFacetProperty(current!, property));
       const clauses = new Map<string, FactClause>(compiledFilter?.leaves.map((leaf) => [leaf.name, leaf]));
       const plan = {
         ...(compiledText
@@ -305,37 +330,50 @@ export function createSearchService({
         if (generation !== undefined && generation !== currentGeneration)
           throw new ProblemError('search_restart_required');
         generation = currentGeneration;
-        const { passed } = await checkHits(
-          disclosureSource,
-          page.hits,
-          clauses,
-          admitted ? { filter: admitted } : undefined,
+        const { passed, relationRejected } = await sourceRequest(() =>
+          checkHits(
+            disclosureSource,
+            page.hits,
+            clauses,
+            admitted ? { filter: admitted, relationProperties } : undefined,
+          ),
         );
+        inexact ||= relationRejected === true;
         const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
         let consumed = 0;
         for (const hit of page.hits) {
+          const subject = subjects.get(hit);
+          // Consume rejected lookahead too, stopping before the next undisclosed hit.
+          if (results.length === limit && subject) break;
           after = hit.sort;
           consumed++;
-          const subject = subjects.get(hit);
           if (subject) {
             results.push(projectHit(subject, hitOptions));
             shown.push(subject);
           }
-          if (results.length === limit) break;
         }
         exhausted = page.hits.length < size && consumed === page.hits.length;
         if (exhausted || results.length === limit) break;
       }
       if (hitOptions.properties) {
-        const facts = await projectFacts(source, shown, hitOptions.properties, hitOptions.languages);
+        const facts = await sourceRequest(() =>
+          projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
+        );
         results.forEach((hit, index) => (hit.facts = facts[index]!));
       }
       return {
         subjects: results,
-        // Overflow candidates are a superset, not a lower bound. Only disclosed hits
+        // Overflow and live rejections make candidate totals unsafe. Only disclosed hits
         // on this response prove a count without scanning beyond the bounded pages.
-        total: overflow ? { value: results.length, relation: 'lower_bound' as const } : total!,
-        next: exhausted ? null : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
+        total: overflow || inexact ? { value: results.length, relation: 'lower_bound' as const } : total!,
+        next: exhausted
+          ? null
+          : encodeSearchCursor(
+              cursors,
+              overflow || inexact ? lowerBoundBinding : binding,
+              { generation: generation!, after: after! },
+              now,
+            ),
         as_of: await asOf(generation!),
       };
     },
@@ -366,10 +404,12 @@ export function createSearchService({
       const coded = new Set(
         facets.filter((facet) => codeFacet(current, facet.property)).map((facet) => facet.property),
       );
-      const subjects = await discloseFacetValues(
-        source,
-        counted.facets.flatMap((facet) =>
-          facet.property === 'type' || coded.has(facet.property) ? [] : facet.values.map(({ value }) => value),
+      const subjects = await sourceRequest(() =>
+        discloseFacetValues(
+          source,
+          counted.facets.flatMap((facet) =>
+            facet.property === 'type' || coded.has(facet.property) ? [] : facet.values.map(({ value }) => value),
+          ),
         ),
       );
       return {
@@ -399,10 +439,12 @@ export function createSearchService({
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit }));
       const generation = await generationOf(hits);
-      const { passed } = await checkHits(
-        source,
-        hits.map((hit) => ({ ...hit, matched: [] })),
-        new Map(),
+      const { passed } = await sourceRequest(() =>
+        checkHits(
+          source,
+          hits.map((hit) => ({ ...hit, matched: [] })),
+          new Map(),
+        ),
       );
       return { subjects: passed.slice(0, limit).map(({ subject }) => project(subject)), as_of: await asOf(generation) };
     },
