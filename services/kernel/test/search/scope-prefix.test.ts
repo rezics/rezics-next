@@ -230,6 +230,7 @@ test('canonical readiness is an explicit native dependency, never an ordinary pa
 test('real raw prefix covers rejected and lookahead candidates with pinned generation and truthful exhaustion and failures', async () => {
   const observed = observedTransport();
   const { runtime, handle } = await prepared(prefix, observed.transport);
+  expect(observed.raw.flat()).toHaveLength(0);
   observed.raw.length = 0;
   assertPage(await runtime.prefix(handle, { quota: 1, budget: 2 }), native.slice(0, 1), ids[0]!, false, 2);
   expect(observed.raw).toEqual([[ids[0]!, ids[1]!]]);
@@ -263,6 +264,7 @@ test('caller aggregate 256 reserves every source dispatch and rejects insufficie
   const observed = observedTransport();
   const one = await prepared(prefix, observed.transport);
   const two = await prepared(prefix, observed.transport);
+  expect(observed.raw.flat()).toHaveLength(0);
   observed.raw.length = 0;
   let remaining = 256;
   // Repeated raw candidates are deliberately not deduplicated by the caller.
