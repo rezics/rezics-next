@@ -51,7 +51,7 @@ afterAll(async () => {
 });
 
 const body = Buffer.from(JSON.stringify(fromPlainText('Profile reply')));
-const viewOff = { posts: false, reviews: false, collections: false };
+const viewOff = { posts: false, reviews: false, collections: false, realms: false };
 
 async function account(
   id: string,
@@ -71,7 +71,10 @@ async function account(
   );
 }
 
-async function setViews(id: string, value: { posts: boolean; reviews: boolean; collections: boolean }) {
+async function setViews(
+  id: string,
+  value: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean },
+) {
   await db.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2', [
     routeOf(id),
     id,
@@ -232,7 +235,7 @@ test('private author lists are empty to other viewers but remain visible to the 
   const discussion = await item(author, 'discussion', 1);
   const reply = await item(author, 'discussion', 2, true);
   const review = await item(author, 'review', 3);
-  await setViews(author, { posts: false, reviews: true, collections: true });
+  await setViews(author, { posts: false, reviews: true, collections: true, realms: false });
 
   const outsider = await token(viewer);
   for (const [url, key] of [
@@ -249,7 +252,7 @@ test('private author lists are empty to other viewers but remain visible to the 
   expect(
     (await get(path(author, 'threads', 'review'), outsider)).body.threads.map((value: { id: string }) => value.id),
   ).toContain(review.thread);
-  await setViews(author, { posts: false, reviews: false, collections: true });
+  await setViews(author, { posts: false, reviews: false, collections: true, realms: false });
   expect((await get(path(author, 'threads', 'review'), outsider)).body).toEqual({ threads: [], next: null });
 
   const self = await token(author);

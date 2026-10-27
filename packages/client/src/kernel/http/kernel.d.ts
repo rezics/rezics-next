@@ -37,6 +37,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     };
     /** Enqueue-only client. Tests close the instance they pass. */
     workClient?: WorkClient;
+    /** Test and deployment override for the kernel-registered current Realm role reader. */
+    realmRoleReader?: AccessRealmRoleReader;
 };
 /** Builds the Access resolver shared by production kernels and test compositions. */
 export declare function createKernelAccessResolver(options: {

@@ -168,7 +168,7 @@ test('every public identity column advances public change time and private colum
     avatar_url: "avatar_url='https://example.com/avatar'",
     biography: "biography='Changed'",
     avatar: `avatar='${newId(23)}'`,
-    public_views: `public_views='{"posts":false,"reviews":true,"collections":true}'`,
+    public_views: `public_views='{"posts":false,"reviews":true,"collections":true,"realms":false}'`,
     speakers_listed: 'speakers_listed=true',
     links: `links='[{"label":"Site","url":"https://example.com"}]'`,
     operator_account_id: `operator_account_id='${newId(23)}'`,

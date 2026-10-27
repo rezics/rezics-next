@@ -764,9 +764,10 @@ freeze assignments or public identity state.
 - `avatar: <media id> | null` sets or clears the reference. Content's `checkAvatarMedia` checks available avatar media
   uploaded by that account, by primary key in the account partition, inside the same command. Invalid media answers
   `invalid_request` and the whole patch writes nothing. Clearing the reference does not erase Content's media object.
-- `publicViews: { posts?: boolean, reviews?: boolean, collections?: boolean }` merges only the supplied flags.
-  All three default to true for actors and organizations. The handle read always returns all three keys. These flags
-  hide only the lists on the agent's subject page; individual items retain their own visibility.
+- `publicViews: { posts?: boolean, reviews?: boolean, collections?: boolean, realms?: boolean }` merges only the
+  supplied flags. Posts, reviews and collections default to true for actors and organizations; `realms` defaults to
+  false. The handle read always returns all four keys. The three activity flags hide only the lists on the agent's
+  subject page; individual items retain their own visibility. The Realm flag controls the public account Realms page.
 - An organization's patch also accepts `speakersListed: boolean`, default false. Only organization handle profiles
   return this field. Principal assignments still determine who speaks for the organization; this flag controls listing.
 - Presentation follows the existing profile authorization: the account itself (including an organization's acting
@@ -796,6 +797,27 @@ freeze assignments or public identity state.
 - Growth check: `test/access/growth-account-public-views.test.ts`,
   `public view flags for 20 accounts across 4 partitions stay bounded as accounts grow`, uses scales [256, 1024, 4096],
   seeding in `grow` and using the default warm-up.
+
+### Public account Realms page
+
+`GET /v1/accounts/:accountId/realms?cursor=&limit=` returns `{ realms: [{ id, role }], next }`, with `role` set to
+`owner` or `member`, a default limit of 20 and a maximum of 100. The page is public under the account identity read
+action. An account must opt in through its existing profile patch with `publicViews.realms: true`; the new flag
+defaults to false. Fenced, deleted and incomplete-inverse accounts answer an empty page. Each candidate from the
+account's Realm membership inverse is confirmed at T by the registered Realm role reader, then checked for
+`realm:read` at the same T, in that order. A stale membership or unreadable Realm is skipped. The opaque cursor from
+`tokens/list-cursor.ts` is bound to `GET /v1/accounts/:accountId/realms`, the viewer and the account/limit query; it
+uses the kernel clock and continues after the last scanned inverse row without revealing its id. The page does not
+refill after skips, so it may return fewer than `limit` items.
+
+- Touches: one account primary-key probe for the opt-in and inverse-completeness gate; one `membership_inverse_pkey`
+  range of at most `limit + 1` Realm rows in the account's partition; then, for each scanned candidate, one registered
+  Realm role read and one `realm:read` authorization, each anchored in that Realm's partition. Checks run in sequence.
+- Bound: rows and statements O(limit); blocks O(limit × log R), independent of other accounts' memberships and of
+  this account's Realms beyond the page.
+- Growth check: `test/access/growth-account-realms.test.ts`,
+  `account Realm pages stay bounded as this and other accounts' memberships grow at a fixed limit`, seeded in `grow`
+  with at least one warm-up.
 
 ### Organization creation
 

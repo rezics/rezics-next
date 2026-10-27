@@ -111,7 +111,7 @@ test('handle reads the public profile and ids keep their identity projection wit
       accounts: [
         {
           ...identity,
-          publicViews: { posts: true, reviews: true, collections: true },
+          publicViews: { posts: true, reviews: true, collections: true, realms: false },
           bio: 'A biography',
           links,
           avatar: null,
@@ -123,6 +123,21 @@ test('handle reads the public profile and ids keep their identity projection wit
     },
   });
   expect(await read(`ids=${accountId}`)).toEqual({ status: 200, body: { accounts: [identity], next: null } });
+});
+
+test('profile patch opts Realms into the public identity read', async () => {
+  await commands.updateAccount(await context(accountId), {
+    accountId,
+    key: key(),
+    patch: { publicViews: { realms: true } },
+  });
+
+  expect((await read('handle=profile_handle')).body.accounts[0].publicViews).toEqual({
+    posts: true,
+    reviews: true,
+    collections: true,
+    realms: true,
+  });
 });
 
 test('unknown, reserved and pending claims return an empty list', async () => {

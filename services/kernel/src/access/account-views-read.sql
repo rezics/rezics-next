@@ -2,7 +2,12 @@ WITH input AS NOT MATERIALIZED (SELECT :partition::integer AS partition),
 requested AS MATERIALIZED (
   SELECT route, account_id FROM unnest(:routes::integer[], :account_ids::uuid[]) AS ids(route, account_id)
 )
-SELECT account.account_id AS "accountId", account.public_views AS "publicViews"
+SELECT account.account_id AS "accountId",
+       jsonb_build_object(
+         'posts', account.public_views->'posts',
+         'reviews', account.public_views->'reviews',
+         'collections', account.public_views->'collections'
+       ) AS "publicViews"
 FROM requested CROSS JOIN input i
 CROSS JOIN LATERAL (
   SELECT candidate.account_id, candidate.public_views

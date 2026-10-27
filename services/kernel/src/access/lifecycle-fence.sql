@@ -13,7 +13,7 @@ WITH input AS NOT MATERIALIZED (
       display_name = CASE WHEN i.tombstone THEN NULL ELSE display_name END,
       avatar_url = CASE WHEN i.tombstone THEN NULL ELSE avatar_url END,
       avatar = NULL,
-      public_views = '{"posts":false,"reviews":false,"collections":false}'::jsonb,
+      public_views = '{"posts":false,"reviews":false,"collections":false,"realms":false}'::jsonb,
       speakers_listed = false,
       biography = NULL,
       links = '[]'::jsonb,

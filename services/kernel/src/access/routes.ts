@@ -25,7 +25,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
 import { normalizeLookupHandle } from './lifecycle.ts';
 import {
@@ -42,6 +42,7 @@ import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts'
 import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
 import { createSuspensionCommands } from './suspension.ts';
 import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
+import { readAccountRealms, type AccountRealmsPage } from './account-realms.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   AgentVerificationConflictError,
@@ -110,7 +111,10 @@ const publicProfile = t.Object(
       { maxItems: 5 },
     ),
     avatar: t.Union([coverSummary, t.Null()]),
-    publicViews: t.Object({ posts: t.Boolean(), reviews: t.Boolean(), collections: t.Boolean() }, closed),
+    publicViews: t.Object(
+      { posts: t.Boolean(), reviews: t.Boolean(), collections: t.Boolean(), realms: t.Boolean() },
+      closed,
+    ),
     speakersListed: t.Optional(t.Boolean()),
     subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
     verified: t.Boolean(),
@@ -364,7 +368,13 @@ function verificationDenied(error: unknown): never {
 
 export function accessRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; access: () => Access; clock: () => Date; tokens: KeyRing },
+  dependencies: {
+    pool: Pool;
+    access: () => Access;
+    clock: () => Date;
+    tokens: KeyRing;
+    realmRoleReader?: AccessRealmRoleReader;
+  },
 ) {
   let resolved: ReturnType<typeof createGrantCommands> | undefined;
   const commands = () =>
@@ -869,6 +879,69 @@ export function accessRoutes(
         set.headers.etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
         set.headers['cache-control'] = 'no-cache';
         return body;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/realms',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: strict(
+          t.Object(
+            {
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: t.Unsafe<AccountRealmsPage>(
+            t.Object(
+              {
+                realms: t.Array(t.Object({ id, role: t.Union([t.Literal('owner'), t.Literal('member')]) }, closed)),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          ...publicReadFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          403: problemSchema('forbidden'),
+        },
+        detail: {
+          operationId: 'account.list_realms',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        const realmRoleReader = dependencies.realmRoleReader;
+        if (!realmRoleReader) {
+          set.headers['cache-control'] = 'no-cache';
+          return { realms: [], next: null };
+        }
+        const at = dependencies.clock();
+        const page = await admission.run('normal', job, () =>
+          readAccountRealms(
+            {
+              pool: dependencies.pool,
+              tokens: dependencies.tokens,
+              access: dependencies.access(),
+              realmRoleReader,
+            },
+            actor,
+            params.accountId,
+            at,
+            job.deadline,
+            {
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+            },
+          ),
+        );
+        set.headers['cache-control'] = 'no-cache';
+        return page;
       },
     )
     .get(

@@ -164,7 +164,7 @@ test('fencing and deletion clear avatar and all views without erasing the media'
           id,
         ])
       ).rows,
-    ).toEqual([{ avatar: null, public_views: { posts: false, reviews: false, collections: false } }]);
+    ).toEqual([{ avatar: null, public_views: { posts: false, reviews: false, collections: false, realms: false } }]);
     const profile = (await readPublicAccountByHandle(pool, handle))[0];
     if (deleted) expect(profile).not.toHaveProperty('avatar');
     else

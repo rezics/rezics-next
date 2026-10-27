@@ -1784,7 +1784,7 @@ function validatePatch(value: unknown): Record<string, unknown> {
     } else if (key === 'publicViews') {
       requireAllowed(field && typeof field === 'object' && !Array.isArray(field));
       for (const [view, enabled] of Object.entries(field))
-        requireAllowed(['posts', 'reviews', 'collections'].includes(view) && typeof enabled === 'boolean');
+        requireAllowed(['posts', 'reviews', 'collections', 'realms'].includes(view) && typeof enabled === 'boolean');
     } else if (key === 'speakersListed') requireAllowed(typeof field === 'boolean');
     else if (key === 'links') {
       requireAllowed(Array.isArray(field) && field.length <= 5);

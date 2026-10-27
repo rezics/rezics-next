@@ -50,11 +50,14 @@ export type AccountLink = {
     label: string;
     url: string;
 };
+export type AccountPublicViews = PublicViews & {
+    realms: boolean;
+};
 export type PublicAccountProfile = PublicIdentityFields & {
     bio: string | null;
     links: AccountLink[];
     avatar: AvatarSummary | null;
-    publicViews: PublicViews;
+    publicViews: AccountPublicViews;
     speakersListed?: boolean;
     subject: PublicSubject | null;
     verified: boolean;

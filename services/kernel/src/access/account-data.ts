@@ -58,11 +58,12 @@ export type PublicIdentityFields = {
 };
 
 export type AccountLink = { label: string; url: string };
+export type AccountPublicViews = PublicViews & { realms: boolean };
 export type PublicAccountProfile = PublicIdentityFields & {
   bio: string | null;
   links: AccountLink[];
   avatar: AvatarSummary | null;
-  publicViews: PublicViews;
+  publicViews: AccountPublicViews;
   speakersListed?: boolean;
   subject: PublicSubject | null;
   verified: boolean;
@@ -135,7 +136,7 @@ async function publicIdentityForAccount(
       bio: row.biography,
       links: row.links as AccountLink[],
       avatar,
-      publicViews: row.publicViews as PublicViews,
+      publicViews: row.publicViews as AccountPublicViews,
       ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
       subject,
       verified: row.agentVerified,

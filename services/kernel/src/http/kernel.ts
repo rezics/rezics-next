@@ -55,6 +55,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   reports?: { anonymousVerifier?: TurnstileVerifier };
   /** Enqueue-only client. Tests close the instance they pass. */
   workClient?: WorkClient;
+  /** Test and deployment override for the kernel-registered current Realm role reader. */
+  realmRoleReader?: AccessRealmRoleReader;
 };
 
 type ContentReadAssociation = Readonly<{ realmId: string | null }>;
@@ -223,6 +225,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     ...(dependencies.access === undefined ? {} : { access: dependencies.access }),
+    ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
@@ -327,6 +330,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(granted), realmRoleReader }),
+    realmRoleReader,
   });
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
