@@ -216,10 +216,18 @@ test('the check-host probe starts its SSH attempts in the background and never b
     const launched: string[] = [];
     const started = Date.now();
     expect(
-      watch(empty, root, branches, root, () => {}, now, (probeHost, complete) => {
-        launched.push(probeHost.name);
-        finishProbe = complete;
-      }),
+      watch(
+        empty,
+        root,
+        branches,
+        root,
+        () => {},
+        now,
+        (probeHost, complete) => {
+          launched.push(probeHost.name);
+          finishProbe = complete;
+        },
+      ),
     ).toBe(0);
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(launched).toEqual(['kernel-a']);
@@ -296,9 +304,11 @@ test('check hosts are probed once per five minutes and a repeated outage alerts 
       complete: (result: { status: number | null; stderr: string }) => void,
     ) => {
       probes.push(host.name);
-      complete(succeeds
-        ? { status: 0, stderr: '' }
-        : { status: 255, stderr: 'ssh: Connection refused\n/private/key /secret/identity' });
+      complete(
+        succeeds
+          ? { status: 0, stderr: '' }
+          : { status: 255, stderr: 'ssh: Connection refused\n/private/key /secret/identity' },
+      );
     };
     const branches = { stabilize: 'none', integration: 'none' };
     const run = (at: number) => watch(empty, root, branches, root, (message) => delivered.push(message), at, probe);

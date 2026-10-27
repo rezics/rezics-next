@@ -215,9 +215,7 @@ function probeCheckHosts(state: State, stateDirectory: string, now: number, prob
     const previous = failures[host.name] ?? 0;
     failures[host.name] = Math.min(previous + 1, 2);
     if (previous < 2 && failures[host.name] === 2) {
-      const message = (result.stderr || 'SSH probe failed')
-        .replaceAll(host.identity, '[identity]')
-        .trim();
+      const message = (result.stderr || 'SSH probe failed').replaceAll(host.identity, '[identity]').trim();
       incidents.push(`Incident: check host ${host.name.replace(/[\r\n]/g, ' ')} refuses SSH: ${message}`);
     }
   }
@@ -238,10 +236,14 @@ function probeCheckHosts(state: State, stateDirectory: string, now: number, prob
       if (completed) return;
       completed = true;
       if (currentProbeRuns.get(path) !== run) return;
-      writeProbeResult(path, {
-        status: result.status,
-        stderr: firstLine(result.stderr).replaceAll(host.identity, '[identity]'),
-      }, sweepAt);
+      writeProbeResult(
+        path,
+        {
+          status: result.status,
+          stderr: firstLine(result.stderr).replaceAll(host.identity, '[identity]'),
+        },
+        sweepAt,
+      );
     };
     try {
       probe(host, complete);
