@@ -13,7 +13,13 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { createRealAccess } from './real-access.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, type Capture, type GrowthDatabase } from '../support/growth.ts';
+import {
+  assertUnforcedIndexes,
+  logGrowthSeeding,
+  seedSemanticPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-graph-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -99,6 +105,7 @@ const release: Release = {
 };
 const digest = releaseDigest(release);
 let growth: GrowthDatabase;
+const coveringCaptures: { scale: number; raw: Capture }[] = [];
 let growthAnchor = '';
 let growthTarget = '';
 const createdIds = new Set<string>();
@@ -376,6 +383,43 @@ test('a graph read refuses unanchored or unbounded requests', async () => {
 test('a graph read costs the same whatever the size of the graph beyond its bounds', async () => {
   const anchorRoute = routeOf(growthAnchor)!;
   const targetRoute = routeOf(growthTarget)!;
+  const unrelated = unrelatedSemanticPopulation('graph-read-unrelated', partitionOf(anchorRoute));
+  const operation = async () => {
+    const graph = await listSubjectGraph(growth.pool, ring, {
+      subject: growthAnchor,
+      properties: ['ex:follows'],
+      direction: 'out',
+      depth: 2,
+      limit: 12,
+      languages: ['en'],
+      release,
+      authorizeSummary: async () => true,
+      authorize: async () => true,
+    });
+    expect(graph.edges).toHaveLength(12);
+    expect(graph.truncated).toEqual([
+      expect.objectContaining({
+        node: growthAnchor,
+        property: 'ex:follows',
+        direction: 'out',
+        count: expect.any(Number),
+      }),
+    ]);
+    expect(graph.nodes).toContainEqual({
+      id: growthTarget,
+      type: 'ex:Work',
+      label: 'Growth target',
+      summary: {
+        id: growthTarget,
+        type: 'ex:Work',
+        types: ['ex:Work'],
+        label: { value: 'Growth target', language: 'en' },
+        creativeWork: false,
+        cover: null,
+      },
+    });
+    expect(partitionOf(targetRoute)).toBe(partitionOf(anchorRoute));
+  };
   const report = await checkGrowth(growth, {
     name: 'a graph read costs the same whatever the size of the graph beyond its bounds',
     scales: [64, 512, 4096],
@@ -401,44 +445,30 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
          ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
         [anchorRoute, growthAnchor, scale],
       );
+      await seedSemanticPopulation({ pool: growth.pool, admin: growth.admin }, unrelated.population, {
+        from: previous * 500,
+        to: scale * 500,
+      });
     },
-    operation: async () => {
-      const graph = await listSubjectGraph(growth.pool, ring, {
-        subject: growthAnchor,
-        properties: ['ex:follows'],
-        direction: 'out',
-        depth: 2,
-        limit: 12,
-        languages: ['en'],
-        release,
-        authorizeSummary: async () => true,
-        authorize: async () => true,
-      });
-      expect(graph.edges).toHaveLength(12);
-      expect(graph.truncated).toEqual([
-        expect.objectContaining({
-          node: growthAnchor,
-          property: 'ex:follows',
-          direction: 'out',
-          count: expect.any(Number),
-        }),
-      ]);
-      expect(graph.nodes).toContainEqual({
-        id: growthTarget,
-        type: 'ex:Work',
-        label: 'Growth target',
-        summary: {
-          id: growthTarget,
-          type: 'ex:Work',
-          types: ['ex:Work'],
-          label: { value: 'Growth target', language: 'en' },
-          creativeWork: false,
-          cover: null,
-        },
-      });
-      expect(partitionOf(targetRoute)).toBe(partitionOf(anchorRoute));
+    operation,
+    warmup: async (_database, scale) => {
+      const measured = await capture(growth, operation);
+      coveringCaptures.push({ scale, raw: measured.capture });
     },
   });
+  logGrowthSeeding(report);
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
   expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.statements > 0)).toBe(true);
+}, 900_000);
+
+test('graph and summary covering reads use unforced indexed access as their populations grow', () => {
+  expect(coveringCaptures.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+  for (const { scale, raw } of coveringCaptures)
+    assertUnforcedIndexes('bounded graph expansion and node summaries', scale, raw, {
+      'semantic.subject': 'subject_pkey',
+      'semantic.fact': 'fact_label',
+      'semantic.outbound_link': 'outbound_link_maintenance',
+      'semantic.inbound_link': 'inbound_link_present',
+      'semantic.outbound_link_count': 'outbound_link_count_pkey',
+    });
 });

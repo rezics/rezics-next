@@ -13,7 +13,8 @@ import { createSubject, writeFacts } from '../../src/semantic/subject.ts';
 import { readSubjectSummaries, type CoverSummary, type SummaryDependencies } from '../../src/semantic/summaries.ts';
 import { expandSlot } from '../../src/semantic/slots.ts';
 import { createContext } from '../../src/semantic/context.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { captureUnforcedIndexes, logGrowthSeeding, unrelatedSemanticPopulation } from './planner-graph-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -433,6 +434,13 @@ test('summary batches refuse more than 256 ids before SQL', async () => {
 test('subject summaries for a page use two bounded reads per partition, not one read per subject', async () => {
   const ids: string[] = [];
   const deps = dependencies();
+  const unrelated = unrelatedSemanticPopulation('summary-page-unrelated', routeOf(edition)! >>> 4);
+  const operation = async (_db: GrowthDatabase, scale: number) => {
+    const summaries = await readSubjectSummaries(deps, ids.slice(0, scale));
+    expect(summaries.size).toBe(scale);
+    for (const summary of summaries.values()) expect(summary!.cover).toEqual(expectedCover(english));
+    return summaries;
+  };
   const report = await checkGrowth(db, {
     name: 'subject summary page',
     scales: [4, 32, 256],
@@ -446,21 +454,35 @@ test('subject summaries for a page use two bounded reads per partition, not one 
             'rezics:representativeEdition': [value('rezics:representativeEdition', edition)],
           }),
         );
+      await seed({ pool: db.pool, admin: db.admin }, unrelated.population, {
+        from: previous * 500,
+        to: scale * 500,
+      });
       for (const id of ids) await deps.authorize(db.admin, id, ids);
       await deps.authorize(db.admin, edition, [edition]);
     },
-    operation: async (_db, scale) => {
-      const summaries = await readSubjectSummaries(deps, ids.slice(0, scale));
-      expect(summaries.size).toBe(scale);
-      for (const summary of summaries.values()) expect(summary!.cover).toEqual(expectedCover(english));
-      return summaries;
+    operation,
+    warmup: async (_db, scale) => {
+      await captureUnforcedIndexes(db, 'subject summary page', scale, () => operation(db, scale), {
+        'semantic.subject': 'subject_pkey',
+        'semantic.fact': ['fact_label', 'fact_terms'],
+        'semantic.outbound_link': 'outbound_link_present',
+      });
     },
   });
+  logGrowthSeeding(report);
+  // costOf excludes SET LOCAL controls, so removing the planner control does not reduce semantic statement totals.
   expect(report.samples.map(({ cost }) => cost.statements)).toEqual([11, 11, 11]);
-}, 120_000);
+}, 900_000);
 
 test('a representative cover read stays flat as the work gains editions', async () => {
   const deps = dependencies();
+  const unrelated = unrelatedSemanticPopulation('representative-cover-unrelated', routeOf(work)! >>> 4);
+  const operation = async () => {
+    const result = await readSubjectSummaries(deps, [work]);
+    expect(result.get(work)!.cover).toEqual(expectedCover(english));
+    return result;
+  };
   const report = await checkGrowth(db, {
     name: 'representative edition cover',
     scales: [16, 128, 1024],
@@ -472,13 +494,22 @@ test('a representative cover read stays flat as the work gains editions', async 
         await subject('bf:Instance', 32048, undefined, {
           'schema:exampleOfWork': [value('schema:exampleOfWork', work)],
         });
+      await seed({ pool: db.pool, admin: db.admin }, unrelated.population, {
+        from: previous * 500,
+        to: scale * 500,
+      });
       for (const id of [work, edition]) await deps.authorize(db.admin, id, [work, edition]);
     },
-    operation: async () => {
-      const result = await readSubjectSummaries(deps, [work]);
-      expect(result.get(work)!.cover).toEqual(expectedCover(english));
-      return result;
+    operation,
+    warmup: async (_db, scale) => {
+      await captureUnforcedIndexes(db, 'representative edition cover', scale, operation, {
+        'semantic.subject': 'subject_pkey',
+        'semantic.fact': ['fact_label', 'fact_terms'],
+        'semantic.outbound_link': 'outbound_link_present',
+      });
     },
   });
+  logGrowthSeeding(report);
+  // costOf excludes SET LOCAL controls, so removing the planner control does not reduce semantic statement totals.
   expect(report.samples.map(({ cost }) => cost.statements)).toEqual([5, 5, 5]);
-}, 120_000);
+}, 900_000);
