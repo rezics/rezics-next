@@ -69,7 +69,10 @@ export const readPersonalLibrary = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<PersonalLibraryView> => {
     setResponseHeader('cache-control', 'private, no-store');
     const view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-    if (view.signedIn) await nameSubjectTypes(view.entries.map((entry) => entry.subject));
+    if (view.signedIn) {
+      const shown = view.state === null ? view.sections.flatMap((section) => section.entries) : view.entries;
+      await nameSubjectTypes(shown.map((entry) => entry.subject));
+    }
     return view;
   });
 

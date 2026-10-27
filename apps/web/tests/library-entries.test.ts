@@ -14,7 +14,8 @@ const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
-const pageLimit = '100';
+const sectionLimit = '12';
+const tabLimit = '48';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -467,6 +468,9 @@ function formatInstant(value: string, locale: string) {
     timeZone: 'UTC',
   }).format(new Date(value));
 }
+function shortDate(value: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeZone: 'UTC' }).format(new Date(value));
+}
 function libraryReads() {
   return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryEntries');
 }
@@ -509,16 +513,16 @@ test(
     expect(page.cache).toMatch(/\bno-store\b/);
     const body = main(page.html);
     expect(body).toContain('Library');
+    // The All tab has a section per status that holds entries, each newest first.
+    expect(body.indexOf('Completed')).toBeGreaterThan(-1);
     expect(body.indexOf('Zebra story')).toBeLessThan(body.indexOf('Unavailable'));
     expect(body.indexOf('Unavailable')).toBeLessThan(body.indexOf('Apple story'));
     // The fake serves no definitions, so the type has no name to show and its raw value stays out.
     expect(body).not.toContain('book');
-    expect(body).toContain('data-state="completed"');
-    expect(body).toContain('data-state="planned"');
     expect(body).toContain(`datetime="${newerStamp}"`);
-    expect(body).toContain(formatInstant(newerStamp, 'en'));
-    expect(body).toContain(formatInstant(middleStamp, 'en'));
-    expect(body).toContain(formatInstant(olderStamp, 'en'));
+    expect(body).toContain(shortDate(newerStamp, 'en'));
+    expect(body).toContain(shortDate(middleStamp, 'en'));
+    expect(body).toContain(shortDate(olderStamp, 'en'));
     expect(visible(page.html)).toContain('Unavailable');
     expect(visible(page.html)).not.toContain(hiddenSubjectId);
     const found = links(page.html);
@@ -533,17 +537,25 @@ test(
     expect(tab('Paused')?.href).toBe('/en/library?state=paused');
     expect(tab('Dropped')?.href).toBe('/en/library?state=dropped');
     expect(tab('Planned')?.current).toBe(false);
+    // One read per status, each of the first twelve entries.
     const reads = libraryReads();
-    expect(reads).toHaveLength(1);
-    expect(reads[0]).toMatchObject({
-      method: 'GET',
-      path: '/v1/libraryEntries',
-      view: 'FULL',
-      limit: pageLimit,
-      cursor: null,
-      state: null,
-      authorization: `Bearer ${aliceAccess}`,
-    });
+    expect(reads).toHaveLength(5);
+    expect(reads.map((read) => read.state).sort()).toEqual([
+      'completed',
+      'dropped',
+      'in_progress',
+      'paused',
+      'planned',
+    ]);
+    for (const read of reads)
+      expect(read).toMatchObject({
+        method: 'GET',
+        path: '/v1/libraryEntries',
+        view: 'FULL',
+        limit: sectionLimit,
+        cursor: null,
+        authorization: `Bearer ${aliceAccess}`,
+      });
 
     calls.length = 0;
     const completed = await readPage('/en/library?state=completed', cookie);
@@ -552,8 +564,6 @@ test(
     expect(completedMain).toContain('Zebra story');
     expect(completedMain).not.toContain('Apple story');
     expect(completedMain).not.toContain('Unavailable');
-    expect(completedMain).toContain('data-state="completed"');
-    expect(completedMain).not.toContain('data-state="planned"');
     expect(links(completed.html).find((link) => link.text === 'Completed')).toMatchObject({
       href: '/en/library?state=completed',
       current: true,
@@ -561,7 +571,7 @@ test(
     expect(libraryReads()).toHaveLength(1);
     expect(libraryReads()[0]).toMatchObject({
       view: 'FULL',
-      limit: pageLimit,
+      limit: tabLimit,
       cursor: null,
       state: 'completed',
       authorization: `Bearer ${aliceAccess}`,
@@ -576,7 +586,7 @@ test(
 
     calls.length = 0;
     const empty = await readPage('/en/library?state=in_progress', cookie);
-    expect(main(empty.html)).toContain('Your library is empty.');
+    expect(main(empty.html)).toContain('Nothing in In progress yet');
     expect(main(empty.html)).not.toContain('Zebra story');
     expect(libraryReads()[0]?.state).toBe('in_progress');
 
@@ -585,31 +595,32 @@ test(
     const japaneseMain = main(japanese.html);
     expect(japaneseMain).toContain('ライブラリ');
     expect(japaneseMain).toContain('完了');
-    expect(japaneseMain).toContain(formatInstant(newerStamp, 'ja'));
+    expect(japaneseMain).toContain(shortDate(newerStamp, 'ja'));
     expect(japaneseMain.indexOf('Zebra story')).toBeLessThan(japaneseMain.indexOf('Apple story'));
 
     calls.length = 0;
     entries = longLibrary();
-    const first = await readPage('/en/library', cookie);
+    const first = await readPage('/en/library?state=planned', cookie);
     expect(first.status).toBe(200);
     const firstMain = main(first.html);
     expect(firstMain.indexOf('Entry 001')).toBeLessThan(firstMain.indexOf('Entry 002'));
-    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 100'));
-    expect(firstMain).not.toContain('Entry 101');
+    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 048'));
+    expect(firstMain).not.toContain('Entry 049');
     const firstRead = libraryReads()[0];
-    expect(firstRead).toMatchObject({ view: 'FULL', limit: pageLimit, cursor: null, state: null });
+    expect(firstRead).toMatchObject({ view: 'FULL', limit: tabLimit, cursor: null, state: 'planned' });
     const more = links(first.html).find((link) => link.text === 'More');
     expect(more?.href).toContain('/en/library?');
+    expect(new URL(more!.href, 'http://site.test').searchParams.get('state')).toBe('planned');
     const cursor = new URL(more!.href, 'http://site.test').searchParams.get('cursor');
     expect(cursor).toBeTruthy();
     expect([...cursors.keys()]).toContain(cursor);
     calls.length = 0;
-    const second = await readPage(`/en/library?cursor=${encodeURIComponent(cursor!)}`, cookie);
+    const second = await readPage(more!.href, cookie);
     expect(second.status).toBe(200);
     const secondMain = main(second.html);
-    expect(secondMain).toContain('Entry 101');
+    expect(secondMain).toContain('Entry 049');
     expect(secondMain).not.toContain('Entry 001');
-    expect(libraryReads()[0]).toMatchObject({ view: 'FULL', limit: pageLimit, cursor, state: null });
+    expect(libraryReads()[0]).toMatchObject({ view: 'FULL', limit: tabLimit, cursor, state: 'planned' });
   },
   timeout,
 );
@@ -620,37 +631,32 @@ test(
     reset();
     const page = await open('/en/library', await alice());
     try {
-      const zebra = page.locator('main li').filter({ hasText: 'Zebra story' });
+      const zebra = page.locator('main article').filter({ hasText: 'Zebra story' });
       expect(await zebra.count()).toBe(1);
-      const change = zebra.locator('form').first();
-      const key = await change.locator('input[name="idempotencyKey"]').inputValue();
-      expect(key).toMatch(uuid);
-      expect(await page.content()).toContain(key);
-      expect(await change.locator('input[name="revision"]').inputValue()).toBe('4');
+      const choose = async (title: string, name: string) => {
+        await page.getByRole('button', { name: `Actions for ${title}` }).click();
+        await page.getByRole('menuitem', { name: 'Change status' }).click();
+        await page.getByRole('menuitemradio', { name: name, exact: true }).click();
+      };
       calls.length = 0;
-      await zebra.locator('[data-slot="library-status"]').click();
-      await page.getByRole('menuitemradio', { name: 'Paused', exact: true }).click();
+      await choose('Zebra story', 'Paused');
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       const put = calls.find((call) => call.method === 'PUT');
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([put]);
       expect(put).toMatchObject({
         method: 'PUT',
         path: `/v1/libraryEntries/${id(11)}`,
-        key,
         authorization: `Bearer ${aliceAccess}`,
         body: { state: 'paused', revision: 4 },
       });
-      await eventually(async () => (await change.locator('input[name="revision"]').inputValue()) === '5');
-      expect(await zebra.locator('[data-slot="library-status"]').getAttribute('data-state')).toBe('paused');
-      expect(await zebra.locator('[data-slot="library-status"]').innerText()).toBe('Paused');
-      const nextKey = await change.locator('input[name="idempotencyKey"]').inputValue();
-      expect(nextKey).toMatch(uuid);
-      expect(nextKey).not.toBe(key);
+      const key = put!.key!;
+      expect(key).toMatch(uuid);
+      // The card, in the Completed section, now says where the entry went.
+      await eventually(async () => (await zebra.innerText()).includes('Paused'));
 
       diverge(id(11), 'dropped');
       calls.length = 0;
-      await zebra.locator('[data-slot="library-status"]').click();
-      await page.getByRole('menuitemradio', { name: 'Completed', exact: true }).click();
+      await choose('Zebra story', 'Completed');
       await eventually(() =>
         calls.some((call) => call.method === 'GET' && call.path === `/v1/libraryEntries/${id(11)}`),
       );
@@ -659,41 +665,34 @@ test(
         `GET /v1/libraryEntries/${id(11)}`,
       ]);
       expect(calls[0]).toMatchObject({
-        key: nextKey,
         authorization: `Bearer ${aliceAccess}`,
         body: { state: 'completed', revision: 5 },
       });
+      // Each answered write takes a fresh idempotency key.
+      expect(calls[0]!.key).toMatch(uuid);
+      expect(calls[0]!.key).not.toBe(key);
       expect(calls[1]).toMatchObject({ view: 'FULL', authorization: `Bearer ${aliceAccess}` });
       expect(entries.find((item) => item.subjectId === id(11))).toMatchObject({
         state: 'dropped',
         revision: 10,
         updatedAt: reloadedStamp,
       });
-      await eventually(async () => (await zebra.locator('[data-slot="library-status"]').innerText()) === 'Dropped');
-      expect(await zebra.locator('[data-slot="library-status"]').getAttribute('data-state')).toBe('dropped');
+      await eventually(async () => (await zebra.innerText()).includes('Dropped'));
       expect(await zebra.locator('time').getAttribute('datetime')).toBe(reloadedStamp);
       expect(await zebra.getByRole('status').innerText()).toBe('This entry changed elsewhere.');
-      expect(await zebra.locator('form').first().locator('input[name="revision"]').inputValue()).toBe('10');
 
-      const apple = page.locator('main li').filter({ hasText: 'Apple story' });
+      const apple = page.locator('main article').filter({ hasText: 'Apple story' });
       expect(await apple.count()).toBe(1);
-      const removal = apple.locator('form').last();
-      const removeKey = await removal.locator('input[name="idempotencyKey"]').inputValue();
-      expect(removeKey).toMatch(uuid);
-      expect(await removal.locator('input[name="revision"]').inputValue()).toBe('2');
       calls.length = 0;
-      await apple.locator('[data-slot="library-actions"]').click();
-      await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+      await page.getByRole('button', { name: 'Actions for Apple story' }).click();
+      await page.getByRole('menuitem', { name: 'Remove from library', exact: true }).click();
       await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm removal', exact: true }).click();
       await eventually(() => calls.some((call) => call.method === 'DELETE'));
       expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([`DELETE /v1/libraryEntries/${id(12)}`]);
-      expect(calls[0]).toMatchObject({
-        revision: '2',
-        key: removeKey,
-        authorization: `Bearer ${aliceAccess}`,
-      });
+      expect(calls[0]).toMatchObject({ revision: '2', authorization: `Bearer ${aliceAccess}` });
+      expect(calls[0]!.key).toMatch(uuid);
       await eventually(async () => (await apple.count()) === 0);
-      expect(await page.locator('main li').filter({ hasText: 'Zebra story' }).count()).toBe(1);
+      expect(await page.locator('main article').filter({ hasText: 'Zebra story' }).count()).toBe(1);
       expect(await page.locator('main').innerText()).toContain('Unavailable');
       expect(entries.some((item) => item.subjectId === id(12))).toBe(false);
     } finally {
@@ -715,11 +714,10 @@ test(
     expect(menuLinks.find((link) => link.text === 'Library')?.href).toBe('/en/library');
     expect(menuLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
     expect(menuLinks.find((link) => link.text === 'Following')?.href).toBe('/en/following');
-    const sections = /<nav\b[^>]*aria-label="Library"[^>]*>([\s\S]*?)<\/nav>/.exec(main(english.html))?.[1] ?? '';
-    const sectionLinks = linksIn(sections);
-    expect(sectionLinks.find((link) => link.text === 'Library')).toMatchObject({ href: '/en/library', current: true });
-    expect(sectionLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
-    expect(sectionLinks.find((link) => link.text === 'Following')?.href).toBe('/en/following');
+    const tabs = /<nav\b[^>]*aria-label="States"[^>]*>([\s\S]*?)<\/nav>/.exec(main(english.html))?.[1] ?? '';
+    const tabLinks = linksIn(tabs);
+    expect(tabLinks.find((link) => link.text === 'All')).toMatchObject({ href: '/en/library', current: true });
+    expect(tabLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/library/collections');
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
@@ -728,15 +726,13 @@ test(
     expect(japaneseLinks.find((link) => link.text === 'ライブラリ')?.href).toBe('/ja/library');
     expect(japaneseLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');
     expect(japaneseLinks.find((link) => link.text === 'フォロー中')?.href).toBe('/ja/following');
-    const japaneseSections =
-      /<nav\b[^>]*aria-label="ライブラリ"[^>]*>([\s\S]*?)<\/nav>/.exec(main(japanese.html))?.[1] ?? '';
-    const japaneseSectionLinks = linksIn(japaneseSections);
-    expect(japaneseSectionLinks.find((link) => link.text === 'ライブラリ')).toMatchObject({
+    const japaneseTabs = /<nav\b[^>]*aria-label="状態"[^>]*>([\s\S]*?)<\/nav>/.exec(main(japanese.html))?.[1] ?? '';
+    const japaneseTabLinks = linksIn(japaneseTabs);
+    expect(japaneseTabLinks.find((link) => link.text === 'すべて')).toMatchObject({
       href: '/ja/library',
       current: true,
     });
-    expect(japaneseSectionLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');
-    expect(japaneseSectionLinks.find((link) => link.text === 'フォロー中')?.href).toBe('/ja/following');
+    expect(japaneseTabLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/library/collections');
   },
   timeout,
 );

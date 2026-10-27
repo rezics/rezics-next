@@ -443,6 +443,14 @@ async function eventually(check: () => boolean | Promise<boolean>) {
   while (!(await check()) && Date.now() < deadline) await Bun.sleep(50);
   expect(await check()).toBe(true);
 }
+// Escape closes one level of menu at a time: the status submenu first, then the menu.
+async function closeMenus(page: Page) {
+  for (let level = 0; level < 3 && (await page.getByRole('menu').count()) > 0; level++) {
+    await page.keyboard.press('Escape');
+    await Bun.sleep(150);
+  }
+  await page.getByRole('menu').first().waitFor({ state: 'detached' });
+}
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
@@ -580,14 +588,14 @@ test(
       await actions.click();
       await menu.getByRole('menuitem', { name: 'Change status' }).click();
       const paused = menu.getByRole('menuitemradio', { name: 'Paused' });
+      await paused.waitFor({ state: 'visible' });
       expect(await paused.count()).toBe(1);
-      await page.keyboard.press('Escape');
-      await menu.first().waitFor({ state: 'detached' });
+      await closeMenus(page);
       await actions.click();
+      await menu.getByRole('menuitem', { name: 'Open subject page' }).waitFor({ state: 'visible' });
       expect(await menu.getByRole('menuitem', { name: 'Open subject page' }).count()).toBe(1);
       expect(await menu.getByRole('menuitem', { name: 'Remove from library' }).count()).toBe(1);
-      await page.keyboard.press('Escape');
-      await menu.first().waitFor({ state: 'detached' });
+      await closeMenus(page);
 
       // Choosing a status sends one revisioned write; the card says where the entry went.
       calls.length = 0;

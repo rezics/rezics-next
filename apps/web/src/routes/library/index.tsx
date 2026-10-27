@@ -1,17 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { PersonalLibraryPage } from '../../library/entries-page';
 import { readPersonalLibrary } from '../../library/entries-actions';
-import { libraryEntryState } from '../../library/entries-read';
+import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
 export const Route = createFileRoute('/library/')({
-  validateSearch: (search: Record<string, unknown>) => {
-    const state = typeof search.state === 'string' ? libraryEntryState(search.state) : undefined;
-    const cursor = typeof search.cursor === 'string' && search.cursor ? search.cursor : undefined;
-    return { ...(state ? { state } : {}), ...(cursor ? { cursor } : {}) };
+  validateSearch: validateShelfSearch,
+  // The router merges what the address says over what validation returns, so a value the validator dropped is still
+  // there; reading through the validator again keeps only the documented values.
+  loaderDeps: ({ search }) => {
+    const { state, cursor } = validateShelfSearch(search);
+    return { state, cursor };
   },
-  loaderDeps: ({ search }) => ({ state: search.state, cursor: search.cursor }),
   loader: ({ deps }) =>
     readPersonalLibrary({
       data: {
@@ -24,5 +25,13 @@ export const Route = createFileRoute('/library/')({
 });
 
 function LibraryRoute() {
-  return <PersonalLibraryPage page={Route.useLoaderData()} locale={getLocale()} />;
+  const search = validateShelfSearch(Route.useSearch());
+  return (
+    <PersonalLibraryPage
+      page={Route.useLoaderData()}
+      locale={getLocale()}
+      display={shelfDisplay(search)}
+      cursor={search.cursor}
+    />
+  );
 }

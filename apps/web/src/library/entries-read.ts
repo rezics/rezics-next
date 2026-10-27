@@ -31,14 +31,25 @@ export type PersonalLibraryEntry = {
   removeKey: string;
 };
 
+/** Entries a status section of the All tab shows, and entries one status tab shows per page. */
+export const SHELF_SECTION_LIMIT = 12;
+export const SHELF_TAB_LIMIT = 48;
+
+/** The order of the All tab's sections: what the person is in the middle of first. */
+export const shelfSectionOrder: readonly LibraryEntryState[] = [
+  'in_progress',
+  'planned',
+  'completed',
+  'paused',
+  'dropped',
+];
+
+export type ShelfSection = { state: LibraryEntryState; entries: PersonalLibraryEntry[] };
+
 export type PersonalLibraryView =
   | { signedIn: false }
-  | {
-      signedIn: true;
-      state: LibraryEntryState | null;
-      entries: PersonalLibraryEntry[];
-      next: string | null;
-    };
+  | { signedIn: true; state: null; sections: ShelfSection[] }
+  | { signedIn: true; state: LibraryEntryState; entries: PersonalLibraryEntry[]; next: string | null };
 
 export type SavedLibraryEntry = {
   subjectId: string;
@@ -126,7 +137,18 @@ export async function readEntryPage(
   return readLibraryResult(result);
 }
 
-/** One session read and one library page. A cursor the kernel no longer accepts restarts at the first page. */
+function presentShelfEntries(rows: RawEntry[]): PersonalLibraryEntry[] {
+  return rows.map((entry) => ({
+    ...presentEntry(entry),
+    changeKey: crypto.randomUUID(),
+    removeKey: crypto.randomUUID(),
+  }));
+}
+
+/**
+ * One session read, then either one read per status for the All tab (the first entries of each, in parallel) or one
+ * page of one status. A cursor the kernel no longer accepts restarts that status at its first page.
+ */
 export async function loadPersonalLibrary(
   client: KernelClient,
   request: Request,
@@ -137,23 +159,26 @@ export async function loadPersonalLibrary(
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
   const state = libraryEntryState(input.state);
+  if (!state) {
+    const pages = await Promise.all(
+      shelfSectionOrder.map((section) => readEntryPage(client, authorization, undefined, section, SHELF_SECTION_LIMIT)),
+    );
+    return {
+      signedIn: true,
+      state: null,
+      sections: shelfSectionOrder
+        .map((section, index) => ({ state: section, entries: presentShelfEntries(pages[index]!.libraryEntries) }))
+        .filter((section) => section.entries.length > 0),
+    };
+  }
   let page: Awaited<ReturnType<typeof readEntryPage>>;
   try {
-    page = await readEntryPage(client, authorization, input.cursor, state);
+    page = await readEntryPage(client, authorization, input.cursor, state, SHELF_TAB_LIMIT);
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await readEntryPage(client, authorization, undefined, state);
+    page = await readEntryPage(client, authorization, undefined, state, SHELF_TAB_LIMIT);
   }
-  return {
-    signedIn: true,
-    state: state ?? null,
-    entries: page.libraryEntries.map((entry) => ({
-      ...presentEntry(entry),
-      changeKey: crypto.randomUUID(),
-      removeKey: crypto.randomUUID(),
-    })),
-    next: page.next,
-  };
+  return { signedIn: true, state, entries: presentShelfEntries(page.libraryEntries), next: page.next };
 }
 
 async function reloadEntry(

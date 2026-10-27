@@ -573,6 +573,14 @@ Each server render and browser session has its own query cache. Public reads sta
   at most 100 entries. No per-entry reads.
 - **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
 
+### Shelf page
+
+- **Touches:** All: five `GET /v1/libraryEntries` reads, one per status, 12 entries each. A status tab: one read of 48
+  entries. A status change or removal: one write and, on conflict, one entry read.
+- **Bound:** Constant reads per page view, independent of the library's size; entries rendered at most 60 for All and
+  48 for a tab.
+- **Growth check:** `tests/shelf-page.test.ts`: `the page renders without JavaScript and makes five entry reads for All and one for a status tab, with libraries of 10, 1,000 and 10,000 entries`
+
 ### Copies
 
 - **Touches:** One session read, then `GET /v1/copies?view=FULL` with `subjectId` when the URL names a subject,

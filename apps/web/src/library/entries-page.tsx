@@ -1,321 +1,228 @@
-import type { CoverRatio } from '@rezics/ui/cover';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
-import { BookCopyIcon, ChevronDownIcon, EllipsisIcon, GaugeIcon, Trash2Icon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ShelfEmpty } from '@rezics/ui/shelf-empty';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import { csrfHeaders } from '../threads/composer';
-import { deletePersonalLibraryEntry, savePersonalLibraryEntry } from './entries-actions';
-import {
-  libraryEntryState,
-  libraryEntryStates,
-  type LibraryEntryState,
-  type PersonalLibraryEntry,
-  type PersonalLibraryView,
-} from './entries-read';
-import { rowRatio, SubjectIdentity } from './subject-row';
 import { PageHeading } from '../shell/page-heading';
+import { shelfSectionOrder, type LibraryEntryState, type PersonalLibraryView } from './entries-read';
+import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
+import { ShelfEntries, stateLabel } from './shelf-view';
 
-function formatUpdated(value: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(value));
+type Display = { layout: ShelfLayout; size: ShelfSize };
+type SignedIn = Extract<PersonalLibraryView, { signedIn: true }>;
+
+const tabClass =
+  'shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
+
+function layoutLabel(layout: ShelfLayout): string {
+  if (layout === 'grid') return m.library_layout_grid();
+  if (layout === 'list') return m.library_layout_list();
+  return m.library_layout_table();
 }
 
-function stateLabel(state: LibraryEntryState): string {
-  if (state === 'planned') return m.library_state_planned();
-  if (state === 'in_progress') return m.library_state_in_progress();
-  if (state === 'completed') return m.library_state_completed();
-  if (state === 'paused') return m.library_state_paused();
-  return m.library_state_dropped();
+function sizeLabel(size: ShelfSize): string {
+  if (size === 's') return m.library_size_small();
+  if (size === 'm') return m.library_size_medium();
+  return m.library_size_large();
 }
 
-function libraryHref(locale: string, state?: LibraryEntryState | null, cursor?: string) {
-  const params = new URLSearchParams();
-  if (state) params.set('state', state);
-  if (cursor) params.set('cursor', cursor);
-  const query = params.toString();
-  return query ? `/${locale}/library?${query}` : `/${locale}/library`;
-}
-
-function LibrarySections({ locale }: { locale: string }) {
-  const linkClass = buttonVariants({ variant: 'ghost', size: 'lg' });
+/** The status tabs. Each is a link, so they work without JavaScript, and each keeps the chosen layout and size. */
+function Tabs({ state, locale, display }: { state: LibraryEntryState | null; locale: string; display: Display }) {
+  const tabs: { state: LibraryEntryState | null; label: string }[] = [
+    { state: null, label: m.library_state_all() },
+    ...shelfSectionOrder.map((tab) => ({ state: tab, label: stateLabel(tab) })),
+  ];
   return (
-    <nav aria-label={m.library_navigation()} className="flex flex-wrap gap-2">
-      <a href={libraryHref(locale)} aria-current="page" className={linkClass}>
-        {m.library_nav_library()}
-      </a>
-      <a href={`/${locale}/collections`} className={linkClass}>
+    <nav aria-label={m.library_states()} className="flex min-w-0 gap-1 overflow-x-auto border-b">
+      {tabs.map((tab) => (
+        <a
+          key={tab.state ?? 'all'}
+          href={shelfHref(locale, { state: tab.state, ...display })}
+          {...(state === tab.state ? { 'aria-current': 'page' as const } : {})}
+          className={tabClass}
+        >
+          {tab.label}
+        </a>
+      ))}
+      <a href={`/${locale}/library/collections`} className={tabClass}>
         {m.library_nav_collections()}
-      </a>
-      <a href={`/${locale}/following`} className={linkClass}>
-        {m.library_nav_following()}
       </a>
     </nav>
   );
 }
 
-function failureText(reason: 'closed' | 'unavailable' | 'signed-out'): string {
-  if (reason === 'closed') return m.platform_closed_message();
-  if (reason === 'signed-out') return m.library_sign_in();
-  return m.error_message();
-}
-
-function LibraryRow({ entry, locale, ratio }: { entry: PersonalLibraryEntry; locale: string; ratio: CoverRatio }) {
-  const [row, setRow] = useState(entry);
-  const [changeKey, setChangeKey] = useState(entry.changeKey);
-  const [removeKey, setRemoveKey] = useState(entry.removeKey);
-  const [conflict, setConflict] = useState(false);
-  const [failure, setFailure] = useState<'closed' | 'unavailable' | 'signed-out' | null>(null);
-  const [removed, setRemoved] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
-  if (removed) return null;
-
-  const onChange = async (value: string) => {
-    const state = libraryEntryState(value);
-    if (!state || state === row.state || pending) return;
-    setPending(true);
-    try {
-      const result = await savePersonalLibraryEntry({
-        data: { subjectId: row.subjectId, state, revision: row.revision, idempotencyKey: changeKey },
-        headers: csrfHeaders(),
-      });
-      if (result.ok && result.entry) {
-        setRow((current) => ({
-          ...current,
-          state: result.entry!.state,
-          revision: result.entry!.revision,
-          updatedAt: result.entry!.updatedAt,
-        }));
-        setChangeKey(crypto.randomUUID());
-        setConflict(false);
-        setFailure(null);
-      } else if (!result.ok && result.reason === 'conflict') {
-        setRow((current) => ({ ...current, ...result.entry }));
-        setChangeKey(crypto.randomUUID());
-        setConflict(true);
-        setFailure(null);
-      } else if (!result.ok && result.reason === 'missing') {
-        setRemoved(true);
-      } else if (!result.ok) {
-        setFailure(result.reason === 'closed' || result.reason === 'signed-out' ? result.reason : 'unavailable');
-      }
-    } catch {
-      setFailure('unavailable');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const onRemove = async () => {
-    if (pending) return;
-    setPending(true);
-    try {
-      const result = await deletePersonalLibraryEntry({
-        data: { subjectId: row.subjectId, revision: row.revision, idempotencyKey: removeKey },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setRemoved(true);
-      } else if (result.reason === 'conflict') {
-        setRow((current) => ({ ...current, ...result.entry }));
-        setRemoveKey(crypto.randomUUID());
-        setConflict(true);
-        setFailure(null);
-        setRemoving(false);
-      } else if (result.reason === 'missing') {
-        setRemoved(true);
-      } else {
-        setFailure(result.reason === 'closed' || result.reason === 'signed-out' ? result.reason : 'unavailable');
-        setRemoving(false);
-      }
-    } catch {
-      setFailure('unavailable');
-      setRemoving(false);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const title = row.subject?.label ?? m.library_subject_unavailable();
-  const current = stateLabel(row.state);
-  const subjectQuery = row.subject ? `?subjectId=${encodeURIComponent(row.subject.id)}` : null;
+/** Layout and grid size, as links that rewrite the address; the table is for wide screens only. */
+function DisplayLinks({
+  state,
+  locale,
+  display,
+}: {
+  state: LibraryEntryState | null;
+  locale: string;
+  display: Display;
+}) {
+  const link = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
   return (
-    <li className="space-y-2 py-3">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <SubjectIdentity subject={row.subject} ratio={ratio}>
-          {m.library_updated()} <time {...{ datetime: row.updatedAt }}>{formatUpdated(row.updatedAt, locale)}</time>
-        </SubjectIdentity>
-        <form onSubmit={(event) => event.preventDefault()}>
-          <input type="hidden" name="subjectId" value={row.subjectId} />
-          <input type="hidden" name="revision" value={String(row.revision)} />
-          <input type="hidden" name="idempotencyKey" value={changeKey} />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!hydrated || pending}
-                  aria-label={m.library_entry_state_label({ title, state: current })}
-                  data-slot="library-status"
-                  data-state={row.state}
-                />
-              }
-            >
-              {current}
-              <ChevronDownIcon aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuRadioGroup value={row.state} onValueChange={(value) => void onChange(value)}>
-                {libraryEntryStates.map((state) => (
-                  <DropdownMenuRadioItem key={state} value={state} closeOnClick>
-                    {stateLabel(state)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </form>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={m.library_entry_actions({ title })}
-                data-slot="library-actions"
-              />
-            }
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <nav aria-label={m.library_layout()} className="flex gap-1">
+        {shelfLayouts.map((layout) => (
+          <a
+            key={layout}
+            href={shelfHref(locale, { state, ...display, layout })}
+            {...(display.layout === layout ? { 'aria-current': 'true' as const } : {})}
+            className={`${link(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
           >
-            <EllipsisIcon aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44">
-            {subjectQuery ? (
-              <>
-                <DropdownMenuItem render={<a href={`/${locale}/library/copies${subjectQuery}`} />}>
-                  <BookCopyIcon aria-hidden="true" />
-                  {m.library_entry_copies()}
-                </DropdownMenuItem>
-                <DropdownMenuItem render={<a href={`/${locale}/library/progress${subjectQuery}`} />}>
-                  <GaugeIcon aria-hidden="true" />
-                  {m.library_entry_progress()}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            ) : null}
-            <DropdownMenuItem variant="destructive" disabled={!hydrated || pending} onClick={() => setRemoving(true)}>
-              <Trash2Icon aria-hidden="true" />
-              {m.library_remove()}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      {conflict ? <p role="status">{m.library_conflict()}</p> : null}
-      {failure ? <p role="alert">{failureText(failure)}</p> : null}
-      <form onSubmit={(event) => event.preventDefault()}>
-        <input type="hidden" name="subjectId" value={row.subjectId} />
-        <input type="hidden" name="revision" value={String(row.revision)} />
-        <input type="hidden" name="idempotencyKey" value={removeKey} />
-      </form>
-      <AlertDialog open={removing} onOpenChange={setRemoving}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{m.library_remove_confirm()}</AlertDialogTitle>
-            <AlertDialogDescription>{title}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>{m.library_collection_cancel()}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={pending} onClick={() => void onRemove()}>
-              {m.library_remove_submit()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </li>
+            {layoutLabel(layout)}
+          </a>
+        ))}
+      </nav>
+      {display.layout === 'grid' ? (
+        <nav aria-label={m.library_size()} className="flex gap-1">
+          {shelfSizes.map((size) => (
+            <a
+              key={size}
+              href={shelfHref(locale, { state, ...display, size })}
+              {...(display.size === size ? { 'aria-current': 'true' as const } : {})}
+              className={link(display.size === size)}
+            >
+              {sizeLabel(size)}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+    </div>
   );
 }
 
-function SignedInLibrary({ page, locale }: { page: Extract<PersonalLibraryView, { signedIn: true }>; locale: string }) {
-  const tabs: { state: LibraryEntryState | null; label: string }[] = [
-    { state: null, label: m.library_state_all() },
-    { state: 'planned', label: m.library_state_planned() },
-    { state: 'in_progress', label: m.library_state_in_progress() },
-    { state: 'completed', label: m.library_state_completed() },
-    { state: 'paused', label: m.library_state_paused() },
-    { state: 'dropped', label: m.library_state_dropped() },
-  ];
-  const ratio = rowRatio(page.entries.map((entry) => entry.subject));
+function Overview({
+  page,
+  locale,
+  display,
+}: {
+  page: Extract<SignedIn, { state: null }>;
+  locale: string;
+  display: Display;
+}) {
   return (
-    <>
-      <nav aria-label={m.library_states()} className="flex flex-wrap gap-2">
-        {tabs.map((tab) => {
-          const current = page.state === tab.state;
-          return (
-            <a
-              key={tab.state ?? 'all'}
-              href={libraryHref(locale, tab.state)}
-              {...(current ? { 'aria-current': 'page' as const } : {})}
-              className={buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'lg' })}
-            >
-              {tab.label}
-            </a>
-          );
-        })}
-      </nav>
+    <div className="space-y-10">
+      {page.sections.map((section) => (
+        <ShelfEntries
+          key={section.state}
+          entries={section.entries}
+          shelf={section.state}
+          locale={locale}
+          {...display}
+          section={{
+            title: section.state === 'in_progress' ? m.library_continue() : stateLabel(section.state),
+            href: shelfHref(locale, { state: section.state, ...display }),
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatusTab({
+  page,
+  cursor,
+  locale,
+  display,
+}: {
+  page: Extract<SignedIn, { state: LibraryEntryState }>;
+  cursor: string | undefined;
+  locale: string;
+  display: Display;
+}) {
+  return (
+    <div className="space-y-6">
       {page.entries.length ? (
-        <ol className="divide-y divide-border/60 border-y border-border/60">
-          {page.entries.map((entry) => (
-            <LibraryRow key={entry.subjectId} entry={entry} locale={locale} ratio={ratio} />
-          ))}
-        </ol>
+        <ShelfEntries
+          key={`${page.state}:${cursor ?? ''}`}
+          entries={page.entries}
+          shelf={page.state}
+          locale={locale}
+          {...display}
+        />
       ) : (
-        <p>{m.library_empty()}</p>
+        <ShelfEmpty
+          kind="tab"
+          title={m.library_tab_empty_title({ status: stateLabel(page.state) })}
+          description={m.library_tab_empty_description()}
+          actions={
+            <a href={shelfHref(locale, display)} className={buttonVariants({ variant: 'outline' })}>
+              {m.library_view_all()}
+            </a>
+          }
+        />
       )}
       {page.next ? (
         <a
-          href={libraryHref(locale, page.state, page.next)}
+          href={shelfHref(locale, { state: page.state, ...display, cursor: page.next })}
           className={buttonVariants({ variant: 'outline', size: 'lg' })}
         >
           {m.library_more()}
         </a>
       ) : null}
+    </div>
+  );
+}
+
+function SignedInLibrary({
+  page,
+  cursor,
+  locale,
+  display,
+}: {
+  page: SignedIn;
+  cursor: string | undefined;
+  locale: string;
+  display: Display;
+}) {
+  const empty = page.state === null && page.sections.length === 0;
+  return (
+    <>
+      <Tabs state={page.state} locale={locale} display={display} />
+      {empty ? (
+        <ShelfEmpty
+          kind="library"
+          title={m.library_empty_title()}
+          description={m.library_empty_description()}
+          actions={
+            <a href={`/${locale}/search`} className={buttonVariants()}>
+              {m.library_browse()}
+            </a>
+          }
+        />
+      ) : (
+        <>
+          {page.state === null || page.entries.length ? (
+            <DisplayLinks state={page.state} locale={locale} display={display} />
+          ) : null}
+          {page.state === null ? (
+            <Overview page={page} locale={locale} display={display} />
+          ) : (
+            <StatusTab page={page} cursor={cursor} locale={locale} display={display} />
+          )}
+        </>
+      )}
     </>
   );
 }
 
-export function PersonalLibraryPage({ page, locale }: { page: PersonalLibraryView; locale: string }) {
+export function PersonalLibraryPage({
+  page,
+  locale,
+  display,
+  cursor,
+}: {
+  page: PersonalLibraryView;
+  locale: string;
+  display: Display;
+  cursor?: string | undefined;
+}) {
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <PageHeading>{m.library_heading()}</PageHeading>
-        <LibrarySections locale={locale} />
-      </header>
+    <div className="max-w-6xl space-y-6 text-foreground">
+      <PageHeading>{m.library_heading()}</PageHeading>
       {page.signedIn ? (
-        <SignedInLibrary page={page} locale={locale} />
+        <SignedInLibrary page={page} cursor={cursor} locale={locale} display={display} />
       ) : (
         <p>
           <a
@@ -326,6 +233,6 @@ export function PersonalLibraryPage({ page, locale }: { page: PersonalLibraryVie
           </a>
         </p>
       )}
-    </article>
+    </div>
   );
 }

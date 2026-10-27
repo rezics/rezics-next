@@ -273,6 +273,14 @@ async function selectRecording(
   pathname: string,
   recordings: Record<string, KernelRecording>,
 ): Promise<KernelRecording | undefined> {
+  if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
+    // A shelf reads one status at a time; the recording holds every status, so the answer keeps the asked one.
+    const state = new URL(request.url).searchParams.get('state');
+    const recorded = recordings['library-entries'];
+    const rows = recorded?.libraryEntries;
+    if (state && recorded && Array.isArray(rows))
+      return { ...recorded, libraryEntries: rows.filter((row) => isRecord(row) && row.state === state) };
+  }
   const library = libraryRecording(request.method, pathname, recordings);
   if (library) return library;
   if (request.method === 'GET' && pathname === `/v1/accounts/${storyViewerId}/preferences`)
