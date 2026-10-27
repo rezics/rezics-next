@@ -5,6 +5,15 @@ export const MAX_IMPORT_TOTAL_WAIT_MS = 60000;
 export const MAX_IMPORT_DEADLINE_MS = 120000;
 export const MAX_IMPORT_ATTEMPTS = 5;
 
+/** Local retry admission only: no remote body, header text or credential is retained. */
+export type ImportRetryState = Readonly<{
+  notBefore?: number;
+  deadline: number;
+  stopped?: 'unrepresentable-delay' | 'wait-limit' | 'total-wait-limit' | 'deadline';
+}>;
+const retryStates = new WeakMap<Response, ImportRetryState>();
+export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
+
 export type ImportHttpOptions = {
   origin: string;
   token: (fresh?: boolean) => Promise<string>;
@@ -176,17 +185,16 @@ const httpDate = new RegExp(
     `${weekday} ${month} (?: \\d|\\d{2}) \\d{2}:\\d{2}:\\d{2} \\d{4})$`,
 );
 
-function retryDelay(response: Response, attempt: number, now: () => number): number | null {
-  const fallback = backoff(attempt);
-  const header = response.status === 429 ? response.headers.get('retry-after') : null;
-  if (header === null) return fallback;
-  let delay: number;
-  if (/^\d+$/.test(header)) delay = Number(header) * 1000;
+function retryAfter(response: Response, receivedAt: number): number | null | undefined {
+  const header = response.headers.get('retry-after');
+  if (header === null) return undefined;
+  let notBefore: number;
+  if (/^\d+$/.test(header)) notBefore = receivedAt + Number(header) * 1000;
   else if (httpDate.test(header) && Number.isFinite(Date.parse(header)))
-    delay = Math.max(0, Date.parse(header) - now());
-  else return fallback;
-  // An unrepresentable advertised delay cannot safely be shortened to a backoff.
-  return Number.isSafeInteger(Math.ceil(delay)) ? Math.ceil(delay) : null;
+    notBefore = Math.max(receivedAt, Date.parse(header));
+  else return undefined;
+  // An unrepresentable advertised time cannot safely become a shorter backoff.
+  return Number.isSafeInteger(Math.ceil(notBefore)) ? Math.ceil(notBefore) : null;
 }
 
 function backoff(attempt: number): number {
@@ -310,6 +318,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     const signal = controller.signal;
     const aborted = () => controller.abort(caller?.reason);
     caller?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
     let clearDeadline: (() => void) | undefined;
     try {
       clearDeadline = schedule(
@@ -378,15 +387,62 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
           attempt--;
           continue;
         }
+        const receivedAt = now();
+        let buffered = false;
+        const adaptable = response.status === 429 || response.status === 503;
+        const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
+        let overload = response.status === 429;
+        if (response.status === 503 && hint !== undefined) {
+          // Interpret 503 hints only for the same public retryable classifier as
+          // the coordinator. Buffer before parsing, under the existing body cap.
+          response = await boundedResponse(response, maxResponseBytes, signal);
+          buffered = true;
+          const problem: unknown = await abortable(signal, () =>
+            response
+              .clone()
+              .json()
+              .catch(() => null),
+          );
+          overload =
+            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+        }
+        const notBefore = overload ? hint : undefined;
+        const delay =
+          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+        const stopped = (): ImportRetryState['stopped'] =>
+          delay === null
+            ? 'unrepresentable-delay'
+            : delay > maxWaitMs
+              ? 'wait-limit'
+              : delay > maxTotalWaitMs - scheduledWait
+                ? 'total-wait-limit'
+                : notBefore !== undefined && now() + delay >= deadline
+                  ? 'deadline'
+                  : undefined;
+        const finish = async (refused = false) => {
+          const result = buffered ? response : await boundedResponse(response, maxResponseBytes, signal);
+          if (adaptable && (notBefore !== undefined || refused)) {
+            const reason = stopped();
+            retryStates.set(
+              result,
+              Object.freeze({
+                deadline,
+                ...(notBefore === undefined || notBefore === null ? {} : { notBefore }),
+                ...(reason === undefined ? {} : { stopped: reason }),
+              }),
+            );
+          }
+          return result;
+        };
         if (
           !retryable ||
           attempt === maxAttempts ||
           !(response.status === 429 || (response.status >= 500 && response.status <= 599))
         )
-          return await boundedResponse(response, maxResponseBytes, signal);
-        const delay = retryDelay(response, attempt, now);
-        if (delay === null || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
-          return await boundedResponse(response, maxResponseBytes, signal);
+          return await finish();
+        if (stopped() !== undefined) return await finish(true);
+        // stopped() rejects the null (unrepresentable) case before scheduling.
+        if (delay === null) return await finish(true);
         scheduledWait += delay;
         await abortable(request.signal, () => cancel(response.body));
         await sleep(delay, request.signal);

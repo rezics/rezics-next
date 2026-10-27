@@ -17,7 +17,13 @@ import {
 import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
-import { createImportFetch, MAX_IMPORT_BODY_BYTES, type ImportHttpOptions } from './import-fetch.ts';
+import {
+  createImportFetch,
+  importRetryState,
+  MAX_IMPORT_BODY_BYTES,
+  type ImportHttpOptions,
+  type ImportRetryState,
+} from './import-fetch.ts';
 import type { ImportSourceStatisticValue } from './import-contract.ts';
 
 export interface FenceTuple {
@@ -163,6 +169,7 @@ export class ImportTransportError extends Error {
     readonly type?: string,
     readonly code?: string,
     readonly retryable = false,
+    readonly retry?: ImportRetryState,
   ) {
     super('Import transport request failed');
     this.name = 'ImportTransportError';
@@ -190,7 +197,13 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
       : undefined;
   const code = field('code');
   const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
-  return new ImportTransportError(reply.response?.status, safeType, safeCode, field('retryable') === true);
+  return new ImportTransportError(
+    reply.response?.status,
+    safeType,
+    safeCode,
+    field('retryable') === true,
+    reply.response ? importRetryState(reply.response) : undefined,
+  );
 }
 async function response(call: () => Promise<ClientResponse>, expected: number, signal?: AbortSignal) {
   signal?.throwIfAborted();

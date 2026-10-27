@@ -92,6 +92,8 @@ const success = (result: BatchWriteResult['results'][number]) => result.status =
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
 type Write = <T>(operation: () => Promise<T>) => Promise<T>;
+// Platform policy per logical write and run, independent of width recovery.
+const MAX_WRITE_INVOCATIONS = 8;
 type Planned = { kind: Kind; deferredCover: boolean; conversion?: ImportConversion };
 
 // Native source keys are not normalized into different record identities. Compound
@@ -319,9 +321,22 @@ export class Importer {
         }
       };
       const write: Write = async (effect) => {
+        let invocations = 0;
+        let prior: ImportTransportError | undefined;
         for (;;) {
           if (signal.aborted) throw new Interrupted('Import was interrupted');
+          if (prior?.retry) {
+            const { notBefore, deadline } = prior.retry;
+            if (this.now() >= deadline) throw prior;
+            if (notBefore !== undefined) {
+              await this.sleep(notBefore - this.now(), signal);
+              if (signal.aborted) throw new Interrupted('Import was interrupted');
+              // Never send early even if an injected sleeper wakes prematurely.
+              if (this.now() < notBefore || this.now() >= deadline) throw prior;
+            }
+          }
           const singleWriter = width.width === 1 && active === 1;
+          invocations++;
           try {
             const result = await effect();
             width.width = Math.min(this.recordConcurrency, width.width + 1);
@@ -332,8 +347,16 @@ export class Importer {
               error instanceof ImportTransportError &&
               (error.status === 429 || (error.status === 503 && error.retryable));
             // An older wide cohort can finish after another record narrowed to
-            // one. Only a write started alone at width one proves an outage.
-            if (!overload || singleWriter || signal.aborted) throw error;
+            // one. An isolated width-one failure can stop sooner than the cap.
+            if (
+              !overload ||
+              singleWriter ||
+              signal.aborted ||
+              invocations >= MAX_WRITE_INVOCATIONS ||
+              error.retry?.stopped
+            )
+              throw error;
+            prior = error;
             width.width = Math.max(1, Math.floor(width.width / 2));
             active--;
             await new Promise<void>((resolve) => {
@@ -751,6 +774,7 @@ export class Importer {
       let after: string | undefined;
       let pending = false;
       let failed = false;
+      let stopped = false;
       for (;;) {
         const page = this.session.store.pageDeferredCovers(run, {
           ...(after ? { after } : {}),
@@ -770,16 +794,22 @@ export class Importer {
               return await this.resolveCover(registration, run, entry, signal, write);
             } catch (error) {
               if (error instanceof Interrupted) throw error;
-              return { outcome: 'failed' as const, kind: entry.kind };
+              const overload =
+                error instanceof ImportTransportError &&
+                (error.status === 429 || (error.status === 503 && error.retryable));
+              return { outcome: overload ? ('stopped' as const) : ('failed' as const), kind: entry.kind };
             }
           },
         );
         for (const outcome of outcomes) {
           if (outcome.outcome === 'pending') pending = true;
           else if (outcome.outcome === 'failed') failed = true;
+          else if (outcome.outcome === 'stopped') stopped = true;
         }
         if (page.length) after = page.at(-1)!.row.recordKey;
         this.options.observer?.onPageRetained?.('media', []);
+        // Polling availability must not open a new budget for a failed write.
+        if (stopped) return false;
         if (page.length < 100) break;
       }
       if (!pending && !failed) return true;
