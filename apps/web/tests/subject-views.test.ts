@@ -78,7 +78,7 @@ test("each subject view is its own server-rendered URL under the subject's addre
   // The route is a sibling of the overview route, so a view lives at /subjects/<id>/<view>.
   const route = await Bun.file(join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$view.tsx')).text();
   expect(route).toContain("createFileRoute('/subjects/$id_/$view')");
-  expect(route).toContain('loadSubjectPage(client, data.id, data.view)');
+  expect(route).toContain('loadViewPages(client, data.id, data.view)');
 
   sent.length = 0;
   const details = await loaded(kokoro, 'details');

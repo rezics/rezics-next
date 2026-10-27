@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import { planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
 import { Cover, type CoverLabels, type CoverRatio } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
@@ -88,6 +88,13 @@ export async function loadViewPages(client: KernelClient, id: string, view: View
   return { kind: 'page', page: result.page, overview: overview.page };
 }
 
+/** The tabs with the current view among them: the reader is on it, so the bar always offers it, in the documented order. */
+function withCurrent(tabs: readonly ViewTab[], view: View): readonly ViewTab[] {
+  if (tabs.some((tab) => tab.view === view)) return tabs;
+  const order = (tab: ViewTab) => VIEWS.indexOf(tab.view);
+  return [...tabs, { view }].sort((a, b) => order(a) - order(b));
+}
+
 /**
  * The compact header every subject view starts with, and the view tabs under it: which subject the reader is on, and
  * the way to every other view. The summary, reactions and library controls stay on the overview.
@@ -151,7 +158,7 @@ export function SubjectFrame({
           {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
         </div>
       </header>
-      {tabs.length > 0 && <ViewTabs tabs={tabs} active={view} locale={locale} base={base} labels={tabLabels} />}
+      <ViewTabs tabs={withCurrent(tabs, view)} active={view} locale={locale} base={base} labels={tabLabels} />
     </div>
   );
 }
