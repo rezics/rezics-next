@@ -1,20 +1,94 @@
-# Library profile ABI proposal
+# Agreed library profile ABI and implementation handoff
 
-[Library and Collections](../../../docs/library-and-collections.md) is the authority: they are one capability,
-configured through definitions. This document proposes the definitions ABI and its executable acceptance surface;
-it does not replace a consumer agreement. No agreed Commerce field shape is present in this checkout. The names
-below are a concrete proposal for that agreement, not an assertion that the illustrative research JSON was adopted.
-There is no product implementation in this change. The new tests intentionally fail on missing compiler/schema/data
-support, while importing only entrypoints that already exist. Actual row replay and migration remain subsequent
-Commerce API acceptance, not package test outcomes.
+[Library and Collections](../../../docs/library-and-collections.md) is authoritative. This handoff incorporates the
+Semantic/Commerce agreement, including unknown historical accepting types. It supersedes the original inline,
+numeric-revision proposal. This change contains executable specifications and fixture data only. It neither emits
+a bundle nor implements Commerce migration, activation, transactions or replay. The tests use the existing
+`compileCatalogue`, `validateRelease` and `releaseDigest` entrypoints and intentionally expose missing support.
 
-The inherited annotation follows the existing `cover_ratio` source path and `coverRatio` output precedent.
-`bases` remains ancestry metadata, never instructions for a runtime walk. Source: class `annotations.library`
-is a native YAML mapping (also a JSON object when schemas are supplied as JSON), not JSON text in a scalar.
-Its fields equal the compiled profile below, except that every `labels` member is absent in source.
-No separate global profile registry or mutable profile lookup is introduced.
+## Canonical immutable data
 
-## Source and presentation
+`Release.libraryProfiles?: Record<string, LibraryProfile>` is the sole immutable canonical registry. A registry key
+must equal its object's `id`. `TypeDefinition.library?: { profileId: string }` is a closed reference, never an inline
+profile. Intern each unique canonically labelled object once. Repeated identical declarations deduplicate;
+conflicting semantic bodies or labels with the same ID reject. All references must resolve in the same release.
+There is no numeric profile revision, second authority, mutable service or table.
+
+Resolve the nearest whole source declaration during compilation, following the existing bounded ancestry rules.
+A bridge with no declaration inherits. A nearer declaration replaces the entire profile, including absent fields
+and empty lists: no field fallback, list union or runtime ancestry traversal. A declaration with only `id` is valid
+and enables no state/progress/copy/import operations. A source annotation cannot be null, a scalar, an array, or an
+empty object; there is no implicit suppression syntax. Older releases with neither registry nor references remain
+valid, byte/digest stable, with no silently installed defaults. An optional empty registry is valid too.
+
+The unattached `legacy-fixed-v1` entry is immutable release data, available for explicit legacy provenance only.
+Source may declare it on an abstract class with no `class_uri` and no descendants. Collect that declaration as inert
+annotation data; do not emit a fake type. Reject an attachment or inheritance of this reserved profile into any
+accepting type. Never annotate People, Organizations, Concepts, Thing, CreativeWork or a default root to make
+legacy data reachable. Ordinary writes on a type with no reference remain unsupported even when the registry has
+this entry. A release without this declaration need not synthesize it; the future bundled release must include it.
+
+## Exact closed output
+
+All object members in this shape are exhaustive. Source uses the same nested shapes except that every `labels`
+member is absent. Numeric strings must remain strings while parsing YAML/JSON; numeric bounds must reject without
+coercion. JSON Schema, source validation and release semantic validation must agree, including recursive closure.
+
+```ts
+type Labels = { en: string } & Partial<Record<'de' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant', string>>;
+type Id = string;
+type Mode = 'scalar_amount' | 'cursor_position' | 'completed_units';
+type LibraryProfile = {
+  id: Id;
+  entryStateSet?: {
+    id: Id;
+    states: { id: Id; labels: Labels; role?: 'planned' | 'active' | 'completed' | 'paused' | 'dropped' }[];
+  };
+  progress?: {
+    allowed: {
+      mode: Mode;
+      units: {
+        id: Id;
+        labels: Labels;
+        dimension?: Id;
+        minimum?: string;
+        maximum?: string;
+        precision?: number;
+        totalPolicy?: 'optional' | 'required' | 'forbidden';
+        identity: { kind: 'none' } | { kind: 'session_local' };
+        structure: { kind: 'none' };
+      }[];
+    }[];
+  };
+  copies?: { kinds: { id: Id; labels: Labels; statuses: { id: Id; labels: Labels }[] }[] };
+  importSources?: { id: Id; mappingVersion: Id; recordKinds: Id[] }[];
+};
+```
+
+Use bounded ASCII data identifiers for profile/state-set/state/unit/dimension/copy-kind/status/source/mapping-version
+and record-kind IDs: 1–64 characters, first `[a-z]`, remaining `[a-z0-9_.-]`. Match the entire string, including rejecting
+a trailing newline (`^[a-z][a-z0-9_.-]{0,63}$` with an explicit entire-input check). This accommodates `legacy-fixed-v1`,
+`legacy-unspecified`, `in_progress`, `visual-novel.reading`, `seed-tray.v2` and `v1.0`. Unit IDs and import record-kind
+IDs are data, not backend enums or declarations that a provider/adapter exists. Import consumers still require an
+implemented mapping for their supported record kinds; a new identifier alone enables nothing. There is no new
+length cap or profile identifier grammar imposed on `acceptingType`, which is an existing real type identifier.
+
+Labels are 1–80 Unicode code points. Exactly the eight launch locales are allowed, English is mandatory; each launch
+leaf has all eight. Reject unknown locale keys, missing English, empty and oversized labels. Do not invent labels
+on profiles, state sets, modes, import sources, identity or structure. Labels and semantic roles are not identifiers.
+
+Each present state set has 1–64 states. There are 0–3 allowed modes, each with 1–32 units; 0–16 copy kinds, each with
+1–64 statuses; 0–32 import sources, each with 1–16 record-kind IDs. Reject duplicate state IDs within a set, modes,
+unit IDs within a mode, kind IDs, statuses within a kind, source IDs, and record kinds within a source. A unit may
+appear under several modes with different metadata and labels. Status IDs may repeat in different kinds. Distinct
+profiles may reuse vocabulary IDs; no global unit-name rules exist. Check missing/invalid registry references,
+key/ID mismatch, hostile keys and unknown members at every nesting level, including descriptors and presentation.
+Do not accept credentials, endpoints, executable configuration, conversions, grants or adapter enablement flags.
+
+## Source and presentation homes
+
+The annotation is a native YAML mapping, or an object in JSON schema input, never serialized JSON text in a scalar.
+A minimal example in `catalogue/book.yaml` is:
 
 ```yaml
 classes:
@@ -23,350 +97,175 @@ classes:
     annotations:
       library:
         id: book.reading
-        revision: 1
         entryStateSet:
           id: legacy-five
-          states:
-            - { id: planned, role: planned }
-            - { id: in_progress, role: active }
-            - { id: completed, role: completed }
-            - { id: paused, role: paused }
-            - { id: dropped, role: dropped }
-        units:
-          - { id: page, dimension: count, precision: 0, minimum: 0, maximum: 999999999999 }
+          states: [{ id: planned, role: planned }]
         progress:
-          - { mode: scalar_amount, units: [page], totalPolicy: optional }
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: page
+                  minimum: '0'
+                  maximum: '999999999999.999999'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
         copies:
-          - { id: physical, statuses: [{ id: owned }, { id: disposed }] }
-          - { id: digital, statuses: [{ id: owned }] }
+          kinds: [{ id: physical, statuses: [{ id: owned }] }]
         importSources: []
 ```
 
-For a declaration in `catalogue/book.yaml`, labels live only in
-`presentation/book/{locale}.yaml` under `libraryProfiles["book.reading"]`:
+Labels live in the declaration's existing schema presentation group, for example
+`presentation/book/en.yaml` under `libraryProfiles["book.reading"]`. The exhaustive leaf homes are:
 
 ```yaml
 libraryProfiles:
   book.reading:
-    profile: library
-    stateSet: state
-    states: { planned: Planned, in_progress: In progress, completed: Completed, paused: Paused, dropped: Dropped }
-    units: { page: page }
-    copyKinds: { physical: physical, digital: digital }
+    states: { planned: Planned }
+    units:
+      scalar_amount: { page: page }
+    copyKinds: { physical: physical }
     copyStatuses:
-      physical: { owned: owned, disposed: disposed }
-      digital: { owned: owned }
-    importSources: {}
+      physical: { owned: owned }
 ```
 
-These are leaf strings, compiled into `labels[locale]` on the corresponding profile, state set, state, unit,
-kind, status or source. English is required for each leaf; the launch data requires all eight UI locales
-`de/en/es/fr/ja/ko/zh-Hans/zh-Hant`. Reject unknown profile/member/locale keys, duplicate contributions, misplaced
-homes, missing English and labels longer than 80 Unicode code points or empty labels. Inheritance copies the
-already labelled declaration; a child does not relabel its inherited profile in its own presentation home.
-An override has a new profile ID and its own home. Neither labels nor semantic roles are identifiers.
-Presentation objects are closed: exactly `profile`, `stateSet`, `states`, `units`, `copyKinds`, `copyStatuses`,
-`importSources`; each map admits only IDs actually declared in that profile (statuses are nested by kind).
-Profile maps contain at most the number of declarations in their bounded source schemas.
+`states[stateId]` labels the declared state's `labels[locale]`; `units[mode][unitId]` labels exactly that pair;
+`copyKinds[kindId]` labels the kind; `copyStatuses[kindId][statusId]` labels that status in that kind. These four
+optional maps are the only presentation members; maps for absent capabilities must be absent. An empty capability
+may have an empty map. `units` is always mode-nested, including when only one mode is present. Thus scalar percent
+and cursor percent have unambiguous independent homes. No `profile`, `stateSet` or `importSources` presentation leaf
+exists. Unknown profiles, modes, units, kinds, states or statuses reject; misplaced/duplicate contributions reject.
+English is required for every declared label leaf. Inheritance references the already labelled object; a child
+cannot relabel it at a different home. Repeated source declarations in different schema groups may contribute only
+canonically identical fully labelled objects. Conflicting labels reject just like conflicting semantic bodies.
 
-## Closed TypeScript output
+## Progress meaning and preserved legacy acceptance
 
-All object members below are exhaustive. JSON Schema and runtime validation reject extra members recursively;
-TypeScript alone does not enforce exact objects. `TypeDefinition` gains only optional `library?: LibraryProfile`.
-Absence is distinct from a present profile with empty progress/copies/importSources.
+Metadata belongs to a mode/unit pair. `dimension` is optional inert vocabulary: never conversion, arithmetic or a
+unit-name compatibility rule. Bounds are nonnegative exact decimal strings, using the existing parser grammar:
+`0` or a nonzero-leading sequence of at most 12 integer digits, optionally followed by a dot and 1–6 fractional
+digits. No signs, whitespace, exponents or leading zeros. Compare digit strings exactly, padding fractions for
+comparison, rather than converting to floating point. If both bounds are present require minimum <= maximum.
+Optional `precision` is an integer 0–6; absence retains the parser's 12-integer/6-fraction acceptance, including
+fractional pages/counts. No implicit precision zero or integer-only count rule is permitted.
+
+`totalPolicy` is optional/required/forbidden. Absence means the algorithm's existing default: scalar optional,
+cursor and completed sets forbidden. Cursor/completed explicit policies must be forbidden. Scalar bounds apply
+to amount and a supplied total. They are not a percentage conversion or a fixed total. Percent is an ordinary unit
+ID; only the explicit legacy scalar percent pair sets minimum `0` and maximum `100`. Legacy cursor percent position
+may exceed 100 up to the parser bounds. A normal profile's numeric bounds are its declared pair metadata.
+
+Scalar and cursor identity is exactly `{kind:'none'}`. Completed-unit identity is exactly
+`{kind:'session_local'}`. Structure is exactly `{kind:'none'}` for all three modes. No provider, revision or extra
+member is accepted. Completed sets are valid personal assertions of exact opaque keys scoped to a session, not
+verified episodes/achievements or an ordinal range. A reread has a new session/keyspace. Existing bounds from
+`services/kernel/src/library/progress.ts` are 1–128 ASCII characters `[A-Za-z0-9_.:~-]` per sparse key, at most
+100 add/remove IDs combined per command, no duplicates or add/remove overlap, and 20,000 stored completed keys per
+session. Sparse `{1,3,7}` stays sparse; cardinality is separate from decimal position/amount bounds. A cursor locator
+retains the existing 1–256 character bound. Package tests prove descriptors/data, not execution of these algorithms.
+A future provider-backed identity/structure needs a separately implemented and agreed kernel contract.
+
+The explicit migration profile is exactly:
+
+- ID `legacy-fixed-v1`; state set `legacy-five`, five IDs `planned/in_progress/completed/paused/dropped`, roles
+  `planned/active/completed/paused/dropped` respectively.
+- All 18 pairs: `scalar_amount`, `cursor_position`, `completed_units`, each with all six IDs
+  `page/chapter/episode/volume/minute/percent`. Minimum `0` on each; no precision property. Only scalar percent has
+  maximum `100`; other pairs have no declared maximum beyond the existing parser or sparse cardinality bounds.
+  Scalar total optional, other modes forbidden. Identity and structure as above. No global count-only restrictions.
+- One kind `legacy-unspecified` with all four statuses `ordered/owned/lent/disposed`, never inferred physical/digital
+  licence. Empty import sources. All state/unit/kind/status leaves have the eight launch labels.
+
+Migration preserves actual values, IDs, revisions, dates and sparse sets and invents no session, completed range,
+holding, entitlement or adapter. Unknown historical values remain readable with explicit legacy provenance.
+These are Commerce obligations; definitions package fixtures do not claim that any stored row was migrated.
+
+## Release provenance and lookup policy
 
 ```ts
-type Locale = 'de' | 'en' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant';
-type Labels = { en: string } & Partial<Record<Exclude<Locale, 'en'>, string>>;
-type LocalId = string; // ^[a-z][a-z0-9_]{0,31}$, end anchored against trailing newline
-type ScopedId = string; // ^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$
-type UnitId = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
-type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-type Named = { id: LocalId; labels: Labels };
-type LibraryProfile = {
-  id: ScopedId;
-  revision: number; // integer 1..2147483647
-  labels: Labels;
-  entryStateSet: Named & {
-    states: (Named & { role?: 'planned' | 'active' | 'completed' | 'paused' | 'dropped' })[];
-  };
-  units: {
-    id: UnitId;
-    labels: Labels;
-    dimension: 'count' | 'duration' | 'ratio';
-    precision: number;
-    minimum: number;
-    maximum: number;
-  }[];
-  progress: { mode: ProgressMode; units: UnitId[]; totalPolicy: 'optional' | 'forbidden' | 'fixed_100' }[];
-  copies: (Named & { statuses: Named[] })[];
-  importSources: {
-    id: ScopedId;
-    labels: Labels;
-    mappingVersion: LocalId;
-    types: string[]; // exact accepting type CURIEs in this release
-    recordKinds: ('entry_state' | 'progress' | 'holding' | 'observation')[];
-  }[];
-};
-type LibraryProfilePin = {
-  releaseDigest: string; // ^sha256:[0-9a-f]{64}$, immutable release address
-  type: string; // accepting type CURIE, not a structural source class name
-  profileId: ScopedId;
-  profileRevision: number;
-};
+type LibraryProfilePin =
+  | { provenance: 'profile'; releaseDigest: string; acceptingType: string; profileId: string }
+  | { provenance: 'legacy'; releaseDigest: string; acceptingType: string | null; profileId: 'legacy-fixed-v1' };
 ```
 
-IDs are scoped as `(profileId, stateSet.id, state.id)`, `(profileId, unit.id)`,
-`(profileId, copyKind.id, status.id)`, and `(profileId, importSource.id, mappingVersion)`.
-Each declaring class owns one profile ID per release; duplicates across distinct declarations are rejected even
-if byte identical. Repeated inherited copies are permitted. A profile revision is not a release address.
-The accepting type remains in the pin even when several types inherit the same declaration.
+`releaseDigest` is the immutable `sha256:` plus 64 lowercase hex digest; there is no numeric `profileRevision`.
+A normal pin requires the actual real nonnull accepting type. New writes resolve its active compiled reference
+and registry entry, and cannot submit legacy provenance to bypass absent capability. Historical normal lookups
+resolve the stored digest, then the stored type's reference, and verify the pinned profile ID against that reference.
+An unavailable release, missing entry or mismatch is an explicit unavailable/incompatible outcome; never search
+other releases, walk bases or substitute a mutable current type/release.
 
-## Closed JSON Schema fragment
+Legacy lookup resolves its stored digest's registry entry independently of a type annotation. A retained historical
+accepting type may be used only when authoritative evidence retained it. If never retained it is `null`, never the
+mutable current type, even if visible now. Never expose hidden current metadata through a migration pin. An observed
+migration-time type, if separately recorded, must be identified as such and cannot replace historical provenance.
+Pins are Commerce storage/API contracts; the definitions release itself contains no pins or consumer receipt data.
 
-Add `library: { "$ref": "#/$defs/libraryProfile" }` to the existing closed type schema, without making it
-required. This fragment defines all new shapes. `typeCurie` reuses the release's existing `curie` definition.
-Patterns use the repository's strict end-anchor convention. Numeric cross-field rules, unique IDs, references
-and canonical byte limits are semantic validation shared by compiler and `validateRelease`, not just schema rules.
-Source validation uses the same structure with `labels` removed, then attaches presentation before release validation.
+Publish immutable bytes, then explicitly activate through Global expected-head CAS. Bundle editing alone neither
+activates databases nor migrates rows. A changed profile body or label creates a new release digest; the stable ID
+may be reused in another release. Stored pins keep the old digest. Rollback to a previous digest never changes pins
+or values. Narrowing/renaming/mapping changes require explicit bounded checkpointed Commerce migration admission;
+never coerce or silently narrow old acceptance. Every replay authorizes at current authoritative T before receipt
+disclosure. Actual migration, privacy, replay, unknown-value reads and rollback API outcomes belong to Commerce's
+acceptance; the two-digest package fixture proves immutable data lookup only, not pointer transactions or row replay.
 
-```json
-{
-  "$defs": {
-    "libraryLocalId": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$(?![\\s\\S])" },
-    "libraryScopedId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}\\.[a-z][a-z0-9-]{0,31}$(?![\\s\\S])" },
-    "libraryLabels": {
-      "type": "object",
-      "required": ["en"],
-      "additionalProperties": false,
-      "maxProperties": 8,
-      "patternProperties": {
-        "^(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)$(?![\\s\\S])": { "type": "string", "minLength": 1, "maxLength": 80 }
-      }
-    },
-    "libraryUnitId": { "enum": ["page", "chapter", "episode", "volume", "minute", "percent"] },
-    "libraryNamed": {
-      "type": "object",
-      "required": ["id", "labels"],
-      "additionalProperties": false,
-      "properties": { "id": { "$ref": "#/$defs/libraryLocalId" }, "labels": { "$ref": "#/$defs/libraryLabels" } }
-    },
-    "libraryState": {
-      "type": "object",
-      "required": ["id", "labels"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "role": { "enum": ["planned", "active", "completed", "paused", "dropped"] }
-      }
-    },
-    "libraryStateSet": {
-      "type": "object",
-      "required": ["id", "labels", "states"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "states": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/libraryState" } }
-      }
-    },
-    "libraryUnit": {
-      "type": "object",
-      "required": ["id", "labels", "dimension", "precision", "minimum", "maximum"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryUnitId" },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "dimension": { "enum": ["count", "duration", "ratio"] },
-        "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
-        "minimum": { "type": "number", "minimum": 0, "maximum": 999999999999 },
-        "maximum": { "type": "number", "minimum": 0, "maximum": 999999999999 }
-      }
-    },
-    "libraryProgress": {
-      "type": "object",
-      "required": ["mode", "units", "totalPolicy"],
-      "additionalProperties": false,
-      "properties": {
-        "mode": { "enum": ["scalar_amount", "cursor_position", "completed_units"] },
-        "units": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 6,
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/libraryUnitId" }
-        },
-        "totalPolicy": { "enum": ["optional", "forbidden", "fixed_100"] }
-      }
-    },
-    "libraryCopyKind": {
-      "type": "object",
-      "required": ["id", "labels", "statuses"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "statuses": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/libraryNamed" } }
-      }
-    },
-    "libraryImportSource": {
-      "type": "object",
-      "required": ["id", "labels", "mappingVersion", "types", "recordKinds"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryScopedId" },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "mappingVersion": { "$ref": "#/$defs/libraryLocalId" },
-        "types": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 16,
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/curie" }
-        },
-        "recordKinds": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 4,
-          "uniqueItems": true,
-          "items": { "enum": ["entry_state", "progress", "holding", "observation"] }
-        }
-      }
-    },
-    "libraryProfile": {
-      "type": "object",
-      "required": ["id", "revision", "labels", "entryStateSet", "units", "progress", "copies", "importSources"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/libraryScopedId" },
-        "revision": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "labels": { "$ref": "#/$defs/libraryLabels" },
-        "entryStateSet": { "$ref": "#/$defs/libraryStateSet" },
-        "units": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/libraryUnit" } },
-        "progress": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/libraryProgress" } },
-        "copies": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/libraryCopyKind" } },
-        "importSources": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/libraryImportSource" } }
-      }
-    }
-  }
-}
-```
+## Launch data and release cost
 
-## Resolution, compatibility and bounds
+These are the eleven actual accepting declarations. Keep work vs edition/release distinct; unrelated agent/concept
+types remain absent. Each normal profile uses `libraryProfile` in the fixture helper: five states/roles as above,
+one scalar unit with minimum `0`, optional total, absent precision, identity/structure none; scalar percent maximum
+`100`. Copies are physical `{owned,disposed}` and digital `{owned}` personal assertions, and imports empty.
 
-Walk the existing single `is_a` ancestry at compile time, nearest class first, including abstract classes without
-CURIEs. The first explicitly declared profile wins as a whole. No list union, field fallback, mutation or
-shared mutable output objects. No declaration means omit `library`, including after recompiling older sources.
-`null`, booleans, arrays and scalar annotations are invalid; `{}` is not suppression. Multiple parents/mixins
-remain outside the existing LinkML subset. Reject ambiguous concrete declarations sharing a CURIE before any
-order-dependent choice; reject duplicate profile IDs across declaring classes. Stable source pointers and sorted,
-capped diagnostics follow `CatalogueError`. Profile declaration order and state order are presentation data;
-identical source compiles deterministically, without sorting a state's display order by its label.
+| Source            | Class            | Accepting type   | Profile ID           | Unit    |
+| ----------------- | ---------------- | ---------------- | -------------------- | ------- |
+| book.yaml         | Work             | schema:Book      | book.reading         | page    |
+| book.yaml         | Edition          | bf:Instance      | book.edition         | page    |
+| anime.yaml        | TVSeries         | schema:TVSeries  | anime.series         | episode |
+| anime.yaml        | TVSeason         | schema:TVSeason  | anime.season         | episode |
+| anime.yaml        | Episode          | schema:Episode   | anime.episode        | minute  |
+| anime.yaml        | Movie            | schema:Movie     | anime.film           | minute  |
+| game.yaml         | VideoGame        | schema:VideoGame | game.playing         | minute  |
+| game.yaml         | VideoGameRelease | wd:Q20631656     | game.release         | minute  |
+| game.yaml         | GameAddOn        | wd:Q209163       | game.addon           | minute  |
+| visual-novel.yaml | VisualNovel      | wd:Q689445       | visual-novel.reading | percent |
+| recipe.yaml       | Recipe           | schema:Recipe    | recipe.cooking       | minute  |
 
-All IDs must be unique within their scope (state IDs, unit IDs, modes, units per mode, kind IDs, status IDs per
-kind, source IDs, source types and record kinds). References must exist in this release; every progress unit must
-be declared in the same effective profile. Import `types` is an exact compatibility allowlist; an inherited
-profile does not expand that list. Unsupported writes to a descendant are rejected rather than searched in bases.
+Compilation touches bounded source ancestry, presentation data and each canonical registry object once, memoizing
+nearest declarations. Runtime touches one type reference and one registry point, no account traversal. The complete
+canonical release retains the existing limits: 4 MiB UTF-8, 1,024 types, 4,096 properties. Reject oversize bytes before
+expensive semantic validation. The superseded per-inline-copy 16 KiB limit is not an additional profile cap: the
+agreed 64/3x32/16x64/32x16 maxima and 80-code-point labels have an executable full-cardinality byte witness under the
+actual release limit. No cardinality or complete-release limit is narrowed.
 
-Counts have dimension `count`, integer precision zero and integer bounds. Minutes have dimension `duration`;
-percent has dimension `ratio`, bounds exactly 0 and 100 and precision 0..6. Minimum must not exceed maximum;
-bounds must be representable at the declared decimal precision. All numeric magnitudes stay within the existing
-12-integer-digit/6-fractional-digit engine contract. No implicit conversions between dimensions or units.
-`scalar_amount` admits declared count, minute and percent units; total policy is `optional` for count/minute and
-`fixed_100` for percent. `cursor_position` admits only count units, with `forbidden` totals. One rule per mode;
-a scalar rule cannot mix percent with count/minute because their total policies differ.
+The expansion fixture uses `services/kernel/test/support/manifests.ts`: each of 10/100 manifests adds three types,
+twelve properties, eight presentation files. Work/edition inherit from a structural abstract base; the agent does
+not. Even manifests share one canonical profile ID; odd manifests introduce gardening `seed-tray.v2` units and
+unique profiles with source/presentation only. Canonical byte delta charges each new registry key/object once and
+each type's closed reference, including commas/colons/member names. Removing those members recovers the entire plain
+baseline; existing bundled types, properties, contexts and filters stay equal. There is no wall-time benchmark,
+per-vertical backend/table/deployment work or claim about migrated stored rows.
 
-`completed_units` remains the existing sparse-set algorithm, not a count or achievement algorithm. There is no
-accepted stable unit identity plus structure-revision binding in this checkout, so all profile declarations of
-that mode fail semantic validation for now. Its enum name stays reserved to the existing algorithm; nothing
-adds a fourth mode. A later agreed identity contract must be explicitly admitted by the closed schema before
-sparse units become configurable. Do not fabricate an achievement provider contract. The current launch profiles
-select scalar progress; tests also accept cursor on page units. Repeated recipe cooks are repeated sessions,
-not invented completed-unit IDs.
+## Ready implementation slices
 
-Kinds define allowed pairs by containment: `digital/owned` and `physical/disposed` are allowed; `digital/disposed`
-is not in the proposed launch data. These are private personal assertions, including digital ownership wording,
-never access rights or entitlements. Attributes have no admitted field in this revision. Future platform, store,
-condition and provenance attributes require a closed, bounded typed schema extension, not an opaque object.
-Import descriptors are declarations only. Stable source and mapping IDs never enable adapters. No credentials,
-URLs/endpoints, permissions, executable mappings or enablement flags are accepted anywhere in a profile.
-`observation` is a distinct record kind, never an assertion or an automatic holding. Launch import arrays are
-empty: the synthetic `fixture.manual` mapping in tests makes no provider capability claim.
+The specification is ready for these separate production slices, with no ABI alternatives left to choose:
 
-Each compiled effective profile is at most 16 KiB of canonical UTF-8 JSON, including labels, and is charged once
-per accepting type in the complete canonical release. Array caps are in the schema; the complete release remains
-at most 4 MiB, 1,024 types and 4,096 properties. Check bytes before expensive semantic validation. Compilation and
-validation touch only supplied schema/presentation/profile bytes, O(total bytes) under the existing source and
-ancestry caps; memoize nearest declaration resolution rather than repeating ancestry walks per consumer. Detect
-identity duplicates with bounded maps. Consumers perform one fixed bounded lookup in the pinned release.
-No SQL, account traversal, profile service, table, deployment or per-vertical backend path is needed.
+1. **Compiler/schema:** `packages/definitions/src/compile.ts` (source annotation allowlist, inert abstract collection,
+   whole-declaration inheritance, interning and presentation homes), `packages/definitions/src/index.ts` (closed ABI,
+   runtime semantics), `packages/definitions/schema/release.json` (optional registry, closed references/nested data).
+   Run `packages/definitions/test/library-profiles.test.ts` except the launch-data test, and expansion acceptance.
+   In particular the named canonical-reference, explicit-legacy and release-pinned tests are executable reds until
+   this support exists. Preserve old-release absence. No Commerce implementation is part of this slice.
+2. **Catalogue/presentation/bundle:** `packages/definitions/catalogue/{book,anime,game,visual-novel,recipe}.yaml` and
+   their eight `packages/definitions/presentation/<group>/<locale>.yaml` files supply the table above; put the inert
+   unattached legacy declaration in `book.yaml` with its labels in the book presentation group. Regenerate
+   `packages/definitions/release/rezics.json` with `bun run --cwd packages/definitions release`. Acceptance is the
+   eleven-type/eight-locale launch test plus the same full package/expansion check. The future bundle change MUST
+   also regenerate `apps/web/src/kernel/recorded/definitions-active.json` and `definitions-release.json` using exactly
+   `bun run --cwd apps/web record -- definitions-active definitions-release` in the same change after Web's recording
+   contract lands. This specification creates no bundle and does not wait for that code.
+3. **Commerce:** use these structural provenance pins and lookup/absence rules; its specification owns migration,
+   current authorization, privacy and actual API replay. No fake package transaction test stands in for that work.
 
-## Launch declarations and migration profile
-
-These exact catalogue classes were inspected; do not annotate Thing, CreativeWork, LaunchWork or unrelated agents
-and concepts. All launch declarations use `legacy-five`, preserving `planned/in_progress/completed/paused/dropped`
-and the corresponding roles in the example. All use physical `{owned, disposed}` and digital `{owned}` pairs,
-with private assertion meaning. A printed recipe copy is a personal holding assertion too. Work and edition/release
-remain distinct accepting types, not implicit redirects. A future profile can use different IDs and omit roles;
-independent labels and wishlist membership coexist through Commerce's generic capability, outside this ABI.
-
-| Source            | Declaring class  | Accepting type                          | Profile ID           | Scalar unit |
-| ----------------- | ---------------- | --------------------------------------- | -------------------- | ----------- |
-| book.yaml         | Work             | schema:Book                             | book.reading         | page        |
-| book.yaml         | Edition          | bf:Instance                             | book.edition         | page        |
-| anime.yaml        | TVSeries         | schema:TVSeries                         | anime.series         | episode     |
-| anime.yaml        | TVSeason         | schema:TVSeason                         | anime.season         | episode     |
-| anime.yaml        | Episode          | schema:Episode                          | anime.episode        | minute      |
-| anime.yaml        | Movie            | schema:Movie                            | anime.film           | minute      |
-| game.yaml         | VideoGame        | schema:VideoGame (via BangumiVideoGame) | game.playing         | minute      |
-| game.yaml         | VideoGameRelease | wd:Q20631656                            | game.release         | minute      |
-| game.yaml         | GameAddOn        | wd:Q209163                              | game.addon           | minute      |
-| visual-novel.yaml | VisualNovel      | wd:Q689445                              | visual-novel.reading | percent     |
-| recipe.yaml       | Recipe           | schema:Recipe                           | recipe.cooking       | minute      |
-
-Persist the complete `LibraryProfilePin` with each accepted fact/session/copy or its immutable accepting revision.
-Resolve exactly `release.types[pin.type].library`; verify profile ID and revision match. No cross-release search,
-mutable global profile resolution or runtime base walk. Do not substitute the current Global release on reads.
-A missing pinned release or mismatch is an explicit unavailable/incompatible outcome, not fallback.
-Publishing a new digest leaves old bytes untouched. Activation changes only the existing Global pointer with
-`expectedHead` CAS; rollback reactivates an old digest and changes neither pins nor values. A release cannot prove
-its relationship to another release in isolation; activation/migration admission belongs to the consumer protocol.
-
-Any profile content change, including labels, requires a new profile revision and immutable release digest.
-Removing/renaming IDs, changing roles or units, narrowing pairs, or inheritance changes additionally requires an
-explicit versioned migration mapping between full source and destination pins. A label-only revision needs no
-value conversion but does not rewrite existing pins. A mapping must enumerate state IDs, mode/unit pairs and
-kind/status pairs it changes, and leave unmapped/unknown historic values readable under their source pin.
-Unsupported new writes are rejected. No coercion, deletion or conversion from count to sparse IDs is allowed.
-Migration is an explicit bounded, checkpointed consumer operation, never activation side effects.
-
-Older releases without `library` remain valid and retain their digest. No default profile is silently installed.
-Existing unprofiled rows remain legacy reads under their original release; an explicit migration can bind the
-five preserved state IDs to the migration profile without changing their meaning. Unknown historic IDs remain
-readable raw values under their old release; they cannot be guessed into a new state. Absence never autoenables
-an adapter, creates sessions/holdings, or adds labels. New profile-aware writes require an explicit accepting pin.
-The two-release package fixture proves immutable data separation and pointer rollback only; Commerce must test
-actual row replay, unknown-ID reads, bounded mappings, pair narrowing and rollback through its API.
-
-## Production handoff
-
-1. In `src/compile.ts`, extend the class annotation allowlist and bounded source/presentation validation together;
-   resolve nearest profiles at compile time and attach independently copied effective values. In `src/index.ts`
-   and `schema/release.json`, add the optional closed ABI and shared semantic constraints. Keep absence valid.
-2. In the five `catalogue/*.yaml` files above and their eight `presentation/<group>/*.yaml` files, add only the
-   declared data. Regenerate `release/rezics.json` with the existing release script. No Commerce implementation is
-   part of this slice; reconcile this proposed ABI with its manager agreement before production implementation.
-3. Owners then update typed consumers and Web recordings, publish and explicitly activate. Commerce's subsequent
-   acceptance owns stored pin shape adoption, migration admission, row reads/writes and observations/assertions.
-   An ABI conflict must return to that agreement before implementation rather than be hidden by a compatibility alias.
-
-`test/library-profiles.test.ts` exercises real `compileCatalogue`, `validateRelease` and `releaseDigest`; no missing
-static imports manufacture red tests. `test/library-profile-expansion.test.ts` reuses the existing
-`services/kernel/test/support/manifests.ts` generator and the root-import pattern from
-`services/kernel/test/semantic/expansion.test.ts`. Ten and one hundred manifests each add three types and twelve
-properties; only fixture work/edition get profiles through a structural base. The fixture agent does not.
-Assertions charge exact canonical profile bytes plus JSON member overhead, stay within existing cardinalities,
-and preserve bundled definitions/properties/contexts/filters. A fourth/sixth fixture vertical needs only source
-and presentation data; no package backend code, schema/table or deployment growth per vertical. The existing
-catalogue expansion acceptance is unchanged. No wall-clock performance threshold is used.
+Both real test files import only helpers/data from `test/support/library-profiles.ts`, which registers no tests.
+There are no value imports between test files. The full required package command is
+`bun run --cwd packages/definitions check`; root type checking is `bun scripts/typecheck.ts` and must exit zero.
