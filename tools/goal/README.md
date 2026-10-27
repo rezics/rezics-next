@@ -163,10 +163,11 @@ problem; the work then implements the design for this repository's stack itself 
 passages. A report is evidence: once the manager adopts a recommendation, the
 decision goes into the owning document.
 
-A hard question (an architecture or contract choice, a domain the repository has no evidence on) gets two
-researchers: dispatch the same question twice with different report paths, one brief pinned to the strongest model
-at a deep effort and one to a faster model, and compare the two reports before deciding. Two independent reports
-expose what one missed; where they disagree, the manager checks the sources.
+A hard question whose decision is costly to reverse (an architecture or contract choice, a domain the repository has
+no evidence on) gets two researchers: dispatch the same question twice with different report paths, both on the
+strongest model, one pinned to a deep effort, and compare the two reports before deciding. Two independent reports
+expose what one missed; where they disagree, the manager checks the sources. A weaker model is not a second
+researcher: its report costs review time and adds little.
 
 ### Pinning a model
 
