@@ -62,6 +62,8 @@ export type Settings = {
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
   startGraceMs?: number;
+  /** How long a running worker may go without run-log output; 40 minutes by default. */
+  silenceMs?: number;
   codex: {
     serviceTier: string;
     compactTokens: { sol: number; luna: number };

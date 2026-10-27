@@ -3,6 +3,7 @@
   "mainBranch": "main",
   "branchPrefix": "worker/",
   "terminationGraceMs": 1500,
+  "silenceMs": 2400000,
   "affectedTests": [
     {
       "paths": ["services/kernel/**"],

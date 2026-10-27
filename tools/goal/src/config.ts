@@ -121,6 +121,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'promotionParallelism',
       'branchPrefix',
       'terminationGraceMs',
+      'silenceMs',
       'gate',
       'formatCommand',
       'integrationChecks',
@@ -244,6 +245,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     pools,
     notes: parseNotes(local.notes),
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
+    silenceMs: positive(local.silenceMs ?? defaults.silenceMs, 'silenceMs'),
     codex: {
       serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: {

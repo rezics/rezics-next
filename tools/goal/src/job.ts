@@ -50,6 +50,10 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 export const CAPACITY_PAUSE_MS = 10_000;
 /** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
 export const START_GRACE_MS = 10 * 60_000;
+/** A running worker with no run-log activity for this long is stopped and retried. */
+export const SILENCE_WINDOW_MS = 40 * 60_000;
+/** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
+const SILENCE_CHECK_MS = 60_000;
 
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
@@ -234,6 +238,49 @@ export class WorkerJob implements GateOutcomeSink {
     ];
     let watcher: Watching | undefined;
     let stopping: Promise<void> | undefined;
+    const silenceMs = this.tasks.settings.silenceMs ?? SILENCE_WINDOW_MS;
+    let silenceFailure: string | undefined;
+    let silenceStopping: Promise<void> | undefined;
+    const initialStat = statSync(ref.logPath, { throwIfNoEntry: false });
+    let lastLogSize = initialStat?.size ?? 0;
+    let lastLogMtime = initialStat?.mtimeMs ?? 0;
+    let lastLogActivityAt = initialStat?.size
+      ? Math.max(Date.parse(ref.startedAt), Math.min(Date.now(), lastLogMtime || Date.now()))
+      : Date.parse(ref.startedAt);
+    let checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
+    const checkSilence = () => {
+      if (silenceStopping || silenceFailure) return;
+      try {
+        store.assertCurrent(ref);
+        const attempt = store.attempt(ref);
+        if (attempt.state !== 'running') return;
+        const stat = statSync(ref.logPath, { throwIfNoEntry: false });
+        const size = stat?.size ?? 0;
+        const mtime = stat?.mtimeMs ?? 0;
+        if (size !== lastLogSize || mtime !== lastLogMtime) {
+          lastLogSize = size;
+          lastLogMtime = mtime;
+          lastLogActivityAt = Date.now();
+          checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
+        }
+        // Check tools append elapsed slot-wait time beside the run log. Subtract it from idle time so a
+        // worker blocked on a check host does not look silent while its check is still waiting.
+        const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
+        if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
+        const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
+        silenceFailure = `stalled: no output for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+        store.updateAttempt(ref, (current) => {
+          current.escalation = 'stalled';
+        });
+        silenceStopping = terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs);
+        void silenceStopping.catch(() => {});
+      } catch (error) {
+        if (!(error instanceof StaleAttemptError)) {
+          silenceStopping = Promise.reject(error);
+          void silenceStopping.catch(() => {});
+        }
+      }
+    };
     const stopIfStalled = (timeLimit: boolean) => {
       try {
         store.assertCurrent(ref);
@@ -269,6 +316,7 @@ export class WorkerJob implements GateOutcomeSink {
     // hour or more ended attempts whose work was done.
     const remainingMs = () => limits.maxMs + checkWaitMs(ref.logPath) - (Date.now() - Date.parse(ref.startedAt));
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(SILENCE_CHECK_MS, silenceMs)));
     const scheduleLimit = () => {
       timer = setTimeout(() => (remainingMs() > 0 ? scheduleLimit() : stopIfStalled(true)), Math.max(0, remainingMs()));
     };
@@ -291,7 +339,10 @@ export class WorkerJob implements GateOutcomeSink {
       Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - Date.parse(ref.startedAt))),
     );
     try {
-      watcher = watchOrPoll(ref.logPath, () => stopIfStalled(false), 30_000);
+      watcher = watchOrPoll(ref.logPath, () => {
+        checkSilence();
+        stopIfStalled(false);
+      }, 30_000);
       try {
         await settle(this.tasks, worker, this.landing, async () => {
           clearTimeout(timer);
@@ -302,12 +353,21 @@ export class WorkerJob implements GateOutcomeSink {
         if (!stopping || !(error instanceof StaleAttemptError)) throw error;
       }
       if (stopping) await stopping;
+      if (silenceStopping) await silenceStopping;
     } finally {
       clearTimeout(timer);
       clearTimeout(startCheck);
+      clearInterval(silenceTimer);
       watcher?.close();
     }
     if (!stopping) {
+      if (silenceFailure && store.attempt(ref).state === 'exited') {
+        store.updateAttempt(ref, (attempt) => {
+          attempt.failureKind = 'tool';
+          attempt.result = silenceFailure!;
+          attempt.escalation = 'stalled';
+        });
+      }
       const fact = store.attempt(ref).failureKind;
       if (fact) this.onAttemptExit(ref);
     }
@@ -660,11 +720,12 @@ export class WorkerJob implements GateOutcomeSink {
       const failureClass = kind === 'tool' ? 'environment' : kind;
       const record = store.record(ref)!;
       record.outcome = 'stopped';
-      record.escalation = failureClass;
+      const stalledForSilence = attempt.result.startsWith('stalled: no output for ');
+      record.escalation = stalledForSilence ? 'stalled' : failureClass;
       store.putRecord(record);
       store.event(ref, 'attempt-exit-classified', { kind: failureClass, detail: attempt.blocker ?? attempt.result });
       store.updateAttempt(ref, (a) => {
-        a.escalation = failureClass;
+        a.escalation = stalledForSilence ? 'stalled' : failureClass;
       });
       const evidencePath = evidenceBundle(task, store.attempt(ref));
       if (kind === 'spec-conflict' || kind === 'scope-growth') {
@@ -686,11 +747,9 @@ export class WorkerJob implements GateOutcomeSink {
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
         capacity = kind === 'tool' && (MODEL_AT_CAPACITY.test(detail) || CHECK_HOST_TRANSPORT.test(detail));
         if (kind === 'tool' && previous?.failureKind === 'tool' && !capacity) {
-          const firstLine = (
-            previous.result ||
-            previous.blocker ||
-            'Worker CLI failed before starting a session'
-          ).split(/\r?\n/, 1)[0]!;
+          const firstLine = (attempt.result.startsWith('stalled: no output for ')
+            ? attempt.result
+            : previous.result || previous.blocker || 'Worker CLI failed before starting a session').split(/\r?\n/, 1)[0]!;
           store.updateTask(ref, (t) => {
             t.state = 'stopped';
           });
@@ -703,7 +762,9 @@ export class WorkerJob implements GateOutcomeSink {
             managerId: task.brief.manager,
             taskId: task.id,
             kind: 'stalled' as const,
-            summary: `Repeated launch failure: ${firstLine}`.replace(/[\r\n]+/g, ' '),
+            summary: firstLine.startsWith('stalled: no output for ')
+              ? firstLine.replace(/[\r\n]+/g, ' ')
+              : `Repeated launch failure: ${firstLine}`.replace(/[\r\n]+/g, ' '),
             evidencePath,
           };
           store.event(ref, 'manager-event', event);

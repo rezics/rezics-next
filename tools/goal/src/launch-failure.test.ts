@@ -161,6 +161,123 @@ test('a worker that writes nothing within the start window is stopped and retrie
   } finally { h.dispose(); }
 }, 60_000);
 
+const silentAfterCommitCli = `#!/usr/bin/env bun
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const commit = () => spawnSync('git', ['add', 'result.txt']) && spawnSync('git', ['commit', '-qm', 'worker progress']);
+if (process.env.GOAL_ATTEMPT === '1') {
+  writeFileSync('result.txt', 'committed by the first attempt');
+  commit();
+  console.log(JSON.stringify({type:'thread.started',thread_id:'silent-worker'}));
+  await new Promise(resolve => setTimeout(resolve, 600_000));
+} else {
+  if (readFileSync('result.txt', 'utf8') !== 'committed by the first attempt') process.exit(12);
+  writeFileSync('result.txt', 'continued by the replacement attempt');
+  commit();
+  console.log(JSON.stringify({type:'thread.started',thread_id:'replacement-worker'}));
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+  console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+}
+`;
+
+test('a running worker whose log is silent is stopped and retried from its commits', async () => {
+  const h = harness(silentAfterCommitCli), landings: LandingRequest[] = [];
+  h.settings.silenceMs = 1000;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    await job.start(task.id);
+    await job.drain();
+    const first = h.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(first.failureKind).toBe('tool');
+    expect(first.result).toBe('stalled: no output for 1 minute');
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(git(task.worktree, 'rev-list', '--count', `${task.base}..HEAD`)).toBe('2');
+    expect(landings).toHaveLength(1);
+  } finally { h.dispose(); }
+}, 15_000);
+
+const activeWriterCli = `#!/usr/bin/env bun
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+console.log(JSON.stringify({type:'thread.started',thread_id:'active-writer'}));
+for (let i = 0; i < 10; i++) {
+  console.log(JSON.stringify({type:'item.completed',item:{id:'heartbeat-' + i,type:'reasoning',text:'working'}}));
+  await delay(100);
+}
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+
+test('a worker that keeps writing is never stopped by the silence window', async () => {
+  const h = harness(activeWriterCli), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
+  h.settings.silenceMs = 300;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
+    await job.start(task.id);
+    await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
+    expect(landings).toHaveLength(1);
+    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
+  } finally { h.dispose(); }
+}, 15_000);
+
+const checkWaitCli = `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+console.log(JSON.stringify({type:'thread.started',thread_id:'check-wait-worker'}));
+for (let i = 0; i < 9; i++) {
+  appendFileSync(process.env.GOAL_CHECK_WAIT_FILE, '100\\n');
+  await delay(100);
+}
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+
+test('time recorded waiting for a check slot counts as run activity', async () => {
+  const h = harness(checkWaitCli), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
+  h.settings.silenceMs = 300;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
+    await job.start(task.id);
+    await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
+    expect(landings).toHaveLength(1);
+    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
+  } finally { h.dispose(); }
+}, 15_000);
+
+const repeatedlySilentCli = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+if (process.env.GOAL_ATTEMPT === '1') {
+  writeFileSync('result.txt', 'committed before the stall');
+  spawnSync('git', ['add', 'result.txt']);
+  spawnSync('git', ['commit', '-qm', 'worker progress']);
+}
+console.log(JSON.stringify({type:'thread.started',thread_id:'silent-worker'}));
+await new Promise(resolve => setTimeout(resolve, 600_000));
+`;
+
+test('a repeated silence failure reports the stalled output window to the manager', async () => {
+  const h = harness(repeatedlySilentCli), inbox: ManagerEvent[] = [];
+  h.settings.silenceMs = 800;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    await job.start(task.id);
+    await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(inbox.filter(event => event.kind === 'stalled').map(event => event.summary)).toEqual([
+      'stalled: no output for 1 minute',
+    ]);
+  } finally { h.dispose(); }
+}, 15_000);
+
 test('the host starts a ready task whose dispatching process is gone, once', async () => {
   const h = harness(), inbox: ManagerEvent[] = [];
   // A start window long enough for the fixture worker to write, even on a loaded host.

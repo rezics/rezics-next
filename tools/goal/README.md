@@ -116,7 +116,7 @@ quota failure excludes all aliases of that allowance before selecting another pe
 purchase or reset-card redemption path.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
-`branchPrefix`, `terminationGraceMs`,
+`branchPrefix`, `terminationGraceMs`, `silenceMs`,
 `gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.

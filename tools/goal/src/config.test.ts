@@ -11,10 +11,13 @@ test('settings anchor to the main checkout from a linked worktree; local setting
     const task = h.tasks.dispatch(h.briefFile), initial = loadSettings({ cwd: task.worktree, env: {} });
     expect(initial.mainCheckout).toBe(h.root); expect(initial.stateDirectory).toBe(join(h.root, '.temp/goal'));
     expect(initial.worktreeRoot).toBe(join(h.root, '.temp/worktrees'));
+    expect(initial.silenceMs).toBe(40 * 60_000);
     const local = JSON.parse(readFileSync(initial.localFile, 'utf8'));
-    local.stateDirectory = '.temp/local-state'; local.integration = { gateConcurrency: 3, inboxDirectory: '.temp/incoming' };
+    local.stateDirectory = '.temp/local-state'; local.silenceMs = 12_345;
+    local.integration = { gateConcurrency: 3, inboxDirectory: '.temp/incoming' };
     writeFileSync(initial.localFile, JSON.stringify(local));
     const settings = loadSettings({ cwd: task.worktree, env: { GOAL_STATE_DIRECTORY: '.temp/override' } });
+    expect(settings.silenceMs).toBe(12_345);
     expect(settings.stateDirectory).toBe(join(h.root, '.temp/override'));
     expect(settings.integration.gateConcurrency).toBe(3); expect(settings.integration.inboxDirectory).toBe(join(h.root, '.temp/incoming'));
     expect(settings.pools[0]!.configDirectory).toBe(join(h.root, '.temp/goal/account'));
