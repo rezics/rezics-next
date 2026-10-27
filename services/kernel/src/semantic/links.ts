@@ -3,8 +3,8 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { readItemTypes, readLabels, readLabelChoices } from './subject.ts';
-import { chooseLabel, languageRanges } from './language.ts';
+import { readItemTypes, readLabels } from './subject.ts';
+import { languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type Statement } from './item.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
@@ -1095,15 +1095,19 @@ export async function listSubjectLinks(
   requireAccessDeadline(deadline);
   return {
     ...page,
-    links: page.links.map((link) =>
-      includeLabels
-        ? {
-            ...link,
-            label: summaries.get(link.subject)?.label?.value ?? '',
-            summary: summaries.get(link.subject) ?? null,
-          }
-        : { subject: link.subject, property: link.property, statement: link.statement },
-    ),
+    links: page.links.flatMap((link) => {
+      if (!includeLabels) return [{ subject: link.subject, property: link.property, statement: link.statement }];
+      const summary = summaries.get(link.subject) ?? null;
+      if (options.authorizeSummary && !summary) return [];
+      return [
+        {
+          ...link,
+          type: summary?.type ?? link.type,
+          label: summary?.label?.value ?? '',
+          summary,
+        },
+      ];
+    }),
   };
 }
 
@@ -1113,6 +1117,7 @@ export type SubjectRelation = {
   external: string | null;
   type?: string;
   label?: string;
+  summary?: SubjectSummary | null;
 };
 export type SubjectRelationsPage = {
   relations: SubjectRelation[];
@@ -1149,6 +1154,7 @@ export async function listSubjectRelations(
     cursor?: string;
     release: Release;
     authorize: (client: PoolClient) => Promise<boolean>;
+    authorizeSummary?: SummaryDependencies['authorize'];
     seen: readonly SessionComponent[];
     caughtUp?: boolean;
   },
@@ -1315,22 +1321,32 @@ export async function listSubjectRelations(
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
   });
-  const labels = await readLabelChoices(
-    pool,
+  const summaries = await readSubjectSummaries(
+    {
+      client: { query: pool.query.bind(pool) },
+      pool,
+      release: options.release,
+      authorize: options.authorizeSummary ?? (async () => false),
+    },
     page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+    { languages },
   );
   requireAccessDeadline(deadline);
   return {
     ...page,
-    relations: page.relations.map((entry) =>
-      entry.target
-        ? {
-            ...entry,
-            label:
-              chooseLabel(labels.get(entry.target)?.labels ?? {}, languages, labels.get(entry.target)?.original)
-                ?.value ?? '',
-          }
-        : entry,
-    ),
+    relations: page.relations.flatMap((entry) => {
+      if (!entry.target) return [{ ...entry, summary: null }];
+      const summary = summaries.get(entry.target) ?? null;
+      if (options.authorizeSummary && !summary) return [];
+      const type = summary?.type ?? entry.type;
+      return [
+        {
+          ...entry,
+          ...(type ? { type } : {}),
+          label: summary?.label?.value ?? '',
+          summary,
+        },
+      ];
+    }),
   };
 }

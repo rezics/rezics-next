@@ -1685,9 +1685,9 @@ function subjectRoutes(
                       subject: t.String(),
                       property: t.String(),
                       statement: t.String(),
-                      type: t.Optional(t.String()),
-                      label: t.Optional(t.String()),
-                      summary: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
+                      type: t.String(),
+                      label: t.String(),
+                      summary: SubjectSummarySchema,
                     },
                     { additionalProperties: false },
                   ),
@@ -1750,7 +1750,7 @@ function subjectRoutes(
                 ...(query.type === undefined ? {} : { type: query.type }),
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 release: active.release,
-                includeLabels: query.property !== undefined,
+                includeLabels: true,
                 async authorizeSummary(client, id, batch) {
                   const route = routeOf(id);
                   if (route === null) return false;
@@ -1806,6 +1806,7 @@ function subjectRoutes(
                       external: t.Union([t.String(), t.Null()]),
                       type: t.Optional(t.String()),
                       label: t.Optional(t.String()),
+                      summary: t.Union([SubjectSummarySchema, t.Null()]),
                     },
                     { additionalProperties: false },
                   ),
@@ -1870,6 +1871,16 @@ function subjectRoutes(
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 release: active.release,
+                async authorizeSummary(client, id, batch) {
+                  const route = routeOf(id);
+                  if (route === null) return false;
+                  const relatedCheck = await authorize({
+                    route,
+                    id,
+                    eligibility: relatedReadEligibility({ route, id }, batch),
+                  });
+                  return relatedCheck(client);
+                },
                 authorize: check,
                 seen,
                 caughtUp,

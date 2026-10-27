@@ -93,7 +93,7 @@ const edition = (title: string, workId: string, statements: Record<string, unkno
     labels: { en: title },
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)], ...statements },
   });
-const linkOf = (source: Record<string, any>, property: string, includeLabels = false) => ({
+const linkOf = (source: Record<string, any>, property: string, includeLabels = true) => ({
   subject: source.id as string,
   property,
   statement: source.statements[property][0].id as string,
@@ -226,7 +226,7 @@ test('a Global adoption is scoped to the target slot and replaying the whole log
     },
   });
   expect(adopted.response.status).toBe(200);
-  const moved = { subject: penguin.id, property: 'schema:exampleOfWork', statement: candidate };
+  const moved = { ...original, statement: candidate };
   expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [original], freshness: fresh(true), next: null });
   expect(await links(botchan.id, 'acceptor')).toEqual({ links: [moved], freshness: fresh(true), next: null });
   await relays.pause();
@@ -254,7 +254,7 @@ test('links are filtered by property and paged in declared order', async () => {
     .sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
   const translation = linkOf(translated, 'schema:translator', true);
   expect(await links(soseki.id, 'editor')).toEqual({
-    links: [...authored, translation].map(({ subject, property, statement }) => ({ subject, property, statement })),
+    links: [...authored, translation],
     freshness: fresh(true),
     next: null,
   });
