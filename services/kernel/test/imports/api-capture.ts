@@ -3,7 +3,13 @@ import { partitionOf } from '../../src/route/route.ts';
 import type { Counters, PhaseCounters } from '../../../../specs/imports-api-driver.ts';
 import type { GrowingRelation, SqliteStatement } from '../../../../specs/imports-growth-driver.ts';
 import type { SqliteEvidence } from '../../../importer/tests/support/sqlite-growth.ts';
-import { capture, withoutCatalogStatements, type GrowthDatabase, type Capture } from '../support/growth.ts';
+import {
+  capture,
+  isControlStatement,
+  withoutCatalogStatements,
+  type GrowthDatabase,
+  type Capture,
+} from '../support/growth.ts';
 
 const empty = (): Counters => ({
   statements: 0,
@@ -25,6 +31,7 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
   let relations: GrowingRelation[] = [];
   let partitions = new Set<number>();
   let sources = new Set<string>();
+  const proofTexts = new Map<GrowthDatabase, Set<string>>();
 
   function metadata() {
     if (!local) throw new Error('Importer SQLite is not open');
@@ -79,10 +86,23 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     };
   }
 
-  function merge(captured: Capture) {
+  function merge(captured: Capture, owner: GrowthDatabase) {
     if (!active) return;
     // Shared plan-based accounting bounds catalog freshness probes separately from request work.
     const raw = withoutCatalogStatements('import API', captured);
+    const texts = proofTexts.get(owner) ?? new Set<string>();
+    for (const sql of raw.statements) if (!isControlStatement(sql)) texts.add(sql);
+    for (const sql of raw.backgroundStatements ?? []) if (!isControlStatement(sql)) texts.add(sql);
+    for (const document of [...raw.plans, ...(raw.backgroundPlans ?? [])]) {
+      const roots = Array.isArray(document) ? document : [document];
+      for (const root of roots) {
+        if (root && typeof root === 'object' && !Array.isArray(root) && 'Query Text' in root) {
+          const sql = root['Query Text'];
+          if (typeof sql === 'string') texts.add(sql);
+        }
+      }
+    }
+    proofTexts.set(owner, texts);
     function visit(value: unknown): void {
       if (Array.isArray(value)) {
         for (const child of value) visit(child);
@@ -104,12 +124,40 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     active.api.postgres = {
       statements: [...previous.statements, ...raw.statements],
       plans: [...previous.plans, ...raw.plans],
+      ...(previous.backgroundStatements === undefined && raw.backgroundStatements === undefined
+        ? {}
+        : { backgroundStatements: [...(previous.backgroundStatements ?? []), ...(raw.backgroundStatements ?? [])] }),
+      ...(previous.backgroundPlans === undefined && raw.backgroundPlans === undefined
+        ? {}
+        : { backgroundPlans: [...(previous.backgroundPlans ?? []), ...(raw.backgroundPlans ?? [])] }),
+      ...(previous.statementBackends === undefined && raw.statementBackends === undefined
+        ? {}
+        : { statementBackends: [...(previous.statementBackends ?? []), ...(raw.statementBackends ?? [])] }),
+      ...(previous.planBackends === undefined && raw.planBackends === undefined
+        ? {}
+        : { planBackends: [...(previous.planBackends ?? []), ...(raw.planBackends ?? [])] }),
+      ...(previous.backgroundStatementBackends === undefined && raw.backgroundStatementBackends === undefined
+        ? {}
+        : {
+            backgroundStatementBackends: [
+              ...(previous.backgroundStatementBackends ?? []),
+              ...(raw.backgroundStatementBackends ?? []),
+            ],
+          }),
+      ...(previous.backgroundPlanBackends === undefined && raw.backgroundPlanBackends === undefined
+        ? {}
+        : {
+            backgroundPlanBackends: [...(previous.backgroundPlanBackends ?? []), ...(raw.backgroundPlanBackends ?? [])],
+          }),
     };
   }
 
   return {
     get active() {
       return active;
+    },
+    attachDatabase(db: Database) {
+      local = db;
     },
     instrument(db: Database) {
       local = db;
@@ -274,9 +322,38 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
       metadata();
     },
     merge,
-    async measure(action: () => Promise<void>): Promise<PhaseCounters> {
+    async indexPlans(): Promise<{ sql: string; plan: unknown }[]> {
+      const result: { sql: string; plan: unknown }[] = [];
+      for (const [owner, texts] of proofTexts) {
+        const client = await owner.admin.connect();
+        try {
+          for (const sql of texts) {
+            let transaction = false;
+            try {
+              await client.query('BEGIN');
+              transaction = true;
+              await client.query('SET LOCAL enable_seqscan = off');
+              const query = sql.trim().replace(/;+\s*$/, '');
+              const explained = await client.query<{ 'QUERY PLAN': unknown }>(
+                `EXPLAIN (GENERIC_PLAN, FORMAT JSON) ${query}`,
+              );
+              const plan = explained.rows[0]?.['QUERY PLAN'];
+              if (plan === undefined) throw new Error('EXPLAIN returned no plan document');
+              result.push({ sql, plan });
+            } finally {
+              if (transaction) await client.query('ROLLBACK');
+            }
+          }
+        } finally {
+          client.release();
+        }
+      }
+      return result;
+    },
+    async measure<T>(action: () => Promise<T>): Promise<PhaseCounters> {
       if (active) throw new Error('Nested importer measurement');
       metadata();
+      proofTexts.clear();
       const counters: PhaseCounters = { reader: empty(), converter: empty(), reconcile: empty(), api: empty() };
       for (const counter of Object.values(counters))
         counter.sqlite = { analyzed: true, growingRelations: relations, executions: [] };
@@ -290,8 +367,8 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
         const result = await capture(database, () => capture(auth, action, { includeBackends: true }), {
           includeBackends: true,
         });
-        merge(result.capture);
-        merge(result.value.capture);
+        merge(result.capture, database);
+        merge(result.value.capture, auth);
         return counters;
       } finally {
         active = undefined;

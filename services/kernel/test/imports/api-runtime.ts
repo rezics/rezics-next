@@ -2,8 +2,9 @@ import { Database } from 'bun:sqlite';
 import { decodeJwt } from 'jose';
 import { afterAll } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateIdentity } from '../../src/access/write-rate-identity.ts';
@@ -37,6 +38,42 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createMediaBoundary } from './media-boundary.ts';
 import { createApiCapture } from './api-capture.ts';
+
+type GrowthSqliteCapture = {
+  instrument(database: Database): Database;
+  attach(objects: readonly object[]): void;
+  capture<T>(operation: () => Promise<T>): Promise<{
+    value: T;
+    statements: import('../../../../specs/imports-growth-driver.ts').SqliteStatement[];
+  }>;
+  readonly metadata: {
+    analyzed: boolean;
+    growingRelations: import('../../../../specs/imports-growth-driver.ts').GrowingRelation[];
+  };
+};
+type GrowthObserver = NonNullable<ConstructorParameters<typeof Importer>[0]['observer']>;
+type StartupWriteRate = { maximum: number; seconds: number };
+type ScheduledDeadline = { scheduledAtMs: number; deadlineAtMs: number; durationMs: number };
+type HttpEvent = {
+  sequence: number;
+  attempt: number;
+  method: string;
+  path: string;
+  requestKey: string;
+  bodyBytes: number;
+  commandKeys: string[];
+  startedAtMs: number;
+  deadlineAtMs?: number;
+  deadlineMs?: number;
+  tokenExpiresAtMs?: number;
+  tokenRemainingMs?: number;
+  status?: number;
+  problem?: string;
+  error?: string;
+  abortedAtMs?: number;
+  abortReason?: string;
+};
+type RetryWait = { atMs: number; durationMs: number; layer: 'transport' | 'importer' };
 
 const origin = 'https://kernel.import.test';
 type Controls = NonNullable<Parameters<ImportApiDriver['run']>[1]>;
@@ -93,7 +130,12 @@ afterAll(async () => {
 }, 120_000);
 
 /** One owner of credentials, public transport, worker, durable journal and cleanup. */
-export async function openApiRuntime(options: DriverOptions) {
+export async function openApiRuntime(
+  options: DriverOptions,
+  growthSqlite?: GrowthSqliteCapture,
+  growthObserver?: GrowthObserver,
+  growthWriteRate?: StartupWriteRate,
+) {
   const started = Date.now();
   const fixture = randomUUID();
   const evidenceRoot = resolve(import.meta.dir, '../../../../.temp');
@@ -214,6 +256,7 @@ export async function openApiRuntime(options: DriverOptions) {
     let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),
     );
+    const tokenRenewals: { atMs: number; priorExpiresAtMs: number; expiresAtMs: number }[] = [];
     const database = identity.database;
     const auth = identity.accessConfig.auth!;
     // The application resolves resource declarations from its complete mounted
@@ -225,11 +268,15 @@ export async function openApiRuntime(options: DriverOptions) {
     await mediaBoundary.source('https://lain.bgm.tv/replacement.jpg');
     work = await time('work client', () => createWorkClient(database.url, database.openPool()));
     const secret = randomUUID();
-    let overrides: string | undefined;
+    let overrides: string | undefined = growthWriteRate
+      ? JSON.stringify({ service: { write: growthWriteRate } })
+      : undefined;
     let limited: Parameters<ImportApiDriver['rateLimit']>[0] | undefined;
-    let batchUnits = 0;
+    // The public growth client caps each request at 100 commands. Keep one
+    // startup budget for all warm-up and measured envelopes.
+    let batchUnits = growthWriteRate ? 100 : 0;
     function budget(units: number) {
-      if (!limited || units <= batchUnits) return;
+      if (growthWriteRate || !limited || units <= batchUnits) return;
       batchUnits = units;
       overrides = JSON.stringify({
         [importerClass]: {
@@ -298,6 +345,40 @@ export async function openApiRuntime(options: DriverOptions) {
     const importerClass = rateIdentity({ ...context, actor }, secret).rateClass;
     const measurement = createApiCapture(database, identitySupport(identity).authDatabase);
     const captures: { request: Request; body: string; response: Response }[] = [];
+    const httpEvents: HttpEvent[] = [];
+    const retryWaits: RetryWait[] = [];
+    const pendingDeadlines: ScheduledDeadline[] = [];
+    const deadlines = new Map<string, ScheduledDeadline>();
+    const attempts = new Map<string, number>();
+    let lastTransportClockMs = Date.now();
+    function transportKey(request: Request, body: string): { key: string; commandKeys: string[] } {
+      const url = new URL(request.url);
+      let commandKeys: string[] = [];
+      if (url.pathname === '/v1/subjects:batchWrite' && body) {
+        try {
+          const commands = (JSON.parse(body) as { commands?: { key?: unknown }[] }).commands;
+          if (Array.isArray(commands))
+            commandKeys = commands.flatMap((command) => (typeof command.key === 'string' ? [command.key] : []));
+        } catch {
+          // Keep the transport evidence even when the endpoint rejects an invalid envelope.
+        }
+      }
+      const identity =
+        request.headers.get('idempotency-key') ??
+        (commandKeys.length ? commandKeys.join('\u0000') : `${url.pathname}${url.search}`);
+      return { key: `${request.method} ${url.pathname}${url.search} ${identity}`, commandKeys };
+    }
+    function scheduleDeadline(callback: () => void, durationMs: number) {
+      const scheduledAtMs = lastTransportClockMs;
+      const deadline: ScheduledDeadline = { scheduledAtMs, deadlineAtMs: scheduledAtMs + durationMs, durationMs };
+      pendingDeadlines.push(deadline);
+      const timer = setTimeout(callback, durationMs);
+      return () => {
+        clearTimeout(timer);
+        const index = pendingDeadlines.indexOf(deadline);
+        if (index >= 0) pendingDeadlines.splice(index, 1);
+      };
+    }
     const commands = new Map<string, { command: BatchCommand; actor: string }>();
     let current: { result: Run; controls: Controls; abort: AbortController; lost: boolean } | undefined;
 
@@ -335,7 +416,10 @@ export async function openApiRuntime(options: DriverOptions) {
     async function bulkBearer() {
       if ((decodeJwt(bulk.bearer).exp ?? 0) * 1000 - Date.now() < 60_000) {
         renewingBulk ??= time('importer account-key renewal', async () => {
+          const atMs = Date.now();
+          const priorExpiresAtMs = (decodeJwt(bulk.bearer).exp ?? 0) * 1000;
           bulk = await identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes);
+          tokenRenewals.push({ atMs, priorExpiresAtMs, expiresAtMs: (decodeJwt(bulk.bearer).exp ?? 0) * 1000 });
         }).finally(() => {
           renewingBulk = undefined;
         });
@@ -349,14 +433,27 @@ export async function openApiRuntime(options: DriverOptions) {
         if (current?.controls.as === 'ordinary') return identity.ordinary.bearer;
         return bulkBearer();
       },
-      now: Date.now,
+      now: growthSqlite
+        ? () => {
+            lastTransportClockMs = Date.now();
+            return lastTransportClockMs;
+          }
+        : Date.now,
       sleep: async (ms) => {
+        retryWaits.push({ atMs: Date.now(), durationMs: ms, layer: 'transport' });
         current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
         await Bun.sleep(ms);
       },
+      ...(growthSqlite === undefined ? {} : { schedule: scheduleDeadline }),
       fetch: (async (input, init) => {
         const req = new Request(input, init);
         const bulk = new URL(req.url).pathname === '/v1/subjects:batchWrite';
+        let event: HttpEvent | undefined;
+        const onAbort = () => {
+          if (!event) return;
+          event.abortedAtMs = Date.now();
+          event.abortReason = String(req.signal.reason ?? 'aborted');
+        };
         if (bulk) {
           if (writing) await new Promise<void>((resolve) => writes.push(resolve));
           else writing = true;
@@ -367,6 +464,42 @@ export async function openApiRuntime(options: DriverOptions) {
           req.signal.throwIfAborted();
           const atMs = Date.now();
           const bytes = req.method === 'POST' ? await req.clone().text() : '';
+          const { key: requestKey, commandKeys } = transportKey(req, bytes);
+          const scheduled = pendingDeadlines.shift();
+          if (scheduled) {
+            deadlines.set(requestKey, scheduled);
+            attempts.set(requestKey, 0);
+          }
+          const attempt = (attempts.get(requestKey) ?? 0) + 1;
+          attempts.set(requestKey, attempt);
+          const deadline = deadlines.get(requestKey);
+          let tokenExpiresAtMs: number | undefined;
+          const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+          if (bearer) {
+            try {
+              const expiry = decodeJwt(bearer).exp;
+              if (typeof expiry === 'number') tokenExpiresAtMs = expiry * 1000;
+            } catch {
+              // Keep the HTTP event when a request has a non-JWT authorization value.
+            }
+          }
+          event = {
+            sequence: httpEvents.length + 1,
+            attempt,
+            method: req.method,
+            path: `${new URL(req.url).pathname}${new URL(req.url).search}`,
+            requestKey,
+            bodyBytes: Buffer.byteLength(bytes),
+            commandKeys,
+            startedAtMs: atMs,
+            ...(deadline === undefined
+              ? {}
+              : { deadlineAtMs: deadline.deadlineAtMs, deadlineMs: deadline.durationMs }),
+            ...(tokenExpiresAtMs === undefined
+              ? {}
+              : { tokenExpiresAtMs, tokenRemainingMs: tokenExpiresAtMs - atMs }),
+          };
+          req.signal.addEventListener('abort', onAbort, { once: true });
           if (bulk) {
             budget((JSON.parse(bytes) as BatchWriteRequest).commands.length);
             await current?.controls.beforeWrite?.();
@@ -379,6 +512,8 @@ export async function openApiRuntime(options: DriverOptions) {
             statusText: response.statusText,
             headers: response.headers,
           });
+          event.status = response.status;
+          if (response.status >= 400) event.problem = await captured.clone().text();
           captures.push({ request: req, body: bytes, response: captured });
           if (bulk && current) {
             const body = JSON.parse(bytes) as BatchWriteRequest;
@@ -416,7 +551,12 @@ export async function openApiRuntime(options: DriverOptions) {
             }
           }
           return response;
+        } catch (error) {
+          if (event) event.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          throw error;
         } finally {
+          if (event) httpEvents.push(event);
+          req.signal.removeEventListener('abort', onAbort);
           const next = waiting.shift();
           if (next) next();
           else requests--;
@@ -428,9 +568,7 @@ export async function openApiRuntime(options: DriverOptions) {
         }
       }) as typeof fetch,
     });
-    const root = resolve(import.meta.dir, '../../../../.temp');
-    await mkdir(root, { recursive: true });
-    directory = await mkdtemp(`${root}/import-api-`);
+    directory = await mkdtemp(`${tmpdir()}/import-api-`);
     const path = `${directory}/state.sqlite`;
     function openImporter(serial = false) {
       const next = new Importer({
@@ -440,10 +578,11 @@ export async function openApiRuntime(options: DriverOptions) {
         ...(serial || limited ? { recordConcurrency: 1 } : {}),
         now: Date.now,
         sleep: async (ms, signal) => {
+          retryWaits.push({ atMs: Date.now(), durationMs: ms, layer: 'importer' });
           current?.result.waits.push({ startedAtMs: Date.now(), durationMs: ms });
           await sleep(ms, undefined, { signal });
         },
-        instrumentDatabase: measurement.instrument,
+        instrumentDatabase: growthSqlite?.instrument ?? measurement.instrument,
         transport: {
           batchWrite: (body) => transport.batch(body, current?.abort.signal),
           readFence: (tuple) =>
@@ -455,6 +594,7 @@ export async function openApiRuntime(options: DriverOptions) {
         onConversionOutput(output) {
           if (current) (current.result.conversions as object[]).push(output);
         },
+        ...(growthObserver === undefined ? {} : { observer: growthObserver }),
         mediaResolver: {
           async resolve(input) {
             const resolver = createMediaResolver({
@@ -486,7 +626,9 @@ export async function openApiRuntime(options: DriverOptions) {
           },
         },
       });
+      if (growthSqlite) measurement.attachDatabase(next.session.store.database);
       measurement.attach([next.session, next.session.store, next.session.bindings]);
+      growthSqlite?.attach([next.session, next.session.store, next.session.bindings]);
       return next;
     }
     importer = timeSync('importer state', openImporter);
@@ -625,9 +767,23 @@ export async function openApiRuntime(options: DriverOptions) {
       database,
       mediaBoundary,
       measurement,
+      async measureGrowth<T>(operation: () => Promise<T>) {
+        if (!growthSqlite) throw new Error('Growth SQLite capture was not configured');
+        let sqliteStatements: import('../../../../specs/imports-growth-driver.ts').SqliteStatement[] = [];
+        const phases = await measurement.measure(async () => {
+          const observed = await growthSqlite.capture(operation);
+          sqliteStatements = observed.statements;
+          return observed.value;
+        });
+        return { phases, sqliteStatements, sqlite: growthSqlite.metadata };
+      },
+      importTransport: transport,
       time,
       request,
       captures,
+      httpEvents,
+      tokenRenewals,
+      retryWaits,
       commands,
       receipt,
       run,
@@ -643,7 +799,7 @@ export async function openApiRuntime(options: DriverOptions) {
       },
       async rateLimit(input: Parameters<ImportApiDriver['rateLimit']>[0]) {
         limited = input;
-        batchUnits = 0;
+        if (!growthWriteRate) batchUnits = 0;
         await importer!.close();
         importer = openImporter();
       },

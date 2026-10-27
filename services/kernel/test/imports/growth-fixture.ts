@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput } from '../../../../packages/conversion/src/index.ts';
@@ -355,6 +356,23 @@ function normalizedPlanSql(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, '').trim();
 }
 
+function executionHistogram(sql: readonly string[]) {
+  const counts = new Map<string, number>();
+  for (const statement of sql) counts.set(statement, (counts.get(statement) ?? 0) + 1);
+  return [...counts].map(([statement, executions]) => ({ statement, executions })).sort((a, b) => a.statement.localeCompare(b.statement));
+}
+
+function planTexts(plans: readonly unknown[]): string[] {
+  return plans.flatMap((document) => {
+    const roots = Array.isArray(document) ? document : [document];
+    return roots.flatMap((root) =>
+      root && typeof root === 'object' && !Array.isArray(root) && typeof root['Query Text'] === 'string'
+        ? [root['Query Text']]
+        : [],
+    );
+  });
+}
+
 function rowsAppended(document: unknown): number {
   const roots = Array.isArray(document) ? document : [document];
   let rows = 0;
@@ -565,13 +583,29 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
 
   async function importRecords(source: string, converterRevision: string, records: readonly SourceRecord[]) {
     const registration = createSourceRegistration('bangumi', { source, converterRevision });
-    return runtime.importer.runRecords(
-      registration,
-      (async function* () {
-        for (const record of records) yield record;
-      })(),
-      { collectionLimit: 1000 },
-    );
+    const httpStart = runtime.httpEvents.length;
+    const renewalStart = runtime.tokenRenewals.length;
+    const waitStart = runtime.retryWaits.length;
+    const evidence = () =>
+      JSON.stringify({
+        httpAttempts: runtime.httpEvents.slice(httpStart),
+        tokenRenewals: runtime.tokenRenewals.slice(renewalStart),
+        retryWaits: runtime.retryWaits.slice(waitStart),
+      });
+    try {
+      const result = await runtime.importer.runRecords(
+        registration,
+        (async function* () {
+          for (const record of records) yield record;
+        })(),
+        { collectionLimit: 1000 },
+      );
+      if (result.status !== 'committed')
+        throw new Error(`Import setup did not commit: ${result.status}; transport=${evidence()}`);
+      return result;
+    } catch (error) {
+      throw new Error(`Import setup failed for ${source}/${converterRevision}; transport=${evidence()}`, { cause: error });
+    }
   }
 
   function stage(source: string, converterRevision: string, records: readonly RecordValue[]) {
@@ -1214,6 +1248,9 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       const manualRequestStart = manualRequests;
       const manualBytesStart = manualRequestBytes;
       const manualPeakStart = manualPeakBytes;
+      const httpEventStart = runtime.httpEvents.length;
+      const renewalStart = runtime.tokenRenewals.length;
+      const retryWaitStart = runtime.retryWaits.length;
       const captured = await nativeGrowthCapture(async () => {
         resultValue = await operation();
         return resultValue;
@@ -1221,6 +1258,26 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       const postgres = captured.postgres;
       const pg = captured.pgStatements;
       const outcome = resultValue as unknown as Partial<Outcome> | undefined;
+      if (state?.seed.scenario === 'revision') {
+        const seed = state.seed;
+        const axis = seed.n !== 32 ? 'n' : seed.history !== 32 ? 'history' : seed.fields !== 1 ? 'fields' : 'baseline-shared';
+        const record = {
+          kind: 'revision-sql-histogram',
+          axis,
+          seed: { n: seed.n, history: seed.history, fields: seed.fields },
+          sqlite: executionHistogram(captured.statements.filter((statement) => statement.engine === 'sqlite').map((s) => s.sql)),
+          postgres: {
+            foreground: executionHistogram(postgres.statements),
+            background: executionHistogram(postgres.backgroundStatements ?? []),
+            nestedPlans: executionHistogram(planTexts(postgres.plans)),
+            backgroundPlans: executionHistogram(planTexts(postgres.backgroundPlans ?? [])),
+          },
+          httpAttempts: runtime.httpEvents.slice(httpEventStart),
+          tokenRenewals: runtime.tokenRenewals.slice(renewalStart),
+          retryWaits: runtime.retryWaits.slice(retryWaitStart),
+        };
+        appendFileSync(resolve(import.meta.dir, '../../../../.temp/import-growth-revision-sql.jsonl'), `${JSON.stringify(record)}\n`);
+      }
       if (outcome && typeof outcome.serverFenceChecks === 'number')
         outcome.serverFenceChecks = postgres.statements.filter((sql) => /fence/i.test(sql)).length;
       const sqliteStatements = captured.statements.filter((statement) => statement.engine === 'sqlite');
