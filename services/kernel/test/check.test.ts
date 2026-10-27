@@ -64,6 +64,46 @@ test('a focused check runs the named test files and checks only the named files'
   });
 });
 
+test('a directory selector with no test files is refused rather than silently selecting no checks', () => {
+  withModule(
+    ['src/search/a.ts', 'src/search/a.sql', 'src/other/a.test.ts', 'test/support/c.ts', 'test/a.test.ts'],
+    (directory) => {
+      mkdirSync(resolve(directory, 'test/empty'));
+      for (const refused of ['test/empty', 'src/search', 'src/other', 'test/support']) {
+        expect(() => checkPlan([refused], directory)).toThrow(refused);
+        for (const valid of ['src/search/a.ts', 'test/a.test.ts']) {
+          expect(() => checkPlan([valid, refused], directory)).toThrow(refused);
+          expect(() => checkPlan([refused, valid], directory)).toThrow(refused);
+        }
+      }
+    },
+  );
+});
+
+test('a test directory selects its real tests without selecting support files', () => {
+  withModule(
+    [
+      'test/other.test.ts',
+      'test/search/b.test.ts',
+      'test/search/nested/a.test.ts',
+      'test/search/support/c.ts',
+      'test/search/nested/fixture.sql',
+    ],
+    (directory) => {
+      const tests = ['test/search/b.test.ts', 'test/search/nested/a.test.ts'];
+      expect(checkPlan(['test/search'], directory)).toEqual({ files: tests, tests });
+      expect(checkPlan(['./test/search', 'test/search/nested', 'test/search/b.test.ts'], directory)).toEqual({
+        files: tests,
+        tests,
+      });
+      expect(checkPlan(['test/search/nested'], directory)).toEqual({
+        files: ['test/search/nested/a.test.ts'],
+        tests: ['test/search/nested/a.test.ts'],
+      });
+    },
+  );
+});
+
 test('a focused typecheck reports only diagnostics in the named files', () => {
   const output = [
     "src/search/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.",

@@ -59,6 +59,7 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
     rootRealPath = null;
   }
   const files = new Set<string>();
+  const testFiles = new Set(allTests);
   for (const argument of args) {
     const normalized = resolve(root, argument.startsWith('./') ? argument.slice(2) : argument);
     if (!rootRealPath || !pathIsWithin(root, normalized)) {
@@ -69,11 +70,15 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
       const stats = statSync(normalized);
       if (!pathIsWithin(rootRealPath, realpathSync(normalized))) throw new Error();
       if (stats.isDirectory()) {
+        let selectsTest = false;
         for (const file of new Bun.Glob('**/*.test.ts').scanSync({ cwd: normalized })) {
           const candidate = resolve(normalized, file);
           if (!pathIsWithin(rootRealPath, realpathSync(candidate))) throw new Error();
-          files.add(relative(root, candidate).split(sep).join('/'));
+          const selected = relative(root, candidate).split(sep).join('/');
+          files.add(selected);
+          if (testFiles.has(selected)) selectsTest = true;
         }
+        if (!selectsTest) throw new Error();
       } else if (stats.isFile()) {
         files.add(relative(root, normalized).split(sep).join('/'));
       } else {
@@ -85,7 +90,6 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
   }
 
   const sortedFiles = Array.from(files).sort();
-  const testFiles = new Set(allTests);
   return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
 }
 
