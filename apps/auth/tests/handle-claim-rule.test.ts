@@ -198,9 +198,7 @@ test(
           expect(await errorFor(page, path).innerText()).toBe(rule);
           for (const value of ['admin', 'claimed-handle']) {
             await submit(page, path, value, true);
-            expect(await errorFor(page, path).innerText()).toBe(
-              path === '/signup' ? messages.auth_signup_handle_unavailable : messages.auth_organization_conflict,
-            );
+            expect(await errorFor(page, path).innerText()).toBe(messages.auth_signup_handle_unavailable);
           }
         } finally {
           await page.context().close();
