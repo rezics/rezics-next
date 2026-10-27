@@ -193,7 +193,8 @@ test('local public component changes retain command time while private activity 
     subject_page_dependency: '(route, subject_id, owner_kind, owner_route, owner_key, component_key)',
     subject_page_change: '(route, subject_id, position)',
     subject_page_repair: '(route, subject_id)',
-    subject_page_fanout: '(owner_kind, owner_route, owner_key, change_id)',
+    subject_page_owner_dependency: '(route, owner_kind, owner_key, source_route, source_subject_id, component_key)',
+    subject_page_fanout: '(route, owner_kind, owner_key, change_id)',
   };
   for (const [table, columns] of Object.entries(primaryKeys)) {
     const constraint = await admin.query(
@@ -204,9 +205,8 @@ test('local public component changes retain command time while private activity 
     expect(constraint.rows.map((row) => row.definition)).toEqual([`PRIMARY KEY ${columns}`]);
   }
   for (const [table, columns] of [
-    ['subject_page_dependency', '(owner_kind, owner_route, owner_key, route, subject_id, component_key)'],
     ['subject_page_change', '(route, subject_id, change_id)'],
-    ['subject_page_repair', '(state, available_at, route, subject_id)'],
+    ['subject_page_repair', '(route, state, available_at, subject_id)'],
   ])
     expect(indexes.some((row) => row.tablename === table && row.indexdef.includes(columns))).toBe(true);
   expect(

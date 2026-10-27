@@ -159,21 +159,25 @@ function commitSubjectPageFanoutPage(
     changeId: string;
     expectedVersion: string;
     after: string[];
-    subjects: SubjectKey[];
+    subjects: SubjectKey[]; // durable target handoff events, never target writes here
     complete: boolean;
   },
 ): Promise<boolean>;
 ```
 
 The store additionally exports
-`claimSubjectPagePublicationWork(tx: CommandTransaction, input: { worker: string;
+`claimSubjectPagePublicationWork(tx: CommandTransaction, input: { partition: number; worker: string;
 leaseUntil: string }): Promise<{ kind: 'subject'; subject: SubjectKey;
 checkpoint: RepairCheckpoint } | { kind: 'bootstrap'; partition: number;
 version: string; after: [number, string] | null } | { kind: 'fanout';
 owner: OwnerKey; changeId: string; version: string; after: string[];
 time: EvidenceTime } | null>`. This port alone
 acquires durable runnable leases using indexed ordered work and `SKIP LOCKED`;
-null means no claim, not global idle while another live lease remains.
+null means no claim in the supplied partition, not global idle while another
+live lease remains. Runnable indexes and claims lead with route and are scoped
+to that partition. Aggregate readiness visits each of the fixed 4096 partition
+homes through bounded metadata, including bootstrap and Relay checkpoints;
+there is no global job-table scan, global lease or cross-partition SQL join.
 
 Repair's native source-reader boundary is
 `readSubjectPageNativeWindow(client, { subject, phase, after, limit, sentinel })`, where
@@ -188,13 +192,14 @@ sentinel allowance, never a fresh allowance per phase. Bootstrap reuses the
 candidate primitive's native source window and commits only through
 `commitSubjectPageBootstrapPage`.
 
-Publication replay and reverse dependencies remain store-owned reads:
+Publication replay and owner-home reverse dependencies remain store-owned reads:
 `readSubjectPageReplayWindow(client, { subject, after: string, limit: number, sentinel: boolean })`
 returns `{ changes: { position: string; changeId: string;
 component: ComponentKey | null; before: PublicState; after: PublicState;
 time: EvidenceTime }[]; hasMore: boolean }`, and
 `readSubjectPageFanoutWindow(client, { owner, after: string[], limit: number, sentinel: boolean })`
-returns `{ edges: { sourceKey: string[]; subject: SubjectKey;
+reads only `subject_page_owner_dependency` at `owner.route` and returns
+`{ edges: { sourceKey: string[]; subject: SubjectKey;
 component: ComponentKey }[]; hasMore: boolean }`.
 Both use the remaining combined key budget and shared sentinel allowance.
 Claimed checkpoint/high-water state comes from the store claim port; replay
@@ -220,6 +225,68 @@ establishes a known time even if earlier evidence is missing; replay/rebuild
 cannot replace that time with a deployment or worker time. Owner events preserve
 their original evidence time through fanout, never semantic consumption time.
 
+## Partition-local dependency delivery
+
+`subject_page_dependency` is subject-home forward state only. Native transitions
+atomically persist changed forward keys plus bounded dependency-change outbox
+events in the source command transaction. Repair-page installation likewise
+emits deltas for only its bounded changed keys. The store owns this SQL and
+returns events to the existing `runCommand` envelope commit; it never opens
+owner/target transactions inside a source port.
+
+The separate semantic Relay adapter follows `links.ts:linkProjection`,
+`applyLinkBatch`, `newestChanges` and `applyChanges`: `events/log.ts:projectBatch`
+reads a source partition, releases its connection, applies idempotent pages
+using separate `runCommand` transactions per destination home, then CAS-advances
+the source consumer checkpoint. A crash between destination commits and source
+checkpoint advancement replays safely. It does not atomically commit source and
+destination homes. `events/relays.ts:startRelays` supplies existing lifecycle,
+retry and shutdown; no new kernel mechanism is needed.
+
+Add schemas to `semantic/events.ts:SEMANTIC_EVENTS`, already spread into
+`events/catalogue.ts:productEventTypes` before catalogue sealing:
+`com.rezics.semantic.subject_page.dependencies_changed.v1` carries source
+route/subject, component key, owner identity, present/tombstone, source version,
+originating event/change identity and original effective time/evidence;
+`com.rezics.semantic.subject_page.repair_requested.v1` carries target subject,
+owner/change identity and original time/evidence. Arrays are bounded by the
+originating changed-key/page budget; no full-degree payload. Source version is
+a monotonic per-source-component dependency version allocated by the store,
+not an effective timestamp or delivery order. Each version's owner deltas share
+that version, and an event identity fixes its payload. The additive schemas,
+producer envelopes and Relay consumers must agree; unknown types must never be
+silently skipped.
+
+The store exports `applySubjectPageDependencyDelta(tx, { owner, subject,
+component, sourceVersion: string, eventId: string, present: boolean,
+time: EvidenceTime }): Promise<void>`. Its transaction belongs to the owner's
+partition. It is the sole writer of `subject_page_owner_dependency`; SQL
+compares source versions per full membership key and retains removal tombstones
+and event identity, preventing replay/out-of-order resurrection. The row's
+`route` equals `owner.route`, not `source_route`. Forward rows are never queried
+by a foreign owner. Native owner changes call `applySubjectPageOwnerChange` in
+the owner's own command transaction; foreign events enter that port through
+separate owner-home Relay commands, preserving the originating identity/time.
+
+`commitSubjectPageFanoutPage` belongs to that same owner home. It advances its
+CAS checkpoint and emits bounded repair-request outbox events atomically; its
+`subjects` argument describes deliveries, never direct writes to those subject
+homes. Relay delivers each event with `enqueueSubjectPageRepair` in a separate
+subject-home transaction, then advances its source consumer checkpoint only
+after durable target commits. The target deduplicates owner/change/event
+identity via store-owned state in its home. Neither Relay nor repair owns any
+publication-table SQL; Relay owns delivery and lifecycle integration only.
+
+An owner change retains its latest original evidence even after fanout completes.
+Installing a newer present dependency after the reverse cursor passed (or after
+completion) atomically emits a repair request for that membership using retained
+owner evidence, alongside the owner-home projection write. Thus late membership
+cannot miss an earlier owner change. Replayed/older deltas emit no work, and
+finite quiescent source changes plus finite Relay backlog yield finite fanout,
+subject repair and checkpoint catch-up. Readiness includes those checkpoints;
+current reads always recheck positive proof during lag. Membership arrival itself
+never supplies a new publication time, and missing owner evidence stays missing.
+
 ## Schema and sole writers
 
 All tables are semantic-owned migrations under `db/semantic/migrations/`.
@@ -230,14 +297,15 @@ Repair may own `subject-page-publication-phase-*.typed.sql` source readers for
 native semantic component windows. Those readers never write or directly read
 publication tables. Store SQL and native phase SQL have distinct ownership.
 
-| Table                      | Primary key; other required index                                                                                                                          | Required state; store writer                                                                                                                                                   |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `subject_page_publication` | `(route, subject_id)`                                                                                                                                      | `generation`, `readiness`, `completed_position`, `public_effective_at` nullable, `evidence`, `witnesses` (maximum eight distinct identities); transition and repair-page ports |
-| `subject_page_component`   | `(route, subject_id, component_kind, component_key)`                                                                                                       | generation, shown state/digest, original effective time/evidence, last change position; transition and repair-page ports                                                       |
-| `subject_page_dependency`  | `(route, subject_id, owner_kind, owner_route, owner_key, component_key)`; reverse `(owner_kind, owner_route, owner_key, route, subject_id, component_key)` | exact identities, retained until safely replaced; transition and repair-page ports                                                                                             |
-| `subject_page_change`      | `(route, subject_id, position)`; unique `(route, subject_id, change_id)`                                                                                   | component identity, before/after public state, original effective time/evidence; transition port only (repair replays, never reinvents changes)                                |
-| `subject_page_repair`      | `(route, subject_id)`; runnable `(state, available_at, route, subject_id)`                                                                                 | `version`, `generation`, `phase`, `source_key`, `high_water`, `replay_position`, `state`, `available_at`, lease; enqueue and repair-page ports                                 |
-| `subject_page_fanout`      | `(owner_kind, owner_route, owner_key, change_id)`; runnable state/availability index                                                                       | original effective time/evidence, version, last reverse key, completion and lease; owner-change and fanout-page ports                                                          |
+| Table                           | Primary key; other required index                                                                                      | Required state; store writer                                                                                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `subject_page_publication`      | `(route, subject_id)`                                                                                                  | `generation`, `readiness`, `completed_position`, `public_effective_at` nullable, `evidence`, `witnesses` (maximum eight distinct identities); transition and repair-page ports |
+| `subject_page_component`        | `(route, subject_id, component_kind, component_key)`                                                                   | generation, shown state/digest, original effective time/evidence, last change position; transition and repair-page ports                                                       |
+| `subject_page_dependency`       | `(route, subject_id, owner_kind, owner_route, owner_key, component_key)`                                               | subject-home forward identities only; transition and repair-page ports                                                                                                         |
+| `subject_page_owner_dependency` | PK `(route, owner_kind, owner_key, source_route, source_subject_id, component_key)`                                    | owner-home asynchronous reverse membership, source version/event identity and retained tombstones; store dependency-projection port                                            |
+| `subject_page_change`           | `(route, subject_id, position)`; unique `(route, subject_id, change_id)`                                               | component identity, before/after public state, original effective time/evidence; transition port only (repair replays, never reinvents changes)                                |
+| `subject_page_repair`           | `(route, subject_id)`; runnable `(route, state, available_at, subject_id)`                                             | `version`, `generation`, `phase`, `source_key`, `high_water`, `replay_position`, `state`, `available_at`, lease; enqueue and repair-page ports                                 |
+| `subject_page_fanout`           | `(route, owner_kind, owner_key, change_id)`; runnable `(route, state, available_at, owner_kind, owner_key, change_id)` | original effective time/evidence, version, last reverse key, completion and lease; owner-change and fanout-page ports                                                          |
 
 Use one durable bootstrap checkpoint per source partition, keyed by
 `(partition_no)` in `subject_page_bootstrap`, with version, source key, state and
@@ -300,13 +368,13 @@ Estimates below describe production work, excluding this acceptance handoff.
 Each slice owns its listed implementation files; shared store files have one
 writer. No permanent stub or temporary success response is a valid landing.
 
-| Slice                                | Paths and estimate                                                                                                                                              | Independent acceptance                                                                                                                                                             | Genuine dependency                                                                                                                                                                                                            |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native publication store             | `subject-page-publication-store.ts`, `subject-page-publication-*.sql`, semantic migration, native mutation files listed above; about 1,100 lines / 20 files     | `bun run --cwd services/kernel check test/semantic/subject-page-local-publication.test.ts`                                                                                         | Existing command/Access/read helpers only. No feed route, Content event implementation or repair runtime prerequisite.                                                                                                        |
-| Durable repair/bootstrap             | `subject-page-publication.ts`, native repair phase-window `*.typed.sql` readers (publication-table access only through store ports); about 800 lines / 10 files | `bun run --cwd services/kernel check test/semantic/subject-page-repair.test.ts test/semantic/growth-subject-page-repair.test.ts`                                                   | Store types/ports and current candidate primitive. Direct factory acceptance proves durable unit behavior; it does not prove mounting or worker registration.                                                                 |
-| HTTP traversal/current-proof adapter | `semantic/http/subject-pages.ts`, API schema/derived client surface and transport integration; about 350 lines / 5 files                                        | `bun run --cwd services/kernel check test/semantic/subject-pages-contract.test.ts test/semantic/subject-page-candidates.test.ts`; final composition also runs full API tests below | Candidate primitive and store interface. It can implement signed traversal, batching, omission scheduling and final current proof without waiting on unrelated worker tests.                                                  |
-| Semantic durable Relay/fanout        | `src/semantic/subject-page-publication-relay.ts`, store fanout ports/SQL and `test/semantic/subject-page-publication-relay.test.ts`; about 450 lines / 6 files  | `bun run --cwd services/kernel check test/semantic/subject-page-publication-relay.test.ts` (new owner acceptance); final API foreign-removal test remains required                 | Content's agreed original-time event and subsequent `SourceFence`/`readFences` extension for real foreign completion. Uses store owner-change/fanout ports; does not require Content code for native store/repair acceptance. |
-| Kernel/worker composition            | `http/kernel.ts`, `worker.ts`, omission scheduler mounting; about 200 lines / 3 files                                                                           | `bun run --cwd services/kernel check test/semantic/subject-pages.test.ts test/semantic/growth-subject-pages.test.ts`                                                               | Runtime, HTTP and real foreign adapter. `subjectPagePublicationFor(app)` must return the actual shared mounted instance; worker registration invokes that implementation and durable queue with retry/shutdown.               |
+| Slice                                | Paths and estimate                                                                                                                                              | Independent acceptance                                                                                                                                                             | Genuine dependency                                                                                                                                                                                                                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native publication store             | `subject-page-publication-store.ts`, `subject-page-publication-*.sql`, semantic migration, native mutation files listed above; about 1,100 lines / 20 files     | `bun run --cwd services/kernel check test/semantic/subject-page-local-publication.test.ts`                                                                                         | Existing command/Access/read helpers only. No feed route, Content event implementation or repair runtime prerequisite.                                                                                                                                                                 |
+| Durable repair/bootstrap             | `subject-page-publication.ts`, native repair phase-window `*.typed.sql` readers (publication-table access only through store ports); about 800 lines / 10 files | `bun run --cwd services/kernel check test/semantic/subject-page-repair.test.ts test/semantic/growth-subject-page-repair.test.ts`                                                   | Store types/ports and current candidate primitive. Direct factory acceptance proves durable unit behavior; it does not prove mounting or worker registration.                                                                                                                          |
+| HTTP traversal/current-proof adapter | `semantic/http/subject-pages.ts`, API schema/derived client surface and transport integration; about 350 lines / 5 files                                        | `bun run --cwd services/kernel check test/semantic/subject-pages-contract.test.ts test/semantic/subject-page-candidates.test.ts`; final composition also runs full API tests below | Candidate primitive and store interface. It can implement signed traversal, batching, omission scheduling and final current proof without waiting on unrelated worker tests.                                                                                                           |
+| Semantic durable Relay/fanout        | `src/semantic/subject-page-publication-relay.ts`, additive event schemas and `test/semantic/subject-page-publication-relay.test.ts`; about 450 lines / 6 files  | `bun run --cwd services/kernel check test/semantic/subject-page-publication-relay.test.ts` (new owner acceptance); final API foreign-removal test remains required                 | Content's agreed original-time event and subsequent `SourceFence`/`readFences` extension for real foreign completion. Uses store dependency-projection/owner-change/fanout ports (store slice alone owns their SQL); does not require Content code for native store/repair acceptance. |
+| Kernel/worker composition            | `http/kernel.ts`, `worker.ts`, omission scheduler mounting; about 200 lines / 3 files                                                                           | `bun run --cwd services/kernel check test/semantic/subject-pages.test.ts test/semantic/growth-subject-pages.test.ts`                                                               | Runtime, HTTP and real foreign adapter. `subjectPagePublicationFor(app)` must return the actual shared mounted instance; worker registration invokes that implementation and durable queue with retry/shutdown.                                                                        |
 
 The repair runner also handles native owner fanout windows through the same
 combined step budget and store ports. The Relay adapter supplies durable foreign

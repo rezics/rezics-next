@@ -86,21 +86,27 @@ pass; unchanged repeated reads of settled state produce no endless jobs.
 
 Implement these semantic-owned tables (names are the handoff, not existing DDL):
 
-| Table                               | Key/index                                                                                                                                                           | Stored meaning                                                                                                                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `semantic.subject_page_publication` | PK `(route, subject_id)`                                                                                                                                            | generation, readiness (`cold`, `repairing`, `ready`), last completed change position, nullable internal `public_effective_at`, known/missing evidence flag, bounded witness slots |
-| `semantic.subject_page_component`   | PK `(route, subject_id, component_kind, component_key)`                                                                                                             | last proven shown state/digest and original effective time for a fact, label, selected cover or shown relation; retained removals/tombstones                                      |
-| `semantic.subject_page_dependency`  | PK `(route, subject_id, owner_kind, owner_route, owner_key, component_key)`; reverse index `(owner_kind, owner_route, owner_key, route, subject_id, component_key)` | exact dependency identity for incremental invalidation and bounded fanout                                                                                                         |
-| `semantic.subject_page_change`      | PK `(route, subject_id, position)`; unique `(route, subject_id, change_id)`                                                                                         | immutable public transition identity, component identity, before/after evidence and original `effective_at`; no private payload                                                   |
-| `semantic.subject_page_repair`      | PK `(route, subject_id)`; runnable index `(state, available_at, route, subject_id)`                                                                                 | generation, phase, source key, high-water/replay position, durable repair continuation and lease                                                                                  |
-| `semantic.subject_page_fanout`      | PK `(owner_kind, owner_route, owner_key, change_id)`                                                                                                                | original effective time, last reverse-dependency key and durable completion state                                                                                                 |
+| Table                                    | Key/index                                                                           | Stored meaning                                                                                                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `semantic.subject_page_publication`      | PK `(route, subject_id)`                                                            | generation, readiness (`cold`, `repairing`, `ready`), last completed change position, nullable internal `public_effective_at`, known/missing evidence flag, bounded witness slots |
+| `semantic.subject_page_component`        | PK `(route, subject_id, component_kind, component_key)`                             | last proven shown state/digest and original effective time for a fact, label, selected cover or shown relation; retained removals/tombstones                                      |
+| `semantic.subject_page_dependency`       | PK `(route, subject_id, owner_kind, owner_route, owner_key, component_key)`         | subject-home forward dependency identity; not a globally queryable reverse index                                                                                                  |
+| `semantic.subject_page_owner_dependency` | PK `(route, owner_kind, owner_key, source_route, source_subject_id, component_key)` | owner-home asynchronous reverse membership, source version/event identity and retained tombstones; store dependency-projection port                                               |
+| `semantic.subject_page_change`           | PK `(route, subject_id, position)`; unique `(route, subject_id, change_id)`         | immutable public transition identity, component identity, before/after evidence and original `effective_at`; no private payload                                                   |
+| `semantic.subject_page_repair`           | PK `(route, subject_id)`; runnable index `(route, state, available_at, subject_id)` | generation, phase, source key, high-water/replay position, durable repair continuation and lease                                                                                  |
+| `semantic.subject_page_fanout`           | PK `(route, owner_kind, owner_key, change_id)`                                      | original effective time, last reverse-dependency key and durable completion state                                                                                                 |
 
 Witness slots contain at most eight component identities, not copied truth.
 Store component history and dependencies outside the constant-size publication
 row. A generation swap exposes a completed projection; every HTTP inclusion
 still needs current proof. Exact-key lookup indexes serve original gates,
-component state and owner checks. Reverse fanout uses ordered key windows, never
-all dependents in one transaction. The source candidate index remains the
+component state and owner checks. Reverse fanout reads only the asynchronous owner-home
+`subject_page_owner_dependency` range, using ordered key windows, never all
+dependents in one transaction. Its `route`, and the fanout row's `route`, equal
+the owner's route. Runnable indexes lead with route; claims remain partition
+local. Bootstrap checkpoints remain partition-led. Aggregate readiness checks
+bounded metadata at each of the fixed 4096 partition homes, with no global
+job-table scan or lease. The source candidate index remains the
 candidate primitive's authority; publication rows do not replace traversal.
 
 ## Local mutation and effective-time hooks
@@ -141,16 +147,30 @@ and its emitted change), then preserve those fields through Relay. Do not
 derive time from security revision. This is an explicit owner implementation
 slice, not a claim that the current fence schema already retains that evidence.
 
-Relay delivery records the change and a durable fanout continuation in its
-existing outbox-consumer/checkpoint transaction. Advance the Relay checkpoint
-only with that durable handoff. The worker expands at most 32 reverse dependency
-keys per step, enqueues/coalesces subject repair and resumes after the last key.
-Replay uses the unique change id. No synchronous publication barrier or
-whole-degree fanout is required at the foreign owner.
+Native source transactions persist forward dependencies and bounded dependency-change
+outbox events atomically. Existing Relay projects each delta into its owner's
+home separately; source versions, event identities and retained tombstones
+prevent stale membership resurrection. Owner changes enqueue owner-local fanout.
+Each at-most-32-key reverse page atomically advances its owner-local checkpoint
+and emits durable repair-request events. Relay delivers them into each subject's
+own partition with idempotent transactions before advancing its source checkpoint.
+No source/owner/target multi-home transaction is implied. Late dependency arrival
+uses retained original owner evidence to hand off repair even after fanout
+completion, so finite quiescent catch-up settles. Current proof always rechecks
+positive evidence; lag grants neither disclosure nor a fabricated time.
+
+The [slice handoff](subject-pages-slices.md#partition-local-dependency-delivery)
+locates the exact existing `links.ts:linkProjection` / `applyChanges`,
+`events/log.ts:projectBatch`, event catalogue registration and Relay lifecycle
+patterns, additive schemas and transaction-only ports. Native store owns all
+publication tables and SQL; the semantic Relay adapter owns delivery/lifecycle,
+using those ports in separate destination-home transactions. No new kernel
+mechanism or globally queryable source reverse index is introduced.
 
 `src/semantic/subject-page-publication.ts` exports
-`createSubjectPagePublication({ pool, access, clock })`: the kernel database
-pool, its resolved real Access instance, and `clock: () => Date`. Bind existing
+`createSubjectPagePublication({ pool, access, clock, routeKey })`: the kernel database
+pool, its resolved real Access instance, `clock: () => Date`, and the required
+canonical `routeKey: Uint8Array` already owned by the kernel/worker. Bind existing
 current-reader dependencies internally; callers cannot supply witness answers.
 The factory returns the runner interface below. Its production runtime is constructed and mounted by `createKernel`, shared with
 the feed's omission scheduler, and obtained for tests through exported
