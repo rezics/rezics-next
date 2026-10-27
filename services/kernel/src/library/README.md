@@ -20,6 +20,15 @@ Private state never reaches public full text, counts or "who also read". Only pu
 
 Events about private state use the account or Collection id as `subject`, never a subject id. Collection updated, deleted, member-changed and listing-changed events use the Collection id. Entry, follow, progress-session, copy and published-log events use the account id. A member-changed payload also carries the member id and the subject id. An entry or follow payload may carry an id in `data`. The public listing event `com.rezics.library.subject.listed.v1` uses the subject id because that projection is public. Follows are never counted in public. A published log shows the subject id, the session state, the start and completion times, and the owner's note. It does not show amount, cursor or the completed-unit set.
 
+### Projection freshness
+
+The [listing freshness contract](listing-freshness-contract.md) specifies monotonic source stamps and public-history
+zero tombstones for the existing public Collection projection. The
+[account-retention report, steps 4–5](https://github.com/rezics/rezics-next/blob/a1d0b76e4975daa2cbdbd5f172d0f72039d91252/docs/research/library-account-retention.md)
+records the delayed-positive race and later purge's reverse-index/fence needs. Never-public private/unlisted zeros
+must leave no subject-partition holder state. The typed ports are proposals and the native outcome suite remains red
+without its real driver; this specification does not change the implementation or choose public contribution retention.
+
 ## Bulk library operations
 
 A bulk action accepts either up to 100 explicit targets or a query over saved-entry state and primary type. The browser sends the predicate; it does not enumerate matching IDs. The operation discovers candidates in bounded pages, freezes the private manifest, and only then starts effects. The request starts discovery, so existing entries may enter or leave the match until their candidate page is read. New entry incarnations after the captured high-water mark are excluded. Sort, layout and page cursors do not change query membership, and unknown predicates are rejected. This adopts the bounded discovery-time behavior in the [bulk research](../../../../docs/research/library-query-bulk.md) alongside the [shelf selection study](../../../../docs/research/library-shelves.md#34-selection-and-bulk-actions).
