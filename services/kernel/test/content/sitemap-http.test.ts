@@ -450,7 +450,9 @@ test('a cursor that stops on a skipped candidate contains no id, route or timest
       expect(typeof decoded.after[0]).toBe('string');
       expect(typeof decoded.after[1]).toBe('number');
       const tamperedBytes = Buffer.from(cursor, 'base64url');
-      tamperedBytes[tamperedBytes.length - 1] ^= 1;
+      const lastByte = tamperedBytes[tamperedBytes.length - 1];
+      if (lastByte === undefined) throw new Error('Cursor bytes are empty');
+      tamperedBytes[tamperedBytes.length - 1] = lastByte ^ 1;
       const tampered = tamperedBytes.toString('base64url');
       expect((await get(feed, { cursor: tampered })).body).toMatchObject({ code: 'invalid_cursor' });
     } while (cursor);

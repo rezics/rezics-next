@@ -276,8 +276,8 @@ test('a bearer caller receives the same Realm and Space feeds as an anonymous ca
     if (authenticated.body.next && anonymous.body.next) {
       const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
       const [authenticatedCursor, anonymousCursor] = await Promise.all([
-        decodeListCursor(tokens, binding, authenticated.body.next, fixedNow),
-        decodeListCursor(tokens, binding, anonymous.body.next, fixedNow),
+        decodeListCursor(tokens, binding, authenticated.body.next, new Date(fixedNow)),
+        decodeListCursor(tokens, binding, anonymous.body.next, new Date(fixedNow)),
       ]);
       expect(authenticatedCursor.ok).toBe(true);
       expect(anonymousCursor.ok).toBe(true);
@@ -375,7 +375,7 @@ test('a cursor that stops on a skipped candidate contains no id, route or timest
     expect(cursorAfterSkipped).toEqual(expect.any(String));
     const opaque = cursorAfterSkipped!;
     const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
-    const decoded = await decodeListCursor(tokens, binding, opaque, fixedNow);
+    const decoded = await decodeListCursor(tokens, binding, opaque, new Date(fixedNow));
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) throw new Error('Cursor did not decode');
     const readable = Buffer.from(opaque, 'base64url').toString('utf8');
