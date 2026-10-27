@@ -30,6 +30,7 @@ import {
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { startConsentServer } from './membership-fixture.ts';
 
 const AUDIENCE = 'https://content.test';
@@ -63,7 +64,7 @@ async function startWorker(system: ContentSystem): Promise<{
   );
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
-    env: {
+    env: workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
       KERNEL_ROUTE_KEY: routeKey,
@@ -85,7 +86,7 @@ async function startWorker(system: ContentSystem): Promise<{
       CONTENT_SOURCE_HOSTS: 'images.example.org',
       ...consent.env,
       OPENSEARCH_URL: '',
-    },
+    }),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',

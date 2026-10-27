@@ -1,6 +1,7 @@
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -164,7 +165,7 @@ if (process.argv.includes('--erased-post-worker')) {
   function spawnWorker(executorId: string) {
     const routeKey = Buffer.alloc(32, 8).toString('base64url');
     const sessionKey = Buffer.alloc(32, 9).toString('base64url');
-    const env: Record<string, string | undefined> = {
+    const env = workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: executorId,
@@ -181,7 +182,7 @@ if (process.argv.includes('--erased-post-worker')) {
       KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
-    };
+    });
     for (const name of [
       'OPENSEARCH_URL',
       'STRIPE_SECRET_KEY',

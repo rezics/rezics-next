@@ -23,6 +23,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://realm-participation-content.auth.test';
 const audience = 'https://realm-participation-content.api.test';
@@ -70,9 +71,7 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 }
 
 async function startKernelWorker(env: Record<string, string>): Promise<Bun.Subprocess> {
-  const childEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) if (typeof value === 'string') childEnv[key] = value;
-  Object.assign(childEnv, env);
+  const childEnv = workerTestEnv({ ...process.env, ...env });
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: childEnv,
