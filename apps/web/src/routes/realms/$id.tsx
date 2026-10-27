@@ -1,13 +1,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { locateRealmPage } from '../../community/space-actions';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { realmPageQuery } from '../../community/space-queries';
 import { SpacePage } from '../../community/space-page';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ClosedErrorPage } from '../../shell/closed';
 
 export const Route = createFileRoute('/realms/$id')({
-  loader: async ({ params }) => {
-    const located = await locateRealmPage({ data: { realmId: params.id } });
+  loader: async ({ params, context }) => {
+    const located = await context.queryClient.ensureQueryData(realmPageQuery(params.id, getLocale()));
     if (located.kind === 'redirect')
       throw redirect({ href: `/${getLocale()}/spaces/${encodeURIComponent(located.address)}`, statusCode: 307 });
     return located.page;
@@ -18,5 +19,8 @@ export const Route = createFileRoute('/realms/$id')({
 });
 
 function RealmRoute() {
-  return <SpacePage page={Route.useLoaderData()} />;
+  const { id } = Route.useParams();
+  const { data } = useSuspenseQuery(realmPageQuery(id, getLocale()));
+  if (data.kind !== 'page') return null;
+  return <SpacePage page={data.page} />;
 }

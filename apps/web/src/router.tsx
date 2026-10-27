@@ -2,6 +2,11 @@ import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { requestNonce } from './security/nonce.ts';
 import { createRouter } from '@tanstack/react-router';
+import { QueryClient } from '@tanstack/react-query';
+import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
+import { ClosedErrorPage } from './shell/closed';
+import { NotFoundPage } from './shell/shell';
+import { PendingPage } from './shell/pending';
 import { routeTree } from './routeTree.gen';
 import { deLocalizeUrl, localizeUrl } from './paraglide/runtime.js';
 const nonce = createIsomorphicFn()
@@ -33,13 +38,22 @@ function stringifySearch(search: Record<string, unknown>): string {
 
 export function getRouter() {
   const cspNonce = nonce();
-  return createRouter({
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
+  const router = createRouter({
+    context: { queryClient },
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 0,
+    defaultPendingComponent: PendingPage,
+    defaultErrorComponent: ClosedErrorPage,
+    defaultNotFoundComponent: NotFoundPage,
     routeTree,
     parseSearch,
     stringifySearch,
     ssr: cspNonce ? { nonce: cspNonce } : {},
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
+  setupRouterSsrQueryIntegration({ router, queryClient });
+  return router;
 }
 declare module '@tanstack/react-router' {
   interface Register {

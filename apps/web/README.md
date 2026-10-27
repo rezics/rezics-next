@@ -338,6 +338,10 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** The acceptance test packs 300, 3,000 and 30,000 synthetic families and checks that shard count
   and uncompressed bytes grow linearly and that no shard exceeds 3,000 families or 40,000,000 bytes.
 
+### Data reads
+
+Each server render and browser session has its own query cache. Public reads stay fresh for 60 seconds, so preloaded client navigations reuse them without another kernel read. Server renders make the same reads as before, once per page, and dehydrate only the queries they used.
+
 ### Page security headers
 
 - **Touches:** Request-local nonce → SSR and response headers

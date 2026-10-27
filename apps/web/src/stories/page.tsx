@@ -1,4 +1,5 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
 import '../../.storybook/route-root';
@@ -97,19 +98,24 @@ function localizedEntry(path: string): string {
 export function PageStory({ visitor, path }: { visitor: 'Signed In' | 'Signed Out'; path: string }) {
   const entry = localizedEntry(path);
   setStoryRequestContext({ visitor, url: entry });
-  const router = useMemo(
-    () =>
-      createRouter({
-        routeTree,
-        history: createMemoryHistory({ initialEntries: [entry] }),
-        parseSearch,
-        stringifySearch,
-        ssr: {},
-        rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
-      }),
-    [entry],
+  const { router, queryClient } = useMemo(() => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
+    const router = createRouter({
+      routeTree,
+      context: { queryClient },
+      history: createMemoryHistory({ initialEntries: [entry] }),
+      parseSearch,
+      stringifySearch,
+      ssr: {},
+      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
+    });
+    return { router, queryClient };
+  }, [entry]);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
   );
-  return <RouterProvider router={router} />;
 }
 
 export async function pageReady({ canvasElement }: { canvasElement: HTMLElement }) {

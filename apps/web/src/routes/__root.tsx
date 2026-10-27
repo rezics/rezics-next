@@ -1,4 +1,5 @@
-import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
+import { createRootRouteWithContext, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
+import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
 import { getRequest, getRequestHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { useLayoutEffect } from 'react';
@@ -32,7 +33,7 @@ const publicOrigin = createIsomorphicFn()
   .client(() =>
     validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
   );
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   loader: () => readPreferences(),
   head: ({ loaderData, matches }) => {
     const locale = getLocale();
