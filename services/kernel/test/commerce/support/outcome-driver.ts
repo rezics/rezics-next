@@ -10,13 +10,12 @@ import { readExposure } from '../../../src/access/gates/catalogue.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
-import { checkout } from '../../../src/commerce/checkout.ts';
 import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
 import * as store from '../../../src/commerce/store.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
-import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
@@ -24,6 +23,7 @@ import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
+import { seedUnrelatedOrders as seedOrderFixtures } from './seed-unrelated-orders.ts';
 
 // A separate process owns DBOS's process-global registrations for each isolated driver.
 // Only its scheduling clock advances: command T and snapshot ordering still come from PostgreSQL.
@@ -54,7 +54,7 @@ if (import.meta.main) {
     )
       offset = Math.max(offset, message.advanceTo - realNow());
   });
-  await startWorker(
+  const worker = await startWorker(
     { databaseUrl: process.env.DATABASE_URL!, poolSize: 10, executorId: 'commerce-outcomes' },
     KERNEL_WORK_MODULES,
     process.env,
@@ -63,6 +63,16 @@ if (import.meta.main) {
   for (const schedule of await DBOS.listSchedules()) await DBOS.deleteSchedule(schedule.scheduleName);
   // Shorten scheduling latency while preserving the production queues' concurrency policies.
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
+  process.on('message', (message) => {
+    if (message === 'stop')
+      void worker.stop().then(
+        () => process.exit(0),
+        (error) => {
+          console.error(error);
+          process.exit(1);
+        },
+      );
+  });
   process.send?.('ready');
 }
 
@@ -108,8 +118,11 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   };
   const seller = account(0x2200);
   const governor = account(0x1100);
-  // Distinct from the buyer's partition, so seeded orders can drain while measured orders stay unread.
-  const seedAccounts = [account(0x1010), account(0x6610)];
+  const seedAccounts = [accounts.buyer.route, 0x1010, 0x6610].map((route) => ({
+    id: derivedId('00000000-0000-8000-8000-000000000001', `commerce-outcome-account:${route}`, route),
+    route,
+    partition: partitionOf(route),
+  }));
   const people = [...Object.values(accounts), seller, governor, ...seedAccounts];
   const approvals = new Set(people.map(({ id }) => id));
   // All registered work modules share the real fixture issuer, including the
@@ -279,6 +292,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   }
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let workerFailure: string | undefined;
+  let diagnostics = '';
+  let readDiagnostics: Promise<void> = Promise.resolve();
   let held = true;
   const disputes = new Map<string, string>();
   let seeded = 0;
@@ -336,8 +351,8 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       },
     });
     const running = child;
-    let diagnostics = '';
-    const readDiagnostics = (async () => {
+    diagnostics = '';
+    readDiagnostics = (async () => {
       const decoder = new TextDecoder();
       for await (const chunk of running.stderr as ReadableStream<Uint8Array>) {
         diagnostics += decoder.decode(chunk, { stream: true });
@@ -353,61 +368,6 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       }),
     ]);
     held = false;
-  }
-  const seedPartitions = seedAccounts.map((person) => person.partition);
-  // Far past any reconciliation or expiry delay this fixture's clock jump reaches. The final settle
-  // releases these workflows; seeding must not, or the scale listing would observe their grants.
-  const parkedUntil = Date.parse('2040-01-01T00:00:00.000Z');
-  type HeldCheckpoint = { partition: number; epoch: number | null; position: string };
-  async function shieldMeasuredPartitions(): Promise<HeldCheckpoint[]> {
-    const saved = await db.admin.query<{ partition_no: number; epoch: number | null; position: string }>(
-      `SELECT partition.partition_no, checkpoint.epoch, COALESCE(checkpoint.position, 0)::text AS position
-       FROM core.partition AS partition
-       LEFT JOIN core.consumer_checkpoint AS checkpoint
-         ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = 'effects'
-       WHERE partition.position > COALESCE(checkpoint.position, 0)
-         AND NOT (partition.partition_no = ANY($1::int[]))`,
-      [seedPartitions],
-    );
-    const partitions = saved.rows.map((row) => row.partition_no);
-    if (partitions.length) {
-      await db.admin.query(
-        `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
-         SELECT partition.partition_no, 'effects',
-           CASE WHEN partition.position = 0 THEN NULL ELSE partition.epoch END, partition.position
-         FROM core.partition AS partition
-         WHERE partition.partition_no = ANY($1::int[])
-         ON CONFLICT (partition_no, consumer) DO UPDATE
-         SET epoch = EXCLUDED.epoch, position = EXCLUDED.position, updated_at = now()`,
-        [partitions],
-      );
-    }
-    return saved.rows.map((row) => ({ partition: row.partition_no, epoch: row.epoch, position: row.position }));
-  }
-  async function restoreMeasuredPartitions(saved: readonly HeldCheckpoint[]) {
-    for (const checkpoint of saved) {
-      await db.admin.query(
-        `UPDATE core.consumer_checkpoint
-         SET epoch = $2, position = $3::bigint, updated_at = now()
-         WHERE partition_no = $1 AND consumer = 'effects'`,
-        [checkpoint.partition, checkpoint.epoch, checkpoint.position],
-      );
-    }
-  }
-  // Every measured workflow parked by any seed call. A later seed must not treat an earlier
-  // park deadline as work it should jump to, or those orders grant before the scale listing.
-  const parkedWorkflows = new Set<string>();
-  async function parkQueuedWorkflows() {
-    const parked = await db.admin.query<{ workflow_uuid: string }>(
-      `UPDATE dbos.workflow_status
-       SET status = 'DELAYED', delay_until_epoch_ms = $1,
-         updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
-       WHERE status = 'ENQUEUED'
-       RETURNING workflow_uuid`,
-      [parkedUntil],
-    );
-    for (const row of parked.rows) parkedWorkflows.add(row.workflow_uuid);
-    return parkedWorkflows;
   }
   async function waitForWork(
     parked: ReadonlySet<string>,
@@ -472,17 +432,16 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     return active.rows[0]?.count === '0';
   }
   async function pauseExecutor() {
-    for (let attempt = 0; attempt < 20; attempt++) {
-      if (child && !held) {
-        child.kill('SIGSTOP');
-        held = true;
-      }
-      if (await databaseIsIdle()) return;
-      // A stopped transaction cannot release its locks. Let that scan finish, then stop between ticks.
-      if (child) await startExecutor();
-      await Bun.sleep(50);
+    if (child) {
+      // Production shutdown drains in-flight relay transactions before closing its pools.
+      child.send('stop');
+      const code = await child.exited;
+      await readDiagnostics;
+      child = undefined;
+      held = true;
+      if (code !== 0) throw new Error(`Commerce executor exited ${code}: ${diagnostics}`);
     }
-    throw new Error('Commerce executor still holds a database transaction');
+    if (!(await databaseIsIdle())) throw new Error('Commerce executor still holds a database transaction');
   }
   const driver: CommerceDriver = {
     accounts,
@@ -575,17 +534,14 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       return { orders, entitlements, events, transactions, workflows };
     },
     async holdWork() {
-      if (child && !held) {
-        child.kill('SIGSTOP');
-        held = true;
-      }
+      await pauseExecutor();
     },
     async settle() {
       await startExecutor();
       // Surface the production relay's stop reason instead of waiting forever
       // for a checkpoint it explicitly refused to advance. Never skip its events.
       await waitForWork(new Set(), null);
-      // Stop only between relay ticks so the next seed can hold measured partitions without waiting on a lock.
+      // Drain the executor between ticks before holding the next measured operations.
       await pauseExecutor();
     },
     stripe: {
@@ -677,62 +633,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     async seedUnrelatedOrders(total) {
       if (seeded >= total) return;
       if (!seedOffer) seedOffer = (await driver.provisionOffer()).id;
-      // Measured orders are already queued and must stay unsettled until the final settle.
-      // Hold their partitions and stripe workflows, then drain seeded orders while inserting them.
-      // Do not resume here: the executor is already between ticks, and resuming would grant those orders.
-      if (child && !held) {
-        child.kill('SIGSTOP');
-        held = true;
-      }
-      if (!(await databaseIsIdle())) throw new Error('Commerce executor still holds a database transaction');
-      const shielded = await shieldMeasuredPartitions();
-      const parked = await parkQueuedWorkflows();
-      await startExecutor();
-      const stripe = createStripePort({
-        apiKey: 'sk_test_commerce',
-        managedPayments,
-        host: '127.0.0.1',
-        port: fake.port,
-        protocol: 'http',
-        maxNetworkRetries: 0,
-        clock: () => new Date(instant),
-      });
-      const seedCommands = createCommerceCommands({ pool: seedPool, access });
-      let next = seeded;
-      let seeding = true;
-      const seedOne = async () => {
-        for (;;) {
-          const index = next++;
-          if (index >= total) return;
-          const person = seedAccounts[index % seedAccounts.length]!;
-          await checkout(
-            { pool: seedPool, commands: seedCommands, stripe, ...configuration },
-            await access.authenticate(tokens.get(person.id)!, { pool: seedPool, deadline: Date.now() + 30_000 }),
-            seedOffer!,
-            Bun.randomUUIDv7(),
-          );
-        }
-      };
-      const drained = waitForWork(parked, seedPartitions, () => seeding);
-      try {
-        try {
-          await Promise.all(Array.from({ length: 8 }, () => seedOne()));
-          seeded = total;
-        } finally {
-          seeding = false;
-          await drained;
-        }
-      } finally {
-        try {
-          await pauseExecutor();
-        } finally {
-          if (child && !held) {
-            child.kill('SIGSTOP');
-            held = true;
-          }
-          await restoreMeasuredPartitions(shielded);
-        }
-      }
+      await driver.holdWork();
+      await seedOrderFixtures(seedPool, seedOffer, seedAccounts, seeded, total, instant);
+      seeded = total;
     },
     async measure(operation) {
       await driver.holdWork();
