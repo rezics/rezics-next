@@ -283,6 +283,9 @@ export async function createProfileEntryFixture() {
           copies: await rows(
             'SELECT to_jsonb(f) AS row FROM library.copy f WHERE route=$1 AND account_id=$2 ORDER BY copy_id',
           ),
+          entitlements: await rows(
+            'SELECT to_jsonb(f) AS row FROM commerce.entitlement f WHERE route=$1 AND account_id=$2 ORDER BY entitlement_id',
+          ),
           follows: await rows(
             'SELECT to_jsonb(f) AS row FROM library.follow f WHERE route=$1 AND account_id=$2 ORDER BY target_id',
           ),

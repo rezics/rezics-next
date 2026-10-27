@@ -94,6 +94,7 @@ test('native entry commands accept active data profiles pin fresh values and rep
   expect(after.events.length - before.events.length).toBe(1);
   expect(after.sessions).toEqual(before.sessions);
   expect(after.copies).toEqual(before.copies);
+  expect(after.entitlements).toEqual(before.entitlements);
   expect(after.follows).toEqual(before.follows); // role=active does not mean the ID in_progress
   const event = after.events.at(-1)!.row;
   expect(event.type).toBe('com.rezics.library.entry.updated.v1');
@@ -137,6 +138,7 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
     const fresh = await native.inspect();
     expect(fresh.sessions).toEqual(before.sessions);
     expect(fresh.copies).toEqual(before.copies);
+    expect(fresh.entitlements).toEqual(before.entitlements);
     expect(fresh.follows).toEqual(before.follows);
     expect(fresh.receipts.length - before.receipts.length).toBe(1);
     expect(fresh.events.length - before.events.length).toBe(1);
@@ -180,6 +182,7 @@ test('the literal in_progress state follows once and preserves an explicit unfol
     expect(after.events.length - before.events.length).toBe(explicitUnfollow ? 1 : 2);
     expect(after.sessions).toEqual(before.sessions);
     expect(after.copies).toEqual(before.copies);
+    expect(after.entitlements).toEqual(before.entitlements);
     expect((await fact(subjectId)).library_profile_pin).toEqual(pin(native.originalDigest, 'recipe'));
   }
 });
