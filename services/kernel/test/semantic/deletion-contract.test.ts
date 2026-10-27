@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -22,6 +23,8 @@ let now = new Date();
 const clock = () => new Date(now);
 const day = 86_400_000;
 const actions = [
+  'definitions:publish',
+  'definitions:activate',
   'subject:create',
   'subject:read',
   'statement:propose',
@@ -46,7 +49,10 @@ const kernel = createKernel({
   clock,
   routeKey,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) },
-  writeRate: real.writeRate,
+  writeRate: createWriteRateLimiter({
+    secret: 'semantic-deletion-native-test-rate-secret',
+    overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
+  }),
 });
 type Persona = keyof typeof accounts;
 async function call(method: string, path: string, persona?: Persona, body?: unknown, key = `"${randomUUID()}"`) {
@@ -307,6 +313,11 @@ test('early purge is separate platform authority and a legal hold suspends autom
   status(await call('POST', `${path(record)}:hold`, 'platform', { held: false, reason: 'Released' }), 200);
   await drain(record.subject);
   await absentPayload(record.payload);
+  const earlyPrivacy = await proposal(await person());
+  status(await call('DELETE', path(earlyPrivacy), 'owner'), 200);
+  status(await call('POST', `${path(earlyPrivacy)}:purge`, 'platform', { reason: 'early' }), 200);
+  await drain(earlyPrivacy.subject);
+  await absentPayload(earlyPrivacy.payload);
   const early = await proposal(await person());
   status(
     await call('POST', `${path(early)}:purge`, 'platform', { reason: 'legal_order', order: 'order-reference' }),
@@ -341,6 +352,32 @@ test('paused consumers do not disclose a revoked source in inverse links or publ
   expect(withheld.body.count, JSON.stringify(withheld.body)).toEqual({ value: 0, exact: true });
 });
 
+test('deleted community Context cannot disclose its adopted overlay while consumers pause', async () => {
+  const record = await proposal(await person());
+  const created = await call('POST', '/v1/contexts', 'owner', { labels: { en: 'Overlay lifecycle' } });
+  status(created, 201);
+  const context = created.body.context.id;
+  status(await call('POST', `${path(record)}:accept`, 'owner', { context, expected_head: null }), 200);
+  status(
+    await call('POST', `/v1/subjects/${record.subject}:adopt`, 'owner', {
+      context,
+      property: 'schema:url',
+      mode: 'replace',
+      selection: [{ candidate: record.candidate, rank: 'normal' }],
+      expected_head: null,
+    }),
+    200,
+  );
+  const read = () => call('GET', `/v1/subjects/${record.subject}?context=${context}`, 'owner');
+  expect(JSON.stringify((await read()).body)).toContain(record.payload);
+  status(await call('DELETE', `/v1/contexts/${context}`, 'owner'), 200);
+  const withheld = await read();
+  status(withheld, 404);
+  expect(JSON.stringify(withheld.body)).not.toContain(record.payload);
+  status(await call('POST', `/v1/contexts/${context}:restore`, 'owner', {}), 200);
+  expect(JSON.stringify((await read()).body)).toContain(record.payload);
+});
+
 test('account erasure de-identifies retained public contributions and automatically purges private assertions', async () => {
   const record = await proposal(await person());
   await accept(record);
@@ -373,4 +410,96 @@ test('account erasure de-identifies retained public contributions and automatica
   expect(JSON.stringify(privateRow.rows)).not.toContain(agent);
   const identity = await call('GET', `/v1/subjects/${agent}`);
   expect(JSON.stringify(identity.body)).not.toContain(privateName);
+});
+
+test('explicit account-agent name clear is immediate and does not create record deletion', async () => {
+  const account = accounts.stranger;
+  const name = `Clear-only name ${randomUUID()}`;
+  const agent = semantic.accountAgentId(account);
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name });
+  const before = await revisions(agent);
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name: null });
+  await absentPayload(name);
+  expect((await revisions(agent)).slice(0, before.length)).toEqual(before);
+  const cleared = await call('GET', `/v1/subjects/${agent}`);
+  status(cleared, 200);
+  expect(cleared.body.subject.labels).toEqual({});
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name: 'New explicit name' });
+  const restored = await call('GET', `/v1/subjects/${agent}`);
+  status(restored, 200);
+  expect(restored.body.subject.labels).toEqual({ und: 'New explicit name' });
+});
+
+test('retention failure before receipt commit leaves payload intact and the same page can retry', async () => {
+  // Use another real principal because account deletion above is terminal.
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  const created = await call('POST', '/v1/subjects', 'editor', {
+    type: 'schema:Person',
+    labels: { en: 'Crash fixture' },
+  });
+  status(created, 201);
+  const subject = created.body.subject.id;
+  const payload = `https://example.test/crash/${randomUUID()}`;
+  const proposed = await call('POST', `/v1/subjects/${subject}/candidates`, 'editor', {
+    statement: cited('schema:url', payload),
+  });
+  status(proposed, 201);
+  const record = { subject, candidate: proposed.body.candidate };
+  status(await call('DELETE', path(record), 'editor'), 200);
+  now = new Date(clock().getTime() + 31 * day);
+  const input = { partition: partitionOf(routeOf(subject)!), limit: 2, key: randomUUID() };
+  // A native command failure after its writes must roll back payload and checkpoint together.
+  await admin.query(`CREATE FUNCTION public.reject_semantic_retention_receipt() RETURNS trigger LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'retention receipt fault'; END $$`);
+  await admin.query(`CREATE TRIGGER reject_semantic_retention_receipt BEFORE INSERT ON core.receipt
+    FOR EACH ROW EXECUTE FUNCTION public.reject_semantic_retention_receipt()`);
+  try {
+    await expect(retention().step(input)).rejects.toThrow('retention receipt fault');
+    const row = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate]);
+    expect(JSON.stringify(row.rows)).toContain(payload);
+  } finally {
+    await admin.query('DROP TRIGGER reject_semantic_retention_receipt ON core.receipt');
+    await admin.query('DROP FUNCTION public.reject_semantic_retention_receipt()');
+  }
+  await retention().step(input);
+  await drain(subject);
+  await absentPayload(payload);
+});
+
+test('account-agent erasure still clears personal names when its stored type leaves the current release', async () => {
+  for (const action of ['definitions:publish', 'definitions:activate'])
+    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  const release = {
+    ...bundledRelease,
+    types: {
+      ...bundledRelease.types,
+      'schema:SoftwareApplication': {
+        iri: 'http://schema.org/SoftwareApplication',
+        labels: { en: 'Software application' },
+        mappings: [],
+        bases: ['schema:Thing'],
+        properties: [],
+        facets: [],
+      },
+    },
+  };
+  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
+  status(published, 201);
+  const digest = published.body.digest;
+  status(await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: 1 }), 200);
+  const account = newId(21004);
+  const name = `Retired type personal name ${randomUUID()}`;
+  try {
+    await semantic.ensureAccountAgent(pool, { account, kind: 'software', name });
+  } finally {
+    status(
+      await call('POST', `/v1/definitions/releases/${bundledDigest}:activate`, 'editor', { expected_head: 2 }),
+      200,
+    );
+  }
+  const cleared = await semantic.ensureAccountAgent(pool, { account, kind: 'software', name: null });
+  expect(cleared.subject.type).toBe('schema:SoftwareApplication');
+  expect(cleared.subject.labels).toEqual({});
+  await absentPayload(name);
 });

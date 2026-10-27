@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import * as semantic from '../../src/semantic/index.ts';
@@ -63,8 +64,10 @@ beforeAll(async () => {
     'statement:propose',
     'statement:delete',
     'statement:restore',
+    'context:accept',
+    'context:adopt',
   ]);
-  for (const action of ['subject:create', 'statement:propose'])
+  for (const action of ['subject:create', 'statement:propose', 'context:accept', 'context:adopt'])
     await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', action);
   kernel = createKernel({
     pool: db.pool,
@@ -72,7 +75,10 @@ beforeAll(async () => {
     clock,
     routeKey: new Uint8Array(32).fill(81),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) },
-    writeRate: real.writeRate,
+    writeRate: createWriteRateLimiter({
+      secret: 'semantic-deletion-growth-test-rate-secret',
+      overrides: '{"new-account":{"write":{"maximum":100000,"seconds":60}}}',
+    }),
   });
 });
 afterAll(async () => {
@@ -84,6 +90,17 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
     const subject = await person();
     const unrelated = await person();
     const selected = await proposal(subject);
+    status(await call('POST', `${path(selected)}:accept`, { context: GLOBAL_CONTEXT, expected_head: null }), 200);
+    status(
+      await call('POST', `/v1/subjects/${subject}:adopt`, {
+        context: GLOBAL_CONTEXT,
+        property: 'schema:url',
+        mode: 'replace',
+        selection: [{ candidate: selected.candidate, rank: 'normal' }],
+        expected_head: null,
+      }),
+      200,
+    );
     const report = await checkGrowth(db, {
       name: `semantic deletion and restore: ${axis}`,
       scales: [64, 512, 4096],
@@ -104,6 +121,9 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
         const deleted = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl&limit=1`);
         status(deleted, 200);
         expect(JSON.stringify(deleted.body)).not.toContain(selected.payload);
+        const view = await call('GET', `/v1/subjects/${subject}`);
+        status(view, 200);
+        expect(JSON.stringify(view.body)).not.toContain(selected.payload);
         status(await call('POST', `${path(selected)}:restore-deleted`, {}), 200);
       },
     });
@@ -113,7 +133,6 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
 
 test('automatic semantic purge pages count examined keys and replay durably as history grows', async () => {
   const subject = await person();
-  const unrelated = await person();
   let pending: Awaited<ReturnType<typeof proposal>>[] = [];
   // The required adapter executes real commands and checkpoints. It is deliberately
   // looked up only after native deletion succeeds; no missing module or fake job model.
@@ -141,7 +160,7 @@ test('automatic semantic purge pages count examined keys and replay durably as h
     warmups: 1,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_database, scale, previous) {
-      for (let i = previous; i < scale; i++) await proposal(unrelated);
+      for (let i = previous; i < scale; i++) await proposal(subject);
     },
     async warmup() {
       // Prepare separate eligible source keys for the warm-up and measured page.
