@@ -209,12 +209,16 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     console.log('ready');
     const remind = () => { try { runtime.deliverReminders?.(); } catch (error) { console.error(error); } };
     remind();
-    // The train promotes only when its queue empties; with a steady backlog that never happens, so the host promotes
-    // too. The promotion lease keeps one run at a time, and its gate runs on a check host, not in the train.
-    let promoting: Promise<void> | undefined;
+    // The train promotes only when its queue empties; with a steady backlog that never happens, so the host starts
+    // a promotion step in its own process every minute. Promotion runs git and generators synchronously, so it must
+    // never run inside the host, whose socket serves managers. The promotion lease keeps one run at a time.
+    let promotion: ReturnType<typeof spawn> | undefined;
     const promote = () => {
-      if (!runtime.promote || promoting) return;
-      promoting = runtime.promote().catch(error => console.error(error)).finally(() => { promoting = undefined; });
+      if (!runtime.promote || (promotion && promotion.exitCode === null && promotion.signalCode === null)) return;
+      const log = openSync(join(runtime.stateDirectory, 'promotion-runner.log'), 'a');
+      promotion = spawn(process.execPath, [process.argv[1]!, 'promote'], { cwd: runtime.mainCheckout, stdio: ['ignore', log, log] });
+      promotion.once('exit', () => closeSync(log));
+      promotion.unref();
     };
     recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); promote(); }, 60_000);
     recoveryTimer.unref();
@@ -269,6 +273,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     if (runtime.pump) { await runtime.pump(); await runtime.drain?.(); }
     return 0;
   }
+  if (command === 'promote') { await runtime.promote?.(); return 0; }
   if (command === 'train') { await recordManagerCommand(runtime); if (runtime.pump) { await runtime.pump(); await runtime.drain?.(); }
     else await new MergeTrain({ ...runtime, queue }).run(); return 0; }
   if (command === '_manager-host') { await serveManagers(runtime); return 0; }

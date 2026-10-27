@@ -16,7 +16,7 @@ const workerCommands = [
   'import-attempt',
   'event',
 ];
-const integrationCommands = ['land', 'train', 'manager', 'inbox', '_manager-host'];
+const integrationCommands = ['land', 'train', 'promote', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
 
 /** Runtime injection is confined to the programmatic test entry point. */
