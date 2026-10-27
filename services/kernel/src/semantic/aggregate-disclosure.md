@@ -94,6 +94,8 @@ must stay constant and blocks logarithmic. A 404/503 is never a successful measu
 hidden-before-cursor and hidden-after-cursor cases; raw target-local stored total must stay exact while the
 public property is absent. Do not alter capture/classification, ignored statements, Cost bounds, planner
 settings or timeouts to obtain green measurements.
+The typed native page test also rejects the existing thousand-member type sample in captured SQL: passing
+aggregate growth bounds against a large fixed authorization baseline does not establish the smaller page proof budget.
 
 ## Implementation split and dependencies
 
