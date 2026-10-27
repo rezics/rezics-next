@@ -21,6 +21,7 @@
   "auth_account_delete_security_description": "Dadurch wird dein REZICS-Konto dauerhaft gelöscht und du wirst überall abgemeldet.",
   "auth_account_delete_submit": "Konto löschen",
   "auth_account_delete_success": "Dein Konto wurde gelöscht.",
+  "auth_account_delete_unavailable": "Die Kontolöschung ist derzeit nicht verfügbar.",
   "auth_account_operation_failure": "Die Anfrage konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
   "auth_account_operation_sign_in_required": "Du bist abgemeldet. Melde dich an, um dein Konto zu verwalten.",
   "auth_consent_already_granted": "Bereits erlaubt",

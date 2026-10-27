@@ -21,6 +21,7 @@
   "auth_account_delete_security_description": "Cette action supprime définitivement votre compte REZICS et vous déconnecte partout.",
   "auth_account_delete_submit": "Supprimer le compte",
   "auth_account_delete_success": "Votre compte a été supprimé.",
+  "auth_account_delete_unavailable": "La suppression de compte est indisponible pour le moment.",
   "auth_account_operation_failure": "La demande n’a pas abouti. Veuillez réessayer.",
   "auth_account_operation_sign_in_required": "Vous êtes déconnecté. Connectez-vous pour gérer votre compte.",
   "auth_consent_already_granted": "Déjà autorisé",

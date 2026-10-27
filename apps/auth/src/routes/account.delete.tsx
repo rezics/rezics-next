@@ -27,9 +27,9 @@ export const Route = createFileRoute('/account/delete')({
 
 function DeleteAccountPage() {
   const privacyContact = Route.useLoaderData();
-  const [privacyBefore, privacyAfter] = m
-    .auth_account_delete_privacy_contact({ contact: privacyContact })
-    .split(privacyContact);
+  const [privacyBefore, privacyAfter] = privacyContact
+    ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
+    : [];
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
@@ -67,7 +67,7 @@ function DeleteAccountPage() {
   }, [confirmationError, message]);
 
   async function deleteAccount() {
-    if (submitting.current || pending) return;
+    if (!privacyContact || submitting.current || pending) return;
     if (!confirmed) {
       setMessage('');
       setConfirmationError(true);
@@ -160,13 +160,17 @@ function DeleteAccountPage() {
           <p>{m.auth_account_delete_retained_attribution()}</p>
         </section>
         <p>{m.auth_account_delete_prepare()}</p>
-        <p>
-          {privacyBefore}
-          <a href={privacyContact} className="wrap-anywhere underline underline-offset-4">
-            {privacyContact}
-          </a>
-          {privacyAfter}
-        </p>
+        {privacyContact ? (
+          <p>
+            {privacyBefore}
+            <a href={privacyContact} className="wrap-anywhere underline underline-offset-4">
+              {privacyContact}
+            </a>
+            {privacyAfter}
+          </p>
+        ) : (
+          <ErrorAlert>{m.auth_account_delete_unavailable()}</ErrorAlert>
+        )}
         <ul className="auth-account-operation-requirements">
           <li>{m.auth_account_delete_no_automated_accounts()}</li>
           <li>{m.auth_account_delete_not_last_owner()}</li>
@@ -202,7 +206,13 @@ function DeleteAccountPage() {
             ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" variant="destructive" disabled={pending} aria-busy={pending} className="w-full">
+        <Button
+          type="submit"
+          variant="destructive"
+          disabled={!privacyContact || pending}
+          aria-busy={pending}
+          className="w-full"
+        >
           {m.auth_account_delete_submit()}
         </Button>
       </form>

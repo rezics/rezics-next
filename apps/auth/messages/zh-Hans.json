@@ -21,6 +21,7 @@
   "auth_account_delete_security_description": "此操作会永久删除你的 REZICS 账户，并让你在所有设备上退出登录。",
   "auth_account_delete_submit": "删除账户",
   "auth_account_delete_success": "你的账户已删除。",
+  "auth_account_delete_unavailable": "目前无法删除账户。",
   "auth_account_operation_failure": "无法完成请求。请重试。",
   "auth_account_operation_sign_in_required": "你已退出登录。请登录以管理账户。",
   "auth_consent_already_granted": "已授权",

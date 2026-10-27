@@ -21,6 +21,7 @@
   "auth_account_delete_security_description": "REZICSアカウントは完全に削除され、すべての場所でサインアウトされます。",
   "auth_account_delete_submit": "アカウントを削除",
   "auth_account_delete_success": "アカウントを削除しました。",
+  "auth_account_delete_unavailable": "現在、アカウントを削除できません。",
   "auth_account_operation_failure": "リクエストを完了できませんでした。もう一度お試しください。",
   "auth_account_operation_sign_in_required": "サインアウトしています。アカウントを管理するにはログインしてください。",
   "auth_consent_already_granted": "許可済み",
