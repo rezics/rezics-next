@@ -20,6 +20,59 @@ Private state never reaches public full text, counts or "who also read". Only pu
 
 Events about private state use the account or Collection id as `subject`, never a subject id. Collection updated, deleted, member-changed and listing-changed events use the Collection id. Entry, follow, progress-session, copy and published-log events use the account id. A member-changed payload also carries the member id and the subject id. An entry or follow payload may carry an id in `data`. The public listing event `com.rezics.library.subject.listed.v1` uses the subject id because that projection is public. Follows are never counted in public. A published log shows the subject id, the session state, the start and completion times, and the owner's note. It does not show amount, cursor or the completed-unit set.
 
+### Account deletion
+
+At T, the terminal account-deletion barrier ends all Library authority. The Access contract emits exactly one
+`com.rezics.access.account-tombstoned.v1` event in that barrier for each active-account deletion, including
+organization closure. The Library consumer is intended to use this durable event as its purge trigger and run
+checkpointed, bounded cleanup asynchronously. Access deletion never waits for that consumer. The event contract and
+this plan do not mean a Library consumer is registered or that physical purge is implemented; account deletion and a
+later, evidence-backed Library purge completion are separate states.
+
+Purge must serialize with normal Library writes through the owning account's `shareAccount`/tombstone barrier: writes
+admitted before T settle before cleanup classifies the frozen state, and writes after T cannot recreate it. A native
+maintenance fence must also reject old reservations, bulk steps and rebuilds before they publish or reopen the
+namespace. These are cleanup requirements, not claims that the guards or purge are implemented. Only minimal terminal
+anti-resurrection evidence may remain, without erased payloads.
+
+Retain only Collections that are active and public at T, with their current title, description, ordered members and
+notes, plus log snapshots explicitly published and still present at T. These are frozen, de-identified contributions
+attributed as “Deleted account” or “Deleted organization”: no replacement curator, ownership transfer, further
+mutation, or new publication from private progress. Detach each retained log's source-session pointer before erasing
+its session; the current schema still requires that pointer, so storage/model support for detachment remains a gap.
+Private state is erased, never converted into a retained contribution. This includes private, unlisted and already-
+deleted Collections, even those that used to be public.
+
+The existing platform privacy contact remains the channel for a data-copy or privacy-removal request after login is
+gone. The deletion confirmation must name the erased and retained categories beside that contact. This policy adds
+no contact address, self-serve export or cleanup deadline. See the [account-retention report](../../../../docs/research/library-account-retention.md)
+for the evidence and the [shelf-maintenance protocol](../../../../docs/research/library-shelf-maintenance.md#proposed-protocol)
+for account quiescence, epoch fences, durable phase checkpoints and bounded page cleanup.
+
+#### Retention inventory
+
+The account-owned native rows below live on the owner's route unless stated otherwise. Account deletion has no
+account-wide Library cascade. The current schema and the shelf/bulk contracts include applied rows and planned
+logical stores; a planned name without an applied table or exact locator is an implementation gap, not covered by
+workflow history.
+
+| Native data                                                                                                                               | Deletion boundary                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library.collection`, `library.collection_member`                                                                                         | Keep only Collections active/public at T and their current occurrences and notes. Freeze them. Erase all other Collections, including private, unlisted and deleted rows, and their occurrences/notes. Settle their public-listing cleanup before deleting parent rows.                                                                                                    |
+| `library.entry`, `library.copy`, `library.follow`                                                                                         | Erase every entry state, all copies and private copy text, and every outgoing follow regardless of state or reason. An entry deletion alone is not account erasure.                                                                                                                                                                                                        |
+| `library.progress_session`, `library.progress_unit`, `library.progress_change`, `library.progress_head`                                   | Erase active, completed and abandoned sessions, unit rows, full change-intent history and heads, including heads with no remaining entry or session. Remove child units/history before their session. Never copy private progress into a retained log.                                                                                                                     |
+| `library.published_log`                                                                                                                   | Retain only the published snapshot that exists at T, with deleted-account attribution. Remove its private session pointer before erasing sessions; do not retain source sessions, units or history to satisfy that pointer. A retracted log is not restored.                                                                                                               |
+| `library.shelf_type_reservation`, `library.shelf_type_node`, `library.shelf_type_root`, `library.shelf_type_value`, `library.shelf_count` | Erase full staged reservation input, roots, every trie node (including partial/orphan paths), exact type text including zero-use identities, and every private counter/bucket/generation. Fence continuations first so a stale reservation cannot recreate a value.                                                                                                        |
+| `library.bulk_target`, `library.bulk_effect`, planned `library.bulk_operation`, entry-slot generations and temporary bulk selections      | Erase canonical selection/request payloads, target manifests/outcomes, receipts and target-side capture/transfer/ack payloads after already-committed outcomes are reconciled under the bulk contract. Erase absent-entry slot generations once terminal fencing prevents ABA. Some stores remain planned or unnamed; their locators and cleanup are not implemented here. |
+| Maintenance and listing-cleanup state                                                                                                     | Erase nonminimal gate, rebuild/backfill generations, checkpoints, cursors, page receipts, enqueue intents, manifests and target acknowledgements after dependent phases finish. Preserve only the minimal terminal fence/completion marker needed to reject replay.                                                                                                        |
+| `library.subject_collection`, `library.subject_listing` on subject routes                                                                 | Preserve or reconcile pairs/counts for surviving public Collections. Remove every pair for erased Collections, including obsolete pairs from earlier public membership; keep contributions from other public Collections. A zero aggregate may remain only without a private account-holder record.                                                                        |
+
+Cleanup must use bounded, indexed native phases with child-before-parent ordering and durable receipts/cursors; a Collection tombstone, terminal flag or empty account-local read is not proof that children and remote listing pairs are gone. Proposed page bounds have not been measured here. The [listing freshness contract](listing-freshness-contract.md#bounded-storage-purge-and-delivery) records the stale-positive projection race and fencing requirement.
+
+Library cleanup does not run broad SQL over shared stores. `core.receipt` can retain command request/response payloads; `core.outbox` must keep tombstone and projection events deliverable until durable custody is established; `core.consumer_checkpoint` is a shared stream position, not per-account state. `editorial.write_basis` and DBOS status/input/output/step/event/message histories follow their owners' retention and minimization rules. Existing age-based workflow history collection does not establish Library erasure. Exact evidence locators, account-specific payload cleanup and some consumer-custody acknowledgements are still missing; do not delete these stores by broad principal or JSON scans.
+
+Logs, caches, exports, replicas and backups have no complete Library-specific inventory or enforced account-erasure/restore deadline. These are explicit custody gaps. A tombstone, `state = 'deleted'`, or exhaustion of Library-native rows does not support a blanket physical-erasure claim while those gaps remain. See the [Access deletion policy](../access/README.md#account-deletion-policy) and [Access retention inventory](../access/README.md#retention-inventory) for the shared authority boundary and shared-store coverage; the detailed Library table/locator inventory remains here.
+
 ### Projection freshness
 
 The [listing freshness contract](listing-freshness-contract.md) specifies monotonic source stamps and public-history
