@@ -147,7 +147,7 @@ function taskIntegrationTarget(stateDirectory: string, taskId: string): { target
     const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
     if (!row) return {};
     const brief = (JSON.parse(row.body) as { brief?: { target?: string; manager?: string } }).brief;
-    return { target: brief?.target, manager: brief?.manager };
+    return { ...(brief?.target ? { target: brief.target } : {}), ...(brief?.manager ? { manager: brief.manager } : {}) };
   } finally {
     db.close();
   }

@@ -45,7 +45,7 @@ export async function run(
         if (process.env.GOAL_TASK_ID && process.env.GOAL_ATTEMPT)
           runtime.store.assertCurrent({ taskId: process.env.GOAL_TASK_ID, attempt: Number(process.env.GOAL_ATTEMPT) });
         const [taskId, target] = args;
-        if (!taskId || args.length !== 2) throw new Error('usage: retarget <task> stabilize');
+        if (!taskId || !target || args.length !== 2) throw new Error('usage: retarget <task> stabilize');
         runtime.tasks.retarget(taskId, target);
         return 0;
       }
