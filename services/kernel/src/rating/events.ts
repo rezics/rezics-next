@@ -25,6 +25,23 @@ export const RATING_EVENTS = {
     { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.public_figure.changed.v1': Type.Object(
+    {
+      questionId: Type.String({ pattern: UUID }),
+      populationId: Type.String({ pattern: UUID }),
+      subjectId: Type.String({ pattern: UUID }),
+      count: Type.Integer({ minimum: 0 }),
+      mean: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+      score: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+      m: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+      C: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+      priorEpoch: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+      revision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+      asOf: Type.Union([Type.String(), Type.Null()]),
+      position: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.segment.page.v1': Type.Union([
     Type.Object(
       {

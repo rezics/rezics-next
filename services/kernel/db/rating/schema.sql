@@ -115,6 +115,38 @@ CREATE TABLE rating.population_vote (
 
 
 --
+-- Name: public_figure; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.public_figure (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    count bigint DEFAULT 0 NOT NULL,
+    mean numeric(12,4),
+    score numeric(12,4),
+    m numeric(12,4),
+    c bigint,
+    prior_epoch integer,
+    revision bigint DEFAULT 0 NOT NULL,
+    as_of timestamp with time zone,
+    "position" bigint DEFAULT 0 NOT NULL,
+    pending_position bigint,
+    CONSTRAINT public_figure_check CHECK (((pending_position IS NULL) OR (pending_position > "position"))),
+    CONSTRAINT public_figure_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT public_figure_check2 CHECK ((((mean IS NULL) OR ((mean >= (0)::numeric) AND (mean <= (10)::numeric))) AND ((m IS NULL) OR ((m >= (0)::numeric) AND (m <= (10)::numeric))))),
+    CONSTRAINT public_figure_check3 CHECK ((((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (10)::numeric))) AND ((c IS NULL) OR (c >= 1)))),
+    CONSTRAINT public_figure_count_check CHECK ((count >= 0)),
+    CONSTRAINT public_figure_position_check CHECK (("position" >= 0)),
+    CONSTRAINT public_figure_prior_epoch_check CHECK (((prior_epoch IS NULL) OR (prior_epoch >= 1))),
+    CONSTRAINT public_figure_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT public_figure_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: question; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -263,6 +295,14 @@ ALTER TABLE ONLY rating.population_vote
 
 
 --
+-- Name: public_figure public_figure_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.public_figure
+    ADD CONSTRAINT public_figure_pkey PRIMARY KEY (route, question_id, population_id, subject_id);
+
+
+--
 -- Name: question question_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -331,6 +371,20 @@ CREATE INDEX population_vote_target_voter_page_idx ON rating.population_vote USI
 
 
 --
+-- Name: public_figure_pending_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX public_figure_pending_idx ON rating.public_figure USING btree (partition_no, route, question_id, population_id, subject_id) WHERE (pending_position IS NOT NULL);
+
+
+--
+-- Name: public_figure_population_subject_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX public_figure_population_subject_idx ON rating.public_figure USING btree (partition_no, question_id, population_id, subject_id) WHERE (revision > 0);
+
+
+--
 -- Name: vote_counted_target_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -372,6 +426,14 @@ ALTER TABLE ONLY rating.aggregate_component
 
 ALTER TABLE ONLY rating.population_vote
     ADD CONSTRAINT population_vote_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
+
+
+--
+-- Name: public_figure public_figure_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.public_figure
+    ADD CONSTRAINT public_figure_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
 
 
 --

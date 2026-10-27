@@ -35,7 +35,8 @@ votes are separate because its question is separate, and it is always displayed 
 ## Aggregates
 
 An aggregate is kept per (question, population, target) as additive components: count, sum and a histogram over the
-scale's units. Means, Bayesian scores and roll-ups are computed from components and never stored as inputs.
+scale's units. Means, Bayesian scores and roll-ups are computed from components and never stored as inputs. The
+standard question also publishes a separate current figure projection for search and display.
 
 - A vote, change or clear updates the Global aggregate and the aggregate of each Realm whose population includes the
   voter, asynchronously and idempotently, by subtracting the previous value and adding the new one. The number of
@@ -53,6 +54,22 @@ scale's units. Means, Bayesian scores and roll-ups are computed from components 
 Different questions, scales or grains are never combined. Episode ratings do not feed a series score; release
 ratings do not feed a work score. A roll-up over members (for example a series over its works) is a named metric
 with its formula, member count and coverage, and is shown only when it covers at least half its members.
+
+### Public figure
+
+A public figure is stored for each (standard question, population, subject) in the subject's anchor partition. It
+contains the count and a display-scale mean rounded to four decimal places from the grain threshold (5 votes for work
+or release, 10 for episode or character). Below threshold only count is published. This task leaves the Bayesian
+score, prior mean `m`, prior count `C` and `priorEpoch` null. Realm-defined questions have no public figure.
+
+Aggregate applies mark affected figures pending with the anchor-partition position. A serial drain reads at most 16
+shards per pending figure and publishes at most one changed-figure event per figure in each page of at most 500. A
+published figure's revision increases for every changed snapshot; the event carries the same current fields returned
+by the internal reads.
+
+`readPublicFigures(client, { partition, questionId, populationId, subjectIds })` reads at most 256 current figures
+with one statement. `pagePublicFigures(client, { partition, questionId, populationId, after, limit })` reads at most
+500 current figures in subject order with one statement.
 
 ## Thresholds and privacy
 
@@ -269,3 +286,20 @@ both votes and Realm memberships for reinstatement.
 - Bound: 20 × 16 shard rows.
 - Growth check: `test/rating/growth-aggregate-read.test.ts`, test "a target population page has constant rows and
   statements as rated populations grow" at scales `[256, 1024, 4096]`.
+
+### Public figure drain
+
+- Touches: at most 500 pending figures per page; for each figure, at most 16 aggregate shard rows, one figure row and
+  one changed-figure event.
+- Growth check: `test/rating/growth-public-figure.test.ts`, votes on one subject at scales `[64, 256, 1024]`, with
+  constant rows per drained figure.
+
+### Public figure read batch
+
+- Touches: at most 256 figure rows by primary key `(route, question, population, subject)`.
+- Bound: one statement per call.
+
+### Public figure page
+
+- Touches: one index range of at most 500 figure rows through the `(partition, question, population, subject)` index.
+- Bound: one statement per call.

@@ -16,6 +16,9 @@ import upsertPopulationVote from './population-vote-upsert.sql';
 import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
 import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
 import readQuestionScale from './question-scale-read.sql';
+import readPublicFigurePosition from './public-figure-next-position.sql';
+import markPublicFigurePending from './public-figure-pending.sql';
+import { STANDARD_QUESTION_ID } from './votes.ts';
 
 const VOTE_CHANGED = 'com.rezics.rating.vote.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
@@ -183,6 +186,24 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
     await runCommand(pool, { partition }, async (tx, command) => {
       const scales = new Map<string, QuestionScale>();
       let applied = 0;
+      let figurePosition: string | undefined;
+      const markFigurePending = async (change: RatingChange, route: number): Promise<void> => {
+        if (change.questionId !== STANDARD_QUESTION_ID) return;
+        if (figurePosition === undefined) {
+          const row = await readPublicFigurePosition.run(tx, { partition_no: partition });
+          if (!row) throw new Error('Rating figure partition is unavailable');
+          figurePosition = row.position;
+        }
+        if (figurePosition === undefined) throw new Error('Rating figure partition is unavailable');
+        const rows = await markPublicFigurePending.run(tx, {
+          route,
+          question_id: change.questionId,
+          population_id: change.populationId,
+          subject_id: change.targetId,
+          position: figurePosition,
+        });
+        if (!returnedRows(rows)) throw new Error('Rating public figure could not be marked pending');
+      };
       for (const change of changes) {
         const { route, at, appliedAt, shard } = validateChange(change);
         let scale = scales.get(change.questionId);
@@ -229,6 +250,7 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
             applied += 1;
           }
           await applyDelta(tx, change, change.countingKey, newBefore, newAfter, scale, appliedAt);
+          await markFigurePending(change, route);
           applied += 1;
           continue;
         }
@@ -262,6 +284,7 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           at: appliedAt,
         });
         if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
+        await markFigurePending(change, route);
         applied += 1;
       }
       if (applied === 0) throw new NoAggregateChange();

@@ -2,6 +2,7 @@ import { createRatingCounter, type RatingCounter } from '../access/rating-counte
 import type { WorkModule } from '../work/registry.ts';
 import { createRatingAggregateEffect } from './aggregate-effect.ts';
 import { createVoterEligibilityEffect } from './eligibility.ts';
+import { createPublicFigureDrainEffect } from './public-figure.ts';
 import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
 import { registerRatingSubjectMergeWork } from './merge-job.ts';
@@ -26,6 +27,7 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
         ratingCounter ?? createRatingCounter({ secret: counterSecret(context.env[RATING_COUNTER_SECRET_ENV]) });
       context.addEffects([
         createRatingAggregateEffect(context.pool, counter),
+        createPublicFigureDrainEffect(context.pool),
         createVoterRealmsEffect(context.pool),
         createVoterEligibilityEffect(context.pool),
       ]);
