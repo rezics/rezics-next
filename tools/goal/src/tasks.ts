@@ -286,7 +286,7 @@ export class WorkerTasks {
     return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)));
+    await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)), taskId);
     // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
     // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
@@ -364,7 +364,7 @@ export class WorkerTasks {
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
-    if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first);
+    if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId);
     const lease = leased
       ? undefined
       : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));

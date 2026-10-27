@@ -160,3 +160,19 @@ test('a worker that writes nothing within the start window is stopped and retrie
     expect(inbox.map(event => event.kind)).toEqual(['stalled']);
   } finally { h.dispose(); }
 }, 60_000);
+
+test('the host starts a ready task whose dispatching process is gone, once', async () => {
+  const h = harness(), inbox: ManagerEvent[] = [];
+  h.settings.startGraceMs = 10;
+  try {
+    // Dispatched, but the command that would start it ended before it could.
+    const task = h.tasks.dispatch(h.briefFile);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    await job.recoverOrphans({ adoptRunning: true }); await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    // A late start from the original dispatch is a no-op, not a second attempt.
+    await job.start(task.id, { expectedAttempt: 0 }); await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+  } finally { h.dispose(); }
+}, 60_000);
