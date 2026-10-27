@@ -10,6 +10,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { slotId } from '../../src/semantic/slots.ts';
+import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   checkGrowth,
@@ -209,7 +210,8 @@ function positionFor(name: string, ordinal: number): string {
 }
 
 function genericRows(name: string, ordinal: number, route: number): Readonly<Record<string, readonly Row[]>> {
-  const subjectId = newId(route);
+  const seedAccount = newId(route);
+  const subjectId = accountAgentId(seedAccount);
   const candidateId = newId(route);
   const documentId = newId(route);
   const mediaId = newId(route);
@@ -276,7 +278,6 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
   }
   const commandPosition = positionFor(name, ordinal);
   const outboxId = newId(route);
-  const seedAccount = newId(route);
   const resourceId = newId(route);
   const denialResourceId = newId(route);
   const roleResourceId = newId(route);
@@ -322,10 +323,21 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
       {
         route,
         subject_id: subjectId,
-        type: 'schema:Book',
+        type: 'schema:Person',
         recorded_transaction_id: transactionId,
         current_facts: facts.length,
         current_release: bundledDigest,
+      },
+    ],
+    'semantic.account_agent_subject': [
+      {
+        route,
+        account_route: route,
+        subject_id: subjectId,
+        account_id: seedAccount,
+        agent_id: subjectId,
+        verified: false,
+        receipt_id: null,
       },
     ],
     'semantic.fact': facts.map((fact) => ({
@@ -636,6 +648,9 @@ function logSamples(report: Awaited<ReturnType<typeof checkGrowth>>): void {
         rows: cost.rows,
         blocks: cost.blocks,
         statements: cost.statements,
+        semanticRelations: Object.fromEntries(
+          Object.entries(cost.relations).filter(([relation]) => relation.startsWith('semantic.')),
+        ),
       })),
     })}`,
   );
