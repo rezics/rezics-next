@@ -37,12 +37,12 @@ or reference repository programs were executed. The explicitly requested clone
 directory was treated as an exception to the worktree-only writing instruction;
 the report is the only changed tracked file in REZICS.
 
-| Reference | Inspected commit | Licence evidence and copying boundary |
-| --- | --- | --- |
-| Open Library | `37e446827465be2febad416de1bc18753b66997d` | [Root LICENSE][OL], GNU AGPL version 3 text. No code copied. |
-| MediaWiki | `387d8ced27f16899afe674749f9890d14987e81d` | [Root COPYING][ML], GPL-2.0-or-later, with separately licensed components. No code copied. |
-| BookWyrm | `fe2fa0bd2b16f1d95030d8ac1d41139e51b8cde4` | [Root LICENSE.md][BL], Anti-Capitalist Software License 1.4; do not assume a permissive or OSI-approved licence. No code copied. |
-| Wagtail | `57f63027644fff99a1a2b4fb8116a80e851a84a6` | [Root LICENSE][WL], BSD-3-Clause. No code copied. |
+| Reference    | Inspected commit                           | Licence evidence and copying boundary                                                                                            |
+| ------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Open Library | `37e446827465be2febad416de1bc18753b66997d` | [Root LICENSE][OL], GNU AGPL version 3 text. No code copied.                                                                     |
+| MediaWiki    | `387d8ced27f16899afe674749f9890d14987e81d` | [Root COPYING][ML], GPL-2.0-or-later, with separately licensed components. No code copied.                                       |
+| BookWyrm     | `fe2fa0bd2b16f1d95030d8ac1d41139e51b8cde4` | [Root LICENSE.md][BL], Anti-Capitalist Software License 1.4; do not assume a permissive or OSI-approved licence. No code copied. |
+| Wagtail      | `57f63027644fff99a1a2b4fb8116a80e851a84a6` | [Root LICENSE][WL], BSD-3-Clause. No code copied.                                                                                |
 
 Source links below use these immutable commit ids. Source inspection establishes
 implemented paths at those revisions, not deployment configuration or observed
@@ -229,13 +229,13 @@ stronger conditions rather than copying the action wholesale. [W1][W2]
 
 ## Shared patterns and differences from REZICS
 
-| Observed pattern | Transferable lesson | Boundary REZICS must preserve |
-| --- | --- | --- |
-| Current-record/type filtering in Open Library; live/public and noindex metadata elsewhere | Enumerate publication state, not editorial activity | Title-only, hidden, removed, closed and merged-source subjects must be excluded by current public rules |
-| Stable numeric buckets or fixed id ranges | Sparse output is acceptable; advance over candidate space | One source partition per range read, signed keyset cursor, no eligible-row OFFSET or hidden global scan |
-| Persisted page properties and published timestamps | Maintain small publication metadata instead of parsing all pages per request | Backfill and complete change coverage; metadata alone never authorizes disclosure |
-| Record, touch and publication clocks differ | Choose a clock with a demonstrated public meaning | Nonpublic proposals and unshown-fact moderation cannot signal freshness |
-| Regenerated or cached sitemap files | Discovery can be asynchronous | Current final suppression must still win; cached candidates cannot reveal withdrawn data |
+| Observed pattern                                                                          | Transferable lesson                                                          | Boundary REZICS must preserve                                                                           |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Current-record/type filtering in Open Library; live/public and noindex metadata elsewhere | Enumerate publication state, not editorial activity                          | Title-only, hidden, removed, closed and merged-source subjects must be excluded by current public rules |
+| Stable numeric buckets or fixed id ranges                                                 | Sparse output is acceptable; advance over candidate space                    | One source partition per range read, signed keyset cursor, no eligible-row OFFSET or hidden global scan |
+| Persisted page properties and published timestamps                                        | Maintain small publication metadata instead of parsing all pages per request | Backfill and complete change coverage; metadata alone never authorizes disclosure                       |
+| Record, touch and publication clocks differ                                               | Choose a clock with a demonstrated public meaning                            | Nonpublic proposals and unshown-fact moderation cannot signal freshness                                 |
+| Regenerated or cached sitemap files                                                       | Discovery can be asynchronous                                                | Current final suppression must still win; cached candidates cannot reveal withdrawn data                |
 
 REZICS evidence inspected at base `b83e8ec43c3056755cc6593b35dafa2e52f2e7f0`:
 
@@ -368,29 +368,29 @@ to reopen the approved public/privacy contract:
 These are proposed tests for the later mechanism; no acceptance tests were
 changed or executed as reference repository code for this report.
 
-| Case | Required observation |
-| --- | --- |
-| Title only; title plus hidden/unselected/private-Context fact | Subject absent; no label or timestamp leaks from excluded entries |
-| First shown non-title fact at T1 | Subject present with current public labels and `lastModified=T1` |
-| New proposal at T2, no public selection change | Entry and T1 unchanged |
-| Hide/take down/reject a never-shown candidate at T3 | Public entry and T1 unchanged despite security/editorial changes |
-| Publish replacement at T4 | Current selected fact affects eligibility and `lastModified=T4` |
-| Remove shown A at T5, older B remains | Subject remains; `lastModified=T5`, not B's creation time |
-| Remove or fence the last shown non-title fact | Subject absent immediately at final disclosure, even with a stale positive publication row |
-| Hide/remove/close subject after candidate collection | Final output omits it, including its labels; point reads retain existing status semantics |
-| Fence a source at a different tuple home | Bounded owner checks suppress its evidence without a cross-partition SQL join |
-| Restore a shown fact at T6 | Eligible again if public, timestamp reflects the actual restored public change |
-| Merge source into survivor; reverse merge | Source omitted while redirected; existing API 308/web 301 unchanged; reversal recomputes public eligibility/time without bulk timestamp fabrication |
-| Replay, retry, rebuild, compaction, unchanged import | Entry and public timestamp unchanged; no clock set to worker execution time |
-| Edit/remove public locale label | Labels and canonical slug agree with rendered fallback; significant public change advances publication time |
-| Multiple labels, missing requested-language label | Deterministic stored tags; configured localized URLs use the same fallback as HTML and reciprocal alternates |
-| Empty partition | Empty source result completes that partition step; no scan into another partition to find output |
-| More than ten candidate windows of noindex entries | Each request inspects at most its declared candidate budget, can return empty plus continuation, and eventually reaches a later eligible id |
-| Eligible sentinel after a fully processed window | Cursor does not skip it; unchanged fixture traversal returns every eligible id once |
-| Partition move or cursor tampering | Existing signed binding and stale/moved handling apply; never resume against a different unchecked range |
-| Large descriptive history and arbitrarily many relations | Fixed candidate/dependency inspection budget independent of history and relation count; an existence decision cannot scan the complete relation list |
-| Projection bootstrap and lag, if selected | Preexisting eligible pages are backfilled; all change classes are covered; delayed projection never bypasses final suppression |
-| XML generation repeated without page changes | URL lastmod stable; sitemap-file lastmod handled separately; escaped URLs, 50,000-URL and uncompressed byte limits respected |
+| Case                                                          | Required observation                                                                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Title only; title plus hidden/unselected/private-Context fact | Subject absent; no label or timestamp leaks from excluded entries                                                                                    |
+| First shown non-title fact at T1                              | Subject present with current public labels and `lastModified=T1`                                                                                     |
+| New proposal at T2, no public selection change                | Entry and T1 unchanged                                                                                                                               |
+| Hide/take down/reject a never-shown candidate at T3           | Public entry and T1 unchanged despite security/editorial changes                                                                                     |
+| Publish replacement at T4                                     | Current selected fact affects eligibility and `lastModified=T4`                                                                                      |
+| Remove shown A at T5, older B remains                         | Subject remains; `lastModified=T5`, not B's creation time                                                                                            |
+| Remove or fence the last shown non-title fact                 | Subject absent immediately at final disclosure, even with a stale positive publication row                                                           |
+| Hide/remove/close subject after candidate collection          | Final output omits it, including its labels; point reads retain existing status semantics                                                            |
+| Fence a source at a different tuple home                      | Bounded owner checks suppress its evidence without a cross-partition SQL join                                                                        |
+| Restore a shown fact at T6                                    | Eligible again if public, timestamp reflects the actual restored public change                                                                       |
+| Merge source into survivor; reverse merge                     | Source omitted while redirected; existing API 308/web 301 unchanged; reversal recomputes public eligibility/time without bulk timestamp fabrication  |
+| Replay, retry, rebuild, compaction, unchanged import          | Entry and public timestamp unchanged; no clock set to worker execution time                                                                          |
+| Edit/remove public locale label                               | Labels and canonical slug agree with rendered fallback; significant public change advances publication time                                          |
+| Multiple labels, missing requested-language label             | Deterministic stored tags; configured localized URLs use the same fallback as HTML and reciprocal alternates                                         |
+| Empty partition                                               | Empty source result completes that partition step; no scan into another partition to find output                                                     |
+| More than ten candidate windows of noindex entries            | Each request inspects at most its declared candidate budget, can return empty plus continuation, and eventually reaches a later eligible id          |
+| Eligible sentinel after a fully processed window              | Cursor does not skip it; unchanged fixture traversal returns every eligible id once                                                                  |
+| Partition move or cursor tampering                            | Existing signed binding and stale/moved handling apply; never resume against a different unchecked range                                             |
+| Large descriptive history and arbitrarily many relations      | Fixed candidate/dependency inspection budget independent of history and relation count; an existence decision cannot scan the complete relation list |
+| Projection bootstrap and lag, if selected                     | Preexisting eligible pages are backfilled; all change classes are covered; delayed projection never bypasses final suppression                       |
+| XML generation repeated without page changes                  | URL lastmod stable; sitemap-file lastmod handled separately; escaped URLs, 50,000-URL and uncompressed byte limits respected                         |
 
 ## Primary source links
 
