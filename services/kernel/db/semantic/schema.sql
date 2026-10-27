@@ -1097,6 +1097,13 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 
 
 --
+-- Name: revision_identity_version; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX revision_identity_version ON semantic.revision USING btree (route, subject_id, revision DESC) INCLUDE (recorded_transaction_id) WHERE (kind = ANY (ARRAY['create'::text, 'identity'::text]));
+
+
+--
 -- Name: revision_transaction; Type: INDEX; Schema: semantic; Owner: -
 --
 

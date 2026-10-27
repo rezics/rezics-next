@@ -22,6 +22,22 @@ The current route is an unavailable stub: valid requests return `semantic_not_re
 or establish indexability. Validation and the unavailable response cost O(1), with no database read; this makes no
 cost claim for the eventual feed.
 
+## Item identity metadata
+
+`readItemIdentityVersion` is an internal validation helper for callers that already read the full type through
+`readItemTypes`. Call it on the same repeatable-read client used for `readItemTypes` and `readPartition`; it opens no
+connection or transaction. It returns the latest existing `create` or `identity` revision and its recorded
+transaction id, plus the source's current redirect target. It returns null for invalid, missing or nonvisible ids. A
+redirect is metadata for that source only: the caller reanchors and rechecks the target in its own partition, and
+compares version stamps only when both reads name the same source. The helper neither follows redirects nor proves
+Access. Editorial revisions do not alter the identity version, and a redirect change is checked independently.
+
+- Touches: one visible-subject point read, one latest identity/create index entry, and one latest redirect index entry.
+- Bound: one statement and a fixed three-column, one-row result independent of type length; the revision integer has
+  its ordinary decimal width. B-tree probes grow logarithmically with their indexed relations.
+- Growth check: `test/semantic/growth-item-identity-version.test.ts`: `metadata point reads stay bounded as unrelated
+  revision history grows`.
+
 ## Authorization
 
 Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
