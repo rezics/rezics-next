@@ -1,3 +1,4 @@
+import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
 import { withReadTransaction } from './read.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
@@ -203,7 +204,23 @@ export async function writeProposal(
     options.source === undefined,
   );
   const details = await readItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
-  assertAgentStatementAccess(tx, [options.subject, ...input.items.map((item) => item.id)], details);
+  const privateAccount = await disclosureAccount(tx, options.release.release, input.property, input.fact.body);
+  assertAgentStatementAccess(
+    tx,
+    [
+      options.subject,
+      ...input.items
+        .filter(
+          (item) =>
+            !(
+              options.release.release.properties[input.property]?.disclosure === 'sourceOrConsent' &&
+              item.pointer === '/statement/value/content'
+            ),
+        )
+        .map((item) => item.id),
+    ],
+    details,
+  );
   const errors = input.items.flatMap((item) =>
     matchesTarget(options.release.release, details.get(item.id)?.type ?? '', item.targets)
       ? []
@@ -281,6 +298,17 @@ export async function writeProposal(
     }
     throw error;
   }
+  if (privateAccount)
+    await keepStatementPrivate(tx, {
+      subject: options.subject,
+      candidate,
+      slot: input.fact.slot_id,
+      property: input.property,
+      body: factBody,
+      account: privateAccount,
+      revision,
+      release: options.release.release,
+    });
   return {
     value: { candidate, revision },
     events: [
@@ -577,6 +605,8 @@ export async function adoptCandidates(
           route,
           subject_id: options.subject,
           candidate_ids: hiddenIds,
+          viewer_account: '00000000-0000-0000-0000-000000000000',
+          viewer_moderator: false,
         });
         for (const row of listed(concealed)) hiddenCandidates.add(row.candidate_id);
       }
@@ -906,6 +936,7 @@ export async function listCandidates(
           route: routeOf(options.subject)!,
           subject_id: options.subject,
           candidate_ids: window.map((row) => row.candidate_id),
+          ...(await statementAudience(client)),
         });
         for (const row of listed(concealed)) hidden.add(row.candidate_id);
       }

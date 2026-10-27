@@ -1,5 +1,6 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import { statementAudience } from './statement-disclosure.ts';
 import { writeFacts } from './write-facts.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
 import { statementSlotId, type FactRow, type Statement } from './item.ts';
@@ -167,6 +168,7 @@ async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRo
     route: routeOf(subject)!,
     subject_id: subject,
     candidate_ids: ids,
+    ...(await statementAudience(tx)),
   });
   if (hidden.length === 0) return facts;
   const gone = new Set(hidden.map((row) => row.candidate_id));

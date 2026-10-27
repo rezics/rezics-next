@@ -64,6 +64,8 @@ export type PropertyDefinition = {
   iri: string;
   labels: Record<string, string>;
   relation?: RelationDefinition;
+  disclosure?: 'sourceOrConsent';
+  descriptions?: Record<string, string>;
   mappings: string[];
   datatype: DataType;
   multivalued: boolean;

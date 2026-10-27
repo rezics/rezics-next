@@ -623,7 +623,7 @@
       },
       "mappings": ["wd:Q43229"],
       "bases": ["schema:Thing"],
-      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
+      "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
       "facets": [],
       "coverRatio": "1:1"
     },
@@ -642,6 +642,7 @@
       "mappings": ["wd:Q5"],
       "bases": ["schema:Thing"],
       "properties": [
+        "rezics:penNameOf",
         "schema:birthDate",
         "schema:deathDate",
         "schema:image",
@@ -3410,6 +3411,54 @@
         }
       },
       "targets": ["schema:CreativeWorkSeries"]
+    },
+    "rezics:penNameOf": {
+      "iri": "https://rezics.com/vocab/penNameOf",
+      "labels": {
+        "de": "Pseudonym von",
+        "en": "pen name of",
+        "es": "seudónimo de",
+        "fr": "pseudonyme de",
+        "ja": "筆名の使用者",
+        "ko": "필명 사용자",
+        "zh-Hans": "笔名使用者",
+        "zh-Hant": "筆名使用者"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "disclosure": "sourceOrConsent",
+      "relation": {
+        "group": "association",
+        "order": "name",
+        "inverse": "rezics:penNames",
+        "inverseLabels": {
+          "de": "Pseudonyme",
+          "en": "pen names",
+          "es": "seudónimos",
+          "fr": "pseudonymes",
+          "ja": "筆名",
+          "ko": "필명",
+          "zh-Hans": "笔名",
+          "zh-Hant": "筆名"
+        }
+      },
+      "targets": ["schema:Organization", "schema:Person"],
+      "descriptions": {
+        "de": "Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.",
+        "en": "The person or organization behind this pen name or collective name.",
+        "es": "La persona u organización detrás de este seudónimo o nombre colectivo.",
+        "fr": "La personne ou organisation derrière ce pseudonyme ou nom collectif.",
+        "ja": "この筆名または共同名義を使用する人物または組織。",
+        "ko": "이 필명 또는 공동 명의를 사용하는 사람이나 조직.",
+        "zh-Hans": "使用此笔名或共同名义的个人或组织。",
+        "zh-Hant": "使用此筆名或共同名義的個人或組織。"
+      }
     },
     "schema:position": {
       "iri": "http://schema.org/position",

@@ -1,3 +1,4 @@
+import { disclosureAccount, keepStatementPrivate, privateLinks } from './statement-disclosure.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { activeRelease } from './definitions.ts';
 import { withReadTransaction } from './read.ts';
@@ -31,7 +32,7 @@ import readIdentityVisibility from './read-visibility.sql';
 import updateIdentity from './update-subject-identity.sql';
 import readIdentitySubject from './candidates-read-adoption-subject.sql';
 import { linkChanges } from './link-changes.ts';
-import { slotId, slotView } from './slots.ts';
+import { expandSlot, slotId, slotView } from './slots.ts';
 import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertSubject from './create-subject.sql';
@@ -170,7 +171,28 @@ export async function writeSubject(
   const dataTypes = factDataTypes(options.release.release, facts);
   const statementSubjects = [subjectId, ...checked.targets.map((item) => item.id)];
   const itemDetails = await readItemDetails(tx, statementSubjects);
-  assertAgentStatementAccess(tx, statementSubjects, itemDetails);
+  const privateAccounts = new Map<string, string>();
+  for (const fact of facts) {
+    if (fact.kind !== 'statement') continue;
+    const account = await disclosureAccount(tx, options.release.release, fact.property!, fact.body);
+    if (account) privateAccounts.set(fact.statement_id!, account);
+  }
+  assertAgentStatementAccess(
+    tx,
+    [
+      subjectId,
+      ...checked.targets
+        .filter((target) => {
+          const parts = target.pointer.split('/');
+          return !(
+            options.release.release.properties[parts[2]!]?.disclosure === 'sourceOrConsent' &&
+            parts.slice(4).join('/') === 'value/content'
+          );
+        })
+        .map((target) => target.id),
+    ],
+    itemDetails,
+  );
   const targetErrors = checked.targets.flatMap((item) => {
     const targetType = itemDetails.get(item.id)?.type;
     return targetType && matchesTarget(options.release.release, targetType, item.targets)
@@ -224,12 +246,39 @@ export async function writeSubject(
       relation: fact.kind === 'statement' && isRelationProperty(options.release.release, fact.property!),
     })),
   });
+  for (const fact of facts) {
+    const account = privateAccounts.get(fact.statement_id!);
+    if (!account) continue;
+    await expandSlot(
+      tx,
+      subjectId,
+      fact.property!,
+      transactionId,
+      fact.slot_id,
+      isRelationProperty(options.release.release, fact.property!),
+    );
+    await keepStatementPrivate(tx, {
+      subject: subjectId,
+      candidate: fact.statement_id!,
+      slot: fact.slot_id,
+      property: fact.property!,
+      body: fact.body,
+      account,
+      revision: 1,
+      release: options.release.release,
+    });
+  }
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
-  const changes = linkChanges([], facts, dataTypes, {
-    subject: subjectId,
-    release: options.release.release,
-    type: String(input.type),
-  });
+  const changes = linkChanges(
+    [],
+    facts.filter((fact) => !privateAccounts.has(fact.statement_id!)),
+    dataTypes,
+    {
+      subject: subjectId,
+      release: options.release.release,
+      type: String(input.type),
+    },
+  );
   if (changes.length > 0) {
     events.push({
       type: LINKS_CHANGED,
@@ -416,7 +465,6 @@ export async function readSubject(
           property,
           filter_value: NIL_UUID,
         });
-        relationCounts[property] = Number(count?.value ?? 0);
         // Resolution describes omitted Global slots too. Keep that diagnostic at
         // the same bounded Global preview it used before Context projection rows.
         if (context !== GLOBAL_CONTEXT) {
@@ -436,7 +484,26 @@ export async function readSubject(
             if (view.resolution) resolution[property] = view.resolution;
           }
         }
-        for (const entry of preview.slice(0, 12)) {
+        const privatePage = await privateLinks(client, { subject: id, property, limit: 13 });
+        relationCounts[property] = Number(count?.value ?? 0) + privatePage.total;
+        const privatePreview = privatePage.entries.map((row) => ({
+          slot: row.slot_id,
+          statement: row.candidate_id,
+          target: row.target_id,
+          order_key: row.order_key,
+        }));
+        const combined = [...preview, ...privatePreview].sort((a, b) =>
+          a.order_key < b.order_key
+            ? -1
+            : a.order_key > b.order_key
+              ? 1
+              : a.target! < b.target!
+                ? -1
+                : a.target! > b.target!
+                  ? 1
+                  : a.statement.localeCompare(b.statement),
+        );
+        for (const entry of combined.slice(0, 12)) {
           const view = await slotView(client, id, property, context, defaults, entry.slot);
           const fact = view.facts.find((row) => row.statement_id === entry.statement);
           if (fact) statementFacts.push(fact);
@@ -567,7 +634,10 @@ export async function readItemTypes(client: Queryable, ids: readonly string[]): 
   return new Map([...details].map(([id, detail]) => [id, detail.type]));
 }
 
-export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Map<string, Item['labels']>> {
+export async function readLabels(
+  pool: Pool | CommandTransaction,
+  ids: readonly string[],
+): Promise<Map<string, Item['labels']>> {
   assertBatch(ids, 'A label fill accepts at most 256 ids');
   const labels = new Map<string, Item['labels']>();
   await Promise.all(

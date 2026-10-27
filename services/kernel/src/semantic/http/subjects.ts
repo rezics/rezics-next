@@ -1,3 +1,10 @@
+import {
+  changeStatementDisclosure,
+  readStatementAs,
+  StatementDisclosureConflictError,
+  StatementDisclosureDeniedError,
+  StatementDisclosureNotFoundError,
+} from '../statement-disclosure.ts';
 import { readSubjectSummaries } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
@@ -116,6 +123,9 @@ const pageQuery = {
   cursor: t.Optional(t.String()),
 };
 function candidateError(error: unknown): never {
+  if (error instanceof StatementDisclosureConflictError) throw new ProblemError('conflict');
+  if (error instanceof StatementDisclosureDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof StatementDisclosureNotFoundError) throw new ProblemError('not_found');
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
   if (error instanceof SubjectRedirectError) throw new ProblemError('conflict');
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
@@ -600,7 +610,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
@@ -622,12 +632,14 @@ function subjectRoutes(
           return (await pending)(client);
         };
         const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
-            languages,
-            authorize: authorizeSummary,
-            seen: [...session.components],
-            deadline: job.deadline,
-          }).catch((error: unknown) => {
+          readStatementAs(pool, access(), actor, job.deadline, () =>
+            readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
+              languages,
+              authorize: authorizeSummary,
+              seen: [...session.components],
+              deadline: job.deadline,
+            }),
+          ).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
           }),
@@ -1466,7 +1478,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const active = await activeRelease(pool);
@@ -1477,16 +1489,18 @@ function subjectRoutes(
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listCandidates(pool, tokens, {
-              subject: params.id,
-              property: query.property,
-              slot,
-              context: query.context ?? GLOBAL_CONTEXT,
-              limit: query.limit ?? 20,
-              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-              authorize: check,
-              routeKey,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listCandidates(pool, tokens, {
+                subject: params.id,
+                property: query.property,
+                slot,
+                context: query.context ?? GLOBAL_CONTEXT,
+                limit: query.limit ?? 20,
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                authorize: check,
+                routeKey,
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
@@ -1682,7 +1696,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const active = await activeRelease(pool);
@@ -1705,27 +1719,33 @@ function subjectRoutes(
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listSubjectLinks(pool, tokens, {
-              context: query.context ?? GLOBAL_CONTEXT,
-              subject: params.id,
-              property: query.property ?? null,
-              limit: query.limit ?? 20,
-              ...(query.filter === undefined ? {} : { filter: query.filter }),
-              ...(query.type === undefined ? {} : { type: query.type }),
-              languages: languageRanges(request.headers.get('accept-language'), query.language),
-              release: active.release,
-              includeLabels: query.property !== undefined,
-              async authorizeSummary(client, id, batch) {
-                const route = routeOf(id);
-                if (route === null) return false;
-                const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-                return check(client);
-              },
-              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-              authorize: check,
-              seen,
-              caughtUp,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectLinks(pool, tokens, {
+                context: query.context ?? GLOBAL_CONTEXT,
+                subject: params.id,
+                property: query.property ?? null,
+                limit: query.limit ?? 20,
+                ...(query.filter === undefined ? {} : { filter: query.filter }),
+                ...(query.type === undefined ? {} : { type: query.type }),
+                languages: languageRanges(request.headers.get('accept-language'), query.language),
+                release: active.release,
+                includeLabels: query.property !== undefined,
+                async authorizeSummary(client, id, batch) {
+                  const route = routeOf(id);
+                  if (route === null) return false;
+                  const check = await authorize({
+                    route,
+                    id,
+                    eligibility: relatedReadEligibility({ route, id }, batch),
+                  });
+                  return check(client);
+                },
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                authorize: check,
+                seen,
+                caughtUp,
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
@@ -1794,7 +1814,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const active = await activeRelease(pool);
@@ -1818,20 +1838,22 @@ function subjectRoutes(
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listSubjectRelations(pool, tokens, {
-              subject: params.id,
-              property: query.property,
-              ...(query.context === undefined ? {} : { context: query.context }),
-              limit: query.limit ?? 25,
-              ...(query.filter === undefined ? {} : { filter: query.filter }),
-              ...(query.type === undefined ? {} : { type: query.type }),
-              languages: languageRanges(request.headers.get('accept-language'), query.language),
-              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-              release: active.release,
-              authorize: check,
-              seen,
-              caughtUp,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectRelations(pool, tokens, {
+                subject: params.id,
+                property: query.property,
+                ...(query.context === undefined ? {} : { context: query.context }),
+                limit: query.limit ?? 25,
+                ...(query.filter === undefined ? {} : { filter: query.filter }),
+                ...(query.type === undefined ? {} : { type: query.type }),
+                languages: languageRanges(request.headers.get('accept-language'), query.language),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                release: active.release,
+                authorize: check,
+                seen,
+                caughtUp,
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
@@ -1842,6 +1864,125 @@ function subjectRoutes(
             set.headers.location = `/v1/subjects/${error.to}/relations${new URL(request.url).search}`;
             return { redirect: { from: error.from, to: error.to } };
           }
+          return candidateError(error);
+        }
+      },
+    )
+    .post(
+      '/v1/statements/:id/disclose',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        response: {
+          200: withHeaders(t.Object({ candidate: t.String({ format: 'uuid' }), disclosed: t.Literal(true) }), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.disclose',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'statement:propose',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeStatementDisclosure(pool, {
+              candidate: params.id,
+              actor,
+              authorization,
+              deadline: job.deadline,
+              clock,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.disclose', actor, { candidate: params.id }),
+            }),
+          );
+          session.record(result.component);
+          return { candidate: result.candidate, disclosed: true as const };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .post(
+      '/v1/statements/:id/retract',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        response: {
+          200: withHeaders(t.Object({ candidate: t.String({ format: 'uuid' }), retracted: t.Literal(true) }), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.retract',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'statement:propose',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeStatementDisclosure(pool, {
+              candidate: params.id,
+              retract: true,
+              actor,
+              authorization,
+              deadline: job.deadline,
+              clock,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.retract', actor, { candidate: params.id }),
+            }),
+          );
+          session.record(result.component);
+          return { candidate: result.candidate, retracted: true as const };
+        } catch (error) {
           return candidateError(error);
         }
       },

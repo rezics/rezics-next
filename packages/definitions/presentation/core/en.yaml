@@ -5,6 +5,7 @@ types:
   schema:Organization: organization
   schema:SoftwareApplication: software application
 properties:
+  rezics:penNameOf: 'pen name of'
   wdt:P186: made from material
   wdt:P1114: quantity
   rezics:note: note
@@ -61,6 +62,7 @@ properties:
   rezics:bangumiLegacyVersion: 'Version counterpart (retired Bangumi code)'
   rezics:expansionCounterpart: 'Expansion or base game'
 inverseProperties:
+  rezics:penNameOf: 'pen names'
   wdt:P186: Used in
   rezics:storyArc: 'Story arc of'
   schema:author: 'Author of'
@@ -78,3 +80,6 @@ inverseProperties:
   rezics:summaryOf: 'Summary versions'
   rezics:sideStoryOf: 'Side stories'
   rezics:bangumiRelatedTo: 'Related from (Bangumi)'
+
+propertyDescriptions:
+  rezics:penNameOf: 'The person or organization behind this pen name or collective name.'

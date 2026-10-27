@@ -89,6 +89,10 @@ export const SEMANTIC_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.subject.statement_disclosed.v1': Type.Object(
+    { id: UUID, candidate: UUID },
+    { additionalProperties: false },
+  ),
   'com.rezics.statement.retracted.v1': Type.Object({ candidate: UUID, revision }, { additionalProperties: false }),
   'com.rezics.statement.proposed.v1': Type.Object({ candidate: UUID, revision }, { additionalProperties: false }),
   'com.rezics.statement.accepted.v1': Type.Object(

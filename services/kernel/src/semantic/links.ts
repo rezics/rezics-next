@@ -1,3 +1,4 @@
+import { privateLinks } from './statement-disclosure.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
@@ -944,7 +945,7 @@ export async function listSubjectLinks(
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
       const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-      const rows =
+      let rows =
         options.property === null
           ? await listInboundLinks.run(client, {
               context_id: context,
@@ -966,6 +967,36 @@ export async function listSubjectLinks(
               after_statement: afterStatement,
               page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
             });
+      const privatePage = await privateLinks(client, {
+        subject: options.subject,
+        inbound: true,
+        property: options.property,
+        crossProperty: options.property === null,
+        after: cursor?.after,
+        limit: (options.type ? 4 * options.limit : options.limit) + 1,
+      });
+      const privateRows = privatePage.entries.map((row) => ({
+        subject: row.subject_id,
+        property: row.property,
+        statement: row.candidate_id,
+        type: row.source_type,
+        order_key: row.order_key,
+      }));
+      rows = [...rows, ...privateRows]
+        .sort((a, b) => {
+          const left = options.property === null ? a.property : 'order_key' in a ? String(a.order_key) : '';
+          const right = options.property === null ? b.property : 'order_key' in b ? String(b.order_key) : '';
+          return left < right
+            ? -1
+            : left > right
+              ? 1
+              : a.subject < b.subject
+                ? -1
+                : a.subject > b.subject
+                  ? 1
+                  : a.statement.localeCompare(b.statement);
+        })
+        .slice(0, (options.type ? 4 * options.limit : options.limit) + 1);
       const scanLimit = options.type ? 4 * options.limit : options.limit;
       const scanned = rows.slice(0, scanLimit);
       const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
@@ -987,7 +1018,7 @@ export async function listSubjectLinks(
           property: options.property,
           filter_value: options.filter ?? NIL_UUID,
         });
-        const value = Number(total?.value ?? 0);
+        const value = Number(total?.value ?? 0) + privatePage.total;
         if (!options.type) count = { value, exact: true };
         else {
           const sample = await countInboundLinkTypes.run(client, {
@@ -997,7 +1028,12 @@ export async function listSubjectLinks(
             property: options.property,
             filter_value: options.filter ?? NIL_UUID,
           });
-          count = { value: sample.filter((row) => matches(row.type)).length, exact: value <= 1000 };
+          count = {
+            value:
+              sample.filter((row) => matches(row.type)).length +
+              privatePage.entries.filter((row) => matches(row.source_type)).length,
+            exact: value <= 1000 && privatePage.total <= privatePage.entries.length,
+          };
         }
       }
       return {
@@ -1158,7 +1194,7 @@ export async function listSubjectRelations(
     await client.query('SET LOCAL enable_seqscan = off');
     if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
     const scanLimit = options.type ? 4 * options.limit : options.limit;
-    const rows = (await listOutboundLinksByProperty.run(client, {
+    let rows = (await listOutboundLinksByProperty.run(client, {
       context_id: context,
       route,
       subject_id: options.subject,
@@ -1177,6 +1213,34 @@ export async function listSubjectRelations(
       value: 'value' | 'somevalue' | 'novalue';
       order_key: string;
     }[];
+    const privatePage = await privateLinks(client, {
+      subject: options.subject,
+      property: options.property,
+      after: cursor?.after,
+      limit: scanLimit + 1,
+    });
+    const privateRows = privatePage.entries.map((row) => ({
+      statement: row.candidate_id,
+      slot: row.slot_id,
+      target: row.target_id,
+      type: row.target_type,
+      external: null,
+      value: 'value' as const,
+      order_key: row.order_key,
+    }));
+    rows = [...rows, ...privateRows]
+      .sort((a, b) =>
+        a.order_key < b.order_key
+          ? -1
+          : a.order_key > b.order_key
+            ? 1
+            : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+              ? -1
+              : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                ? 1
+                : a.statement.localeCompare(b.statement),
+      )
+      .slice(0, scanLimit + 1);
     const visibleRows = rows.slice(0, scanLimit);
     const selected: typeof visibleRows = [];
     let examined = 0;
@@ -1193,7 +1257,7 @@ export async function listSubjectRelations(
       property: options.property,
       filter_value: options.filter ?? NIL_UUID,
     });
-    const totalValue = Number(total?.value ?? 0);
+    const totalValue = Number(total?.value ?? 0) + privatePage.total;
     let count = { value: totalValue, exact: true };
     if (options.type) {
       const sample = (await countOutboundLinkTypes.run(client, {
@@ -1204,9 +1268,10 @@ export async function listSubjectRelations(
         filter_value: options.filter ?? NIL_UUID,
       })) as { type: string }[];
       count = {
-        value: sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!]))
-          .length,
-        exact: totalValue <= 1000,
+        value:
+          sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!])).length +
+          privatePage.entries.filter((row) => matchesTarget(options.release, row.target_type, [options.type!])).length,
+        exact: totalValue <= 1000 && privatePage.total <= privatePage.entries.length,
       };
     }
     const relations: SubjectRelation[] = [];

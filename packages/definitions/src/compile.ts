@@ -163,7 +163,7 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, `datatype units qualifiers ${relationAnnotationKeys.join(' ')}`, {
+      allowed(slot.annotations, `datatype units qualifiers disclosure ${relationAnnotationKeys.join(' ')}`, {
         ...location,
         pointer: at(location.pointer, 'annotations'),
       });
@@ -574,6 +574,11 @@ export async function compileCatalogue(input: {
       qualifiers: [],
       value: {},
     };
+    if (annotations.disclosure !== undefined) {
+      if (annotations.disclosure !== 'sourceOrConsent')
+        add(annotation('disclosure'), 'invalid', 'Disclosure must be sourceOrConsent');
+      else property.disclosure = 'sourceOrConsent';
+    }
     propertyLocations.set(term.key, location);
     if (annotations.qualifiers !== undefined && typeof annotations.qualifiers !== 'string')
       add(annotation('qualifiers'), 'invalid', 'Qualifiers must be space-separated slot names');
@@ -770,7 +775,7 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties inverseProperties typeDescriptions', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions', { file, pointer: '' });
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
         add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
@@ -804,6 +809,24 @@ export async function compileCatalogue(input: {
           seenLabels.add(identity);
           type.descriptions ??= dictionary();
           type.descriptions[tag] = description;
+        }
+      }
+    }
+    if (labels.propertyDescriptions !== undefined && !record(labels.propertyDescriptions))
+      add({ file, pointer: '/propertyDescriptions' }, 'invalid', 'Expected a description object');
+    for (const [key, description] of Object.entries(object(labels.propertyDescriptions))) {
+      const location = { file, pointer: at('/propertyDescriptions', key) };
+      const property = release.properties[key];
+      if (!property) add(location, 'invalid', 'Unknown property');
+      else if (typeof description !== 'string' || !description.length || [...description].length > 1500)
+        add(location, 'invalid', 'Description must contain between one and 1500 characters');
+      else {
+        const identity = `${tag}\0propertyDescriptions\0${key}`;
+        if (seenLabels.has(identity)) add(location, 'duplicate', 'Term already has a description in this language');
+        else {
+          seenLabels.add(identity);
+          property.descriptions ??= dictionary();
+          property.descriptions[tag] = description;
         }
       }
     }

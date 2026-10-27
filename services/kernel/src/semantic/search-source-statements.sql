@@ -44,6 +44,12 @@ LEFT JOIN LATERAL (
     AND hidden.candidate_id = entry.candidate_id
     AND hidden.route >= input.partition_no * 16
     AND hidden.route < (input.partition_no + 1) * 16
+  UNION ALL
+  SELECT 1 FROM semantic.statement_disclosure d
+  CROSS JOIN input
+  WHERE d.route = entry.route AND d.subject_id = entry.subject_id AND d.candidate_id = entry.candidate_id
+    AND (NOT d.disclosed OR EXISTS (SELECT 1 FROM semantic.retraction t
+      WHERE t.route = d.route AND t.route >= input.partition_no * 16 AND t.route < (input.partition_no + 1) * 16 AND t.subject_id = d.subject_id AND t.candidate_id = d.candidate_id)) AND d.route >= input.partition_no * 16 AND d.route < (input.partition_no + 1) * 16
   LIMIT 1
 ) concealed ON true
 WHERE concealed IS NULL

@@ -536,7 +536,10 @@ export function checkStatementInput(
     ? checkSubjectRelease(input, release, options.rejectContent, true, options.authoredDocuments)
     : { violations: [], items: [] };
   const violations = typed.violations.map(remap);
-  if (!isObject(raw) || !Array.isArray(raw.references) || !raw.references.length)
+  if (
+    release?.properties[property]?.disclosure !== 'sourceOrConsent' &&
+    (!isObject(raw) || !Array.isArray(raw.references) || !raw.references.length)
+  )
     violations.push({ pointer: '/statement/references', code: 'required' });
   const structural = checkSubjectStructure(input).violations.map(remap);
   return {

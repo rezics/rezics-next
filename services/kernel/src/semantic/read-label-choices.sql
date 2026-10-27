@@ -69,6 +69,11 @@ LEFT JOIN LATERAL (
       SELECT 1 FROM semantic.hidden_candidate
       WHERE route = requested.route AND subject_id = requested.id AND candidate_id = live.id
         AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
+      UNION ALL
+      SELECT 1 FROM semantic.statement_disclosure d
+      WHERE route = requested.route AND subject_id = requested.id AND candidate_id = live.id AND (NOT d.disclosed OR EXISTS (SELECT 1 FROM semantic.retraction t
+        WHERE t.route = d.route AND t.route >= input.partition_no * 16 AND t.route < (input.partition_no + 1) * 16 AND t.subject_id = d.subject_id AND t.candidate_id = d.candidate_id))
+        AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
     )
   ORDER BY (body->>'rank' = 'preferred') DESC NULLS LAST, ordinal, id
   LIMIT 1

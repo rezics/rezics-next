@@ -81,6 +81,7 @@ classes:
     exact_mappings:
       - wd:Q5
     slots:
+      - penNameOf
       - birthDate
       - deathDate
       - openLibraryId
@@ -91,6 +92,7 @@ classes:
   Organization:
     is_a: Thing
     slots:
+      - penNameOf
       - vndbId
     class_uri: schema:Organization
     description: An organization.
@@ -680,4 +682,18 @@ slots:
       qualifiers: inLanguage
       relation_group: derivation
       inverse: none
+      relation_order: name
+
+  penNameOf:
+    slot_uri: rezics:penNameOf
+    description: The person or organization behind this pen name or collective name; credits remain on the named agent.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      disclosure: sourceOrConsent
+      relation_group: association
+      inverse: rezics:penNames
       relation_order: name

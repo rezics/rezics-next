@@ -580,6 +580,23 @@ CREATE TABLE semantic.source_candidate (
 
 
 --
+-- Name: statement_disclosure; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.statement_disclosure (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    target_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    property text NOT NULL,
+    disclosed boolean DEFAULT false NOT NULL,
+    source_order_key text NOT NULL COLLATE pg_catalog."C",
+    target_order_key text NOT NULL COLLATE pg_catalog."C"
+);
+
+
+--
 -- Name: subject; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -826,6 +843,14 @@ ALTER TABLE ONLY semantic.source_candidate
 
 
 --
+-- Name: statement_disclosure statement_disclosure_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.statement_disclosure
+    ADD CONSTRAINT statement_disclosure_pkey PRIMARY KEY (route, candidate_id);
+
+
+--
 -- Name: subject subject_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -957,6 +982,20 @@ CREATE INDEX revision_transaction ON semantic.revision USING btree (recorded_tra
 --
 
 CREATE INDEX source_candidate_retract ON semantic.source_candidate USING btree (route, subject_id, candidate_id, source, external_id, field_group);
+
+
+--
+-- Name: statement_disclosure_inbound; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX statement_disclosure_inbound ON semantic.statement_disclosure USING btree (target_id, account_id, property, source_order_key, subject_id, candidate_id) WHERE (NOT disclosed);
+
+
+--
+-- Name: statement_disclosure_outbound; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX statement_disclosure_outbound ON semantic.statement_disclosure USING btree (subject_id, account_id, property, target_order_key, target_id, candidate_id) WHERE (NOT disclosed);
 
 
 --
@@ -1259,6 +1298,14 @@ ALTER TABLE ONLY semantic.revision
 
 ALTER TABLE ONLY semantic.source_candidate
     ADD CONSTRAINT source_candidate_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: statement_disclosure statement_disclosure_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.statement_disclosure
+    ADD CONSTRAINT statement_disclosure_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
 
 
 --

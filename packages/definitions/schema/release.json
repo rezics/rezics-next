@@ -252,6 +252,12 @@
         "relation": {
           "$ref": "#/$defs/relation"
         },
+        "disclosure": {
+          "const": "sourceOrConsent"
+        },
+        "descriptions": {
+          "$ref": "#/$defs/descriptions"
+        },
         "mappings": {
           "$ref": "#/$defs/curies"
         },

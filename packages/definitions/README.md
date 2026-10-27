@@ -892,3 +892,16 @@ unchanged slug, and a slug is its own slug.
 Cost: the helper touches only the supplied string in memory, with no database, network
 or locale-catalogue access. Work is O(label code points) and the output is at most 60
 code points, independent of subjects, manifests and history.
+
+## Statement disclosure
+
+A property may declare `disclosure: sourceOrConsent` in a release. Catalogue slots use the same annotation. Omission retains ordinary statement rules; every other value is invalid. This is an authorization contract for semantic writes, not an editor preference: a reference makes the statement eligible for ordinary public review; without one, only the account linked to the target agent can state it, and it stays private until that account discloses it.
+
+`rezics:penNameOf` is a multivalued association from a person or organization representing a pen name or collective name to each person or organization behind it. Its inverse is `rezics:penNames`, labelled “pen names”. The named agent retains its own credits. Each core presentation locale supplies its property label, inverse label and `propertyDescriptions` entry. Optional `propertyDescriptions` maps compile to `properties[curie].descriptions`, using the same locale, length and duplicate rules as type descriptions.
+
+### Cost
+
+- Touches: one optional enum on each property and optional localized descriptions; validation and compilation traverse the existing bounded property and presentation collections.
+- Bound: disclosure adds no lookup or data-dependent traversal to definitions reads. Definitions tests cover valid and invalid release values, compiler annotations, localized descriptions and unsourced input validation in `test/disclosure.test.ts`.
+- Growth check: semantic's public-read check is `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
+

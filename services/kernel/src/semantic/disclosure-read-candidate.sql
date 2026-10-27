@@ -6,7 +6,7 @@ WITH input AS NOT MATERIALIZED (
 SELECT s.visibility,
        s.security_revision::text AS security_revision,
        (c.candidate_id IS NOT NULL OR f.statement_id IS NOT NULL) AS known,
-       (h.candidate_id IS NOT NULL) AS hidden
+       (h.candidate_id IS NOT NULL OR d.candidate_id IS NOT NULL) AS hidden
 FROM input i
 JOIN semantic.subject s
   ON s.route = i.route AND s.subject_id = i.subject_id
@@ -25,5 +25,8 @@ LEFT JOIN LATERAL (
     )
   LIMIT 1
 ) f ON true
+LEFT JOIN semantic.statement_disclosure d
+  ON d.route = i.route AND d.subject_id = s.subject_id AND d.candidate_id = i.candidate_id AND (NOT d.disclosed OR EXISTS (SELECT 1 FROM semantic.retraction t
+    WHERE t.route = i.route AND t.subject_id = d.subject_id AND t.candidate_id = d.candidate_id))
 LEFT JOIN semantic.hidden_candidate h
   ON h.route = i.route AND h.subject_id = s.subject_id AND h.candidate_id = i.candidate_id;

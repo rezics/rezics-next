@@ -5,6 +5,7 @@ types:
   schema:Organization: '단체'
   schema:SoftwareApplication: '소프트웨어 애플리케이션'
 properties:
+  rezics:penNameOf: '필명 사용자'
   wdt:P186: 재료
   wdt:P1114: 수량
   rezics:note: 비고
@@ -61,6 +62,7 @@ properties:
   rezics:bangumiLegacyVersion: '대응 버전 (Bangumi 폐기 코드)'
   rezics:expansionCounterpart: '확장팩 또는 원본 게임'
 inverseProperties:
+  rezics:penNameOf: '필명'
   wdt:P186: 사용되는 곳
   rezics:storyArc: '이 편이 속한 작품'
   schema:author: '집필한 작품'
@@ -78,3 +80,6 @@ inverseProperties:
   rezics:summaryOf: '요약판'
   rezics:sideStoryOf: '외전'
   rezics:bangumiRelatedTo: '관련 출발 작품 (Bangumi)'
+
+propertyDescriptions:
+  rezics:penNameOf: '이 필명 또는 공동 명의를 사용하는 사람이나 조직.'

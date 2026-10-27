@@ -5,6 +5,7 @@ types:
   schema:Organization: 組織
   schema:SoftwareApplication: 軟體應用程式
 properties:
+  rezics:penNameOf: '筆名使用者'
   wdt:P186: 材料
   wdt:P1114: 數量
   rezics:note: 備註
@@ -61,6 +62,7 @@ properties:
   rezics:bangumiLegacyVersion: '版本關聯（Bangumi 舊代碼）'
   rezics:expansionCounterpart: '擴充包或基礎遊戲'
 inverseProperties:
+  rezics:penNameOf: '筆名'
   wdt:P186: 用於
   rezics:storyArc: '所屬作品'
   schema:author: '著作'
@@ -78,3 +80,6 @@ inverseProperties:
   rezics:summaryOf: '總集篇'
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '關聯來源（Bangumi）'
+
+propertyDescriptions:
+  rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
