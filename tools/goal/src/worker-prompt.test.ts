@@ -93,6 +93,7 @@ test('stabilize and critical-path starts skip the worker cap but not the memory 
   const { startsFirst } = await import('./launch.ts');
   expect(startsFirst({ taskClass: 'claim', brief: { target: 'stabilize' } } as never)).toBe(true);
   expect(startsFirst({ taskClass: 'critical-path', brief: {} } as never)).toBe(true);
+  expect(startsFirst({ taskClass: 'claim', brief: { criticalPath: true } } as never)).toBe(true);
   expect(startsFirst({ taskClass: 'implementation', brief: {} } as never)).toBe(false);
 });
 
