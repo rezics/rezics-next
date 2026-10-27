@@ -108,7 +108,7 @@ beforeAll(async () => {
     .sign(keys.privateKey);
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,public_views)
-    VALUES (0,$1,'actor','active',$1,true,'{"posts":true,"reviews":true,"collections":false}')`,
+    VALUES (0,$1,'actor','active',$1,true,'{"posts":true,"reviews":true,"collections":false,"realms":true}')`,
     [owner],
   );
 });
