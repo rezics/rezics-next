@@ -33,6 +33,9 @@ beforeAll(async () => {
   db = await openGrowthDatabase(url);
   fixture = await aggregateFixture(db);
   target = (await fixture.create('Growth target')).id;
+  // Pair the two command-created foreign sources with unrelated subjects too.
+  await fixture.create('Unrelated native first');
+  await fixture.create('Unrelated native last');
   firstHidden = (await fixture.create('Source 00000', [target])).id;
   lastHidden = (await fixture.create('Source 99999', [target])).id;
   await fixture.drain();
