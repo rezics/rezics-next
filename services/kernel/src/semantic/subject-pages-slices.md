@@ -98,6 +98,7 @@ The store also exports these transaction-only ports. Types below are internal;
 they are not HTTP schemas or an executable task configuration.
 
 ```ts
+// CommandEvent is the existing type from command/command.ts.
 type OwnerKey = { kind: 'subject' | 'source-fence'; route: number; key: string };
 type PublicState = { shown: boolean; digest: string | null };
 type ComponentTransition = {
@@ -122,6 +123,7 @@ function recordSubjectPageTransition(
     subject: SubjectKey;
     changeId: string;
     components: ComponentTransition[];
+    outbox: CommandEvent[];
     invalidateGate?: boolean;
   },
 ): Promise<void>;
@@ -130,6 +132,7 @@ function enqueueSubjectPageRepair(
   input: {
     subject: SubjectKey;
     cause: 'explicit' | 'missing-proof' | 'owner' | 'continuation';
+    delivery?: { owner: OwnerKey; changeId: string; eventId: string; time: EvidenceTime };
   },
 ): Promise<void>;
 function commitSubjectPageRepairPage(
@@ -139,6 +142,7 @@ function commitSubjectPageRepairPage(
     expectedVersion: string;
     checkpoint: RepairCheckpoint;
     components: (ComponentTransition & EvidenceTime)[];
+    outbox: CommandEvent[];
     replayedChangeIds: string[];
     witnesses: Witness[];
     complete: boolean;
@@ -160,6 +164,7 @@ function commitSubjectPageFanoutPage(
     expectedVersion: string;
     after: string[];
     subjects: SubjectKey[]; // durable target handoff events, never target writes here
+    outbox: CommandEvent[];
     complete: boolean;
   },
 ): Promise<boolean>;
@@ -231,7 +236,8 @@ their original evidence time through fanout, never semantic consumption time.
 atomically persist changed forward keys plus bounded dependency-change outbox
 events in the source command transaction. Repair-page installation likewise
 emits deltas for only its bounded changed keys. The store owns this SQL and
-returns events to the existing `runCommand` envelope commit; it never opens
+appends events to the caller-owned `outbox: CommandEvent[]`, which the caller
+includes in its existing `runCommand` result `events` before envelope commit; it never opens
 owner/target transactions inside a source port.
 
 The separate semantic Relay adapter follows `links.ts:linkProjection`,
@@ -250,7 +256,8 @@ route/subject, component key, owner identity, present/tombstone, source version,
 originating event/change identity and original effective time/evidence;
 `com.rezics.semantic.subject_page.repair_requested.v1` carries target subject,
 owner/change identity and original time/evidence. Arrays are bounded by the
-originating changed-key/page budget; no full-degree payload. Source version is
+originating changed-key/page budget, packed into bounded array events within
+`MAX_COMMAND_EVENTS`; no full-degree payload. Source version is
 a monotonic per-source-component dependency version allocated by the store,
 not an effective timestamp or delivery order. Each version's owner deltas share
 that version, and an event identity fixes its payload. The additive schemas,
@@ -259,7 +266,7 @@ silently skipped.
 
 The store exports `applySubjectPageDependencyDelta(tx, { owner, subject,
 component, sourceVersion: string, eventId: string, present: boolean,
-time: EvidenceTime }): Promise<void>`. Its transaction belongs to the owner's
+time: EvidenceTime, outbox: CommandEvent[] }): Promise<void>`. Its transaction belongs to the owner's
 partition. It is the sole writer of `subject_page_owner_dependency`; SQL
 compares source versions per full membership key and retains removal tombstones
 and event identity, preventing replay/out-of-order resurrection. The row's
@@ -274,7 +281,9 @@ CAS checkpoint and emits bounded repair-request outbox events atomically; its
 homes. Relay delivers each event with `enqueueSubjectPageRepair` in a separate
 subject-home transaction, then advances its source consumer checkpoint only
 after durable target commits. The target deduplicates owner/change/event
-identity via store-owned state in its home. Neither Relay nor repair owns any
+identity via store-owned state in its home. Owner delivery supplies the
+`enqueueSubjectPageRepair` input `delivery` (required for this cause), retaining
+original time/evidence locally; it never reads a foreign publication table. Neither Relay nor repair owns any
 publication-table SQL; Relay owns delivery and lifecycle integration only.
 
 An owner change retains its latest original evidence even after fanout completes.
