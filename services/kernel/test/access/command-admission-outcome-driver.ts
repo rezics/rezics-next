@@ -410,7 +410,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
           accessTokenForProof: async () => bearer.token,
           verifyCredentialEffect: async () => structuredClone(stage),
         });
-        const opening = await credential.approveCredentialEffect({ stage, human });
+        const opening = await credential.approveCredentialEffect({ stage, human, deadline });
         const { authorization } = await credential.consumeAuthAuthorization({
           authorization: opening.reference,
           subjectAccountId: stage.subjectAccountId,
@@ -418,6 +418,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
           operationKey: stage.operationKey,
           effectReference: stage.effectReference,
           human,
+          deadline,
         });
         await credential.advanceCredentialFloor({
           stage,
@@ -425,6 +426,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
           expectedPreviousFloor: fixture.actor.authnEpoch,
           key: stage.operationKey,
           purpose: stage.purpose,
+          deadline,
         });
         return;
       }
