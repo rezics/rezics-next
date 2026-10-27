@@ -922,6 +922,21 @@ declare const productEventTypes: {
             receipt: Type.TString;
         }>>;
     }>;
+    readonly "com.rezics.semantic.links.keys-changed.v1": Type.TObject<{
+        subject: Type.TString;
+        direction: Type.TUnion<[Type.TLiteral<"holder">, Type.TLiteral<"target">]>;
+        revision: Type.TInteger;
+        security_revision: Type.TInteger;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+    }>;
+    readonly "com.rezics.semantic.links.visibility-changed.v1": Type.TObject<{
+        subject: Type.TString;
+        revision: Type.TInteger;
+        security_revision: Type.TInteger;
+        release: Type.TString;
+        visible: Type.TBoolean;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+    }>;
     readonly 'com.rezics.statement.retracted.v1': Type.TObject<{
         candidate: Type.TString;
         revision: Type.TInteger;
@@ -956,8 +971,15 @@ declare const productEventTypes: {
         changes: Type.TArray<Type.TObject<{
             property: Type.TString;
             statement: Type.TString;
-            target: Type.TString;
+            target: Type.TUnion<[Type.TString, Type.TNull]>;
             present: Type.TBoolean;
+            project_outbound: Type.TOptional<Type.TBoolean>;
+            relation: Type.TOptional<Type.TBoolean>;
+            slot_id: Type.TOptional<Type.TString>;
+            external: Type.TOptional<Type.TUnion<[Type.TString, Type.TNull]>>;
+            value: Type.TOptional<Type.TUnion<[Type.TLiteral<"value">, Type.TLiteral<"somevalue">, Type.TLiteral<"novalue">]>>;
+            outbound_order: Type.TOptional<Type.TUnion<[Type.TLiteral<"position">, Type.TLiteral<"date">, Type.TLiteral<"name">, Type.TNull]>>;
+            outbound_order_key: Type.TOptional<Type.TString>;
             source_type: Type.TOptional<Type.TString>;
             order_key: Type.TOptional<Type.TString>;
             filter_value: Type.TOptional<Type.TString>;

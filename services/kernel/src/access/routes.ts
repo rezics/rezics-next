@@ -15,6 +15,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { normalizeHandle } from './lifecycle.ts';
 import {
+  readAgentPages,
   readPublicAccountByHandle,
   readPublicIdentities,
   type PublicIdentity,
@@ -615,6 +616,58 @@ export function accessRoutes(
           return denied(error);
         }
       },
+    )
+    .get(
+      '/v1/agent-pages',
+      {
+        query: strict(
+          t.Object(
+            {
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 1000, multipleOf: 1, default: 1000 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: t.Object(
+            {
+              agentPages: t.Array(
+                t.Object(
+                  {
+                    handle: t.String(),
+                    kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+                    lastModified: t.String(),
+                  },
+                  closed,
+                ),
+              ),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            closed,
+          ),
+          ...publicReadFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.agent_pages',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, admission, job }) =>
+        admission.run('normal', job, () =>
+          readAgentPages(
+            dependencies.pool,
+            dependencies.tokens,
+            {
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+            },
+            dependencies.clock(),
+          ),
+        ),
     )
     .get(
       '/v1/accounts',

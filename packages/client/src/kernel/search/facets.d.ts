@@ -19,6 +19,8 @@ export type FacetValue = {
 };
 /** A string facet whose definition declares `value.pattern`. Its values are codes, not subjects. */
 export declare function codeFacet(release: FilterRelease, property: string): boolean;
+/** Type definitions are public; their labels need no subject disclosure. */
+export declare function typeFacetLabels(release: FilterRelease, type: string): Record<string, string> | undefined;
 export declare function validateFacets(request: FacetRequest): Facet[];
 /** Probe admission with the same immediate type anchors, without spending the query's leaf/depth budget. */
 export declare function admitFacets(facets: readonly Facet[], filter: FilterDocument | undefined, release: FilterRelease): void;

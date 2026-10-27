@@ -77,6 +77,7 @@ const typed = [
   'GET /v1/verification-requests',
   'POST /v1/verification-requests/:requestId/$approve',
   'POST /v1/verification-requests/:requestId/$reject',
+  'GET /v1/agent-pages',
   'GET /v1/accounts',
   'GET /v1/accounts/:accountId/speakers',
   'GET /v1/accounts/:accountId/preferences',

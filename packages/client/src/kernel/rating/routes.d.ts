@@ -3717,12 +3717,13 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         operationId: string;
         'x-action': string;
         'x-exposure': string;
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
-        'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        } | {
+            bearerAuth?: never;
+        })[];
     };
-}, {}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, admission, job }: {
+}, {}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -4072,10 +4073,11 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             operationId: string;
             'x-action': string;
             'x-exposure': string;
-            security: {
+            security: ({
                 bearerAuth: never[];
-            }[];
-            'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            } | {
+                bearerAuth?: never;
+            })[];
         };
     }, {}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
@@ -4246,10 +4248,11 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         operationId: string;
         'x-action': string;
         'x-exposure': string;
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
-        'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        } | {
+            bearerAuth?: never;
+        })[];
     };
 }>;
 export {};

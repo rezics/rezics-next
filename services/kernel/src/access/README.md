@@ -808,3 +808,33 @@ Cost: one statement returning one account relation version plus one HMAC per vot
 with logarithmic index blocks in accounts and relation history. A transfer adds one fixed controller-version write
 and one outbox row; it never enumerates votes or responsibilities. `test/access/growth-rating-counter.test.ts` uses
 the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts in `grow` with default warmups.
+
+## Agent pages
+
+`GET /v1/agent-pages?cursor=&limit=` returns `{ agentPages, next }`, where each item is
+`{ handle, kind, lastModified }`. The public route uses `account:read_public_identity`.
+The limit defaults to 1000 and accepts integers from 1 through 1000; `next` is a signed,
+operation-bound cursor, or null at the end. Cursors expire after 15 minutes. Omit `cursor`
+for the first page. Pages seek in `(route, account_id)` order through the partial
+`account_agent_pages` index: only active, unfenced accounts with a handle are indexable.
+Pending, suspended, fenced and deleted accounts never appear.
+
+`account.public_changed_at` starts at `created_at`, including for existing accounts.
+The single `account_public_change` BEFORE INSERT OR UPDATE trigger initializes it and
+advances it on changes to the account columns used by `account-public-read.sql`, including
+visibility guards. Other updates and unchanged public values preserve it. Keep the trigger's
+comparison aligned with that read. The feed's `lastModified` covers the account's own identity;
+activity lists on the handle page belong to their owning modules and are outside this feed.
+
+Cost:
+
+- Agent pages touch one key-ordered range of at most limit + 1 partial-index entries.
+  Rows are O(limit), blocks O(limit + log N), independent of unlisted accounts.
+  `test/access/growth-agent-pages.test.ts`, “agent pages stay bounded as listed and unlisted accounts grow”,
+  grows listed, pending, fenced and deleted accounts in `grow` at scales [256, 1024, 4096],
+  with a fixed limit and one warm-up per scale.
+- Public change time compares only the updated account row inside its existing update:
+  constant work per update and no extra statement.
+  `test/access/growth-agent-pages.test.ts`, “public change time stays bounded as accounts grow”,
+  measures a profile update against the same account populations at scales [256, 1024, 4096]
+  with one warm-up per scale.

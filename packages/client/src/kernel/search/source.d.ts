@@ -2,6 +2,16 @@ export type LanguageValue = {
     language: string;
     value: string;
 };
+export declare const MAX_RELATION_FACET_VALUES = 128;
+export declare const MAX_RELATION_FACET_PROBES = 256;
+/** Unqualified adopted Global relation membership for one subject, property and value. */
+export type RelationFacetProbe = {
+    subject: string;
+    property: string;
+    value: string;
+};
+/** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
+export type RelationFacetMatch = boolean | 'not_proven';
 /**
  * Filterable form of a statement value.
  * `year` is the astronomical year of a time value.
@@ -45,8 +55,18 @@ export type IndexedSubject = {
     labels: LanguageValue[];
     aliases: LanguageValue[];
     descriptions: LanguageValue[];
-    /** Adopted Global statement values; an item value is the target subject id. */
+    /**
+     * Adopted Global statement values visible at snapshot build time; an item value is the target subject id.
+     * Descriptive statements are unchanged. Outgoing relations include at most MAX_RELATION_FACET_VALUES
+     * sampled entries per declared facet property, retaining facet and qualifier metadata.
+     * Undeclared relation properties and inbound edges are omitted.
+     */
     statements: IndexedStatement[];
+    /**
+     * Relation facet properties exceeding the sample bound. Production emits [] when none overflow;
+     * absence also means no overflow, for historical fixtures.
+     */
+    relationFacetOverflow?: string[];
 };
 /** The partition's `core.partition.position` and the listed subjects' state, read in one snapshot. */
 export type SubjectSnapshot = {
@@ -62,6 +82,18 @@ export interface SubjectSource {
         position: bigint;
         count: number;
     }>;
+    /**
+     * Match unqualified membership in full adopted Global relations, applying current source fences and moderation.
+     * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;
+     * invalid input, including a qualifiers field, rejects. The aligned boolean array preserves probe order
+     * and duplicates; each result matches only the probe's subject, property and value.
+     * Missing, hidden, taken-down and redirected subjects return false.
+     * `true` and `false` are definitive current truth and absence. `not_proven` is bounded witness
+     * uncertainty: the source could not prove membership within its bound, and it is never `false`.
+     * Optional for historical mocks. Search must fail closed
+     * when an overflow probe is needed and this method is absent.
+     */
+    matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
 }
 /** Active public Collection counts for subjects in one partition. Only the count is read. */
 export interface SubjectListingSource {

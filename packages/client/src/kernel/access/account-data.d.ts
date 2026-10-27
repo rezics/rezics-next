@@ -1,6 +1,7 @@
 import { type AvatarSummary } from '../content/avatar.ts';
 import type { PublicViews } from './public-views.ts';
 import type { Pool, PoolClient } from 'pg';
+import type { KeyRing } from '../tokens/seal.ts';
 import accountRead from './account-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -69,4 +70,17 @@ export declare function readPublicAccount(client: Queryable, route: number, acco
 export declare function readPublicIdentities(client: Queryable, routes: readonly number[], accountIds: readonly string[]): Promise<PublicIdentity[]>;
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */
 export declare function readOrganizationRole(client: Queryable, route: number, organizationId: string, memberAccountId: string, at: Date): Promise<OrganizationRole | null>;
+export type AgentPagesPage = {
+    agentPages: {
+        handle: string;
+        kind: AccountKind;
+        lastModified: string;
+    }[];
+    next: string | null;
+};
+/** One range of the index containing only indexable handle pages, with one lookahead entry. */
+export declare function readAgentPages(client: Queryable, tokens: KeyRing, input: {
+    cursor?: string;
+    limit?: number;
+}, at?: Date): Promise<AgentPagesPage>;
 export {};

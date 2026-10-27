@@ -1,6 +1,6 @@
 import type { Facet } from './facets.ts';
 import type { OpenSearch } from './opensearch.ts';
-export declare const SEARCH_TEMPLATE = "subjects-search-v1";
+export declare const SEARCH_TEMPLATE = "subjects-search-v2";
 export declare const SUGGEST_TEMPLATE = "subjects-suggest-v1";
 export declare const FACET_TEMPLATE = "subjects-facets-v1";
 export declare const TOTAL_LIMIT = 10000;
@@ -12,6 +12,8 @@ export type SearchPlan = {
     sort: 'relevance' | 'name' | 'id' | 'collections';
     size: number;
     after?: readonly SortValue[];
+    /** Distinct statement properties in the admitted filter. */
+    overflowProperties?: readonly string[];
 };
 export type SubjectHit = {
     id: string;
@@ -29,6 +31,7 @@ export type SearchResult = {
         value: number;
         relation: 'exact' | 'lower_bound';
     };
+    overflow?: boolean;
 };
 export declare function installTemplates(search: OpenSearch, prefix: string): Promise<void>;
 export declare function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult>;
@@ -39,6 +42,8 @@ export declare function suggestSubjects(search: OpenSearch, prefix: string, plan
 export declare function countFacets(search: OpenSearch, prefix: string, plan: {
     query?: Record<string, unknown>;
     filter?: Record<string, unknown>;
+    /** Distinct statement properties in the admitted filter. */
+    overflowProperties?: readonly string[];
     facets: readonly Facet[];
     sample: number;
 }): Promise<{
@@ -48,7 +53,7 @@ export declare function countFacets(search: OpenSearch, prefix: string, plan: {
     };
     facets: {
         property: string;
-        relation: SearchResult['total']['relation'];
+        relation: "exact" | "lower_bound";
         values: {
             value: string;
             count: number;

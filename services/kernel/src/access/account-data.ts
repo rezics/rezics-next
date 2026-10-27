@@ -4,6 +4,10 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import handleRead from './account-handle-read.sql';
+import agentPagesPage from './agent-pages-page.sql';
+import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { ProblemError } from '../http/problem.ts';
 import accountRead from './account-read.sql';
 import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
@@ -182,3 +186,52 @@ export async function readOrganizationRole(
 // Future Access commands own operator eligibility/transfer/deletion, automation membership rules,
 // the last-owner invariant, handle-claim workflows and the Access-before-Auth fence sequence.
 // This adapter deliberately exposes reads only; cross-account facts are not local schema guarantees.
+
+export type AgentPagesPage = {
+  agentPages: { handle: string; kind: AccountKind; lastModified: string }[];
+  next: string | null;
+};
+const agentPagesBinding = { operation: 'account.agent_pages', parameters: {} } as const;
+
+/** One range of the index containing only indexable handle pages, with one lookahead entry. */
+export async function readAgentPages(
+  client: Queryable,
+  tokens: KeyRing,
+  input: { cursor?: string; limit?: number },
+  at = new Date(),
+): Promise<AgentPagesPage> {
+  const limit = input.limit ?? 1000;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new ProblemError('invalid_request');
+  let afterRoute = -1;
+  let afterAccountId = '00000000-0000-0000-0000-000000000000';
+  if (input.cursor !== undefined) {
+    const decoded = decodeCursor(tokens, agentPagesBinding, input.cursor, at.getTime());
+    if (
+      !decoded.ok ||
+      decoded.epoch !== 1 ||
+      decoded.after.length !== 2 ||
+      typeof decoded.after[0] !== 'number' ||
+      decoded.after[0] < 0 ||
+      decoded.after[0] > 65535 ||
+      typeof decoded.after[1] !== 'string' ||
+      routeOf(decoded.after[1]) !== decoded.after[0]
+    )
+      throw new ProblemError('invalid_cursor');
+    afterRoute = decoded.after[0];
+    afterAccountId = decoded.after[1];
+  }
+  const page = await agentPagesPage.run(client, {
+    after_route: afterRoute,
+    after_account_id: afterAccountId,
+    limit: limit + 1,
+  });
+  const selected = page.slice(0, limit);
+  const last = selected.at(-1);
+  return {
+    agentPages: selected.map(({ handle, kind, lastModified }) => ({ handle: handle!, kind, lastModified })),
+    next:
+      page.length > limit && last
+        ? encodeCursor(tokens, agentPagesBinding, { epoch: 1, after: [last.route, last.accountId] }, at.getTime())
+        : null,
+  };
+}

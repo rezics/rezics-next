@@ -300,6 +300,32 @@ $$;
 
 
 --
+-- Name: record_public_account_change(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.record_public_account_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.public_changed_at := NEW.created_at;
+  ELSIF ROW(NEW.account_id, NEW.kind, NEW.state, NEW.authn_fenced, NEW.avatar, NEW.public_views,
+            NEW.speakers_listed, NEW.handle, NEW.display_name, NEW.avatar_url, NEW.biography,
+            NEW.links, NEW.operator_account_id, NEW.agent_verified, NEW.agent_subject_id)
+        IS DISTINCT FROM
+        ROW(OLD.account_id, OLD.kind, OLD.state, OLD.authn_fenced, OLD.avatar, OLD.public_views,
+            OLD.speakers_listed, OLD.handle, OLD.display_name, OLD.avatar_url, OLD.biography,
+            OLD.links, OLD.operator_account_id, OLD.agent_verified, OLD.agent_subject_id) THEN
+    NEW.public_changed_at := statement_timestamp();
+  ELSE
+    NEW.public_changed_at := OLD.public_changed_at;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: record_rating_controller(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -388,6 +414,7 @@ CREATE TABLE access.account (
     agent_verification_receipt_id uuid,
     pending_agent_subject_id uuid,
     pending_agent_receipt_id uuid,
+    public_changed_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     CONSTRAINT account_agent_verification_check CHECK ((((pending_agent_subject_id IS NULL) = (pending_agent_receipt_id IS NULL)) AND ((agent_verified AND (agent_subject_id IS NOT NULL) AND (agent_verification_receipt_id IS NOT NULL) AND (pending_agent_subject_id IS NULL)) OR ((NOT agent_verified) AND (agent_subject_id IS NULL) AND (agent_verification_receipt_id IS NULL))))),
     CONSTRAINT account_avatar_route_check CHECK (((avatar IS NULL) OR (route = ((get_byte(uuid_send(avatar), 10) * 256) + get_byte(uuid_send(avatar), 11))))),
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -1328,6 +1355,13 @@ ALTER TABLE ONLY access.write_rate_counter
 
 
 --
+-- Name: account_agent_pages; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX account_agent_pages ON access.account USING btree (route, account_id) WHERE ((state = 'active'::text) AND (NOT authn_fenced) AND (handle IS NOT NULL));
+
+
+--
 -- Name: agent_verification_account_latest_idx; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -1458,6 +1492,13 @@ CREATE TRIGGER account_identity BEFORE UPDATE ON access.account FOR EACH ROW EXE
 --
 
 CREATE TRIGGER account_membership_inverse BEFORE INSERT ON access.account FOR EACH ROW EXECUTE FUNCTION access.initialize_membership_inverse();
+
+
+--
+-- Name: account account_public_change; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_public_change BEFORE INSERT OR UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.record_public_account_change();
 
 
 --
