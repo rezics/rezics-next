@@ -11,8 +11,8 @@ structured data, sitemaps and HTTP status of public pages. Routing mechanics liv
 - **Public pages render the same for every anonymous reader.** The server renders public content without reading
   the reader's session, so the HTML can be cached at the edge and crawlers see what readers see. Personal state
   (library status, own vote, reactions, settings) loads after hydration.
-- **Status codes tell the truth.** Unknown is 404, removed is 410, moved is 301 to the new URL, closed behind a
-  platform grant is not indexed. A page never answers 200 with an error inside.
+- **Status codes tell the truth.** Unknown, removed and not visible are one 404, moved is 301 to the new URL,
+  closed behind a platform grant is not indexed. A page never answers 200 with an error inside.
 - **Only pages worth finding are indexed.** Search results, filters, personal pages and thin pages are not.
 - **Nothing hidden leaks through metadata.** Titles, descriptions, images, structured data and sitemaps carry only
   what the anonymous page shows.
@@ -77,14 +77,15 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 ## Sitemaps
 
 `/sitemap.xml` is an index of sharded sitemaps, each with at most 50,000 URLs, generated from paged keyset reads of
-indexable pages with `lastmod` from the last change of what the page shows. Each URL lists its locale alternates
+indexable pages (server-to-server feeds that may return up to 1,000 entries per page, above the usual list limit) with `lastmod` from the last change of what the page shows. Each URL lists its locale alternates
 with `xhtml:link`. Sitemaps never list a page that is `noindex`, closed or removed. `/robots.txt` names the index.
 
 ## Status and change
 
 - A merged subject answers 301 to the survivor's URL; an unmerged one returns to 200.
-- A subject, thread or agent removed by takedown or erasure answers 410 with a short page that says it was removed.
-- An unknown id answers 404.
+- A subject, thread or agent removed by takedown or erasure answers 404 exactly as an unknown or unreadable id
+  does, so a response never reveals that something existed; the removal reaches search engines through the 404 and
+  its absence from sitemaps.
 - A page closed behind a platform grant answers 403 to readers without the grant and carries `noindex`.
 - Changes to indexed pages may be announced through IndexNow; this is optional and never required for
   correctness.
