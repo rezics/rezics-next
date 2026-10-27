@@ -1045,6 +1045,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       activeHook = hook ? { ...hook, used: false } : undefined;
       let releaseGate = () => {};
       let continuationPaused: (() => void) | undefined;
+      let continuationPausedAtStep = false;
       const continuationReached = new Promise<void>((resolve) => {
         continuationPaused = resolve;
       });
@@ -1067,6 +1068,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         if (work.operation.kind === 'delete' && name === 'erase-auth-owner') {
           const view = await native().continuations.read(work.operationKey, work.operation.accountId);
           if (view) {
+            continuationPausedAtStep = true;
             continuationPaused?.();
             await new Promise<void>((resolve) => {
               releaseGate = resolve;
@@ -1109,24 +1111,28 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
               await Bun.sleep(5);
             }
             if (continuation) {
-              await continuationReached;
-              pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-              completion
-                .finally(() => {
-                  const currentPending = pendingWorkflows.get(work.operationKey);
-                  if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                  if (stepObserver === executionObserver) stepObserver = priorObserver;
-                })
-                .catch(() => {});
-              pendingCompletion = true;
-              return { outcome: 'denied' as const };
+              await Promise.race([
+                continuationReached,
+                completion.then(
+                  () => undefined,
+                  () => undefined,
+                ),
+              ]);
+              if (continuationPausedAtStep) {
+                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+                completion
+                  .finally(() => {
+                    const currentPending = pendingWorkflows.get(work.operationKey);
+                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                    if (stepObserver === executionObserver) stepObserver = priorObserver;
+                  })
+                  .catch(() => {});
+                pendingCompletion = true;
+                return { outcome: 'denied' as const };
+              }
             }
             if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
-            if (!continuation) value = await completion;
-            else {
-              releaseGate();
-              value = await completion;
-            }
+            value = await completion;
           } else {
             value = await executeWorkflow(reference, work);
           }
@@ -1250,20 +1256,31 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       const currentApproval = await driver.approve(f.caller, f.work);
       if (currentApproval.outcome !== 'approved') throw new Error('Native approval could not be renewed');
       const approvalRow = await driver.approval(currentApproval.reference);
-      const target =
-        approvalRow?.resourceId ??
-        (operation.kind === 'delete'
-          ? operation.accountId
-          : operation.kind === 'fence-operator'
-            ? PLATFORM_RESOURCE.id
-            : operation.kind === 'opening'
-              ? operation.operatorAccountId
-              : operation.kind === 'transfer'
-                ? operation.previous.operatorAccountId
-                : PLATFORM_RESOURCE.id);
       const actor = await required(accessPort, 'Access is not composed').authenticate(f.caller, context());
       if (fact === 'actor-grant' || fact === 'principal-grant') {
-        const who = actor.accountId;
+        const principal = actor.requestedBy ? /^urn:rezics:request:([^:]+):/.exec(actor.requestedBy)?.[1] : undefined;
+        if (actor.requestedBy && !principal) throw new Error('Auth returned a malformed assignment reference');
+        const who = fact === 'principal-grant' ? (principal ?? actor.accountId) : actor.accountId;
+        const identity = required(registrations.get(who), `Missing native grant holder session for ${who}`);
+        const session = await login(identity.email, f.identity.clientId);
+        const grantActor = await required(accessPort, 'Access is not composed').authenticate(session.bearer, context());
+        const target =
+          operation.kind === 'delete' && operation.responsibility && actor.accountId !== operation.accountId
+            ? operation.responsibility.operatorAccountId
+            : (approvalRow?.resourceId ??
+              (operation.kind === 'delete'
+                ? operation.accountId
+                : operation.kind === 'fence-operator'
+                  ? PLATFORM_RESOURCE.id
+                  : operation.kind === 'opening'
+                    ? operation.operatorAccountId
+                    : operation.kind === 'transfer'
+                      ? operation.previous.operatorAccountId
+                      : PLATFORM_RESOURCE.id));
+        const targetAction =
+          operation.kind === 'delete' && operation.responsibility && actor.accountId !== operation.accountId
+            ? 'account:manage'
+            : action;
         const revokeCommand = createGrantCommands({
           pool: kernel,
           access: required(accessPort, 'Access is not composed'),
@@ -1276,8 +1293,17 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           key: reference(`revoke-${fact}`),
         };
         if (f.family === 'fence-operator')
-          await revokeCommand.revokeRole({ ...context(), actor }, { ...input, role: platformGovernance.role });
-        else await revokeCommand.revoke({ ...context(), actor }, { ...input, actions: [action] });
+          await revokeCommand.revokeRole(
+            {
+              ...context(),
+              actor: await required(accessPort, 'Access is not composed').authenticate(
+                (await login(required(governor, 'Platform governance is not bootstrapped').email, loginClient)).bearer,
+                context(),
+              ),
+            },
+            { ...input, role: platformGovernance.role },
+          );
+        else await revokeCommand.revoke({ ...context(), actor: grantActor }, { ...input, actions: [targetAction] });
       } else if (fact === 'assignment') {
         if (actor.requestedBy) {
           const match = /urn:rezics:request:([^:]+):([^:]+)/.exec(actor.requestedBy);
@@ -1987,16 +2013,29 @@ async function observe(f: Fixture): Promise<Snapshot> {
     idempotency_key: string;
     request_digest: Buffer;
     response: unknown;
+    business_receipt_id: string | null;
   }>(
     `SELECT transaction_id::text,command_kind,idempotency_key,encode(request_digest,'hex') AS request_digest,response
-     FROM core.receipt WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]) OR response::text LIKE ANY($2::text[]))
+            ,completion.business_receipt_id
+     FROM core.receipt
+     LEFT JOIN LATERAL (
+       SELECT item.receipt_id::text AS business_receipt_id
+       FROM access.committed_continuation_completion AS item
+       JOIN access.committed_continuation AS continuation USING (route, continuation_id)
+       WHERE continuation.route=$3 AND continuation.operation_key=$4
+         AND item.receipt_key=core.receipt.idempotency_key
+         AND item.receipt_digest=encode(core.receipt.request_digest,'hex')
+       LIMIT 1
+     ) AS completion ON true
+     WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]) OR response::text LIKE ANY($2::text[])
+       OR completion.business_receipt_id IS NOT NULL)
        AND command_kind NOT LIKE 'access.workflow-approval.%'
        AND command_kind NOT LIKE 'access.grant.%'
        AND command_kind NOT LIKE 'access.role-grant.%'
        AND command_kind NOT LIKE 'access.delegation.%'
        AND command_kind NOT LIKE 'access.standing-parent.%'
      ORDER BY transaction_id`,
-    [[...ids], [...ids].map((id) => `%${id}%`)],
+    [[...ids], [...ids].map((id) => `%${id}%`), route(continuationAccount(f)), f.work.operationKey],
   );
   const ownerRows = await facts.query<{ organization_id: string; member_account_id: string; reservation_id: string }>(
     `SELECT m.organization_id::text,m.member_account_id::text,c.reservation_id::text FROM access.organization_member m
@@ -2064,7 +2103,7 @@ async function observe(f: Fixture): Promise<Snapshot> {
     handles: handleRows.rows.map((row) => ({ handle: row.handle, accountId: row.account_id, phase: row.phase })),
     history,
     receipts: receipts.rows.map((row) => ({
-      id: observedReceiptId(row),
+      id: row.business_receipt_id ?? observedReceiptId(row),
       kind: row.command_kind,
       key: row.idempotency_key,
       digest: row.request_digest.toString(),
