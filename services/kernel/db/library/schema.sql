@@ -536,6 +536,20 @@ CREATE TABLE library.entry_deleted (
 
 
 --
+-- Name: fact_source_head; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.fact_source_head (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT fact_source_head_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT fact_source_head_generation_check CHECK ((generation > 0)),
+    CONSTRAINT fact_source_head_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: follow; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -573,11 +587,16 @@ CREATE TABLE library.label_assignment (
     transaction_id uuid NOT NULL,
     deleted_at timestamp with time zone,
     purge_after timestamp with time zone,
+    assignment_id uuid DEFAULT gen_random_uuid(),
+    slot_no smallint,
     CONSTRAINT label_assignment_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT label_assignment_check1 CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
     CONSTRAINT label_assignment_check2 CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT label_assignment_deleted_slot CHECK (((deleted_at IS NULL) OR (slot_no IS NULL))),
+    CONSTRAINT label_assignment_reserved_identity CHECK (((slot_no IS NULL) OR (assignment_id IS NOT NULL))),
     CONSTRAINT label_assignment_revision_check CHECK ((revision >= 1)),
-    CONSTRAINT label_assignment_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT label_assignment_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT label_assignment_slot_range CHECK (((slot_no IS NULL) OR ((slot_no >= 0) AND (slot_no <= 31))))
 );
 
 
@@ -1223,11 +1242,27 @@ ALTER TABLE ONLY library.entry
 
 
 --
+-- Name: fact_source_head fact_source_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.fact_source_head
+    ADD CONSTRAINT fact_source_head_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: follow follow_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.follow
     ADD CONSTRAINT follow_pkey PRIMARY KEY (route, account_id, target_id);
+
+
+--
+-- Name: label_assignment label_assignment_identity; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_identity UNIQUE (route, account_id, assignment_id);
 
 
 --
@@ -1694,6 +1729,20 @@ CREATE INDEX label_assignment_owner_label ON library.label_assignment USING btre
 --
 
 CREATE INDEX label_assignment_purge_due ON library.label_assignment USING btree (route, purge_after, account_id, subject_id, label_id) WHERE (deleted_at IS NOT NULL);
+
+
+--
+-- Name: label_assignment_reserved_slot; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment USING btree (route, account_id, subject_id, slot_no) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: label_assignment_reserved_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
 
 
 --
