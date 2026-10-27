@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { accountOf, viewIsPublic } from './account-read';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
+import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
 import { DocumentValue, readableDocument } from './values';
 
 function dateText(value: unknown, locale: string): string | null {
@@ -180,8 +181,11 @@ function Excerpt({ body, value }: { body: unknown; value: OverviewValue }) {
   );
 }
 
-const threadHref = (value: OverviewValue, id: unknown) =>
-  `/${encodeURIComponent(value.locale)}/threads/${encodeURIComponent(String(id))}`;
+function threadHref(locale: string, thread: { id: unknown; title?: unknown }): string {
+  const id = typeof thread.id === 'string' ? thread.id : String(thread.id ?? '');
+  const title = typeof thread.title === 'string' ? thread.title : null;
+  return `/${encodeURIComponent(locale)}${canonicalThreadHref({ id, title: threadTitle({ title }) })}`;
+}
 
 export function AccountPosts(props: Record<string, unknown>) {
   return (
@@ -205,7 +209,7 @@ export function AccountPosts(props: Record<string, unknown>) {
             <li key={typeof post.id === 'string' ? post.id : index} className="space-y-1">
               <Quiet>
                 <span className={`${linkClass} ${linkColor} font-medium`}>
-                  <Link href={threadHref(value, post.threadId)}>{title}</Link>
+                  <Link href={threadHref(value.locale, { id: post.threadId, title: thread?.title })}>{title}</Link>
                 </span>
                 {when && ` · ${when}`}
               </Quiet>
@@ -243,7 +247,7 @@ export function AccountThreads(props: Record<string, unknown>) {
             <li key={typeof thread.id === 'string' ? thread.id : index} className="space-y-1">
               <p className="font-medium">
                 <span className={`${linkClass} ${linkColor}`}>
-                  <Link href={threadHref(value, thread.id)}>{title}</Link>
+                  <Link href={threadHref(value.locale, { id: thread.id, title: thread.title })}>{title}</Link>
                 </span>
               </p>
               {when && <Quiet>{when}</Quiet>}

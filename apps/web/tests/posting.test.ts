@@ -8,6 +8,7 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 import type { KernelClient } from '@rezics/client';
 import { hasDocumentContent } from '@rezics/document';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -61,7 +62,7 @@ type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>[
 type Snapshot = NonNullable<Posts['posts'][number]['body']>;
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const boardPath = (locale = 'en') => `/${locale}/boards/${id(1)}`;
-const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
+const threadPath = (locale = 'en') => `/${locale}${threadHref({ id: id(2), title: 'A shared reading' })}`;
 const licence = 'LicenseRef-rezics-terms';
 const metadata = {
   route: 0,
@@ -519,7 +520,7 @@ test(
       const html = await page.content();
       const requests = observe(page);
       await send(page).click();
-      await page.waitForURL(`${await site()}/ja/threads/${id(3)}`);
+      await page.waitForURL(`${await site()}/ja${threadHref({ id: id(3), title: 'Reading together' })}`);
       expect(writes()).toHaveLength(1);
       expect(requests).toHaveLength(1);
       await checkWrite(
@@ -716,7 +717,7 @@ test(
             expect(requests).toHaveLength(2);
             expect(requests[1]!.headers()['x-csrf-token']).toBe(requests[0]!.headers()['x-csrf-token']);
             if (newThread) {
-              await page.waitForURL(`${await site()}/${locale}/threads/${id(3)}`);
+              await page.waitForURL(`${await site()}/${locale}${threadHref({ id: id(3), title: 'Keep this title' })}`);
             } else {
               await eventually(() => posts.posts.length === 2);
               await page.locator('main li').filter({ hasText: 'Keep this argument' }).waitFor();

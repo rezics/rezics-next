@@ -7,6 +7,8 @@
   "agent_empty": "Nothing to show here yet.",
   "agent_links": "Links",
   "board_context_label": "Breadcrumb",
+  "board_meta_description": "Discussions on {title}.",
+  "board_meta_description_realm": "Discussions on {title} in {realm}.",
   "board_sign_in_to_start": "Sign in to start a thread",
   "board_sort_active": "Active",
   "board_sort_hot": "Hot",

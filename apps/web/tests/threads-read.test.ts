@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -267,8 +268,8 @@ test(
       const links = page.locator('main a[href*="/threads/"]');
       expect(await links.allTextContents()).toEqual(['Zebra reading', 'Apple reading']);
       expect(await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')))).toEqual([
-        `/en/threads/${id(2)}`,
-        `/en/threads/${id(3)}`,
+        `/en${threadHref({ id: id(2), title: 'Zebra reading' })}`,
+        `/en${threadHref({ id: id(3), title: 'Apple reading' })}`,
       ]);
       const more = moreLink(page);
       expect(await more.count()).toBe(1);
@@ -292,7 +293,7 @@ test(
   'a thread page shows its posts in order with their rendered bodies',
   async () => {
     calls.length = 0;
-    const page = await open(`/en/threads/${id(2)}`);
+    const page = await open(`/en${threadHref({ id: id(2), title: 'Zebra reading' })}`);
     try {
       expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe('Zebra reading');
       expect(calls).toContainEqual(read(`/v1/threads/${id(2)}`));
@@ -313,7 +314,7 @@ test(
       const more = moreLink(page);
       expect(await more.count()).toBe(1);
       const target = new URL((await more.getAttribute('href'))!, page.url());
-      expect(target.pathname).toBe(`/en/threads/${id(2)}`);
+      expect(target.pathname).toBe(`/en${threadHref({ id: id(2), title: 'Zebra reading' })}`);
       expect(target.searchParams.get('cursor')).toBe(cursor);
       calls.length = 0;
       await more.click();
@@ -337,7 +338,7 @@ test(
       ['en', /removed by its author/i],
       ['ja', /消去|削除/],
     ] as const) {
-      const page = await open(`/${locale}/threads/${id(5)}`);
+      const page = await open(`/${locale}${threadHref({ id: id(5), title: 'A quiet discussion' })}`);
       try {
         expect(await page.locator('main').innerText()).toMatch(note);
         expect(await page.getByRole('heading', { name: 'A close reading' }).count()).toBe(0);
@@ -389,7 +390,7 @@ test(
     // A sequential implementation must finish too, so release after a bounded observation window.
     const fallback = setTimeout(() => release?.(), 1500);
     try {
-      const response = await fetch(`${origin}/en/threads/${id(2)}`);
+      const response = await fetch(`${origin}/en${threadHref({ id: id(2), title: 'Zebra reading' })}`);
       await response.text();
       expect(calls.slice(0, 2)).toEqual([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`)]);
       expect(calls.slice(2)).toContainEqual(read(`/v1/boards/${id(1)}`));

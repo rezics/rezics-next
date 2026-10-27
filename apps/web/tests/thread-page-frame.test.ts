@@ -30,7 +30,7 @@ test('reads the thread board once regardless of post count and tolerates a missi
 });
 
 test('the thread head, subjects, composer and post anchors provide a compact accessible frame', async () => {
-  const route = await Bun.file(new URL('../src/routes/threads/$id.tsx', import.meta.url)).text();
+  const route = await Bun.file(new URL('../src/routes/threads/$id_.$slug.tsx', import.meta.url)).text();
   const subjects = await Bun.file(new URL('../src/threads/thread-subjects.tsx', import.meta.url)).text();
   const composer = await Bun.file(new URL('../src/threads/composer.tsx', import.meta.url)).text();
   const context = await Bun.file(new URL('../src/threads/thread-context.tsx', import.meta.url)).text();

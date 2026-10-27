@@ -6,7 +6,9 @@ import { env } from 'cloudflare:workers';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import { cookie } from '../session/cookies';
+import { prepareSession, viewerCredential } from '../session/request';
 import { kernelClient } from '../kernel/client';
+import { threadTitle } from './thread-href';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
 import type { PageAuthors } from '../identity/read';
 import type { BoardRealm } from './board-context';
@@ -73,6 +75,27 @@ export const readNewThreadPage = createServerFn({ method: 'GET' })
     const board = checkRead<Board>(result, 'board');
     if (board.board.id !== data.id) throw notFound();
     return { board: board.board, idempotencyKey: crypto.randomUUID() };
+  });
+
+/** The thread read that decides the slug. A redirect stops here and does not read posts. */
+export const readThreadSlug = createServerFn({ method: 'GET' })
+  .validator(validatePageInput)
+  .handler(async ({ data }): Promise<{ id: string; title: string | null }> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    let authorization: string | null = null;
+    try {
+      await prepareSession(request, env as Partial<SessionEnv>);
+      authorization = viewerCredential(request);
+    } catch {
+      authorization = null;
+    }
+    const result = authorization
+      ? await kernelClient().threads({ id: data.id }).get({ headers: { authorization } })
+      : await kernelClient().threads({ id: data.id }).get();
+    const thread = checkRead<Thread>(result, 'thread');
+    if (thread.thread.id !== data.id) throw notFound();
+    return { id: thread.thread.id, title: threadTitle(thread.thread) };
   });
 
 export const readThreadPage = createServerFn({ method: 'GET' })

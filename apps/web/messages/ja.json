@@ -7,6 +7,8 @@
   "agent_empty": "ここにはまだ何もありません。",
   "agent_links": "リンク",
   "board_context_label": "パンくずリスト",
+  "board_meta_description": "{title}の議論。",
+  "board_meta_description_realm": "{realm}の{title}での議論。",
   "board_sign_in_to_start": "ログインしてスレッドを作成",
   "board_sort_active": "アクティブ",
   "board_sort_hot": "人気",

@@ -3,6 +3,7 @@ import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/rea
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
+import { threadHref, threadTitle } from '../../threads/thread-href';
 import { csrfHeaders, draftFetch, PostComposer, SignInPrompt } from '../../threads/composer';
 import { readNewThreadPage } from '../../threads/reads';
 import { PageHeading } from '../../shell/page-heading';
@@ -46,7 +47,7 @@ function NewThreadPage() {
             return result.ok ? { ok: true as const, value: result.thread } : result;
           }}
           onSuccess={(thread) => {
-            window.location.assign(`/${getLocale()}/threads/${thread.id}`);
+            window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
           }}
         />
       ) : session === 'signed-out' ? (

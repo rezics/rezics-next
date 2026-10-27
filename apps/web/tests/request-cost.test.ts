@@ -8,6 +8,7 @@ import { prepareSession } from '../src/session/request.ts';
 import { mediaRequest } from '../src/media/index.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const cookieId = 'a'.repeat(43);
@@ -349,7 +350,7 @@ test('thread page stays within its bound as s grows', async () => {
     postSize = s;
     kernelCalls.length = 0;
     authCalls.length = 0;
-    const response = await fetch(`${origin}/en/threads/${threadId}`);
+    const response = await fetch(`${origin}/en${threadHref({ id: threadId, title: 'Cost thread' })}`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual([
       `GET /v1/threads/${threadId}`,

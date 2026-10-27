@@ -7,6 +7,8 @@
   "agent_empty": "Rien à afficher pour le moment.",
   "agent_links": "Liens",
   "board_context_label": "Fil d’Ariane",
+  "board_meta_description": "Discussions sur {title}.",
+  "board_meta_description_realm": "Discussions sur {title} dans {realm}.",
   "board_sign_in_to_start": "Connectez-vous pour créer une discussion",
   "board_sort_active": "Actives",
   "board_sort_hot": "Populaires",

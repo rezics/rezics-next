@@ -7,6 +7,7 @@ import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
+import { threadHref } from '../threads/thread-href';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';
@@ -42,9 +43,12 @@ export const pagePaths = {
   subject: `/subjects/${subjectRecording.subject.id}`,
   'missing-subject': `/subjects/${missingSubjectId}`,
   board: `/boards/${boardRecording.board.id}`,
-  thread: `/threads/${threadRecording.thread.id}`,
-  'thread-owned': `/threads/${threadOwnedRecording.thread.id}`,
-  'thread-deleted-organization': `/threads/${deletedOrganizationThreadId}`,
+  thread: threadHref(threadRecording.thread),
+  'thread-owned': threadHref(threadOwnedRecording.thread),
+  'thread-deleted-organization': threadHref({
+    id: deletedOrganizationThreadId,
+    title: threadOwnedRecording.thread.title,
+  }),
   'board-new': `/boards/${boardRecording.board.id}/new`,
   offer: `/offers/${offerRecording.offer.id}`,
   'offer-cjk': `/offers/${offerCjkRecording.offer.id}`,

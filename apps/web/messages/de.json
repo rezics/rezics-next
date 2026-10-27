@@ -7,6 +7,8 @@
   "agent_empty": "Hier gibt es noch nichts zu sehen.",
   "agent_links": "Links",
   "board_context_label": "Brotkrumennavigation",
+  "board_meta_description": "Diskussionen auf {title}.",
+  "board_meta_description_realm": "Diskussionen auf {title} in {realm}.",
   "board_sign_in_to_start": "Anmelden, um einen Thread zu starten",
   "board_sort_active": "Aktiv",
   "board_sort_hot": "Beliebt",

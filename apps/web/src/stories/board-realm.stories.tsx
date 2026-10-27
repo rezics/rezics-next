@@ -4,6 +4,7 @@ import boardRealmRecording from '../kernel/recorded/board-realm.json';
 import boardRealmRealmRecording from '../kernel/recorded/board-realm-realm.json';
 import boardRealmThreadRecording from '../kernel/recorded/board-realm-thread.json';
 import { m } from '../paraglide/messages.js';
+import { threadHref } from '../threads/thread-href';
 import { PageStory, pageReady } from './page';
 
 const meta = { title: 'Pages/Realm Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -26,7 +27,7 @@ const realm = boardRealmRealmRecording.realm.title;
 const board = boardRealmRecording.board.title;
 const thread = boardRealmThreadRecording.thread.title;
 const boardPath = `/boards/${boardRealmRecording.board.id}`;
-const threadPath = `/threads/${boardRealmThreadRecording.thread.id}`;
+const threadPath = threadHref(boardRealmThreadRecording.thread);
 
 export const ThreadSignedIn: Story = {
   name: 'Thread Signed In',

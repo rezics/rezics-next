@@ -247,6 +247,8 @@ then the total, and stops the server when it exits.
 
 **Locale URLs**: Every page path starts with a site locale. A path without one redirects 302 to the reader's locale, selected from the `rezics_locale` cookie, then `Accept-Language`, then `en`, with `Vary: Cookie, Accept-Language` and `Cache-Control: private, no-store`. A trailing slash redirects 301 to the path without it. The `x-default` alternate is the page path without the locale.
 
+**Thread URLs**: A thread's canonical path is `/threads/{id}/{slug}`. `{slug}` is `slug(title)` from `@rezics/definitions/slug`, or `thread` when the title is null. `/threads/{id}` and any other slug redirect 301 to that path and keep `cursor`. Links use `threadHref`.
+
 **Public and signed-in routes**: Public routes render on the server without reading the session or any cookie. The session, CSRF token and personal state (library status, own vote, reactions, membership and edit controls) load in the browser after hydration through queries. Signed-in routes check the session in `beforeLoad` and redirect to sign-in with a return path; components never check it themselves.
 
 **Data reads**: Each kernel read has one `queryOptions` factory beside its loader code. Loaders call `context.queryClient.ensureQueryData`; components use `useSuspenseQuery` for public reads and `useQuery` for personal reads in the browser only. Public reads keep `staleTime` 60 s, personal reads 0. The router preloads on intent.
