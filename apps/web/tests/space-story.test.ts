@@ -99,7 +99,7 @@ test(
           const heading = main.getByRole('heading', { level: 1 });
           await heading.waitFor();
           expect((await heading.textContent())?.trim()).toBe(space.space.title);
-          const cards = main.getByRole('region', { name: own.realm_published_heading, exact: true });
+          const cards = main.locator('section[aria-labelledby="realm-published-heading"]');
           await cards.waitFor();
           expect(await cards.locator('article').count()).toBe(subjects.length);
           for (const { subject } of subjects) {
