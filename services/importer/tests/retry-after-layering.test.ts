@@ -112,3 +112,37 @@ for (const status of [429, 503]) {
     });
   }
 }
+
+for (const status of [429, 503]) {
+  test(`deferred cover polling cannot reopen a terminal retry refusal (${status})`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cover-refusal-'));
+    let sends = 0;
+    const writes: WriteSimulation = {
+      limit: Infinity,
+      http: { maxAttempts: 1 },
+      invocations: [],
+      attempts: [],
+      accepted: new Map(),
+      onSend(request) {
+        if (
+          request.commands[0]!.source.external_id === '1' &&
+          request.commands.every((command) => command.source.field_group === 'cover')
+        ) {
+          sends++;
+          return { status, retryAfter: '31', delayMs: 1 };
+        }
+      },
+    };
+    const driver = await createImportPipelineDriver({ directory, writes, recordConcurrency: 2, media: 'available' });
+    try {
+      const report = await driver.run(rows.map((row) => ({ ...row, cover: true })));
+      expect(report.result.status).toBe('bulk-failed');
+      expect(sends).toBe(1);
+      expect(report.records.find((record) => record.recordKey === '1')!.acknowledged).toBe(false);
+      expect(report.activeRequestsAtEnd).toBe(0);
+    } finally {
+      await driver.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
