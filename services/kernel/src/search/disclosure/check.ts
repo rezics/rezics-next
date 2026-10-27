@@ -3,6 +3,7 @@ import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
   type IndexedSubject,
+  type RelationFacetMatch,
   type RelationFacetProbe,
   type SubjectSource,
 } from '../source.ts';
@@ -48,6 +49,16 @@ function holds(subject: IndexedSubject, clause: FactClause): boolean {
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
+function anyMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
+  if (values.includes(true)) return true;
+  return values.includes('not_proven') ? 'not_proven' : false;
+}
+
+function allMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
+  if (values.includes(false)) return false;
+  return values.includes('not_proven') ? 'not_proven' : true;
+}
+
 function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): FilterQualifier[] {
   const clauses = new Map<string, FilterQualifier>();
   for (const { property, in: values } of qualifiers) {
@@ -74,19 +85,22 @@ function filterPlan(filter: FilterDocument) {
   const leaves: FactClause[] = [];
   const indices = new Map<string, number>();
   const positive = new Set<number>();
-  type Evaluate = (values: readonly boolean[]) => boolean;
+  type Evaluate = (values: readonly RelationFacetMatch[]) => RelationFacetMatch;
   function visit(node: FilterDocument, negated = false): Evaluate {
     if ('and' in node) {
       const children = node.and.map((child) => visit(child, negated));
-      return (values) => children.every((child) => child(values));
+      return (values) => allMatch(children.map((child) => child(values)));
     }
     if ('or' in node) {
       const children = node.or.map((child) => visit(child, negated));
-      return (values) => children.some((child) => child(values));
+      return (values) => anyMatch(children.map((child) => child(values)));
     }
     if ('not' in node) {
       const child = visit(node.not, !negated);
-      return (values) => !child(values);
+      return (values) => {
+        const result = child(values);
+        return result === 'not_proven' ? result : !result;
+      };
     }
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
     const clause: FactClause =
@@ -160,7 +174,7 @@ export async function checkHits(
     for (const [partition, group] of partitions) {
       const snapshot = await source.read(partition, [...group.ids]);
       const subjects = new Map(snapshot.subjects.map((subject) => [subject.id, subject]));
-      type Point = { probe: RelationFacetProbe; result?: boolean };
+      type Point = { probe: RelationFacetProbe; result?: RelationFacetMatch };
       const points = new Map<string, Point>();
       const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
       const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
@@ -213,9 +227,10 @@ export async function checkHits(
           }
           evaluations.set(subject.id, () => {
             const resolved = values.map((value) =>
-              typeof value === 'boolean' ? value : value.some((point) => point.result === true),
+              typeof value === 'boolean' ? value : anyMatch(value.map((point) => point.result!)),
             );
-            const passed = plan.evaluate(resolved);
+            // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
+            const passed = plan.evaluate(resolved) === true;
             return {
               passed,
               // Rejection after live positive-leaf evaluation invalidates the candidate total.
@@ -247,7 +262,8 @@ export async function checkHits(
           throw new Error('Malformed relation facet probe results');
         for (const [index, point] of batch.entries()) {
           const result = results[index];
-          if (typeof result !== 'boolean') throw new Error('Malformed relation facet probe results');
+          if (!Object.hasOwn(results, index) || (result !== true && result !== false && result !== 'not_proven'))
+            throw new Error('Malformed relation facet probe results');
           point.result = result;
         }
       }
