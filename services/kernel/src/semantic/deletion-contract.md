@@ -239,5 +239,21 @@ Three failures stopped earlier than the intended outcomes: proposal-author setup
 `deadline_exceeded`, locator-growth subject creation returned 503 `overloaded`, and scoped takedown's subject
 read returned 503 `deadline_exceeded`. These are observed validation limits, not proof of ownership ambiguity,
 scoped withholding, or growth bounds. Delete/restore and purge growth reached missing DELETE at their first
-scale; no 512/4096 budget result is claimed. Isolated unchanged-file retries are needed to resolve those three
-load-sensitive outcomes. This attempt changed only this validation documentation within the declared paths.
+scale; no 512/4096 budget result is claimed.
+
+The unchanged contract-file retry acquired host `a` after 104.918 seconds and uploaded in 21.896 seconds,
+then SSH closed during the remote command before a result (`RemoteTransportError`, `remote command`). It
+supplies no replacement outcome for the proposal-author or scoped-takedown 503s. The unchanged growth-file
+retry waited for its slot for 7759.647 seconds on host `a`, uploaded in 53.875 seconds, and completed with
+three expected failures and no 503 response: the locator reached the absent reader assertion after native
+setup and 64 proposals; delete/restore and purge reached missing DELETE. This resolves the locator-growth
+setup limit, but still establishes no growth bound. The complete exact run above returned native results;
+the later isolated transport failure does not erase those results or justify claiming the two remaining
+load-sensitive outcomes were observed. No further runtime result is inferred from static checks.
+
+This continuation preserved all corrected policy decisions and existing acceptance assertions: immediate
+account-confirmation handoff, individual 30-day restoration, lowerCamelCase `restoreDeleted`, Content source
+fence custody, legal-order-only destruction of takedown evidence with holds, read-only caller-RR/native-T
+owner evidence, and pending foreign-count ABI. It changed only this validation documentation within the
+declared paths; there are no outside-path changes or new product decisions. Reference reading was limited
+to the read-only reference `INDEX.md`; no external implementation is named for this lifecycle surface.
