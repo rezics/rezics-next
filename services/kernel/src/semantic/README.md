@@ -39,7 +39,6 @@ One `semantic.account_agent_subject` row is the back link: it follows the visibl
 
 `unverifyAccountAgent(pool, { account, receipt })` is platform work for account revocation. It records the revocation receipt on a new merge revision, removes the catalogue back link and account-node redirect, unregisters the node as a member of the catalogue survivor, and restores the account node's own statements and only the inbound links recorded by that verification, in pages. Statements the account made on the catalogue subject while verified stay there with the account as their source. It emits the existing `SUBJECT_REVISED` event at the returned revision with kind `merge`, plus the ordinary change event when needed. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging. A later verification is allowed. Ordinary merges refuse account nodes and linked catalogue subjects.
 
-
 ### Pen names and collective names
 
 A pen name or collective name is a separate person or organization agent with its own page and credits. `rezics:penNameOf` links it to each person or organization behind it; its inverse is “pen names”. Credits never move or copy across that link.

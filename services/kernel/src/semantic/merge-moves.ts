@@ -468,9 +468,7 @@ export async function reverseAccountAgentLinks(
     await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
       await tx.query('SET LOCAL enable_seqscan = off');
       const contexts = [...new Set(page.value.map((link) => link.context_id))];
-      contexts.sort((a, b) =>
-        a === GLOBAL_CONTEXT ? -1 : b === GLOBAL_CONTEXT ? 1 : a.localeCompare(b),
-      );
+      contexts.sort((a, b) => (a === GLOBAL_CONTEXT ? -1 : b === GLOBAL_CONTEXT ? 1 : a.localeCompare(b)));
       for (const context_id of contexts)
         await deleteMovedAgentLinks.run(tx, {
           route,
