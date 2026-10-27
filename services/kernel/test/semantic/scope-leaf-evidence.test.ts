@@ -111,7 +111,10 @@ test('unresolved witness work advances bounded native progress beyond two hundre
     await finishWitnessRepair(db.pool, subject);
     // The recorded hint must be among the stale witnesses, in addition to the first32 alternatives.
     const hint = await db.admin.query(
-      'SELECT witness_id FROM semantic.relation_facet_value WHERE route=$1 AND subject_id=$2 AND property=$3 AND value=$4',
+      `SELECT v.witness_id FROM semantic.relation_facet_build b
+       JOIN semantic.relation_facet_witness_value v
+         ON v.route=b.route AND v.subject_id=b.subject_id AND v.generation=b.published
+       WHERE b.route=$1 AND b.subject_id=$2 AND v.property=$3 AND v.value=$4`,
       [routeOf(subject), subject, 'ex:credit', target],
     );
     expect(hint.rows).toHaveLength(1);
