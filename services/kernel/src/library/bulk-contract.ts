@@ -2,7 +2,12 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
-import type { DurableInitiatorReader, DurableInitiatorRecord, DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
+import type {
+  DurableInitiatorReader,
+  DurableInitiatorRecord,
+  DurableOperationAnchor,
+  InitiatorRestorer,
+} from '../access/durable-initiator.ts';
 import type { WriteRateContext, WriteRateDecision, WriteRateFamily } from '../access/write-rate.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -18,20 +23,45 @@ export const BULK_ADMISSION_BODY_BYTES = 16_384;
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
   | { kind: 'explicit'; targets: readonly { subjectId: string }[] }
-  | { kind: 'query'; filter: { state?: EntryState; /** Raw type identifier; no per-id length cap. The shelf reader's opaque type-key codec is a dependency. */ primaryType?: string } };
+  | {
+      kind: 'query';
+      filter: {
+        state?: EntryState;
+        /** Raw type identifier; no per-id length cap. The shelf reader's opaque type-key codec is a dependency. */ primaryType?: string;
+      };
+    };
 export type OccurrenceSelection = { kind: 'occurrences'; memberIds: readonly string[] };
 export type BulkAdmission =
   | { action: 'set_status'; state: EntryState; selection: SubjectSelection }
   | { action: 'add_to_collection'; collectionId: string; selection: SubjectSelection }
   | { action: 'remove_from_collection'; collectionId: string; selection: SubjectSelection | OccurrenceSelection }
   | { action: 'remove_from_library'; selection: SubjectSelection };
-export type BulkPhase = 'queued' | 'discovering' | 'expanding' | 'applying' | 'reconciling'
-  | 'completed' | 'completed_with_errors' | 'cancelled' | 'stopped' | 'expired';
+export type BulkPhase =
+  | 'queued'
+  | 'discovering'
+  | 'expanding'
+  | 'applying'
+  | 'reconciling'
+  | 'completed'
+  | 'completed_with_errors'
+  | 'cancelled'
+  | 'stopped'
+  | 'expired';
 export type TerminalOutcome = 'applied' | 'no_effect' | 'conflict' | 'denied' | 'failed' | 'cancelled';
 export type TargetState = TerminalOutcome | 'pending' | 'reconciling';
-export type BulkReason = 'revision_mismatch' | 'incarnation_mismatch' | 'missing_target' | 'authority_lost'
-  | 'target_denied' | 'collection_full' | 'invalid_subject' | 'dependency_unavailable' | 'deadline'
-  | 'cancel_requested' | 'evidence_missing' | 'execution_expired';
+export type BulkReason =
+  | 'revision_mismatch'
+  | 'incarnation_mismatch'
+  | 'missing_target'
+  | 'authority_lost'
+  | 'target_denied'
+  | 'collection_full'
+  | 'invalid_subject'
+  | 'dependency_unavailable'
+  | 'deadline'
+  | 'cancel_requested'
+  | 'evidence_missing'
+  | 'execution_expired';
 export type BulkCounters = Readonly<{
   scannedCandidates: number;
   selectedSubjects: number;
@@ -86,27 +116,50 @@ export type EntryExpectation =
   | { kind: 'present'; incarnation: string; admissionSequence: DecimalSequence; revision: number }
   | { kind: 'absent'; slotGeneration: DecimalSequence };
 export type SubjectTarget = Readonly<{
-  kind: 'subject'; operationId: string; ordinal: DecimalSequence;
-  subjectId: string; requestedSubjectId: string | null; expected: EntryExpectation;
+  kind: 'subject';
+  operationId: string;
+  ordinal: DecimalSequence;
+  subjectId: string;
+  requestedSubjectId: string | null;
+  expected: EntryExpectation;
 }>;
 export type OccurrenceTarget = Readonly<{
-  kind: 'occurrence'; operationId: string; ordinal: DecimalSequence;
-  subjectId: string; collectionId: string; memberId: string;
-  incarnation: string; admissionSequence: DecimalSequence;
+  kind: 'occurrence';
+  operationId: string;
+  ordinal: DecimalSequence;
+  subjectId: string;
+  collectionId: string;
+  memberId: string;
+  incarnation: string;
+  admissionSequence: DecimalSequence;
 }>;
 export type ImmutableTarget = SubjectTarget | OccurrenceTarget;
 export type ReceiptLocator = Readonly<{
-  partition: number; principalKind: 'account'; principalId: string; commandKind: string; key: string; digest: string;
+  partition: number;
+  principalKind: 'account';
+  principalId: string;
+  commandKind: string;
+  key: string;
+  digest: string;
 }>;
 export type BulkSource = Readonly<{
-  id: string; route: number; operationId: string; request: BulkAdmission;
-  initiator: DurableInitiatorRecord; entryHighWater: DecimalSequence;
-  admittedAt: string; expiresAt: string; resultsExpireAt: string;
+  id: string;
+  route: number;
+  operationId: string;
+  request: BulkAdmission;
+  initiator: DurableInitiatorRecord;
+  entryHighWater: DecimalSequence;
+  admittedAt: string;
+  expiresAt: string;
+  resultsExpireAt: string;
 }>;
 export type Checkpoint = Readonly<{
-  operationId: string; generation: number; phase: BulkPhase;
+  operationId: string;
+  generation: number;
+  phase: BulkPhase;
   /** Immutable per-phase keyset boundary; never a shelf sort or Collection ordinal. */
-  after: DecimalSequence; highWater: DecimalSequence;
+  after: DecimalSequence;
+  highWater: DecimalSequence;
   /** Monotonic operation-wide budget index. A refused chunk retries this exact index. */
   nextChunkIndex: number;
 }>;
@@ -114,22 +167,39 @@ export type Checkpoint = Readonly<{
 export type SegmentInput = Readonly<{ operationId: string; route: number; generation: number }>;
 export type EnqueueIntent = Readonly<{ workflowId: string; input: SegmentInput; queue: 'workflows' }>;
 export type PageCommit = Readonly<{
-  checkpoint: Checkpoint; chunkIndex: number; targets: readonly ImmutableTarget[];
-  complete: boolean; enqueue: EnqueueIntent;
+  checkpoint: Checkpoint;
+  chunkIndex: number;
+  targets: readonly ImmutableTarget[];
+  complete: boolean;
+  enqueue: EnqueueIntent;
 }>;
 export type OccurrencePage = Readonly<{
-  operationId: string; collectionId: string; page: DecimalSequence;
-  sourceDigest: string; after: DecimalSequence; highWater: DecimalSequence;
-  targets: readonly OccurrenceTarget[]; complete: boolean;
+  operationId: string;
+  collectionId: string;
+  page: DecimalSequence;
+  sourceDigest: string;
+  after: DecimalSequence;
+  highWater: DecimalSequence;
+  targets: readonly OccurrenceTarget[];
+  complete: boolean;
 }>;
 export type TargetCommand = Readonly<{
-  source: DurableOperationAnchor; sourceDigest: string; target: ImmutableTarget;
-  receipt: ReceiptLocator; chunkIndex: number; deadline: number;
+  source: DurableOperationAnchor;
+  sourceDigest: string;
+  target: ImmutableTarget;
+  receipt: ReceiptLocator;
+  chunkIndex: number;
+  deadline: number;
 }>;
 export type TargetEvidence = Readonly<{
-  operationId: string; ordinal: DecimalSequence; sourceDigest: string;
-  receipt: ReceiptLocator; transactionId: string; outcome: TerminalOutcome;
-  reason: BulkReason | null; resultingMemberId: string | null;
+  operationId: string;
+  ordinal: DecimalSequence;
+  sourceDigest: string;
+  receipt: ReceiptLocator;
+  transactionId: string;
+  outcome: TerminalOutcome;
+  reason: BulkReason | null;
+  resultingMemberId: string | null;
 }>;
 export type AttemptResult =
   | { kind: 'terminal'; evidence: TargetEvidence }
@@ -148,8 +218,12 @@ export type SpendBulkChunk = (
   units: number,
 ) => Promise<WriteRateDecision>;
 export type BulkDependencies = Readonly<{
-  pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock;
-  initiators: InitiatorRestorer; readInitiator: DurableInitiatorReader;
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  initiators: InitiatorRestorer;
+  readInitiator: DurableInitiatorReader;
   spendChunk: SpendBulkChunk;
 }>;
 export type BulkOperations = Readonly<{
@@ -161,20 +235,36 @@ export type BulkOperations = Readonly<{
 
 /** Native rows, not workflow payloads. Every row is led by its owning route. */
 export type OperationRow = Readonly<{
-  route: number; accountId: string; source: BulkSource; view: OperationView;
-  checkpoint: Checkpoint; admissionKey: string; admissionDigest: string;
-  creationReceipt: ReceiptLocator; cancelReceipt: ReceiptLocator | null;
+  route: number;
+  accountId: string;
+  source: BulkSource;
+  view: OperationView;
+  checkpoint: Checkpoint;
+  admissionKey: string;
+  admissionDigest: string;
+  creationReceipt: ReceiptLocator;
+  cancelReceipt: ReceiptLocator | null;
 }>;
 export type TargetRow = Readonly<{
-  route: number; target: ImmutableTarget; receipt: ReceiptLocator;
-  state: TargetState; evidence: TargetEvidence | null; chunkIndex: number;
+  route: number;
+  target: ImmutableTarget;
+  receipt: ReceiptLocator;
+  state: TargetState;
+  evidence: TargetEvidence | null;
+  chunkIndex: number;
 }>;
 export type DiscoveryPage = Readonly<{
-  previous: Checkpoint; next: Checkpoint; scanned: number;
-  chunkIndex: number; selected: readonly SubjectTarget[]; sealed: boolean;
+  previous: Checkpoint;
+  next: Checkpoint;
+  scanned: number;
+  chunkIndex: number;
+  selected: readonly SubjectTarget[];
+  sealed: boolean;
 }>;
 export type Transition = Readonly<{
-  operationId: string; ordinal: DecimalSequence; from: 'pending' | 'reconciling';
+  operationId: string;
+  ordinal: DecimalSequence;
+  from: 'pending' | 'reconciling';
   evidence: TargetEvidence;
 }>;
 export type ExpiryPage = Readonly<{ route: number; after: string | null; removed: number; complete: boolean }>;
@@ -196,11 +286,16 @@ export function createBulkStore(_pool: Pool): BulkStore {
 /** Route/action data only; an implementation installs it in the ordinary mounted
  * catalogue and creates no grants by virtue of adding these action names.
  */
-export type BulkRouteAction = 'library_operation:create' | 'library_operation:read'
-  | 'library_operation:list_outcomes' | 'library_operation:cancel';
+export type BulkRouteAction =
+  | 'library_operation:create'
+  | 'library_operation:read'
+  | 'library_operation:list_outcomes'
+  | 'library_operation:cancel';
 
 export async function expireBulkPage(
-  _dependencies: BulkDependencies, _route: number, _after: string | null,
+  _dependencies: BulkDependencies,
+  _route: number,
+  _after: string | null,
 ): Promise<ExpiryPage> {
   throw new Error('Library bulk expiry is not implemented');
 }
@@ -212,7 +307,10 @@ export function createBulkOperations(_dependencies: BulkDependencies): BulkOpera
  * CommandAuthorization.prepare, then commits source/operation/creation commitment.
  */
 export async function admitBulkOperation(
-  _dependencies: BulkDependencies, _actor: Actor, _input: BulkAdmission, _key: string,
+  _dependencies: BulkDependencies,
+  _actor: Actor,
+  _input: BulkAdmission,
+  _key: string,
 ): Promise<CommandOutcome<OperationResult>> {
   throw new Error('Library bulk admission is not implemented');
 }
@@ -222,7 +320,9 @@ export async function discoverBulkPage(_dependencies: BulkDependencies, _input: 
 }
 /** One owning-partition transaction: checkpoint, immutable page, counters, intent. */
 export async function commitBulkPage(
-  _tx: CommandTransaction, _time: AuthoritativeTime, _page: PageCommit,
+  _tx: CommandTransaction,
+  _time: AuthoritativeTime,
+  _page: PageCommit,
 ): Promise<void> {
   throw new Error('Library bulk page commit is not implemented');
 }
@@ -230,30 +330,38 @@ export async function commitBulkPage(
  * their connection before target page persistence. Transfer uses immutable digest.
  */
 export async function captureCollectionPage(
-  _dependencies: BulkDependencies, _input: SegmentInput,
+  _dependencies: BulkDependencies,
+  _input: SegmentInput,
 ): Promise<OccurrencePage> {
   throw new Error('Library bulk occurrence capture is not implemented');
 }
 export async function acknowledgeOccurrencePage(
-  _dependencies: BulkDependencies, _page: OccurrencePage,
+  _dependencies: BulkDependencies,
+  _page: OccurrencePage,
 ): Promise<Checkpoint> {
   throw new Error('Library bulk occurrence transfer is not implemented');
 }
-export async function executeStatusTarget(_dependencies: BulkDependencies, _command: TargetCommand): Promise<AttemptResult> {
+export async function executeStatusTarget(
+  _dependencies: BulkDependencies,
+  _command: TargetCommand,
+): Promise<AttemptResult> {
   throw new Error('Library bulk status is not implemented');
 }
 export async function executeLibraryRemovalTarget(
-  _dependencies: BulkDependencies, _command: TargetCommand,
+  _dependencies: BulkDependencies,
+  _command: TargetCommand,
 ): Promise<AttemptResult> {
   throw new Error('Library bulk entry removal is not implemented');
 }
 export async function executeCollectionAddTarget(
-  _dependencies: BulkDependencies, _command: TargetCommand,
+  _dependencies: BulkDependencies,
+  _command: TargetCommand,
 ): Promise<AttemptResult> {
   throw new Error('Library bulk Collection add is not implemented');
 }
 export async function executeCollectionRemoveTarget(
-  _dependencies: BulkDependencies, _command: TargetCommand,
+  _dependencies: BulkDependencies,
+  _command: TargetCommand,
 ): Promise<AttemptResult> {
   throw new Error('Library bulk Collection remove is not implemented');
 }
@@ -261,12 +369,14 @@ export async function executeCollectionRemoveTarget(
  * cannot restore an initiator, issue personal effects or disclose target data.
  */
 export async function reconcileBulkTarget(
-  _dependencies: BulkDependencies, _command: TargetCommand,
+  _dependencies: BulkDependencies,
+  _command: TargetCommand,
 ): Promise<AttemptResult> {
   throw new Error('Library bulk reconciliation is not implemented');
 }
 export async function acknowledgeBulkOutcome(
-  _dependencies: BulkDependencies, _evidence: TargetEvidence,
+  _dependencies: BulkDependencies,
+  _evidence: TargetEvidence,
 ): Promise<OperationView> {
   throw new Error('Library bulk outcome transition is not implemented');
 }

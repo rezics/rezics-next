@@ -22,38 +22,87 @@
  * it does not turn pending/reconciling into success. Tests control retry clocks.
  */
 import type {
-  BulkAdmission, BulkCounters, BulkPhase, EntryExpectation, ImmutableTarget,
-  OperationResult, OperationView, OutcomePage, ReceiptLocator, TargetEvidence, TargetState,
+  BulkAdmission,
+  BulkCounters,
+  BulkPhase,
+  EntryExpectation,
+  ImmutableTarget,
+  OperationResult,
+  OperationView,
+  OutcomePage,
+  ReceiptLocator,
+  TargetEvidence,
+  TargetState,
 } from '../services/kernel/src/library/bulk-contract.ts';
 import type { EntryState } from '../services/kernel/src/library/entry-model.ts';
 
 export type { BulkAdmission, OperationResult, OperationView, OutcomePage };
 export type Persona = 'owner' | 'other' | 'anonymous' | 'suspended' | 'delegated' | 'consent_revoked';
-export type Boundary = 'before_discovery_page' | 'after_discovery_commit' | 'after_discovery_seal'
-  | 'after_occurrence_commit' | 'before_occurrence_ack' | 'after_occurrence_seal'
-  | 'before_target_command' | 'before_target_commit' | 'after_target_commit'
-  | 'before_outcome_ack' | 'after_outcome_ack' | 'before_segment_enqueue' | 'after_segment_enqueue';
+export type Boundary =
+  | 'before_discovery_page'
+  | 'after_discovery_commit'
+  | 'after_discovery_seal'
+  | 'after_occurrence_commit'
+  | 'before_occurrence_ack'
+  | 'after_occurrence_seal'
+  | 'before_target_command'
+  | 'before_target_commit'
+  | 'after_target_commit'
+  | 'before_outcome_ack'
+  | 'after_outcome_ack'
+  | 'before_segment_enqueue'
+  | 'after_segment_enqueue';
 export type AuthorityChange =
   | { kind: 'scope'; action: string; enabled: boolean }
   | { kind: 'role'; action: string; resourceId?: string; enabled: boolean }
   | { kind: 'gate'; gate: 'personal_library' | 'collections'; resourceId?: string; enabled: boolean }
   | { kind: 'consent' | 'delegation' | 'account'; enabled: boolean };
 export interface BulkInspection {
-  operations: { id: string; route: number; view: OperationView; sourceDigest: string;
-    entryHighWater: string; occurrenceHighWater: string | null; generation: number;
-    creationCommitment: string; durableInitiatorVerified: boolean }[];
-  targets: { operationId: string; target: ImmutableTarget; state: TargetState;
-    receipt: ReceiptLocator; evidence: TargetEvidence | null }[];
+  operations: {
+    id: string;
+    route: number;
+    view: OperationView;
+    sourceDigest: string;
+    entryHighWater: string;
+    occurrenceHighWater: string | null;
+    generation: number;
+    creationCommitment: string;
+    durableInitiatorVerified: boolean;
+  }[];
+  targets: {
+    operationId: string;
+    target: ImmutableTarget;
+    state: TargetState;
+    receipt: ReceiptLocator;
+    evidence: TargetEvidence | null;
+  }[];
   entries: { subjectId: string; state: EntryState; revision: number; expectation: EntryExpectation }[];
   members: { id: string; collectionId: string; subjectId: string; incarnation: string; admissionSequence: string }[];
   history: { subjectId: string; sessions: string[]; changes: string[]; copies: string[]; follows: string[] }[];
   receipts: { locator: ReceiptLocator; transactionId: string; response: unknown }[];
-  steps: { operationId: string; phase: BulkPhase; rawCandidates: number; targets: number;
-    externalProbes: number; pagesInSegment: number; inputBytes: number; resultBytes: number;
-    heldPartitions: number[]; chunkIndex: number | null; rateUnits: number | null }[];
+  steps: {
+    operationId: string;
+    phase: BulkPhase;
+    rawCandidates: number;
+    targets: number;
+    externalProbes: number;
+    pagesInSegment: number;
+    inputBytes: number;
+    resultBytes: number;
+    heldPartitions: number[];
+    chunkIndex: number | null;
+    rateUnits: number | null;
+  }[];
   /** Actual attempted spend calls and persisted counter deltas, not target counts. */
-  rate: { operationId: string; index: number; units: number; charged: number; allowed: boolean;
-    restoredActorId: string; family: string }[];
+  rate: {
+    operationId: string;
+    index: number;
+    units: number;
+    charged: number;
+    allowed: boolean;
+    restoredActorId: string;
+    family: string;
+  }[];
   events: { type: string; data: unknown; partition: number }[];
   enqueueIntents: { operationId: string; generation: number; acknowledged: boolean }[];
 }
@@ -65,9 +114,19 @@ export interface LibraryBulkDriver {
   now(): string;
   /** A fresh JSON-encoded UUIDv4 Idempotency-Key header value, no product rules. */
   key(): string;
-  request(as: Persona, input: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string;
-    body?: unknown; headers?: Record<string, string> }): Promise<Response>;
-  provisionEntries(count: number, input?: { state?: EntryState; primaryType?: string; as?: Persona }): Promise<string[]>;
+  request(
+    as: Persona,
+    input: {
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+      path: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+    },
+  ): Promise<Response>;
+  provisionEntries(
+    count: number,
+    input?: { state?: EntryState; primaryType?: string; as?: Persona },
+  ): Promise<string[]>;
   provisionSubject(input?: { primaryType?: string; versionOf?: string }): Promise<string>;
   provisionCollection(input?: { as?: Persona; members?: readonly string[] }): Promise<string>;
   provisionHistory(subjectId: string): Promise<void>;
@@ -91,14 +150,21 @@ export interface LibraryBulkDriver {
   inspect(): Promise<BulkInspection>;
   rotateCursorKey(input: { retainPrevious: boolean }): Promise<void>;
   /** Fault injected at actual dependency boundary; unavailable is never denial. */
-  fault(input: { dependency: 'enqueue' | 'receipt_read' | 'source_read' | 'write_rate';
-    mode: 'unavailable' | 'missing' | 'refused' | 'clear'; retryAfter?: number }): Promise<void>;
+  fault(input: {
+    dependency: 'enqueue' | 'receipt_read' | 'source_read' | 'write_rate';
+    mode: 'unavailable' | 'missing' | 'refused' | 'clear';
+    retryAfter?: number;
+  }): Promise<void>;
   /** Expire only owned DBOS history / run production bounded native GC. */
   collect(input: { dbos?: boolean; native?: boolean }): Promise<void>;
   /** Grow independently, preserving fixture identities. No tested write is replayed by measure. */
-  seed(scale: number, axis: 'entries' | 'sparse' | 'sessions' | 'jobs' | 'duplicates' | 'outcomes' | 'accounts'): Promise<void>;
-  measure<T>(body: () => Promise<T>): Promise<{ value: T; statements: number; rows: number;
-    buffers: number; sequentialRelations: string[] }>;
+  seed(
+    scale: number,
+    axis: 'entries' | 'sparse' | 'sessions' | 'jobs' | 'duplicates' | 'outcomes' | 'accounts',
+  ): Promise<void>;
+  measure<T>(
+    body: () => Promise<T>,
+  ): Promise<{ value: T; statements: number; rows: number; buffers: number; sequentialRelations: string[] }>;
   close(): Promise<void>;
 }
 
