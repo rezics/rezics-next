@@ -45,6 +45,121 @@ function attribute(tag: string, name: string): string | undefined {
   return value === undefined ? undefined : unescapeXml(value);
 }
 
+type GrowthFailure = { title: string; message: string };
+type ReportedFailure = GrowthFailure & { type: string };
+
+/** Growth errors and their test titles, when the JUnit report includes complete per-failure metadata. */
+function junitFailures(xml: string): ReportedFailure[] | null {
+  const root = xml.match(/<testsuites\b[^>]*>/)?.[0];
+  if (!root) return null;
+  const failures = attribute(root, 'failures');
+  const errors = attribute(root, 'errors');
+  if (failures === undefined || errors === undefined) return null;
+  const expectedCount = Number(failures) + Number(errors);
+  if (!Number.isInteger(expectedCount)) return null;
+
+  const results: ReportedFailure[] = [];
+  const testcaseRanges: Array<[number, number]> = [];
+  const testcases = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase\s*>)/g;
+  for (const match of xml.matchAll(testcases)) {
+    const tag = `<testcase ${match[1]}>`;
+    const title = attribute(tag, 'classname');
+    const name = attribute(tag, 'name') ?? '';
+    const body = match[2] ?? '';
+    testcaseRanges.push([match.index!, match.index! + match[0].length]);
+    const errorsInTest = /<(failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1\s*>)/g;
+    for (const failure of body.matchAll(errorsInTest)) {
+      const failureTag = `<${failure[1]} ${failure[2]}>`;
+      const type = attribute(failureTag, 'type');
+      const message = attribute(failureTag, 'message');
+      if (type === undefined || message === undefined) return null;
+      results.push({ title: title ? `${title} ${name}` : name, message, type });
+    }
+  }
+
+  // Every reported failure must belong to a test case and have type and message attributes.
+  const allFailureTags = Array.from(xml.matchAll(/<(?:failure|error)\b/g));
+  if (allFailureTags.length !== expectedCount || results.length !== expectedCount) return null;
+  if (
+    allFailureTags.some(
+      (failure) => !testcaseRanges.some(([start, end]) => failure.index! > start && failure.index! < end),
+    )
+  ) {
+    return null;
+  }
+  return results;
+}
+
+/** Bun's console output fallback when a JUnit report does not preserve failure type and message attributes. */
+function outputGrowthFailures(output: string): GrowthFailure[] | null {
+  const failures: GrowthFailure[] = [];
+  let block: string[] = [];
+  let finished = false;
+  for (const line of output.split(/\r\n?|\n/)) {
+    const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
+    if (failure) {
+      const message = block.find((candidate) => candidate.startsWith('GrowthBoundError:'));
+      if (message === undefined || block.some((candidate) => /^(error:|# Unhandled)/.test(candidate))) return null;
+      failures.push({ title: failure[1]!, message: message.slice('GrowthBoundError:'.length).trim() });
+      block = [];
+    } else if (/^\s*\d+ (pass|fail|skip|todo)\b/.test(line) || line.startsWith('Ran ')) {
+      finished = true;
+    } else if (!finished) {
+      block.push(line);
+    }
+  }
+  return failures.length > 0 && block.every((line) => line.trim() === '') ? failures : null;
+}
+
+/**
+ * Reruns each eligible file once, in order. A file is eligible only when every reported test failure is a growth
+ * bound error; failed files that cannot be classified this way or fail again remain in the result.
+ */
+export async function rerunGrowthFailures<T>(
+  outcomes: FileOutcome<T>[],
+  rerun: (file: string) => Promise<FileOutcome<T>>,
+  classify: (outcome: FileOutcome<T>) => GrowthFailure[] | null,
+  write: (text: string) => void = (text) => void process.stderr.write(text),
+): Promise<{ failed: FileOutcome<T>[] }> {
+  const failed: FileOutcome<T>[] = [];
+  const loadSensitive: string[] = [];
+  for (const outcome of outcomes) {
+    if (!outcome.error) continue;
+    const failures = classify(outcome);
+    if (!failures || failures.length === 0) {
+      failed.push(outcome);
+      continue;
+    }
+    const again = await rerun(outcome.file);
+    if (again.error) {
+      write(`${outcome.error.message}\n${outcome.file}: failed again alone:\n${again.error.message}\n`);
+      failed.push(outcome);
+      continue;
+    }
+    for (const failure of failures) {
+      const message = failure.message.split('\n')[0]!;
+      loadSensitive.push(`load-sensitive growth check: ${outcome.file} :: ${failure.title} :: ${message}`);
+    }
+  }
+  if (loadSensitive.length > 0) {
+    write(`Load-sensitive growth checks (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
+  }
+  return { failed };
+}
+
+function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | undefined): GrowthFailure[] | null {
+  if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
+  if (report) {
+    const failures = junitFailures(report);
+    if (failures !== null) {
+      return failures.length > 0 && failures.every((failure) => failure.type === 'GrowthBoundError')
+        ? failures.map(({ title, message }) => ({ title, message }))
+        : null;
+    }
+  }
+  return outputGrowthFailures(outcome.error.message);
+}
+
 /** Each test case's name (prefixed by its suite) and time in seconds, from Bun's JUnit report. */
 export function parseJunit(xml: string): TestTiming[] {
   return Array.from(xml.matchAll(/<testcase\b[^>]*>/g), ([tag]) => {
@@ -295,6 +410,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
   const reports = mkdtempSync(join(tmpdir(), `${suite.service}-check-`));
   const recorder = createRecorder();
   const slots = new Map<string, StackSlot>();
+  const reportsByFile = new Map<string, string>();
   let timingsPath: string | null = null;
   try {
     timingsPath = timingsDirectory(suite.service, suite.directory, env);
@@ -302,42 +418,48 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
     console.warn(`Check timings are not recorded: ${error instanceof Error ? error.message : String(error)}`);
   }
   const latest = timingsPath ? readLatest(timingsPath) : {};
-  const runner = recorder.wrap<string>(
-    {
-      // Each file gets a fresh copy so its result cannot depend on writes from another file.
-      create: async (file, database) => {
-        const slot = await acquireStackSlot(file, env);
-        slots.set(database, slot);
-        try {
-          await suite.createDatabase(database);
-        } catch (error) {
-          slots.delete(database);
-          await slot.release();
-          throw error;
-        }
-      },
-      run: async (file, database) => {
-        const slot = slots.get(database);
-        const result = await capture(
-          'bun',
-          testCommand(file, join(reports, `${database}.xml`)),
-          { ...suite.environment(database), ...slot?.env },
-          suite.directory,
-        );
-        if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
-        return result.output;
-      },
-      drop: async (_file, database) => {
-        const slot = slots.get(database);
-        try {
-          await suite.dropDatabase(database);
-        } finally {
-          slots.delete(database);
-          await slot?.release();
-        }
-      },
+  const laneRunner: FileRunner<string> = {
+    // Each file gets a fresh copy so its result cannot depend on writes from another file.
+    create: async (file, database) => {
+      const slot = await acquireStackSlot(file, env);
+      slots.set(database, slot);
+      try {
+        await suite.createDatabase(database);
+      } catch (error) {
+        slots.delete(database);
+        await slot.release();
+        throw error;
+      }
     },
-    async (_file, database) => parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
+    run: async (file, database) => {
+      const slot = slots.get(database);
+      const report = join(reports, `${database}.xml`);
+      const result = await capture(
+        'bun',
+        testCommand(file, report),
+        { ...suite.environment(database), ...slot?.env },
+        suite.directory,
+      );
+      try {
+        reportsByFile.set(file, readFileSync(report, 'utf8'));
+      } catch {
+        reportsByFile.delete(file);
+      }
+      if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
+      return result.output;
+    },
+    drop: async (_file, database) => {
+      const slot = slots.get(database);
+      try {
+        await suite.dropDatabase(database);
+      } finally {
+        slots.delete(database);
+        await slot?.release();
+      }
+    },
+  };
+  const runner = recorder.wrap<string>(laneRunner, async (_file, database) =>
+    parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
   );
   try {
     const outcomes = await runTestFiles(
@@ -355,8 +477,17 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       },
       env,
     );
+    let rerunIndex = 0;
+    const { failed } = await rerunGrowthFailures(
+      outcomes,
+      async (file) => {
+        const [outcome] = await scheduleFiles(`${suite.service}_growth_${++rerunIndex}_test`, [file], 1, laneRunner);
+        return outcome!;
+      },
+      (outcome) => classifyGrowthFailures(outcome, reportsByFile.get(outcome.file)),
+    );
     if (timingsPath) writeTimings(timingsPath, recorder.timings(), { partial: suite.partial });
-    return { failed: outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file), concurrency };
+    return { failed: failed.map((outcome) => outcome.file), concurrency };
   } finally {
     rmSync(reports, { recursive: true, force: true });
   }

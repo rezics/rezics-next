@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import {
   capture as captureIn,
+  rerunGrowthFailures,
   runLaneSuite,
   runTestFiles as runTestFilesIn,
   scheduleFiles as scheduleFilesIn,
@@ -215,7 +216,7 @@ export function fileEnvironment(
   };
 }
 
-export { testCommand };
+export { rerunGrowthFailures, testCommand };
 
 /** Run the planned test files longest first, each on its own database. */
 export function runTestFiles<T>(
