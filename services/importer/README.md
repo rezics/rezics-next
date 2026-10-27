@@ -37,7 +37,17 @@ Keep the same SQLite state path when resuming. Prepared writes and receipts are 
 
 Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Import transport defaults to three attempts and permits at most five. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
 
+Record write width starts at `recordConcurrency` (default 16). After the transport exhausts its unchanged attempts and backoff, a `429` or a `503` problem with `retryable: true` halves the width, rounding down to at least one. The failed write goes to the front of the queue with the same envelope and command keys; its record resumes at that write, preserving completed planning, bootstrap and cover resolution. Nothing new starts while active records meet or exceed the width. Each successful write adds one slot up to the configured concurrency. A write started alone at width one that still overloads fails as before; older requests from a wider cohort can requeue while it drains. Other failures retain their existing behaviour. Width persists across pages and phases within a run and resets for the next run.
+
+`tests/write-width.test.ts` verifies this behaviour in `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes`.
+
 ## Cost
+
+### Adaptive writes
+
+Each successful write updates one width counter and checks admission. A decrease and front-of-queue insertion take constant time. In-flight records are capped by `recordConcurrency`; paused records retain only the failed write's existing continuation and envelope, and their count cannot exceed the cohort present at a decrease. Queued records have priority over fresh records, so the combined live cohort remains bounded by `recordConcurrency`. No reads or persistent storage are added. Requeued writes incur another bounded transport invocation; a persistent outage reaches a width-one failure, while successful writes can restore concurrency. The transport's `maxAttempts`, backoff and per-request limits are unchanged.
+
+Cost evidence: `tests/write-width.test.ts`, `contention answered with retryable 503 narrows the write width and every record lands once` (bounded live records and one effect per command key), `a single writer that still gets retryable 503 fails the run as before` (bounded requests and virtual waits), and `width grows back to the configured concurrency after successful writes` (recovery to the configured cap).
 
 ### Credentials
 

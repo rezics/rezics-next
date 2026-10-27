@@ -17,6 +17,7 @@ import type {
   RunStatus,
   SourceRegistration,
 } from './import-contract.ts';
+import { ImportTransportError } from './import-client.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
@@ -90,6 +91,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const success = (result: BatchWriteResult['results'][number]) => result.status === 200 || result.status === 201;
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
+type Write = <T>(operation: () => Promise<T>) => Promise<T>;
 type Planned = { kind: Kind; deferredCover: boolean; conversion?: ImportConversion };
 
 // Native source keys are not normalized into different record identities. Compound
@@ -109,6 +111,7 @@ export class Importer {
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
   private readonly recordConcurrency: number;
+  private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
   private readonly mediaDeadlineMs: number;
   private closing = false;
 
@@ -223,11 +226,11 @@ export class Importer {
     }
   }
 
-  private async send(request: BatchWriteRequest, signal: AbortSignal): Promise<BatchWriteResult> {
+  private async send(request: BatchWriteRequest, signal: AbortSignal, write: Write): Promise<BatchWriteResult> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     const text = JSON.stringify(request);
     if (checkBatch(request).length || Buffer.byteLength(text) > 65536) throw new Error('Invalid public envelope');
-    const response = await this.options.transport.batchWrite(request);
+    const response = await write(() => this.options.transport.batchWrite(request));
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     this.validateResult(request, response);
     if (response.results.some(success)) {
@@ -275,38 +278,99 @@ export class Importer {
     values: readonly T[],
     signal: AbortSignal,
     key: (value: T) => string,
-    operation: (value: T) => Promise<R>,
+    operation: (value: T, write: Write) => Promise<R>,
   ): Promise<R[]> {
     const results = new Array<R>(values.length);
+    const width = this.writeWidths.get(signal) ?? { width: this.recordConcurrency };
+    this.writeWidths.set(signal, width);
     let next = 0;
+    let active = 0;
+    let running = 0;
     let stopped = false;
     let failure: unknown;
-    const worker = async () => {
-      for (;;) {
-        if (stopped) return;
-        if (signal.aborted) {
-          failure ??= new Interrupted('Import was interrupted');
-          stopped = true;
-          return;
+    // Paused records retain their stack at the failed write, including its exact
+    // envelope. Earlier planning, bootstrap and media effects are not repeated.
+    type Retry = { resume(): void; next: Retry | undefined };
+    let retry: Retry | undefined;
+    await new Promise<void>((done) => {
+      const resume = () => {
+        const entry = retry!;
+        retry = entry.next;
+        active++;
+        entry.resume();
+      };
+      const aborted = () => {
+        failure ??= new Interrupted('Import was interrupted');
+        stopped = true;
+        pump();
+      };
+      const pump = () => {
+        if (stopped) {
+          while (retry) resume();
+        } else {
+          while (active < width.width && (retry || next < values.length)) {
+            if (retry) resume();
+            else start(next++);
+          }
         }
-        const index = next++;
-        if (index >= values.length) return;
+        if (!running && (stopped || next >= values.length)) {
+          signal.removeEventListener('abort', aborted);
+          done();
+        }
+      };
+      const write: Write = async (effect) => {
+        for (;;) {
+          if (signal.aborted) throw new Interrupted('Import was interrupted');
+          const singleWriter = width.width === 1 && active === 1;
+          try {
+            const result = await effect();
+            width.width = Math.min(this.recordConcurrency, width.width + 1);
+            pump();
+            return result;
+          } catch (error) {
+            const overload =
+              error instanceof ImportTransportError &&
+              (error.status === 429 || (error.status === 503 && error.retryable));
+            // An older wide cohort can finish after another record narrowed to
+            // one. Only a write started alone at width one proves an outage.
+            if (!overload || singleWriter || signal.aborted) throw error;
+            width.width = Math.max(1, Math.floor(width.width / 2));
+            active--;
+            await new Promise<void>((resolve) => {
+              retry = { resume: resolve, next: retry };
+              pump();
+            });
+          }
+        }
+      };
+      const start = (index: number) => {
+        active++;
+        running++;
         const value = values[index]!;
         const recordKey = key(value);
         this.options.observer?.onRecordActive?.(phase, recordKey, true);
-        try {
-          results[index] = await operation(value);
-        } catch (error) {
-          failure ??= error;
-          stopped = true;
-          this.runControllers.get(signal)?.abort(error);
-          return;
-        } finally {
-          this.options.observer?.onRecordActive?.(phase, recordKey, false);
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(this.recordConcurrency, values.length) }, worker));
+        void operation(value, write)
+          .then(
+            (result) => {
+              results[index] = result;
+            },
+            (error: unknown) => {
+              failure ??= error;
+              stopped = true;
+              this.runControllers.get(signal)?.abort(error);
+            },
+          )
+          .finally(() => {
+            active--;
+            running--;
+            this.options.observer?.onRecordActive?.(phase, recordKey, false);
+            pump();
+          });
+      };
+      signal.addEventListener('abort', aborted, { once: true });
+      if (signal.aborted) aborted();
+      else pump();
+    });
     if (failure !== undefined) throw failure;
     return results;
   }
@@ -353,6 +417,7 @@ export class Importer {
     staged: Staged<SourceProjection>,
     conversion: ImportConversion,
     signal: AbortSignal,
+    write: Write,
   ): Promise<string | null> {
     const owner = { source: staged.row.source, external_id: staged.row.recordKey };
     const bindings = this.session.bindings;
@@ -372,13 +437,13 @@ export class Importer {
       });
     }
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
-    const result = await this.send(request, signal);
+    const result = await this.send(request, signal, write);
     this.acknowledge(owner, request, result);
     const bound = bindings.claim(owner);
     return bound?.state === 'bound' ? bound.subject : null;
   }
 
-  private async dispatch(run: Run, pending: Pending, signal: AbortSignal): Promise<boolean> {
+  private async dispatch(run: Run, pending: Pending, signal: AbortSignal, write: Write): Promise<boolean> {
     const owner = { source: run.source, external_id: pending.recordKey };
     const omissions = await this.fences(owner, signal);
     // An empty commands argument augments only omission proof, retaining the
@@ -395,7 +460,7 @@ export class Importer {
       for (const command of commands)
         this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
     });
-    const result = await this.send(request, signal);
+    const result = await this.send(request, signal, write);
     // Returned identities must be durable before RunStore can resolve a record.
     this.atomic(() => {
       this.acknowledge(owner, request, result);
@@ -419,9 +484,9 @@ export class Importer {
         page,
         signal,
         (pending) => pending.recordKey,
-        async (pending) => {
+        async (pending, write) => {
           try {
-            return await this.dispatch(run, pending, signal);
+            return await this.dispatch(run, pending, signal, write);
           } catch (error) {
             if (error instanceof Interrupted) throw error;
             return false;
@@ -440,6 +505,7 @@ export class Importer {
     run: Run,
     staged: Staged<SourceProjection>,
     signal: AbortSignal,
+    write: Write,
   ): Promise<Planned | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     const store = this.session.store;
@@ -465,7 +531,7 @@ export class Importer {
         !omissions.some((o) => o.field_group === 'facts') &&
         !('outcome' in conversion && conversion.outcome === 'ignored')
       ) {
-        subject = await this.bootstrap(registration, staged, conversion, signal);
+        subject = await this.bootstrap(registration, staged, conversion, signal, write);
         if (!subject) return null;
       }
       if (subject) {
@@ -501,18 +567,20 @@ export class Importer {
       const { source, ...value } = conversion.sourceStatistic;
       const writeSourceStatistic = this.options.transport.writeSourceStatistic;
       if (!writeSourceStatistic) throw new Error('Source statistic transport is unavailable');
-      await writeSourceStatistic.call(
-        this.options.transport,
-        {
-          subjectId: subject,
-          source,
-          value,
-          idempotencyKey: operationKey(
-            owner,
-            `${run.id}:source-statistic:${hash(JSON.stringify(conversion.sourceStatistic))}`,
-          ),
-        },
-        signal,
+      await write(() =>
+        writeSourceStatistic.call(
+          this.options.transport,
+          {
+            subjectId: subject,
+            source,
+            value,
+            idempotencyKey: operationKey(
+              owner,
+              `${run.id}:source-statistic:${hash(JSON.stringify(conversion.sourceStatistic))}`,
+            ),
+          },
+          signal,
+        ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
     }
@@ -578,6 +646,7 @@ export class Importer {
     run: Run,
     deferred: DeferredCover<SourceProjection>,
     signal: AbortSignal,
+    write: Write,
   ): Promise<{ outcome: 'pending' | 'failed' | 'resolved'; kind: Kind }> {
     const { row } = deferred;
     const owner = { source: row.source, external_id: row.recordKey };
@@ -663,7 +732,7 @@ export class Importer {
         for (const command of commands)
           this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
       });
-      const result = await this.send(request, signal);
+      const result = await this.send(request, signal, write);
       this.acknowledge(owner, request, result);
       if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
     }
@@ -696,9 +765,9 @@ export class Importer {
           page,
           signal,
           (entry) => entry.row.recordKey,
-          async (entry) => {
+          async (entry, write) => {
             try {
-              return await this.resolveCover(registration, run, entry, signal);
+              return await this.resolveCover(registration, run, entry, signal, write);
             } catch (error) {
               if (error instanceof Interrupted) throw error;
               return { outcome: 'failed' as const, kind: entry.kind };
@@ -859,7 +928,7 @@ export class Importer {
           page,
           signal,
           (staged) => staged.row.recordKey,
-          async (staged): Promise<Planned | 'failed' | null> => {
+          async (staged, write): Promise<Planned | 'failed' | null> => {
             const { row, projection } = staged;
             // Prior attempts can already have classified disappeared rows in this
             // journal. The dedicated vanished index owns that enumeration.
@@ -875,10 +944,10 @@ export class Importer {
                       source: row.source,
                       converterRevision: row.converter_revision,
                     });
-              const planned = await this.plan(configured, run, staged, signal);
+              const planned = await this.plan(configured, run, staged, signal, write);
               if (!planned) return 'failed';
               for (const pending of store.pendingRecord(run, row.recordKey))
-                if (!(await this.dispatch(run, pending, signal))) return 'failed';
+                if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
               return planned;
             } catch (error) {
               if (error instanceof Interrupted) throw error;
@@ -910,7 +979,7 @@ export class Importer {
           page,
           signal,
           (prior) => prior.recordKey,
-          async (prior): Promise<Planned | 'failed'> => {
+          async (prior, write): Promise<Planned | 'failed'> => {
             try {
               const planned = await this.plan(
                 registration,
@@ -920,10 +989,11 @@ export class Importer {
                   projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
                 },
                 signal,
+                write,
               );
               if (!planned) return 'failed';
               for (const pending of store.pendingRecord(run, prior.recordKey))
-                if (!(await this.dispatch(run, pending, signal))) return 'failed';
+                if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
               return planned;
             } catch (error) {
               if (error instanceof Interrupted) throw error;

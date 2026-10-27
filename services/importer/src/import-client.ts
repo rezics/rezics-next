@@ -161,6 +161,8 @@ export class ImportTransportError extends Error {
   constructor(
     readonly status?: number,
     readonly type?: string,
+    readonly code?: string,
+    readonly retryable = false,
   ) {
     super('Import transport request failed');
     this.name = 'ImportTransportError';
@@ -182,7 +184,13 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
     (type !== undefined && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}(?![\s\S])/.test(type))
       ? type
       : undefined;
-  return new ImportTransportError(reply.response?.status, safeType);
+  const field = (name: string): unknown =>
+    typeof value === 'object' && value !== null && !types.isProxy(value)
+      ? Object.getOwnPropertyDescriptor(value, name)?.value
+      : undefined;
+  const code = field('code');
+  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
+  return new ImportTransportError(reply.response?.status, safeType, safeCode, field('retryable') === true);
 }
 async function response(call: () => Promise<ClientResponse>, expected: number, signal?: AbortSignal) {
   signal?.throwIfAborted();

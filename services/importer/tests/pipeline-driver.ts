@@ -124,6 +124,7 @@ class Scheduler {
   }
 
   timer(callback: () => void, ms: number): () => void {
+    this.active++;
     const event: Event = {
       at: this.now + ms,
       key: '',
@@ -134,7 +135,11 @@ class Scheduler {
     };
     this.events.push(event);
     return () => {
-      this.events = this.events.filter((entry) => entry !== event);
+      const index = this.events.indexOf(event);
+      if (index !== -1) {
+        this.events.splice(index, 1);
+        this.active--;
+      }
     };
   }
 
