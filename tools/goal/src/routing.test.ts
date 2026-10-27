@@ -46,3 +46,8 @@ test('a brief parses its pinned model and effort from front matter', () => {
   expect(parsed.model).toBe('gpt-6.1-sol');
   expect(parsed.effort).toBe('xhigh');
 });
+
+test('a research brief stays research when it cites sources or names risk areas', () => {
+  expect(classifyTask({ ...brief(), kind: 'research', citesSources: true } as never)).toBe('research');
+  expect(classifyTask({ ...brief(), kind: 'research', riskAreas: ['disclosure'] } as never)).toBe('research');
+});
