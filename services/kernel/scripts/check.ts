@@ -527,7 +527,7 @@ async function main(): Promise<void> {
     if (lintFiles.length) run(oxlint, ['--config', '../../.oxlintrc.json', ...lintFiles], env);
 
     const formatFiles = formattedFiles(plan.files);
-    if (formatFiles.length) run(oxfmt, ['--check', ...formatFiles], env);
+    if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);
   }
 
   const testFiles = plan.tests;

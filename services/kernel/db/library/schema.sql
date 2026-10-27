@@ -44,6 +44,84 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: bulk_effect; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.bulk_effect (
+    route integer NOT NULL,
+    operation_id uuid NOT NULL,
+    ordinal bigint NOT NULL,
+    target_anchor_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    source_route integer NOT NULL,
+    source_id uuid NOT NULL,
+    source_digest text NOT NULL,
+    target jsonb NOT NULL,
+    receipt jsonb NOT NULL,
+    command_kind text NOT NULL,
+    idempotency_key text NOT NULL,
+    request_digest text NOT NULL,
+    transaction_id uuid NOT NULL,
+    outcome text NOT NULL,
+    reason text,
+    resulting_member_id uuid,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT bulk_effect_check CHECK ((route = ((get_byte(uuid_send(target_anchor_id), 10) * 256) + get_byte(uuid_send(target_anchor_id), 11)))),
+    CONSTRAINT bulk_effect_check1 CHECK ((source_route = ((get_byte(uuid_send(source_id), 10) * 256) + get_byte(uuid_send(source_id), 11)))),
+    CONSTRAINT bulk_effect_command_kind_check CHECK (((char_length(command_kind) >= 1) AND (char_length(command_kind) <= 255))),
+    CONSTRAINT bulk_effect_idempotency_key_check CHECK (((char_length(idempotency_key) >= 1) AND (char_length(idempotency_key) <= 255))),
+    CONSTRAINT bulk_effect_ordinal_check CHECK ((ordinal >= 0)),
+    CONSTRAINT bulk_effect_outcome_check CHECK ((outcome = ANY (ARRAY['applied'::text, 'no_effect'::text, 'conflict'::text, 'denied'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT bulk_effect_reason_check CHECK ((reason = ANY (ARRAY['revision_mismatch'::text, 'incarnation_mismatch'::text, 'missing_target'::text, 'authority_lost'::text, 'target_denied'::text, 'collection_full'::text, 'invalid_subject'::text, 'dependency_unavailable'::text, 'deadline'::text, 'cancel_requested'::text, 'evidence_missing'::text, 'execution_expired'::text]))),
+    CONSTRAINT bulk_effect_receipt_check CHECK ((jsonb_typeof(receipt) = 'object'::text)),
+    CONSTRAINT bulk_effect_request_digest_check CHECK ((request_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT bulk_effect_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT bulk_effect_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT bulk_effect_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535))),
+    CONSTRAINT bulk_effect_target_check CHECK ((jsonb_typeof(target) = 'object'::text))
+);
+
+
+--
+-- Name: bulk_target; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.bulk_target (
+    route integer NOT NULL,
+    operation_id uuid NOT NULL,
+    ordinal bigint NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    target_kind text NOT NULL,
+    collection_id uuid,
+    member_id uuid,
+    target jsonb NOT NULL,
+    source_digest text NOT NULL,
+    receipt jsonb NOT NULL,
+    created_transaction_id uuid NOT NULL,
+    state text NOT NULL,
+    reason text,
+    resulting_member_id uuid,
+    evidence jsonb,
+    chunk_index integer NOT NULL,
+    CONSTRAINT bulk_target_check CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
+    CONSTRAINT bulk_target_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT bulk_target_check2 CHECK ((((target_kind = 'subject'::text) AND (collection_id IS NULL) AND (member_id IS NULL)) OR ((target_kind = 'occurrence'::text) AND (collection_id IS NOT NULL) AND (member_id IS NOT NULL)))),
+    CONSTRAINT bulk_target_check3 CHECK ((((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)) = ((get_byte(uuid_send(member_id), 10) * 256) + get_byte(uuid_send(member_id), 11)))),
+    CONSTRAINT bulk_target_chunk_index_check CHECK ((chunk_index >= 0)),
+    CONSTRAINT bulk_target_evidence_check CHECK ((jsonb_typeof(evidence) = 'object'::text)),
+    CONSTRAINT bulk_target_ordinal_check CHECK ((ordinal >= 0)),
+    CONSTRAINT bulk_target_reason_check CHECK ((reason = ANY (ARRAY['revision_mismatch'::text, 'incarnation_mismatch'::text, 'missing_target'::text, 'authority_lost'::text, 'target_denied'::text, 'collection_full'::text, 'invalid_subject'::text, 'dependency_unavailable'::text, 'deadline'::text, 'cancel_requested'::text, 'evidence_missing'::text, 'execution_expired'::text]))),
+    CONSTRAINT bulk_target_receipt_check CHECK ((jsonb_typeof(receipt) = 'object'::text)),
+    CONSTRAINT bulk_target_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT bulk_target_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT bulk_target_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'reconciling'::text, 'applied'::text, 'no_effect'::text, 'conflict'::text, 'denied'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT bulk_target_target_check CHECK ((jsonb_typeof(target) = 'object'::text)),
+    CONSTRAINT bulk_target_target_kind_check CHECK ((target_kind = ANY (ARRAY['subject'::text, 'occurrence'::text])))
+);
+
+
+--
 -- Name: collection; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -349,6 +427,22 @@ CREATE TABLE library.subject_listing (
 
 
 --
+-- Name: bulk_effect bulk_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_effect
+    ADD CONSTRAINT bulk_effect_pkey PRIMARY KEY (route, operation_id, ordinal);
+
+
+--
+-- Name: bulk_target bulk_target_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_target
+    ADD CONSTRAINT bulk_target_pkey PRIMARY KEY (route, operation_id, ordinal);
+
+
+--
 -- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -458,6 +552,41 @@ ALTER TABLE ONLY library.subject_collection
 
 ALTER TABLE ONLY library.subject_listing
     ADD CONSTRAINT subject_listing_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: bulk_effect_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_effect_expiry ON library.bulk_effect USING btree (route, expires_at, operation_id, ordinal);
+
+
+--
+-- Name: bulk_target_occurrence; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX bulk_target_occurrence ON library.bulk_target USING btree (route, operation_id, collection_id, member_id) WHERE (target_kind = 'occurrence'::text);
+
+
+--
+-- Name: bulk_target_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_pending ON library.bulk_target USING btree (route, operation_id, ordinal) WHERE (state = ANY (ARRAY['pending'::text, 'reconciling'::text]));
+
+
+--
+-- Name: bulk_target_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_state ON library.bulk_target USING btree (route, operation_id, state, ordinal);
+
+
+--
+-- Name: bulk_target_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX bulk_target_subject ON library.bulk_target USING btree (route, operation_id, subject_id) WHERE (target_kind = 'subject'::text);
 
 
 --

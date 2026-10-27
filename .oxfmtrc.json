@@ -4,6 +4,7 @@
   "sortPackageJson": false,
   "ignorePatterns": [
     "contracts/**",
+    "services/kernel/test/library/bulk-target-schema.test.ts",
     "packages/client/src/kernel/**",
     "packages/document/schema/**",
     "packages/ui/src/shadcn/**",
