@@ -127,6 +127,8 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     paths: list(raw.paths, 'paths', true),
     riskAreas: list(raw.riskAreas, 'riskAreas'),
     ...(raw.target === 'stabilize' ? { target: 'stabilize' as const } : {}),
+    ...(raw.model === undefined ? {} : { model: text(raw.model, 'model') }),
+    ...(raw.effort === undefined ? {} : { effort: text(raw.effort, 'effort') }),
     acceptance: {
       command: list(acceptance.command, 'acceptance.command', true),
       tests: list(acceptance.tests, 'acceptance.tests', true),

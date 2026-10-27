@@ -91,6 +91,9 @@ export type Brief = {
   markdown: string;
   /** A fix for the frozen promotion candidate bases on and integrates into the stabilize branch. */
   target?: 'stabilize';
+  /** A Codex model (and effort) this task runs on instead of its class route, such as deep research on Sol max. */
+  model?: string;
+  effort?: string;
 };
 export type PoolReading = {
   pool: string;
