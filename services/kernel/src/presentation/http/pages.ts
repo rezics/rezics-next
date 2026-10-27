@@ -16,6 +16,7 @@ import {
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
+import type { TProperties } from 'typebox';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
 import { customMethod } from '../../http/custom-method.ts';
@@ -37,7 +38,7 @@ const profileRoute = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const readResult = t.Object({ status: t.Integer(), body: t.Any() }, closed);
-const pageResponse = t.Object(
+export const PageResponseSchema = t.Object(
   {
     subject: t.Optional(t.String()),
     account: t.Optional(t.String()),
@@ -55,6 +56,13 @@ const pageResponse = t.Object(
   },
   closed,
 );
+
+/** Builds a closed top-level extension of the common page response without mutating its schema. */
+export function extendPageResponseSchema<Extension extends TProperties>(extension: Extension) {
+  return t.Object({ ...PageResponseSchema.properties, ...extension }, closed);
+}
+
+const pageResponse = PageResponseSchema;
 
 type ReadResult = { status: number; body: unknown };
 type PageTarget = ({ subject: string } | { route: string } | { account: string }) & { view?: View };
