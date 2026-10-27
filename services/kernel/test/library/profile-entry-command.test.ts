@@ -33,6 +33,7 @@ async function problem(response: Response, status: number, code: string) {
   const body = await json(response, status);
   expect(body.code).toBe(code);
   expect(body.effect_status).toBe('not_applied');
+  expect(body).not.toHaveProperty('libraryEntry');
   privateFree(body);
 }
 function privateFree(value: unknown) {
@@ -334,6 +335,7 @@ test('revoking a real native gate grant denies an authorized HTTP receipt before
     await native.revokeLibraryGate(who.actor.accountId);
     const revoked = await native.inspect(who.actor.accountId);
     const denied = await native.send(who.bearer, 'PUT', path(subjectId), { state: 'planned' }, key);
+    expect(await denied.clone().text()).not.toContain('planned');
     await problem(denied, 403, 'platform_closed');
     expect(await native.inspect(who.actor.accountId)).toEqual(revoked);
   } finally {
