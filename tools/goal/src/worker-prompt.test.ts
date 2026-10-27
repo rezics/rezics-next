@@ -47,3 +47,11 @@ test('a worker starts only below the worker cap and above the memory floor', asy
   expect(hasCapacity(32, 8000, capacity)).toBe(false);
   expect(hasCapacity(10, 4000, capacity)).toBe(false);
 });
+
+test('a worker writes acceptance tests the contract names and waits for queued checks', () => {
+  const task = { worktree: '/work/trees/t1', branch: 'worker/t1', brief: { markdown: 'Do the thing.', kind: 'implementation', acceptance: { command: ['bun', 'test'], tests: ['x'] } } } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain('Write every acceptance test the contract names that does not exist yet');
+  expect(prompt).toContain('never weaken or edit an existing acceptance test');
+  expect(prompt).toContain('queued, not stuck');
+});
