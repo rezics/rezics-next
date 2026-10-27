@@ -82,6 +82,38 @@ $$;
 
 
 --
+-- Name: guard_listing_order(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_listing_order() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.collection_id IS DISTINCT FROM OLD.collection_id
+    OR NEW.collection_route IS DISTINCT FROM OLD.collection_route
+    OR NEW.source_partition IS DISTINCT FROM OLD.source_partition THEN
+    RAISE EXCEPTION 'Listing source binding is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF (NEW.source_epoch, NEW.source_position) < (OLD.source_epoch, OLD.source_position) THEN
+    RAISE EXCEPTION 'Listing source stamp regressed' USING ERRCODE = '23514';
+  END IF;
+  IF TG_TABLE_NAME = 'subject_collection_version' THEN
+    IF NEW.route IS DISTINCT FROM OLD.route OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+      OR ((NEW.source_epoch, NEW.source_position) = (OLD.source_epoch, OLD.source_position)
+        AND NEW.multiplicity IS DISTINCT FROM OLD.multiplicity) THEN
+      RAISE EXCEPTION 'Listing identity or equal-stamp payload changed' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    IF NEW.partition_no IS DISTINCT FROM OLD.partition_no OR (OLD.terminal AND NOT NEW.terminal) THEN
+      RAISE EXCEPTION 'Listing fence identity or terminal state changed' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_type_preparation_header(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -680,11 +712,64 @@ CREATE TABLE library.subject_collection (
     multiplicity integer NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    source_partition integer,
+    source_epoch integer,
+    source_position bigint,
     CONSTRAINT subject_collection_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_collection_check1 CHECK ((collection_route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT subject_collection_collection_route_check CHECK (((collection_route >= 0) AND (collection_route <= 65535))),
     CONSTRAINT subject_collection_multiplicity_check CHECK ((multiplicity >= 1)),
-    CONSTRAINT subject_collection_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT subject_collection_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_collection_source_check CHECK ((((source_partition IS NULL) AND (source_epoch IS NULL) AND (source_position IS NULL)) OR ((source_partition IS NOT NULL) AND (source_epoch IS NOT NULL) AND (source_position IS NOT NULL) AND (source_partition = (collection_route >> 4)) AND (source_epoch >= 1) AND (source_position >= 0))))
+);
+
+
+--
+-- Name: subject_collection_source_fence; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.subject_collection_source_fence (
+    partition_no integer NOT NULL,
+    collection_id uuid NOT NULL,
+    collection_route integer NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    terminal boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT subject_collection_source_fence_check CHECK ((collection_route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT subject_collection_source_fence_check1 CHECK ((source_partition = (collection_route >> 4))),
+    CONSTRAINT subject_collection_source_fence_collection_route_check CHECK (((collection_route >= 0) AND (collection_route <= 65535))),
+    CONSTRAINT subject_collection_source_fence_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_collection_source_fence_source_epoch_check CHECK ((source_epoch >= 1)),
+    CONSTRAINT subject_collection_source_fence_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: subject_collection_version; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.subject_collection_version (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    collection_route integer NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    multiplicity integer NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT subject_collection_version_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_collection_version_check1 CHECK ((collection_route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT subject_collection_version_check2 CHECK ((source_partition = (collection_route >> 4))),
+    CONSTRAINT subject_collection_version_collection_route_check CHECK (((collection_route >= 0) AND (collection_route <= 65535))),
+    CONSTRAINT subject_collection_version_multiplicity_check CHECK ((multiplicity >= 0)),
+    CONSTRAINT subject_collection_version_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_collection_version_source_epoch_check CHECK ((source_epoch >= 1)),
+    CONSTRAINT subject_collection_version_source_position_check CHECK ((source_position >= 0))
 );
 
 
@@ -1044,6 +1129,22 @@ ALTER TABLE ONLY library.shelf_type_value
 
 ALTER TABLE ONLY library.subject_collection
     ADD CONSTRAINT subject_collection_pkey PRIMARY KEY (route, subject_id, collection_id);
+
+
+--
+-- Name: subject_collection_source_fence subject_collection_source_fence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection_source_fence
+    ADD CONSTRAINT subject_collection_source_fence_pkey PRIMARY KEY (partition_no, collection_id);
+
+
+--
+-- Name: subject_collection_version subject_collection_version_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection_version
+    ADD CONSTRAINT subject_collection_version_pkey PRIMARY KEY (route, subject_id, collection_id);
 
 
 --
@@ -1412,6 +1513,20 @@ CREATE UNIQUE INDEX shelf_type_node_terminal_type ON library.shelf_type_node USI
 
 
 --
+-- Name: subject_collection_reverse; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX subject_collection_reverse ON library.subject_collection USING btree (collection_route, collection_id, route, subject_id);
+
+
+--
+-- Name: subject_collection_version_reverse; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX subject_collection_version_reverse ON library.subject_collection_version USING btree (collection_route, collection_id, route, subject_id);
+
+
+--
 -- Name: type_preparation_pending; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1430,6 +1545,20 @@ CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE O
 --
 
 CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON library.follow FOR EACH ROW EXECUTE FUNCTION library.guard_follow_target_type();
+
+
+--
+-- Name: subject_collection_source_fence subject_collection_source_fence_order; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER subject_collection_source_fence_order BEFORE UPDATE ON library.subject_collection_source_fence FOR EACH ROW EXECUTE FUNCTION library.guard_listing_order();
+
+
+--
+-- Name: subject_collection_version subject_collection_version_order; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER subject_collection_version_order BEFORE UPDATE ON library.subject_collection_version FOR EACH ROW EXECUTE FUNCTION library.guard_listing_order();
 
 
 --

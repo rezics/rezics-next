@@ -20,7 +20,8 @@ export async function withThrowawayDatabase<T>(work: (env: NodeJS.ProcessEnv) =>
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   try {
-    cleanupStale('derived');
+    if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE)
+      cleanupStale('derived');
     container = docker([
       'run',
       '-d',
