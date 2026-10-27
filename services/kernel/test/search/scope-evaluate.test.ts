@@ -208,10 +208,11 @@ test('point evaluation without invented hits shares current complete Boolean sem
 });
 
 test('native type code range and same-statement qualifier evidence do not need named matched queries', async () => {
+  const otherRole = await create('skos:Concept');
   const split = await create('schema:Book', {
     'schema:inLanguage': [
       statement('schema:inLanguage', 'ja', [part('wdt:P3831', role)]),
-      statement('schema:inLanguage', 'en', [part('wdt:P3831', other)]),
+      statement('schema:inLanguage', 'en', [part('wdt:P3831', otherRole)]),
     ],
   });
   const qualified: FilterDocument = {
@@ -225,7 +226,7 @@ test('native type code range and same-statement qualifier evidence do not need n
     true,
   ]);
   const wrongRole: FilterDocument = {
-    statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [other] }] },
+    statement: { property: 'schema:inLanguage', in: ['ja'], qualifiers: [{ property: 'wdt:P3831', in: [otherRole] }] },
   };
   expect((await evaluate(within(wrongRole), [lagged, split])).results).toEqual([false, false]);
   expect((await evaluate(within({ not: wrongRole }), [lagged])).results).toEqual([true]);
