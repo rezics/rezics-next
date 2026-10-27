@@ -176,6 +176,19 @@ A brief normally runs on its class route. Its front matter may instead pin a Cod
 express the need, such as the deep researcher above; ordinary work stays on the route so its experiments measure
 it.
 
+## Watchdog
+
+The watchdog runs with reminder delivery and reports running tasks, or ready tasks with pending retries, that have had
+no worker for ten minutes after an attempt ended. It also reports a `stabilize` branch that has stayed out of the
+integration branch for thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are
+grouped: three matching failures across at least two tasks produce one incident with the attempt and task counts,
+affected Goal names and one example. The incident repeats after two hours while the signature remains present.
+
+When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every listed check host no more than once per
+five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
+line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
+watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
+
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
