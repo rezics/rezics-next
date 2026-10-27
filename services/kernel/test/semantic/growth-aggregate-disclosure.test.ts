@@ -113,6 +113,7 @@ beforeAll(async () => {
               subject_id: noise,
               recorded_transaction_id: noiseTransaction,
               release: null,
+              relation: false,
             }),
           ),
         ],
