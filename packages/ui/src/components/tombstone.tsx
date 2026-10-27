@@ -7,6 +7,7 @@ import { ratioValue, type CoverRatio } from './cover-model.ts';
 import { useLocale } from './locale.tsx';
 
 export const tombstoneLabels = {
+  unavailable: 'Not available',
   deleted: 'This record was deleted.',
   withheld: 'This record is withheld.',
   restore: 'Restore',
@@ -15,7 +16,7 @@ export const tombstoneLabels = {
 export type TombstoneLabels = typeof tombstoneLabels;
 
 export interface TombstoneProps {
-  reason: 'deleted' | 'withheld';
+  reason?: 'unavailable' | 'deleted' | 'withheld';
   shape: 'post' | 'card' | 'row';
   /** Pass both owner props only for the owner. This component does not authorize a restore. */
   restoreUntil?: string | Date;
@@ -29,7 +30,16 @@ export interface TombstoneProps {
 }
 
 /** A content-free reference in the original slot; shadcn has no deleted-record display. */
-export function Tombstone({ reason, shape, restoreUntil, onRestore, labels, ratio, className, style }: TombstoneProps) {
+export function Tombstone({
+  reason = 'unavailable',
+  shape,
+  restoreUntil,
+  onRestore,
+  labels,
+  ratio,
+  className,
+  style,
+}: TombstoneProps) {
   const text = { ...tombstoneLabels, ...labels };
   const { locale } = useLocale();
   const collectionRatio = useCoverRatio();

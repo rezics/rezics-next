@@ -310,6 +310,15 @@ browser coverage in `tests/security-headers.test.ts`. Keep server-only upstreams
 Configure `AUTH_ISSUER` rather than hardcoding an Auth host. Give new inline script or style producers the
 document nonce explicitly; do not relax the policy to accommodate them.
 
+## Deletion
+
+Web stores no records of its own, so it soft-deletes, restores and purges nothing itself.
+References to deleted, withheld or unavailable records render with `Tombstone`; a withheld part renders with
+`Withheld`, leaving the other fields visible. A deleted or withheld page answers 404, following
+[the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export, and a shared cache serves a page
+at most `s-maxage` (60 s) after its record goes. Restore and Undo call the owner's restore route only once
+that route exists.
+
 ## Cost
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,

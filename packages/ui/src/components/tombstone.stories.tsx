@@ -8,7 +8,7 @@ import { withSurface } from '../stories/support.tsx';
 const meta = {
   title: 'Content/Tombstone',
   component: Tombstone,
-  args: { shape: 'post', reason: 'deleted' },
+  args: { shape: 'post' },
   decorators: [withSurface],
 } satisfies Meta<typeof Tombstone>;
 export default meta;
@@ -31,10 +31,12 @@ const liveCard = (
 function Examples() {
   return (
     <div className="flex flex-col gap-6">
+      <Tombstone shape="post" />
       <Tombstone shape="post" reason="deleted" />
       <Tombstone shape="post" reason="withheld" />
       <CoverGrid ratio="3:4">
         {liveCard}
+        <Tombstone shape="card" />
         <Tombstone shape="card" reason="deleted" />
         <Tombstone shape="card" reason="withheld" />
         {liveCard}
@@ -45,6 +47,9 @@ function Examples() {
         <Tombstone shape="card" reason="withheld" />
       </CoverRow>
       <ul className="flex flex-col gap-2">
+        <li>
+          <Tombstone shape="row" />
+        </li>
         <li>
           <Tombstone shape="row" reason="deleted" />
         </li>

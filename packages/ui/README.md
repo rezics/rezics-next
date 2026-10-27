@@ -41,11 +41,20 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 ## Deletion
 
-Import `Tombstone` from `@rezics/ui/tombstone` for a reference to a deleted or withheld record. Ordinary reads
+Import `Tombstone` from `@rezics/ui/tombstone` for a reference to a deleted, withheld or unavailable record. Ordinary reads
 omit deleted records; only references keep a tombstone, following [the deletion policy](../../docs/deletion.md).
-Pass `reason` (`deleted` or `withheld`) and the replaced `shape` (`post`, `card` or `row`). Never pass the record's
+Pass the replaced `shape` (`post`, `card` or `row`). Never pass the record's
 title, author, image or link. Cards keep an empty cover frame and inherit the ratio from `CoverGrid` or `CoverRow`;
 outside a collection pass `ratio`. Match a surface's known item dimensions with `className` or `style`.
+
+`reason` defaults to `unavailable`: “Not available”, with no claim about why a reference cannot be read. Pass
+`deleted` or `withheld` only when the wire supplies that reason. For a notice covering one part, import `Withheld`
+from `@rezics/ui/withheld` in place of that image, passage or field, leaving the record's other fields visible.
+Pass `shape="image"` with a numeric width/height `ratio`, `shape="passage"`, or `shape="field"` with its public `label`.
+It keeps the image frame, passage block or field label on one muted surface with a notice message and no action;
+`className` or `style` can reserve known dimensions. Pass no withheld content, alt text or file name. Its `labels`
+prop overrides the English notice message. A purge keeps the record's identifier, type, relations, counts and
+tombstone as the deletion policy requires; neither display component purges data.
 
 Only an owner's deleted reference receives both `restoreUntil` and `onRestore`. It offers Restore with a relative
 deadline until that instant, then removes the control and deadline automatically. Withheld records never offer
