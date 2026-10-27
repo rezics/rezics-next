@@ -19,6 +19,7 @@ export type FileTiming = {
   drop: number;
   outsideTests: number;
   result: 'pass' | 'fail';
+  peakConnections?: number;
   tests: TestTiming[];
 };
 
@@ -331,17 +332,21 @@ export function createRecorder() {
       return {
         create: async (file, database) => {
           const start = performance.now();
+          let created = false;
           try {
             await runner.create(file, database);
+            created = true;
           } finally {
-            pending.set(file, {
+            const timing: FileTiming = {
               wall: 0,
               create: round((performance.now() - start) / 1000),
               drop: 0,
               outsideTests: 0,
               result: 'fail',
               tests: [],
-            });
+            };
+            if (created) pending.set(file, timing);
+            else files[file] = timing;
           }
         },
         run: async (file, database) => {
@@ -548,6 +553,8 @@ export type LaneSuite = {
   dropDatabase: (database: string) => Promise<void>;
   /** The environment of every process one test file starts. */
   environment: (database: string) => NodeJS.ProcessEnv;
+  /** Runs after a file and its database clone finish, before this run's timings are written. */
+  onFileComplete?: (outcome: FileOutcome<string>, timing: FileTiming) => void;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -623,6 +630,16 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
           if (outcome.output)
             process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
           if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
+          const timing = recorder.timings()[outcome.file];
+          if (timing && suite.onFileComplete) {
+            try {
+              suite.onFileComplete(outcome, timing);
+            } catch (error) {
+              process.stderr.write(
+                `Could not record ${outcome.file} completion: ${error instanceof Error ? error.message : String(error)}\n`,
+              );
+            }
+          }
         },
       },
       env,

@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { Client } from 'pg';
 import {
   existsSync,
   mkdirSync,
@@ -32,6 +33,9 @@ const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
 let reyloDirectory = '';
+const POSTGRES_MAX_CONNECTIONS = 500;
+const POSTGRES_CONNECTION_SAMPLE_MS = 250;
+const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname';
 
 // Cloned from the migrated template once and never used as a template; Reylo reads every analysis from it.
 const ANALYSIS_DATABASE = 'kernel_analysis';
@@ -370,6 +374,86 @@ export function reportPostgresErrors(
   if (summary) write(`${summary}\n`);
 }
 
+export type PostgresActivityRow = { datname: string | null; count: string | number };
+
+export type PostgresConnectionSampler = {
+  start: () => void;
+  sample: () => Promise<void>;
+  stop: () => Promise<void>;
+  peakFor: (database: string) => number;
+  peakTotal: () => number;
+};
+
+/** Sample total and per-database connection peaks without allowing sampling errors to affect a test file. */
+export function createPostgresConnectionSampler(
+  query: (sql: string) => Promise<PostgresActivityRow[]>,
+  intervalMs = POSTGRES_CONNECTION_SAMPLE_MS,
+): PostgresConnectionSampler {
+  const databasePeaks = new Map<string, number>();
+  let totalPeak = 0;
+  let interval: ReturnType<typeof setInterval> | undefined;
+  let sampling: Promise<void> | undefined;
+  let running = false;
+
+  const sample = async (): Promise<void> => {
+    if (sampling) return sampling;
+    sampling = (async () => {
+      try {
+        const rows = await query(POSTGRES_ACTIVITY_QUERY);
+        let total = 0;
+        for (const row of rows) {
+          const count = Number(row.count);
+          if (!Number.isFinite(count) || count < 0) continue;
+          total += count;
+          if (row.datname) databasePeaks.set(row.datname, Math.max(databasePeaks.get(row.datname) ?? 0, count));
+        }
+        totalPeak = Math.max(totalPeak, total);
+      } catch {
+        // The sampler is diagnostic only; an unavailable sample must not affect the file being checked.
+      }
+    })().finally(() => {
+      sampling = undefined;
+    });
+    return sampling;
+  };
+
+  return {
+    start: () => {
+      if (running) return;
+      running = true;
+      void sample();
+      interval = setInterval(() => {
+        if (running) void sample();
+      }, intervalMs);
+    },
+    sample,
+    stop: async () => {
+      running = false;
+      if (interval) clearInterval(interval);
+      interval = undefined;
+      await sampling;
+    },
+    peakFor: (database) => databasePeaks.get(database) ?? 0,
+    peakTotal: () => totalPeak,
+  };
+}
+
+export function formatFileConnectionResult(file: string, result: 'PASS' | 'FAIL', peak: number): string {
+  return `${file}: ${result}; peak database connections ${peak}`;
+}
+
+export function formatConnectionRunSummary(
+  peakTotal: number,
+  filePeaks: ReadonlyMap<string, number>,
+  maxConnections = POSTGRES_MAX_CONNECTIONS,
+): string {
+  const highest = [...filePeaks.entries()]
+    .sort(([fileA, peakA], [fileB, peakB]) => peakB - peakA || fileA.localeCompare(fileB))
+    .slice(0, 3)
+    .map(([file, peak]) => `${file}=${peak}`);
+  return `PostgreSQL connections: peak ${peakTotal}/${maxConnections} max_connections; highest file peaks: ${highest.join(', ') || 'none'}`;
+}
+
 export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
   return dockerCommand([
     'run',
@@ -400,7 +484,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     'max_wal_size=256MB',
     // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
     '-c',
-    'max_connections=500',
+    `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
   ]);
@@ -583,15 +667,52 @@ async function main(): Promise<void> {
 
   const testFiles = plan.tests;
   await waitForSearch(searchUrl, searchContainer);
-  const { failed: failedFiles } = await runLaneSuite({
-    service: 'kernel',
-    directory,
-    files: testFiles,
-    partial: plan.files !== null,
-    createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-    dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
-    environment: (database) => fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
+  const samplerClient = new Client({
+    connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
+    application_name: 'kernel-check-connection-sampler',
+    connectionTimeoutMillis: 1000,
+    query_timeout: 1000,
+    statement_timeout: 1000,
   });
+  let samplerConnected = false;
+  try {
+    await samplerClient.connect();
+    samplerConnected = true;
+  } catch (error) {
+    process.stderr.write(
+      `PostgreSQL connection sampling is unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+  const sampler = createPostgresConnectionSampler(async (sql) => {
+    if (!samplerConnected) return [];
+    const result = await samplerClient.query(sql);
+    return result.rows as PostgresActivityRow[];
+  });
+  const filePeaks = new Map<string, number>();
+  sampler.start();
+  let failedFiles: string[] = [];
+  try {
+    const result = await runLaneSuite({
+      service: 'kernel',
+      directory,
+      files: testFiles,
+      partial: plan.files !== null,
+      createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+      dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
+      environment: (database) => fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
+      onFileComplete: (outcome, timing) => {
+        const peak = sampler.peakFor(outcome.database);
+        timing.peakConnections = peak;
+        filePeaks.set(outcome.file, peak);
+        process.stdout.write(`${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`);
+      },
+    });
+    failedFiles = result.failed;
+  } finally {
+    await sampler.stop();
+    if (samplerConnected) await samplerClient.end().catch(() => undefined);
+    process.stdout.write(`${formatConnectionRunSummary(sampler.peakTotal(), filePeaks)}\n`);
+  }
   const queries = resolve(reyloDirectory, '.reylo/queries');
   process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);

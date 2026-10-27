@@ -281,6 +281,38 @@ test('${name} sees its own clone', () => {
   });
 });
 
+test('a suite lets the check record each completed file peak in its timing', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    mkdirSync(resolve(module, 'test'), { recursive: true });
+    writeFileSync(
+      resolve(module, 'test/peak.test.ts'),
+      "import { test } from 'bun:test';\ntest('passes', () => {});\n",
+    );
+    const env = laneEnvironment(directory, 1);
+    const completed: Array<{ file: string; result: string; peak: number }> = [];
+
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/peak.test.ts'],
+      partial: false,
+      createDatabase: async () => undefined,
+      dropDatabase: async () => undefined,
+      environment: () => ({ ...env }),
+      env,
+      onFileComplete: (outcome, timing) => {
+        timing.peakConnections = 4;
+        completed.push({ file: outcome.file, result: outcome.error ? 'fail' : 'pass', peak: timing.peakConnections });
+      },
+    });
+
+    expect(result.failed).toEqual([]);
+    expect(completed).toEqual([{ file: 'test/peak.test.ts', result: 'pass', peak: 4 }]);
+    expect(readLatest(resolve(directory, 'timings'))['test/peak.test.ts']!.peakConnections).toBe(4);
+  });
+});
+
 test('a suite names the files whose tests failed and still drops their clones', async () => {
   await withDirectory(async (directory) => {
     mkdirSync(resolve(directory, 'test'));

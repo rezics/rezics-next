@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { formatPostgresErrors, reportPostgresErrors, startPostgresContainer } from './check.ts';
+import {
+  createPostgresConnectionSampler,
+  formatConnectionRunSummary,
+  formatFileConnectionResult,
+  formatPostgresErrors,
+  reportPostgresErrors,
+  startPostgresContainer,
+} from './check.ts';
 
 test('the check database logs each error with its SQLSTATE', () => {
   const calls: string[][] = [];
@@ -37,4 +44,62 @@ test("a failing kernel check prints the database server's errors and fatal messa
   expect(printed).toContain('XX000 PANIC: 1; first: forced server panic');
   expect(printed).not.toContain('outside the retained log tail');
   expect(formatPostgresErrors('2026-10-28 01:02:08 UTC [105] [00000] LOG: checkpoint complete')).toBeNull();
+});
+
+test("the check reports each file's peak database connections and the run's peak against max_connections", async () => {
+  const rows = [
+    [
+      { datname: 'postgres', count: '1' },
+      { datname: 'rezics', count: '2' },
+      { datname: 'kernel_analysis', count: '1' },
+      { datname: 'kernel_test_1', count: '4' },
+      { datname: 'kernel_test_2', count: '3' },
+      { datname: 'kernel_test_3', count: '1' },
+    ],
+    [
+      { datname: 'postgres', count: '1' },
+      { datname: 'rezics', count: '1' },
+      { datname: 'kernel_analysis', count: '1' },
+      { datname: 'kernel_test_1', count: '6' },
+      { datname: 'kernel_test_2', count: '5' },
+      { datname: 'kernel_test_3', count: '2' },
+    ],
+  ];
+  const queries: string[] = [];
+  const sampler = createPostgresConnectionSampler(async (sql) => {
+    queries.push(sql);
+    return rows.shift() ?? [];
+  });
+
+  await sampler.sample();
+  await sampler.sample();
+
+  expect(queries).toEqual([
+    'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname',
+    'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname',
+  ]);
+  expect(sampler.peakFor('kernel_test_1')).toBe(6);
+  expect(sampler.peakFor('kernel_test_2')).toBe(5);
+  expect(sampler.peakTotal()).toBe(16);
+  expect(formatFileConnectionResult('test/accounts.test.ts', 'PASS', sampler.peakFor('kernel_test_1'))).toBe(
+    'test/accounts.test.ts: PASS; peak database connections 6',
+  );
+  expect(
+    formatConnectionRunSummary(
+      sampler.peakTotal(),
+      new Map([
+        ['test/accounts.test.ts', sampler.peakFor('kernel_test_1')],
+        ['test/search.test.ts', sampler.peakFor('kernel_test_2')],
+        ['test/tags.test.ts', sampler.peakFor('kernel_test_3')],
+        ['test/other.test.ts', 1],
+      ]),
+    ),
+  ).toBe(
+    'PostgreSQL connections: peak 16/500 max_connections; highest file peaks: test/accounts.test.ts=6, test/search.test.ts=5, test/tags.test.ts=2',
+  );
+
+  const unavailable = createPostgresConnectionSampler(async () => {
+    throw new Error('sampling query failed');
+  });
+  await expect(unavailable.sample()).resolves.toBeUndefined();
 });
