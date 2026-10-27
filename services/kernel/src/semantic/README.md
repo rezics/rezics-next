@@ -331,9 +331,13 @@ for final evaluation without retaining historical truth in a token.
 
 The existing encrypted position stays exactly
 `[basisDigest, settledCanonicalId, groupId, sourceOrdinal, aliasAfter, sourceAfter, ownerBasisDigest, formatVersion]`.
-Proposed `sourceAfter` is ONE fixed 28-byte native raw record, base64url encoded (38 ASCII bytes): version u8,
-Search deterministic leaf ordinal u8 (0..31), phase u8, value ordinal u8, decimal sequence as unsigned big-endian
-u64, witness UUID16 (zero for no UUID). Unused sequence/UUID fields must be zero. Null progress uses empty string.
+Proposed `sourceAfter` is ONE fixed 18-byte native raw record, base64url encoded (24 ASCII bytes). The first byte
+contains format version1 in its high3 bits and Search deterministic leaf ordinal (0..31) in its low5 bits. The
+second byte contains phase (compact0, selection1, witness2) in its high2 bits and value ordinal in its low6 bits.
+The remaining16 bytes are a union: witness UUID16 in witness phase; otherwise unsigned big-endian sequence u64
+followed by eight zero bytes. Reject other versions/phases and nonzero padding. This uses the required128-bit
+witness key plus16 bits of plan/phase/version addressing without separate mutually exclusive key fields.
+Null progress uses empty string.
 It is not a nested token, JSON, leaf vector, prior result, witness receipt or allow/deny claim. Native progress.basis
 maps to ownerBasisDigest; that digest also binds current Search source/query/release/profile/generation. Search
 reconstructs the deterministic leaf from the admitted plan. A fresh bounded leaf probe supplies the native basis

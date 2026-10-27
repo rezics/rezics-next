@@ -322,14 +322,12 @@ test('native identity ports and one-owner raw progress preserve independent alia
     expect(pool.waitingCount).toBe(0);
     expect(pool.idleCount).toBe(pool.totalCount);
     // The fixed raw wire has no leaf truth, nested tokens, or variable JSON payload.
-    const record = Buffer.alloc(28);
-    record[0] = 1;
-    record[1] = 0;
-    record[2] = 2;
-    record[3] = 0;
-    record.writeBigUInt64BE(16n, 4);
+    const record = Buffer.alloc(18);
+    record[0] = (1 << 5) | 0; // version1, deterministic leaf0
+    record[1] = (1 << 6) | 0; // selection phase, value0
+    record.writeBigUInt64BE(16n, 2);
     const sourceAfter = record.toString('base64url');
-    expect(sourceAfter.length).toBe(38);
+    expect(sourceAfter.length).toBe(24);
     const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(83)]]) };
     const binding = {
       route: 'GET /v1/zones/{id}/subjects',
