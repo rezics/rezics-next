@@ -446,6 +446,25 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   none when warm; local work is one lookup per distinct type among at most 100 rows. A type with no name is left out
 - **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
 
+### Realm page
+
+- **Touches:** One session read, then `GET /v1/spaceAddresses/<address>`, then `GET /v1/spaces/<id>`. Only when the
+  Space's `realmId` is non-null: the Realm, one boards page (`limit` 20), one publications page (`limit` 12) and, signed
+  in, `members/me` and `participation` together; then one `GET /v1/subjects/<id>` per published subject shown, started
+  together. `/realms/<id>` reads the Realm and the Space instead of the address and Space, then redirects when the Space
+  has an address.
+- **Bound:** 5 K signed out and 7 K signed in, plus one K per published subject shown, which is at most 12; 1 D signed in,
+  0 R and 0 A. The Space alone costs 2 K. Boards and publications are single pages, never walked.
+- **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
+
+### My Realms
+
+- **Touches:** One session read and `GET /v1/me/realms` for one page of at most 20 Realms; the next page is a cursor.
+  Each link goes to `/realms/<id>`, which resolves it when followed. Joining or leaving sends one
+  `POST` or `DELETE /v1/realms/<id>/membership` with an idempotency key.
+- **Bound:** 1 K and 1 D for the page, and 1 K and 1 D for a join or leave; 0 R and 0 A. No per-Realm reads.
+- **Growth check:** `tests/realm-pages-cost.test.ts`: `my Realms is one page read, however many Realms the person has joined` at 1, 10 and 100
+
 ### My collections and following
 
 - **Touches:** Each page reads one signed-in session and one `GET /v1/collections?curatorAccountId=…&view=FULL` or
