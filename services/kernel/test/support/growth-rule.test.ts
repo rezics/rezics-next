@@ -43,7 +43,10 @@ async function check(
           const count = repetition % 2 === 0 ? 1 : 12;
           const first = 100_000 + repetition * 100;
           await client.query('BEGIN');
-          await client.query(`INSERT INTO ${table} SELECT generate_series($1, $1 + $2 - 1)`, [first, count]);
+          await client.query(
+            `INSERT INTO ${table} SELECT generate_series($1::integer, $1::integer + $2::integer - 1)`,
+            [first, count],
+          );
           await client.query(`SELECT id FROM ${table} WHERE id >= $1`, [first]);
           await client.query('ROLLBACK');
         } else if (options.fixed) {
