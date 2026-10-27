@@ -255,7 +255,7 @@ async function createNativeContentSystemWithOptions(
     await bootstrapGovernance(pool, governance.actor.accountId);
     const author = await person('author');
     const other = await person('other');
-    const moderator = await person('moderator');
+    const moderator = await person('content-moderator');
     const suspended = await person('suspended');
     const capture = async (request: Request) => ({ request, response: await kernel.handle(request) });
     const command = async (path: string, body: unknown, status: number) => {
