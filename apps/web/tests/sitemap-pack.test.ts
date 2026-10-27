@@ -115,7 +115,7 @@ test('a shard closes before a family that would exceed 3,000 families or 40,000,
 
 test('a family missing a locale, a duplicate URL, an invalid lastmod or an origin that is not absolute https throws', async () => {
   const good = family(1);
-  const { ja: _removed, ...partial } = good.paths;
+  const { ja: _removed, ...partial } = family(2).paths;
   await expect(packShards(origin, [good, { ...family(2), paths: partial as PagePaths }])).rejects.toThrow(/ja/);
   await expect(packShards(origin, [good, { ...family(2), paths: partial as PagePaths }])).rejects.toThrow(
     /subjects\/00000002/,

@@ -330,6 +330,14 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** Constant per page: eight alternates, one canonical and at most one JSON-LD script.
 - **Growth check:** Page head rendering does not add a kernel request.
 
+### Sitemap files
+
+- **Touches:** Memory and processor time only: no kernel, storage or network operation.
+- **Bound:** Linear in the families passed; memory holds one shard's families and its compressed bytes, at most
+  3,000 families and about 4 MB of gzip for 40,000,000 bytes of XML.
+- **Growth check:** The acceptance test packs 300, 3,000 and 30,000 synthetic families and checks that shard count
+  and uncompressed bytes grow linearly and that no shard exceeds 3,000 families or 40,000,000 bytes.
+
 ### Page security headers
 
 - **Touches:** Request-local nonce → SSR and response headers
