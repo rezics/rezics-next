@@ -18,6 +18,8 @@ export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
   hostSweepIntervalMs?: number;
   codeIsCurrent?(): boolean; recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>; deliverReminders?(): number;
+  /** One promotion step; returns at once when a promotion holds the lease or nothing changed. */
+  promote?(): Promise<void>;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;
@@ -207,7 +209,14 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     console.log('ready');
     const remind = () => { try { runtime.deliverReminders?.(); } catch (error) { console.error(error); } };
     remind();
-    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); }, 60_000);
+    // The train promotes only when its queue empties; with a steady backlog that never happens, so the host promotes
+    // too. The promotion lease keeps one run at a time, and its gate runs on a check host, not in the train.
+    let promoting: Promise<void> | undefined;
+    const promote = () => {
+      if (!runtime.promote || promoting) return;
+      promoting = runtime.promote().catch(error => console.error(error)).finally(() => { promoting = undefined; });
+    };
+    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); promote(); }, 60_000);
     recoveryTimer.unref();
     await new Promise<void>(resolve => {
       stopServer = resolve;
