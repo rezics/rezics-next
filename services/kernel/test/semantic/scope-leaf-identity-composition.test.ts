@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { FILTER_LIMITS } from '@rezics/filter';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { moveMergePage } from '../../src/semantic/merge-moves.ts';
 import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';
@@ -14,6 +15,7 @@ import {
   type AliasReader,
   type BasisReader,
   type LeafFixture,
+  type LeafProgress,
   type TerminalReader,
 } from './scope-leaf-evidence-fixture.ts';
 
@@ -64,7 +66,7 @@ test('native identity ports and one-owner raw progress preserve independent alia
     const record = Buffer.alloc(18);
     record[0] = (1 << 5) | 0; // version1, deterministic leaf0
     record[1] = (1 << 6) | 0; // selection phase, value0
-    record.writeBigUInt64BE(16n, 2);
+    record.writeBigUInt64BE(17n, 2); // real selected ordinal16, distinct from null and ordinal0
     const sourceAfter = record.toString('base64url');
     expect(sourceAfter.length).toBe(24);
     const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(83)]]) };
@@ -78,6 +80,110 @@ test('native identity ports and one-owner raw progress preserve independent alia
     const decoded = await decodeListCursor(ring, binding, token, new Date());
     expect(decoded.ok).toBe(true);
     if (decoded.ok) expect(decoded.after).toEqual(position);
+    // Literal native wire vectors, not a second SourceScope parser/serializer. Search owns rejection tests.
+    // Keep every vector in the ACTUAL shared encrypted eight-key handoff and actual native identity basis.
+    expect(FILTER_LIMITS.leaves).toBe(32);
+    expect(FILTER_LIMITS.in).toBe(64);
+    const vectors: readonly {
+      leaf: number;
+      progress: Omit<LeafProgress, 'basis'> | null;
+      hex: string;
+    }[] = [
+      { leaf: 0, progress: null, hex: '' },
+      {
+        leaf: 0,
+        progress: { phase: 'compact', valueOrdinal: 0, after: null },
+        hex: '200000000000000000000000000000000000',
+      },
+      {
+        leaf: 0,
+        progress: { phase: 'compact', valueOrdinal: 0, after: '0' },
+        hex: '200000000000000000010000000000000000',
+      },
+      {
+        leaf: 0,
+        progress: { phase: 'selection', valueOrdinal: 0, after: null },
+        hex: '204000000000000000000000000000000000',
+      },
+      {
+        leaf: 0,
+        progress: { phase: 'selection', valueOrdinal: 0, after: '0' },
+        hex: '204000000000000000010000000000000000',
+      },
+      {
+        leaf: 0,
+        progress: { phase: 'selection', valueOrdinal: 0, after: '9007199254740993' },
+        hex: '204000200000000000020000000000000000',
+      },
+      {
+        leaf: 31,
+        progress: { phase: 'compact', valueOrdinal: 63, after: '18446744073709551614' },
+        hex: '3f3fffffffffffffffff0000000000000000',
+      },
+      {
+        leaf: 31,
+        progress: { phase: 'selection', valueOrdinal: 63, after: '18446744073709551614' },
+        hex: '3f7fffffffffffffffff0000000000000000',
+      },
+      {
+        leaf: 31,
+        progress: { phase: 'witness', valueOrdinal: 63, after: null },
+        hex: '3fff00000000000000000000000000000000',
+      },
+      // Zero UUID is wire data, not a native domain-admission claim and never a null witness cursor.
+      {
+        leaf: 31,
+        progress: { phase: 'witness', valueOrdinal: 63, after: '00000000-0000-0000-0000-000000000000' },
+        hex: '3fbf00000000000000000000000000000000',
+      },
+      { leaf: 0, progress: { phase: 'witness', valueOrdinal: 0, after: book }, hex: '2080' + book.replaceAll('-', '') },
+    ];
+    const wireValues = new Set<string>();
+    for (const vector of vectors) {
+      const bytes = Buffer.from(vector.hex, 'hex');
+      const sourceAfter = bytes.toString('base64url');
+      expect(wireValues.has(sourceAfter)).toBe(false);
+      wireValues.add(sourceAfter);
+      if (vector.progress === null) {
+        expect(sourceAfter).toBe('');
+      } else {
+        const progress = vector.progress;
+        expect(bytes.length).toBe(18);
+        expect(sourceAfter).toMatch(/^[A-Za-z0-9_-]{24}$/);
+        expect(bytes[0]! >>> 5).toBe(1);
+        expect(bytes[0]! & 31).toBe(vector.leaf);
+        expect(vector.leaf).toBeLessThan(FILTER_LIMITS.leaves);
+        expect(bytes[1]! & 63).toBe(progress.valueOrdinal);
+        expect(progress.valueOrdinal).toBeLessThan(FILTER_LIMITS.in);
+        const wirePhase = bytes[1]! >>> 6;
+        if (progress.phase === 'witness') {
+          expect(wirePhase).toBe(progress.after === null ? 3 : 2);
+          expect(bytes.subarray(2).toString('hex')).toBe(
+            progress.after === null ? '0'.repeat(32) : progress.after.replaceAll('-', ''),
+          );
+        } else {
+          expect(wirePhase).toBe(progress.phase === 'compact' ? 0 : 1);
+          if (progress.after !== null) {
+            expect(progress.after).toMatch(/^(0|[1-9][0-9]*)$/);
+            expect(BigInt(progress.after)).toBeLessThanOrEqual((1n << 64n) - 2n);
+          }
+          expect(bytes.readBigUInt64BE(2)).toBe(progress.after === null ? 0n : BigInt(progress.after) + 1n);
+          expect(bytes.subarray(10)).toEqual(Buffer.alloc(8));
+        }
+      }
+      const pendingPosition = [...position];
+      pendingPosition[5] = sourceAfter;
+      expect(pendingPosition).toHaveLength(8);
+      const encrypted = await encodeListCursor(ring, binding, { epoch: 1, after: pendingPosition }, new Date());
+      const restored = await decodeListCursor(ring, binding, encrypted, new Date());
+      expect(restored.ok).toBe(true);
+      if (restored.ok) {
+        expect(restored.after).toEqual(pendingPosition);
+        // A pending leaf retains the original under evaluation, independent of raw leaf progress.
+        expect(restored.after[4]).toBe(book);
+      }
+    }
+
     expect(
       await decodeListCursor(ring, { ...binding, query: { ...binding.query, limit: 99 } }, token, new Date()),
     ).toEqual({ ok: false, reason: 'invalid' });

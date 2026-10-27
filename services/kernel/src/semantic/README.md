@@ -178,7 +178,9 @@ A Context's custom relation types are one term extension: an immutable body addr
 ### Current leaf evidence
 
 This additive internal contract is a native implementation handoff, deliberately red until the independent export
-below exists. Its signature and fields are proposals for manager/Search review, not approved production ABI.
+below exists. Search accepts the data/coverage/accounting direction; the exact signature and fields remain an
+implementation proposal, not approved production ABI. The reserved wire phase below still requires direct Search
+confirmation before consumer production.
 It preserves public `SubjectSource`, Search admission, deadlines, `checkHits` and its unknown/drop
 policy. `SubjectSource.read` loads unrelated facts/history; `matchRelationFacets` samples a recorded witness and
 32 alternatives without caller accounting or continuation. Neither is this reader. The Search scope admission
@@ -324,8 +326,11 @@ bytes are UTF-8 field payload bytes (binary bytea length, null zero), including 
 unbounded payloads using native bounded metadata/length reads before fetching bodies; length/sentinel points and
 rows count too. Empty indexed probes consume points and emptySeeks. If an otherwise valid budget cannot reserve
 the next bounded unit, return unfinished work/not_ready with actual usage; no silent overspend or fabricated false.
-Zone additionally debits every leaf/internal driver key from aggregate256. Each owner step consumes <=100 keys plus
-its explicitly reserved lookahead. Deadline and unavailable errors propagate through existing typed handlers.
+The Search evaluation wrapper explicitly reserves `{ rawKeys, native }` and returns actual `{ keys, native }`
+plus at most ONE pending progress. `native` contains all five independent axes: points, witnesses, rows, bytes and
+emptySeeks. Keys cannot be inferred from returned IDs/rows or the witness allowance. The Source leaf receives only
+its reserved remainder of the SAME shared aggregate256 ledger. Every alias/prefix, leaf/internal driver, lookahead
+and reread key debits that ledger. Each owner step consumes <=100 keys plus its explicitly reserved lookahead. Deadline and unavailable errors propagate through existing typed handlers.
 
 The owner calls ACTUAL `readTerminalSubjectIdentity`, `readIdentityBasis`, and `readSubjectAliasGroup`, independently
 of this per-leaf port. It prepares Access before checking out each anchor, evaluates on that anchor's SAME RR client,
@@ -352,11 +357,26 @@ The existing encrypted position stays exactly
 Proposed `sourceAfter` is ONE fixed 18-byte native raw record, base64url encoded (24 ASCII bytes). The first byte
 contains format version1 in its high3 bits and Search deterministic leaf ordinal (0..31) in its low5 bits. These
 record bounds derive from actual `FILTER_LIMITS.leaves = 32` and `FILTER_LIMITS.in = 64`, not new admission limits. The
-second byte contains phase (compact0, selection1, witness2) in its high2 bits and value ordinal in its low6 bits.
-The remaining16 bytes are a union: witness UUID16 in witness phase; otherwise unsigned big-endian sequence u64
-followed by eight zero bytes. Reject other versions/phases and nonzero padding. This uses the required128-bit
-witness key plus16 bits of plan/phase/version addressing without separate mutually exclusive key fields.
-Null progress uses empty string.
+second byte contains wirePhase in its high2 bits and value ordinal in its low6 bits. The remaining16 payload bytes
+have these exact meanings:
+
+- Wire0 compact / wire1 selection: bytes2..9 are unsigned big-endian u64. Zero means `after: null`; a real canonical
+  decimal `n >= 0` encodes `n + 1`, with `n <= 2^64 - 2`. Use lossless BigInt, never a Number roundtrip. Real ordinal
+  zero encodes1, NEVER null. Bytes10..17 must be zero.
+- Wire2 witness: all16 payload bytes are the REAL UUID key, including a zero UUID. Normal native routed-key domain
+  checks still apply; a rejected key must never silently become start-of-range. Current writers derive UUIDv8,
+  but the candidate schema only checks routed bytes; no unstated nonnil storage guarantee is assumed.
+- Reserved wire3: maps ONLY to native `phase: 'witness', after: null`, with all16 payload bytes zero. Any nonzero
+  payload is invalid. This adds no native phase or UUID-domain assumption.
+
+Whole null `LeafProgress` uses empty `sourceAfter`, distinct from nonnull progress with null `after`. Require
+canonical24-character base64url without padding or extra bytes. Validate version1, canonical decimal/overflow,
+phase-specific padding/payload and ordinals against the CURRENT actual admitted plan and sorted values, not merely
+32/64 storage capacity. Search owns the actual parser and invalid-wire acceptance (wrong version, noncanonical
+number, overflow, padding, current leaf/value bounds, nil witness never null and nonzero reserved payload).
+Native layout assertions and the actual shared encrypted handoff are not a second parser or crypto implementation.
+The reserved phase3 proposal requires direct Search confirmation before consumer production; the native producer
+continues returning the SAME structured `LeafProgress`.
 It is not a nested token, JSON, leaf vector, prior result, witness receipt or allow/deny claim. Native progress.basis
 maps to ownerBasisDigest; that digest also binds current Search source/query/release/profile/generation. Search
 reconstructs the deterministic leaf from the admitted plan. A fresh bounded leaf probe supplies the native basis
@@ -365,7 +385,10 @@ not an extra unrecorded basis callback. A mismatch restarts preparation before c
 The original being evaluated is the independent native aliasAfter raw key, groupId is its canonical group,
 sourceOrdinal selects the owner and basisDigest is actual structural identity. When a leaf can become pending,
 request a one-original native alias window and retain its ACTUAL returned after in aliasAfter (the original under
-evaluation); resume that same native alias cursor after settling it. Never overwrite it with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
+evaluation). With nonempty sourceAfter, resume that ORIGINAL FIRST with current native identity/source checks.
+Do not seek `readSubjectAliasGroup(after: aliasAfter)` until the pending original settles: doing so can skip the
+last eligible alias257. Only then seek the next original using that same native alias cursor. Never overwrite it
+with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
 are request-local, not serialized. This scalar mapping needs manager/Search review before production; if an owner
 also needs independent unresolved prefix state at this boundary, that is a shared-protocol decision, NOT permission
 to append a ninth key or concatenate tokens. The existing scaffold's unresumable `leaves` callback must be replaced
