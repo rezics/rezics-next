@@ -3,18 +3,18 @@ import * as contract from '../services/kernel/src/library/shelf-contract.ts';
 
 const owner = '00000000-0000-7000-8000-111100000001';
 const other = '00000000-0000-7000-8000-111100000002';
-const typeKey = '00000000-0000-7000-8000-111100000010';
+const typeId = '00000000-0000-7000-8000-111100000010';
 const module = contract as unknown as Record<string, unknown>;
-const query = { state: 'planned', typeKey, orderBy: 'lastActivity', direction: 'desc', limit: 48 };
+const query = { state: 'planned', typeId, orderBy: 'lastActivity', direction: 'desc', limit: 48 };
 
 test('shelf cursor binding carries route owner every effective filter and page size', () => {
-  const bind = module.shelfCursorBinding as ((account: string, query: typeof query) => unknown) | undefined;
+  const bind = module.shelfCursorBinding as ((account: string, input: typeof query) => unknown) | undefined;
   expect(bind).toBeFunction();
   const actual = bind!(owner, query);
   expect(actual).toEqual({ route: 'GET /v1/libraryEntries', viewer: owner, query });
   expect(bind!(other, query)).not.toEqual(actual);
   expect(bind!(owner, { ...query, limit: 1 })).not.toEqual(actual);
-  expect(bind!(owner, { ...query, typeKey: other })).not.toEqual(actual);
+  expect(bind!(owner, { ...query, typeId: other })).not.toEqual(actual);
 });
 
 test('type facet binding is a different list with owner and page size', () => {
