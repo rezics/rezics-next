@@ -30,6 +30,7 @@ test('worker and promotion gate environments carry KERNEL_CHECK_REMOTE when the 
       GOAL_ATTEMPT: '2',
       KERNEL_CHECK_AFFECTED: 'abc123',
       KERNEL_CHECK_REMOTE: hosts,
+      GOAL_CHECK_WAIT_FILE: join(present.directory, 'runs', 'task', '2.check-wait'),
     });
     expect(attemptEnvironment({ id: 'task', base: 'abc123' }, { attempt: 2 }, absent.directory)).not.toHaveProperty(
       'KERNEL_CHECK_REMOTE',
@@ -43,5 +44,17 @@ test('worker and promotion gate environments carry KERNEL_CHECK_REMOTE when the 
   } finally {
     present.remove();
     absent.remove();
+  }
+});
+
+test('check slot waits recorded beside the run log are summed', async () => {
+  const { checkWaitMs } = await import('./launch.ts');
+  const directory = mkdtempSync(join(tmpdir(), 'goal-wait-'));
+  try {
+    expect(checkWaitMs(join(directory, '1.jsonl'))).toBe(0);
+    writeFileSync(join(directory, '1.check-wait'), '1000\n2500\nnot a number\n');
+    expect(checkWaitMs(join(directory, '1.jsonl'))).toBe(3500);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

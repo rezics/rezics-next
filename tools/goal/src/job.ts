@@ -31,7 +31,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityAvailable } from './launch.ts';
+import { capacityAvailable, checkWaitMs } from './launch.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -262,10 +262,14 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
     };
-    const timer = setTimeout(
-      () => stopIfStalled(true),
-      Math.max(0, limits.maxMs - (Date.now() - Date.parse(ref.startedAt))),
-    );
+    // Time spent waiting for a check slot does not count against the class limit: under load, slot waits of half an
+    // hour or more ended attempts whose work was done.
+    const remainingMs = () => limits.maxMs + checkWaitMs(ref.logPath) - (Date.now() - Date.parse(ref.startedAt));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleLimit = () => {
+      timer = setTimeout(() => (remainingMs() > 0 ? scheduleLimit() : stopIfStalled(true)), Math.max(0, remainingMs()));
+    };
+    scheduleLimit();
     // One worker held a slot for two hours with an empty log until the class limit ended it.
     const startCheck = setTimeout(
       () => {
