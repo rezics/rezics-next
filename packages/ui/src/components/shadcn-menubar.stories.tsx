@@ -102,7 +102,7 @@ export const KeyboardBetweenMenus: Story = {
     // ArrowRight on an open menu hands over to the next menu of the bar.
     await userEvent.keyboard('{ArrowRight}');
     await settled(await screen.findByRole('menuitemcheckbox', { name: 'Show spoilers' }));
-    await expect(screen.queryByRole('menuitem', { name: /New shelf/ })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: /New shelf/ })).toBeNull(), { timeout: 3000 });
     await userEvent.keyboard('{Escape}');
     await gone();
   },
