@@ -448,9 +448,9 @@ Registration expiry deletes only pending accounts, which cannot create consumer 
 
 Modules that retain per-account data register a durable effect on this event through
 [`registerEffects`](../events/effects.ts), using the account id to start their own purge. Work modules contribute
-effects through `context.addEffects`. The existing consumers in [Rating eligibility](../rating/eligibility.ts)
-and [organization close](organization-close-work.ts) show the pattern: persist progress and schedule bounded
-steps with stable workflow identities. Access does not enumerate consumers or call their purge code.
+effects through `context.addEffects`. The existing consumers in [Rating eligibility](../rating/eligibility.ts),
+[Library](../library/README.md) and [organization close](organization-close-work.ts) show the pattern: persist progress
+and schedule bounded steps with stable workflow identities. Access does not enumerate consumers or call their purge code.
 
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
@@ -1059,6 +1059,14 @@ A deleted account's public identity is `{ id, state, kind }` only. Readers see â
 remain subject to [Content's erasure rules](../content/README.md#subject-threads), and catalogue history to
 [Semantic's history rules](../semantic/README.md). Where those documents do not state an account-deletion retention
 rule, the owner decides; account deletion does not invent a content or catalogue erasure cascade.
+
+Deleting an account purges all of its private Library data and its private, unlisted and deleted Collections.
+Active public Collections stay, with their current notes and explicitly published log snapshots, as frozen,
+de-identified contributions. No replacement curator is appointed. Retained logs are detached from erased
+sessions. Authority ends at the deletion barrier; the Library's tombstone consumer cleans up asynchronously.
+The [Library README](../library/README.md) documents the mechanism and the Library's own consumer. The deletion
+confirmation states exactly what is erased and what stays as de-identified public contributions, next to the
+privacy contact.
 
 Statutory erasure requests are separate from product deletion. A missing export, a last-owner dispute, a suspension
 or a pending bot handoff never delays the legal response. Product eligibility and cleanup authority are not the
