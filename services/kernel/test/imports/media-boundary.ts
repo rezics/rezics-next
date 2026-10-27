@@ -95,6 +95,8 @@ export interface MediaBoundary {
   start(): Promise<void>;
   /** Actual shared growth capture of one registered import transition. */
   measureTransition(mediaId: string): Promise<import('../support/growth-cost.ts').Capture>;
+  /** Seed completed DBOS history rows with the production workflow persistence shape. */
+  seedWorkflowHistory(count: number): Promise<number>;
   close(): Promise<void>;
 }
 
@@ -325,6 +327,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       } finally {
         await syncTrace(id);
       }
+    },
+    async seedWorkflowHistory(count) {
+      if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Workflow history count must be positive');
+      await boundary.start();
+      return worker!.call('seedHistory', { count }) as Promise<number>;
     },
     async observe(id) {
       await syncTrace(id);

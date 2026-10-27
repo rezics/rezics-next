@@ -14,7 +14,9 @@ import {
   checkGrowth,
   seed,
   assertGrowth,
+  type GrowthDatabase,
   type GrowthSample,
+  type Population,
 } from '../support/growth.ts';
 import type { Capture, Cost } from '../support/growth-cost.ts';
 import { routeOf, partitionOf, newId } from '../../src/route/route.ts';
@@ -130,6 +132,10 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
       throw error;
     }
   })();
+  // The parent owns process lifetime through its RPC streams. Detaching the
+  // process handle lets Bun close stdin on test-file exit, which the fixture
+  // host uses to tear down its identity and worker databases.
+  child.unref();
   let output = '';
   let errorOutput = '';
   const errors = (async () => {
@@ -218,8 +224,8 @@ export async function closeMediaBoundaryDriver() {
 
 /** Mechanical forwarding to the full application's actual mounted API fixture. */
 export async function createMediaBoundaryDriver(): Promise<MediaBoundaryDriver> {
-  const shared = Boolean(sharedHost);
-  const host = await (sharedHost ?? launchBoundaryProcess('host'));
+  sharedHost ??= launchBoundaryProcess('host');
+  const host = await sharedHost;
   try {
     const identity = await host.call<{ importerId: string; containerId: string }>('open');
     let pending = Promise.resolve<unknown>(undefined);
@@ -267,20 +273,26 @@ export async function createMediaBoundaryDriver(): Promise<MediaBoundaryDriver> 
           ),
         };
       },
-      close: shared
-        ? async () => {
-            await host.call('reset');
-          }
-        : host.close,
+      seedWorkflowHistory: (count) => host.call('seedWorkflowHistory', { count }) as Promise<number>,
+      close: async () => {
+        await host.call('reset');
+      },
     };
-    return {
-      ...identity,
-      boundary,
-      request: (input, key) => host.call('request', { input, key }),
-      status: (mediaId) => host.call('status', { mediaId }),
-      disclose: (mediaId) => host.call('disclose', { mediaId }),
-      close: boundary.close,
-    };
+    return Object.assign(
+      {
+        ...identity,
+        boundary,
+        request: (input: MediaImportRequest, key: string) => host.call('request', { input, key }),
+        status: (mediaId: string) => host.call('status', { mediaId }),
+        disclose: (mediaId: string) => host.call('disclose', { mediaId }),
+        close: boundary.close,
+      },
+      {
+        counters: () => host.call('counters'),
+        seedGrowthStep: (input: { request: MediaImportRequest; previousScale: number; scale: number }) =>
+          host.call('growthSeedStep', input),
+      },
+    ) as MediaBoundaryDriver;
   } catch (error) {
     await host.close();
     throw error;
@@ -288,6 +300,165 @@ export async function createMediaBoundaryDriver(): Promise<MediaBoundaryDriver> 
 }
 
 type RpcHost = { call(method: string, input: any, signal?: AbortSignal): Promise<unknown>; close(): Promise<void> };
+
+const MEDIA_HISTORY_ROWS = 2_048;
+const MEDIA_WORKFLOW_HISTORY_ROWS = 2_048;
+const MEDIA_ROWS_PER_SCALE = 8;
+
+function mediaHistoryPopulation(
+  name: string,
+  hotRoute: number,
+  positionBase: number,
+  rangeStart: number,
+  epoch: number,
+): Population {
+  const hotPartition = partitionOf(hotRoute);
+  const credit = {
+    rightsHolder: 'Growth fixture',
+    via: { name: 'Growth fixture', url: 'https://lain.bgm.tv/' },
+    license: 'CC-BY-4.0',
+    obligations: [],
+  };
+  const provenance = {
+    source: 'bangumi',
+    external_id: 'growth-fixture',
+    record_revision: 'fixture:1',
+    digest: '0'.repeat(64),
+    converter_revision: 'fixture:1',
+    field_group: 'cover',
+    references: [{ name: 'Growth fixture', url: 'https://lain.bgm.tv/' }],
+  };
+  return {
+    name,
+    hotPartition,
+    hotShare: 1,
+    rows({ ordinal }) {
+      const route = hotRoute;
+      const mediaId = newId(route);
+      const containerId = newId(route);
+      const uploaderId = newId(route);
+      const transactionId = randomUUID();
+      const eventId = randomUUID();
+      const position = positionBase + ordinal - rangeStart + 1;
+      return {
+        'access.account': [
+          { route, account_id: uploaderId, kind: 'actor', state: 'active', transaction_id: transactionId },
+        ],
+        'semantic.subject': [
+          { route, subject_id: containerId, type: 'schema:Book', recorded_transaction_id: transactionId },
+        ],
+        'content.media': [
+          {
+            route,
+            media_id: mediaId,
+            container_id: containerId,
+            uploader_id: uploaderId,
+            reservation_request_id: `${name}-${ordinal}`,
+            purpose: 'cover',
+            media_type: null,
+            byte_count: null,
+            declared_sha256: null,
+            actual_byte_count: null,
+            sha256: null,
+            state: 'reserved',
+            decision: null,
+            key: `m/${mediaId}/original`,
+            transaction_id: transactionId,
+            source_url: 'https://lain.bgm.tv/pic/growth-baseline.jpg',
+            credit,
+            provenance,
+          },
+        ],
+        'access.resource_role_grant': [mediaId, containerId].map((resource_id) => ({
+          route,
+          resource_id,
+          subject_kind: 'identity',
+          subject_id: uploaderId,
+          subject_role: '',
+          grant_role: 'owner',
+          valid: '(,)',
+          transaction_id: transactionId,
+        })),
+        'core.receipt': [
+          {
+            partition_no: hotPartition,
+            principal_kind: 'account',
+            principal_id: uploaderId,
+            command_kind: 'content.media.importFromUrl',
+            idempotency_key: `${name}-${ordinal}`,
+            request_digest: Buffer.alloc(32),
+            epoch,
+            position,
+            transaction_id: transactionId,
+            response: { mediaId },
+          },
+        ],
+        'core.outbox': [
+          {
+            partition_no: hotPartition,
+            position,
+            event_seq: 0,
+            event_count: 1,
+            epoch,
+            id: eventId,
+            type: 'com.rezics.content.media.import-requested.v1',
+            subject: mediaId,
+            data: { mediaId },
+          },
+        ],
+      };
+    },
+    async finish(admin, range) {
+      if (range.from === range.to) return;
+      await admin.query('UPDATE core.partition SET position=GREATEST(position,$2) WHERE partition_no=$1', [
+        hotPartition,
+        positionBase + range.to - range.from,
+      ]);
+    },
+  };
+}
+
+async function mediaGrowthSeedStep(
+  database: GrowthDatabase,
+  host: RpcHost,
+  request: MediaImportRequest,
+  previousScale: number,
+  scale: number,
+): Promise<void> {
+  const hotRoute = routeOf(request.containerId);
+  if (hotRoute === null) throw new Error('Growth fixture container has no route');
+  if (
+    !Number.isSafeInteger(previousScale) ||
+    !Number.isSafeInteger(scale) ||
+    previousScale < 0 ||
+    scale <= previousScale
+  )
+    throw new RangeError('Media growth scales must be positive increasing integers');
+  const hotPartition = partitionOf(hotRoute);
+  const partition = (
+    await database.admin.query<{ epoch: number; position: string }>(
+      'SELECT epoch,position::text AS position FROM core.partition WHERE partition_no=$1',
+      [hotPartition],
+    )
+  ).rows[0];
+  if (!partition) throw new Error('Growth fixture partition is missing');
+  const from = previousScale * MEDIA_ROWS_PER_SCALE;
+  const to = scale * MEDIA_ROWS_PER_SCALE;
+  const population = mediaHistoryPopulation(
+    'media-growth-history',
+    hotRoute,
+    Number(partition.position),
+    from,
+    partition.epoch,
+  );
+  await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
+  const result = (await host.call('request', {
+    input: request,
+    key: `media-growth-hot-${scale}`,
+  })) as { status: number };
+  if (result.status !== 202) throw new Error(`Growth public import: ${JSON.stringify(result)}`);
+}
+
 async function applicationHost(): Promise<RpcHost> {
   const { COMMON_ACTIONS, IMPORT_ACTIONS } = await import('../../../../specs/imports-identity-driver.ts');
   // The worker process loads the registered application modules, but has no
@@ -315,6 +486,8 @@ async function applicationHost(): Promise<RpcHost> {
     import('./media-boundary.ts'),
   ]);
   const identities = createImportIdentityDriver();
+  const publicApiCalls: { containerId: string }[] = [];
+  let identityOpens = 0;
   let boundary: MediaBoundary | undefined;
   let ending: Promise<void> | undefined;
   const close = () =>
@@ -327,6 +500,7 @@ async function applicationHost(): Promise<RpcHost> {
     })());
   try {
     const f = await identities.open({ clock: () => new Date() });
+    identityOpens++;
     const auth = f.accessConfig.auth!;
     const access = createAccess({ actions: importActionCatalogue(f.database, f.routeKey), auth });
     // The media client consents to its private status read as well as import.
@@ -459,12 +633,24 @@ async function applicationHost(): Promise<RpcHost> {
             await b.reset();
             containerId = await openContainer();
             return { importerId, containerId };
+          case 'counters':
+            return { identityOpens, publicApiCalls: [...publicApiCalls] };
           case 'start':
             return b.start();
           case 'reset':
             return b.reset();
+          case 'seedWorkflowHistory':
+            return b.seedWorkflowHistory(input.count as number);
+          case 'growthSeedStep':
+            return mediaGrowthSeedStep(
+              f.database,
+              host,
+              input.request as MediaImportRequest,
+              input.previousScale as number,
+              input.scale as number,
+            );
           case 'growth':
-            return mediaGrowth(f, b, host, input.request, openContainer, input.minimumRows);
+            return mediaGrowth(f, b, host, input.request, input.minimumRows);
           case 'measureTransition':
             return b.measureTransition(input.mediaId);
           case 'source':
@@ -481,6 +667,7 @@ async function applicationHost(): Promise<RpcHost> {
             return { ...captured, registrations: undefined, names: captured.registrations.map((r) => r.name) };
           }
           case 'request': {
+            publicApiCalls.push({ containerId: (input.input as MediaImportRequest).containerId });
             const response = await client.media.$importFromUrl.post(input.input as MediaImportRequest, {
               headers: { 'idempotency-key': JSON.stringify(`${containerId}:${input.key}`) },
             });
@@ -520,19 +707,17 @@ async function applicationHost(): Promise<RpcHost> {
   }
 }
 
-/** Setup grows native public writes; fixed operations are captured on every owning
- * pool, including nested plans and the actual DBOS system/client pools. */
+/** Seed unrelated native-shaped history with one hot public reservation per scale;
+ * fixed operations are captured on every owning pool, including DBOS. */
 async function mediaGrowth(
   f: ImportIdentity,
   boundary: MediaBoundary,
   host: RpcHost,
   request: MediaImportRequest,
-  createContainer: () => Promise<string>,
   minimumRows: number,
 ) {
   const { identitySupport } = await import('./identity-fixture.ts');
   const bounds = { statements: 'constant', rows: 'constant', blocks: 'logarithmic' } as const;
-  const hotContainer = request.containerId;
   const submit = async (input: MediaImportRequest, key: string) => {
     const response = (await host.call('request', { input, key })) as {
       status: number;
@@ -541,142 +726,40 @@ async function mediaGrowth(
     if (response.status !== 202) throw new Error(`Growth public import: ${JSON.stringify(response)}`);
     return response.body.media.id;
   };
-  // Container and media-owner checks are native point reads too. Populate their
-  // relations through public creates and reservations before the first scale.
-  // These unrelated pending reservations are the same setup as population.write;
-  // grants come only from native resource initialization, never SQL seeding.
-  for (let batch = 0; batch < 128; batch++)
-    for (let index = 0; index < 8; index++) {
-      const containerId = await createContainer();
-      await submit({ ...request, containerId }, `container-baseline-${batch}-${index}`);
-    }
-  // Native workflow tables need a populated baseline too. Otherwise PostgreSQL's
-  // small-table sequential plans count the benchmark's own preceding runs. Each
-  // batch is at most sixteen real public reservations and registered jobs, with
-  // corrupt encoded input exercising normal rejection and governance cleanup.
-  // Setup and external input allocation are outside every fixed measurement.
-  const baseline: { executedJobs: number; sourceBytes: number }[] = [];
-  for (let batch = 0; batch < 16; batch++) {
-    await boundary.reset();
-    await boundary.source(request.sourceUrl, 'corrupt-image');
-    const ids: string[] = [];
-    for (let index = 0; index < 8; index++) {
-      const containerId = await createContainer();
-      ids.push(await submit({ ...request, containerId }, `workflow-baseline-${batch}-${index}`));
-    }
-    await Promise.all(
-      ids.map((id) => boundary.drain({ mediaIds: [id], maxJobs: 16, signal: new AbortController().signal })),
-    );
-    const recorded = await boundary.capture();
-    baseline.push({
-      executedJobs: recorded.executedJobs,
-      sourceBytes: recorded.sourceRequests.reduce((sum, r) => sum + r.bytes, 0),
-    });
-  }
+  // Keep the probe on the real public reservation and registered job path. Seed
+  // only unrelated history set-based, with contiguous positions owned by C.
   await boundary.reset();
   const source = await boundary.source(request.sourceUrl);
   const fixed = await submit(request, 'fixed-read');
   await boundary.drain({ mediaIds: [fixed], maxJobs: 16, signal: new AbortController().signal });
-  // Seed unrelated native-shaped history in the hot route so measured exact
-  // lookups plan against populated relations. The importer, operator, human,
-  // hot container and fixed media remain untouched by this setup.
-  const hotRoute = routeOf(hotContainer);
+  const hotRoute = routeOf(request.containerId);
   if (hotRoute === null) throw new Error('Growth fixture container has no route');
-  const seededRows = 2_048;
-  const mediaIds = Array.from({ length: seededRows }, () => newId(hotRoute));
-  const containerIds = Array.from({ length: seededRows }, () => newId(hotRoute));
-  const accountIds = Array.from({ length: seededRows }, () => newId(hotRoute));
-  const transactionIds = Array.from({ length: seededRows }, () => randomUUID());
-  const eventIds = Array.from({ length: seededRows }, () => randomUUID());
+  const hotPartition = partitionOf(hotRoute);
   const partition = (
     await f.database.admin.query<{ epoch: number; position: string }>(
       'SELECT epoch,position::text AS position FROM core.partition WHERE partition_no=$1',
-      [partitionOf(hotRoute)],
+      [hotPartition],
     )
   ).rows[0];
   if (!partition) throw new Error('Growth fixture partition is missing');
-  await f.database.admin.query(
-    `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
-    SELECT $1,account_id,'actor','active',transaction_id
-    FROM unnest($2::uuid[],$3::uuid[]) AS seeded(account_id,transaction_id)`,
-    [hotRoute, accountIds, transactionIds],
+  await seed(
+    f.database,
+    mediaHistoryPopulation('media-growth-baseline', hotRoute, Number(partition.position), 0, partition.epoch),
+    { from: 0, to: MEDIA_HISTORY_ROWS },
   );
-  await f.database.admin.query(
-    `INSERT INTO semantic.subject (route,subject_id,type,recorded_transaction_id)
-    SELECT $1,subject_id,'schema:Book',transaction_id
-    FROM unnest($2::uuid[],$3::uuid[]) AS seeded(subject_id,transaction_id)`,
-    [hotRoute, containerIds, transactionIds],
-  );
-  await f.database.admin.query(
-    `INSERT INTO content.media (
-      route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
-      declared_sha256,actual_byte_count,sha256,state,decision,key,transaction_id,source_url,credit,provenance
-    )
-    SELECT $1,media_id,container_id,uploader_id,'growth-baseline-'||ordinality,'cover',NULL,NULL,
-      NULL,NULL,NULL,'reserved',NULL,'m/'||media_id::text||'/original',transaction_id,
-      'https://lain.bgm.tv/pic/growth-baseline.jpg',
-      jsonb_build_object(
-        'rightsHolder','Growth fixture',
-        'via',jsonb_build_object('name','Growth fixture','url','https://lain.bgm.tv/'),
-        'license','CC-BY-4.0','obligations','[]'::jsonb
-      ),
-      jsonb_build_object(
-        'source','bangumi','external_id','growth-'||ordinality,'record_revision','fixture:1',
-        'digest',repeat('0',64),'converter_revision','fixture:1','field_group','cover',
-        'references',jsonb_build_array(jsonb_build_object('name','Growth fixture','url','https://lain.bgm.tv/'))
-      )
-    FROM unnest($2::uuid[],$3::uuid[],$4::uuid[],$5::uuid[]) WITH ORDINALITY
-      AS seeded(media_id,container_id,uploader_id,transaction_id,ordinality)`,
-    [hotRoute, mediaIds, containerIds, accountIds, transactionIds],
-  );
-  await f.database.admin.query(
-    `INSERT INTO access.resource_role_grant
-      (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-    SELECT $1,resource_id,'identity',account_id,'','owner','(,)',transaction_id
-    FROM unnest($2::uuid[],$3::uuid[],$4::uuid[],$5::uuid[]) AS seeded(media_id,container_id,account_id,transaction_id)
-    CROSS JOIN LATERAL (VALUES (media_id),(container_id)) AS resources(resource_id)`,
-    [hotRoute, mediaIds, containerIds, accountIds, transactionIds],
-  );
-  await f.database.admin.query(
-    `INSERT INTO core.receipt (
-      partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,
-      epoch,position,transaction_id,response
-    )
-    SELECT $1,'account',account_id,'content.media.importFromUrl','growth-baseline-'||ordinality,
-      decode(repeat('00',32),'hex'),$2,$3::bigint+1000000+ordinality,transaction_id,
-      jsonb_build_object('mediaId',media_id::text)
-    FROM unnest($4::uuid[],$5::uuid[],$6::uuid[]) WITH ORDINALITY
-      AS seeded(media_id,account_id,transaction_id,ordinality)`,
-    [partitionOf(hotRoute), partition.epoch, partition.position, mediaIds, accountIds, transactionIds],
-  );
-  await f.database.admin.query(
-    `INSERT INTO core.outbox (partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
-    SELECT $1,$2::bigint+1000000+ordinality,0,1,$3,event_id,
-      'com.rezics.content.media.import-requested.v1',media_id::text,
-      jsonb_build_object('mediaId',media_id::text)
-    FROM unnest($4::uuid[],$5::uuid[]) WITH ORDINALITY
-      AS seeded(media_id,event_id,ordinality)`,
-    [partitionOf(hotRoute), partition.position, partition.epoch, mediaIds, eventIds],
-  );
+  const workflowBaselineRows = await boundary.seedWorkflowHistory(MEDIA_WORKFLOW_HISTORY_ROWS);
   const workerRuns = new Map<number, Cost[]>();
   const authRuns = new Map<number, Cost[]>();
   const raw: { scale: number; worker: Capture; auth: Capture }[] = [];
   let floors: Record<string, number> = {};
-  const population = {
-    name: 'public-media-and-history',
-    hotPartition: partitionOf(routeOf(hotContainer)!),
-    async write(_target: unknown, placement: { ordinal: number; hot: boolean }) {
-      const containerId = placement.hot ? hotContainer : await createContainer();
-      await submit({ ...request, containerId }, `population-${placement.ordinal}`);
-    },
-  };
   const report = await checkGrowth(f.database, {
     name: 'public media status, disclosure, receipt and registered import',
+    scales: [1, 8, 64],
     bounds,
     repetitions: 3,
     warmups: 1,
     async grow(db, scale, previous) {
-      await seed(db, population, { from: previous * 8, to: scale * 8 });
+      await mediaGrowthSeedStep(db, host, request, previous, scale);
       if (scale === 1) {
         for (const relation of [
           'content.media',
@@ -719,7 +802,7 @@ async function mediaGrowth(
   assertGrowth(workers, bounds);
   assertGrowth(auth, bounds);
   return {
-    baseline,
+    workflowBaselineRows,
     application: report.samples,
     worker: workers,
     auth,
@@ -888,6 +971,37 @@ async function workerHost(): Promise<RpcHost> {
           drains.clear();
           workflowDrains.clear();
           return null;
+        }
+        if (method === 'seedHistory') {
+          const count = input.count as number;
+          const now = Date.now();
+          const namespace = `media-growth:${randomUUID()}:`;
+          await database.admin.query(
+            `WITH history AS (
+               SELECT $1 || item::text AS workflow_uuid, item
+               FROM generate_series(1, $2::integer) AS item
+             ), inserted AS (
+               INSERT INTO dbos.workflow_status (
+                 workflow_uuid, status, name, queue_name, authenticated_user, assumed_role, authenticated_roles,
+                 executor_id, application_id, created_at, updated_at, recovery_attempts, inputs,
+                 queue_partition_key, serialization
+               )
+               SELECT workflow_uuid, 'SUCCESS', 'content.importFromUrl', 'import', '', '', '', '', 'rezics-kernel',
+                      $3::bigint + item, $3::bigint + item, 0, '[]', 'media-growth:' || item::text, 'JSON'
+               FROM history
+               RETURNING workflow_uuid
+             ), inputs AS (
+               INSERT INTO dbos.workflow_input (workflow_uuid, inputs)
+               SELECT workflow_uuid, '[]' FROM inserted
+             ), outputs AS (
+               INSERT INTO dbos.workflow_output (workflow_uuid, output, error)
+               SELECT workflow_uuid, 'null', '' FROM inserted
+             )
+             INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
+             SELECT workflow_uuid, 1, 'content.importFromUrl', 'null', '' FROM inserted`,
+            [namespace, count, now],
+          );
+          return count;
         }
         if (method === 'beginDrain') {
           beginDrain(input.mediaIds, input.maxJobs);
