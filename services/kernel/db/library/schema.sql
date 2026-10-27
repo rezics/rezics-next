@@ -139,10 +139,19 @@ CREATE TABLE library.entry (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    activity_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    type_id uuid,
+    type_source_id uuid,
+    type_source_partition integer,
+    type_source_epoch integer,
+    type_source_position bigint,
+    incarnation_id uuid,
     CONSTRAINT entry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT entry_revision_check CHECK ((revision >= 1)),
     CONSTRAINT entry_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text])))
+    CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))),
+    CONSTRAINT entry_type_observation_check CHECK ((((type_id IS NULL) AND (type_source_id IS NULL) AND (type_source_partition IS NULL) AND (type_source_epoch IS NULL) AND (type_source_position IS NULL)) OR ((type_id IS NOT NULL) AND (type_source_id IS NOT NULL) AND (type_source_partition IS NOT NULL) AND (type_source_epoch IS NOT NULL) AND (type_source_position IS NOT NULL) AND ((type_source_partition >= 0) AND (type_source_partition <= 4095)) AND (type_source_epoch >= 1) AND (type_source_position >= 0) AND (type_source_partition = (((get_byte(uuid_send(type_source_id), 10) * 256) + get_byte(uuid_send(type_source_id), 11)) >> 4)))))
 );
 
 
@@ -187,6 +196,21 @@ CREATE TABLE library.progress_change (
 
 
 --
+-- Name: progress_head; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_head (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    last_changed_at timestamp with time zone,
+    last_completed_at timestamp with time zone,
+    CONSTRAINT progress_head_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT progress_head_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: progress_session; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -208,6 +232,7 @@ CREATE TABLE library.progress_session (
     started_at timestamp with time zone NOT NULL,
     completed_at timestamp with time zone,
     transaction_id uuid NOT NULL,
+    last_changed_at timestamp with time zone,
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -264,6 +289,24 @@ CREATE TABLE library.published_log (
     CONSTRAINT published_log_note_check CHECK (((note IS NULL) OR ((char_length(note) >= 0) AND (char_length(note) <= 1000)))),
     CONSTRAINT published_log_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT published_log_session_state_check CHECK ((session_state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
+);
+
+
+--
+-- Name: shelf_count; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.shelf_count (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    bucket text NOT NULL,
+    type_id uuid NOT NULL,
+    n bigint NOT NULL,
+    CONSTRAINT shelf_count_bucket_check CHECK ((bucket = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text, 'all'::text, 'collections'::text]))),
+    CONSTRAINT shelf_count_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT shelf_count_check1 CHECK (((bucket <> 'collections'::text) OR (type_id = '00000000-0000-0000-0000-000000000000'::uuid))),
+    CONSTRAINT shelf_count_n_check CHECK ((n >= 0)),
+    CONSTRAINT shelf_count_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -362,6 +405,14 @@ ALTER TABLE ONLY library.progress_change
 
 
 --
+-- Name: progress_head progress_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_head
+    ADD CONSTRAINT progress_head_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -383,6 +434,14 @@ ALTER TABLE ONLY library.progress_unit
 
 ALTER TABLE ONLY library.published_log
     ADD CONSTRAINT published_log_pkey PRIMARY KEY (route, log_id);
+
+
+--
+-- Name: shelf_count shelf_count_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_count
+    ADD CONSTRAINT shelf_count_pkey PRIMARY KEY (route, account_id, bucket, type_id);
 
 
 --
@@ -465,6 +524,97 @@ CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_
 
 
 --
+-- Name: entry_shelf_activity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity ON library.entry USING btree (route, account_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_state ON library.entry USING btree (route, account_id, state, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_state_type ON library.entry USING btree (route, account_id, state, type_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_type ON library.entry USING btree (route, account_id, type_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created ON library.entry USING btree (route, account_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_state ON library.entry USING btree (route, account_id, state, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_state_type ON library.entry USING btree (route, account_id, state, type_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_type ON library.entry USING btree (route, account_id, type_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_finished; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished ON library.entry USING btree (route, account_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_state ON library.entry USING btree (route, account_id, state, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_state_type ON library.entry USING btree (route, account_id, state, type_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, account_id, type_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_type_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_type_source ON library.entry USING btree (type_source_id, route, account_id, subject_id);
+
+
+--
 -- Name: follow_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -479,10 +629,24 @@ CREATE INDEX progress_session_account_subject ON library.progress_session USING 
 
 
 --
+-- Name: progress_session_active; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_active ON library.progress_session USING btree (route, account_id, subject_id, last_changed_at DESC, session_id) WHERE (state = 'active'::text);
+
+
+--
 -- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX published_log_account_page ON library.published_log USING btree (route, account_id, published_at DESC, log_id);
+
+
+--
+-- Name: shelf_count_types; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_count_types ON library.shelf_count USING btree (route, account_id, type_id) WHERE ((bucket = 'all'::text) AND (type_id <> '00000000-0000-0000-0000-000000000000'::uuid) AND (n > 0));
 
 
 --
