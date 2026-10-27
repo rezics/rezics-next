@@ -14,6 +14,7 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const pages = ['home', 'subject', 'missing-subject', 'shell', 'board', 'thread', 'search', 'search-empty'];
 const visitors = ['Signed In', 'Signed Out'];
 const recorded = join(app, 'src/kernel/recorded');
+const englishTextExceptions: { story: string; locale: string; text: string }[] = [];
 mkdirSync(join(root, '.temp'), { recursive: true });
 const temporary = mkdtempSync(join(root, '.temp/page-stories-'));
 const timeout = 1_800_000;
@@ -87,6 +88,30 @@ function sharedBrowser(): Promise<Browser> {
 
 function storyUrl(origin: string, storyId: string, locale: string) {
   return `${origin}/iframe.html?id=${storyId}&viewMode=story&globals=locale:${locale};a11y.manual:!true`;
+}
+
+async function visibleTextNodes(page: Page, selector?: string): Promise<string[]> {
+  return page.evaluate((rootSelector) => {
+    const root = rootSelector ? document.querySelector(rootSelector) : document.body;
+    if (!root) return [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const result: string[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.nodeValue?.trim();
+      const element = node.parentElement;
+      if (!text || !element || element.getClientRects().length === 0) continue;
+      let visible = true;
+      for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+        const style = window.getComputedStyle(current);
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) {
+          visible = false;
+          break;
+        }
+      }
+      if (visible) result.push(text);
+    }
+    return result;
+  }, selector);
 }
 
 async function openStory(name: string, visitor: string, locale: string) {
@@ -269,6 +294,20 @@ test(
           );
           expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
           const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+          if (name === 'home') {
+            expect(
+              await page.locator('[data-slot="cover-card-secondary"]').count(),
+              `${entry.id} ${locale}: home type rows and Continue cards have no type line under the title`,
+            ).toBe(0);
+            if (locale === 'zh-Hans') {
+              const cardTexts = await visibleTextNodes(page, '[data-slot="cover-card"]');
+              const englishTypes = new Set(['Book', 'TV Series', 'Recipe']);
+              expect(
+                cardTexts.filter((text) => englishTypes.has(text)),
+                `${entry.id} ${locale}: home cards do not show English type names`,
+              ).toEqual([]);
+            }
+          }
           expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
           const heading = main.getByRole('heading', { level: 1 }).first();
           await heading.waitFor();
@@ -292,6 +331,26 @@ test(
           if (name === 'subject') {
             const recording = await Bun.file(join(recorded, 'subject.json')).json();
             expect(headingText).toBe(recording.subject.labels[locale] ?? recording.subject.labels.en);
+          }
+          if (locale !== 'en') {
+            const english = await Bun.file(join(app, 'messages/en.json')).json();
+            const release = await Bun.file(join(recorded, 'definitions-release.json')).json();
+            const candidates = new Set<string>();
+            for (const [key, value] of Object.entries(english))
+              if (typeof value === 'string' && own[key] !== value) candidates.add(value);
+            for (const type of Object.values(release.release.types) as { labels?: Record<string, string> }[])
+              if (type.labels?.en && type.labels[locale] !== type.labels.en) candidates.add(type.labels.en);
+            const hits = (await visibleTextNodes(page)).filter(
+              (text) =>
+                candidates.has(text) &&
+                !englishTextExceptions.some(
+                  (exception) => exception.story === entry.id && exception.locale === locale && exception.text === text,
+                ),
+            );
+            expect(
+              hits.map((text) => `${entry.id}, ${locale}, ${text}`),
+              'non-English page stories contain no English message or type label text nodes',
+            ).toEqual([]);
           }
           const a11y = await new AxeBuilder({ page })
             .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
