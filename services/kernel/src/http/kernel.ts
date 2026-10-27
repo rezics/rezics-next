@@ -312,7 +312,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     },
   };
   content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
-  subjectReactionRoutes(app, contentDependencies);
+  subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,

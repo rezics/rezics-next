@@ -12,6 +12,7 @@ import { moderationRoutes } from './moderation-routes.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { createApp } from '../http/app.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -1017,7 +1018,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
   return routes;
 }
 
-export function subjectReactionRoutes(routes: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
+export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, dependencies: Dependencies) {
   return routes
     .put(
       '/v1/subjects/:id/reaction',
