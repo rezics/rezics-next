@@ -113,8 +113,9 @@ async function build(
       };
 
       if (host) await attempt(() => host!.stop());
+      // Until host construction succeeds, this helper still owns any pool Auth has not already closed.
+      else if (database && !database.ended && !database.ending) await attempt(() => database!.end());
       if (server) await attempt(() => server!.stop(true));
-      else if (database) await attempt(() => database!.end());
       if (dropper) {
         await attempt(async () => {
           const stdin = dropper!.stdin;

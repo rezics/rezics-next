@@ -303,6 +303,112 @@ async function setupFailureMode() {
   );
 }
 
+async function authConstructionFailureMode() {
+  const admin = await adminPool();
+  const owned: OwnedResource[] = [];
+  const events: string[] = [];
+  const originalEnd = Pool.prototype.end;
+  const originalServe = Bun.serve;
+  const originalSpawn = Bun.spawn;
+  const retention = process.env.AUTH_WORKFLOW_RETENTION_DAYS;
+  let authName: string | undefined;
+  let listener: ReturnType<typeof Bun.serve> | undefined;
+  let originalStop: ReturnType<typeof Bun.serve>['stop'] | undefined;
+  let watcher: ReturnType<typeof Bun.spawn> | undefined;
+  let issuer = '';
+  let authPoolEndCompletions = 0;
+  let endedBeforeListenerAndWatcher = false;
+  let caught: unknown;
+
+  try {
+    // Observe only the acknowledged Auth pool, forwarding every call to the genuine end method.
+    Pool.prototype.end = function (this: Pool, ...args: Parameters<typeof originalEnd>) {
+      const target = authName && new URL(this.options.connectionString!).pathname === `/${authName}`;
+      const ending = Reflect.apply(originalEnd, this, args) as Promise<void> | undefined;
+      if (!target || !ending) return ending;
+      return ending.then(async () => {
+        authPoolEndCompletions++;
+        endedBeforeListenerAndWatcher =
+          this.ended && Boolean(listener?.port) && watcher?.exitCode === null && (await hasDatabase(admin, authName!));
+        events.push('auth-pool-ended');
+      });
+    } as typeof originalEnd;
+    Bun.serve = ((options: Parameters<typeof originalServe>[0]) => {
+      const server = originalServe(options);
+      listener = server;
+      issuer = `http://127.0.0.1:${server.port}`;
+      originalStop = server.stop;
+      const stop = server.stop.bind(server);
+      server.stop = async (closeActiveConnections) => {
+        await stop(closeActiveConnections);
+        events.push('listener-stopped');
+      };
+      return server;
+    }) as typeof originalServe;
+    Bun.spawn = ((...args: Parameters<typeof originalSpawn>) => {
+      const child = Reflect.apply(originalSpawn, Bun, args) as ReturnType<typeof Bun.spawn>;
+      const command = args[0];
+      if (authName && Array.isArray(command) && command.includes(authName)) {
+        watcher = child;
+        void child.exited.then(() => events.push('watcher-exited'));
+      }
+      return child;
+    }) as typeof originalSpawn;
+    process.env.AUTH_WORKFLOW_RETENTION_DAYS = 'invalid';
+    try {
+      const driver = await createSemanticDriver(createKernel, {
+        strictCleanup: true,
+        onOwnedResource: (resource) => {
+          owned.push(resource);
+          if (resource.kind === 'auth_database') authName = resource.name;
+        },
+      });
+      openDrivers.add(driver);
+    } catch (error) {
+      caught = error;
+      events.push('setup-rejected');
+    }
+    assert.ok(caught instanceof Error && !(caught instanceof AggregateError));
+    assert.equal(caught.name, 'WorkflowRetentionConfigurationError');
+    assert.equal(caught.message, 'Invalid Auth host configuration: AUTH_WORKFLOW_RETENTION_DAYS');
+    assert.equal(authPoolEndCompletions, 1, 'Allocated Auth Pool.end must complete exactly once');
+    assert.equal(endedBeforeListenerAndWatcher, true);
+    assert.deepEqual(events, ['auth-pool-ended', 'listener-stopped', 'watcher-exited', 'setup-rejected']);
+    assert.ok(listener);
+    assert.equal(
+      await fetch(issuer).then(
+        () => false,
+        () => true,
+      ),
+      true,
+    );
+    assert.ok(watcher);
+    assert.equal(watcher.exitCode, 0);
+    assert.equal(owned.length, 2);
+    assert.ok(owned.some((resource) => resource.kind === 'kernel_database'));
+    assert.ok(owned.some((resource) => resource.kind === 'auth_database'));
+    for (const resource of owned) assert.equal(await hasDatabase(admin, resource.name), false);
+    process.stdout.write(
+      `RESULT:${JSON.stringify({
+        configurationErrorPreserved: true,
+        authPoolEndCompletions,
+        authPoolEndStage: 'before listener stop and watcher drain',
+        listenerClosed: true,
+        watcherDrained: true,
+        ownedDatabasesRemoved: true,
+      })}`,
+    );
+  } finally {
+    Pool.prototype.end = originalEnd;
+    Bun.serve = originalServe;
+    Bun.spawn = originalSpawn;
+    if (listener && originalStop) listener.stop = originalStop;
+    if (retention === undefined) delete process.env.AUTH_WORKFLOW_RETENTION_DAYS;
+    else process.env.AUTH_WORKFLOW_RETENTION_DAYS = retention;
+    await endAdmin(admin);
+  }
+}
+
 async function defaultProjectionMode() {
   const admin = await adminPool();
   const firstOwnership: Array<OwnedResource & { existed: boolean }> = [];
@@ -377,6 +483,7 @@ async function run() {
   else if (mode === 'external-runtime') await externalRuntimeMode();
   else if (mode === 'auth-cleanup') await authCleanupMode();
   else if (mode === 'cleanup-failure') await setupFailureMode();
+  else if (mode === 'auth-construction-failure') await authConstructionFailureMode();
   else if (mode === 'default-projection') await defaultProjectionMode();
   else throw new Error('Unknown outcome lifecycle child mode');
 }

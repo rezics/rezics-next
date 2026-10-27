@@ -40,6 +40,18 @@ test('owned Auth cleanup awaits its host listener watcher and database without h
   });
 }, 180_000);
 
+test('owned Auth cleanup closes its allocated pool when host construction fails before SDK launch', async () => {
+  const result = await scenario('auth-construction-failure');
+  expect(result).toMatchObject({
+    configurationErrorPreserved: true,
+    authPoolEndCompletions: 1,
+    authPoolEndStage: 'before listener stop and watcher drain',
+    listenerClosed: true,
+    watcherDrained: true,
+    ownedDatabasesRemoved: true,
+  });
+}, 180_000);
+
 test('default semantic outcome callers retain owned link projection behavior', async () => {
   const result = await scenario('default-projection');
   expect(result).toMatchObject({
