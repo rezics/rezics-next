@@ -133,3 +133,20 @@ test('a reshape that only records a held contract does not wait for host capacit
     expect(h.store.task(task.id).brief.markdown).toContain(dependency.id);
   } finally { h.dispose(); }
 });
+
+test('a held task whose current attempt stopped can be cancelled', async () => {
+  const h = harness();
+  try {
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id); await job.drain();
+    await h.tasks.stop(task.id);
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const reshaped = join(h.root, '.temp/goal/reshaped.md');
+    writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    await job.start(task.id, { brief: reshaped }); await job.drain();
+    expect(h.store.task(task.id).state).toBe('held');
+    await h.tasks.cancel(task.id);
+    expect(h.store.task(task.id).state).toBe('cancelled');
+  } finally { h.dispose(); }
+});
