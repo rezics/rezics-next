@@ -222,12 +222,14 @@ A missing anchor partition also denies the page call before reading responsibili
 
 The list port accepts `{ operatorAccountId, cursor?: string, limit?: number }` and an optional authenticated `Actor`, returning `{ operators, next: string | null }`.
 Trusted composition supplies the acting account from authentication; omitting the actor denotes an anonymous viewer.
+An anonymous cursor cannot resume as an account viewer, and an account cursor cannot resume anonymously or as another account.
 The default limit is 20; explicit limits must be integers from 1 to 100.
 Rows retain exactly `{ reservationId, subjectAccountId }`, including pending responsibilities conservatively; they do not establish current relation authority.
 `cursor` and `next` use the opaque `encodeListCursor`/`decodeListCursor` format.
 Because this internal port has no HTTP route, its fixed feed name is `access.operator.responsibility.list`; the binding includes the acting account ID (or `null` for anonymous), operator identity, purpose `operator`, ascending reservation order and the effective limit.
 The encrypted position retains the partition epoch and reservation after-key. A cursor cannot cross viewers or page sizes.
 Issuance and expiry use `OperatorConfig.clock`, defaulting to the kernel clock installed on Access.
+Each page samples that clock once for both cursor validation and issuance; a cursor remains valid at exactly 15 minutes old.
 The scan touches the same rows and statements; cursor encryption adds constant CPU for HKDF and AES-GCM per token.
 The separate internal `responsibilityWorkPage` port retains sealed work cursors for durable fence fanout; these never reach list readers.
 Malformed, expired, wrong-key, differently bound and stale-epoch cursors fail before the responsibility query.

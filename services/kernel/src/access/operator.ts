@@ -429,6 +429,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
     };
     const binding = {
+      // This internal list has no HTTP route; use its fixed feed identity.
       route: workBinding.operation,
       viewer: viewer.kind === 'account' ? viewer.accountId : null,
       query: { ...workBinding.parameters, limit },

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { createOperatorCommands, OperatorDeniedError } from '../../src/access/operator.ts';
 import { createAccess } from '../../src/access/permission.ts';
+import { installAccessClock } from '../../src/access/access-clock.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { encodeListCursor, decodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { decodeCursor } from '../../src/tokens/cursor.ts';
@@ -224,6 +225,53 @@ test('internal fanout keeps sealed work cursors separate from opaque list cursor
   await expect(
     operators.responsibilityWorkPage({ operatorAccountId, limit: 1, cursor: list.next! }),
   ).rejects.toBeInstanceOf(OperatorDeniedError);
+});
+
+test('anonymous list cursors cannot resume as an account viewer', async () => {
+  const page = await commands().responsibilityPage({ operatorAccountId, limit: 1 });
+  const viewer = {
+    kind: 'account' as const,
+    accountId: newId(route),
+    clientId: 'operator-list-test',
+    scopes: ['account:manage'],
+    requestedBy: null,
+    authnEpoch: 1,
+  };
+  const attempt = await capture(db, async () => {
+    await expect(
+      commands().responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! }, viewer),
+    ).rejects.toBeInstanceOf(OperatorDeniedError);
+  });
+  expect(attempt.capture.statements.some((sql) => sql.includes('access.lifecycle_coordination'))).toBe(false);
+});
+
+test('responsibility list inherits the Access kernel clock and honors the exact expiry boundary', async () => {
+  let now = new Date('2020-01-01T00:00:00Z');
+  let clockReads = 0;
+  const access = createAccess({ actions, accountEvidence: () => null });
+  installAccessClock(access, () => {
+    clockReads++;
+    return now;
+  });
+  const operators = createOperatorCommands({ ...config(), access });
+  const page = await operators.responsibilityPage({ operatorAccountId, limit: 1 });
+  expect(clockReads).toBe(1);
+  expect(
+    await decodeListCursor(ring, { ...binding, query: { ...binding.query, limit: 1 } }, page.next!, now),
+  ).toMatchObject({ ok: true, epoch: 1, after: [id(1)] });
+  now = new Date(now.getTime() + 15 * 60_000);
+  expect((await operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! })).operators).toEqual(
+    expected.slice(1, 2),
+  );
+  expect(clockReads).toBe(2);
+  now = new Date(now.getTime() + 1);
+  const attempt = await capture(db, async () => {
+    await expect(
+      operators.responsibilityPage({ operatorAccountId, limit: 1, cursor: page.next! }),
+    ).rejects.toBeInstanceOf(OperatorDeniedError);
+  });
+  expect(clockReads).toBe(3);
+  expect(attempt.capture.statements.some((sql) => sql.includes('access.lifecycle_coordination'))).toBe(false);
 });
 
 test('stable keyset pages are bounded and include pending responsibilities conservatively', async () => {

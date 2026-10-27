@@ -1860,12 +1860,13 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       };
     },
     async page(f, limit, cursor, mismatch) {
+      const viewer = await required(accessPort, 'Access is not composed').authenticate(f.caller, context());
       let supplied = cursor;
       if (mismatch === 'bytes') supplied = `${cursor ?? ''}x`;
       if (mismatch === 'epoch' && cursor) {
         const binding = {
           route: 'access.operator.responsibility.list',
-          viewer: null,
+          viewer: viewer.kind === 'account' ? viewer.accountId : null,
           query: { operatorAccountId: f.ownerId, purpose: 'operator', sort: 'reservationId:asc', limit },
         };
         const decoded = await decodeListCursor(referenceKeys, binding, cursor, new Date());
@@ -1878,11 +1879,14 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         );
       }
       return refused(async () => {
-        const value = await native().operators.responsibilityPage({
-          operatorAccountId: mismatch === 'operator' ? f.nextOperatorId : f.ownerId,
-          limit,
-          ...(supplied === undefined ? {} : { cursor: supplied }),
-        });
+        const value = await native().operators.responsibilityPage(
+          {
+            operatorAccountId: mismatch === 'operator' ? f.nextOperatorId : f.ownerId,
+            limit,
+            ...(supplied === undefined ? {} : { cursor: supplied }),
+          },
+          viewer,
+        );
         return {
           operators: value.operators.map((x) => ({
             reservationId: x.reservationId,
