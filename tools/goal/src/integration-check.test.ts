@@ -276,3 +276,24 @@ test("an error dev already has is not new when the branch only grows the type Ty
   expect(newErrorLines(line(28), line(26))).toEqual([]);
   expect(newErrorLines(`${line(28)}\nsrc/other.ts(1,1): error TS2304: Cannot find name 'x'.`, line(26))).toHaveLength(1);
 });
+
+test('read-only integration checks run at once, and a check that writes the tree runs alone afterwards', async () => {
+  const { runIntegrationChecks } = await import('./merge-train.ts');
+  const { mkdtempSync, readFileSync: read, rmSync: remove } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'checks-'));
+  try {
+    const log = join(dir, 'landing.log');
+    const started = Date.now();
+    const result = await runIntegrationChecks(
+      [['sh', '-c', 'sleep 1; echo first'], ['sh', '-c', 'sleep 1; echo second'], ['sh', '-c', 'echo generate step']],
+      dir,
+      log,
+    );
+    expect(result.passed).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_900);
+    const text = read(log, 'utf8');
+    expect(text.indexOf('first')).toBeLessThan(text.indexOf('second'));
+    expect(text.indexOf('second')).toBeLessThan(text.indexOf('generate step'));
+  } finally { remove(dir, { recursive: true, force: true }); }
+});
