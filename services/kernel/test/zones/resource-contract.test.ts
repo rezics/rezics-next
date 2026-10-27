@@ -428,6 +428,7 @@ test('all Zone list envelopes accept 1 through 100 with default 20', async () =>
   body.configuration.scope = [];
   body.configuration.pages = [{ route: '', document: page('List boundary') }];
   const zone = await f.create(body);
+  for (let i = 0; i < 20; i++) await f.create(body);
   for (const endpoint of ['/v1/zones', `${path(zone.id)}/subjects`, `${path(zone.id)}/collections`]) {
     for (const limit of [1, 24, 25, 100]) {
       expect((await f.call('owner', 'GET', `${endpoint}?limit=${limit}`)).status).toBe(200);
@@ -441,6 +442,10 @@ test('all Zone list envelopes accept 1 through 100 with default 20', async () =>
     const implicit = await f.call('owner', 'GET', endpoint);
     const explicit = await f.call('owner', 'GET', `${endpoint}?limit=20`);
     expect(implicit.status).toBe(200);
+    expect(Array.isArray(implicit.body[field])).toBe(true);
+    expect(Object.hasOwn(implicit.body, 'next')).toBe(true);
+    if (field === 'zones') expect(implicit.body.zones).toHaveLength(20);
+    else expect(implicit.body[field]).toEqual([]);
     expect(implicit.body[field]).toEqual(explicit.body[field]);
     // Opaque sealed continuations may differ byte-for-byte for the same boundary.
     expect(implicit.body.next === null).toBe(explicit.body.next === null);
