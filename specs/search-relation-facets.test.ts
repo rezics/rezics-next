@@ -347,3 +347,87 @@ test('a declared author relation update refreshes its source subject', async () 
   refused(await driver.request('suspended', 'POST', '/v1/subjects:search', { text: marker, filter: positive }));
   refused(await driver.request('suspended', 'GET', `/v1/subjects:suggest?q=${marker}`));
 });
+
+test('hiding a relation target suppresses positive source hits before the rebuild', async () => {
+  const authors = await people(130);
+  const hiddenTarget = authors[0]!;
+  const takenDownTarget = authors[129]!;
+  const single = await create('Single author', [hiddenTarget]);
+  const overflowing = await create('Overflowing authors', authors.slice(1));
+  const books = [single, overflowing];
+  await indexed(books);
+  const singlePredicate = anchored(authorFilter(hiddenTarget));
+  const overflowPredicate = anchored(authorFilter(takenDownTarget));
+  // Both positive witnesses must be indexed before removal, under one explicit deadline.
+  await eventually(
+    async () => ({ single: await search(singlePredicate), overflow: await search(overflowPredicate) }),
+    (result) => sameIds(result.single, [single]) && sameIds(result.overflow, [overflowing]),
+  );
+  for (const persona of ['anonymous', 'editor'] as const) {
+    expectIds(await search(singlePredicate, persona), [single]);
+    expectIds(await search(overflowPredicate, persona), [overflowing]);
+    for (const subject of [...books, hiddenTarget, takenDownTarget]) {
+      expect((await driver.request(persona, 'GET', path(subject.id))).status).toBe(200);
+    }
+  }
+  await driver.indexing('paused');
+  try {
+    await driver.remove(hiddenTarget.id, 'hidden');
+    for (const persona of ['anonymous', 'editor'] as const) {
+      expectIds(await search(singlePredicate, persona), []);
+      expectIds(await search(overflowPredicate, persona), [overflowing]);
+    }
+    await driver.remove(takenDownTarget.id, 'taken_down');
+    for (const persona of ['anonymous', 'editor'] as const) {
+      expectIds(await search(singlePredicate, persona), []);
+      expectIds(await search(overflowPredicate, persona), []);
+      // Removal suppresses relation witnesses, while both source Books remain public.
+      for (const book of books) {
+        expect((await driver.request(persona, 'GET', path(book.id))).status).toBe(200);
+      }
+    }
+    // A negative predicate may conservatively omit a source until its rebuild.
+    // No assertion depends on which of the overflowing Book's authors was sampled.
+  } finally {
+    await driver.indexing('running');
+  }
+});
+
+test('qualified relation facet filters are refused without changing unqualified author semantics', async () => {
+  const author = await create('Author', [], 'schema:Person');
+  const book = await create('Qualified relation control', [author]);
+  await indexed([book]);
+  const leaf = authorFilter(author);
+  await eventually(
+    () => search(anchored(leaf)),
+    (result) => sameIds(result, [book]),
+  );
+  // The release declares author as a relation and wdt:P3831 as an admitted item
+  // qualifier. This well-formed query must fail at qualifiers, not at its contents.
+  const qualified = {
+    statement: {
+      ...leaf.statement,
+      qualifiers: [{ property: 'wdt:P3831', in: [author.id] }],
+    },
+  };
+  for (const persona of ['anonymous', 'editor'] as const) {
+    expectIds(await search(anchored(leaf), persona), [book]);
+    for (const [filter, pointer] of [
+      [anchored(qualified), '/filter/and/1/statement/qualifiers'],
+      [anchored({ not: qualified }), '/filter/and/1/not/statement/qualifiers'],
+    ] as const) {
+      for (const route of ['/v1/subjects:search', '/v1/subjects:facets']) {
+        const response = await driver.request(persona, 'POST', route, {
+          text: marker,
+          filter,
+          ...(route.endsWith(':facets') ? { facets: [{ property: 'schema:author', size: 20 }] } : { limit: 20 }),
+        });
+        expect(response.status).toBe(400);
+        expect(response.headers.get('content-type')).toContain('application/problem+json');
+        expect(response.body).toMatchObject({ code: 'invalid_request', status: 400 });
+        expect(response.body.errors).toEqual(expect.arrayContaining([{ pointer, code: 'unsupported' }]));
+      }
+    }
+    expectIds(await search(anchored(leaf), persona), [book]);
+  }
+});
