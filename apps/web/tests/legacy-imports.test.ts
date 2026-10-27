@@ -39,9 +39,9 @@ test('no site source imports a legacy @rezics/ui component that has a shadcn cou
   // The site components kept are still there.
   for (const name of siteComponents)
     if (name !== 'utils' && name !== 'styles.css')
-      expect(existsSync(join(import.meta.dir, '..', '..', '..', 'packages', 'ui', 'src', 'components', `${name}.tsx`))).toBe(
-        true,
-      );
+      expect(
+        existsSync(join(import.meta.dir, '..', '..', '..', 'packages', 'ui', 'src', 'components', `${name}.tsx`)),
+      ).toBe(true);
 });
 
 test('the search typeahead keeps its keyboard behaviour and suggestions with covers on the shadcn combobox', () => {
