@@ -205,7 +205,6 @@ test(
         join(app, 'node_modules/.bin/storybook'),
         'dev',
         '--ci',
-        '--no-open',
         '--disable-telemetry',
         '--port',
         String(port),
