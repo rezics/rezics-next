@@ -82,10 +82,20 @@ async function openStory(file: string, name: string, locale: string, width: numb
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
   const page = await context.newPage();
-  await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
-    waitUntil: 'networkidle',
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
   });
-  await page.locator('html[data-hydrated]').waitFor();
+  try {
+    await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
+      waitUntil: 'networkidle',
+    });
+    await page.locator('html[data-hydrated]').waitFor();
+  } catch (error) {
+    await context.close();
+    throw new Error(`${entry.id} (${locale}, ${width}px): ${String(error)}\n${errors.join('\n')}`);
+  }
   return { context, page };
 }
 
