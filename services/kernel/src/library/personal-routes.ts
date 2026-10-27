@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import type { KernelClock } from '../clock.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -18,10 +18,26 @@ import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
+import { admitShelfRead } from './shelf-admission.ts';
+import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
+import {
+  shelfEntrySchema,
+  shelfListQuerySchema,
+  shelfSummaryQuerySchema,
+  shelfSummarySchema,
+  shelfTypesQuerySchema,
+  shelfTypesSchema,
+} from './shelf-schemas.ts';
 
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; tokens: KeyRing; access: () => Access; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  tokens: KeyRing;
+  access: () => Access;
+  clock?: KernelClock;
+  shelves?: () => ShelfReads;
+};
 const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
@@ -85,6 +101,7 @@ const failures = {
   422: problemSchema('idempotency_conflict'),
   503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
 };
+const shelfFailures = { ...failures, 400: problemSchema('invalid_request', 'invalid_cursor', 'invalid_argument') };
 function detail(operationId: string, action: string, write = false) {
   return {
     operationId,
@@ -113,8 +130,41 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     throw error;
   }
 }
-function entryView({ subjectId, state, revision, createdAt, updatedAt }: Entry) {
+function entryView({
+  subjectId,
+  state,
+  revision,
+  createdAt,
+  updatedAt,
+}: Pick<Entry, 'subjectId' | 'state' | 'revision' | 'createdAt' | 'updatedAt'>) {
   return { subjectId, state, revision, createdAt, updatedAt };
+}
+function shelfEntryView(entry: ShelfEntry) {
+  const { lastActivityAt, finishedAt, activeProgressSession: session } = entry;
+  return {
+    ...entryView(entry),
+    lastActivityAt,
+    finishedAt,
+    activeProgressSession:
+      session === null
+        ? null
+        : {
+            id: session.id,
+            subjectId: session.subjectId,
+            versionSubjectId: session.versionSubjectId,
+            mode: session.mode,
+            unit: session.unit,
+            total: session.total,
+            amount: session.amount,
+            locator: session.locator,
+            position: session.position,
+            completedUnitCount: session.completedUnitCount,
+            state: session.state,
+            revision: session.revision,
+            startedAt: session.startedAt,
+            completedAt: session.completedAt,
+          },
+  };
 }
 function copyView({ id, subjectId, status, revision, location, source, acquiredOn, disposedOn, note }: Copy) {
   return { id, subjectId, status, revision, location, source, acquiredOn, disposedOn, note };
@@ -129,26 +179,80 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
   const entries = () => createEntryCommands(config());
   const copies = () => createCopyCommands(config());
   const follows = () => createFollowCommands(config());
+  const shelves = (operation: keyof ShelfReads) => {
+    if (!dependencies.shelves) throw new ShelfContractNotImplementedError(operation);
+    return dependencies.shelves();
+  };
+  const shelfOwner = (actor: Actor) => {
+    const owner = account(actor);
+    if (!owner.scopes.includes('library_entry:list')) throw new ProblemError('forbidden');
+  };
   return app
     .get(
       '/v1/libraryEntries',
       {
-        query: t.Object({ ...pageQuery, state: t.Optional(state) }, closed),
+        query: t.Object(
+          { ...shelfListQuerySchema.properties, orderBy: t.Optional(shelfListQuerySchema.properties.orderBy) },
+          closed,
+        ),
         response: {
-          200: t.Object({ libraryEntries: t.Array(embedded(entrySchema, subjectFields)), next: nullable }, closed),
-          ...failures,
+          200: t.Object(
+            {
+              libraryEntries: t.Array(t.Union([shelfEntrySchema, embedded(entrySchema, subjectFields)])),
+              next: nullable,
+            },
+            closed,
+          ),
+          ...shelfFailures,
         },
         detail: detail('library_entry.list', 'library_entry:list'),
       },
       async ({ actor, query, admission, job }) => {
         account(actor);
+        if (query.orderBy !== undefined) {
+          shelfOwner(actor);
+          const result = await admission.run('normal', job, async () => {
+            await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
+            return command(() => shelves('listShelf').listShelf(actor, basicQuery(query)));
+          });
+          return fullView(config(), actor, query.view, {
+            libraryEntries: result.entries.map(shelfEntryView),
+            next: result.next,
+          });
+        }
+        if (query.direction !== undefined || query.type !== undefined) throw new ProblemError('invalid_request');
+        const { orderBy: _orderBy, direction: _direction, type: _type, ...oldQuery } = query;
         const result = await admission.run('normal', job, () =>
-          command(() => entries().listEntries(actor, basicQuery(query))),
+          command(() => entries().listEntries(actor, basicQuery(oldQuery))),
         );
         return fullView(config(), actor, query.view, {
           libraryEntries: result.entries.map(entryView),
           next: result.next,
         });
+      },
+    )
+    .get(
+      '/v1/libraryShelfSummary',
+      {
+        query: shelfSummaryQuerySchema,
+        response: { 200: shelfSummarySchema, ...shelfFailures },
+        detail: detail('library_shelf.summary', 'library_entry:list'),
+      },
+      async ({ actor, query, admission, job }) => {
+        shelfOwner(actor);
+        return admission.run('normal', job, () => command(() => shelves('summary').summary(actor, query)));
+      },
+    )
+    .get(
+      '/v1/libraryShelfTypes',
+      {
+        query: shelfTypesQuerySchema,
+        response: { 200: shelfTypesSchema, ...shelfFailures },
+        detail: detail('library_shelf.types', 'library_entry:list'),
+      },
+      async ({ actor, query, admission, job }) => {
+        shelfOwner(actor);
+        return admission.run('normal', job, () => command(() => shelves('listTypes').listTypes(actor, query)));
       },
     )
     .get(

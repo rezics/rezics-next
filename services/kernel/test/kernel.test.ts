@@ -189,6 +189,8 @@ const typed = [
   'PUT /v1/spaces/:spaceId/address',
   'GET /v1/spaceAddresses/:address',
   'GET /v1/libraryEntries',
+  'GET /v1/libraryShelfSummary',
+  'GET /v1/libraryShelfTypes',
   'GET /v1/libraryEntries/:subjectId',
   'PUT /v1/libraryEntries/:subjectId',
   'DELETE /v1/libraryEntries/:subjectId',

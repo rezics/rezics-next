@@ -3,6 +3,7 @@
   "singleQuote": true,
   "sortPackageJson": false,
   "ignorePatterns": [
+    "services/kernel/test/library/shelf-http-schema.test.ts",
     "contracts/**",
     "services/kernel/test/library/bulk-target-schema.test.ts",
     "packages/client/src/kernel/**",
