@@ -24,22 +24,32 @@ if (configuredInspectorPort !== undefined) {
   inspectorPort = parsedInspectorPort;
 }
 
-export default defineConfig({
-  html: { cspNonce: viteNonceMarker },
-  // Fonts must stay on the site origin; the page policy does not allow data: fonts.
-  build: { assetsInlineLimit: 0 },
-  optimizeDeps: {
-    include: ['lucide-react', '@rezics/ui/menu', '@rezics/ui/select', '@rezics/ui/button'],
-  },
-  plugins: [
-    paraglideVitePlugin({ project: './project.inlang' }),
-    tanstackStart(),
-    react(),
-    tailwindcss(),
-    ...cloudflare({
-      viteEnvironment: { name: 'ssr' },
-      inspectorPort,
-      ...(testStateDirectory ? { persistState: { path: testStateDirectory } } : {}),
-    }),
-  ],
+export default defineConfig(async ({ command }) => {
+  // Create generated localization modules before Vite scans the browser routes.
+  if (command === 'serve') await import('./scripts/generate.ts');
+
+  return {
+    html: { cspNonce: viteNonceMarker },
+    // Fonts must stay on the site origin; the page policy does not allow data: fonts.
+    build: { assetsInlineLimit: 0 },
+    optimizeDeps: {
+      entries: ['src/routes/**/*.tsx'],
+    },
+    ssr: {
+      optimizeDeps: {
+        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+      },
+    },
+    plugins: [
+      paraglideVitePlugin({ project: './project.inlang' }),
+      tanstackStart(),
+      react(),
+      tailwindcss(),
+      ...cloudflare({
+        viteEnvironment: { name: 'ssr' },
+        inspectorPort,
+        ...(testStateDirectory ? { persistState: { path: testStateDirectory } } : {}),
+      }),
+    ],
+  };
 });

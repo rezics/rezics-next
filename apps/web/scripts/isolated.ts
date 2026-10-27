@@ -10,6 +10,12 @@ if (command.length === 0) {
 } else {
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
+  const appCommand =
+    command[0] === 'bun' && command[1] === 'test'
+      ? command.map((argument, index) =>
+          index > 1 && argument.startsWith('apps/web/') ? resolve(root, argument) : argument,
+        )
+      : command;
   const stateRoot = process.env.WEB_TEST_STATE_DIR;
 
   process.exitCode = await stackRun(
@@ -17,9 +23,9 @@ if (command.length === 0) {
       label: 'web isolated',
       root,
       cwd: app,
-      command: ['bun', 'scripts/isolated.ts', ...command],
+      command: ['bun', 'scripts/isolated.ts', ...appCommand],
       // A state directory or a report the caller names is read back from this machine.
-      keepsFiles: stateRoot !== undefined || testKeepsFiles(command),
+      keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },
     async (slotEnvironment) => {
       const linux = process.platform === 'linux';
@@ -28,25 +34,28 @@ if (command.length === 0) {
       // Only the recorder needs Docker's host-published ports. Keep browser tests in their own namespace even when
       // the same Bun invocation names both kinds of test.
       const recorder = (argument: string) => argument.endsWith('record-script.test.ts');
-      const testFiles = command.filter((argument) => /\.test\.[cm]?[jt]sx?$/.test(argument));
-      const mixed = command[1] === 'test' && testFiles.some(recorder) && testFiles.some((file) => !recorder(file));
+      const testFiles = appCommand.filter((argument) => /\.test\.[cm]?[jt]sx?$/.test(argument));
+      const mixed = appCommand[1] === 'test' && testFiles.some(recorder) && testFiles.some((file) => !recorder(file));
       const defaultRecorder =
-        command[1] === 'test' && command.length === 2
+        appCommand[1] === 'test' && appCommand.length === 2
           ? ['tests/record-script.test.ts', 'apps/web/tests/record-script.test.ts', 'record-script.test.ts'].find(
               existsSync,
             )
           : undefined;
       const commands = mixed
         ? [
-            { args: command.filter((argument) => !recorder(argument)), isolate: true },
-            { args: command.filter((argument) => !testFiles.includes(argument) || recorder(argument)), isolate: false },
+            { args: appCommand.filter((argument) => !recorder(argument)), isolate: true },
+            {
+              args: appCommand.filter((argument) => !testFiles.includes(argument) || recorder(argument)),
+              isolate: false,
+            },
           ]
         : defaultRecorder
           ? [
-              { args: [...command, '--path-ignore-patterns=**/record-script.test.ts'], isolate: true },
-              { args: [command[0]!, 'test', `./${defaultRecorder}`], isolate: false },
+              { args: [...appCommand, '--path-ignore-patterns=**/record-script.test.ts'], isolate: true },
+              { args: [appCommand[0]!, 'test', `./${defaultRecorder}`], isolate: false },
             ]
-          : [{ args: command, isolate: !command.some(recorder) }];
+          : [{ args: appCommand, isolate: !appCommand.some(recorder) }];
 
       if (linux) {
         try {
