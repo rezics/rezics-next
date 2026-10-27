@@ -38,7 +38,10 @@ function queryClient(client: Client): Client {
   return { query: client.query.bind(client) };
 }
 
-function asRecord(row: LabelRecord): LabelRecord {
+function asRecord(
+  row: Omit<LabelRecord, 'createdAt' | 'updatedAt'> & { createdAt: string | null; updatedAt: string | null },
+): LabelRecord {
+  if (row.createdAt === null || row.updatedAt === null) throw new Error('Personal label timestamps are required');
   return {
     ...row,
     createdAt: new Date(row.createdAt).toISOString(),
