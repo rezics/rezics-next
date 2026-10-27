@@ -26,6 +26,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   admin: Pool,
   accounts: Personas,
   actions: readonly string[],
+  options: { clock?: () => Date } = {},
 ): Promise<RealAccessFixture<keyof Personas & string>> {
   type Persona = keyof Personas & string;
   const accountById = new Map(Object.entries(accounts).map(([persona, accountId]) => [accountId, persona]));
@@ -40,19 +41,20 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   const bearers = new Map<Persona, string>();
 
   for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
+    const issuedAt = Math.floor((options.clock?.() ?? new Date()).getTime() / 1000);
     const bearer = await new SignJWT({
       client_id: 'web',
       scope: actions.join(' '),
       authn_epoch: 1,
-      auth_time: Math.floor(Date.now() / 1000),
+      auth_time: issuedAt,
       amr: ['pwd'],
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'semantic-real-access', typ: 'at+jwt' })
       .setIssuer(auth.issuer)
       .setAudience(auth.audience)
       .setSubject(accountId)
-      .setIssuedAt()
-      .setExpirationTime('5m')
+      .setIssuedAt(issuedAt)
+      .setExpirationTime(issuedAt + 5 * 60)
       .sign(signing.privateKey);
     const route = routeOf(accountId);
     if (route === null) throw new Error(`Invalid account id for persona ${persona}`);
