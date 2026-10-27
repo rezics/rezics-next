@@ -810,7 +810,7 @@ async function makeFixture(
         owner.accountId,
         grantee.accountId,
         ['account:delete', 'account:manage'],
-        staff.bearer,
+        owner.bearer,
         reference('operator-manager-grant'),
       );
     }
@@ -2076,7 +2076,7 @@ async function observe(f: Fixture): Promise<Snapshot> {
        JOIN access.committed_continuation AS continuation USING (route, continuation_id)
        LEFT JOIN access.lifecycle_fence_receipt AS fence
          ON fence.receipt_id=item.receipt_id
-        AND fence.account_id=split_part(item.target, ':', 1)::uuid
+        AND fence.account_id=CASE WHEN item.step='fence' THEN split_part(item.target, ':', 1)::uuid END
        WHERE continuation.route=$3 AND continuation.operation_key=$4
          AND COALESCE(fence.transaction_id,item.receipt_id)=core.receipt.transaction_id
        LIMIT 1
