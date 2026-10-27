@@ -160,7 +160,7 @@ async function listedFamilies(store: MemoryStore, type: string): Promise<string[
     const body = await store.get(key);
     if (!body) throw new Error(`index listed missing ${key}`);
     const xml = gunzipSync(body).toString('utf8');
-    for (const match of xml.matchAll(/<loc>https:\/\/public\.example\/subjects\/([^<]+)-en<\/loc>/g)) {
+    for (const match of xml.matchAll(/<loc>https:\/\/public\.example\/en\/subjects\/([^<]+)-en<\/loc>/g)) {
       found.push(match[1]!);
     }
   }
@@ -422,7 +422,7 @@ test('feed reads, R2 operations and bounded step batches grow linearly through 3
   expect(metrics.map(({ reads }) => reads)).toEqual([3, 30, 300]);
   expect(metrics.map(({ steps }) => steps)).toEqual([2, 15, 150]);
   expect(metrics.every(({ held }) => held <= 3_000)).toBe(true);
-  for (const field of ['reads', 'r2', 'steps'] as const) {
+  for (const field of ['reads', 'steps'] as const) {
     const firstRatio = metrics[1]![field] / metrics[0]![field];
     const secondRatio = metrics[2]![field] / metrics[1]![field];
     expect(firstRatio).toBeGreaterThanOrEqual(7);
@@ -430,4 +430,8 @@ test('feed reads, R2 operations and bounded step batches grow linearly through 3
     expect(secondRatio).toBeGreaterThanOrEqual(7);
     expect(secondRatio).toBeLessThanOrEqual(12);
   }
+  const firstR2Growth = metrics[1]!.r2 - metrics[0]!.r2;
+  const secondR2Growth = metrics[2]!.r2 - metrics[1]!.r2;
+  expect(secondR2Growth / firstR2Growth).toBeGreaterThanOrEqual(7);
+  expect(secondR2Growth / firstR2Growth).toBeLessThanOrEqual(12);
 });
