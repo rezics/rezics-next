@@ -194,7 +194,7 @@ export function unrelatedSemanticPopulation(
         await admin.query(
           `INSERT INTO semantic.inbound_link_count(route,subject_id,context_id,property,filter_value,value)
            VALUES($1,$2,$5,'schema:author',$3,$4)
-           ON CONFLICT(route,subject_id,context_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
+           ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
           [baseRoute, target, NIL, range.to, GLOBAL_CONTEXT],
         );
         for (const [index, partition] of partitions.entries()) {

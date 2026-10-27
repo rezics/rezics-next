@@ -442,7 +442,7 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
       await growth.admin.query(
         `INSERT INTO semantic.outbound_link_count(route,subject_id,property,filter_value,value)
          VALUES ($1,$2,'ex:follows','00000000-0000-0000-0000-000000000000',$3)
-         ON CONFLICT(route,subject_id,context_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
+         ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
         [anchorRoute, growthAnchor, scale],
       );
       await seedSemanticPopulation({ pool: growth.pool, admin: growth.admin }, unrelated.population, {
