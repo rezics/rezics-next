@@ -5,20 +5,30 @@ import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
-import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
+import { factDataTypes, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from './agents.ts';
 import { AccountAgentScopeGrowthError, AccountAgentVerificationError } from './agents.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
-import { SUBJECT_REVISED } from './events.ts';
+import { SUBJECT_REVISED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
+import { linkChanges } from './link-changes.ts';
+import { slotView } from './slots.ts';
 import accountAgentSubject from './account-agent-subject.sql';
 import insertAccountAgentSubject from './account-agent-subject-insert.sql';
 import verifyAccountAgentSubject from './account-agent-subject-verify.sql';
+import unverifyAccountAgentSubject from './account-agent-subject-unverify.sql';
+import deleteAccountAgentRedirect from './account-agent-delete-redirect.sql';
+import deleteAccountAgentMember from './account-agent-delete-member.sql';
+import insertUnverifyRevision from './account-agent-unverify-revision.sql';
+import readAccountAgentRevocation from './account-agent-read-revocation.sql';
+import readLatestRevision from './merges-read-latest-revision.sql';
+import changePartitionSubjectCount from './change-partition-subject-count.sql';
+import updateSubjectRelease from './update-subject-release.sql';
 import syncLabel from './account-agent-sync-label.sql';
 import insertSubject from './create-subject.sql';
 import createRevision from './create-revision.sql';
-import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { writeSubject } from './subject.ts';
 import { mergeSubjectsInCommand } from './merges.ts';
+import { reverseAccountAgentLinks } from './merge-moves.ts';
 
 type Queryable = Pick<PoolClient, 'query'>;
 type Account = string | Pick<AccountActor, 'accountId'>;
@@ -384,6 +394,168 @@ export async function verifyAccountAgent(
       throw new AccountAgentVerificationError('The catalogue subject is already linked to another account');
     throw error;
   }
+}
+
+/** Revoke a verified account-agent link and restore only the inbound links moved by that verification. */
+export async function unverifyAccountAgent(
+  pool: Pool,
+  options: { account: Account; receipt: string },
+): Promise<{
+  survivor: string;
+  redirected: string;
+  revision: number;
+  subject: Item;
+  component: { partition: number; epoch: number; position: bigint };
+}> {
+  const account = accountIdOf(options.account);
+  if (typeof options.receipt !== 'string' || !options.receipt.length || options.receipt.length > 255)
+    throw new TypeError('Revocation receipt id must contain 1 to 255 characters');
+  const agentId = accountAgentId(account);
+  const nodeRoute = routeOf(agentId)!;
+  const command = await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
+    if (currentCommand(tx).basis !== null)
+      throw new AccountAgentVerificationError('Verification reversal requires platform work');
+    const node = await readAgentSubject(tx, agentId);
+    if (!node) throw new AccountAgentVerificationError('The account agent does not exist');
+    const mapping = await accountAgentForNode(tx, agentId);
+    if (!mapping || mapping.account !== account || mapping.agent_id !== agentId)
+      throw new AccountAgentVerificationError('The account has no verified derived agent');
+
+    if (!mapping.verified) {
+      if (node.redirect) throw new AccountAgentVerificationError('The account agent is already merged');
+      const prior = listed(
+        (await readAccountAgentRevocation.run(tx as PoolClient, {
+          route: nodeRoute,
+          subject_id: agentId,
+          receipt_id: options.receipt,
+        })) as
+          | {
+              revision: number;
+              verification_receipt_id: string | null;
+              survivor: string | null;
+            }[]
+          | null,
+      )[0];
+      if (!prior?.verification_receipt_id || !prior.survivor)
+        throw new AccountAgentVerificationError('The account agent is not verified');
+      const active = await activeRelease(tx);
+      if (!active) throw new Error('Global definition release is not active');
+      const subject = resolveItem(
+        agentId,
+        agentFacts(node.labels),
+        node.type,
+        {},
+        {
+          revision: node.revision,
+          release: active.digest,
+          context: GLOBAL_CONTEXT,
+        },
+      );
+      return {
+        value: {
+          survivor: prior.survivor,
+          redirected: agentId,
+          revision: prior.revision,
+          subject,
+          verificationReceipt: prior.verification_receipt_id,
+        },
+        events: [{ type: LINKS_PROJECTED, subject: prior.survivor, data: { subjects: [prior.survivor] } }],
+      };
+    }
+
+    if (!mapping.receipt_id || !node.redirect || node.redirect !== mapping.subject)
+      throw new AccountAgentVerificationError('The account agent verification is incomplete');
+    const active = await activeRelease(tx);
+    if (!active) throw new Error('Global definition release is not active');
+    const latest = await readLatestRevision.run(tx, { route: nodeRoute, subject_id: agentId });
+    if (!latest) throw new SubjectNotFoundError();
+    const revision = Number(latest.revision) + 1;
+    const securityRevision = Number(latest.security_revision);
+    await insertUnverifyRevision.run(tx as PoolClient, {
+      route: nodeRoute,
+      subject_id: agentId,
+      revision,
+      release: active.digest,
+      transaction_id: transactionId,
+      verification_receipt_id: mapping.receipt_id,
+      revocation_receipt_id: options.receipt,
+      revoked_survivor_id: mapping.subject,
+    });
+    const movedBack = listed(
+      (await unverifyAccountAgentSubject.run(tx as PoolClient, {
+        node_route: nodeRoute,
+        catalogue_route: routeOf(mapping.subject)!,
+        account_route: routeOf(account)!,
+        account_id: account,
+        agent_id: agentId,
+        catalogue: mapping.subject,
+        verification_receipt_id: mapping.receipt_id,
+      })) as AccountAgentLink[] | AccountAgentLink | null,
+    );
+    if (!movedBack.length) throw new AccountAgentVerificationError('The verified account-agent link changed');
+    await deleteAccountAgentRedirect.run(tx, { route: nodeRoute, subject_id: agentId });
+    await deleteAccountAgentMember.run(tx, {
+      route: routeOf(mapping.subject)!,
+      subject_id: mapping.subject,
+      member_id: agentId,
+    });
+    await updateSubjectRelease.run(tx, { route: nodeRoute, subject_id: agentId, release: active.digest });
+    await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(nodeRoute), delta: 1 });
+
+    const facts: FactRow[] = [];
+    for (const property of active.release.types[node.type]?.properties ?? [])
+      facts.push(...(await slotView(tx, agentId, property)).facts);
+    const changes = linkChanges([], facts, factDataTypes(active.release, facts), {
+      release: active.release,
+      type: node.type,
+    });
+    const subject = resolveItem(
+      agentId,
+      agentFacts(node.labels),
+      node.type,
+      {},
+      {
+        revision,
+        release: active.digest,
+        context: GLOBAL_CONTEXT,
+      },
+    );
+    return {
+      value: {
+        survivor: mapping.subject,
+        redirected: agentId,
+        revision,
+        subject,
+        verificationReceipt: mapping.receipt_id,
+      },
+      events: [
+        { type: SUBJECT_REVISED, subject: agentId, data: { id: agentId, revision, kind: 'merge' } },
+        ...(changes.length
+          ? [
+              {
+                type: LINKS_CHANGED,
+                subject: agentId,
+                data: { subject: agentId, revision, security_revision: securityRevision, changes },
+              },
+            ]
+          : []),
+      ],
+    };
+  });
+
+  await reverseAccountAgentLinks(pool, {
+    account,
+    receipt: command.value.verificationReceipt,
+    survivor: command.value.survivor,
+    movedFrom: agentId,
+  });
+  return {
+    survivor: command.value.survivor,
+    redirected: agentId,
+    revision: command.value.revision,
+    subject: command.value.subject,
+    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+  };
 }
 
 async function existingVerification(

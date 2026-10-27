@@ -1,4 +1,4 @@
-export { ensureAccountAgent, verifyAccountAgent } from './account-agents.ts';
+export { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from './account-agents.ts';
 export {
   AccountAgentLabelEditError,
   AccountAgentScopeGrowthError,

@@ -81,8 +81,13 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
 )
 INSERT INTO semantic.inbound_link_count(route, subject_id, property, filter_value, value)
 SELECT input.route, d.subject_id, d.property, d.filter_value, COALESCE(c.value, 0) + d.delta
-FROM totals d CROSS JOIN input LEFT JOIN semantic.inbound_link_count c
- ON c.route = input.route AND c.subject_id = d.subject_id AND c.property = d.property AND c.filter_value = d.filter_value
+FROM totals d CROSS JOIN input
+LEFT JOIN LATERAL (
+  SELECT c.value FROM semantic.inbound_link_count c
+  WHERE c.route = input.route AND c.subject_id = d.subject_id
+    AND c.property = d.property AND c.filter_value = d.filter_value
+  LIMIT 1
+) c ON true
 WHERE d.delta <> 0 AND d.context_id = '00000000-0000-8000-8000-000000000000'
 ON CONFLICT (route, subject_id, property, filter_value)
 DO UPDATE SET value = EXCLUDED.value;

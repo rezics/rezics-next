@@ -70,6 +70,32 @@ CREATE FUNCTION semantic.prevent_moderation_mutation() RETURNS trigger
 
 
 --
+-- Name: prevent_redirect_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.prevent_redirect_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+  BEGIN
+    IF TG_OP = 'DELETE' AND EXISTS (
+      SELECT 1
+      FROM semantic.revision AS revision
+      WHERE revision.route = OLD.route AND revision.subject_id = OLD.subject_id
+        AND revision.revision = (
+          SELECT max(latest.revision)
+          FROM semantic.revision AS latest
+          WHERE latest.route = OLD.route AND latest.subject_id = OLD.subject_id
+        )
+        AND revision.revocation_receipt_id IS NOT NULL
+    ) THEN
+      RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'Semantic redirects are immutable' USING ERRCODE = '23514';
+  END;
+  $$;
+
+
+--
 -- Name: prevent_revision_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -132,6 +158,16 @@ CREATE TABLE semantic.account_agent_moved_link (
     survivor uuid NOT NULL,
     moved_from uuid NOT NULL,
     statement_id uuid NOT NULL,
+    property text NOT NULL,
+    source_subject_id uuid NOT NULL,
+    filter_value uuid NOT NULL,
+    source_revision integer,
+    source_security_revision bigint,
+    present boolean,
+    source_type text,
+    order_key text,
+    reversal_prepared boolean DEFAULT false NOT NULL,
+    reversed boolean DEFAULT false NOT NULL,
     CONSTRAINT account_agent_moved_link_receipt_check CHECK (((length(receipt_id) >= 1) AND (length(receipt_id) <= 255)))
 );
 
@@ -555,9 +591,12 @@ CREATE TABLE semantic.revision (
     recorded_transaction_id uuid NOT NULL,
     source jsonb,
     verification_receipt_id text,
+    revocation_receipt_id text,
+    revoked_survivor_id uuid,
     CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT revision_revocation_receipt_check CHECK (((revocation_receipt_id IS NULL) OR ((length(revocation_receipt_id) >= 1) AND (length(revocation_receipt_id) <= 255)))),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
@@ -639,7 +678,7 @@ ALTER TABLE ONLY semantic.acceptance
 --
 
 ALTER TABLE ONLY semantic.account_agent_moved_link
-    ADD CONSTRAINT account_agent_moved_link_pkey PRIMARY KEY (route, receipt_id, moved_from, statement_id);
+    ADD CONSTRAINT account_agent_moved_link_pkey PRIMARY KEY (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value);
 
 
 --
@@ -1086,7 +1125,7 @@ CREATE TRIGGER moderation_immutable_truncate BEFORE TRUNCATE ON semantic.moderat
 -- Name: redirect redirect_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_redirect_mutation();
 
 
 --

@@ -18,6 +18,8 @@ import upsertOutboundLinks from './upsert-outbound-links.sql';
 import pageOutbound from './list-outbound-merge.sql';
 import readLatestRevision from './merges-read-latest-revision.sql';
 import clearProjectionPending from './merge-clear-projection-pending.sql';
+import pageMovedAgentLinks from './account-agent-reversal-page.sql';
+import deleteMovedAgentLinks from './account-agent-reversal-delete-links.sql';
 
 // Counter deltas observe Global writes before sparse Context rows in the same move.
 async function upsertByContext<T extends { context_id?: string }>(
@@ -71,6 +73,17 @@ type Outbound = {
   target_type: string;
   external: string | null;
   value: 'value' | 'somevalue' | 'novalue';
+};
+type ReversalLink = {
+  statement_id: string;
+  property: string;
+  source_subject_id: string;
+  filter_value: string;
+  source_revision: number | null;
+  source_security_revision: string | null;
+  present: boolean | null;
+  source_type: string | null;
+  order_key: string | null;
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -353,6 +366,9 @@ export async function moveMergePage(
           receipt_id: verification.receipt,
           account_id: verification.account,
           statement_id: link.statement_id,
+          property: link.property,
+          source_subject_id: link.source_subject_id,
+          filter_value: link.filter_value,
         })),
       });
     }
@@ -373,4 +389,97 @@ export async function moveMergePage(
   });
   if (applied.value) return moveMergePage(pool, id, applied.value, undefined, verification);
   return true;
+}
+
+/** Move only the links recorded for this verification back to the account agent, a page at a time. */
+export async function reverseAccountAgentLinks(
+  pool: Pool,
+  options: { account: string; receipt: string; survivor: string; movedFrom: string },
+): Promise<void> {
+  const route = routeOf(options.survivor);
+  const nodeRoute = routeOf(options.movedFrom);
+  if (route === null || nodeRoute === null) throw new TypeError('Account agent links must have routed subjects');
+  let after: { property: string; source: string; statement: string; filter: string } = {
+    property: '',
+    source: NIL,
+    statement: NIL,
+    filter: NIL,
+  };
+  for (;;) {
+    const page = await runCommand<ReversalLink[]>(pool, { partition: partitionOf(route) }, async (tx) => {
+      await tx.query('SET LOCAL enable_seqscan = off');
+      const links = (await pageMovedAgentLinks.run(tx, {
+        route,
+        receipt_id: options.receipt,
+        account_id: options.account,
+        survivor: options.survivor,
+        moved_from: options.movedFrom,
+        after_property: after.property,
+        after_source: after.source,
+        after_statement: after.statement,
+        after_filter: after.filter,
+      })) as ReversalLink[];
+      return { value: links, events: [projected(options.survivor)] };
+    });
+    if (!page.value.length) return;
+
+    const restored = page.value.filter(
+      (
+        link,
+      ): link is ReversalLink & {
+        source_revision: number;
+        source_security_revision: string;
+        present: boolean;
+        source_type: string;
+        order_key: string;
+      } => link.source_revision !== null && link.source_security_revision !== null && link.present !== null,
+    );
+    if (restored.length) {
+      await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
+        await tx.query('SET LOCAL enable_seqscan = off');
+        await upsertInboundLinks.run(tx, {
+          route: nodeRoute,
+          transaction_id: transactionId,
+          changes: restored.map((link) => ({
+            subject_id: options.movedFrom,
+            property: link.property,
+            source_subject_id: link.source_subject_id,
+            statement_id: link.statement_id,
+            source_revision: link.source_revision,
+            source_security_revision: Number(link.source_security_revision),
+            present: link.present,
+            source_type: link.source_type ?? '',
+            order_key: link.order_key ?? '',
+            filter_value: link.filter_value,
+          })),
+        });
+        return { value: null, events: [projected(options.movedFrom)] };
+      });
+    }
+    await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
+      await tx.query('SET LOCAL enable_seqscan = off');
+      await deleteMovedAgentLinks.run(tx, {
+        route,
+        receipt_id: options.receipt,
+        account_id: options.account,
+        survivor: options.survivor,
+        moved_from: options.movedFrom,
+        links: page.value.map((link) => ({
+          property: link.property,
+          source_subject_id: link.source_subject_id,
+          statement_id: link.statement_id,
+          filter_value: link.filter_value,
+        })),
+      });
+      return { value: null, events: [projected(options.survivor)] };
+    });
+    if (page.value.length < 100) return;
+    const last = page.value.at(-1)!;
+    after = {
+      property: last.property,
+      source: last.source_subject_id,
+      statement: last.statement_id,
+      filter: last.filter_value,
+    };
+  }
 }
