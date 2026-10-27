@@ -177,7 +177,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 - Touches: `ensureAccountAgent` reads the node by its derived id and writes at most the subject, its label and the back link. Label synchronization deletes the node's label rows and installs zero or one replacement, without reading or changing other facts. It records a name-free identity revision and subject event. Migration removes prior label history once. Verification is one merge. Inbound link moves append one reversal row per moved link row. The write-rule probe adds the back-link lookup to the batched target-type read. Grow total subjects and links; fix the account, label count, merge page and authorization evidence.
 - Bound: Ensure and label erasure touch O(1) rows and statements, independent of previous name changes. Erasure touches only that node's label rows, plus constant revision, subject and command bookkeeping. The write-rule probe adds no statement per target. Verification uses the existing merge page cost plus O(L) ledger rows for L moved statements.
-- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow` at scales `[1, 8, 64]`; `test/semantic/account-agent-cost.test.ts`: `account agent ownership probe uses constant statements at targets 1, 8 and 64` at scales `[1, 8, 64]`.
+- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow`; `test/semantic/account-agent-cost.test.ts`: `account agent ownership probe uses constant statements at targets 1, 8 and 64`.
 
 ### Private statements
 
@@ -226,7 +226,7 @@ append, with no additional SQL. The API round trips are covered by
 
 - Touches: `readLabels` takes at most 256 ids, groups them by partition, and issues one statement per partition. Each id is an exact `(route, subject_id)` pair: one `subject_pkey` probe and one `fact_label` probe. The label probe reads label rows only. Grow that partition and the total; the eight subjects stay fixed.
 - Bound: Rows O(i × labels), blocks O(i log N), one statement per nonempty partition. Independent of P. i is at most 256.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`, scales `[1, 8, 64]`.
+- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`.
 
 ### Partition keyset page
 
@@ -238,7 +238,7 @@ append, with no additional SQL. The API round trips are covered by
 
 - Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived under Subject summaries. Grow the related partitions and the total; the subject and its six related ids stay fixed.
 - Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Independent of P. The additional summary fill costs O(i × (labels + 65)) rows and O(subject, edition and media partitions) statements. Access permission checks remain one per related id and are bounded by that same fixed id list.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Related labels of a subject read stay within their bound as the related partitions grow`, scales `[1, 8, 64]`.
+- Growth check: `test/semantic/growth-reads.test.ts`: `Related labels of a subject read stay within their bound as the related partitions grow`.
 
 ### Definition publish
 

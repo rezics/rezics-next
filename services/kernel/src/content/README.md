@@ -342,7 +342,7 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
 
 - **Touches:** One keyset seek of L `board_thread` rows by `(route, board_id, hot_rank DESC, thread_id)`, plus the existing final disclosure per item.
 - **Bound:** O(L × (conditions + chain)), as the active page.
-- **Growth check:** `test/content/board-hot-http.test.ts`, `Hot board page`: a fixed page with constant rows and statements at 2048, 8192 and 32768 board threads.
+- **Growth check:** `test/content/board-hot-http.test.ts`, `Hot board page`: a fixed page with constant rows and statements as board threads grow.
 
 `document.ts` and both document tables cap canonical bodies at 2 MiB, with at most 128 subject references and 32 media IDs per revision; document validation, hashing and text extraction are linear in those bounded bytes.
 Images cap input at 20 MiB and decoding at 40 million pixels, generating at most twelve variants; `media_variant_slot_idx` enforces twelve slots even for sub-320 widths.
@@ -395,12 +395,12 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 - **Touches:** One admission observation, one scope point read, one state write and one event in the media's partition.
 - **Bound:** O(1) rows and statements; O(log M) blocks, where M is total media.
-- **Growth check:** `test/content/growth-media-erase.test.ts`, `Erase media stays within its bound as M grows`: at 2048, 8192 and 32768 media across other accounts with the probe fixed, constant rows and statements.
+- **Growth check:** `test/content/growth-media-erase.test.ts`, `Erase media stays within its bound as M grows`: as media across other accounts grow with the probe fixed, constant rows and statements.
 
 ### Reaction count
 
-- **Reaction count change:** Touches one contribution upsert and at most two `content.reaction_total` upserts (`-1` on the previous kind and `+1` on the new kind), in the target partition and one transaction. The source watermark changes only when its contribution row changes. Bound: O(log R) per event; concurrent changes to one target serialize on its total rows, which is acceptable for this asynchronous projection. Growth check: `test/content/reaction-totals.test.ts`, `reaction totals stay equal to contributions after actual log events are replayed, stale and reordered`; per-event rows and statements stay constant with 2048, 8192 and 32768 prior contributions on the target.
-- **Reaction counts read:** `readReactionCounts` touches one index range of at most seven total rows per target. A page reads at most L x 7 total rows per partition with one statement per partition. Bound: O(L x 7) rows, independent of contributors. Growth check: `test/content/reaction-totals.test.ts`, `single-target and page reads stay within seven rows as 2048, 8192 and 32768 contributors accumulate`; one target's read and a fixed page's read stay constant as contributors on the target grow to 2048, 8192 and 32768 across source partitions.
+- **Reaction count change:** Touches one contribution upsert and at most two `content.reaction_total` upserts (`-1` on the previous kind and `+1` on the new kind), in the target partition and one transaction. The source watermark changes only when its contribution row changes. Bound: O(log R) per event; concurrent changes to one target serialize on its total rows, which is acceptable for this asynchronous projection. Growth check: `test/content/reaction-totals.test.ts`, `reaction totals stay equal to contributions after actual log events are replayed, stale and reordered`; per-event rows and statements stay constant as prior contributions on the target grow.
+- **Reaction counts read:** `readReactionCounts` touches one index range of at most seven total rows per target. A page reads at most L x 7 total rows per partition with one statement per partition. Bound: O(L x 7) rows, independent of contributors. Growth check: `test/content/reaction-totals.test.ts`, `single-target and page reads stay within seven rows as 256, 1024 and 4096 contributors accumulate`; one target's read and a fixed page's read stay constant as contributors on the target grow across source partitions.
 
 - **Subject reaction counts:** `GET /v1/subjects/:id/reactions` checks subject visibility and Access, then reads at most five relayed `content.reaction_total` rows in the subject's partition. It returns the existing count array and watermark without reading the viewer's slot. Bound: O(1) rows and statements, independent of reactors. Growth check: `test/content/subject-reactions-http.test.ts`, `subject reaction read` at 64, 512 and 4096 reactors; rows and statements stay constant.
 - **Subject's own reaction:** `GET /v1/subjects/:id/reaction` requires an account, checks subject visibility and Access in the subject's partition, then reads one slot by primary key in the caller's partition. The check and slot read are separate statements; the endpoint returns the caller's subject kind or null. Bound: O(1) rows and statements, independent of reactors. Growth check: `test/content/subject-reactions-http.test.ts`, `subject own reaction read` at 64, 512 and 4096 reactors; rows and statements stay constant.
@@ -412,7 +412,7 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 - **Touches:** One rank-refresh index range of at most 500 candidates, one totals statement per thread partition in the batch, one Realm-votes statement per board partition in the batch, and one batch update.
 - **Bound:** O(B log R) rows with at most 2B + 2 statements for B <= 500; independent of reactions per thread.
-- **Growth check:** `test/content/board-hot-refresh.test.ts`, `one hot rank refresh batch`: one batch stays constant in rows and statements at 2048, 8192 and 32768 candidates, with reaction totals on the batch's threads.
+- **Growth check:** `test/content/board-hot-refresh.test.ts`, `one hot rank refresh batch`: one batch stays constant in rows and statements as candidates grow, with reaction totals on the batch's threads.
 
 ### Sitemap board feed
 
@@ -453,7 +453,7 @@ Author erasure `steps` counts only logical page steps, including a denied page. 
 
 - **Growth check:** `test/content/erasure-workflow.test.ts`, checkGrowth names `native content erasure pages`, `affected erasure revisions` and `native logical author page`.
 
-Author erasure provenance stores `source_digest`, `original_minimum_authn_epoch`, `original_operator_account_id`, `original_delegation_transaction_id`, `original_delegation_issued_valid`, and `creation_command_kind`/`creation_idempotency_key`/`creation_request_digest`/`creation_target_route`/`creation_target_id` alongside the existing actor and transaction columns. The operation ID is its own immutable source; `native_workflow_id` remains the DBOS workflow ID. Accounts captures the original floor/operator from admission at the same attempt T and the original delegation through one point read when requested. The receipt alone includes `durableInitiator`, the SHA-256 commitment of the entire allowlisted record; public callers still receive `{ operationId }`. Historical NULL provenance cannot restore. The initiation growth check uses 256, 2048 and 16384 rows.
+Author erasure provenance stores `source_digest`, `original_minimum_authn_epoch`, `original_operator_account_id`, `original_delegation_transaction_id`, `original_delegation_issued_valid`, and `creation_command_kind`/`creation_idempotency_key`/`creation_request_digest`/`creation_target_route`/`creation_target_id` alongside the existing actor and transaction columns. The operation ID is its own immutable source; `native_workflow_id` remains the DBOS workflow ID. Accounts captures the original floor/operator from admission at the same attempt T and the original delegation through one point read when requested. The receipt alone includes `durableInitiator`, the SHA-256 commitment of the entire allowlisted record; public callers still receive `{ operationId }`. Historical NULL provenance cannot restore.
 
 Authenticated paths and reserve's creator-grant insertion inherit the bounds derived in [Access Cost](../access/README.md#cost).
 Media reserve's ancestor validation follows a possibly differently routed board on the same supplied connection without independently checking its partition, so that read shape assumes the pool can reach both homes on one machine.

@@ -127,7 +127,7 @@ position counter.
 
 | Operation    | Touches                                                                                                                                                                                                                                                                | Bound                                                                        | Growth check                                                                 |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Create Realm | One admission observation shared by Global parent, Space and Context checks; one host point read and unique slot probe, prepared Context evidence and one Context verification at T; two inserts, a creation proof and grant initialization in the Space partition (C) | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: create at 256, 2048 and 16384 other Realms           |
+| Create Realm | One admission observation shared by Global parent, Space and Context checks; one host point read and unique slot probe, prepared Context evidence and one Context verification at T; two inserts, a creation proof and grant initialization in the Space partition (C) | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: create as other Realms grow           |
 | Update Realm | A on the Realm and one exact head read; a supplied Context adds its prepared evidence and point verification at T; one revision insert and head compare-and-set (C)                                                                                                    | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: update a fixed probe at the same scales              |
 | Read Realm   | One exact head read during public eligibility verification; protected reads require A's grant branch                                                                                                                                                                   | O(1) domain rows and statements; O(log R) blocks, plus A for protected reads | `growth-realm.test.ts`: public and protected fixed probes at the same scales |
 
@@ -155,7 +155,7 @@ under those same checks. A protected Realm that the actor cannot read is indisti
 
 | Operation                   | Touches                                                                                                                                            | Bound                                          | Growth check                                                                                                 |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Publish, withdraw or reject | One admission observation, one Realm point read and one subject point read at T, then one record insert and one head upsert in the Realm partition | O(1) rows, O(log R) blocks, plus A             | `growth-publication.test.ts`: a fixed probe at 256, 2048 and 16384 publications on other Realms and subjects |
+| Publish, withdraw or reject | One admission observation, one Realm point read and one subject point read at T, then one record insert and one head upsert in the Realm partition | O(1) rows, O(log R) blocks, plus A             | `growth-publication.test.ts`: a fixed probe as publications on other Realms and subjects grow |
 | List or read publications   | One keyset seek of L adopted heads plus final disclosure of the Realm and each subject; no count or offset                                         | O(L * (conditions + chain)); O(1) for one head | `growth-publication.test.ts`: the probe Realm and page stay fixed at the same scales                         |
 
 A Realm's `boardSchemeId` is initially null. `setBoardScheme` requires `realm:manage`,
@@ -170,7 +170,7 @@ in `board-scheme.ts` includes the scheme in its exact head read, including HTTP 
 
 | Operation             | Touches                                                                                                                                                                                                                                                                | Bound                                             | Growth check                                                                                                                                                                                   |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Set/read board scheme | One admission observation shared by Realm management and subject eligibility; one Realm head point read and Semantic's subject/type read at T; one revision insert and head compare-and-set in the Realm partition. Reading includes the scheme in the Realm head seek | O(1) rows and statements; O(log R) blocks, plus A | `board-scheme.test.ts`: fixed Realm and scheme at 2048, 8192 and 32768 other Realms and subjects; constant rows/statements and zero sequential scans on Realm and subject identities/revisions |
+| Set/read board scheme | One admission observation shared by Realm management and subject eligibility; one Realm head point read and Semantic's subject/type read at T; one revision insert and head compare-and-set in the Realm partition. Reading includes the scheme in the Realm head seek | O(1) rows and statements; O(log R) blocks, plus A | `board-scheme.test.ts`: fixed Realm and scheme as other Realms and subjects grow; constant rows/statements and zero sequential scans on Realm and subject identities/revisions |
 
 The board scheme and publication HTTP tests use genuine Auth-issued tokens and
 production Access. They cover a suspended-account persona through the native
@@ -225,8 +225,8 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 | Operation               | Touches                                                                                                               | Bound                                                                                                         | Growth check                                                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A                                                                            | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
-| Read current membership | One `realm_member_open` unique index point read, filtered at T; closed history does not widen the lookup              | O(1) row and statement; O(log N) blocks, where N is the Realm's membership history including closed intervals | `growth-membership-history.test.ts`: one row and statement, zero sequential scans at 2048, 8192 and 32768 closed intervals of the same account and Realm     |
+| Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A                                                                            | `growth-membership.test.ts`: a fixed probe as members of other Realms and accounts grow; constant rows and statements, zero sequential scans |
+| Read current membership | One `realm_member_open` unique index point read, filtered at T; closed history does not widen the lookup              | O(1) row and statement; O(log N) blocks, where N is the Realm's membership history including closed intervals | `growth-membership-history.test.ts`: one row and statement, zero sequential scans as closed intervals of the same account and Realm grow     |
 | List own Realms         | At most 80 caller-route inverse rows by keyset, then one current `realm_member` primary-key read per candidate        | At most 80 + 80 rows and constant statements; O(log R) blocks                                                 | `own-realms.test.ts`: one caller and other accounts' memberships grow at three scales; constant rows/statements and logarithmic blocks                       |
 | Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
 | Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
@@ -235,13 +235,13 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 - Touches: One Access evaluation for `realm:participate`, one `realm:read` eligibility check, and one exact Realm head read at their shared T.
 - Bound: O(1) rows and statements plus Access's bounded membership proof; O(log R) blocks.
-- Growth check: `participation.test.ts` keeps the fixed protected Realm probe at 2048, 8192 and 32768 Realms, members and grants; constant rows/statements and zero sequential scans.
+- Growth check: `participation.test.ts` keeps the protected Realm probe fixed as Realms, members and grants grow; constant rows/statements and zero sequential scans.
 
 ### Ensure protected Realm member grant
 
 - Touches: One exact Realm head read and one idempotent `resource_role_grant` insert in the Realm command transaction.
 - Bound: O(1) rows and statements; O(log R) blocks.
-- Growth check: `participation.test.ts` asserts one group grant after protection and uses the same bounded 2048, 8192 and 32768 population checks.
+- Growth check: `participation.test.ts` asserts one group grant after protection and uses the same bounded checks as Realms, members and grants grow.
 
 ### Join a Realm
 
@@ -265,13 +265,13 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 - Touches: One `realm_member_open` unique index point read of the member's open interval, filtered at T, after the Realm read check. Closed intervals do not widen the lookup.
 - Bound: O(log N) blocks, one row and one statement. N is the Realm's membership history, including closed intervals.
-- Growth check: `growth-membership-history.test.ts` fixes one account and Realm at 2048, 8192 and 32768 closed intervals of that same membership, with 65536, 524288 and 4194304 unrelated memberships spread across routes; one index point read, one row and one statement at every scale, zero sequential scans.
+- Growth check: `growth-membership-history.test.ts` fixes one account and Realm as closed intervals of that same membership and unrelated memberships spread across routes grow; one index point read, one row and one statement at every scale, zero sequential scans.
 
 ### Read Realm votes
 
 - Touches: one primary-key read of community.realm per given Realm, one statement per partition.
 - Bound: O(n log R) for n Realms.
-- Growth check: `test/community/realm-votes.test.ts`, `checkGrowth` name `Read Realm votes`: a fixed set of Realms read with constant rows and statements at 2048, 8192 and 32768 Realms.
+- Growth check: `test/community/realm-votes.test.ts`, `checkGrowth` name `Read Realm votes`: a fixed set of Realms read with constant rows and statements as Realms grow.
 
 ### Ban an account
 

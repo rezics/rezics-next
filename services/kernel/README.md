@@ -304,6 +304,17 @@ rows an earlier one wrote. The harness does not rewrite or compact relations bet
 the version chains, index growth and visibility effects a write check should reveal. A check that measures repeated
 writes to the same rows declares that history in its growth model.
 
+A module README cites a growth check by its test file and test title and says what grows and what stays fixed. It
+does not restate the scales, which the test owns and may change. Test titles do not name scales either, so a
+scale change does not break a citation.
+
+Product code sets no planner method settings (`enable_seqscan`, `enable_bitmapscan` or any other `enable_*`).
+PostgreSQL documents them as a crude, temporary way to influence a plan. A sequential scan of a small relation is
+bounded by that relation's size, and the planner moves to an index as statistics follow growth. A pin would make
+a growth check measure the pin instead of the declared growth model. When a check sees a scan of a relation that
+grows in production, seed that relation in the check; when a production plan is wrong, fix statistics, indexes or
+the query shape.
+
 ## HTTP contract
 
 JSON request bodies are validated against the declared body schema without type coercion. JSON strings are
