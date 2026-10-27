@@ -51,13 +51,13 @@ function refusalText(result: Extract<ReportResult, { ok: false }>): string {
   }
 }
 
-/** The overflow menu of a thread or post the viewer did not write: copy its link or report it. */
+/** The overflow menu of a thread, post or subject the viewer did not write: copy its link or report it. */
 export function PostActions({
   target,
   revisionId,
   verification,
 }: {
-  target: { kind: 'thread' | 'post'; id: string };
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
   verification: VerificationConfig;
 }) {
@@ -68,7 +68,9 @@ export function PostActions({
     key.current = crypto.randomUUID();
   }, []);
   const copyLink = () =>
-    navigator.clipboard.writeText(`${location.origin}${location.pathname}#${target.kind}-${target.id}`);
+    navigator.clipboard.writeText(
+      `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`,
+    );
   const report = async ({ reason, details }: ReportSubmission) => {
     let result: ReportResult;
     try {

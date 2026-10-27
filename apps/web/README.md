@@ -616,6 +616,16 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   `services/kernel/test/semantic/growth-reads.test.ts`: `the fact writer refuses more than 512 facts for one subject`;
   `Anchored subject read stays within its bound as the subject's history grows`
 
+### Subject reactions
+
+- **Touches:** In parallel with the subject page, one K `GET /v1/subjects/<id>/reactions` for the counts (at most five
+  total rows) and, for a signed-in reader, one K `GET /v1/subjects/<id>/reaction` with the session token for their
+  own kind; a change is one `PUT` or `DELETE` `/v1/subjects/<id>/reaction`/K with a new `Idempotency-Key`. A failed
+  counts read shows a sentence in place of the cluster and does not break the page
+- **Bound:** 1 K signed out and 2 K signed in per page view, 1 K per change; counts and kinds are at most five whatever
+  the number of reactions; 0 D/R/A
+- **Growth check:** `tests/subject-reactions.test.ts`: `reading a subject costs one counts read, plus one own-reaction read when signed in, at 1, 10 and 100 reactions`
+
 ### Subject page header and reading settings
 
 - **Touches:** One definitions read for the type's name and cover frame, served from the cache when warm (the active

@@ -76,6 +76,10 @@ export interface ReactionsProps {
   locale: string;
   /** When set, the viewer is signed out: chips are read-only and React links here. */
   signInHref?: string;
+  /** The kinds the target admits, in display order. Other kinds are neither shown nor offered. Defaults to all. */
+  kinds?: readonly ReactionKind[];
+  /** Turns the chips and the React trigger off, for example until the page has hydrated. */
+  disabled?: boolean;
 }
 
 interface ReactionView {
@@ -133,6 +137,8 @@ export const Reactions = (props: ReactionsProps) => {
   const labels = resolveLabels(props.labels);
   const signInHref = props.signInHref;
   const signedOut = signInHref !== undefined;
+  const kinds = props.kinds === undefined ? reactionKinds : reactionKinds.filter((kind) => props.kinds!.includes(kind));
+  const disabled = props.disabled === true;
   const propsRef = React.useRef(props);
   propsRef.current = props;
   const labelsRef = React.useRef(labels);
@@ -158,7 +164,7 @@ export const Reactions = (props: ReactionsProps) => {
   const shown = overlay ?? { counts: props.counts, value: props.value };
 
   const select = (kind: ReactionKind) => {
-    if (propsRef.current.signInHref !== undefined) return;
+    if (propsRef.current.signInHref !== undefined || propsRef.current.disabled === true) return;
     pendingJobs.current += 1;
     setBusy(true);
     const job = gate.current.then(async () => {
@@ -203,7 +209,7 @@ export const Reactions = (props: ReactionsProps) => {
       data-slot="reactions"
       role="group"
     >
-      {reactionKinds.map((kind) => {
+      {kinds.map((kind) => {
         const count = shown.counts[kind] ?? 0;
         if (count <= 0) return null;
         const pressed = shown.value === kind;
@@ -233,6 +239,7 @@ export const Reactions = (props: ReactionsProps) => {
             className={cn(chipClass, pressed && pressedClass)}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
+            disabled={disabled}
             key={kind}
             onClick={() => select(kind)}
             size="sm"
@@ -256,7 +263,7 @@ export const Reactions = (props: ReactionsProps) => {
             if (details.reason === 'outside-press' || details.reason === 'focus-out') details.cancel();
           }}
         >
-          <PopoverTrigger render={<Button className="rounded-full" size="sm" variant="outline" />}>
+          <PopoverTrigger render={<Button className="rounded-full" disabled={disabled} size="sm" variant="outline" />}>
             {labels.react}
           </PopoverTrigger>
           <PopoverContent className="w-64 gap-2 p-3">
@@ -264,7 +271,7 @@ export const Reactions = (props: ReactionsProps) => {
               <PopoverTitle>{labels.choose}</PopoverTitle>
             </PopoverHeader>
             <div className="flex flex-col gap-1">
-              {reactionKinds.map((kind) => {
+              {kinds.map((kind) => {
                 const Icon = reactionIcons[kind];
                 const pressed = shown.value === kind;
                 return (

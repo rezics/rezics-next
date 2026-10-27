@@ -35,6 +35,7 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 `Reactions`, `ContentActions`, `ReportDialog` and the rating components are built from shadcn primitives (`button`, `popover`, `dropdown-menu`, `alert-dialog`, `dialog`, `radio-group`, `field`, `textarea`, `slider`, `badge`) and import no Ark UI.
 
 - On a detail page the reaction cluster sits top right and reporting lives in the `ContentActions` overflow menu; there is no visible report button.
+- `Reactions` shows and offers every kind unless `kinds` narrows it: a subject admits like, love, laugh, insightful and sad, so its cluster passes those five and never shows upvote or downvote. `disabled` turns the chips and the React trigger off until the page has hydrated.
 - `RatingSummary` takes the aggregates the rating module returns (count, sum and histogram per population, plus the threshold) and never shows a score without its population and count. The headline is the page's own population; every other population is a labelled list and is never averaged or substituted; imported source scores follow, labelled with their source and scale. Below the threshold it shows the count, the votes still needed and why the distribution is hidden; with no votes it draws nothing.
 - `RatingInput` is one slider over the question's scale plus a clear button. It works in displayed points and reports stored units, saves optimistically and rolls back with an announced message when saving fails.
 

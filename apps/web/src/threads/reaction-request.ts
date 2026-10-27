@@ -7,8 +7,11 @@ const kinds = new Set(['upvote', 'downvote', 'like', 'love', 'laugh', 'insightfu
 
 export type ReactionKind = 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
 
+/** A subject admits these kinds only; its score is its rating, so there is no upvote or downvote. */
+export const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
+
 export type ChangeReactionInput = {
-  target: 'thread' | 'post';
+  target: 'thread' | 'post' | 'subject';
   id: string;
   kind: ReactionKind | null;
 };
@@ -22,7 +25,7 @@ export function validateReaction(input: unknown): ChangeReactionInput {
     !input ||
     typeof input !== 'object' ||
     !('target' in input) ||
-    (input.target !== 'thread' && input.target !== 'post') ||
+    (input.target !== 'thread' && input.target !== 'post' && input.target !== 'subject') ||
     !('id' in input) ||
     typeof input.id !== 'string' ||
     !input.id ||
@@ -30,6 +33,8 @@ export function validateReaction(input: unknown): ChangeReactionInput {
     !('kind' in input) ||
     !(input.kind === null || (typeof input.kind === 'string' && kinds.has(input.kind)))
   )
+    throw new Error('Invalid reaction');
+  if (input.target === 'subject' && (input.kind === 'upvote' || input.kind === 'downvote'))
     throw new Error('Invalid reaction');
   return { target: input.target, id: input.id, kind: input.kind as ReactionKind | null };
 }
@@ -66,7 +71,13 @@ export async function changeReactionRequest(
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   const headers = { authorization, 'idempotency-key': crypto.randomUUID() } as { 'idempotency-key': string };
-  const resource = input.target === 'thread' ? client.threads({ id: input.id }) : client.posts({ id: input.id });
+  const resource =
+    input.target === 'thread'
+      ? client.threads({ id: input.id })
+      : input.target === 'post'
+        ? client.posts({ id: input.id })
+        : // The generated client declarations lack the subject slot route; its calls match a thread's.
+          (client.subjects({ id: input.id }) as unknown as ReturnType<KernelClient['threads']>);
   try {
     const result =
       input.kind === null

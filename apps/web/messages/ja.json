@@ -444,6 +444,7 @@
   "subject_qualifiers": "修飾子",
   "subject_ratings": "評価",
   "subject_ratings_unavailable": "評価はまだ公開されていません。公開されたら、最初の評価をつけられます。",
+  "subject_reactions_unavailable": "リアクションを読み込めませんでした。",
   "subject_relation_group_association": "関連",
   "subject_relation_group_derivation": "翻案・版",
   "subject_relation_group_membership": "シリーズ・コレクション",

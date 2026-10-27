@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "counts": [
+    { "kind": "like", "count": 42 },
+    { "kind": "love", "count": 17 },
+    { "kind": "laugh", "count": 3 },
+    { "kind": "insightful", "count": 8 },
+    { "kind": "sad", "count": 1 }
+  ],
+  "watermark": { "epoch": 1, "position": "2310" }
+}

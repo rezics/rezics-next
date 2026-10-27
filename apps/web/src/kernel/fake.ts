@@ -16,6 +16,8 @@ import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
 import subjectLinksRecording from './recorded/subject-links.json';
 import subjectPageRecording from './recorded/subject-page.json';
+import subjectReactionRecording from './recorded/subject-reaction.json';
+import subjectReactionsRecording from './recorded/subject-reactions.json';
 import subjectRecording from './recorded/subject.json';
 import subjectUncoveredRecording from './recorded/subject-uncovered.json';
 import boardRecording from './recorded/board.json';
@@ -279,6 +281,9 @@ async function selectRecording(
   if (community) return community;
   if (request.method === 'GET') {
     if (pathname === '/v1/accounts') return recordings.accounts;
+    const reactions = /^\/v1\/subjects\/([^/]+)\/(reactions?)$/.exec(pathname);
+    if (reactions?.[1] && decodeURIComponent(reactions[1]) === knownSubjectId(recordings))
+      return recordings[reactions[2] === 'reactions' ? 'subject-reactions' : 'subject-reaction'];
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
       const id = decodeURIComponent(subject[1]);
@@ -397,6 +402,8 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'subject-page': subjectPageRecording,
     'subject-links': subjectLinksRecording,
     subject: subjectRecording,
+    'subject-reactions': subjectReactionsRecording,
+    'subject-reaction': subjectReactionRecording,
     'subject-uncovered': subjectUncoveredRecording,
     board: boardRecording,
     'board-threads': boardThreadsWithActivity(),

@@ -5,7 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
 import { changeReaction } from './reactions';
-import { type ReactionFailure } from './reaction-request';
+import { subjectReactionKinds, type ReactionFailure } from './reaction-request';
 
 function reactionLabels(failed: string | null) {
   return {
@@ -62,14 +62,16 @@ export function ThreadReactions({
   signedIn,
   returnTo,
 }: {
-  target: { kind: 'thread' | 'post'; id: string };
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
   signedIn: boolean;
   returnTo: string;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
+    setHydrated(true);
     if (signedIn) installSingleReactionMenu();
   }, [signedIn]);
 
@@ -95,6 +97,8 @@ export function ThreadReactions({
   return (
     <Reactions
       counts={counts}
+      disabled={!hydrated}
+      {...(target.kind === 'subject' ? { kinds: subjectReactionKinds } : {})}
       labels={reactionLabels(failed)}
       locale={getLocale()}
       onChange={onChange}

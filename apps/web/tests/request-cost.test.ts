@@ -316,9 +316,13 @@ test('subject page stays within its bound as s grows', async () => {
     const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
     expect(definitions.length).toBeLessThanOrEqual(2);
     const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
-    expect(page).toHaveLength(2);
+    expect(page).toHaveLength(3);
     expect(page).toEqual(
-      expect.arrayContaining(['POST /v1/pages:read', `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`]),
+      expect.arrayContaining([
+        'POST /v1/pages:read',
+        `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`,
+        `GET /v1/subjects/${subjectId}/reactions`,
+      ]),
     );
     expect(kernelAuthorizations).toEqual(kernelCalls.map(() => null));
   }

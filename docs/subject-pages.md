@@ -92,6 +92,10 @@ other view. Sections a type does not support are left out; the rest keep this or
    type and date; principal creators, linked; the headline score with its population and count; the reader's own
    status, progress and rating with one primary action (Continue, Start, Add). On phones the cover is a thumbnail
    beside the title so this whole block fits the first viewport.
+   The header's top right holds the reaction cluster (like, love, laugh, insightful and sad, each with its count; a
+   subject has no upvote or downvote because its score is its rating) and an overflow menu that carries copy link
+   and report. One reaction per reader; choosing another kind replaces it. Signed-out readers see the counts and a
+   sign-in link.
 2. **About.** The summary (spoiler-safe by default), a short set of key facts chosen by the type's template, genres
    and the most-used tags, and content warnings.
 3. **Parts.** For types with parts: the next part for this reader, then the ordered list preview.

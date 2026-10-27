@@ -444,6 +444,7 @@
   "subject_qualifiers": "Qualifikatoren",
   "subject_ratings": "Bewertungen",
   "subject_ratings_unavailable": "Bewertungen sind noch nicht freigeschaltet. Sobald sie es sind, kannst du als Erste oder Erster bewerten.",
+  "subject_reactions_unavailable": "Die Reaktionen konnten nicht geladen werden.",
   "subject_relation_group_association": "Verwandt",
   "subject_relation_group_derivation": "Adaptionen und Ausgaben",
   "subject_relation_group_membership": "Reihen und Sammlungen",

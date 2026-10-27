@@ -444,6 +444,7 @@
   "subject_qualifiers": "Qualifiers",
   "subject_ratings": "Ratings",
   "subject_ratings_unavailable": "Ratings are not open yet. When they open, you can be the first to rate this.",
+  "subject_reactions_unavailable": "Reactions could not be loaded.",
   "subject_relation_group_association": "Related",
   "subject_relation_group_derivation": "Adaptations and editions",
   "subject_relation_group_membership": "Series and collections",

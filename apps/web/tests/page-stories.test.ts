@@ -495,6 +495,9 @@ test(
       "type LinksRead = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>;",
       "type LinksResponse = NonNullable<LinksRead['data']>;",
       "type MissingResponse = Extract<NonNullable<Read['error']>, { status: 404 | '404' }>['value'];",
+      "type SubjectReactionsResponse = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['reactions']['get']>>['data']>;",
+      // The generated client declarations do not carry the subject's own-reaction route yet.
+      "type SubjectOwnReactionResponse = { kind: 'like' | 'love' | 'laugh' | 'insightful' | 'sad' | null };",
       "type BoardResource = ReturnType<KernelClient['boards']>;",
       "type BoardResponse = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;",
       "type BoardThreadsResponse = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;",
@@ -548,6 +551,8 @@ test(
       'home-page.json': 'PageResponse',
       'subject.json': 'SubjectResponse',
       'subject-page.json': 'PageResponse',
+      'subject-reactions.json': 'SubjectReactionsResponse',
+      'subject-reaction.json': 'SubjectOwnReactionResponse',
       'board.json': 'BoardResponse',
       'board-threads.json': 'BoardThreadsResponse',
       'thread.json': 'ThreadResponse',

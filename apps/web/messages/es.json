@@ -444,6 +444,7 @@
   "subject_qualifiers": "Calificadores",
   "subject_ratings": "Valoraciones",
   "subject_ratings_unavailable": "Las valoraciones aún no están abiertas. Cuando lo estén, podrás ser la primera persona en valorar.",
+  "subject_reactions_unavailable": "No se pudieron cargar las reacciones.",
   "subject_relation_group_association": "Relacionadas",
   "subject_relation_group_derivation": "Adaptaciones y ediciones",
   "subject_relation_group_membership": "Series y colecciones",

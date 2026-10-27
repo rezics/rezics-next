@@ -3,7 +3,11 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 
-export type ReportDraft = Parameters<KernelClient['reports']['post']>[0] & { idempotencyKey: string };
+type KernelReport = Parameters<KernelClient['reports']['post']>[0];
+export type ReportDraft = Omit<KernelReport, 'target'> & {
+  target: { kind: KernelReport['target']['kind'] | 'subject'; id: string };
+  idempotencyKey: string;
+};
 export type ReportResult =
   | { ok: true; reportId: string }
   | { ok: false; reason: 'closed' | 'forbidden' | 'invalid' | 'rate-limited' | 'unavailable'; retryAfter?: number };
@@ -16,7 +20,7 @@ export function validateReport(input: unknown): ReportDraft {
   const target = data.target as Record<string, unknown> | undefined;
   if (
     !target ||
-    (target.kind !== 'thread' && target.kind !== 'post') ||
+    (target.kind !== 'thread' && target.kind !== 'post' && target.kind !== 'subject') ||
     typeof target.id !== 'string' ||
     !uuid.test(target.id) ||
     typeof data.idempotencyKey !== 'string' ||
@@ -52,7 +56,9 @@ export async function submitReport(
   const authorization = viewerCredential(request);
   const { idempotencyKey, ...body } = data;
   try {
-    const result = await client.reports.post(body, {
+    // The kernel's report targets name the subject kind only once its report contract admits it. Until then it
+    // refuses the report and the dialog says so.
+    const result = await client.reports.post(body as KernelReport, {
       headers: { 'idempotency-key': idempotencyKey, ...(authorization ? { authorization } : {}) },
     });
     if (!result.error) return { ok: true, reportId: result.data.reportId };

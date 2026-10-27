@@ -444,6 +444,7 @@
   "subject_qualifiers": "Qualificatifs",
   "subject_ratings": "Notes",
   "subject_ratings_unavailable": "Les notes ne sont pas encore ouvertes. Dès qu’elles le seront, vous pourrez noter en premier.",
+  "subject_reactions_unavailable": "Les réactions n’ont pas pu être chargées.",
   "subject_relation_group_association": "Liées",
   "subject_relation_group_derivation": "Adaptations et éditions",
   "subject_relation_group_membership": "Séries et collections",

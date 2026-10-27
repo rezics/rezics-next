@@ -444,6 +444,7 @@
   "subject_qualifiers": "限定条件",
   "subject_ratings": "评分",
   "subject_ratings_unavailable": "评分尚未开放。开放后，你可以成为第一个评分的人。",
+  "subject_reactions_unavailable": "暂时无法加载表态。",
   "subject_relation_group_association": "相关",
   "subject_relation_group_derivation": "改编与版本",
   "subject_relation_group_membership": "系列与合集",
