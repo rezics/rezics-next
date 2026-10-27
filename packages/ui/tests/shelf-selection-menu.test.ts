@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = join(import.meta.dir, '..');
@@ -7,8 +7,9 @@ const stories = ['src/components/selection-bar.stories.tsx', 'src/components/ite
 
 test('selection and item menu interactions work in the browser', async () => {
   for (const file of stories) expect(existsSync(join(root, file)), file).toBe(true);
-  const output = join(root, '../../.temp/shelf-selection-menu');
-  mkdirSync(output, { recursive: true });
+  const temp = join(root, '../../.temp');
+  mkdirSync(temp, { recursive: true });
+  const output = mkdtempSync(join(temp, 'shelf-selection-menu-'));
   const report = join(output, 'stories.json');
   try {
     const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`, ...stories], {
