@@ -68,6 +68,11 @@ const fixtures = {
     targetId: itemId,
     securityRevision: '9223372036854775807',
   },
+  'com.rezics.content.moderation.restored.v1': {
+    targetKind: 'post',
+    targetId: itemId,
+    securityRevision: '9223372036854775807',
+  },
   'com.rezics.content.post.erased.v1': { postId: itemId, securityRevision: '9223372036854775807' },
   'com.rezics.content.moderation.erasure.v1': { threadId, postIds: [itemId], mediaIds: [mediaId] },
   'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },

@@ -506,6 +506,11 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 - **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. A full walk visits boards and their bounded newest-first probes; threads under protected Realms and removed boards are never scanned.
 - **Growth check:** `test/content/growth-sitemap.test.ts`, `Sitemap boards page, listed items`, and `Sitemap boards page, protected Realm content`, at 200, 1600 and 12800 listed boards or protected Realm boards behind a fixed page. Rows and statements stay constant; blocks stay logarithmic.
 
+### Lift takedown
+
+- Touches: the target row, its security revision and one outbox event, each constant. Projection re-admission uses
+  the existing per-item takedown bound.
+
 ### Sitemap thread feed
 
 - **Touches:** The board seek above, and for each disclosed board one keyset range of `board_thread_page_idx` rows by `(created_at, thread_id)` in pages of at most 200, with the shared thread disclosure per candidate. Candidates, board and thread, total at most 4L per page.

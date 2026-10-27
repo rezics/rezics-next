@@ -12,6 +12,14 @@ export const MODERATION_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.moderation.restored.v1': Type.Object(
+    {
+      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+      targetId: UUID,
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.post.erased.v1': Type.Object(
     { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
     { additionalProperties: false },
