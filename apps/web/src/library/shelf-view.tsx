@@ -112,6 +112,21 @@ function EntryMenu({
           },
         ]
       : []),
+    // The copies and reading progress of a subject are reached from here; their pages take the subject in the address.
+    ...(subjectId
+      ? [
+          {
+            type: 'item' as const,
+            label: m.library_entry_copies(),
+            onSelect: () => void navigate({ to: '/library/copies', search: { subjectId } }),
+          },
+          {
+            type: 'item' as const,
+            label: m.library_entry_progress(),
+            onSelect: () => void navigate({ to: '/library/progress/', search: { subjectId } }),
+          },
+        ]
+      : []),
     { type: 'separator' },
     { type: 'item', label: m.library_remove_from_library(), onSelect: () => controls.askRemove(entry.subjectId) },
   ];

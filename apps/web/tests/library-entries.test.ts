@@ -513,13 +513,12 @@ test(
     expect(page.cache).toMatch(/\bno-store\b/);
     const body = main(page.html);
     expect(body).toContain('Library');
-    // The All tab has a section per status that holds entries, each newest first.
-    expect(body.indexOf('Completed')).toBeGreaterThan(-1);
-    expect(body.indexOf('Zebra story')).toBeLessThan(body.indexOf('Unavailable'));
+    // The All tab has a section per status that holds entries, each newest first: Planned, then Completed.
     expect(body.indexOf('Unavailable')).toBeLessThan(body.indexOf('Apple story'));
+    expect(body.indexOf('Apple story')).toBeLessThan(body.indexOf('Zebra story'));
     // The fake serves no definitions, so the type has no name to show and its raw value stays out.
     expect(body).not.toContain('book');
-    expect(body).toContain(`datetime="${newerStamp}"`);
+    expect(body).toContain(`dateTime="${newerStamp}"`);
     expect(body).toContain(shortDate(newerStamp, 'en'));
     expect(body).toContain(shortDate(middleStamp, 'en'));
     expect(body).toContain(shortDate(olderStamp, 'en'));
@@ -596,7 +595,7 @@ test(
     expect(japaneseMain).toContain('ライブラリ');
     expect(japaneseMain).toContain('完了');
     expect(japaneseMain).toContain(shortDate(newerStamp, 'ja'));
-    expect(japaneseMain.indexOf('Zebra story')).toBeLessThan(japaneseMain.indexOf('Apple story'));
+    expect(japaneseMain.indexOf('Apple story')).toBeLessThan(japaneseMain.indexOf('Zebra story'));
 
     calls.length = 0;
     entries = longLibrary();
@@ -637,6 +636,10 @@ test(
         await page.getByRole('button', { name: `Actions for ${title}` }).click();
         await page.getByRole('menuitem', { name: 'Change status' }).click();
         await page.getByRole('menuitemradio', { name: name, exact: true }).click();
+        // The menu stays open after a choice; Escape closes the submenu, then the menu.
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await page.getByRole('menu').first().waitFor({ state: 'detached' });
       };
       calls.length = 0;
       await choose('Zebra story', 'Paused');

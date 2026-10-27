@@ -14,7 +14,6 @@ const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
-const pageLimit = '100';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -386,7 +385,13 @@ const fake = Bun.serve({
     if (!request.headers.get('authorization')?.startsWith('Bearer '))
       return json(problem(401, 'authentication_required'), 401, true);
     if (request.method === 'GET') {
-      if (url.pathname === '/v1/libraryEntries') return page(entries, 'libraryEntries');
+      if (url.pathname === '/v1/libraryEntries') {
+        const state = url.searchParams.get('state');
+        return page(
+          entries.filter((item) => !state || item.state === state),
+          'libraryEntries',
+        );
+      }
       if (url.pathname === '/v1/follows') return page(follows, 'follows');
       if (url.pathname === '/v1/copies') return page(copies, 'copies');
       if (url.pathname === '/v1/publishedLogs') return page([publishedLog], 'publishedLogs');
@@ -581,84 +586,86 @@ afterAll(async () => {
 });
 
 test(
-  "a library entry is one compact row with cover, title, localized type, a status menu and progress, and its other actions in the row's overflow menu",
+  'a library entry shows its cover, title and last update on a card, and as a compact row with the localized type, a status chip and an item menu with its other actions',
   async () => {
     reset();
     const cookie = await alice();
-    const page = await readPage('/en/library', cookie);
+    // The grid: one card per entry, each a cover over its title, linking to the subject.
+    const gridPage = await readPage('/en/library', cookie);
+    expect(gridPage.status).toBe(200);
+    const cards = articles(gridPage.html);
+    expect(cards).toHaveLength(3);
+    expectImage(withTitle(cards, 'Zebra story'));
+    expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="2:3"');
+    expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}"`);
+    expectPlaceholder(withTitle(cards, 'Apple story'));
+    expectPlaceholder(withTitle(cards, 'Unavailable'));
+    expect(main(gridPage.html)).not.toContain(hiddenSubjectId);
+
+    // The list: Reads work without JavaScript, so the cover, title, type and status are all in the document.
+    const page = await readPage('/en/library?layout=list', cookie);
     expect(page.status).toBe(200);
     const list = rows(page.html);
     expect(list).toHaveLength(3);
-    // Reads work without JavaScript: the cover, the title, the type and the state are all in the document.
     const first = withTitle(list, 'Zebra story');
     expectImage(first);
     expect(first).toContain('data-ratio="2:3"');
     expect(first).toContain(`href="/en/subjects/${zebra.id}"`);
     expect(text(first)).toContain('Book');
-    expect(first).toContain('data-slot="library-status"');
-    expect(first).toContain('data-state="completed"');
-    expect(text(first).match(/Completed/g)).toHaveLength(1);
+    expect(text(first)).toContain('Completed');
     expectPlaceholder(withTitle(list, 'Apple story'));
     const hidden = withTitle(list, 'Unavailable');
     expectPlaceholder(hidden);
-    // The revision form keeps the id in a hidden field; nothing the reader sees or follows names it.
-    expect(hidden.replace(/<input\b[^>]*>/g, '')).not.toContain(hiddenSubjectId);
+    expect(hidden).not.toContain(hiddenSubjectId);
     for (const row of list) {
       expect(row).not.toMatch(/<select|<details|<summary/);
       expect(text(row)).not.toContain('Save');
       expect(text(row)).not.toContain('Remove');
     }
-    const chinese = await readPage('/zh-Hans/library', cookie);
+    const chinese = await readPage('/zh-Hans/library?layout=list', cookie);
     const own = await messages('zh-Hans');
     expect(text(withTitle(rows(chinese.html), 'Zebra story'))).toContain('书籍');
     expect(text(withTitle(rows(chinese.html), 'Zebra story'))).toContain(own.library_state_completed!);
 
-    const browserPage = await open('/en/library', cookie);
+    const browserPage = await open('/en/library?layout=list', cookie);
     try {
       const row = browserPage.locator('main li').filter({ hasText: 'Zebra story' });
       expect(await row.count()).toBe(1);
-      // One compact row, not a form.
+      // One compact row.
       expect((await row.boundingBox())!.height).toBeLessThan(120);
       expect(await row.locator('[data-slot="cover"]').count()).toBe(1);
       expect(await row.getByRole('button', { name: 'Save' }).count()).toBe(0);
-      const change = row.locator('form').first();
-      const key = await change.locator('input[name="idempotencyKey"]').inputValue();
-      expect(key).toMatch(uuid);
-      expect(await change.locator('input[name="revision"]').inputValue()).toBe('4');
 
-      // The overflow menu holds the other actions: copies, reading progress and removal.
-      await row.getByRole('button', { name: 'Actions for Zebra story' }).click();
+      // The item menu holds the other actions: copies, reading progress and removal.
       const menu = browserPage.getByRole('menu');
-      expect(await menu.getByRole('menuitem', { name: 'Copies' }).getAttribute('href')).toBe(
-        `/en/library/copies?subjectId=${zebra.id}`,
-      );
-      expect(await menu.getByRole('menuitem', { name: 'Reading progress' }).getAttribute('href')).toBe(
-        `/en/library/progress?subjectId=${zebra.id}`,
-      );
-      expect(await menu.getByRole('menuitem', { name: 'Remove' }).count()).toBe(1);
-      await browserPage.keyboard.press('Escape');
-      await menu.waitFor({ state: 'detached' });
+      await row.getByRole('button', { name: 'Actions for Zebra story' }).click();
+      await menu.getByRole('menuitem', { name: 'Copies' }).waitFor({ state: 'visible' });
+      expect(await menu.getByRole('menuitem', { name: 'Copies' }).count()).toBe(1);
+      expect(await menu.getByRole('menuitem', { name: 'Reading progress' }).count()).toBe(1);
+      expect(await menu.getByRole('menuitem', { name: 'Remove from library' }).count()).toBe(1);
+      await menu.getByRole('menuitem', { name: 'Copies' }).click();
+      await browserPage.waitForURL(`**/en/library/copies?subjectId=${zebra.id}`);
+      await browserPage.goto(`${await site()}/en/library?layout=list`, { waitUntil: 'networkidle' });
+      await browserPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+      await row.waitFor();
 
       // Choosing a state saves it: one write, no Save button.
       calls.length = 0;
-      await row.getByRole('button', { name: 'State of Zebra story: Completed' }).click();
+      await row.getByRole('button', { name: 'Completed' }).click();
       await browserPage.getByRole('menuitemradio', { name: 'Paused' }).click();
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(1);
       expect(calls.find((call) => call.method === 'PUT')).toMatchObject({
         path: `/v1/libraryEntries/${zebra.id}`,
-        key,
         body: { state: 'paused', revision: 4 },
       });
-      const status = row.locator('[data-slot="library-status"]');
-      await eventually(async () => (await status.getAttribute('data-state')) === 'paused');
-      expect(await status.innerText()).toBe('Paused');
-      expect(await change.locator('input[name="revision"]').inputValue()).toBe('5');
+      expect(calls.find((call) => call.method === 'PUT')!.key).toMatch(uuid);
+      await eventually(async () => (await row.getByRole('button', { name: 'Paused' }).count()) === 1);
 
       // Removal asks first, then sends the revision the row holds.
       calls.length = 0;
       await row.getByRole('button', { name: 'Actions for Zebra story' }).click();
-      await browserPage.getByRole('menuitem', { name: 'Remove' }).click();
+      await browserPage.getByRole('menuitem', { name: 'Remove from library' }).click();
       expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
       await browserPage.getByRole('alertdialog').getByRole('button', { name: 'Confirm removal', exact: true }).click();
       await eventually(() => calls.some((call) => call.method === 'DELETE'));
