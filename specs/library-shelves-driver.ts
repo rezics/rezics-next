@@ -2,36 +2,35 @@
  * LIBRARY_SHELVES_DRIVER is an absolute path or file URL exporting
  * createLibraryShelvesDriver(): Promise<LibraryShelvesDriver>. Each call owns an isolated, migrated PostgreSQL
  * database and the shared testKernel/Access personas with real Auth-issued tokens. Every request goes through
- * createKernel(...).handle; entries, sessions and their transitions are written only by the production HTTP commands,
- * and subjects only by semantic's production create path. The platform gates personal_library and reading_progress
- * start open. close removes the database, tokens and any installed gate state, even on failure.
+ * createKernel(...).handle; entries, sessions, Collections and their transitions are written only by the production
+ * HTTP commands, and subjects only by semantic's production create, identity-update and merge paths. The platform
+ * gates personal_library and reading_progress start open. A real DBOS executor composed from the production work
+ * modules runs the subject type projection. close removes the database, tokens and any installed gate state, even on
+ * failure.
  *
  * Personas (all active accounts unless stated; each holds only the scopes named):
- * - owner: the account under test, with every library and progress scope.
- * - other: a different account with the same scopes. It owns its own library and sessions.
+ * - owner: the account under test, with every library, Collection and progress scope.
+ * - other: a different account with the same scopes. It owns its own library, Collections and sessions.
  * - libraryOnly: the owner account, token consents to library_entry:* but not progress_session:list.
  * - progressOnly: the owner account, token consents to progress_session:* but not library_entry:list.
  * - ungranted: the owner account, token consents to no library or progress scope.
  * - anonymous: no token. suspended: real suspended credentials, never a fabricated failure.
  * Scope-limited personas see the owner's data, so a refusal cannot be mistaken for an empty library.
  *
- * The driver maps transport and setup only: no ordering, activity, active-session, cursor or authorization rules, no
- * in-memory model, no outcome normalization. request returns the raw Response. inspect reads authoritative rows in
- * stable primary-key order, bounded to the data the scenario created, never transient executor timestamps.
- * Instrumentation observes actual SQL, never constants, estimates or replayed mutations.
+ * The driver maps transport and setup only: no ordering, activity, active-session, counter, type, cursor or
+ * authorization rules, no in-memory model, no outcome normalization. request returns the raw Response. inspect reads
+ * authoritative rows in stable primary-key order, bounded to the data the scenario created, never transient executor
+ * timestamps. Every timestamp inspect returns is RFC 3339 UTC text like the API's, for example
+ * 2030-01-02T00:05:00.000Z. Instrumentation observes actual SQL, never constants, estimates or replayed mutations.
  */
-export type Persona =
-  | 'owner'
-  | 'other'
-  | 'libraryOnly'
-  | 'progressOnly'
-  | 'ungranted'
-  | 'anonymous'
-  | 'suspended';
+export type Persona = 'owner' | 'other' | 'libraryOnly' | 'progressOnly' | 'ungranted' | 'anonymous' | 'suspended';
 export type EntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
 export type Gate = 'personal_library' | 'reading_progress';
+export type ShelfOrder = 'lastActivity' | 'finishedAt' | 'createdAt';
+export type ShelfDirection = 'desc' | 'asc';
+export type ShelfTab = EntryState | 'all' | 'collections';
 
 export interface Anchor {
   id: string;
@@ -64,29 +63,55 @@ export interface SessionView {
 }
 export interface ShelfItem extends EntryView {
   lastActivityAt: string;
+  finishedAt: string | null;
   activeProgressSession: SessionView | null;
   /** Present only for view=FULL. */
   subject?: unknown;
 }
-export interface ActivityRow {
+export interface ShelfSummaryView {
+  tabs: Record<ShelfTab, { total: number; shown: number }>;
+}
+/** One authoritative stored row. Column names are the contract's: activity_at, finished_at, subject_type, type_source_id. */
+export interface StoredEntry extends EntryView {
+  accountId: string;
+  activityAt: string;
+  finishedAt: string | null;
+  subjectType: string;
+  /** The subject whose primary type this entry follows: its own subject, or the survivor after a merge. */
+  typeSourceId: string;
+}
+export interface StoredSession extends SessionView {
+  accountId: string;
+  lastChangedAt: string;
+}
+export interface StoredHead {
   accountId: string;
   subjectId: string;
-  /** Latest session change of this account and subject, null when none was ever persisted. */
-  progressAt: string | null;
-  /** The entry's persisted activity, null when no entry exists. */
-  entryActivityAt: string | null;
+  lastChangedAt: string;
+  lastCompletedAt: string | null;
+}
+export interface StoredCount {
+  accountId: string;
+  bucket: EntryState | 'all' | 'collections';
+  /** The empty string is the rollup over all types and the Collections row. */
+  type: string;
+  count: number;
 }
 export interface ShelvesInspection {
-  entries: (EntryView & { accountId: string })[];
-  sessions: (SessionView & { accountId: string })[];
+  entries: StoredEntry[];
+  sessions: StoredSession[];
   completedUnits: { sessionId: string; unitId: string }[];
   changes: { sessionId: string; revision: number }[];
-  /** One row per account and subject with an entry or persisted progress activity. */
-  activity: ActivityRow[];
+  /** One row per account and subject with persisted progress, kept after the entry is deleted. */
+  heads: StoredHead[];
+  /** Counter rows, exactly as stored. A row at zero may linger; readers and tests ignore it. */
+  counts: StoredCount[];
+  /** Active Collections per account. */
+  collections: { accountId: string; collectionId: string }[];
   events: { id: string; type: string; data: Record<string, unknown> }[];
 }
 export interface ShelvesSeed {
-  /** Totals of unrelated entries. Never owner or other entries; they never appear in a tested shelf. */
+  /** Totals of unrelated entries on unrelated accounts and subjects. Never owner or other entries. */
   entries: number;
   /** Totals of unrelated active sessions on unrelated accounts, subjects, or both. */
   activeSessions: number;
@@ -97,13 +122,25 @@ export interface LibraryShelvesDriver {
   readonly accounts: Record<'owner' | 'other' | 'suspended', Anchor>;
   /** A valid absent routable subject id, never a malformed one. */
   readonly unknownSubjectId: string;
-  /** Moves the kernel clock the commands read as T. It may move backward; nothing here enforces monotonic time. */
+  /** Three distinct primary types from the bundled definitions that semantic accepts on a subject. */
+  readonly types: { readonly book: string; readonly anime: string; readonly game: string };
+  /** Moves the kernel clock the commands read as T. Nothing here enforces monotonic time. */
   setTime(instant: string): Promise<void>;
   now(): string;
   /** Makes cursor tokens issued so far appear this many milliseconds older to the kernel. */
   ageCursors(milliseconds: number): Promise<void>;
-  provisionSubject(): Promise<Anchor>;
-  provisionSubjects(count: number): Promise<Anchor[]>;
+  /** Defaults to the book type. */
+  provisionSubject(input?: { type?: string }): Promise<Anchor>;
+  provisionSubjects(count: number, input?: { type?: string }): Promise<Anchor[]>;
+  /** Production semantic identity update. Returns the source revision it emitted. */
+  changeSubjectType(subjectId: string, type: string): Promise<{ revision: number }>;
+  /** Production semantic merge of `from` into the survivor `into`. */
+  mergeSubjects(input: { from: string; into: string }): Promise<void>;
+  /**
+   * Replays every com.rezics.subject.revised.v1 event recorded for the subject through the production event path:
+   * again in emitted order, or in reverse order. It then settles.
+   */
+  redeliver(input: { subjectId: string; order: 'repeat' | 'reverse' }): Promise<void>;
   /** Closes or reopens a gate through the production exposure commands. */
   setGate(gate: Gate, open: boolean): Promise<void>;
   request(
@@ -116,11 +153,13 @@ export interface LibraryShelvesDriver {
     },
   ): Promise<Response>;
   inspect(): Promise<ShelvesInspection>;
+  /** Resumes and awaits all enqueued library work, including the type projection. */
   settle(): Promise<void>;
   /**
-   * Grow unrelated data to these totals through bulk rows that reproduce what the production commands write (including
-   * the activity rows), preserving every tested row. Seeded timestamps precede 2030-01-01. Seeded sessions of the
-   * owner's tested subjects are never active, so seeding cannot change a tested active session or activity.
+   * Grow unrelated data to these totals through bulk rows that reproduce what the production commands write (head,
+   * counter and activity columns included), preserving every tested row. Seeded timestamps precede 2030-01-01.
+   * Seeded sessions of the owner's tested subjects are never active, so seeding cannot change a tested active
+   * session or activity.
    */
   seed(input: ShelvesSeed): Promise<void>;
   /** Request SQL only; excludes seed and inspection SQL and asynchronous worker work. */
