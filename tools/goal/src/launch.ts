@@ -263,12 +263,17 @@ function availableMiB(): number {
   const match = /^MemAvailable:\s+(\d+) kB/m.exec(readFileSync('/proc/meminfo', 'utf8'));
   return match ? Number(match[1]) / 1024 : Number.POSITIVE_INFINITY;
 }
+/** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
+export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
+  return task.taskClass === 'critical-path' || task.brief.target === 'stabilize';
+}
 /**
  * A worker starts only while the host has room: at most maxWorkers running and at least minAvailableMiB of memory
  * available. Otherwise it waits; it is never refused. Fifty-two workers on this host exhausted memory and swap and
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
-export async function awaitHostCapacity(store: WorkerStore, stateDirectory: string): Promise<void> {
+export async function awaitHostCapacity(store: WorkerStore, stateDirectory: string, first = false): Promise<void> {
+  let reported = false;
   for (;;) {
     // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
     const file = join(stateDirectory, 'capacity.json');
@@ -282,8 +287,10 @@ export async function awaitHostCapacity(store: WorkerStore, stateDirectory: stri
     } catch {
       /* Defaults. */
     }
-    const running = store.attempts().filter((candidate) => candidate.state === 'running').length;
+    const running = first ? 0 : store.attempts().filter((candidate) => candidate.state === 'running').length;
     if (hasCapacity(running, availableMiB(), capacity)) return;
+    if (!reported) console.error(`Waiting for host capacity (${running} workers running, cap ${capacity.maxWorkers}).`);
+    reported = true;
     await new Promise((resolve) => setTimeout(resolve, 15_000));
   }
 }
