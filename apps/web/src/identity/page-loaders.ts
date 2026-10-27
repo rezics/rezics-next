@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
+import { boardRealmId, readBoardRealm, type BoardRealm } from '../threads/board-context';
 import { readThreadSubjects } from '../threads/subjects';
 import { loadThreadPage } from '../threads/thread-page';
 import { readPageAuthors, type PageAuthors } from './read';
@@ -22,15 +23,24 @@ function checkRead<T>(result: { error?: unknown; status?: number; data?: T | nul
 export async function loadBoardPageWithAuthors(
   client: KernelClient,
   data: PageInput,
-): Promise<{ board: Board['board']; threads: ThreadPage; authors: PageAuthors; now: string }> {
+): Promise<{ board: Board['board']; realm?: BoardRealm; threads: ThreadPage; authors: PageAuthors; now: string }> {
   const now = new Date().toISOString();
   // Active is the default; New is the kernel's own order and sends no sort.
   const sort: 'active' | 'hot' | undefined = data.sort === 'new' ? undefined : (data.sort ?? 'active');
   const query = {
     query: { ...(data.cursor ? { cursor: data.cursor } : {}), ...(sort ? { sort } : {}) },
   };
-  const [boardResult, threadsResult] = await Promise.all([
-    client.boards({ id: data.id }).get(),
+  // The Realm read follows the board read, beside the thread list.
+  const boardRead = client
+    .boards({ id: data.id })
+    .get()
+    .then(async (result) => ({
+      result,
+      realm:
+        result.data?.board.id === data.id ? await readBoardRealm(client, boardRealmId(result.data.board)) : undefined,
+    }));
+  const [{ result: boardResult, realm }, threadsResult] = await Promise.all([
+    boardRead,
     client.boards({ id: data.id }).threads.get(query),
   ]);
   const board = checkRead<Board>(boardResult, 'board');
@@ -40,7 +50,7 @@ export async function loadBoardPageWithAuthors(
     client,
     threads.threads.map((thread) => thread.authorId),
   );
-  return { board: board.board, threads, authors, now };
+  return { board: board.board, ...(realm ? { realm } : {}), threads, authors, now };
 }
 
 export async function loadThreadPageWithAuthors(

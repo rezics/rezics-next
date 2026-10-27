@@ -372,6 +372,100 @@ async function seedThread(
   return { threadId, openingPostId: opening.post };
 }
 
+const realmThreadRoute = 0x4567;
+
+/**
+ * Seeds a Realm through the kernel's public API, with one board and one thread inserted like the other recorded
+ * ones, and records the reads that name the Realm on a thread page and a board page: the board, the Realm, the board's
+ * threads, and the thread with its posts. The recording account holds the platform's governance, so it grants itself
+ * the actions that create the Realm.
+ */
+async function recordBoardRealm(input: {
+  origin: string;
+  pool: Pool;
+  accountId: string;
+  conceptId: string;
+  newId: (route: number) => string;
+  documents: readonly ValidatedDocument[];
+}): Promise<Map<string, JsonObject>> {
+  const { origin, accountId } = input;
+  const token = await libraryToken(
+    accountId,
+    'access:grant context:create context:read space:create space:manage realm:create',
+  );
+  const send = async (method: 'GET' | 'POST', path: string, body?: unknown): Promise<JsonObject> => {
+    const key = JSON.stringify(Bun.randomUUIDv7());
+    const response = await retryOverloaded(() =>
+      fetch(new URL(path, origin), {
+        method,
+        headers: {
+          ...(method === 'GET' ? {} : { authorization: `Bearer ${token}`, 'idempotency-key': key }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    const parsed = objectBody(await response.json(), `${method} ${path}`);
+    if (response.status !== (method === 'GET' ? 200 : 201))
+      throw new Error(`${method} ${path} returned ${response.status}: ${JSON.stringify(parsed)}`);
+    return { ...parsed, status: response.status };
+  };
+  await send('POST', '/v1/grants', {
+    resource: { route: 0, id: '00000000-0000-8000-8000-000000000000' },
+    subject: { kind: 'account', id: accountId },
+    actions: ['context:create', 'space:create', 'realm:create'],
+    valid: '(,)',
+  });
+  const created = async (path: string, body: unknown, field: string, idField: string): Promise<string> => {
+    const value = objectBody(objectBody(await send('POST', path, body), path)[field], field)[idField];
+    if (typeof value !== 'string') throw new Error(`${path} returned no ${idField}.`);
+    return value;
+  };
+  const contextId = await created('/v1/contexts', { labels: { en: 'Reading circles' } }, 'context', 'id');
+  const spaceId = await created(
+    '/v1/spaces',
+    { title: 'Little Prince Readers', summary: 'Readers of one short book.' },
+    'space',
+    'spaceId',
+  );
+  const realmId = await created(
+    '/v1/realms',
+    { spaceId, title: 'Little Prince Readers', summary: 'Readers of one short book.', visibility: 'public', contextId },
+    'realm',
+    'realmId',
+  );
+  // The board is inserted like the other recorded boards, in the route of its Realm. The route of an id is its
+  // eleventh and twelfth bytes.
+  const route = Number.parseInt(realmId.slice(24, 28), 16);
+  const boardId = input.newId(route);
+  await input.pool.query(
+    `INSERT INTO content.board(route,board_id,realm_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+     VALUES ($1,$2,$3,$4,$5,'published',1,$2)`,
+    [route, boardId, realmId, input.conceptId, 'Reading room'],
+  );
+  const { threadId } = await seedThread(input.pool, {
+    route: realmThreadRoute,
+    accountId,
+    boardId,
+    title: 'Which edition should I start with?',
+    at: threadAt,
+    times: postTimes.slice(0, 2),
+    documents: input.documents,
+  });
+  const recorded = new Map<string, JsonObject>();
+  for (const [name, path] of [
+    ['board-realm', `/v1/boards/${boardId}`],
+    ['board-realm-realm', `/v1/realms/${realmId}`],
+    ['board-realm-threads', `/v1/boards/${boardId}/threads`],
+    ['board-realm-thread', `/v1/threads/${threadId}`],
+    ['board-realm-thread-posts', `/v1/threads/${threadId}/posts`],
+  ] as const)
+    recorded.set(name, await send('GET', path));
+  const board = objectBody(recorded.get('board-realm')?.board, 'board-realm board');
+  if (board.realmId !== realmId) throw new Error(`The recorded board names ${String(board.realmId)}, not ${realmId}.`);
+  return recorded;
+}
+
 /**
  * Seeds a used-looking library through the kernel's public API and records the Library reads the pages make.
  * The recorded account keeps the library; a second account keeps a public collection that the first one follows.
@@ -1282,6 +1376,24 @@ async function main(): Promise<void> {
   const ownedPosts = recorded.get('thread-owned-posts')?.posts;
   if (!Array.isArray(ownedPosts) || ownedPosts.length !== 2)
     throw new Error(`The owned thread should hold two posts: ${JSON.stringify(ownedPosts)}`);
+
+  if (writes('board-realm')) {
+    const realmDocuments = [
+      blocks([
+        paragraph('edition-question', [text('I have never read it. Is there an edition you would start with?')]),
+      ]),
+      blocks([paragraph('edition-answer', [text('Start with the one you can find; they all have the fox.')])]),
+    ].map((input) => validateContentDocument(input));
+    for (const [name, body] of await recordBoardRealm({
+      origin,
+      pool: database,
+      accountId,
+      conceptId: fable,
+      newId,
+      documents: realmDocuments,
+    }))
+      recorded.set(name, body);
+  }
 
   const threadPage = recorded.get('board-threads');
   const postPage = recorded.get('thread-posts');

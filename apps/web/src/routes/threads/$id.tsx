@@ -11,6 +11,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { readThreadPage, type ThreadPost } from '../../threads/reads';
 import type { PageAuthors } from '../../identity/read';
 import { Byline } from '../../threads/byline';
+import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReactions } from '../../threads/thread-reactions';
 import {
@@ -37,6 +38,7 @@ function ThreadPage() {
   const {
     thread,
     board,
+    realm,
     posts: loadedPosts,
     idempotencyKey,
     viewerId,
@@ -69,11 +71,7 @@ function ThreadPage() {
   return (
     <article className="max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
-        {board ? (
-          <Link to="/boards/$id" params={{ id: board.id }} className="text-sm text-muted-foreground hover:underline">
-            {board.title}
-          </Link>
-        ) : null}
+        <BoardContext realm={realm} board={board} />
         <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
         <ThreadSubjects subjects={subjects} />
       </header>

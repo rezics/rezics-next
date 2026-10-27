@@ -8,6 +8,7 @@ import { readBoardPage } from '../../threads/reads';
 import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
 import { Byline, fullDateTime, timeText } from '../../threads/byline';
+import { BoardContext } from '../../threads/thread-context';
 import { BoardSortNav, boardSortFromSearch } from '../../threads/board-sort';
 import { ClosedErrorPage } from '../../shell/closed';
 import { PageHeading } from '../../shell/page-heading';
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/boards/$id')({
 });
 
 function BoardPage() {
-  const { board, threads, authors, now } = Route.useLoaderData();
+  const { board, realm, threads, authors, now } = Route.useLoaderData();
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
   const id = Route.useParams().id;
@@ -45,7 +46,8 @@ function BoardPage() {
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
-      <header>
+      <header className="space-y-3">
+        <BoardContext realm={realm} />
         <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
       </header>
       <section className="space-y-4" aria-labelledby="board-threads-heading">

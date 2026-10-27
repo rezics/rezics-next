@@ -1,0 +1,14 @@
+{
+  "board": {
+    "id": "01a17ce8-284e-719b-a9ea-69f9a6a873b5",
+    "realmId": "01a17ce8-282b-7753-bffd-69f9c78ccb71",
+    "route": 27129,
+    "title": "Reading room",
+    "purpose": "discussion",
+    "visibility": "published",
+    "securityRevision": "1",
+    "availability": "available",
+    "createdAt": "2026-10-27T10:29:11.886Z"
+  },
+  "status": 200
+}

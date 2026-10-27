@@ -206,6 +206,10 @@ the thread page shows an image and a placeholder. The one cover image is generat
 `.storybook/media/`, which Storybook serves at `/media/`. The recordings hold only the kernel contract's fields; the
 Storybook kernel adds the board row's reply count and last activity time, derived from the recorded posts.
 
+The `board-realm*.json` recordings hold a Realm board for the Realm crumb: the recorder creates a Space, a Realm and a
+board in it through the kernel's public API, inserts one thread of two posts, and records the board, the Realm, the
+board's threads, the thread and its posts. Name all five to write only them.
+
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
 full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
@@ -474,6 +478,21 @@ Each server render and browser session has its own query cache. Public reads sta
   2 MiB (ADR-0036)
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
   `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
+
+### Realm crumb
+
+The line above a thread title reads `Realm › Board`, and the line above a board title names the Realm. Both are links:
+the Realm to `/<locale>/realms/<id>`, the board to its page. A board view carries `realmId`, which is `null` for a
+board outside every Realm. `readBoardRealm` in `threads/board-context.ts` makes the one Realm read, in the reader's
+language through the client's `accept-language`.
+
+- **Touches:** one `GET /v1/realms/<id>` K read per thread or board page view when the board has a Realm, none
+  otherwise. On the thread page it follows the board read and runs beside the post-page read, with the reader's
+  credential when there is one; on the board page it follows the board read and runs beside the thread-list read. A
+  Realm that cannot be read is left out of the line and the page renders without it
+- **Bound:** +1 K, constant per page view, independent of the number of threads and posts
+- **Growth check:** `tests/board-realm-crumb.test.ts`: a thread with one post and a thread with a full page of posts
+  each make one Realm read, and a board page makes one
 
 ### Thread subjects
 

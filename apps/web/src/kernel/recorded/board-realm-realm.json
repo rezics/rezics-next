@@ -1,0 +1,20 @@
+{
+  "realm": {
+    "realmId": "01a17ce8-282b-7753-bffd-69f9c78ccb71",
+    "spaceId": "01a17ce8-2815-73b7-9de7-69f92d4fcfc3",
+    "state": "active",
+    "visibility": "public",
+    "contextId": "01a17ce8-2800-7668-a7c3-defe947044d8",
+    "boardSchemeId": null,
+    "headRevisionId": "01a17ce8-282b-7754-ab4a-69f913ad07e4",
+    "createdAt": "2026-10-27T10:29:11.852Z",
+    "creator": "01a17ce6-e011-7711-aefd-74fbf0a3eaa9",
+    "predecessor": null,
+    "title": "Little Prince Readers",
+    "summary": "Readers of one short book.",
+    "revisionCreatedAt": "2026-10-27T10:29:11.852Z",
+    "author": "01a17ce6-e011-7711-aefd-74fbf0a3eaa9",
+    "votes": { "upvote": 1, "downvote": -1 }
+  },
+  "status": 200
+}

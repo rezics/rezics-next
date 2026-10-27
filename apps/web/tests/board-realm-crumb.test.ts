@@ -75,7 +75,9 @@ function post(threadId: string, boardId: string, n: number) {
       profile: 'blocks',
       doc: {
         type: 'doc',
-        content: [{ type: 'paragraph', attrs: { id: `p-${n}` }, content: [{ type: 'text', text: `Contribution ${n}` }] }],
+        content: [
+          { type: 'paragraph', attrs: { id: `p-${n}` }, content: [{ type: 'text', text: `Contribution ${n}` }] },
+        ],
       },
     },
   };
@@ -241,9 +243,11 @@ afterAll(async () => {
 /** The links of the line above the title, and whether the line sits above the page's own heading. */
 async function context(page: Page) {
   const line = page.locator('main header nav');
-  const links = await line.locator('a').evaluateAll((anchors) =>
-    anchors.map((anchor) => ({ text: anchor.textContent, href: anchor.getAttribute('href') })),
-  );
+  const links = await line
+    .locator('a')
+    .evaluateAll((anchors) =>
+      anchors.map((anchor) => ({ text: anchor.textContent, href: anchor.getAttribute('href') })),
+    );
   const heading = await page.locator('main h1').boundingBox();
   const above = (await line.count()) === 0 ? null : (await line.boundingBox())!.y < heading!.y;
   return { links, above, label: above === null ? null : await line.getAttribute('aria-label') };

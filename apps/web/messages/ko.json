@@ -6,6 +6,7 @@
   "agent_collection_items": "{count}개 항목",
   "agent_empty": "아직 표시할 내용이 없습니다.",
   "agent_links": "링크",
+  "board_context_label": "탐색 경로",
   "board_sign_in_to_start": "로그인하고 스레드 시작",
   "board_sort_active": "활성",
   "board_sort_hot": "인기",

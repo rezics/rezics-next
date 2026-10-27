@@ -3,6 +3,7 @@ import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -30,6 +31,7 @@ export async function loadThreadPage(
 ): Promise<{
   thread: Thread['thread'];
   board?: Board;
+  realm?: BoardRealm;
   posts: PostPage;
   viewerId?: string;
   verification: VerificationConfig;
@@ -58,19 +60,25 @@ export async function loadThreadPage(
   const threadResult = await threadRead;
   const thread = checkRead<Thread>(threadResult, 'thread');
   if (thread.thread.id !== data.id) throw notFound();
+  // The Realm read follows the board read, beside the posts read.
   const boardRead = thread.thread.boardId
-    ? client
-        .boards({ id: thread.thread.boardId })
-        .get()
+    ? (authorization
+        ? client.boards({ id: thread.thread.boardId }).get({ headers: { authorization } })
+        : client.boards({ id: thread.thread.boardId }).get()
+      )
         .catch(() => null)
-    : Promise.resolve(null);
-  const [boardResult, postsResult] = await Promise.all([boardRead, postsRead]);
+        .then(async (result) => {
+          const board = result?.data?.board;
+          if (!board || board.id !== thread.thread.boardId) return {};
+          const realm = await readBoardRealm(client, boardRealmId(board), authorization);
+          return { board, ...(realm ? { realm } : {}) };
+        })
+    : Promise.resolve({});
+  const [context, postsResult] = await Promise.all([boardRead, postsRead]);
   const posts = checkRead<PostPage>(postsResult, 'thread posts');
   return {
     thread: thread.thread,
-    ...(boardResult?.data?.board && boardResult.data.board.id === thread.thread.boardId
-      ? { board: boardResult.data.board }
-      : {}),
+    ...context,
     posts,
     ...(viewerId ? { viewerId } : {}),
     verification,

@@ -9,6 +9,7 @@ import { cookie } from '../session/cookies';
 import { kernelClient } from '../kernel/client';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
 import type { PageAuthors } from '../identity/read';
+import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost } from './thread-page';
 
@@ -82,6 +83,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
     }): Promise<{
       thread: Thread['thread'];
       board?: Board['board'];
+      realm?: BoardRealm;
       posts: PostPage;
       idempotencyKey: string;
       viewerId?: string;

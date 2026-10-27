@@ -62,6 +62,11 @@ import realmRecording from './recorded/realm.json';
 import realmSubjectsRecording from './recorded/realm-subjects.json';
 import spaceAddressRecording from './recorded/space-address.json';
 import spaceRecording from './recorded/space.json';
+import boardRealmRecording from './recorded/board-realm.json';
+import boardRealmRealmRecording from './recorded/board-realm-realm.json';
+import boardRealmThreadPostsRecording from './recorded/board-realm-thread-posts.json';
+import boardRealmThreadRecording from './recorded/board-realm-thread.json';
+import boardRealmThreadsRecording from './recorded/board-realm-threads.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -268,6 +273,25 @@ function publishedSubject(id: string, recordings: Record<string, KernelRecording
   return isRecord(payload) ? { status: 200, ...payload } : undefined;
 }
 
+/** The reads of the recorded Realm board: the board, its Realm, its threads, and its thread with the posts. */
+function boardRealmRead(
+  method: string,
+  pathname: string,
+  recordings: Record<string, KernelRecording>,
+): KernelRecording | undefined {
+  if (method !== 'GET') return undefined;
+  const board = /^\/v1\/boards\/([^/]+)(\/threads)?$/.exec(pathname);
+  if (board?.[1] && decodeURIComponent(board[1]) === resourceId(recordings['board-realm'], 'board'))
+    return recordings[board[2] ? 'board-realm-threads' : 'board-realm'];
+  const realm = /^\/v1\/realms\/([^/]+)$/.exec(pathname);
+  if (realm?.[1] && decodeURIComponent(realm[1]) === resourceId(recordings['board-realm-realm'], 'realm', 'realmId'))
+    return recordings['board-realm-realm'];
+  const thread = /^\/v1\/threads\/([^/]+)(\/posts)?$/.exec(pathname);
+  if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings['board-realm-thread'], 'thread'))
+    return recordings[thread[2] ? 'board-realm-thread-posts' : 'board-realm-thread'];
+  return undefined;
+}
+
 async function selectRecording(
   request: Request,
   pathname: string,
@@ -287,6 +311,8 @@ async function selectRecording(
     return recordings['settings-preferences'];
   const community = communityRecording(request.method, pathname, recordings);
   if (community) return community;
+  const boardRealm = boardRealmRead(request.method, pathname, recordings);
+  if (boardRealm) return boardRealm;
   if (request.method === 'GET') {
     const withDeleted = pathname === '/v1/accounts' ? withDeletedOrganization(request, recordings.accounts) : undefined;
     if (withDeleted) return withDeleted;
@@ -379,6 +405,23 @@ function libraryStoryRecordings(): Record<string, KernelRecording> {
   };
   const owner = libraryCollectionRecording.collection.curatorAccountId;
   return JSON.parse(JSON.stringify(recordings).replaceAll(owner, storyViewerId)) as Record<string, KernelRecording>;
+}
+
+/** The Realm board's recordings, with the recorded account standing in for the author of its thread. */
+function boardRealmStoryRecordings(): Record<string, KernelRecording> {
+  const recordings: Record<string, KernelRecording> = {
+    'board-realm': boardRealmRecording,
+    'board-realm-realm': boardRealmRealmRecording,
+    'board-realm-thread': boardRealmThreadRecording,
+    'board-realm-thread-posts': boardRealmThreadPostsRecording,
+    'board-realm-threads': boardRealmThreadsRecording,
+  };
+  const known = accountsRecording.accounts[0]?.id;
+  if (!known) return recordings;
+  return JSON.parse(JSON.stringify(recordings).replaceAll(boardRealmThreadRecording.thread.authorId, known)) as Record<
+    string,
+    KernelRecording
+  >;
 }
 
 /**
@@ -475,6 +518,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'realm-subjects': realmSubjectsRecording,
     space: spaceRecording,
     'space-address': spaceAddressRecording,
+    ...boardRealmStoryRecordings(),
   });
 }
 
