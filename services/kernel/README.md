@@ -211,6 +211,8 @@ When a task changes a kernel-wide contract, run the full kernel check and fix ev
 
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
+A test file whose every failure is a growth bound error is rerun alone once after the suite, under a stack slot; a file that
+passes alone is reported as load-sensitive and does not fail the run.
 
 Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), runs only the test
 files that import a path changed since `<rev>` (committed, staged, unstaged or untracked), or the whole suite when the
