@@ -10,6 +10,7 @@
     "services/kernel/test/library/type-preparation-schema.test.ts",
     "services/kernel/test/rating/own-votes.test.ts",
     "services/kernel/test/library/bulk-outcome-page.test.ts",
+    "services/kernel/test/library/listing-public-history-schema.test.ts",
     "packages/client/src/kernel/**",
     "packages/document/schema/**",
     "packages/ui/src/shadcn/**",

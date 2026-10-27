@@ -24,6 +24,48 @@ CREATE SCHEMA library;
 
 
 --
+-- Name: collection_listing_public_history_guard(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.collection_listing_public_history_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.collection_id::text, NEW.route::bigint));
+    IF EXISTS (
+      SELECT 1
+      FROM library.collection_listing_history
+      WHERE route = NEW.route AND collection_id = NEW.collection_id
+    ) THEN
+      RAISE EXCEPTION 'Collection identity has public history'
+        USING ERRCODE = 'unique_violation', CONSTRAINT = 'collection_listing_history_pkey';
+    END IF;
+    NEW.listing_ever_public := NEW.state = 'active' AND NEW.visibility = 'public';
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF (NEW.route, NEW.collection_id) IS DISTINCT FROM (OLD.route, OLD.collection_id) THEN
+      RAISE EXCEPTION 'Collection source identity is immutable'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'collection_source_identity_immutable';
+    END IF;
+    NEW.listing_ever_public := OLD.listing_ever_public
+      OR (OLD.state = 'active' AND OLD.visibility = 'public')
+      OR (NEW.state = 'active' AND NEW.visibility = 'public');
+    RETURN NEW;
+  ELSE
+    IF OLD.listing_ever_public OR (OLD.state = 'active' AND OLD.visibility = 'public') THEN
+      PERFORM pg_advisory_xact_lock(hashtextextended(OLD.collection_id::text, OLD.route::bigint));
+      INSERT INTO library.collection_listing_history (route, collection_id, ever_public)
+      VALUES (OLD.route, OLD.collection_id, true)
+      ON CONFLICT (route, collection_id) DO NOTHING;
+    END IF;
+    RETURN OLD;
+  END IF;
+END;
+$$;
+
+
+--
 -- Name: guard_follow_target_type(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -152,6 +194,7 @@ CREATE TABLE library.collection (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    listing_ever_public boolean DEFAULT false NOT NULL,
     CONSTRAINT collection_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_check1 CHECK ((route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11)))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
@@ -162,6 +205,20 @@ CREATE TABLE library.collection (
     CONSTRAINT collection_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text]))),
     CONSTRAINT collection_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
     CONSTRAINT collection_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
+);
+
+
+--
+-- Name: collection_listing_history; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_listing_history (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    ever_public boolean NOT NULL,
+    CONSTRAINT collection_listing_history_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT collection_listing_history_ever_public_check CHECK (ever_public),
+    CONSTRAINT collection_listing_history_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -728,6 +785,14 @@ ALTER TABLE ONLY library.bulk_target
 
 
 --
+-- Name: collection_listing_history collection_listing_history_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_listing_history
+    ADD CONSTRAINT collection_listing_history_pkey PRIMARY KEY (route, collection_id);
+
+
+--
 -- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1186,6 +1251,13 @@ CREATE UNIQUE INDEX shelf_type_node_terminal_type ON library.shelf_type_node USI
 --
 
 CREATE INDEX type_preparation_pending ON library.type_preparation_progress USING btree (route, account_id, preparation_id) WHERE (enqueue_pending AND (state = 'pending'::text));
+
+
+--
+-- Name: collection collection_listing_public_history_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.collection_listing_public_history_guard();
 
 
 --

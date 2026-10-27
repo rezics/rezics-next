@@ -11,11 +11,13 @@ const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const partition = 0x7a1;
 const first = partition * 16;
 const neighbour = partition + 1;
+let generation = 0;
 
 type Kind = 'public' | 'unlisted' | 'private' | 'deleted';
 
 function id(route: number, n: number, prefix = '00000000'): string {
-  return `${prefix}-0000-7000-8000-${route.toString(16).padStart(4, '0')}${n.toString(16).padStart(8, '0')}`;
+  const uniqueOrdinal = (generation * 10_000 + n).toString(16).padStart(8, '0');
+  return `${prefix}-0000-7000-8000-${route.toString(16).padStart(4, '0')}${uniqueOrdinal}`;
 }
 
 async function insert(rows: { route: number; id: string; kind: Kind; updatedAt?: string }[]): Promise<void> {
@@ -39,7 +41,10 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(clear);
-beforeEach(clear);
+beforeEach(async () => {
+  generation++;
+  await clear();
+});
 afterAll(async () => {
   await clear();
   await pool.end();
@@ -184,10 +189,11 @@ test('Collection sitemap discovery seeks within one partition and never scans re
               '2026-02-03T04:05:06.123456Z'::timestamptz, id
        FROM (
          SELECT r AS route, n,
-                ('00000000-0000-7000-8000-' || lpad(to_hex(r), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid AS id
+                ('00000000-0000-7000-8000-' || lpad(to_hex(r), 4, '0') ||
+                 lpad(to_hex(n + $4::int), 8, '0'))::uuid AS id
          FROM generate_series($1::int, $2::int) AS r, generate_series(1, $3::int) AS n
        ) AS source`,
-      [from, to, count],
+      [from, to, count, generation * 10_000],
     );
   await generate(first, first + 15, 3000);
   // Neighbouring routes sit just outside the interval: a plan that did not stop at it would read or return them.
