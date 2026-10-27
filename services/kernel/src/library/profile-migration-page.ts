@@ -22,10 +22,10 @@ export async function pinLegacyFactsPage(
 ): Promise<{ examined: number; changed: number; after: string | null; exhausted: boolean }> {
   const { accountId, kind, releaseDigest, after, limit } = input;
   const route = routeOf(accountId);
-  if (route === null || (after !== null && routeOf(after) === null))
+  if (route === null || accountId.length !== 36 || (after !== null && (routeOf(after) === null || after.length !== 36)))
     throw new TypeError('Invalid legacy pin page identity');
   if (kind !== 'entry' && kind !== 'session' && kind !== 'copy') throw new TypeError('Invalid legacy pin page kind');
-  if (typeof releaseDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(releaseDigest))
+  if (typeof releaseDigest !== 'string' || releaseDigest.length !== 71 || !/^sha256:[0-9a-f]{64}$/.test(releaseDigest))
     throw new TypeError('Invalid legacy pin release digest');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Legacy pin page limit must be an integer from 1 to 100');
