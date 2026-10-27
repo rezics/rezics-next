@@ -22,6 +22,95 @@ Events about private state use the account or Collection id as `subject`, never 
 
 Ordering keys are fractional-indexing keys. Keys are generated within 32 characters and stored within 48. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respace happens when no generated key fits. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.
 
+## Shelf reads
+
+The [shelf UI study](../../../../docs/research/library-shelves.md) and
+[backend activity report](../../../../docs/research/library-shelf-activity.md) support these module requirements.
+[UI Shelves](../../../../packages/ui/README.md#shelves) owns controls and layouts. Adoption here establishes the
+kernel contract; implementation completion and growth evidence remain separate work.
+
+`GET /v1/libraryEntries` must serve a private, account-local page with progress for 48 cards in one read. Embed a
+nullable active session using exactly the existing BASIC session DTO in [progress-routes.ts](./progress-routes.ts):
+`id`, `subjectId`, `versionSubjectId`, `mode`, `unit`, `total`, `amount`, `locator`, `position`, `completedUnitCount`,
+`state`, `revision`, `startedAt`, `completedAt`. Storage routing, account and transaction IDs are excluded. Preserve
+decimal strings and nulls: `scalar_amount` retains amount and optional total; `cursor_position` retains its locator
+and position without an invented total; `completed_units` uses the maintained sparse `completedUnitCount`, without
+enumerating units or treating their largest identifier as a denominator. No mode requires history enumeration.
+No active session means null, never a terminal session or fabricated zero progress.
+
+Maintain `lastActivityAt` as the maximum of the entry change and that subject's progress change in the account
+partition. A retained account/subject progress head survives entry deletion. Accepted start, record, complete and
+abandon revisions advance activity, including accepted records with no net value change; receipt replay, rejected
+CAS and rolled-back writes do not. Progress updates the head and at most an existing entry's activity atomically;
+it never recreates deleted membership or changes entry state, revision or update time. Entry creation/recreation
+combines its own change time with the retained head. Entry and progress commands share a head-first lock order and
+monotonic maximum rule, so concurrent creation and progress cannot lose the later activity time.
+
+Select the displayed session separately: among active sessions for the exact account and subject, choose the greatest
+session change time, then session ID ascending. Multiple active sessions remain legal, and the winner need not be
+the newest-started session. Terminal changes still contribute to `lastActivityAt` even when another active session
+is displayed. Use an active-session index and bounded top-one probes for the page, rather than searching session
+history. Historic abandonment times absent from storage remain unknown; migration time cannot stand in for them.
+
+Last-activity, date-finished and date-added keyset reads need indexes matching the account, applicable status/type
+filters and ordering. Status/type-filtered tab counts and facets use maintained private counters. Do not sort or
+recount a growing library or progress history to serve a page. The shelf interface contract owns exact query names,
+defaults, finish-date/null semantics and type projection details. Requests without shelf additions retain the
+existing list envelope and fields. A source's primary type can change: its maintained type key follows anchored
+source re-reads and source revision ordering, rather than a permanent snapshot. Raw `readItemTypes` grants no Access
+permission; displayed subject summaries still use authorized summary reads. An unavailable summary does not justify
+an unbounded search for replacement cards or deletion of private membership/progress.
+
+Activity timestamps and ordering reveal progress even without embedded values. Shelf mode therefore requires both
+`library_entry:list` and `progress_session:list`, and both `personal_library` and `reading_progress` gates, with live
+own-account authorization. Existing entry-only reads retain their independent capability. Personal state stays out
+of public full text, public counts and the subject membership projection, and shelf responses use private caching.
+
+Read entry activity and active-session selection in one request snapshot. Preserve the exact stored timestamp
+precision and stable subject ID in cursor positions; converting seek keys through JavaScript `Date` loses finer
+precision. Pagination across requests is live, without a retained historical snapshot: moving keys may cause missed
+or repeated subjects until refresh. Use the accounts-owned `src/tokens/list-cursor.ts` async
+`encodeListCursor`/`decodeListCursor` API with the existing kernel token key ring and required kernel-clock `Date`.
+Bind route, viewer and the entire effective query, including page size, as associated data, and retain partition
+epoch validation. Library owns no cursor cryptography.
+
+## Sitemap feeds
+
+The [partitioned-sitemap research](../../../../docs/research/partitioned-sitemap-feeds.md) supplies the adopted
+partition-major immutable seek design. `GET /v1/sitemap/collections` accepts `cursor` and `limit` from 1 to 1000,
+defaulting to 1000, and returns `{items: [{id, lastModified}], next}` as defined by the shared content schemas.
+This is a bounded JSON discovery feed; downstream sitemap generation consumes it until `next` is null.
+
+Walk partitions in numeric order and seek ascending `(route, collection_id)` within each partition's sixteen-route
+interval, using the active/public partial index. IDs and routes are immutable seek keys; mutable timestamps, titles
+and curator fields are not traversal keys. Public candidate discovery is only a hint. Before emitting each item,
+require current active/public Collection flags and affirmative live anonymous Access, including its platform gate,
+even when the caller supplies a bearer. Unlisted, private, deleted and closed Collections never qualify. Profile
+Collections-view settings add no veto to an otherwise anonymously readable public Collection. Do not enumerate
+personal library state or members.
+
+For requested limit `L`, fetch at most `4L` candidate identities and visit at most four discovery partition intervals
+per page. These are separate budgets; fetched lookahead and any unprocessed suffix consume the candidate budget.
+Process candidates in seek order, advancing the checkpoint after each processed candidate, including rejections,
+and stop at `L` emitted items or a budget. Resume after that processed prefix, never after an unprocessed prefetched
+suffix. A short discovery batch proves exhaustion only when every fetched candidate has been processed; a full batch
+does not prove exhaustion. Retain an explicit exhausted-partition marker so empty partitions still advance without
+an unbounded per-address loop or a request scanning all empty partitions. Short or empty pages can carry `next`;
+only established exhaustion of the final partition returns null. Preserve the checkpoint partition's epoch,
+including on exhausted markers, and validate it on resume. Partition moves and unavailable authority retain normal
+availability/stale-cursor behavior rather than being treated as empty partitions.
+
+Return `lastModified` from the current `collection.updated_at` observed with disclosure. Existing Collection and
+member write paths maintain it; this contract adds neither a new write update nor a synthetic generation timestamp.
+It does not claim to cover every external subject-rendering change. Traversal is live across requests: insertion or
+publication behind the checkpoint may wait for a fresh walk, and cursor replay can observe different current state.
+
+Keep the complete seek position confidential through `src/tokens/list-cursor.ts` WebCrypto AES-GCM, using the shared
+async API and required kernel-clock `Date`. Associated data binds `route: 'GET /v1/sitemap/collections'`,
+`viewer: null` and the effective query including limit. Use the existing `KERNEL_SESSION_KEYS` rotation: the current
+key issues cursors, retained keys decrypt them, and retirement invalidates cursors under that key. Signed-only
+cursors and Library-local AES/HMAC wrappers do not satisfy this contract.
+
 ## Cost
 
 These are derivations from the library commands, SQL, `db/library/schema.sql` and `db/library/migrations/`, not measurements or guaranteed PostgreSQL plans.
