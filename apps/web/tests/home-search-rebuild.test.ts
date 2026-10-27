@@ -624,12 +624,17 @@ test(
         const newest = cards.nth(0);
         const older = cards.nth(1);
         const middle = cards.nth(2);
-        const action = await messageOf(locale, 'home_continue_action');
-        // Each card is one link, with cover, title and action inside it and no further link.
-        for (const card of [newest, older, middle]) {
+        // Each card is one link, named for continuing its title, with cover and title inside it and no further link.
+        for (const [card, title] of [
+          [newest, 'Newest read'],
+          [older, '舊讀物'],
+          [middle, 'Middle read'],
+        ] as const) {
           expect(await card.locator('a').count()).toBe(1);
           expect(await card.locator('[data-slot="cover"]').count()).toBe(1);
-          expect(await card.innerText()).toContain(action);
+          expect(await card.locator('a').getAttribute('aria-label')).toBe(
+            await messageOf(locale, 'home_continue_label', { title }),
+          );
         }
         expect(await newest.locator('a').getAttribute('href')).toBe(`/${locale}/library/progress/${sessionId(23)}`);
         expect(await middle.locator('a').getAttribute('href')).toBe(`/${locale}/library/progress/${sessionId(21)}`);

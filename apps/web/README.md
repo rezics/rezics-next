@@ -388,6 +388,11 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   size of the library, plus at most 6 progress reads (one per card shown), and 1 more D for the credential the reads
   send; signed out, 0. No R or A beyond the home page's existing session read; no other per-entry reads.
 - **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
+- **Card:** each card is one link to the progress session, named "Continue <title>", with no separate button. It shows
+  the progress the kernel returned: the unit and total with the share ("Episode 3 of 12"), the amount alone without a
+  total, a percent, or a short "In progress" line when the session holds no amount (a reading position). Below `sm`
+  the cards form one horizontally scrolling row of compact cards (thumbnail beside title and progress, 16rem wide); from
+  `sm` up they keep the grid. The home story's recorded sessions cover each case.
 
 ### Board page (`/<locale>/boards/<id>`)
 

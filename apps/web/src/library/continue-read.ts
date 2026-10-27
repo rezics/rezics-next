@@ -47,8 +47,8 @@ function summaryOf(subject: RawSubject): SubjectSummary {
   };
 }
 
-/** The active session of one subject, or null when the read fails or the subject has none. */
-async function readProgress(
+/** The active session of the subject itself, or null when the read fails or the subject has none. */
+export async function readProgress(
   client: KernelClient,
   subjectId: string,
   authorization: string,
@@ -58,7 +58,9 @@ async function readProgress(
       query: { subjectId, limit: 5 },
       headers: { authorization },
     });
-    const session = result.data?.progressSessions.find((item) => item.state === 'active');
+    const session = result.data?.progressSessions.find(
+      (item) => item.state === 'active' && item.subjectId === subjectId,
+    );
     if (!session) return null;
     return {
       sessionId: session.id,
