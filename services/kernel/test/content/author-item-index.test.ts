@@ -1,8 +1,17 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
 import { createAuthorItemEffect } from '../../src/content/author-item-index.ts';
-import type { CloudEvent } from '../../src/events/log.ts';
+import {
+  erasePostLogicalAsInitiator,
+  erasePostLogicalPageAsInitiator,
+  type ErasureInitiator,
+} from '../../src/content/erase-post.ts';
+import { readErasureInitiator } from '../../src/content/erasure-initiator.ts';
+import { beginAuthorErasure } from '../../src/content/operations.ts';
+import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const db = await openGrowthDatabase();
@@ -73,9 +82,8 @@ async function position() {
     await db.admin.query('SELECT position::text FROM core.partition WHERE partition_no=$1', [partitionOf(authorRoute)])
   ).rows;
 }
-async function storedPost(author: string) {
-  const thread = newId(threadRoute),
-    post = newId(threadRoute),
+async function storedPost(author: string, thread = newId(threadRoute)) {
+  const post = newId(threadRoute),
     revision = newId(threadRoute);
   const board = newId(0x5678);
   const client = await db.admin.connect();
@@ -90,7 +98,7 @@ async function storedPost(author: string) {
     await client.query(
       `INSERT INTO content.thread
       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-      VALUES ($1,$2,$3,$4,'Index fixture','published',1,$2)`,
+      VALUES ($1,$2,$3,$4,'Index fixture','published',1,$2) ON CONFLICT DO NOTHING`,
       [threadRoute, thread, author, board],
     );
     await client.query(
@@ -181,6 +189,118 @@ test('ID-only post erasure reads the author before the author command and replay
   await effect.run(source);
   expect(await rows(author)).toEqual([]);
   expect(await position()).toEqual(beforePosition);
+});
+
+test('every post.erased event names its post as subject, and an author erasure page removes each post from the author item index', async () => {
+  const fixture = await standingFixture(['account:read']);
+  try {
+    const actor = (await fixture.context()).actor;
+    const first = await storedPost(actor.accountId);
+    const second = await storedPost(actor.accountId, first.thread);
+    const single = await storedPost(actor.accountId, first.thread);
+    const effect = createAuthorItemEffect(db.pool);
+    for (const { post, thread } of [first, second, single]) {
+      await effect.run(created(postType, actor.accountId, thread, post));
+      await fixture.grant(actor.accountId, 'post:erase', { route: threadRoute, id: post });
+    }
+    expect(await rows(actor.accountId)).toHaveLength(3);
+    await fixture.grant(actor.accountId, 'account:read', { route: routeOf(actor.accountId)!, id: actor.accountId });
+    const context = () => ({
+      deadline: Date.now() + 10_000,
+      idempotencyKey: randomUUID(),
+      requestId: randomUUID(),
+    });
+    const deps = { pool: fixture.pool, access: fixture.access };
+    const operation = await beginAuthorErasure(
+      {
+        ...deps,
+        clock: () => new Date(),
+        workflows: {
+          async enqueue() {
+            throw new Error('Only the durable relay may enqueue');
+          },
+          async status() {
+            throw new Error('No status read during initiation');
+          },
+        },
+      },
+      actor,
+      { threadId: first.thread, authorId: actor.accountId },
+      context(),
+    );
+    const initiator: ErasureInitiator = {
+      kind: 'durable-initiator',
+      operation: {
+        route: threadRoute,
+        id: operation.value.operationId,
+        kind: 'content.author-erasure',
+        sourceId: operation.value.operationId,
+      },
+      accountId: actor.accountId,
+      clientId: actor.clientId,
+      requestedBy: actor.requestedBy,
+      restorer: createInitiatorRestorer({
+        ...deps,
+        readConsent: fixture.readConsent,
+        async readOperation(client, operation, time) {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          try {
+            const record = await readErasureInitiator(client, operation, time);
+            await client.query('COMMIT');
+            return record;
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+          }
+        },
+      }),
+    };
+    const postIds = [first.post, second.post];
+    const page = await erasePostLogicalPageAsInitiator(
+      deps,
+      initiator,
+      { postIds, threadId: first.thread, reason: 'Erase author history' },
+      context(),
+    );
+    const point = await erasePostLogicalAsInitiator(
+      deps,
+      initiator,
+      { postId: single.post, reason: 'Erase author history' },
+      context(),
+    );
+    const events: CloudEvent[] = [];
+    const consumer = `author_item_erasure_${randomUUID().replaceAll('-', '')}`;
+    let position = 0n;
+    while (position < point.position) {
+      const batch = await readBatch(db.pool, {
+        partition: page.partition,
+        consumer,
+        apply: async (envelopes) => {
+          for (const envelope of envelopes)
+            if (envelope.position === page.position || envelope.position === point.position)
+              events.push(...envelope.events.filter((event) => event.type === erasedType));
+        },
+      });
+      expect(batch.status).toBe('read');
+      if (batch.status !== 'read') throw new Error('Committed erasure events must be readable');
+      expect(batch.position).toBeGreaterThan(position);
+      position = batch.position;
+    }
+    expect(events.map((event) => (event.data as { postId: string }).postId)).toEqual([...postIds, single.post]);
+    for (const event of events.slice(0, 2)) {
+      await effect.run(event);
+      expect(event.subject).toBe((event.data as { postId: string }).postId);
+    }
+    const remaining = await rows(actor.accountId);
+    expect(remaining.map((row) => row.item_id)).toEqual([single.post]);
+    for (const event of events.slice(0, 2)) await effect.run(event);
+    expect(await rows(actor.accountId)).toEqual(remaining);
+    expect(events[2]!.subject).toBe(single.post);
+    await effect.run(events[2]!);
+    expect(await rows(actor.accountId)).toEqual([]);
+  } finally {
+    await fixture.close();
+  }
 });
 
 test('erasing an opening post preserves its thread candidate and missing posts change nothing', async () => {

@@ -246,7 +246,13 @@ async function prepareAuthorizedPoint(
       if (point.kind === 'post')
         return {
           value,
-          events: [{ type: 'com.rezics.content.post.erased.v1', data: { postId: point.id, securityRevision } }],
+          events: [
+            {
+              type: 'com.rezics.content.post.erased.v1',
+              subject: point.id,
+              data: { postId: point.id, securityRevision },
+            },
+          ],
         };
       // The media purge consumer resolves this ID and purges only m/<id>/.
       // No remote call or worker connection occurs inside the point transaction.
@@ -459,6 +465,7 @@ export async function erasePostLogicalPageAsInitiator(
         if (!changed) throw new GrantDeniedError();
         events.push({
           type: 'com.rezics.content.post.erased.v1',
+          subject: id,
           data: { postId: id, securityRevision: changed.security_revision },
         });
       }
