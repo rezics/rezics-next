@@ -205,3 +205,19 @@ test('a culprit whose revert conflicts with later work is fixed forward and prom
     expect(h.head()).toBe(devBefore);
   } finally { h.dispose(); }
 });
+
+test('a specification routed as a claim, or any verifier run of a specification suite, does not fail promotion', async () => {
+  const h = integrationHarness();
+  try {
+    const spec = await h.seed('outcomes', [], ['fixture-red-suite']);
+    h.store.updateTask({ taskId: spec.id, attempt: 1 }, current => {
+      current.taskClass = 'claim';
+      current.brief = { ...current.brief, kind: 'specification' };
+    });
+    const verifier = await h.seed('verified', [], ['bun', 'specs/support/verify-outcome-suite.ts', 'specs/x.test.ts']);
+    const dev = h.head();
+    await h.promote(async command => command[0] === 'fixture-red-suite' || command.includes('specs/support/verify-outcome-suite.ts') ? failure : success);
+    expect(h.head('main')).toBe(dev);
+    for (const task of [spec, verifier]) expect(h.store.task(task.id).state).toBe('merged');
+  } finally { h.dispose(); }
+});

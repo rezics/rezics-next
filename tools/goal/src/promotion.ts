@@ -174,7 +174,10 @@ function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): strin
   const commands = new Map<string, string[]>([[JSON.stringify(rootGate), [...rootGate]]]);
   for (const task of tasks) {
     const command = task.brief.acceptance.command;
-    if (RED_BY_DESIGN.has(task.taskClass) || coveredByRootGate(command)) continue;
+    // A specification is red by design whatever class its risk areas route it to; its verifier proves the
+    // specification, not the product, and a 20-second red run once blocked a promotion whose root gate passed.
+    if (RED_BY_DESIGN.has(task.taskClass) || RED_BY_DESIGN.has(task.brief.kind) || coveredByRootGate(command)) continue;
+    if (command.some((argument) => argument.endsWith('specs/support/verify-outcome-suite.ts'))) continue;
     commands.set(JSON.stringify(command), [...command]);
   }
   return [...commands.values()];
