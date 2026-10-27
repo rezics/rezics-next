@@ -120,9 +120,27 @@ number never sit on separate lines. Where a unit is meaningful the number may be
 
 ## Shelves
 
-A person's library opens as a cover grid of [cover cards](#cover-cards) with progress, sorted by last activity,
-with status filters above it. A compact list is an alternative view the reader can switch to, never the default.
-Timestamps on a shelf are relative ("3 days ago") and only in the list view.
+A person's library follows what mature shelf apps share ([research](../../docs/research/library-shelves.md)):
+
+- **Structure.** Status tabs with counts (All, In progress, Planned, Completed, Paused, Dropped, Collections). All is
+  an overview with one section per status, In progress first as Continue, empty sections hidden. A type filter row
+  (books, anime, …) appears when the library holds more than one type.
+- **Layouts.** Grid (default), List, and Table on wide screens; on narrow screens Table shows as List. The grid has
+  three sizes (four, three or two columns on a phone, default three; proportionally more on wide screens).
+- **Grid.** [Cover cards](#cover-cards) with the [progress row](#progress) for items in progress; the secondary line
+  shows the active sort key ("Finished 3 days ago"); a badge counts new episodes or chapters past the reader's
+  progress.
+- **List.** Thumbnail, title, a status chip that opens the status menu, the progress row with a −/+ step, relative
+  last activity, and the item menu.
+- **Table.** Status, progress and rating editable in place, a column picker, a sticky header and sorting by column.
+- **Controls.** Each tab offers the sorts that suit it (Completed defaults to date finished, Planned to date added);
+  active filters show as removable chips with Clear filters; selection by a Select button, a checkbox on hover, a
+  long press or shift-click ranges, with a bottom bar for Select all matching, status, collections and remove.
+- **Persistence.** Tab, sort, filters, layout and position live in the URL; layout, sort and grid size are also saved
+  to the reader's account and follow them across devices; a URL value wins.
+- **Phone.** Sort, filter and display share one bottom sheet; menus open as bottom sheets; nothing depends on hover.
+- **Empty and dates.** "Nothing here yet" (with Browse and Import) is distinct from "nothing matches these filters"
+  (with Clear filters); dates are relative within a week, with the exact time on hover.
 
 ## Media image
 
