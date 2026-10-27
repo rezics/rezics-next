@@ -1289,7 +1289,13 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         if (actor.requestedBy && !principal) throw new Error('Auth returned a malformed assignment reference');
         const who = fact === 'principal-grant' ? (principal ?? actor.accountId) : actor.accountId;
         const issuer = principal ?? actor.accountId;
-        const identity = required(registrations.get(issuer), `Missing native grant issuer session for ${issuer}`);
+        const grantor =
+          operation.kind === 'organization' || f.family === 'fence-operator'
+            ? required(governor, 'Platform governance is not bootstrapped').accountId
+            : operation.kind === 'transfer'
+              ? f.ownerId
+              : issuer;
+        const identity = required(registrations.get(grantor), `Missing native grant issuer session for ${grantor}`);
         const session = await login(identity.email, f.identity.clientId);
         const grantActor = await required(accessPort, 'Access is not composed').authenticate(session.bearer, context());
         const target =
@@ -1312,7 +1318,10 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const revokeCommand = createGrantCommands({
           pool: kernel,
           access: required(accessPort, 'Access is not composed'),
-          managementAction: 'account:manage',
+          managementAction:
+            grantActor.accountId === required(governor, 'Platform governance is not bootstrapped').accountId
+              ? 'access:grant'
+              : 'account:manage',
         });
         const input = {
           resource: { route: route(target), id: target },
