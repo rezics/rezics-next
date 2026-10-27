@@ -1,28 +1,27 @@
+import '../support/fixture-event-types.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
-import { DBOS } from '@dbos-inc/dbos-sdk';
+import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { Pool, type PoolClient } from 'pg';
 import { createContentOperationClient, createContentWork } from '../../src/content/work.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
-import { readAccount } from '../../src/access/account-data.ts';
 import { contentEffects } from '../../src/content/relays.ts';
 import { R2Storage } from '../../src/content/r2-storage.ts';
 import { effectsRelay } from '../../src/events/effects.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { composeWork } from '../../src/work/registry.ts';
-import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { authoritativeTimeValue, mintReadTime, runCommand } from '../../src/command/command.ts';
+import authoritativeTimeRead from '../../src/command/time.sql';
 import { accessCommandAttempt, commandAccessContext } from '../../src/access/command-admission.ts';
-import { mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeJwt } from 'jose';
-import reylo from 'reylo/esbuild';
 import type {
   Attack,
   Anchor,
@@ -33,15 +32,10 @@ import type {
   Point,
   Snapshot,
 } from '../../../../specs/durable-initiator-driver.ts';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
-import { createSuspensionCommands } from '../../src/access/suspension.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { grantGroupRole } from '../../src/access/resource-group-grant.ts';
 import { readErasureInitiator } from '../../src/content/erasure-initiator.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
 import { communityWorkModule } from '../../src/community/work.ts';
@@ -50,15 +44,10 @@ import { readPost } from '../../src/content/reads.ts';
 import { readMembershipWorkConfig } from '../../src/access/membership-work-config.ts';
 import { readOperation } from '../../src/content/operations.ts';
 import { withConnection } from '../../src/database/pool.ts';
-import { accessCommandAuthorization, type AccountActor, type Resource } from '../../src/request/access.ts';
+import type { AccountActor, Resource } from '../../src/request/access.ts';
 import type { PublicGrantSubject } from '../../src/access/grant-subject.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
-import {
-  buildBoardAndThreads,
-  createFixtureResources,
-  request,
-  type FixtureResources,
-} from '../content/support/erasure-operation-fixtures.ts';
+import type { FixtureResources } from '../content/support/erasure-operation-fixtures.ts';
 
 const barrierTable = 'content.erasure_operation_test_barrier';
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 15));
@@ -115,15 +104,22 @@ async function until<T>(read: () => Promise<T | undefined>): Promise<T> {
   throw new Error('Native erasure observation timed out');
 }
 
-async function inNativeGrantBatches<T>(values: readonly T[], apply: (value: T) => Promise<void>): Promise<void> {
-  for (let start = 0; start < values.length; start += 16) await Promise.all(values.slice(start, start + 16).map(apply));
+async function inNativeBatches<T>(values: readonly T[], apply: (value: T) => Promise<void>, size = 16): Promise<void> {
+  for (let start = 0; start < values.length; start += size)
+    await Promise.all(values.slice(start, start + size).map(apply));
 }
 
 async function buildWorker(): Promise<string> {
   const directory = fileURLToPath(new URL('../../.temp/durable-initiator-worker/', import.meta.url));
   mkdirSync(directory, { recursive: true });
+  const { default: reylo } = await import('reylo/esbuild');
+  const entryPath = resolve(directory, 'durable-initiator-worker-entry.ts');
+  await Bun.write(
+    entryPath,
+    `import { runWorker } from ${JSON.stringify(fileURLToPath(import.meta.url))};\nawait runWorker();\n`,
+  );
   const built = await Bun.build({
-    entrypoints: [fileURLToPath(new URL('./durable-initiator-outcome-driver.ts', import.meta.url))],
+    entrypoints: [entryPath],
     outdir: directory,
     target: 'bun',
     splitting: true,
@@ -160,7 +156,6 @@ async function startWorker(resources: FixtureResources, executorId: string) {
   )`);
   const child = Bun.spawn([process.execPath, entry], {
     env: workerTestEnv({
-      DURABLE_INITIATOR_WORKER: '1',
       KERNEL_ROUTE_KEY: Buffer.from(resources.system.routeKey).toString('base64url'),
       KERNEL_SESSION_KEYS: [...resources.system.tokenKeys.keys]
         .map(([id, key]) => `${id}:${Buffer.from(key).toString('base64url')}`)
@@ -201,18 +196,11 @@ async function startWorker(resources: FixtureResources, executorId: string) {
   };
   const stop = async () => {
     if (child.exitCode === null) {
-      // Leave parked work untouched. Restart must recover native DBOS state.
-      child.stdin.write('stop\n');
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const stopped = await Promise.race([
-        child.exited.then(() => true),
-        new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), 10_000))),
-      ]);
-      clearTimeout(timer);
-      if (!stopped && child.exitCode === null) {
-        child.kill('SIGKILL');
-        await child.exited;
-      }
+      // A graceful DBOS shutdown waits for deliberately parked workflows. Stop
+      // this owned process without releasing their protected boundaries; the
+      // next host must recover exclusively from committed native DBOS state.
+      child.kill('SIGKILL');
+      await child.exited;
     }
     await Promise.all([stdout, stderr]);
   };
@@ -265,7 +253,7 @@ async function startWorker(resources: FixtureResources, executorId: string) {
   };
   try {
     await wait('ERASURE_WORKER_READY');
-    return { stop, setClock, replay, publicRead, probe, assertRunning };
+    return { stop, setClock, replay, publicRead, probe, assertRunning, diagnostics: () => errors.slice(-16_000) };
   } catch (error) {
     child.kill('SIGKILL');
     await child.exited;
@@ -302,15 +290,14 @@ async function isolatedFault(pool: Pool, change: (connection: PoolClient) => Pro
 function nativeRefusal(error: unknown): boolean {
   return (
     error instanceof Error &&
-    ([
+    [
       'GrantDeniedError',
       'LifecycleDeniedError',
       'DelegationDeniedError',
       'DurableInitiatorUnavailableError',
       'ErasurePermissionDenied',
       'RealmMembershipUnavailableError',
-    ].includes(error.name) ||
-      (error as Error & { status?: number }).status === 403)
+    ].includes(error.name)
   );
 }
 
@@ -332,6 +319,33 @@ function createLifecycleAccess(resources: FixtureResources) {
 export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDriver> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated kernel database');
+  // The executor imports this module too. Keep the HTTP/Auth fixture builder in
+  // the parent process so each real worker restart loads only executor modules.
+  const { buildBoardAndThreads, createFixtureResources, ensureAuthorAccessGrant, request } =
+    await import('../content/support/erasure-operation-fixtures.ts');
+  const [
+    { createKernel },
+    { createWriteRateLimiter },
+    { readAccount },
+    { PLATFORM_RESOURCE },
+    { createDelegationCommands },
+    { createSuspensionCommands },
+    { createReinstatementCommands },
+    { createGrantCommands },
+    { grantGroupRole },
+    { accessCommandAuthorization },
+  ] = await Promise.all([
+    import('../../src/http/kernel.ts'),
+    import('../../src/access/write-rate.ts'),
+    import('../../src/access/account-data.ts'),
+    import('../../src/access/bootstrap-governance.ts'),
+    import('../../src/access/delegation-commands.ts'),
+    import('../../src/access/suspension.ts'),
+    import('../../src/access/reinstatement.ts'),
+    import('../../src/access/grant-commands.ts'),
+    import('../../src/access/resource-group-grant.ts'),
+    import('../../src/request/access.ts'),
+  ]);
   let resources: FixtureResources | undefined;
   let native: FixtureResources;
   let pool: Pool;
@@ -340,6 +354,12 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
   let externalClientId: string | undefined;
   let membershipClientId: string | undefined;
   let lifecycleClientId: string | undefined;
+  let governanceCredential: string | undefined;
+  let authorCredential: { bearer: string; actor: AccountActor } | undefined;
+  let principalCredential: { bearer: string; actor: AccountActor } | undefined;
+  let authorSessionCookie = '';
+  let externalSessionCookie = '';
+  let spareAuthors: string[] = [];
   let executorId = `durable-initiator-${randomUUID()}`;
   let fixtureDirty = false;
   let restoreMutation: (() => Promise<void>) | undefined;
@@ -347,8 +367,25 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
   let parked: { operation: Anchor; point: Point } | undefined;
   const pendingAdvances = new Map<string, Anchor>();
   const fixturesByOperation = new Map<string, Fixture>();
+  const sentinelByThread = new Map<string, string>();
+  let unusedTargets:
+    | { board: Awaited<ReturnType<typeof buildBoardAndThreads>>; posts: string[]; authorId: string }
+    | undefined;
+  type PreparedBoard = Awaited<ReturnType<typeof buildBoardAndThreads>>;
+  let preparedTargets: { authorId: string; result: Promise<{ board: PreparedBoard } | { error: unknown }> } | undefined;
+  const finishPublishing = async () => {
+    if (!preparedTargets) return undefined;
+    const result = await preparedTargets.result;
+    if ('error' in result) throw result.error;
+    return result.board;
+  };
   const retireFixture = async () => {
     const failures: unknown[] = [];
+    try {
+      await finishPublishing();
+    } catch (error) {
+      failures.push(error);
+    }
     for (const stop of [
       () => worker?.stop(),
       () => client?.close(),
@@ -366,8 +403,24 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     }
     if (failures.length) throw new AggregateError(failures, 'Durable initiator fixture cleanup failed');
   };
-  let drainPending = async () => {};
+  let retireOperations = async () => {};
   const close = retireFixture;
+  const bindRouteClient = () => {
+    native.kernel = createKernel({
+      pool,
+      routeKey: native.system.routeKey,
+      tokens: native.system.tokenKeys,
+      clock: () => new Date(),
+      content: { cursorNow: () => Date.now() },
+      access: () => native.system.access,
+      workClient: client!,
+      writeRate: createWriteRateLimiter({
+        secret: `durable-fixture-${randomUUID()}-${randomUUID()}`,
+        overrides: '{"new-account":{"write":{"maximum":100000,"seconds":60}}}',
+      }),
+      ratePeer: () => '127.0.0.1',
+    });
+  };
   const replaceFixture = async () => {
     if (resources) await retireFixture();
     native = resources = await createFixtureResources(databaseUrl);
@@ -375,11 +428,22 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     await native.bootstrap;
     pool = native.pool;
     client = await createWorkClient(native.appUrl);
+    // Membership and ban routes enqueue native work. Supply the client owned
+    // by this driver so closing the fixture also closes that route connection.
+    bindRouteClient();
     worker = await startWorker(native, executorId);
     if (trustedClock) await worker.setClock(trustedClock);
     externalClientId = undefined;
     membershipClientId = undefined;
     lifecycleClientId = undefined;
+    governanceCredential = undefined;
+    authorCredential = undefined;
+    principalCredential = undefined;
+    authorSessionCookie = '';
+    externalSessionCookie = '';
+    spareAuthors = [native.accountIds.legal, native.accountIds.suspended];
+    unusedTargets = undefined;
+    preparedTargets = undefined;
     fixtureDirty = false;
   };
   try {
@@ -392,6 +456,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
       return result.rows[0];
     };
     const freshGovernanceActor = async (deadline: number) => {
+      governanceCredential ??= native.governanceBearer;
+      if (Number(decodeJwt(governanceCredential).exp) * 1000 > Date.now() + 5_000)
+        return native.system.access.authenticate(governanceCredential, { pool, deadline });
       const row = (
         await pool.query<{ account_id: string }>(
           'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
@@ -404,16 +471,40 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         clientId: native.system.auth.ordinaryClient.id,
         scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
       });
+      governanceCredential = credential.bearer;
       return native.system.access.authenticate(credential.bearer, { pool, deadline });
     };
     const freshAuthorActor = async (deadline: number) => {
-      const credential = await native.system.auth.issue({
-        accountId: native.accountIds.author,
-        clientId: native.system.auth.ordinaryClient.id,
-        scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
-      });
-      native.updateBearer('author', credential.bearer);
-      return native.system.access.authenticate(credential.bearer, { pool, deadline });
+      const account = await readAccount(pool, routeOf(native.accountIds.author)!, native.accountIds.author);
+      if (
+        !authorCredential ||
+        !account ||
+        BigInt(authorCredential.actor.authnEpoch) < BigInt(account.minimumAuthnEpoch) ||
+        Number(decodeJwt(authorCredential.bearer).exp) * 1000 <= Date.now() + 5_000
+      ) {
+        const auth = native.system.nativeAuth;
+        const handler = auth.handler.bind(auth);
+        auth.handler = async (input) => {
+          const response = await handler(input);
+          if (new URL(input.url).pathname === '/signin' && response.ok)
+            authorSessionCookie = response.headers
+              .getSetCookie()
+              .map((cookie) => cookie.split(';')[0])
+              .join('; ');
+          return response;
+        };
+        try {
+          authorCredential = await native.system.auth.issue({
+            accountId: native.accountIds.author,
+            clientId: native.system.auth.ordinaryClient.id,
+            scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
+          });
+        } finally {
+          auth.handler = handler;
+        }
+      }
+      native.updateBearer('author', authorCredential.bearer);
+      return native.system.access.authenticate(authorCredential.bearer, { pool, deadline });
     };
     const committedAt = async (transactionId: string) => {
       const result = await pool.query<{ at: string }>(
@@ -428,19 +519,82 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
       close,
       async seed(mode = 'delegated') {
         if (!['direct', 'delegated', 'organization', 'realm'].includes(mode)) throw new TypeError('Unknown seed mode');
-        await drainPending();
+        await finishPublishing();
+        await retireOperations();
         if (restoreMutation) {
           await restoreMutation();
           restoreMutation = undefined;
         }
-        if (fixtureDirty) await replaceFixture();
+        if (fixtureDirty && spareAuthors.length > 0) {
+          // The shared native system has other already registered people.
+          // Use that genuine account after an irreversible identity mutation,
+          // retiring its moderator grants through the grant commands first.
+          const nextAuthor = spareAuthors.shift()!;
+          const deadline = Date.now() + 120_000;
+          const governance = await freshGovernanceActor(deadline);
+          const nextAccount = await readAccount(pool, routeOf(nextAuthor)!, nextAuthor);
+          if (nextAccount?.state === 'suspended')
+            await createReinstatementCommands({
+              pool,
+              access: native.system.access,
+              clock: () => new Date(),
+            }).reinstate({ pool, actor: governance, deadline }, { accountId: nextAuthor, key: randomUUID() });
+          const commands = createGrantCommands({
+            pool,
+            access: native.system.access,
+            managementAction: 'access:grant',
+          });
+          const grants = await pool.query<{ action: string; valid: string }>(
+            `SELECT action,valid::text FROM access.resource_grant
+             WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+               AND action IN ('post:erase','moderation:takedown') AND upper_inf(valid)`,
+            [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, nextAuthor],
+          );
+          for (const grant of grants.rows)
+            await commands.revoke(
+              { pool, actor: governance, deadline },
+              {
+                resource: PLATFORM_RESOURCE,
+                subject: { kind: 'account', id: nextAuthor },
+                actions: [grant.action],
+                valid: grant.valid,
+                key: randomUUID(),
+              },
+            );
+          native.accountIds.author = nextAuthor;
+          authorCredential = undefined;
+          authorSessionCookie = '';
+          externalSessionCookie = '';
+        } else if (fixtureDirty) await replaceFixture();
         fixtureDirty = false;
         parked = undefined;
         const authorActor = await freshAuthorActor(Date.now() + 120_000);
+        await ensureAuthorAccessGrant(native);
         // Native erasure discovers a second protected batch only after the first
         // has committed, so seed enough real posts for two pages.
-        const board = await buildBoardAndThreads(native, 101, 1, randomUUID());
-        const posts = board.targeted.map((post) => post.id);
+        // A refused first boundary leaves its genuine targets untouched. Reuse
+        // those posts only after independently reading that every one is still
+        // available and belongs to this author; each operation is still a new
+        // authenticated native creation with a new key and initiating tuple.
+        const remaining =
+          mode === 'delegated' && unusedTargets?.authorId === native.accountIds.author
+            ? await pool.query<{ count: number }>(
+                `SELECT count(*)::int AS count FROM content.post
+                 WHERE route=$1 AND post_id=ANY($2::uuid[]) AND author_account_id=$3 AND availability='available'`,
+                [unusedTargets.board.route, unusedTargets.posts, unusedTargets.authorId],
+              )
+            : undefined;
+        const retained = remaining?.rows[0]?.count === 101 ? unusedTargets : undefined;
+        const prepared =
+          mode === 'delegated' && preparedTargets?.authorId === native.accountIds.author
+            ? await finishPublishing()
+            : undefined;
+        const board = retained?.board ?? prepared ?? (await buildBoardAndThreads(native, 101, 1, randomUUID()));
+        if (!retained || preparedTargets?.authorId !== native.accountIds.author || mode !== 'delegated')
+          preparedTargets = undefined;
+        sentinelByThread.set(board.thread, board.sentinelThread);
+        const posts = retained?.posts ?? board.targeted.map((post) => post.id);
+        unusedTargets = mode === 'delegated' ? { board, posts, authorId: native.accountIds.author } : undefined;
         const actorId = native.accountIds.author;
         let principalId: string | null = mode === 'delegated' ? native.accountIds.unrelated : null;
         const lifecycleAccess = createLifecycleAccess(native);
@@ -508,6 +662,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           );
         };
         const governanceActor = await freshGovernanceActor(Date.now() + 120_000);
+        if (governanceActor.kind !== 'account') throw new Error('Native governance credential is not an account');
         const governanceContext = () => ({ pool, actor: governanceActor, deadline: Date.now() + 120_000 });
         let organizationOwner = await lifecycleAccess.authenticate(native.system.actors.other.bearer, {
           pool,
@@ -548,6 +703,19 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               key: randomUUID(),
             });
         };
+        await grantIfAbsent('governance', {
+          resource: { route: routeOf(actorId)!, id: actorId },
+          subject: { kind: 'account', id: actorId },
+          actions: ['account:read'],
+        });
+        // Result-axis revocation removes the author's explicit self-read grant.
+        // Give the independent grantor native authority before that mutation so
+        // the next fixture can restore the named fact through grant commands.
+        await grantIfAbsent('author', {
+          resource: { route: routeOf(actorId)!, id: actorId },
+          subject: { kind: 'account', id: governanceActor.accountId },
+          actions: ['account:read'],
+        });
         let requestedBy: string | undefined;
         if (mode === 'organization') {
           if (!membershipClientId) {
@@ -593,7 +761,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             role: 'member',
             key: randomUUID(),
           });
-          await inNativeGrantBatches(posts, (id) =>
+          await inNativeBatches(posts, (id) =>
             addGroupGrant(id, { kind: 'organization', id: principalId!, role: 'member' }, [
               'post:erase',
               'post:revise',
@@ -618,24 +786,42 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             );
             return row.rowCount ? true : undefined;
           });
-          await inNativeGrantBatches(posts, async (id) => {
+          await inNativeBatches(posts, async (id) => {
             await addRealmRole({ route: board.route, id }, realmId);
           });
         }
         // Group membership fixtures must not inherit the creator's direct role;
         // their only post permission comes from the native group grant below.
-        if (mode === 'delegated')
-          await inNativeGrantBatches(posts, async (id) => {
-            await grants.create(authorContext(), {
-              resource: { route: board.route, id },
-              subject: { kind: 'account', id: principalId! },
+        if (mode === 'delegated') {
+          // Both operands must hold the action in the same native context.
+          // Global reach keeps this large erasure fixture bounded without
+          // combining an actor's local grant with a principal's Global grant.
+          for (const id of [actorId, principalId!])
+            await grantIfAbsent('governance', {
+              resource: PLATFORM_RESOURCE,
+              subject: { kind: 'account', id },
               actions: ['post:erase'],
-              valid: '(,)',
+            });
+        } else {
+          // Direct and group fixtures exercise local authority, including the
+          // Realm's ban. No Global erasure grant may cover a local revocation.
+          const global = await pool.query<{ valid: string }>(
+            `SELECT valid::text FROM access.resource_grant
+             WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+               AND subject_role='' AND action='post:erase' AND upper_inf(valid)`,
+            [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, actorId],
+          );
+          for (const row of global.rows)
+            await grants.revoke(governanceContext(), {
+              resource: PLATFORM_RESOURCE,
+              subject: { kind: 'account', id: actorId },
+              actions: ['post:erase'],
+              valid: row.valid,
               key: randomUUID(),
             });
-          });
+        }
         if (mode === 'organization' || mode === 'realm')
-          await inNativeGrantBatches(posts, async (id) => {
+          await inNativeBatches(posts, async (id) => {
             const role = (
               await pool.query<{ valid: string }>(
                 `SELECT valid::text FROM access.resource_role_grant
@@ -660,19 +846,27 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               subject: { kind: 'account', id: principalId },
               actions: ['account:read'],
             });
+            // Assignment management belongs to the principal's account.
+            // Publishing retires its temporary Global setup grant, so keep
+            // native authority on this exact account for create and revoke.
             await grantIfAbsent('governance', {
-              resource: PLATFORM_RESOURCE,
+              resource: { route: routeOf(principalId)!, id: principalId },
               subject: { kind: 'account', id: principalId },
               actions: ['access:grant'],
             });
-            const principal = await native.system.auth.issue({
-              accountId: principalId,
-              clientId: native.system.auth.ordinaryClient.id,
-              scopes: ['access:grant'],
+            if (!principalCredential || Number(decodeJwt(principalCredential.bearer).exp) * 1000 <= Date.now() + 5_000)
+              principalCredential = await native.system.auth.issue({
+                accountId: principalId,
+                clientId: native.system.auth.ordinaryClient.id,
+                scopes: ['access:grant'],
+              });
+            const principal = await native.system.access.authenticate(principalCredential.bearer, {
+              pool,
+              deadline: Date.now() + 120_000,
             });
             requestedBy = (
               await createDelegationCommands({ pool, access: native.system.access, action: 'access:grant' }).create(
-                { pool, actor: principal.actor, deadline: Date.now() + 120_000 },
+                { pool, actor: principal, deadline: Date.now() + 120_000 },
                 {
                   principalId,
                   assignedActorId: actorId,
@@ -684,11 +878,6 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             ).value.requestedBy;
           }
         }
-        await grantIfAbsent('governance', {
-          resource: { route: routeOf(actorId)!, id: actorId },
-          subject: { kind: 'account', id: actorId },
-          actions: ['account:read'],
-        });
         const outsideAction = 'moderation:takedown';
         const auth = native.system.nativeAuth;
         const handler = auth.handler.bind(auth);
@@ -712,12 +901,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete').sort(),
             });
           }
-          await native.system.auth.issue({
-            accountId: actorId,
-            clientId: native.system.auth.ordinaryClient.id,
-            scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete').sort(),
-          });
-          if (!refreshToken) throw new Error('Native Auth returned no consent session cookie');
+          if (!authorSessionCookie) throw new Error('Native Auth returned no consent session cookie');
           const issuer = decodeJwt(native.system.actors.author.bearer).iss;
           if (typeof issuer !== 'string') throw new Error('Native Auth credential has no issuer');
           const consentResponse = await handler(
@@ -725,7 +909,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               method: 'POST',
               headers: {
                 origin: issuer,
-                cookie: refreshToken,
+                cookie: authorSessionCookie,
                 'content-type': 'application/json',
                 'idempotency-key': JSON.stringify(randomUUID()),
               },
@@ -739,12 +923,35 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             throw new Error(
               `Native Auth consent setup returned ${consentResponse.status}: ${await consentResponse.text()}`,
             );
-          credential = await native.system.auth.issue({
+          if (externalSessionCookie) {
+            const response = await handler(
+              new Request(`${issuer}/token`, {
+                method: 'POST',
+                headers: {
+                  origin: issuer,
+                  cookie: externalSessionCookie,
+                  'content-type': 'application/json',
+                  'idempotency-key': JSON.stringify(randomUUID()),
+                },
+                body: JSON.stringify(requestedBy === undefined ? {} : { requested_by: requestedBy }),
+              }),
+            );
+            if (response.ok) {
+              const { access_token: bearer } = (await response.json()) as { access_token: string };
+              const actor = await native.system.access.authenticate(bearer, { pool, deadline: Date.now() + 120_000 });
+              if (actor.kind !== 'account') throw new Error('Native Auth refresh did not authenticate an account');
+              credential = { bearer, actor };
+              refreshToken = externalSessionCookie;
+            } else if (response.status !== 401)
+              throw new Error(`Native Auth setup token refresh returned ${response.status}: ${await response.text()}`);
+          }
+          credential ??= await native.system.auth.issue({
             accountId: actorId,
             clientId: externalClientId,
             scopes: ['account:read', 'post:erase'],
             ...(requestedBy === undefined ? {} : { requestedBy }),
           });
+          externalSessionCookie = refreshToken;
         } finally {
           auth.handler = handler;
         }
@@ -773,6 +980,32 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           key: randomUUID(),
           outsideAction,
         };
+        if (mode === 'delegated' && !preparedTargets) {
+          // Publish one independent future fixture while the current native
+          // workflow runs. Capture real setup credentials: create() replaces
+          // the author's route bearer with this operation's restricted token.
+          // Join publishing before any authority observation or mutation, so
+          // setup commands cannot change another fact during a named mutation.
+          const authorBearer = authorCredential!.bearer;
+          const governanceBearer = governanceCredential!;
+          const publishing: FixtureResources = {
+            ...native,
+            accountIds: { ...native.accountIds },
+            bearer: (persona) =>
+              persona === 'author'
+                ? authorBearer
+                : persona === 'governance'
+                  ? governanceBearer
+                  : native.bearer(persona),
+          };
+          preparedTargets = {
+            authorId: actorId,
+            result: buildBoardAndThreads(publishing, 101, 1, randomUUID()).then(
+              (board) => ({ board }),
+              (error: unknown) => ({ error }),
+            ),
+          };
+        }
         return fixture;
       },
       async create(fixture) {
@@ -821,7 +1054,8 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         const firstGate = workflowId
           ? await pool.query(`SELECT 1 FROM ${barrierTable} WHERE workflow_id=$1 AND serial=1`, [workflowId])
           : undefined;
-        if (!firstGate?.rowCount) throw new Error(`Native erasure did not reach its first boundary: ${observation}`);
+        if (!firstGate?.rowCount)
+          throw new Error(`Native erasure did not reach its first boundary: ${observation}\n${worker!.diagnostics()}`);
         fixturesByOperation.set(operation.id, fixture);
         return { outcome: 'committed', operation };
       },
@@ -829,6 +1063,8 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         const row = await operationRow(operation);
         const fixture = fixturesByOperation.get(operation.id);
         if (!fixture) throw new Error('Operation fixture is missing');
+        const sentinelThread = sentinelByThread.get(fixture.threadId);
+        if (!sentinelThread) throw new Error('Operation fixture has no cross-partition sentinel');
         const workflowKey = `wf:${operation.id}:%`;
         const receiptRows = (
           await pool.query(
@@ -882,7 +1118,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           ),
         );
         const cleanupPostIds = (
-          await pool.query<{ post_ids: string[] }>(
+          await pool.query<{ post_ids: string }>(
             `SELECT DISTINCT jsonb_array_elements_text(response->'postIds') AS post_ids
              FROM core.receipt
              WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
@@ -998,19 +1234,33 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             ),
             resources: (
               await Promise.all([
-                pool.query(`SELECT to_jsonb(t) AS value FROM content.thread t WHERE route=$1 AND thread_id=$2`, [
-                  routeOf(fixture.threadId),
-                  fixture.threadId,
-                ]),
                 pool.query(
-                  `SELECT to_jsonb(t) AS value FROM content.post t WHERE route=$1 AND thread_id=$2
-                   ORDER BY post_id`,
-                  [routeOf(fixture.threadId), fixture.threadId],
+                  `SELECT to_jsonb(t) AS value FROM content.thread t
+                   WHERE (route=$1 AND thread_id=$2) OR (route=$3 AND thread_id=$4)
+                   ORDER BY route,thread_id`,
+                  [routeOf(fixture.threadId), fixture.threadId, routeOf(sentinelThread), sentinelThread],
+                ),
+                pool.query(
+                  `SELECT to_jsonb(t) AS value FROM content.post t
+                   WHERE (route=$1 AND thread_id=$2) OR (route=$3 AND thread_id=$4)
+                   ORDER BY route,post_id`,
+                  [routeOf(fixture.threadId), fixture.threadId, routeOf(sentinelThread), sentinelThread],
                 ),
                 pool.query(`SELECT to_jsonb(t) AS value FROM content.operation t WHERE route=$1 AND operation_id=$2`, [
                   operation.route,
                   operation.id,
                 ]),
+                pool.query(
+                  `SELECT to_jsonb(t) AS value FROM access.governance_reach t
+                   WHERE transaction_id=ANY($1::uuid[]) ORDER BY to_jsonb(t)::text`,
+                  [
+                    receiptRows
+                      .filter(
+                        (value: Record<string, unknown>) => value.command_kind !== 'content.author-erasure.cleanup',
+                      )
+                      .map((value: Record<string, unknown>) => value.transaction_id),
+                  ],
+                ),
               ])
             ).flatMap((result) => result.rows.map((item) => item.value)),
           },
@@ -1128,6 +1378,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         return decodeAttempt(completed as Attempt);
       },
       async mutate(fixture, mutation) {
+        await finishPublishing();
         const target =
           parked && fixturesByOperation.get(parked.operation.id)?.threadId === fixture.threadId ? parked : undefined;
         if (!target && mutation !== 'actor-grant' && mutation !== 'principal-grant')
@@ -1136,8 +1387,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         if (!grantOperation && (mutation === 'actor-grant' || mutation === 'principal-grant')) {
           const row = (
             await pool.query<{ operation_id: string }>(
-              'SELECT operation_id FROM content.operation WHERE route=$1 AND thread_id=$2 AND actor_account_id=$3',
-              [routeOf(fixture.threadId), fixture.threadId, fixture.tuple.actor],
+              `SELECT operation_id FROM content.operation
+               WHERE route=$1 AND thread_id=$2 AND actor_account_id=$3 AND creation_idempotency_key=$4`,
+              [routeOf(fixture.threadId), fixture.threadId, fixture.tuple.actor, fixture.key],
             )
           ).rows[0];
           if (row) grantOperation = { domain: 'content', route: routeOf(fixture.threadId)!, id: row.operation_id };
@@ -1175,7 +1427,8 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           const subjectId = mutation === 'actor-grant' ? fixture.tuple.actor : fixture.principalId;
           if (subjectId === null) throw new Error('Fixture has no principal');
           const permissionAction = action === 'account:read' ? 'account:read' : 'post:erase';
-          const grantResource = resource;
+          const grantResource =
+            fixture.tuple.delegator !== null && permissionAction === 'post:erase' ? PLATFORM_RESOURCE : resource;
           const grantor = await freshAuthorActor(deadline);
           if (mutation === 'actor-grant' && permissionAction === 'post:erase') {
             const role = (
@@ -1223,7 +1476,6 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         }
 
         if (mutation === 'suspended') {
-          fixtureDirty = true;
           const governance = await freshGovernanceActor(deadline);
           const outcome = await createSuspensionCommands({
             pool,
@@ -1233,6 +1485,15 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             { pool, actor: governance, deadline },
             { accountId: fixture.tuple.actor, key: randomUUID(), reason: 'Durable initiator test suspension' },
           );
+          restoreMutation = async () => {
+            const deadline = Date.now() + 120_000;
+            const governance = await freshGovernanceActor(deadline);
+            await createReinstatementCommands({
+              pool,
+              access: native.system.access,
+              clock: () => new Date(),
+            }).reinstate({ pool, actor: governance, deadline }, { accountId: fixture.tuple.actor, key: randomUUID() });
+          };
           return changedAt(outcome.transactionId);
         }
         if (mutation === 'tombstoned') {
@@ -1260,7 +1521,23 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           );
           return changedAt(outcome.transactionId);
         }
-        if (mutation === 'fenced' || mutation === 'epoch-floor-increased') {
+        if (mutation === 'epoch-floor-increased') {
+          // Complete a native consent reduction, then restore its original
+          // scopes. Auth retains the increased floor after clearing its barrier;
+          // the operation still holds its original credential and tuple.
+          await this.mutate(fixture, 'consent-reduced');
+          const restore = restoreMutation;
+          if (!restore) throw new Error('Native consent reduction has no restoration');
+          await restore();
+          restoreMutation = undefined;
+          const row = await pool.query<{ transaction_id: string }>(
+            'SELECT transaction_id FROM access.account WHERE account_id=$1',
+            [fixture.tuple.actor],
+          );
+          if (!row.rows[0]) throw new Error('Native epoch increase has no account transition');
+          return changedAt(row.rows[0].transaction_id);
+        }
+        if (mutation === 'fenced') {
           fixtureDirty = true;
           const outcome = await internals.raiseFence({ accountId: fixture.tuple.actor, key: randomUUID() });
           return changedAt(outcome.transactionId);
@@ -1306,6 +1583,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             )
           ).rows[0];
           if (!member) throw new Error('Native Realm membership is missing');
+          // Leaving is a separate native membership command. Authenticate its
+          // ordinary credential; the operation retains its original tuple.
+          await freshAuthorActor(deadline);
           const response = await request(native, 'author', 'DELETE', `/v1/realms/${realmId}/membership`);
           if (response.status !== 202) throw new Error(`Native Realm leave returned ${response.status}`);
           await until(async () => {
@@ -1379,7 +1659,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               return response;
             };
             try {
-              await native.system.auth.issue({
+              authorCredential = await native.system.auth.issue({
                 accountId: fixture.tuple.actor,
                 clientId: native.system.auth.ordinaryClient.id,
                 scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
@@ -1388,6 +1668,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               auth.handler = handler;
             }
             if (!cookie) throw new Error('Native Auth did not issue a consent restoration session');
+            authorSessionCookie = cookie;
             const issuer = String(decodeJwt(fixture.accessToken).iss);
             const response = await handler(
               new Request(`${issuer}/consent`, {
@@ -1434,7 +1715,10 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           return changedAt(account.rows[0].transaction_id);
         }
         if (mutation === 'client-missing') {
-          fixtureDirty = true;
+          // The missing client is this fixture's isolated Auth fault. Subsequent
+          // fixtures register a new client rather than reconstructing accounts.
+          externalClientId = undefined;
+          externalSessionCookie = '';
           return isolatedFault(native.system.database.authPool, async (connection) => {
             await connection.query('DELETE FROM auth_client WHERE client_id=$1', [fixture.tuple.client]);
           });
@@ -1485,23 +1769,29 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         throw new Error(`Unknown native mutation ${mutation}`);
       },
       async grant(fixture, mode) {
+        await finishPublishing();
         const operation = (
           await pool.query<{ operation_id: string; route: number; anchor_post_id: string }>(
             `SELECT operation_id,route,anchor_post_id FROM content.operation
-             WHERE thread_id=$1 AND actor_account_id=$2`,
-            [fixture.threadId, fixture.tuple.actor],
+             WHERE thread_id=$1 AND actor_account_id=$2 AND creation_idempotency_key=$3`,
+            [fixture.threadId, fixture.tuple.actor, fixture.key],
           )
         ).rows[0];
         if (!operation) throw new Error('Native grant fixture has no author-erasure operation');
         const currentPoint = parked?.operation.id === operation.operation_id ? parked.point : undefined;
         const resource =
           mode === 'restore-actor' && currentPoint?.action === 'post:erase'
-            ? currentPoint.resource
+            ? fixture.tuple.delegator !== null
+              ? PLATFORM_RESOURCE
+              : currentPoint.resource
             : { route: operation.route, id: operation.anchor_post_id };
         const deadline = Date.now() + 120_000;
-        const author = await freshAuthorActor(deadline);
+        // The initiator may have renounced post:erase, and does not hold the
+        // outside moderation action. Use the native governance grantor that
+        // independently holds both actions when restoring or adding a grant.
+        const governance = await freshGovernanceActor(deadline);
         await createGrantCommands({ pool, access: native.system.access, managementAction: 'access:grant' }).create(
-          { pool, actor: author, deadline },
+          { pool, actor: governance, deadline },
           {
             resource,
             subject: { kind: 'account', id: fixture.tuple.actor },
@@ -1512,6 +1802,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         );
       },
       async attack(operation, pointId, attack, _input) {
+        await finishPublishing();
         if (pointId === 'result' || pointId === 'cached-result')
           throw new Error('The frozen provenance attacks target native step checkpoints');
         const original = (
@@ -1533,7 +1824,13 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             operation.id,
             createHash('sha256').update(`native-attack:${attack}:${randomUUID()}`).digest('hex'),
           ]);
-        } catch {
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            (error as Error & { code?: string }).code !== '23514' ||
+            error.message !== 'Operation identity and source binding are immutable'
+          )
+            throw error;
           immutableRejected = true;
         }
         if (!immutableRejected) {
@@ -1594,7 +1891,11 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               { authorId: fixture.authorId },
               randomUUID(),
             );
-            if (refusal.status !== 403)
+            const problem = (await refusal.json()) as { code?: string };
+            if (
+              !(refusal.status === 403 && problem.code === 'forbidden') &&
+              !(refusal.status === 401 && problem.code === 'invalid_credentials')
+            )
               throw new Error(`Native create with stale authenticated evidence returned ${refusal.status}`);
             return await worker!.probe(operation.id, point, attack, _input);
           } finally {
@@ -1658,10 +1959,11 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         return worker!.probe(operation.id, point, attack, _input);
       },
       async restart() {
+        await finishPublishing();
         await worker?.stop();
         worker = undefined;
-        await client?.close();
-        client = await createWorkClient(native.appUrl);
+        // The transport client owns no executor state. Keep its connections
+        // while the separate DBOS host recovers from committed storage.
         worker = await startWorker(native, executorId);
         if (trustedClock) await worker.setClock(trustedClock);
         parked = undefined;
@@ -1674,6 +1976,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         return worker!.publicRead(operation.id);
       },
       async authority(fixture) {
+        await finishPublishing();
         const account = await readAccount(pool, routeOf(fixture.tuple.actor)!, fixture.tuple.actor);
         const { readCurrentConsent } = createCurrentConsentReader({ database: native.system.database.authPool });
         const consent = await readCurrentConsent({
@@ -1730,27 +2033,62 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         };
       },
     };
-    drainPending = async () => {
+    retireOperations = async () => {
       const operations = new Map(pendingAdvances);
       if (parked?.point.kind === 'step') operations.set(parked.operation.id, parked.operation);
       for (const operation of operations.values()) {
-        for (;;) {
-          const row = await operationRow(operation);
-          if (!row?.native_workflow_id) break;
-          const pending = (
-            await pool.query<{ name: string }>(
-              `SELECT name FROM ${barrierTable} WHERE workflow_id=$1 AND attempt IS NULL ORDER BY serial LIMIT 1`,
-              [row.native_workflow_id],
-            )
-          ).rows[0];
-          if (!pending) break;
-          await driver.advance(operation, pending.name);
-        }
+        const row = await operationRow(operation);
+        // A new fixture no longer observes this operation. Retire it through
+        // DBOS rather than executing additional person-attributed commands just
+        // to free its parked worker slot.
+        if (row?.native_workflow_id) await client!.cancelWorkflow(row.native_workflow_id);
       }
       pendingAdvances.clear();
       parked = undefined;
     };
-    return driver;
+    const inFlight = new Set<Promise<unknown>>();
+    const traceDirectory = fileURLToPath(new URL('../../../../.temp/', import.meta.url));
+    mkdirSync(traceDirectory, { recursive: true });
+    const tracePath = resolve(traceDirectory, 'durable-initiator-transport.log');
+    let closed = false;
+    let closing: Promise<void> | undefined;
+    // A runner timeout does not cancel its JavaScript continuation. Finish the
+    // already-started native call before retiring its resources, and refuse new
+    // transport calls after close so a timed-out fixture cannot spawn a worker
+    // or use a pool belonging to the next case.
+    return new Proxy(driver, {
+      get(target, name, receiver) {
+        if (name === 'close')
+          return () =>
+            (closing ??= (async () => {
+              closed = true;
+              await Promise.allSettled([...inFlight]);
+              await close();
+            })());
+        const method = Reflect.get(target, name, receiver);
+        if (typeof method !== 'function') return method;
+        return (...args: unknown[]) => {
+          if (closed) throw new Error('Durable initiator driver is closed');
+          const detail = typeof args[1] === 'string' ? args[1] : name === 'seed' ? args[0] : '';
+          const label = `${String(name)} ${detail ?? ''}`;
+          const started = performance.now();
+          appendFileSync(tracePath, `${Date.now()} start ${label}\n`);
+          const result = Reflect.apply(method, receiver, args) as Promise<unknown>;
+          inFlight.add(result);
+          void result.then(
+            () => {
+              inFlight.delete(result);
+              appendFileSync(tracePath, `${Date.now()} done ${label} ${Math.round(performance.now() - started)}ms\n`);
+            },
+            () => {
+              inFlight.delete(result);
+              appendFileSync(tracePath, `${Date.now()} failed ${label} ${Math.round(performance.now() - started)}ms\n`);
+            },
+          );
+          return result;
+        };
+      },
+    });
   } catch (error) {
     try {
       await close();
@@ -1764,7 +2102,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
 /** Run the product registration in a separate, disposable DBOS host. The wrapper
  * observes the registered step; the registered function still owns every write.
  */
-async function runWorker() {
+export async function runWorker() {
   const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const [line] = (await once(input, 'line')) as [string];
   const config = JSON.parse(line.slice('config '.length)) as {
@@ -1774,11 +2112,17 @@ async function runWorker() {
     executorId: string;
     actions: [string, { anonymous: boolean; replay?: 'self-account-read'; 'x-resource-types'?: readonly string[] }][];
   };
-  const pool = new Pool({ connectionString: config.databaseUrl, max: 12 });
+  const pool = new Pool({ connectionString: config.databaseUrl, max: 24 });
   const barriers = new Pool({ connectionString: config.databaseUrl, max: 2 });
   const authPool = new Pool({ connectionString: config.authDatabaseUrl });
   const consent = createCurrentConsentReader({ database: authPool });
   const traces = new AsyncLocalStorage<Attempt>();
+  const protectedTraces = new WeakSet<Attempt>();
+  const nativeAttempts = new WeakMap<Attempt, Attempt>();
+  const currentTrace = () => {
+    const root = traces.getStore();
+    return root && (nativeAttempts.get(root) ?? root);
+  };
   let workerInstant: number | undefined;
   const clock = () => new Date(workerInstant ?? Date.now());
   const membershipConfig = readMembershipWorkConfig(process.env);
@@ -1829,7 +2173,7 @@ async function runWorker() {
   });
   const prepare = access.prepare!.bind(access);
   access.prepare = async (actor, action, resource, context) => {
-    const trace = traces.getStore();
+    const trace = currentTrace();
     const restored = trace && restoredActors.get(trace)?.get(resourceKey(action, resource));
     let boundActor = restored ?? actor;
     let boundContext = context;
@@ -1859,7 +2203,7 @@ async function runWorker() {
   };
   const authorize = access.authorize.bind(access);
   access.authorize = async (...args) => {
-    const trace = traces.getStore();
+    const trace = currentTrace();
     const [client, suppliedActor, action, resource, evidence, suppliedTime] = args;
     const actor = (trace && restoredActors.get(trace)?.get(resourceKey(action, resource))) ?? suppliedActor;
     let time = suppliedTime;
@@ -1889,18 +2233,36 @@ async function runWorker() {
     return allowed;
   };
   let lease = 0;
-  const connections = new WeakMap<object, { id: string; trace: Attempt }>();
-  pool.on('acquire', (client) => {
-    const trace = traces.getStore();
-    if (trace) {
-      const id = String(++lease);
-      connections.set(client, { id, trace });
-      trace.reads.push({ kind: 'acquire', connection: id });
-    }
-  });
+  const connections = new WeakMap<object, { id: string; trace: Attempt; root: Attempt }>();
+  const liveLeases = new WeakMap<Attempt, Set<string>>();
+  const connect = pool.connect.bind(pool);
+  // pg may hand a queued checkout a client from another request's release
+  // callback. Capture the caller's trace at checkout, not the acquire event's
+  // ambient async context, and retain one identity for that actual lease.
+  pool.connect = ((callback?: Parameters<Pool['connect']>[0]) => {
+    const root = traces.getStore();
+    const acquired = (client: PoolClient) => {
+      connections.delete(client);
+      if (root) {
+        const trace = nativeAttempts.get(root) ?? root;
+        const id = String(++lease);
+        connections.set(client, { id, trace, root });
+        const live = liveLeases.get(root) ?? new Set<string>();
+        live.add(id);
+        liveLeases.set(root, live);
+        trace.reads.push({ kind: 'acquire', connection: id });
+      }
+      return client;
+    };
+    if (callback) return connect((error, client, release) => callback(error, client && acquired(client), release));
+    return connect().then(acquired);
+  }) as Pool['connect'];
   pool.on('release', (_error, client) => {
     const entry = connections.get(client);
-    if (entry) entry.trace.reads.push({ kind: 'release', connection: entry.id });
+    if (entry) {
+      entry.trace.reads.push({ kind: 'release', connection: entry.id });
+      liveLeases.get(entry.root)?.delete(entry.id);
+    }
     connections.delete(client);
   });
   pool.on('connect', (client) => {
@@ -1909,6 +2271,23 @@ async function runWorker() {
       const entry = connections.get(client);
       const statement = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string }).text ?? '');
       const text = statement.toLowerCase();
+      if (entry && protectedTraces.has(entry.root) && statement === authoritativeTimeRead.sql) {
+        // runCommand mints a new T before every physical attempt, including
+        // serialization retries. Start its observation here rather than merging
+        // rolled-back checks into the later committed native attempt.
+        const live = liveLeases.get(entry.root);
+        if (live?.size !== 1 || !live.has(entry.id))
+          throw new Error('Native command attempt started with an earlier evidence lease still held');
+        const attempt: Attempt = {
+          result: { outcome: 'denied' },
+          time: entry.root.time,
+          at: entry.root.at,
+          checks: [],
+          reads: [{ kind: 'acquire', connection: entry.id }],
+        };
+        nativeAttempts.set(entry.root, attempt);
+        entry.trace = attempt;
+      }
       let stage: ReadStage | undefined;
       if (text.includes('from content.operation')) stage = 'operation';
       else if (text.includes('from core.receipt')) {
@@ -1956,10 +2335,13 @@ async function runWorker() {
         [workflow, serial, name],
       );
       for (;;) {
-        const gate = await barriers.query(`SELECT released FROM ${barrierTable} WHERE workflow_id=$1 AND serial=$2`, [
-          workflow,
-          serial,
-        ]);
+        const gate = await barriers.query(
+          `SELECT released,
+                  (SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1) AS status
+           FROM ${barrierTable} WHERE workflow_id=$1 AND serial=$2`,
+          [workflow, serial],
+        );
+        if (gate.rows[0]?.status === 'CANCELLED') throw new DBOSErrors.DBOSWorkflowCancelledError(workflow);
         if (gate.rows[0]?.released) break;
         await sleep();
       }
@@ -1971,8 +2353,10 @@ async function runWorker() {
         // for that refusal; successful checks replace it with their exact T.
         trace.time = await withConnection(pool, (connection) => mintReadTime(connection, clock));
         trace.at = authoritativeTimeValue(trace.time as never);
+        protectedTraces.add(trace);
         const value = await traces.run(trace, () => func(name, action));
-        if (value?.committed === true) trace.result = { outcome: 'permitted', value, replayed: false };
+        const attempt = nativeAttempts.get(trace) ?? trace;
+        if (value?.committed === true) attempt.result = { outcome: 'permitted', value, replayed: false };
         else if (value?.committed !== false) throw new Error('Unexpected native erasure page result');
         return value;
       } catch (error) {
@@ -1981,7 +2365,7 @@ async function runWorker() {
       } finally {
         await barriers.query(
           `UPDATE ${barrierTable} SET attempt=$3::jsonb,error=$4 WHERE workflow_id=$1 AND serial=$2`,
-          [workflow, serial, encodeAttempt(trace), failure],
+          [workflow, serial, encodeAttempt(nativeAttempts.get(trace) ?? trace), failure],
         );
       }
     }, configuration);
@@ -2023,15 +2407,25 @@ async function runWorker() {
       env: process.env,
     },
   );
+  // Queue dispatch captures its initial polling interval during launch. Set
+  // the active queues first, including effects which delivers the native
+  // author-erasure request, so a restart does not start with slow polling.
+  // Idle queues retain their normal cadence rather than competing for native
+  // connections with fixture commands and protected steps.
+  for (const name of ['effects', CONTENT_QUEUES.authorErase])
+    await (await client.retrieveQueue(name))!.setMinPollingIntervalMs(1);
   const authorErasureQueue = await client.retrieveQueue(CONTENT_QUEUES.authorErase);
   if (!authorErasureQueue) throw new Error('Native author-erasure queue is missing');
   // Frozen cases park many independent real erasure workflows at native steps.
   // Keep enough worker capacity for those parked runs without changing workflow behavior.
   await authorErasureQueue.setWorkerConcurrency(64);
+  await authorErasureQueue.setMinPollingIntervalMs(1);
   await work.launch();
   DBOS.registerStep = originalRegister as typeof DBOS.registerStep;
-  const relays = startRelays(pool, [effectsRelay(pool, work.effects), linkProjection(pool)]);
-  for (const name of Object.keys(WORK_QUEUES)) await (await DBOS.retrieveQueue(name))!.setMinPollingIntervalMs(1);
+  const relays = startRelays(pool, [effectsRelay(pool, work.effects), linkProjection(pool)], {
+    intervalMs: 5,
+    concurrency: 8,
+  });
   process.stdout.write('ERASURE_WORKER_READY\n');
   const probeAttempt = async (payload: string): Promise<Attempt> => {
     const probe = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
@@ -2056,7 +2450,7 @@ async function runWorker() {
         [operationRoute, probe.operationId],
       )
     ).rows[0];
-    if (!row) return attempt;
+    if (!row) throw new Error('Native probe operation disappeared');
 
     const operation: Record<string, unknown> = {
       route: operationRoute,
@@ -2263,10 +2657,7 @@ async function runWorker() {
             [operationRoute, operationId],
           )
         ).rows[0];
-        if (!row) {
-          encodeResult(id!, encodeAttempt(attempt));
-          continue;
-        }
+        if (!row) throw new Error('Native replay operation disappeared');
         const operation = {
           route: operationRoute,
           id: operationId!,
@@ -2455,5 +2846,3 @@ async function runWorker() {
     }
   }
 }
-
-if (import.meta.main && process.env.DURABLE_INITIATOR_WORKER === '1') await runWorker();
