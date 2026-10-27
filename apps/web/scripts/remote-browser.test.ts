@@ -12,27 +12,27 @@ type Handed = {
 };
 
 const handed: Handed[] = [];
+const localRuns: string[] = [];
 // 0 means the fake host ran the command. null means the placement stayed on this machine.
 let remoteCode: number | null = 0;
 
 mock.module('../../../scripts/stack-run.ts', () => ({
-  stackRun: async (run: Handed & { keepsFiles?: boolean; returns?: string[] }) => {
+  stackRun: async (
+    run: Handed & { keepsFiles?: boolean; returns?: string[] },
+    local: (env: Record<string, string>) => Promise<number>,
+  ) => {
     handed.push({
       label: run.label,
       command: [...run.command],
       ...(run.returns === undefined ? {} : { returns: [...run.returns] }),
       ...(run.keepsFiles === undefined ? {} : { keepsFiles: run.keepsFiles }),
     });
+    const staysLocal = remoteCode === null || (run.keepsFiles === true && run.returns === undefined);
+    if (staysLocal) {
+      localRuns.push(run.label);
+      return run.label === 'web browser check' ? local({}) : 0;
+    }
     return remoteCode ?? 0;
-  },
-  runOnCheckHost: async (run: Handed & { keepsFiles?: boolean; returns?: string[] }) => {
-    handed.push({
-      label: run.label,
-      command: [...run.command],
-      ...(run.returns === undefined ? {} : { returns: [...run.returns] }),
-      ...(run.keepsFiles === undefined ? {} : { keepsFiles: run.keepsFiles }),
-    });
-    return remoteCode;
   },
 }));
 
@@ -48,6 +48,7 @@ function handedLabel(label: string): Handed {
 
 test('browser-driven web checks, screenshots and recordings run on a check host and their outputs return', async () => {
   handed.length = 0;
+  localRuns.length = 0;
   remoteCode = 0;
   await placeBrowserCheck(['tests/page-stories.test.ts'], { testScript: 'bun run test' });
   await runScreenshots(['--story', 'pages-missing-subject--signed-out', '--out', join(root, '.temp/shots')]);
@@ -55,10 +56,13 @@ test('browser-driven web checks, screenshots and recordings run on a check host 
   await runRecord(['offer', 'order-paid']);
 
   const browser = handedLabel('web browser check');
+  expect(localRuns).toEqual([]);
   expect(browser.command.slice(0, 4)).toEqual(['bun', 'scripts/check.ts', '--browser', '--report']);
   expect(browser.returns).toHaveLength(1);
   expect(browser.returns?.[0]).toMatch(/^\.temp\/web-check-/);
-  expect(browser.command).toContain(browser.returns?.[0]);
+  const browserReport = browser.returns?.[0];
+  if (!browserReport) throw new Error('browser placement did not declare its report directory');
+  expect(browser.command).toContain(browserReport);
   expect(browser.command).toContain('--test-command');
   expect(browser.command).toContain('bun run test');
   expect(browser.command).toContain('tests/page-stories.test.ts');
@@ -67,12 +71,19 @@ test('browser-driven web checks, screenshots and recordings run on a check host 
   const screenshots = handed.filter((run) => run.label === 'web screenshots');
   expect(screenshots[0]).toEqual({
     label: 'web screenshots',
-    command: ['bun', 'scripts/screenshots.ts', '--story', 'pages-missing-subject--signed-out', '--out', '.temp/shots'],
+    command: [
+      'bun',
+      'scripts/screenshots.ts',
+      '--story',
+      'pages-missing-subject--signed-out',
+      '--out',
+      '../../.temp/shots',
+    ],
     returns: ['.temp/shots'],
   });
   expect(screenshots[1]?.returns).toEqual(['.temp/screenshots']);
   expect(screenshots[1]?.command).toContain('--out');
-  expect(screenshots[1]?.command).toContain('.temp/screenshots');
+  expect(screenshots[1]?.command).toContain('../../.temp/screenshots');
   expect(screenshots[1]?.keepsFiles).toBeUndefined();
 
   const recorded = handedLabel('web record');
@@ -83,23 +94,32 @@ test('browser-driven web checks, screenshots and recordings run on a check host 
 
 test('a browser run stays local only where the placement decision says so', async () => {
   handed.length = 0;
+  localRuns.length = 0;
   remoteCode = 0;
-  const previous = process.env.KERNEL_CHECK_ON_REMOTE;
-  process.env.KERNEL_CHECK_ON_REMOTE = '1';
-  try {
-    await runScreenshots([]);
-    await runRecord([]);
-    await placeBrowserCheck(['tests/page-stories.test.ts']);
-  } finally {
-    if (previous === undefined) delete process.env.KERNEL_CHECK_ON_REMOTE;
-    else process.env.KERNEL_CHECK_ON_REMOTE = previous;
-  }
-  // Being on a check host is the placement's decision. The scripts still hand the run over, with outputs to copy back.
+  await runScreenshots([]);
+  await runRecord([]);
+  await placeBrowserCheck(['tests/page-stories.test.ts']);
   expect(handed.map((run) => run.label)).toEqual(['web screenshots', 'web record', 'web browser check']);
+  expect(localRuns).toEqual([]);
   expect(handed.every((run) => run.returns !== undefined && run.returns.length > 0)).toBe(true);
   expect(handed.every((run) => run.keepsFiles !== true)).toBe(true);
 
   handed.length = 0;
+  remoteCode = null;
+  const local = await placeBrowserCheck([]);
+  expect(local.code).toBe(0);
+  expect(local.failed).toEqual([]);
+  expect(handed).toHaveLength(1);
+  const localBrowser = handed[0];
+  if (!localBrowser) throw new Error('browser placement was not recorded');
+  const localReport = localBrowser.command[4];
+  if (!localReport) throw new Error('browser placement did not pass its report directory');
+  expect(localBrowser.returns).toEqual([localReport]);
+  expect(localRuns).toEqual(['web browser check']);
+
+  handed.length = 0;
+  localRuns.length = 0;
+  remoteCode = 0;
   const outside = '/tmp/web-screenshots-outside';
   await runScreenshots(['--out', outside]);
   expect(handed).toEqual([
@@ -109,6 +129,7 @@ test('a browser run stays local only where the placement decision says so', asyn
       keepsFiles: true,
     },
   ]);
+  expect(localRuns).toEqual(['web screenshots']);
 
   const beforeWorker = handed.length;
   const report = '.temp/web-check-placement-worker';

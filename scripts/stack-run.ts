@@ -11,7 +11,6 @@
  *
  * A person (GOAL_TASK_ID unset or empty) can keep a run local with REZICS_STACK_REMOTE=off or an inherited
  * REZICS_STACK_SLOT. A worker cannot. KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE never decide placement.
- * KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE never decide placement.
  *
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
  * where the run went, and when it is waiting.
@@ -30,7 +29,9 @@ export type StackRun = {
   command: string[];
   /** Host slots the run holds, for a run whose peak memory exceeds a host's per-slot share. Default 1. */
   slots?: number;
-  /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it must stay local. */
+  /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it stays local unless it
+   * declares returned paths.
+   */
   keepsFiles?: boolean;
   /**
    * Workspace-relative paths copied back after the run, including when it fails. Declaring them means the run does

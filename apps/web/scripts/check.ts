@@ -10,7 +10,7 @@ import {
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runOnCheckHost } from '../../../scripts/stack-run.ts';
+import { stackRun } from '../../../scripts/stack-run.ts';
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
@@ -188,8 +188,8 @@ function readReportFragment(directory: string): { failed: string[]; timings: Rec
 }
 
 /**
- * Runs the browser files on this machine and leaves `report` in place. A check host runs this after placement; it
- * does not place the work again.
+ * Runs the browser files in the current workspace and leaves `report` in place. A check host runs this after
+ * placement; it does not place the work again.
  */
 export async function runBrowserWorker(input: {
   files: string[];
@@ -235,9 +235,8 @@ export function browserWorkerRequest(args: string[]): { files: string[]; report:
 }
 
 /**
- * Hands browser files to the check-host placement and returns their report directory. The per-file isolated runs
- * already take a local stack slot, so a placement that stays here does not take another one around them. A worker
- * that is already on a check host does not call this.
+ * Hands browser files to stack placement and returns their report directory. A check host handles the command through
+ * `--browser`, which runs the files without placing them again.
  */
 export async function placeBrowserCheck(
   files: string[],
@@ -250,7 +249,7 @@ export async function placeBrowserCheck(
   const directory = resolve(root, report);
   const testScript = options.testScript;
   try {
-    const code = await runOnCheckHost(
+    const code = await stackRun(
       {
         label: 'web browser check',
         root,
@@ -266,21 +265,19 @@ export async function placeBrowserCheck(
         ],
         returns: [report],
       },
+      async (slotEnv) => {
+        return runBrowserWorker({
+          files,
+          report,
+          ...(testScript === undefined ? {} : { testScript }),
+          env: { ...(options.env ?? process.env), ...slotEnv },
+        });
+      },
       options.env ?? process.env,
     );
-    if (code === null) {
-      const result = await runWebTestLanes({
-        files,
-        ...(options.env === undefined ? {} : { env: options.env }),
-        ...(testScript === undefined ? {} : { testScript }),
-        reportDirectory: directory,
-        timingsFile: join(directory, 'timings.json'),
-        retainReport: true,
-      });
-      return { code: result.failed.length > 0 ? 1 : 0, failed: result.failed, timings: result.timings };
-    }
     const fragment = readReportFragment(directory);
-    const failed = fragment.failed.length > 0 || code === 0 ? fragment.failed : [`browser check exited ${code}`];
+    const failed =
+      fragment.failed.length > 0 ? fragment.failed : code === 0 ? [] : [`browser check exited ${code}`];
     return { code, failed, timings: fragment.timings };
   } finally {
     rmSync(directory, { recursive: true, force: true });
