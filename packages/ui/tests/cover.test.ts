@@ -112,6 +112,13 @@ async function expectStories(names: string[]) {
   for (const name of names) expect(outcomes, name).toContain(`${name}: passed`);
 }
 
+test('a directly supplied invalid frame ratio falls back to the subject type', () => {
+  for (const ratio of ['0:1', '65:1', '1.5:2', 'portrait'] as CoverRatio[]) {
+    expect(attr(tag(render({ subject: book, cover: null, ratio }), 'div'), 'data-ratio')).toBe('5:7');
+    expect(attr(tag(render({ subject: person, cover: null, ratio }), 'div'), 'data-ratio')).toBe('3:4');
+  }
+});
+
 test('the cover frame keeps its type’s ratio and named size before the image loads, after it loads and when it fails', async () => {
   const expected: [CoverSubject, CoverRatio][] = [
     [book, '5:7'],
