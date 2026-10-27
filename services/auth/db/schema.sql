@@ -404,6 +404,16 @@ CREATE TABLE public.auth_consent (
 
 
 --
+-- Name: auth_consent_erasure; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_consent_erasure (
+    account_id text NOT NULL,
+    due_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: auth_effect_receipt; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -898,6 +908,14 @@ ALTER TABLE ONLY public.auth_client_reduction_progress
 
 
 --
+-- Name: auth_consent_erasure auth_consent_erasure_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_consent_erasure
+    ADD CONSTRAINT auth_consent_erasure_pkey PRIMARY KEY (account_id);
+
+
+--
 -- Name: auth_consent auth_consent_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1250,6 +1268,13 @@ CREATE INDEX "auth_client_userId_idx" ON public.auth_client USING btree ("userId
 --
 
 CREATE UNIQUE INDEX auth_consent_client_owner ON public.auth_consent USING btree (client_id, account_id);
+
+
+--
+-- Name: auth_consent_erasure_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_consent_erasure_due ON public.auth_consent_erasure USING btree (due_at, account_id);
 
 
 --

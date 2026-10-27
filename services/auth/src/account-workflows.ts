@@ -14,7 +14,13 @@ type Progress = {
 
 type ReductionOwner = { clientId: string; operationId: string; accountId: string };
 
-async function advanceReductionOwner(connection: PoolClient, row: Progress, input: ReductionOwner, deny: () => never) {
+async function advanceReductionOwner(
+  connection: PoolClient,
+  row: Progress,
+  input: ReductionOwner,
+  deny: () => never,
+  allowMissing = false,
+) {
   const acknowledged = (
     await connection.query<{ done: boolean }>('SELECT $1::text <= $2::text AS done', [
       input.accountId,
@@ -28,7 +34,19 @@ async function advanceReductionOwner(connection: PoolClient, row: Progress, inpu
       [input.clientId, row.after_account],
     )
   ).rows[0];
-  if (next?.account_id !== input.accountId) deny();
+  if (next?.account_id !== input.accountId) {
+    if (!allowMissing) deny();
+    if (
+      next &&
+      (
+        await connection.query<{ before: boolean }>('SELECT $1::text < $2::text AS before', [
+          next.account_id,
+          input.accountId,
+        ])
+      ).rows[0]!.before
+    )
+      deny();
+  }
   await connection.query('UPDATE auth_client_reduction_progress SET after_account=$2 WHERE operation_id=$1', [
     input.operationId,
     input.accountId,
@@ -60,7 +78,7 @@ export async function completeDeletedClientReductionOwner(
       )
     ).rows[0];
     if (!row || row.client_id !== input.clientId || row.completed) deny();
-    await advanceReductionOwner(connection, row, input, deny);
+    await advanceReductionOwner(connection, row, input, deny, true);
     await connection.query('COMMIT');
     return true;
   } catch (error) {
@@ -274,31 +292,44 @@ export function clientAuthority(
         if (row.completed) deny();
         const receipt = input.barrier;
         const current = await access.readFencedAccount(input.accountId);
+        if (current && (current.accountId !== input.accountId || !current.fenced)) deny();
+        let deletedOwner = current?.state === 'deleted';
+        if (!current) {
+          const scheduled = await connection.query('SELECT account_id FROM auth_consent_erasure WHERE account_id=$1', [
+            input.accountId,
+          ]);
+          if (!scheduled.rowCount) deny();
+          deletedOwner = true;
+        }
         if (
-          !current ||
-          current.accountId !== input.accountId ||
-          !current.fenced ||
-          receipt.accountId !== input.accountId ||
-          !receipt.receiptId ||
-          !Number.isSafeInteger(receipt.minimumAuthnEpoch) ||
-          receipt.minimumAuthnEpoch < 1 ||
-          current.authnEpoch < receipt.minimumAuthnEpoch
+          !deletedOwner &&
+          (receipt.accountId !== input.accountId ||
+            !receipt.receiptId ||
+            !Number.isSafeInteger(receipt.minimumAuthnEpoch) ||
+            receipt.minimumAuthnEpoch < 1 ||
+            current!.authnEpoch < receipt.minimumAuthnEpoch)
         )
           deny();
-        const saved = (
-          await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
-            'SELECT account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt WHERE receipt_id=$1',
-            [receipt.receiptId],
+        const consent = await connection.query(
+          'SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+          [input.accountId, input.clientId],
+        );
+        if (!deletedOwner) {
+          const saved = (
+            await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
+              'SELECT account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt WHERE receipt_id=$1',
+              [receipt.receiptId],
+            )
+          ).rows[0]!;
+          if (
+            !saved ||
+            saved.account_id !== input.accountId ||
+            saved.purpose !== 'client-reduction' ||
+            saved.minimum_authn_epoch !== receipt.minimumAuthnEpoch
           )
-        ).rows[0]!;
-        if (
-          !saved ||
-          saved.account_id !== input.accountId ||
-          saved.purpose !== 'client-reduction' ||
-          saved.minimum_authn_epoch !== receipt.minimumAuthnEpoch
-        )
-          deny();
-        await advanceReductionOwner(connection, row, input, deny);
+            deny();
+        }
+        await advanceReductionOwner(connection, row, input, deny, deletedOwner || !consent.rowCount);
       });
     },
     async finishClientReduction(input) {

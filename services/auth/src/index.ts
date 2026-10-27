@@ -197,6 +197,10 @@ export interface AuthService {
     pruneExpiredVerifications(): Promise<number>;
     /** Bounded maintenance; the host registers and schedules these ports. */
     pruneExpiredSessions(batch?: number): Promise<number>;
+    /** One bounded batch of consent left by accounts erased in Auth. */
+    eraseDueConsents(batch?: number): Promise<number>;
+    /** Indexed scheduling gate; only the durable cleanup step crosses DBOS. */
+    hasDueConsentErasure(): Promise<boolean>;
     /** One bounded batch per expired native OAuth/OIDC kind (tokens, refresh
      * families, client assertions, recent OIDC sessions); at most 1000 each. */
     pruneExpiredProtocolState(batch?: number): Promise<number>;

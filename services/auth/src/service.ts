@@ -18,6 +18,7 @@ import { issuerOrigin } from './issuer.ts';
 import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
+import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
@@ -934,6 +935,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
+      eraseDueConsents: (batch) => eraseDueConsents(database, batch),
+      hasDueConsentErasure: () => hasDueConsentErasure(database),
       pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(database, batch),
       trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
       sessionUpgradePage: (after, limit) => sessionUpgradePage(database, after, limit),
@@ -1045,7 +1048,26 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           ? await trustedAccess.readErasureAccount(accountId)
           : await trustedAccess.readAccount(accountId);
         if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
-        await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
+        const connection = await database.connect();
+        let begun = false;
+        try {
+          await connection.query('BEGIN');
+          begun = true;
+          await connection.query('DELETE FROM "user" WHERE id=$1', [accountId]);
+          await connection.query(
+            `INSERT INTO auth_consent_erasure (account_id,due_at)
+             VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
+             ON CONFLICT (account_id) DO NOTHING`,
+            [accountId],
+          );
+          await connection.query('COMMIT');
+          begun = false;
+        } catch (error) {
+          if (begun) await connection.query('ROLLBACK');
+          throw error;
+        } finally {
+          connection.release();
+        }
       },
       async stageCredentialEffect(input) {
         const human = await humanProof(input.headers);
