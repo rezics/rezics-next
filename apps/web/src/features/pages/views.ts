@@ -82,10 +82,15 @@ function* walk(nodes: readonly unknown[]): Generator<Node> {
   }
 }
 
+function previewLimit(node: Node, read: { limit?: number } | undefined): number {
+  if (typeof node.props.limit === 'number' && node.props.limit >= 1) return node.props.limit;
+  return read?.limit ?? 12;
+}
+
 /** The items and total a preview read returned for one node. Nothing when the read did not succeed. */
 function previewCount(
   node: Node,
-  read: { kind: string; id?: string } | undefined,
+  read: { kind: string; id?: string; limit?: number } | undefined,
   result: Read | undefined,
 ): { items: number; count: { value: number; exact: boolean } } | undefined {
   if (!read || result?.status !== 200 || !isRecord(result.body)) return;
@@ -93,7 +98,7 @@ function previewCount(
   if (read.kind === 'links' && Array.isArray(body.links)) {
     const count = isRecord(body.count) ? body.count : undefined;
     return {
-      items: body.links.length,
+      items: Math.min(body.links.length, previewLimit(node, read)),
       count: {
         value: typeof count?.value === 'number' ? Math.max(count.value, body.links.length) : body.links.length,
         exact: count ? count.exact === true : true,
@@ -120,12 +125,14 @@ function previewCount(
           : undefined;
   if (read.kind.startsWith('account') && Array.isArray(listed)) {
     // A list has no total, only a continuation: a shown count is exact when nothing follows.
-    return { items: listed.length, count: { value: listed.length, exact: body.next == null } };
+    const items = Math.min(listed.length, previewLimit(node, read));
+    return { items, count: { value: listed.length, exact: body.next == null } };
   }
   if (read.kind === 'collections' && Array.isArray(body.collections)) {
     const count = isRecord(body.count) ? body.count : undefined;
+    const items = Math.min(body.collections.length, previewLimit(node, read));
     return {
-      items: body.collections.length,
+      items,
       count: {
         value:
           typeof count?.value === 'number' ? Math.max(count.value, body.collections.length) : body.collections.length,
@@ -140,17 +147,21 @@ function previewCount(
         ? body.subject.statements[property]
         : undefined;
     const statements = bestRank((Array.isArray(held) ? held : []) as Stmt[]).filter(
-      (statement) => statement.value.type === 'value' && statement.property.data_type === 'wikibase-item',
+      (statement) =>
+        statement.value.type === 'value' &&
+        statement.property.data_type === 'wikibase-item' &&
+        typeof statement.value.content === 'string',
     );
-    return { items: statements.length, count: { value: statements.length, exact: true } };
+    const items = Math.min(statements.length, previewLimit(node, read));
+    return { items, count: { value: statements.length, exact: true } };
   }
   return;
 }
 
 /**
  * The tabs a subject page offers: the views its templates define, in the documented order, minus those without data.
- * A view has data when a preview of it in the overview returned at least one item; Overview, Reviews, Discussion and
- * Details are offered whenever a template defines them. The count of a view is the sum of its previews' counts.
+ * Overview, Reviews, Discussion and Details are offered whenever a template defines them. A list view is omitted
+ * when every preview that feeds it was read and every item in those lists fits in the overview.
  */
 export function subjectTabs(page: {
   subject: string | null;
@@ -169,25 +180,35 @@ export function subjectTabs(page: {
     const view = node.type.startsWith('Account') ? previewedView(node) : undefined;
     if (view) driven.add(view);
   }
-  const sums = new Map<View, { items: number; value: number; exact: boolean }>();
+  const sums = new Map<
+    View,
+    { items: number; value: number; exact: boolean; previews: number; counted: number; fits: boolean }
+  >();
   for (const node of walk(document.content)) {
     const view = previewedView(node);
     if (!view || !defined.has(view)) continue;
+    const sum = sums.get(view) ?? { items: 0, value: 0, exact: true, previews: 0, counted: 0, fits: true };
+    sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
-    if (!counted) continue;
-    const sum = sums.get(view) ?? { items: 0, value: 0, exact: true };
-    sums.set(view, {
-      items: sum.items + counted.items,
-      value: sum.value + counted.count.value,
-      exact: sum.exact && counted.count.exact,
-    });
+    if (counted) {
+      sum.counted += 1;
+      sum.items += counted.items;
+      sum.value += counted.count.value;
+      sum.exact = sum.exact && counted.count.exact;
+      sum.fits = sum.fits && counted.count.exact && counted.count.value === counted.items;
+    } else {
+      sum.fits = false;
+    }
+    sums.set(view, sum);
   }
   return VIEWS.flatMap((view): ViewTab[] => {
     if (!defined.has(view) || !viewIsPublic(profile, view)) return [];
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
-    return sum && sum.items > 0 ? [{ view, count: { value: sum.value, exact: sum.exact } }] : [];
+    if (!sum || sum.items === 0) return [];
+    if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
+    return [{ view, count: { value: sum.value, exact: sum.exact } }];
   });
 }

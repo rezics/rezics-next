@@ -289,28 +289,12 @@ const renderOverview = (page: SubjectPageData, invitation?: string) =>
 test('the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping', () => {
   const page = workPage();
   const tabs = subjectTabs(page);
-  // Previews with items open their views; Reviews, Discussion and Details are always there; credits has no data.
-  expect(tabs.map(({ view }) => view)).toEqual([
-    'overview',
-    'editions',
-    'characters',
-    'relations',
-    'reviews',
-    'discussion',
-    'lists',
-    'details',
-  ]);
+  // Views whose previews do not fit stay tabbed; Reviews, Discussion and Details are always there.
+  expect(tabs.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'lists', 'details']);
   expect(tabs.map(({ view }) => VIEWS.indexOf(view))).toEqual(
     tabs.map(({ view }) => VIEWS.indexOf(view)).sort((a, b) => a - b),
   );
-  expect(tabs.find(({ view }) => view === 'editions')!.count).toEqual({
-    value: 3,
-    exact: true,
-  });
-  expect(tabs.find(({ view }) => view === 'relations')!.count).toEqual({
-    value: 2,
-    exact: true,
-  });
+  expect(tabs.find(({ view }) => view === 'editions')).toBeUndefined();
   expect(tabs.find(({ view }) => view === 'lists')!.count).toEqual({
     value: 9,
     exact: true,
@@ -323,15 +307,13 @@ test('the host renders a tab bar of the views that have data in the documented o
   const hrefs = [...bar.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
   expect(hrefs).toEqual([
     `/en/subjects/${kokoro}`,
-    ...['editions', 'characters', 'relations', 'reviews', 'discussion', 'lists', 'details'].map(
-      (view) => `/en/subjects/${kokoro}/${view}`,
-    ),
+    ...['reviews', 'discussion', 'lists', 'details'].map((view) => `/en/subjects/${kokoro}/${view}`),
   ]);
-  expect(bar.match(/role="tab"/g)).toHaveLength(8);
+  expect(bar.match(/role="tab"/g)).toHaveLength(5);
   expect(bar).toMatch(
     /aria-selected="true"[^>]*href="[^"]*\/subjects\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+"[^>]*aria-selected="true"/,
   );
-  expect(text(bar)).toContain('Editions 3');
+  expect(text(bar)).not.toContain('Editions 3');
   expect(text(bar)).toContain('Lists 9');
   expect(text(bar)).toContain('Details');
   // The bar scrolls sideways on a narrow screen and never wraps; it stays in view under the top bar.
@@ -346,9 +328,9 @@ test('the host renders a tab bar of the views that have data in the documented o
     html.indexOf('data-slot="subject-summary"') >>> 0 || html.length,
   );
 
-  // A view whose previews are empty, and a view the templates do not define, are left out.
+  // Empty views, previews that fit in the overview, and views the templates do not define are left out.
   const bare = subjectTabs(workPage({ editions: 0, relations: 0, lists: 0 }));
-  expect(bare.map(({ view }) => view)).toEqual(['overview', 'characters', 'reviews', 'discussion', 'details']);
+  expect(bare.map(({ view }) => view)).toEqual(['overview', 'reviews', 'discussion', 'details']);
   const person = subjectTabs({
     ...workPage(),
     views: ['overview', 'works', 'discussion', 'details'],

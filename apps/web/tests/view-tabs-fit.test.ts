@@ -89,7 +89,7 @@ function page(lists: Lists, options: { agent?: boolean; views?: string[]; docume
         links: Array.from({ length: returned }, (_, index) => ({
           subject: `0192f3a0-6c1e-7b2a-9d4e-${(0x100 + index).toString(16).padStart(12, '0')}`,
           property: read.property,
-          label: `${view ?? 'List'} item ${index + 1}`,
+          label: `${view ? view[0]!.toUpperCase() + view.slice(1) : 'List'} item ${index + 1}`,
         })),
         count: { value: list?.count ?? 0, exact: list?.exact ?? true },
         next: null,
@@ -102,7 +102,16 @@ function page(lists: Lists, options: { agent?: boolean; views?: string[]; docume
     profile: 'sha256:test',
     template: { scope: 'type' as const, key: 'schema:Book' },
     document,
-    views: options.views ?? ['overview', 'works', 'characters', 'editions', 'relations', 'reviews', 'discussion', 'details'],
+    views: options.views ?? [
+      'overview',
+      'works',
+      'characters',
+      'editions',
+      'relations',
+      'reviews',
+      'discussion',
+      'details',
+    ],
     reads,
   } satisfies SubjectPageData;
 }
@@ -134,7 +143,8 @@ function byId(html: string, id: string) {
   return new RegExp(`<section\\b[^>]*aria-labelledby="${id}-title"[\\s\\S]*?<\\/section>`).exec(html)?.[0] ?? '';
 }
 
-const rowCount = (section: string) => (section.match(/<li\b/g) ?? []).length;
+const rowCount = (section: string) =>
+  new Set([...section.matchAll(/href="\/en\/subjects\/([0-9a-f-]{36})"/g)].map((match) => match[1])).size;
 
 test('an agent whose Characters and Works previews return every item has neither tab or See all link, and shows every item in the overview', () => {
   const agent = page(

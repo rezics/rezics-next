@@ -92,6 +92,10 @@ export type Item = {
 };
 export type Count = { value: number; exact: boolean };
 
+function hasMore(count: Count, returned: number): boolean {
+  return !count.exact || count.value > returned;
+}
+
 export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
   const value = useContext(OverviewContext);
   if (!value) return null;
@@ -330,7 +334,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       title={text.text || title}
       titleLang={text.text ? text.lang : undefined}
       count={listed.count}
-      more={props.paged !== true && (!listed.count.exact || listed.count.value > listed.items.length)}
+      more={props.paged !== true && hasMore(listed.count, listed.items.length)}
       href={viewHref(value, view)}
       locale={value.locale}
     >
@@ -418,7 +422,7 @@ export function RelationGroups(props: Record<string, unknown>) {
           value: members.reduce((sum, entry) => sum + entry.count.value, 0),
           exact: members.every((entry) => entry.count.exact),
         };
-        const more = members.filter((entry) => !entry.count.exact || entry.count.value > entry.items.length);
+        const more = members.filter((entry) => hasMore(entry.count, entry.items.length));
         return (
           <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -489,7 +493,7 @@ export function SubjectList(props: Record<string, unknown>) {
       title={title.text}
       titleLang={title.lang}
       count={listed.count}
-      more={!listed.count.exact || listed.count.value > listed.items.length}
+      more={hasMore(listed.count, listed.items.length)}
       href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
       locale={value.locale}
     >
@@ -542,7 +546,7 @@ export function CollectionList(props: Record<string, unknown>) {
       title={title.text}
       titleLang={title.lang}
       count={{ value: total, exact: true }}
-      more={props.paged !== true && total > collections.length}
+      more={props.paged !== true && hasMore({ value: total, exact: true }, collections.length)}
       href={viewHref(value, 'lists')}
       locale={value.locale}
     >

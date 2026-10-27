@@ -194,16 +194,7 @@ test("/@handle renders the agent's subject page, with the account's display name
 
 test('an agent with an account offers Posts, Reviews and Collections views beside Works and Characters, each a bounded page with a continuation', async () => {
   const novelistPage = await loaded('haruka');
-  expect(tabViews(novelistPage)).toEqual([
-    'overview',
-    'characters',
-    'works',
-    'posts',
-    'reviews',
-    'discussion',
-    'collections',
-    'details',
-  ]);
+  expect(tabViews(novelistPage)).toEqual(['overview', 'posts', 'reviews', 'discussion', 'collections', 'details']);
   // The graph's views come from the subject; the others from the account.
   const overview = render(novelistPage, 'haruka');
   expect(overview).toContain('River Atlas');
@@ -217,7 +208,7 @@ test('an agent with an account offers Posts, Reviews and Collections views besid
     expect(items(overview, slot)).toBe(4);
     expect(section(overview, slot)).toContain(`href="/en/@haruka/${view}"`);
   }
-  for (const view of ['characters', 'works', 'posts', 'reviews', 'discussion', 'collections', 'details'] as const)
+  for (const view of ['posts', 'reviews', 'discussion', 'collections', 'details'] as const)
     expect(overview).toContain(`href="/en/@haruka/${view}"`);
 
   // A view is one bounded page of its list, and a continuation reads the rest through the list's own route.
@@ -252,7 +243,7 @@ test('an agent with an account offers Posts, Reviews and Collections views besid
   // A view is offered only with data, and only when the agent makes it public.
   expect(tabViews(await loaded('plain'))).toEqual(['overview', 'discussion', 'details']);
   const press = await loaded('lanternpress');
-  expect(tabViews(press)).toEqual(['overview', 'works', 'posts', 'discussion', 'collections', 'details']);
+  expect(tabViews(press)).toEqual(['overview', 'discussion', 'details']);
   expect(render(press, 'lanternpress')).not.toContain('data-slot="account-reviews"');
   // Hiding a view hides only that list: the others stay.
   expect(items(render(press, 'lanternpress'), 'account-posts')).toBe(2);
@@ -282,14 +273,7 @@ test("an account verified as a catalogue person or organization renders that sub
   expect(houseHtml).toContain('Paper Lanterns');
 
   // The page is the same either way: an unverified agent has the same sections from its own node.
-  expect(tabViews(await loaded('mira'))).toEqual([
-    'overview',
-    'posts',
-    'reviews',
-    'discussion',
-    'collections',
-    'details',
-  ]);
+  expect(tabViews(await loaded('mira'))).toEqual(['overview', 'posts', 'reviews', 'discussion', 'details']);
 });
 
 test('an unknown handle, a reserved handle and a deleted account answer the same not-found page', async () => {
