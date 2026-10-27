@@ -24,7 +24,7 @@ async function eventually(check: () => Promise<boolean>) {
   }
 }
 
-async function fixture() {
+async function fixture(acknowledge: (resource: OwnedResource) => boolean | Promise<boolean> = () => true) {
   const url = new URL(database!);
   url.pathname = '/postgres';
   const admin = new Pool({ connectionString: url.href, max: 1 });
@@ -74,7 +74,7 @@ async function fixture() {
           expect(indices.body.indices).toEqual([]);
         }
         owned.push(resource);
-        return { acknowledged: true };
+        return { acknowledged: await acknowledge(resource) };
       },
     },
   );
@@ -418,3 +418,66 @@ test('concurrent factories own disjoint resources and one closing leaves the oth
   }
   await isolated(async (_f, ready) => defaults(ready));
 }, 360_000);
+
+test('close seals admission while ownership acknowledgement is pending and denied allocation leaves no resources', async () => {
+  let observed!: () => void;
+  const observedResource = new Promise<void>((resolve) => (observed = resolve));
+  let deny!: () => void;
+  const decision = new Promise<boolean>((resolve) => (deny = () => resolve(false)));
+  const f = await fixture((resource) => {
+    if (resource.kind !== 'kernel_database') return true;
+    observed();
+    return decision;
+  });
+  // Observe rejection immediately without running a promise matcher while ACK is blocked.
+  const initializing = f.rpc.request('init', { endpoint }).then(
+    () => {
+      throw new Error('Expected initialization to reject');
+    },
+    (error: unknown) => error,
+  );
+  try {
+    await observedResource;
+    const closing = f.rpc.request<SupervisorObservation>('close');
+    await expect(f.rpc.request('inspect')).rejects.toThrow('closing');
+    deny();
+    const failure = await initializing;
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('Parent did not acknowledge owned resource');
+    const closed = await closing;
+    expect(closed.resources.map((resource) => resource.kind)).toEqual(['index_prefix']);
+    expect(f.owned.map((resource) => resource.kind)).toEqual(['index_prefix', 'kernel_database']);
+    expect(closed.phases).toEqual(['worker', 'auth', 'indices', 'proxy']);
+  } finally {
+    deny();
+    await f.finish();
+  }
+}, 180_000);
+
+test('private controls reject coercible arrays and unexpected fields without changing worker state', async () => {
+  await isolated(async (f, ready) => {
+    const invalid = [
+      ['request', { persona: 'editor', method: ['GET'], path: '/v1/definitions/active' }],
+      ['remove', { subjectId: 'unused', mode: ['hidden'] }],
+      ['indexing', { state: ['running'] }],
+      ['searchNode', { state: ['up'] }],
+      ['indexing', { state: 'paused', extra: true }],
+      ['inspect', {}],
+      ['close', {}],
+    ] as const;
+    for (const [method, params] of invalid) await expect(f.rpc.request(method, params)).rejects.toThrow();
+    const observation = await f.rpc.request<SupervisorObservation>('inspect');
+    expect(observation.workerStats).toEqual(ready.workerStats);
+  });
+}, 240_000);
+
+test('Auth ownership rejection releases the already allocated kernel database without starting a worker', async () => {
+  const f = await fixture((resource) => resource.kind !== 'auth_database');
+  try {
+    await expect(f.rpc.request('init', { endpoint })).rejects.toThrow('Parent did not acknowledge owned resource');
+    expect(f.owned.map((resource) => resource.kind)).toEqual(['index_prefix', 'kernel_database', 'auth_database']);
+  } finally {
+    // finish checks every exact name, including the acknowledged kernel allocation.
+    await f.finish();
+  }
+}, 180_000);

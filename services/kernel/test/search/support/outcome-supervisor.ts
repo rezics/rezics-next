@@ -355,7 +355,8 @@ function supervise(parent: OutcomeRpc) {
       if (
         typeof params.persona !== 'string' ||
         !personas.includes(params.persona) ||
-        !['GET', 'POST', 'PUT'].includes(String(params.method)) ||
+        typeof params.method !== 'string' ||
+        !['GET', 'POST', 'PUT'].includes(params.method) ||
         typeof params.path !== 'string' ||
         !params.path.startsWith('/')
       )
@@ -382,7 +383,8 @@ function supervise(parent: OutcomeRpc) {
       if (
         typeof params.subjectId !== 'string' ||
         !params.subjectId ||
-        !['hidden', 'taken_down'].includes(String(params.mode))
+        typeof params.mode !== 'string' ||
+        !['hidden', 'taken_down'].includes(params.mode)
       )
         throw new Error('Invalid removal control');
       const response = await semantic!.fixtures.send(
@@ -401,7 +403,7 @@ function supervise(parent: OutcomeRpc) {
     if (method === 'indexing' || method === 'searchNode') {
       exact(params, ['state']);
       const states = method === 'indexing' ? ['paused', 'running'] : ['down', 'up'];
-      if (!states.includes(String(params.state))) throw new Error('Invalid control state');
+      if (typeof params.state !== 'string' || !states.includes(params.state)) throw new Error('Invalid control state');
       if (method === 'indexing') {
         observation.workerStats = await workerRpc!.request<WorkerStats>('indexing', params);
         return null;
