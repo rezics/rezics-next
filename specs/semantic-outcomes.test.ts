@@ -51,16 +51,29 @@ const write = (persona: Persona, method: 'POST' | 'PUT', path: string, body: unk
     const targets = relationTargets.get(relationKey(id, property));
     if (relationProperties.get(id)?.has(property) && !input.target && !input.sameAs) {
       const selected = Array.isArray(input.selection)
-        ? [...new Set(input.selection.flatMap((item) => {
-            if (!item || typeof item !== 'object' || typeof (item as { candidate?: unknown }).candidate !== 'string')
-              return [];
-            const target = relationCandidateTargets.get(
-              candidateKey(id, property, (item as { candidate: string }).candidate),
-            );
-            return target ? [target] : [];
-          }))]
+        ? [
+            ...new Set(
+              input.selection.flatMap((item) => {
+                if (
+                  !item ||
+                  typeof item !== 'object' ||
+                  typeof (item as { candidate?: unknown }).candidate !== 'string'
+                )
+                  return [];
+                const target = relationCandidateTargets.get(
+                  candidateKey(id, property, (item as { candidate: string }).candidate),
+                );
+                return target ? [target] : [];
+              }),
+            ),
+          ]
         : [];
-      const target = selected.length === 1 ? selected[0] : selected.length === 0 && targets?.size === 1 ? [...targets][0] : undefined;
+      const target =
+        selected.length === 1
+          ? selected[0]
+          : selected.length === 0 && targets?.size === 1
+            ? [...targets][0]
+            : undefined;
       if (target) requestBody = { ...input, target };
     }
   }
@@ -134,10 +147,7 @@ async function create(type: string, label: string, statements: Record<string, St
   return subject;
 }
 async function read(id: string, context?: string, persona: Persona = context ? 'acceptor' : 'editor') {
-  const response = await get(
-    `${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`,
-    persona,
-  );
+  const response = await get(`${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`, persona);
   expect(response.status).toBe(200);
   const subject = response.body.subject as Subject;
   expect(response.headers.get('etag')).toBe(`"${subject.revision}"`);
