@@ -94,6 +94,36 @@ Every surface builds `Cover` from the cover summary the kernel returned with the
 
 The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. Where a cover is shown at `lg` or larger, its credit (rights holder, and the source it came through) is reachable from the cover: in a caption on the subject page (`caption`), and otherwise behind a small credit control on the cover that opens the rights holder, source and licence; the sources section lists it too. A `fill` frame shows the control from 240 px wide.
 
+## Cover cards
+
+Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
+mode, relation, edition and character tiles) follows one pattern:
+
+- The cover is the card's top, edge to edge: no padding, border or background frame around it. The card and the
+  cover share the outer corner radius; the card's own surface starts below the cover.
+- Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
+  relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
+  the subject page.
+- Every cover in a grid or row has the frame ratio rules of [Cover](#cover), so covers align across the row and
+  text starts at the same height.
+- The whole card is one link to the subject. Actions on the item (change status, remove, add to collection) live
+  in the card's ⋯ menu, never as a button or select on the card.
+- Grid columns follow the container width (two on a phone, more on wider screens), with the same gap between
+  cards in both directions.
+
+## Progress
+
+Reading, watching or playing progress shows as one row: the item's ⋯ menu at the start where the card has one, a
+thin progress bar filling the remaining width, and the percentage after it in tabular figures. The bar and the
+number never sit on separate lines. Where a unit is meaningful the number may be the unit instead ("Ep 3/12",
+"p. 120/310"), with the same row layout. An item without known progress shows no bar rather than an empty one.
+
+## Shelves
+
+A person's library opens as a cover grid of [cover cards](#cover-cards) with progress, sorted by last activity,
+with status filters above it. A compact list is an alternative view the reader can switch to, never the default.
+Timestamps on a shelf are relative ("3 days ago") and only in the list view.
+
 ## Media image
 
 `MediaImage` draws an image inside a document or a gallery that is not a subject cover. Import it from `@rezics/ui/media-image`. It takes the same image summary as `Cover` (`media`, `width`, `height`, `placeholder`, `variants`), a `src` builder from the site that turns `{ media, format, width }` into a URL, the `alt` text and a `sizes` string.
