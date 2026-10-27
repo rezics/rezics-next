@@ -262,16 +262,16 @@ export declare function createLifecycleInternals(config: Boundary & {
         reservationId: string;
         key: string;
     }): Promise<{
-        partition: number;
-        epoch: number;
-        position: bigint;
-        transactionId: string;
-        replayed: boolean;
         value: {
             organizationId: string;
             memberAccountId: string;
             reservationId: string;
         };
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
     }>;
     /** Actor/operator-anchor hold, separate from organization mutation. Holds
      * remain until the durable workflow releases them using terminal proof.
@@ -285,17 +285,17 @@ export declare function createLifecycleInternals(config: Boundary & {
         purpose: "operator";
         reservationId: string;
     }> | {
-        partition: number;
-        epoch: number;
-        position: bigint;
-        transactionId: string;
-        replayed: boolean;
         value: {
             accountId: string;
             relatedAccountId: string;
             purpose: "membership";
             reservationId: string;
         };
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
     }>;
     /** Abort an unpublished organization reservation on its authoritative anchor.
      * A committed terminal slot permanently prevents delayed publication. Active

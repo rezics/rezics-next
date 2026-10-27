@@ -58,7 +58,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof createApp>): im
         200: import("typebox").TObject<{
             subjectPages: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
-                lastModified: import("typebox").TString;
+                lastModified: import("typebox").TOptional<import("typebox").TString>;
                 labels: import("typebox").TArray<import("typebox").TObject<{
                     language: import("typebox").TString;
                     value: import("typebox").TString;
@@ -128,7 +128,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof createApp>): im
         200: import("typebox").TObject<{
             subjectPages: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
-                lastModified: import("typebox").TString;
+                lastModified: import("typebox").TOptional<import("typebox").TString>;
                 labels: import("typebox").TArray<import("typebox").TObject<{
                     language: import("typebox").TString;
                     value: import("typebox").TString;

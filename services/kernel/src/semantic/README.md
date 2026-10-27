@@ -2,6 +2,26 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Subject page feed
+
+The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).
+Its response contains `subjectPages` with `id`, public display `labels` (`language` and `value`), and optional
+`lastModified`, plus `next` (a cursor or null). A present `lastModified` is a UTC ISO 8601 date-time, never null.
+Legacy rows whose original public effective time was never stored omit it until their next proven meaningful public
+change; web omits XML `lastmod` when it is absent. A known time records the last meaningful change to what the
+page shows.
+
+The eventual feed lists only readable, visible, nonclosed, nonremoved, nonmerged Global subjects with a public fact
+beyond the title. Title-only pages are `noindex`. Every returned subject must be readable now. A candidate may be
+temporarily omitted when it cannot be proved listable, and known `lastModified` values may lag while foreign-change
+relays catch up. Finite relay convergence and the next completed repair pass correct omissions and times. Processing
+or rebuild time and private activity never determine freshness. Merged subject reads retain the API 308 and web 301;
+removed and unreadable subjects retain an indistinguishable 404.
+
+The current route is an unavailable stub: valid requests return `semantic_not_ready` (503). It does not verify cursors
+or establish indexability. Validation and the unavailable response cost O(1), with no database read; this makes no
+cost claim for the eventual feed.
+
 ## Authorization
 
 Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.

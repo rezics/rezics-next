@@ -8,7 +8,7 @@ const response = t.Object(
       t.Object(
         {
           id: t.String({ format: 'uuid' }),
-          lastModified: t.String({ format: 'date-time', pattern: 'Z$' }),
+          lastModified: t.Optional(t.String({ format: 'date-time', pattern: 'Z$' })),
           labels: t.Array(t.Object({ language: t.String(), value: t.String() }, { additionalProperties: false })),
         },
         { additionalProperties: false },

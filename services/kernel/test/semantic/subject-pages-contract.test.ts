@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Kernel as ClientKernel } from '@rezics/client';
+import { Value } from 'typebox/value';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -12,7 +13,7 @@ afterAll(() => pool.end());
 
 type Feed = ClientKernel['~Routes']['v1']['subject-pages']['get'];
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type ExpectedPage = { id: string; lastModified: string; labels: { language: string; value: string }[] };
+type ExpectedPage = { id: string; lastModified?: string; labels: { language: string; value: string }[] };
 const preciseQuery: Equal<Feed['query'], { cursor?: string; limit?: number | string }> = true;
 const preciseResponse: Equal<Feed['response'][200], { subjectPages: ExpectedPage[]; next: string | null }> = true;
 
@@ -54,7 +55,7 @@ test('the subject page feed has a precise public HTTP contract', () => {
                   items: {
                     type: 'object',
                     additionalProperties: false,
-                    required: ['id', 'lastModified', 'labels'],
+                    required: ['id', 'labels'],
                     properties: {
                       id: { type: 'string', format: 'uuid' },
                       lastModified: { type: 'string', format: 'date-time', pattern: 'Z$' },
@@ -80,6 +81,17 @@ test('the subject page feed has a precise public HTTP contract', () => {
       503: expect.anything(),
     },
   });
+
+  const schema = operation?.responses?.['200']?.content?.['application/json']?.schema as Parameters<
+    typeof Value.Check
+  >[0];
+  const page = { id: '00000000-0000-4000-8000-000000000000', labels: [] };
+  const response = (item: unknown) => ({ subjectPages: [item], next: null });
+  expect(Value.Check(schema, response(page))).toBe(true);
+  expect(Value.Check(schema, response({ ...page, lastModified: '2024-01-02T03:04:05Z' }))).toBe(true);
+  expect(Value.Check(schema, response({ ...page, lastModified: null }))).toBe(false);
+  expect(Value.Check(schema, response({ ...page, lastModified: 'invalidZ' }))).toBe(false);
+  expect(Value.Check(schema, response({ ...page, lastModified: '2024-01-02T03:04:05+01:00' }))).toBe(false);
 });
 
 test('the feed refuses limits outside its approved sitemap range', async () => {

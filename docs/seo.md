@@ -100,12 +100,19 @@ The evidence is in [docs/research/sitemaps-at-scale.md](research/sitemaps-at-sca
 
 The public `GET /v1/subject-pages` feed accepts an optional opaque `cursor` and integer `limit` from 1 to 1,000
 (default 20). The 1,000 maximum is an exception to the ordinary list maximum of 100 for server-to-server sitemap
-reads. A page contains `subjectPages` entries with `id`, `lastModified` (UTC date-time) and public display `labels`
-(`language` and `value`), plus `next` (an opaque cursor or null). The final cursor is a signed keyset token, never a
-raw id. The feed has no session personalization and includes only visible, nonmerged, indexable subjects with a
-public fact beyond the title; closed, removed, hidden and unreadable subjects are excluded. `lastModified` records
-the last change to a shown fact. The semantic feed implementation is pending: valid requests currently return
-`semantic_not_ready` (503), and the stub does not verify cursors.
+reads. A page contains `subjectPages` entries with `id`, public display `labels` (`language` and `value`) and an
+optional `lastModified` (UTC ISO 8601 date-time, never null), plus `next` (an opaque cursor or null). Web omits XML
+`lastmod` when the time is absent. Legacy rows whose original public effective time was never stored omit it until
+their next proven meaningful public change. A known time records the last meaningful change to what the page shows.
+The final cursor is a signed keyset token, never a raw id.
+
+The feed has no session personalization. It includes only readable, visible, nonmerged subjects in the Global
+Context with a public fact beyond the title; closed, removed and hidden subjects are excluded. Title-only pages are
+`noindex`. Every returned subject must be readable now. The feed may temporarily omit a candidate it cannot prove
+listable, and known `lastModified` values may lag while foreign-change relays catch up. Finite relay convergence and
+the next completed repair pass correct omissions and times. Freshness never uses processing or rebuild time or private
+activity. The semantic feed implementation is pending: valid requests currently return `semantic_not_ready` (503),
+and the stub does not verify cursors or establish indexability.
 
 ## Status and change
 
