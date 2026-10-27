@@ -1,6 +1,7 @@
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
+export const MAX_NAME_SORT_CHARACTERS = 512;
 
 /** One nested fact. Qualifiers are `property=value` strings, unique and in source order. */
 export type SubjectFact =
@@ -15,7 +16,8 @@ export type SubjectDocument = {
   security_revision: number;
   names: string[];
   descriptions: string[];
-  name_sort: string;
+  /** Native write preparation supplies null for normalized keys exceeding MAX_NAME_SORT_CHARACTERS. */
+  name_sort: string | null;
   statements: string[];
   /** One entry per facet-capable statement, in source order, with exact duplicates removed. */
   facts: SubjectFact[];
