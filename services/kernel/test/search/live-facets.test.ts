@@ -207,6 +207,34 @@ test('positive relation candidates are rechecked and stale or not-proven witness
   }
 });
 
+test('positive relation candidates are rechecked from the release when relation properties are omitted', async () => {
+  const source = new ControlledSource();
+  const relationRelease = {
+    ...release,
+    properties: {
+      ...release.properties,
+      [author]: {
+        datatype: 'wikibase-item',
+        relation: { group: 'association' },
+      },
+    },
+  } as unknown as FilterRelease;
+  source.put(subject(90, [], { type: 'schema:Person' }));
+  source.put(subject(1, [item(id(90))]));
+  const probe = { subject: id(1), property: author, value: id(90) };
+  source.relationResults.set(source.relationKey(probe), false);
+
+  const answer = await result(source, [hit(1, { matched: ['f1'] })], {
+    clauses: clauses(['f1', { facet: 'statement', property: author, values: [id(90)] }]),
+    filter: { statement: { property: author, in: [id(90)] } },
+    release: relationRelease,
+  });
+
+  expect(source.probes.flat()).toContainEqual(probe);
+  expect(answer.total).toEqual({ value: 0, relation: 'lower_bound' });
+  expect(answer.facets[0]!.values).toEqual([]);
+});
+
 test('complete Boolean OR and NOT proof counts only current matching candidates', async () => {
   const source = new ControlledSource();
   source.put(subject(90, [], { type: 'schema:Person' }));

@@ -1,4 +1,4 @@
-import type { FilterDocument, FilterRelease } from '@rezics/filter';
+import { relationFacetProperty, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import {
   admitFacets,
   codeFacet,
@@ -70,9 +70,17 @@ export async function readLiveFacets(request: LiveFacetRequest): Promise<LiveFac
   const { languages } = validateHitOptions({ languages: request.languages });
   admitFacets(facets, request.filter, request.release);
 
+  // The optional hint can precompute relation properties at the call site. When it is absent or incomplete,
+  // derive the relation leaves from the admitted filter and release so positive relation matches are still
+  // rechecked against current source evidence.
+  const relationProperties = new Set(request.relationProperties ?? []);
+  if (request.filter) collectRelationProperties(request.filter, request.release, relationProperties);
+
   const checked = await checkHits(request.source, request.hits, request.clauses, {
     ...(request.filter === undefined ? {} : { filter: request.filter }),
-    ...(request.relationProperties === undefined ? {} : { relationProperties: request.relationProperties }),
+    ...(request.relationProperties === undefined && relationProperties.size === 0
+      ? {}
+      : { relationProperties: [...relationProperties] }),
   });
 
   // Repeated engine hits cannot contribute more than once per current source id.
@@ -185,6 +193,18 @@ export async function readLiveFacets(request: LiveFacetRequest): Promise<LiveFac
 
 function compare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function collectRelationProperties(filter: FilterDocument, release: FilterRelease, properties: Set<string>): void {
+  if ('and' in filter) {
+    for (const child of filter.and) collectRelationProperties(child, release, properties);
+  } else if ('or' in filter) {
+    for (const child of filter.or) collectRelationProperties(child, release, properties);
+  } else if ('not' in filter) {
+    collectRelationProperties(filter.not, release, properties);
+  } else if ('statement' in filter && relationFacetProperty(release, filter.statement.property)) {
+    properties.add(filter.statement.property);
+  }
 }
 
 function originalLanguage(subject: IndexedSubject): string | undefined {
