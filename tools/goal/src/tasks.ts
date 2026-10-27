@@ -18,7 +18,7 @@ import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.
 import { choosePoolWithFallback } from './allowance.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
-import { awaitHostCapacity, launch, workerPrompt, type RunningWorker } from './launch.ts';
+import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { terminateProcessGroup } from './process.ts';
 import { readMeasurement, makeRecord } from './records.ts';
@@ -174,8 +174,11 @@ export class WorkerTasks {
       if (dependency.brief.target === task.brief.target) return true;
       const commit = dependency.integratedCommit ?? dependency.mergedCommit;
       if (!commit) return true;
-      return spawnSync('git', ['merge-base', '--is-ancestor', commit, `refs/heads/${branch}`],
-        { cwd: this.settings.mainCheckout }).status === 0;
+      return (
+        spawnSync('git', ['merge-base', '--is-ancestor', commit, `refs/heads/${branch}`], {
+          cwd: this.settings.mainCheckout,
+        }).status === 0
+      );
     });
   }
   /** A stabilize brief bases on that branch; every other brief bases on the integration branch. */
@@ -283,7 +286,7 @@ export class WorkerTasks {
     return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    await awaitHostCapacity(this.store, this.settings.stateDirectory);
+    await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)));
     // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
     // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
@@ -343,8 +346,11 @@ export class WorkerTasks {
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
-    if (!leased) await awaitHostCapacity(this.store, this.settings.stateDirectory);
-    const lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    if (!leased)
+      await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)));
+    const lease = leased
+      ? undefined
+      : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
@@ -410,7 +416,8 @@ export class WorkerTasks {
       const switched = sameModelFailures
         ? fallbacks.find((candidate) => candidate.model !== old!.profile.model || candidate.cli !== old!.profile.cli)
         : undefined;
-      if (switched) fallbacks = fallbacks.filter((candidate) => candidate !== switched && candidate.model !== old!.profile.model);
+      if (switched)
+        fallbacks = fallbacks.filter((candidate) => candidate !== switched && candidate.model !== old!.profile.model);
       const { profile, pool } = choosePoolWithFallback(
         options.profile ?? switched ?? route.profile,
         fallbacks,
