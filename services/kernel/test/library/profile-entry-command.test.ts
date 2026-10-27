@@ -134,6 +134,9 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
       'updatedAt',
     ]);
     privateFree(first);
+    const listed = await native.commands.listEntries(native.owner.actor, { limit: 100 });
+    expect(String(listed.entries.find((entry) => entry.subjectId === subjectId)?.state)).toBe(entryStates[vertical]);
+    privateFree(listed);
     expect((await fact(subjectId)).library_profile_pin).toEqual(pin(native.originalDigest, vertical));
     const fresh = await native.inspect();
     expect(fresh.sessions).toEqual(before.sessions);
