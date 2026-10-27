@@ -16,6 +16,7 @@ import { readSubjectReference } from '../../src/semantic/references.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { actorFixture, type ActorFixture } from '../access/actor-side-fixture.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
+import { createRealAccess } from './real-access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const admin = createPool(process.env.DATABASE_URL!);
@@ -62,6 +63,27 @@ async function observed<T>(operation: () => Promise<T>) {
 async function check(f: ActorFixture, resource: Resource = f.resource) {
   return f.prepare(f.actor, f.permissions(), resource);
 }
+
+test('authenticated installed Access checks references against real grants and revocation', async () => {
+  const f = await actorFixture(pool, admin);
+  await subject(f);
+  const real = await createRealAccess(admin, { reader: newId(4112) }, ['subject:read']);
+  const access = real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
+  const context = { pool, deadline: Date.now() + 5000 };
+  const actor = await access.authenticate(real.bearer('reader'), context);
+  const prepare = () => accessCheck(access, actor, 'subject:read', f.resource, context);
+  const denied = await prepare();
+  expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => denied(client)))).toBeNull();
+  await real.grant(f.resource, 'reader', 'subject:read');
+  const allowed = await prepare();
+  expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => allowed(client)))).toHaveProperty(
+    'id',
+    f.resource.id,
+  );
+  await real.revoke(f.resource, 'reader', 'subject:read');
+  expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => allowed(client)))).toBeNull();
+  expect(real.readChecks).toHaveLength(3);
+});
 
 test('reference identity and Access share one RR client and preserve native acceptance time', async () => {
   const f = await actorFixture(pool, admin);
