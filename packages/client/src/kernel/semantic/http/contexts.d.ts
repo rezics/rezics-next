@@ -397,6 +397,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                     };
                                 }[]>;
                             };
+                            account: {
+                                id: string;
+                            } | null;
                             summary: {
                                 id: string;
                                 type: string;
@@ -1879,6 +1882,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                     retracted: number | null;
                                     retraction: {
@@ -1889,6 +1895,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                             digest: string;
                                             converter_revision: string;
                                             field_group: "cover" | "facts" | "summary";
+                                        } | {
+                                            kind: "agent";
+                                            subject: string;
                                         };
                                         references: {
                                             parts: ({
@@ -2076,6 +2085,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                 }[];
                                 next: string | null;
@@ -2165,8 +2177,8 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                             id: string;
                         };
                         query: {
-                            cursor?: string;
                             limit?: string | number;
+                            cursor?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

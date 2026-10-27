@@ -8,6 +8,7 @@
     "account:suspend",
     "account:reinstate",
     "account:set_rate_tier",
+    "account:verify_agent",
     "account:renew_cleanup",
     "client:manage",
     "organization:create",

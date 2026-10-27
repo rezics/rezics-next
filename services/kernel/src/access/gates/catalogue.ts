@@ -21,7 +21,7 @@ export const GLOBAL_CONTEXT: Resource = Object.freeze({
   id: '00000000-0000-8000-8000-000000000000',
 });
 
-const GROUP_PATTERN = /^[a-z][a-z_]{0,62}$/;
+const GROUP_PATTERN = /^[a-z][a-z_-]{0,62}$/;
 const RESERVED_GROUPS = new Set(['any', 'open', 'close']);
 
 export function isExposureGroup(value: string): boolean {

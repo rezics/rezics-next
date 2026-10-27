@@ -383,6 +383,12 @@ CREATE TABLE access.account (
     avatar uuid,
     public_views jsonb DEFAULT '{"posts": true, "reviews": true, "collections": true}'::jsonb NOT NULL,
     speakers_listed boolean DEFAULT false NOT NULL,
+    agent_verified boolean DEFAULT false NOT NULL,
+    agent_subject_id uuid,
+    agent_verification_receipt_id uuid,
+    pending_agent_subject_id uuid,
+    pending_agent_receipt_id uuid,
+    CONSTRAINT account_agent_verification_check CHECK ((((pending_agent_subject_id IS NULL) = (pending_agent_receipt_id IS NULL)) AND ((agent_verified AND (agent_subject_id IS NOT NULL) AND (agent_verification_receipt_id IS NOT NULL) AND (pending_agent_subject_id IS NULL)) OR ((NOT agent_verified) AND (agent_subject_id IS NULL) AND (agent_verification_receipt_id IS NULL))))),
     CONSTRAINT account_avatar_route_check CHECK (((avatar IS NULL) OR (route = ((get_byte(uuid_send(avatar), 10) * 256) + get_byte(uuid_send(avatar), 11))))),
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
@@ -416,6 +422,45 @@ CREATE TABLE access.account_preferences (
     CONSTRAINT account_preferences_spoiler_level_check CHECK (((spoiler_level >= 0) AND (spoiler_level <= 2))),
     CONSTRAINT account_preferences_suitability_check CHECK ((suitability = ANY (ARRAY['blur'::text, 'show'::text]))),
     CONSTRAINT account_preferences_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: agent_verification_request; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_verification_request (
+    route integer NOT NULL,
+    request_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    account_kind text NOT NULL,
+    requested_by uuid NOT NULL,
+    catalogue_subject_id uuid NOT NULL,
+    statement text NOT NULL,
+    links jsonb DEFAULT '[]'::jsonb NOT NULL,
+    state text NOT NULL,
+    reason text,
+    problem_type text,
+    problem_detail text,
+    decision_receipt_id uuid,
+    decided_by uuid,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    updated_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT agent_verification_request_account_kind_check CHECK ((account_kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
+    CONSTRAINT agent_verification_request_check CHECK ((route = ((get_byte(uuid_send(request_id), 10) * 256) + get_byte(uuid_send(request_id), 11)))),
+    CONSTRAINT agent_verification_request_check1 CHECK (((state = ANY (ARRAY['approving'::text, 'approved'::text, 'rejected'::text, 'failed'::text])) = (decision_receipt_id IS NOT NULL))),
+    CONSTRAINT agent_verification_request_check2 CHECK (((state = ANY (ARRAY['approving'::text, 'approved'::text, 'rejected'::text, 'failed'::text])) = (decided_by IS NOT NULL))),
+    CONSTRAINT agent_verification_request_check3 CHECK (((problem_type IS NULL) = (problem_detail IS NULL))),
+    CONSTRAINT agent_verification_request_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT agent_verification_request_links_check CHECK (((jsonb_typeof(links) = 'array'::text) AND (jsonb_array_length(links) <= 5))),
+    CONSTRAINT agent_verification_request_problem_detail_check CHECK (((problem_detail IS NULL) OR (char_length(problem_detail) <= 512))),
+    CONSTRAINT agent_verification_request_problem_type_check CHECK (((problem_type IS NULL) OR ((char_length(problem_type) >= 1) AND (char_length(problem_type) <= 128)))),
+    CONSTRAINT agent_verification_request_reason_check CHECK (((reason IS NULL) OR (char_length(reason) <= 500))),
+    CONSTRAINT agent_verification_request_route_check CHECK ((route = 0)),
+    CONSTRAINT agent_verification_request_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'approving'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text, 'failed'::text]))),
+    CONSTRAINT agent_verification_request_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 2000))),
+    CONSTRAINT agent_verification_request_updated_at_check CHECK (isfinite(updated_at))
 );
 
 
@@ -536,7 +581,7 @@ CREATE TABLE access.exposure_opening (
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
     route integer DEFAULT 0 NOT NULL,
-    CONSTRAINT exposure_opening_group_check CHECK (("group" ~ '^[a-z][a-z_]{0,62}$'::text)),
+    CONSTRAINT exposure_opening_group_check CHECK (("group" ~ '^[a-z][a-z_-]{0,62}$'::text)),
     CONSTRAINT exposure_opening_route_check CHECK ((route = 0)),
     CONSTRAINT exposure_opening_valid_check CHECK (((NOT isempty(valid)) AND (NOT lower_inf(valid)) AND lower_inc(valid) AND (NOT upper_inc(valid))))
 );
@@ -1035,6 +1080,14 @@ ALTER TABLE ONLY access.account_preferences
 
 
 --
+-- Name: agent_verification_request agent_verification_request_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_verification_request
+    ADD CONSTRAINT agent_verification_request_pkey PRIMARY KEY (route, request_id);
+
+
+--
 -- Name: committed_continuation_completion committed_continuation_completion_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1272,6 +1325,27 @@ ALTER TABLE ONLY access.workflow_approval
 
 ALTER TABLE ONLY access.write_rate_counter
     ADD CONSTRAINT write_rate_counter_pkey PRIMARY KEY (route, identity_digest, family);
+
+
+--
+-- Name: agent_verification_account_latest_idx; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX agent_verification_account_latest_idx ON access.agent_verification_request USING btree (route, account_id, created_at DESC, request_id DESC);
+
+
+--
+-- Name: agent_verification_active_account_idx; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX agent_verification_active_account_idx ON access.agent_verification_request USING btree (route, account_id) WHERE (state = ANY (ARRAY['pending'::text, 'approving'::text]));
+
+
+--
+-- Name: agent_verification_pending_page_idx; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX agent_verification_pending_page_idx ON access.agent_verification_request USING btree (route, created_at, request_id) WHERE (state = 'pending'::text);
 
 
 --

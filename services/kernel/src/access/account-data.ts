@@ -8,6 +8,7 @@ import accountRead from './account-read.sql';
 import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
+import { accountAgentId } from '../semantic/agents.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
@@ -48,14 +49,17 @@ export type PublicAccountProfile = PublicIdentity & {
   avatar: AvatarSummary | null;
   publicViews: PublicViews;
   speakersListed?: boolean;
-  subject: { id: string; label: string; type: string } | null;
+  subject: PublicSubject | null;
+  verified: boolean;
 };
+export type PublicSubject = { id: string; label: string; type: string };
+export type PublicHandleIdentity = PublicIdentity & { subject: PublicSubject | null; verified: boolean };
 
 /** Resolve only an active claim, then read the account on its own anchor. */
 export async function readPublicAccountByHandle(
-  client: Queryable,
+  client: Pool,
   handle: string,
-): Promise<(PublicIdentity | PublicAccountProfile)[]> {
+): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   const route = createHash('sha256').update(handle).digest().readUInt16BE(0);
   const claim = await handleRead.run(client, { route, handle });
   if (!claim) return [];
@@ -71,7 +75,20 @@ export async function readPublicAccountByHandle(
     automated: !deleted && row.operatorAccountId !== null,
     operatorId: row.operatorAccountId,
   };
-  if (deleted) return [identity];
+  if (deleted) return [{ ...identity, subject: null, verified: false }];
+  const subjectId = row.agentVerified ? row.agentSubjectId : accountAgentId(row.accountId);
+  let subject: PublicSubject | null = null;
+  if (subjectId !== null) {
+    const [{ readItemTypes, readLabels }, { subjectLabel }] = await Promise.all([
+      import('../semantic/subject.ts'),
+      import('../semantic/link-keys.ts'),
+    ]);
+    const [labels, types] = await Promise.all([readLabels(client, [subjectId]), readItemTypes(client, [subjectId])]);
+    const labelSet = labels.get(subjectId);
+    const type = types.get(subjectId);
+    const label = labelSet ? subjectLabel(labelSet) : '';
+    if (type && label) subject = { id: subjectId, label, type };
+  }
   const avatar = row.avatar ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null) : null;
   return [
     {
@@ -81,7 +98,8 @@ export async function readPublicAccountByHandle(
       avatar,
       publicViews: row.publicViews as PublicViews,
       ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
-      subject: null,
+      subject,
+      verified: row.agentVerified,
     },
   ];
 }

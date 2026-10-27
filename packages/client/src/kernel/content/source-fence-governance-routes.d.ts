@@ -391,6 +391,9 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     };
                                 }[]>;
                             };
+                            account: {
+                                id: string;
+                            } | null;
                             summary: {
                                 id: string;
                                 type: string;
@@ -1873,6 +1876,9 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                     retracted: number | null;
                                     retraction: {
@@ -1883,6 +1889,9 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                             digest: string;
                                             converter_revision: string;
                                             field_group: "cover" | "facts" | "summary";
+                                        } | {
+                                            kind: "agent";
+                                            subject: string;
                                         };
                                         references: {
                                             parts: ({
@@ -2070,6 +2079,9 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                 }[];
                                 next: string | null;
@@ -2159,8 +2171,8 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                             id: string;
                         };
                         query: {
-                            cursor?: string;
                             limit?: string | number;
+                            cursor?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

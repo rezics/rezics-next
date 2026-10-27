@@ -18,7 +18,7 @@ Each use is one WeakMap read plus the derivation walk to the root.
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
 
-`gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
+`gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_-]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
 ### Platform governance reach
 
@@ -122,6 +122,42 @@ floors never decrease, so credentials can obtain fresh tokens while earlier toke
 page first checks that the operator is still active and that this is its latest suspension; another suspension stops
 that reversal.
 Page and subject receipts make crash recovery and replay idempotent.
+
+### Account agent verification
+
+`POST /v1/accounts/{accountId}:requestVerification` accepts `{ subject, statement, links }`. A fresh human session may
+request its own actor account; an organization's manager may request that organization through its existing
+`account:manage` authority. The catalogue subject must be a visible `schema:Person` or `schema:Organization` when the
+request is approved. Statements contain 1–2000 characters; links follow the account profile limits. Only one request
+per account may be pending or in approval. `GET /v1/accounts/{accountId}/verification` returns that account's latest
+request, and `POST /v1/accounts/{accountId}:withdrawVerification` withdraws its pending request.
+
+Platform governance reviews `GET /v1/verification-requests?state=pending`, which returns
+`{ verificationRequests, next }` with a signed cursor and a limit from 1 to 100. The approval and rejection routes,
+`POST /v1/verification-requests/{requestId}:approve` and `:reject`, accept an optional reason of at most 500 characters.
+Both require `account:verify_agent` on the Global Context, held by `platform.governance`. The routes and the public
+handle identity read stay closed behind `gate:agent-verification` until governance opens that exposure group.
+
+Approval first records its decision receipt and queues the durable `accounts.agent-verification` workflow. The workflow
+rechecks and marks the account in its own partition, calls Semantic's `verifyAccountAgent` as platform work, then
+marks the request approved. A semantic refusal clears the pending account marker and records the typed problem on a
+failed request. The semantic catalogue node survives the merge. Receipt-bound commands and the semantic merge make
+workflow replay and restart converge. Rejection changes only its request. Request, withdrawal, approval, rejection,
+failure and verification each emit a registered Access event.
+
+The handle identity read returns `subject: { id, label, type }` for an active account, using its derived account agent
+until verification and the catalogue subject afterward. It returns `verified: false` or `true` accordingly; a deleted
+account returns `subject: null` and `verified: false`.
+
+- Request touches the account's anchored read, one unique pending-request probe and one insert in the Global Context
+  partition. A decision touches its Global Context request and writes that row. Rows and statements are constant;
+  blocks grow logarithmically with requests.
+- Pending pages read at most `limit + 1` rows through the partial pending-page index. Rows are O(limit), blocks are
+  O(limit + log N), and decided requests do not affect the range.
+- The workflow performs one account point read/update per Access step; Semantic's merge has its own cost entry.
+- Growth checks: `test/access/growth-agent-verification.test.ts`, `agent verification request stays bounded as decided
+  requests grow` and `pending agent verification page stays bounded as decided requests grow`, scales `[256, 1024,
+  4096]`, seeded in `grow` with at least one warm-up.
 
 ## Operator responsibility pages
 
@@ -480,10 +516,12 @@ its own T; a cursor does not freeze assignments or public identity state.
 ### Public profile by handle
 
 - Returns the identity fields above plus `bio` (the stored biography or null), `links` (an array of `{ label, url }`),
-  `avatar`, `publicViews` and `subject`. `avatar` is null or the [Content cover summary](../content/README.md#the-cover-summary)
-  with `credit: null`. `subject` remains null, reserved for `{ id, label, type }`.
+  `avatar`, `publicViews`, `subject` and `verified`. `avatar` is null or the [Content cover summary](../content/README.md#the-cover-summary)
+  with `credit: null`. `subject` is the derived account agent until verification, then the verified catalogue subject;
+  both include `{ id, label, type }` from Semantic. A deleted account returns `subject: null` and `verified: false`.
   Only an active handle claim resolves: unknown, pending or merely reserved handles return an empty list. Pending
-  accounts are absent. A deleted account returns exactly its ids-read identity tombstone, without profile fields.
+  accounts are absent. Deleted accounts have no profile fields; the ids read continues to return only its identity
+  tombstone.
 - The existing account profile patch accepts `links` alongside `displayName` and `biography`; `[]` clears links.
   There are at most 5 links, with labels of 1–64 characters and absolute `https:` URLs of at most 2048 characters,
   without credentials.
@@ -501,7 +539,8 @@ its own T; a cursor does not freeze assignments or public identity state.
   listing. Fenced or inactive profiles expose no public views even if stale presentation values remain stored.
 - Touches: one `handle_claim_pkey(route, normalized_handle)` point read on the handle's route, then one
   `account_pkey(route, account_id)` point read on the account's route. A missing active claim stops after the first read.
-  An avatar adds one `readAvatarSummaries` statement in the account's partition. An avatar patch adds one
+  An active profile reads the selected subject's label and type through Semantic's bounded one-id batch reads. An avatar
+  adds one `readAvatarSummaries` statement in the account's partition. An avatar patch adds one
   `checkAvatarMedia` primary key read to the existing patch statements.
 - Bound: constant rows and statements; logarithmic blocks in accounts, handle claims and media.
 - Growth check: `test/access/growth-account-handle-read.test.ts`,

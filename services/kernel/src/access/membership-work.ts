@@ -200,6 +200,8 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
   return {
     name: 'accounts',
     async register(context) {
+      const { registerAgentVerificationWork } = await import('./agent-verification-work.ts');
+      registerAgentVerificationWork(context);
       const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
       registerAccounts(context, membershipWorkPorts(context, options, config));
       context.addEffects([createAccountAgentEffect(context.pool)]);

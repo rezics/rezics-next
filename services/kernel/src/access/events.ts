@@ -91,7 +91,7 @@ const opening = Type.Object(
 const exposure = (open: boolean) =>
   Type.Object(
     {
-      group: Type.String({ pattern: '^(?!any$|open$|close$)[a-z][a-z_]{0,62}$(?![\\s\\S])' }),
+      group: Type.String({ pattern: '^(?!any$|open$|close$)[a-z][a-z_-]{0,62}$(?![\\s\\S])' }),
       open: Type.Literal(open),
       changed: Type.Boolean(),
     },
@@ -255,6 +255,36 @@ export const ACCESS_EVENTS = {
   'com.rezics.access.account-updated.v1': Type.Object({ accountId: identity }, { additionalProperties: false }),
   'com.rezics.access.account-display-name-changed.v1': Type.Object(
     { accountId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.requested.v1': Type.Object(
+    { requestId: identity, accountId: identity, catalogueSubjectId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.withdrawn.v1': Type.Object(
+    { requestId: identity, accountId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.approved.v1': Type.Object(
+    { requestId: identity, accountId: identity, catalogueSubjectId: identity, receiptId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.rejected.v1': Type.Object(
+    { requestId: identity, accountId: identity, catalogueSubjectId: identity, receiptId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.failed.v1': Type.Object(
+    {
+      requestId: identity,
+      accountId: identity,
+      catalogueSubjectId: identity,
+      receiptId: identity,
+      problemType: Type.String({ minLength: 1, maxLength: 128 }),
+    },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.agent-verification.verified.v1': Type.Object(
+    { requestId: identity, accountId: identity, catalogueSubjectId: identity, receiptId: identity },
     { additionalProperties: false },
   ),
   'com.rezics.access.membership-changed.v1': Type.Object(

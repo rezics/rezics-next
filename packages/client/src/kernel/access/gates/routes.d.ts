@@ -395,6 +395,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                 }[]>;
                             };
+                            account: {
+                                id: string;
+                            } | null;
                             summary: {
                                 id: string;
                                 type: string;
@@ -1877,6 +1880,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                     retracted: number | null;
                                     retraction: {
@@ -1887,6 +1893,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             digest: string;
                                             converter_revision: string;
                                             field_group: "cover" | "facts" | "summary";
+                                        } | {
+                                            kind: "agent";
+                                            subject: string;
                                         };
                                         references: {
                                             parts: ({
@@ -2074,6 +2083,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                 }[];
                                 next: string | null;
@@ -2163,8 +2175,8 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             id: string;
                         };
                         query: {
-                            cursor?: string;
                             limit?: string | number;
+                            cursor?: string;
                             property?: string;
                             filter?: string;
                             type?: string;
@@ -3455,6 +3467,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                 }[]>;
                             };
+                            account: {
+                                id: string;
+                            } | null;
                             summary: {
                                 id: string;
                                 type: string;
@@ -4937,6 +4952,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                     retracted: number | null;
                                     retraction: {
@@ -4947,6 +4965,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             digest: string;
                                             converter_revision: string;
                                             field_group: "cover" | "facts" | "summary";
+                                        } | {
+                                            kind: "agent";
+                                            subject: string;
                                         };
                                         references: {
                                             parts: ({
@@ -5134,6 +5155,9 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                 }[];
                                 next: string | null;
@@ -5223,8 +5247,8 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             id: string;
                         };
                         query: {
-                            cursor?: string;
                             limit?: string | number;
+                            cursor?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

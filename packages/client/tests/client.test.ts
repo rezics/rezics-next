@@ -41,13 +41,13 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
   });
 
 test('a subject read answers like an Eden Treaty call, with the JSON as the kernel sent it', async () => {
-  const { sent, fetch } = kernel([() => json(200, { subject, summary: null, related: {} })]);
+  const { sent, fetch } = kernel([() => json(200, { subject, account: null, summary: null, related: {} })]);
   const client = createKernelClient(ORIGIN, { fetch });
   const { data, error, status } = await client.subjects({ id: ID }).get();
   expect(sent.map(({ url, method }) => [url, method])).toEqual([[`${ORIGIN}/v1/subjects/${ID}`, 'GET']]);
   expect(status).toBe(200);
   expect(error).toBeNull();
-  expect(data).toEqual({ subject, summary: null, related: {} });
+  expect(data).toEqual({ subject, account: null, summary: null, related: {} });
   expect(typeof data?.subject.descriptions.en).toBe('string');
 });
 

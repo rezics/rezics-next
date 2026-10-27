@@ -45,14 +45,20 @@ export type PublicAccountProfile = PublicIdentity & {
     avatar: AvatarSummary | null;
     publicViews: PublicViews;
     speakersListed?: boolean;
-    subject: {
-        id: string;
-        label: string;
-        type: string;
-    } | null;
+    subject: PublicSubject | null;
+    verified: boolean;
+};
+export type PublicSubject = {
+    id: string;
+    label: string;
+    type: string;
+};
+export type PublicHandleIdentity = PublicIdentity & {
+    subject: PublicSubject | null;
+    verified: boolean;
 };
 /** Resolve only an active claim, then read the account on its own anchor. */
-export declare function readPublicAccountByHandle(client: Queryable, handle: string): Promise<(PublicIdentity | PublicAccountProfile)[]>;
+export declare function readPublicAccountByHandle(client: Pool, handle: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */

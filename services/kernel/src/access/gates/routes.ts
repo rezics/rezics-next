@@ -13,7 +13,7 @@ import { createExposureCommands } from './catalogue.ts';
 import { openApiRoutes } from './openapi-route.ts';
 
 const closed = { additionalProperties: false } as const;
-const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_]{0,62}$' }) }, closed);
+const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_-]{0,62}$' }) }, closed);
 const headersSchema = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
 const success = t.Object(
   { exposure: t.Object({ group: t.String(), open: t.Boolean(), changed: t.Boolean() }, closed) },

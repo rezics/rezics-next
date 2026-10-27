@@ -27,7 +27,6 @@ const invalid = [
   'gate:close',
   'gate:_feature',
   'gate:feature1',
-  'gate:feature-name',
   'gate:feature:other',
   'gate:feature\n',
   'gate:feature ',
@@ -36,7 +35,16 @@ const invalid = [
 
 test('parseExposure accepts public and gate groups and refuses missing malformed and reserved values', () => {
   expect(parseExposure({ 'x-exposure': 'public' })).toEqual({ kind: 'public' });
-  for (const group of ['a', 'catalogue_import', 'realm_appeals', 'any_feature', 'open_feature', 'a'.repeat(63)]) {
+  for (const group of [
+    'a',
+    'catalogue_import',
+    'realm_appeals',
+    'any_feature',
+    'open_feature',
+    'feature-name',
+    'agent-verification',
+    'a'.repeat(63),
+  ]) {
     expect(parseExposure({ 'x-exposure': `gate:${group}` })).toEqual({ kind: 'gate', group });
   }
   for (const value of invalid) {
@@ -91,6 +99,7 @@ test('every route of the production kernel declares a valid x-exposure', () => {
   expect(exposures).toContain('personal_library');
   expect(exposures).toContain('reading_progress');
   expect(exposures).toContain('collections');
+  expect(exposures).toContain('agent-verification');
 });
 
 test('the generated OpenAPI contract carries x-exposure on every operation', async () => {
@@ -108,4 +117,5 @@ test('the generated OpenAPI contract carries x-exposure on every operation', asy
   expect(exposures).toContain('personal_library');
   expect(exposures).toContain('reading_progress');
   expect(exposures).toContain('collections');
+  expect(exposures).toContain('agent-verification');
 });

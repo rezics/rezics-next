@@ -18,6 +18,7 @@ import {
   readPublicAccountByHandle,
   readPublicIdentities,
   type PublicIdentity,
+  type PublicHandleIdentity,
   type PublicAccountProfile,
 } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
@@ -26,6 +27,15 @@ import { createReinstatementCommands, ReinstatementNotAppliedError } from './rei
 import { createSuspensionCommands } from './suspension.ts';
 import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import {
+  AgentVerificationConflictError,
+  AgentVerificationDeniedError,
+  createAgentVerificationCommands,
+  readLatestAgentVerificationRequest,
+  readPendingAgentVerificationRequests,
+  type AgentVerificationRequest,
+  type PendingVerificationPage,
+} from './agent-verification.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -70,12 +80,70 @@ const publicProfile = t.Object(
     publicViews: t.Object({ posts: t.Boolean(), reviews: t.Boolean(), collections: t.Boolean() }, closed),
     speakersListed: t.Optional(t.Boolean()),
     subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
+    verified: t.Boolean(),
+  },
+  closed,
+);
+const publicHandleIdentity = t.Object(
+  {
+    ...publicIdentity.properties,
+    subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
+    verified: t.Boolean(),
   },
   closed,
 );
 // Named item types keep the client declaration within the compiler's serialization bound.
-const publicAccountList = t.Unsafe<{ accounts: (PublicIdentity | PublicAccountProfile)[]; next: null }>(
-  t.Object({ accounts: t.Array(t.Union([publicProfile, publicIdentity])), next: t.Null() }, closed),
+const publicAccountList = t.Unsafe<{
+  accounts: (PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[];
+  next: null;
+}>(
+  t.Object(
+    { accounts: t.Array(t.Union([publicProfile, publicHandleIdentity, publicIdentity])), next: t.Null() },
+    closed,
+  ),
+);
+const agentVerificationLink = t.Object(
+  { label: t.String({ minLength: 1, maxLength: 64 }), url: t.String({ minLength: 1, maxLength: 2048 }) },
+  closed,
+);
+const agentVerificationProblem = t.Union([
+  t.Object({ type: t.String({ minLength: 1, maxLength: 128 }), detail: t.String({ maxLength: 512 }) }, closed),
+  t.Null(),
+]);
+const agentVerificationRequest = t.Unsafe<AgentVerificationRequest>(
+  t.Object(
+    {
+      id,
+      accountId: id,
+      accountKind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      requestedBy: id,
+      catalogueSubjectId: id,
+      statement: t.String({ minLength: 1, maxLength: 2000 }),
+      links: t.Array(agentVerificationLink, { maxItems: 5 }),
+      state: t.Union([
+        t.Literal('pending'),
+        t.Literal('approving'),
+        t.Literal('approved'),
+        t.Literal('rejected'),
+        t.Literal('withdrawn'),
+        t.Literal('failed'),
+      ]),
+      reason: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+      problem: agentVerificationProblem,
+      decisionReceiptId: t.Union([id, t.Null()]),
+      decidedBy: t.Union([id, t.Null()]),
+      createdAt: t.String(),
+      updatedAt: t.String(),
+    },
+    closed,
+  ),
+);
+const agentVerificationRequestEnvelope = t.Object(
+  { verificationRequest: t.Union([agentVerificationRequest, t.Null()]) },
+  closed,
+);
+const pendingVerificationEnvelope = t.Unsafe<PendingVerificationPage>(
+  t.Object({ verificationRequests: t.Array(agentVerificationRequest), next: t.Union([t.String(), t.Null()]) }, closed),
 );
 const preferenceValues = {
   spoilerLevel: t.Union([t.Literal(0), t.Literal(1), t.Literal(2)]),
@@ -88,7 +156,10 @@ const subject = t.Union([
   t.Object({ kind: t.Literal('account'), id }, closed),
   t.Object({ kind: t.Literal('organization'), id, role: t.Union([t.Literal('owner'), t.Literal('member')]) }, closed),
 ]);
-const actions = t.Array(t.String({ pattern: '^[a-z][a-z_]*:[a-z][a-z_]*$' }), { minItems: 1, maxItems: 1000 });
+const actions = t.Array(t.String({ pattern: '^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$' }), {
+  minItems: 1,
+  maxItems: 1000,
+});
 const valid = t.String();
 const direct = { resource, actions, valid };
 const canonical = { subject };
@@ -197,6 +268,11 @@ function denied(error: unknown): never {
   if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) throw new ProblemError('forbidden');
   throw error;
 }
+function verificationDenied(error: unknown): never {
+  if (error instanceof AgentVerificationConflictError) throw new ProblemError('conflict');
+  if (error instanceof AgentVerificationDeniedError) throw new ProblemError('forbidden');
+  return denied(error);
+}
 
 export function accessRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -238,7 +314,242 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let agentVerification: ReturnType<typeof createAgentVerificationCommands> | undefined;
+  const agentVerificationCommands = () =>
+    (agentVerification ??= createAgentVerificationCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
+    .post(
+      customMethod('/v1/accounts/:accountId', 'requestVerification'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              subject: id,
+              statement: t.String({ minLength: 1, maxLength: 2000 }),
+              links: t.Array(agentVerificationLink, { maxItems: 5 }),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          201: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.request_verification'),
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, status }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().request(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return status(201, { verificationRequest: result.value });
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/verification',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: { 200: agentVerificationRequestEnvelope, ...publicReadFailures, 403: problemSchema('forbidden') },
+        detail: {
+          operationId: 'account.read_verification_request',
+          'x-action': 'account:read',
+          'x-exposure': 'gate:agent-verification',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const value = await admission.run('normal', job, () =>
+            readLatestAgentVerificationRequest(
+              dependencies.pool,
+              dependencies.access(),
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              params.accountId,
+            ),
+          );
+          set.headers['cache-control'] = 'private, no-store';
+          return { verificationRequest: value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'withdrawVerification'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({}, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.withdraw_verification'),
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().withdraw(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/verification-requests',
+      {
+        query: strict(
+          t.Object(
+            {
+              state: t.Literal('pending'),
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: pendingVerificationEnvelope,
+          ...publicReadFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          403: problemSchema('forbidden'),
+        },
+        detail: {
+          operationId: 'verification_request.list_pending',
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent-verification',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const page = await admission.run('normal', job, () =>
+            readPendingAgentVerificationRequests(
+              dependencies.pool,
+              dependencies.access(),
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              dependencies.tokens,
+              {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+              dependencies.clock(),
+            ),
+          );
+          set.headers['cache-control'] = 'private, no-store';
+          return page;
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/verification-requests/:requestId', 'approve'),
+      {
+        headers,
+        params: strict(t.Object({ requestId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('verification_request.approve'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().approve(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { requestId: params.requestId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/verification-requests/:requestId', 'reject'),
+      {
+        headers,
+        params: strict(t.Object({ requestId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('verification_request.reject'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().reject(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { requestId: params.requestId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
     .get(
       '/v1/accounts/:accountId/preferences',
       {
@@ -318,7 +629,7 @@ export function accessRoutes(
         },
         detail: {
           operationId: 'account.read_public_identity',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:agent-verification',
           'x-action': 'account:read_public_identity',
           security: [{ bearerAuth: [] }, {}],
         },

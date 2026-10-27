@@ -66,7 +66,7 @@ type PlatformGateCheck = (
   at: string,
 ) => Promise<boolean>;
 const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
-const gateActionPattern = /^gate:([a-z][a-z_]{0,62})$/;
+const gateActionPattern = /^gate:([a-z][a-z_-]{0,62})$/;
 const reservedGateNames = new Set(['any', 'open', 'close']);
 
 function permissionTimeStatement(statement: string): boolean {
@@ -252,7 +252,7 @@ export function createAccess(config: AccessConfig): Access {
       !Number.isFinite(Date.parse(at)) ||
       !Number.isFinite(context.deadline) ||
       requested.length === 0 ||
-      requested.some((action) => !/^gate:(?:any|[a-z][a-z_]{0,62})$/.test(action))
+      requested.some((action) => !/^gate:(?:any|[a-z][a-z_-]{0,62})$/.test(action))
     )
       return false;
 
