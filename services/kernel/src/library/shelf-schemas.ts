@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { ENTRY_STATES, SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
+import { SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
 import { embedded, subjectFields, viewQuery } from './views.ts';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 
