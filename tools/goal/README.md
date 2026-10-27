@@ -32,6 +32,41 @@ Failures return to the same profile, trigger one consultation, or reach the owni
 Each process records the Git object id for `main:tools/goal` when it starts. A stale train hands its queue to a detached
 current-code process, while a stale manager host restarts after finishing its active request and recovers persisted sessions.
 
+## Direct check-host routes
+
+`check-host-route.ts` bypasses the local TUN for each check host with a main-table `/32` route through the single
+physical default gateway. It reads only host names and IPv4 addresses (optionally `user@IPv4`), never identity fields
+or key files. Inspect the current TCP/22 routes without root first:
+
+```sh
+bun tools/goal/scripts/check-host-route.ts plan --hosts <hosts.json>
+```
+
+Between check runs, install once with the maintainer's sudo command:
+
+```sh
+sudo bun tools/goal/scripts/check-host-route.ts apply --hosts <hosts.json>
+```
+
+This writes root-owned `/etc/rezics-check-host-route.json` and
+`/etc/NetworkManager/dispatcher.d/90-rezics-check-host-route`, then reconciles immediately. The standalone Python 3
+hook follows live DHCP gateway changes on `up`, `reapply` and `dhcp4-change`; it removes its routes on `down` or a
+missing gateway. Routes use `proto static metric 42722`, reserved for this tool. Existing exact host routes are
+refused unless recorded in the managed state with that device, protocol and metric. Reapply refreshes the host set.
+
+Verify without root, supplying the current public home egress IPv4 address explicitly:
+
+```sh
+bun tools/goal/scripts/check-host-route.ts verify --hosts <hosts.json> --expected-peer <home-public-ip>
+```
+
+Every host must use the physical device and current gateway for TCP/22, and a fresh SSH probe with proxies disabled
+must report that peer in `SSH_CONNECTION` and matching sshd journal evidence for the client port and probe time.
+The SSH login must be able to read the `ssh.service` or `sshd.service` journal. Missing evidence fails verification.
+Remove the hook, state and only its recorded routes with `check-host-route.ts remove` under sudo; removal needs no
+hosts file or live gateway. Bun, Linux iproute2, NetworkManager and `/usr/bin/python3` are required for installation;
+verification also uses OpenSSH and the remote systemd journal.
+
 ## Local settings
 
 Tracked package defaults are in `defaults.json`. Routing profiles and experiments are in `routing.json`; path ownership
