@@ -165,19 +165,16 @@ test('ordinary Search plans can use one validated physical generation including 
 });
 
 test('an explicit generation survives a real alias switch between calls', async () => {
+  const pinned: GenerationPlan = { ...plan('name'), generation: 2 };
+  let switched = false;
   try {
-    await read({ ...plan('name'), generation: 1 }, 1, subjectIndexName(prefix, 1));
+    await read(pinned, 2, subjectIndexName(prefix, 2));
     await switchAlias(2, 1);
+    switched = true;
     await read(plan('name'), 1, alias);
-    await read({ ...plan('name'), generation: 2 }, 2, subjectIndexName(prefix, 2));
+    await read(pinned, 2, subjectIndexName(prefix, 2));
   } finally {
-    // The first assertion may fail before the switch on an implementation that ignores generation.
-    await engine.request('POST', '/_aliases', {
-      actions: [
-        { remove: { index: subjectIndexName(prefix, 1), alias, must_exist: false } },
-        { add: { index: subjectIndexName(prefix, 2), alias } },
-      ],
-    });
+    if (switched) await switchAlias(1, 2);
   }
 });
 
