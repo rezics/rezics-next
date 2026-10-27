@@ -261,6 +261,9 @@ add rows between scales. Grow both the total data and hot partition, while keepi
 fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
 `linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
 API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not exceed 4096.
+Growth checks support `step` and `series` rules: `check.rule` selects a rule, then `GROWTH_RULE=series` selects series,
+and otherwise step remains the default. Series checks report `GrowthBoundError` when no allowed family fits, and
+`GrowthEvidenceError` when repetitions do not provide enough evidence.
 
 Each measured session in the instrumented `pool` and `openPool` connections pins `max_parallel_workers_per_gather = 0`
 and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`, `effective_cache_size = 4GB`,

@@ -180,6 +180,30 @@ test('a growth file that fails again alone fails the run', async () => {
   });
 });
 
+test('a file whose only failures are growth evidence errors is rerun alone', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const env = laneEnvironment(directory);
+    const events: string[] = [];
+    writeTests(module, {
+      'test/evidence.test.ts': [
+        "import { test } from 'bun:test';",
+        'test("uncertain growth", () => { if (Number(process.env.ATTEMPT) < 2) { const error = new Error("not enough repetitions"); error.name = "GrowthEvidenceError"; throw error; } });',
+        '',
+      ].join('\n'),
+    });
+    let runs = 0;
+    const result = await runLaneSuite({
+      service: 'fixture', directory: module, files: ['test/evidence.test.ts'], partial: false,
+      createDatabase: async (database) => void events.push(`create ${database}`),
+      dropDatabase: async (database) => void events.push(`drop ${database}`),
+      environment: () => ({ ...env, ATTEMPT: String(++runs) }), env,
+    });
+    expect(result).toEqual({ failed: [], concurrency: 1 });
+    expect(events).toEqual(['create fixture_test_1', 'drop fixture_test_1', 'create fixture_growth_1_test_1', 'drop fixture_growth_1_test_1']);
+  });
+});
+
 test('a file with any failure other than a growth bound error is not rerun and fails the run', async () => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');
