@@ -6,7 +6,7 @@ import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
-import { report } from './report.ts';
+import { formatUsageReport, report } from './report.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 
@@ -57,6 +57,7 @@ export async function runWorkerCommand(command: string, argv: string[], options:
           `Attempts per passed task: ${result.attemptsPerPassedTask?.toFixed(2) ?? 'n/a'}; first-attempt pass rate: ${rate(result.firstAttemptPassRate)}.`,
           `Consult hit rate: ${rate(result.consultHitRate)}; early-stop rate: ${rate(result.earlyStopRate)}.`,
           `Wall clock to pass p50/p90: critical path ${duration(result.wallClockToPassMs.criticalPath.p50)}/${duration(result.wallClockToPassMs.criticalPath.p90)}; other ${duration(result.wallClockToPassMs.other.p50)}/${duration(result.wallClockToPassMs.other.p90)}.`,
+          ...formatUsageReport(result),
         ].join('\n'));
       }
     } else if (command === 'retry') {

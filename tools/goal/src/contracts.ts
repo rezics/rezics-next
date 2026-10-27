@@ -53,6 +53,8 @@ export type GateOutcome = AttemptRef & {
   firstFailure?: FirstFailure;
   /** The same first failure also occurs on main. */
   failsOnMain?: boolean;
+  /** Exact command that produced firstFailure when the gate runner identified one. */
+  failedCommand?: readonly string[];
   timedOut?: boolean;
   logPath: string;
   hostMs: number;

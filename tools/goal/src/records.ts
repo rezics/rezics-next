@@ -27,7 +27,59 @@ function tokens(value: Record<string, unknown>): Tokens {
 /** A provider-side capacity refusal: transient and independent of the model, so the attempt simply continues. */
 export const MODEL_AT_CAPACITY = /selected model is at capacity|model is at capacity|try a different model|server is overloaded|temporarily overloaded/i;
 export const POOL_EXHAUSTED = /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
-export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
+export type SessionUsage = { model: string | null; effort: string | null; serviceTier: string | null; reasoning: number; compactions: number };
+export type LogMeasurement = { tokens: Tokens; total: Tokens; usage: SessionUsage | null; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
+
+function codexSessionUsage(events: Record<string, any>[], start: number, end: number): { tokens: Tokens; usage: SessionUsage } | null {
+  const ledger = events.filter(event => event.type === 'token_usage_record');
+  if (!ledger.length) return null;
+  const totals = emptyTokens();
+  const seen = new Set<string>();
+  const usage: SessionUsage = { model: null, effort: null, serviceTier: null, reasoning: 0, compactions: 0 };
+  const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  const firstString = (objects: Record<string, any>[], names: string[]): string | null => {
+    for (const object of objects) for (const name of names) {
+      const value = object[name];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
+  };
+  const contextObjects = (event: Record<string, any>): Record<string, any>[] => {
+    const result: Record<string, any>[] = [];
+    const queue: Record<string, any>[] = [event];
+    const keys = ['payload', 'info', 'settings', 'thread_settings', 'turn_context', 'context', 'config', 'model_info'];
+    while (queue.length && result.length < 24) {
+      const value = queue.shift()!;
+      result.push(value);
+      for (const key of keys) if (value[key] && typeof value[key] === 'object' && !Array.isArray(value[key])) queue.push(value[key]);
+    }
+    return result;
+  };
+  for (const event of events) {
+    const at = event.timestamp ? Date.parse(event.timestamp) : start;
+    const inside = at >= start && at <= end;
+    if (at > end) continue;
+    if (!inside) continue;
+    const payload = event.payload ?? {};
+    if (event.type === 'token_usage_record') {
+      const responseId = event.response_id ?? payload.response_id ?? event.responseId;
+      if (responseId !== undefined && seen.has(String(responseId))) continue;
+      if (responseId !== undefined) seen.add(String(responseId));
+      const record = payload.usage ?? event.usage ?? payload;
+      totals.input += number(record.input_tokens ?? record.inputTokens);
+      totals.cached += number(record.cached_input_tokens ?? record.cachedInputTokens);
+      totals.output += number(record.output_tokens ?? record.outputTokens);
+      usage.reasoning += number(record.reasoning_output_tokens ?? record.reasoningOutputTokens);
+    }
+    if (event.type === 'compacted' || payload.type === 'compacted' || event.type === 'session.compacted') usage.compactions++;
+    const objects = contextObjects(event);
+    usage.model = firstString(objects, ['model', 'model_name', 'modelName']) ?? usage.model;
+    usage.effort = firstString(objects, ['effort', 'model_reasoning_effort', 'reasoning_effort']) ?? usage.effort;
+    usage.serviceTier = firstString(objects, ['service_tier', 'serviceTier', 'service_tier_name', 'tier']) ?? usage.serviceTier;
+  }
+  return { tokens: totals, usage };
+}
+
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
 export function measureLog(text: string, options: { startedAt?: string; endedAt?: string; baseline?: Tokens } = {}): LogMeasurement {
   const start = options.startedAt ? Date.parse(options.startedAt) : -Infinity;
@@ -38,7 +90,7 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   const events = lines.length ? lines : (() => { try { return [JSON.parse(text)]; } catch { return []; } })();
   const hasRollout = events.some(e => e.payload?.type === 'token_count' && e.payload.info?.total_token_usage);
   let previous = options.baseline ?? emptyTokens();
-  const result: LogMeasurement = { tokens: emptyTokens(), total: previous, steps: emptySteps(), session: null, result: '', blocker: null, failureKind: null };
+  const result: LogMeasurement = { tokens: emptyTokens(), total: previous, usage: null, steps: emptySteps(), session: null, result: '', blocker: null, failureKind: null };
   const seen = new Set<string>();
   // The last answer that ended a turn with a report or a blocker; see the end of the loop.
   let answered: string | null = null;
@@ -112,6 +164,12 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
       result.failureKind = exit.blocker.kind; result.blocker = exit.blocker.detail;
     }
   } catch { /* Historical human-readable handoffs remain importable. */ }
+  const ledger = codexSessionUsage(events, start, end);
+  if (ledger) {
+    result.tokens = ledger.tokens;
+    result.total = ledger.tokens;
+    result.usage = ledger.usage;
+  }
   return result;
 }
 /** Whether an answer reports success or states a blocker, as a worker's final answer does. */
@@ -138,7 +196,11 @@ export function makeRecord(task: Task, attempt: Attempt, measurement: LogMeasure
     steps: Object.values(measurement.steps).reduce((a, b) => a + b, 0), criticalPath: task.brief.criticalPath,
     tokens: measurement.tokens, before: attempt.before, after: attempt.after, outcome, firstFailure: attempt.failure?.fingerprint ?? null,
     escalation: attempt.escalation, consulted: attempt.consulted, fixRound: attempt.fixRound,
-    diffLines: 0, changedFiles: [], hostMs: 0, classifierVersion: CLASSIFIER_VERSION, stepClasses: measurement.steps, earlyStop: false };
+    diffLines: 0, changedFiles: [], hostMs: 0, classifierVersion: CLASSIFIER_VERSION, stepClasses: measurement.steps, earlyStop: false,
+    usage: { model: measurement.usage?.model ?? attempt.profile.model, effort: measurement.usage?.effort ?? attempt.profile.effort,
+      serviceTier: measurement.usage?.serviceTier ?? attempt.profile.serviceTier ?? null, input: measurement.tokens.input,
+      cachedInput: measurement.tokens.cached, output: measurement.tokens.output, reasoning: measurement.usage?.reasoning ?? 0,
+      compactions: measurement.usage?.compactions ?? 0, source: measurement.usage ? 'codex-session' : 'attempt-profile' } };
 }
 export type MeasurementOptions = { baseline?: Tokens; configDirectory?: string | undefined };
 function rolloutFor(configDirectory: string, session: string): string | null {
@@ -170,13 +232,14 @@ export function readMeasurement(attempt: Attempt, options: MeasurementOptions = 
   const completed = text.split('\n').some(line => {
     try { return JSON.parse(line).type === 'turn.completed'; } catch { return false; }
   });
-  if (!options.configDirectory || completed) return measurement;
+  if (!options.configDirectory) return measurement;
   const session = measurement.session ?? attempt.session;
   if (!session) return measurement;
   const rollout = rolloutFor(options.configDirectory, session);
   if (rollout === null) return measurement;
   const usage = measureLog(rollout, { ...interval, ...(options.baseline ? { baseline: options.baseline } : {}) });
-  return { ...measurement, tokens: usage.tokens, total: usage.total, session };
+  if (usage.usage || !completed) return { ...measurement, tokens: usage.tokens, total: usage.total, usage: usage.usage ?? measurement.usage, session };
+  return { ...measurement, session };
 }
 
 /** Only the bounded approach/result fields enter evidence; the rest of the session stays in its raw log. */

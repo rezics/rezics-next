@@ -35,14 +35,16 @@ export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
   cwd: string,
   logPath: string,
-): Promise<GateResult> {
+): Promise<GateResult & { failedCommand?: readonly string[] }> {
   // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
   const execute = gateRunner(600_000);
   let output = '';
   let passed = true,
     timedOut = false;
+  let failedCommand: readonly string[] | undefined;
   const record = (command: readonly string[], result: GateResult, started: number) => {
     output += result.output;
+    if (!result.passed && !failedCommand) failedCommand = [...command];
     passed &&= result.passed;
     timedOut ||= result.timedOut;
     appendFileSync(logPath, `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`);
@@ -80,7 +82,7 @@ export async function runIntegrationChecks(
     const started = Date.now();
     record(command, await execute(command, cwd, logPath), started);
   }
-  return { passed, output, timedOut };
+  return { passed, output, timedOut, ...(failedCommand ? { failedCommand } : {}) };
 }
 
 // While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
@@ -600,6 +602,7 @@ export class MergeTrain {
           if (!checked.passed) {
             result.timedOut = checked.timedOut;
             result.firstFailure = firstFailure(checked.output);
+            if (checked.failedCommand) result.failedCommand = [...checked.failedCommand];
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
               git(trainTree, 'reset', '--hard', base);
@@ -611,6 +614,7 @@ export class MergeTrain {
             o.fence.assertCurrent(request);
             if (target() !== base) continue;
             if (baseline.passed) {
+              result.failsOnMain = false;
               result.stage = stage;
               return result;
             }
@@ -619,6 +623,7 @@ export class MergeTrain {
               const report = `Errors that dev ${base} does not have:\n${added.join('\n')}`;
               appendFileSync(logPath, `${report}\n`);
               result.firstFailure = firstFailure(report);
+              result.failsOnMain = false;
               result.stage = stage;
               return result;
             }
@@ -635,6 +640,7 @@ export class MergeTrain {
           if (!gated.passed) {
             result.timedOut = gated.timedOut;
             result.firstFailure = firstFailure(gated.output);
+            result.failedCommand = [...request.gate];
             const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {

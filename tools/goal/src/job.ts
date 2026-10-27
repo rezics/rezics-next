@@ -716,6 +716,9 @@ export class WorkerJob implements GateOutcomeSink {
       if (outcome.stage === 'rebase') {
         store.updateAttempt(outcome, (a) => {
           a.failure = outcome.firstFailure ?? null;
+          a.failureCommand = outcome.failedCommand ? [...outcome.failedCommand] : null;
+          a.failureOnBase = outcome.failsOnMain ?? null;
+          a.failureLogPath = outcome.logPath;
           a.approaches.push({
             approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,
             result: outcome.firstFailure
@@ -772,6 +775,9 @@ export class WorkerJob implements GateOutcomeSink {
       record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);
       store.updateAttempt(outcome, (a) => {
         a.failure = outcome.firstFailure ?? null;
+        a.failureCommand = outcome.failedCommand ? [...outcome.failedCommand] : null;
+        a.failureOnBase = outcome.failsOnMain ?? null;
+        a.failureLogPath = outcome.logPath;
         a.escalation = failureClass;
         a.approaches.push({
           approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,

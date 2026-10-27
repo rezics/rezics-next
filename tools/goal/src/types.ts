@@ -79,11 +79,23 @@ export type Attempt = AttemptRef & {
   startedAt: string; endedAt: string | null; process: ProcessIdentity | null; driver: ProcessIdentity | null;
   logPath: string; evidencePath: string; auxiliaryProcesses: ProcessIdentity[]; session: string | null; fixRound: number; consulted: boolean;
   previousFailure: string | null; failure: FirstFailure | null; escalation: string | null;
+  failureCommand?: string[] | null; failureOnBase?: boolean | null; failureLogPath?: string | null;
   before: PoolReading | null; after: PoolReading | null; exitCode: number | null;
   result: string; blocker: string | null; approaches: { approach: string; result: string }[];
 };
 export type StepClass = 'decision' | 'read' | 'edit' | 'wait' | 'check' | 'commit';
 export type Tokens = { input: number; cached: number; output: number };
+export type AttemptUsage = {
+  model: string;
+  effort: Effort | string;
+  serviceTier: string | null;
+  input: number;
+  cachedInput: number;
+  output: number;
+  reasoning: number;
+  compactions: number;
+  source: 'codex-session' | 'attempt-profile';
+};
 export type AttemptRecord = AttemptRef & {
   taskClass: TaskClass; profile: Profile; pool: string; tableVersion: string; experiment: string | null;
   startedAt: string; endedAt: string; steps: number; criticalPath: boolean; tokens: Tokens;
@@ -92,5 +104,7 @@ export type AttemptRecord = AttemptRef & {
   firstFailure: string | null; escalation: string | null; consulted: boolean; fixRound: number;
   diffLines: number | null; changedFiles: string[] | null; hostMs: number | null;
   classifierVersion: string; stepClasses: Record<StepClass, number>; earlyStop: boolean;
+  /** Session-ledger usage is absent on older records and on imported non-Codex logs. */
+  usage?: AttemptUsage | null;
 };
 export type FailureClass = 'environment' | 'pool-exhausted' | 'repeated-assertion' | 'new-failure' | 'early-stop' | ManagerEventKind;

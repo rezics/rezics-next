@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
-import { report } from './report.ts';
-import type { AttemptRecord } from './types.ts';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { makeRecord, readMeasurement } from './records.ts';
+import { formatUsageReport, report } from './report.ts';
+import type { Attempt, AttemptRecord, Task } from './types.ts';
+import { runWorkerCommand } from './worker-commands.ts';
+import { harness } from './test-support.ts';
+import type { WorkerStore } from './store.ts';
 
 const luna = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' } as const;
 
@@ -57,4 +63,86 @@ test('percentiles use the nearest rank', () => {
   const many = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(minutes => record(`t${minutes}`, 1, {
     endedAt: new Date(Date.parse('2026-10-25T00:00:00.000Z') + minutes * 60_000).toISOString() }));
   expect(report(many).wallClockToPassMs.other).toEqual({ count: 10, p50: 300_000, p90: 540_000 });
+});
+
+test('Codex usage is read per attempt from the recorded session ledger', () => {
+  const tempRoot = join(import.meta.dir, '../../../.temp');
+  mkdirSync(tempRoot, { recursive: true });
+  const root = mkdtempSync(join(tempRoot, 'goal-codex-usage-'));
+  const session = 'codex-usage-session';
+  const configDirectory = join(root, 'codex-home');
+  const sessions = join(configDirectory, 'sessions', '2026', '10', '27');
+  mkdirSync(sessions, { recursive: true });
+  try {
+    const fixture = readFileSync(join(import.meta.dir, 'fixtures/codex-usage.jsonl'), 'utf8');
+    writeFileSync(join(sessions, `rollout-2026-10-27T00-00-00-${session}.jsonl`), fixture);
+    const logPath = join(root, 'attempt.jsonl');
+    writeFileSync(logPath, [
+      { timestamp: '2026-10-27T00:01:00.000Z', type: 'thread.started', thread_id: session },
+      { timestamp: '2026-10-27T00:03:30.000Z', type: 'turn.completed', usage: { input_tokens: 4000, output_tokens: 400 } },
+    ].map(event => JSON.stringify(event)).join('\n'));
+    const attempt = {
+      taskId: 'task', attempt: 1, logPath, session: null,
+      startedAt: '2026-10-27T00:01:00.000Z', endedAt: '2026-10-27T00:04:00.000Z',
+      profile: { cli: 'codex', model: 'routed-model', effort: 'medium', poolClass: 'codex' },
+      pool: 'codex-pool', tableVersion: '1', experiment: null, before: null, after: null,
+      failure: null, escalation: null, fixRound: 0, consulted: false,
+    } as unknown as Attempt;
+
+    const measured = readMeasurement(attempt, { configDirectory });
+    expect(measured.tokens).toEqual({ input: 3000, cached: 2000, output: 300 });
+    expect(measured.usage).toMatchObject({
+      model: 'gpt-6.1-sol', effort: 'high', serviceTier: 'priority', reasoning: 140, compactions: 1,
+    });
+    const record = makeRecord({ id: 'task', taskClass: 'implementation', brief: { criticalPath: false } } as unknown as Task, attempt, measured);
+    expect(record.usage).toEqual({ model: 'gpt-6.1-sol', effort: 'high', serviceTier: 'priority', input: 3000,
+      cachedInput: 2000, output: 300, reasoning: 140, compactions: 1, source: 'codex-session' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('report groups landed histories by the winning model and reports nonlanding token share', () => {
+  const history: AttemptRecord[] = [
+    record('landed', 1, { outcome: 'stopped', tokens: { input: 500, cached: 400, output: 50 },
+      usage: { model: 'old-model', effort: 'medium', serviceTier: 'default', input: 500, cachedInput: 400, output: 50, reasoning: 20, compactions: 2, source: 'codex-session' } }),
+    record('landed', 2, { outcome: 'passed', tokens: { input: 1000, cached: 800, output: 100 },
+      usage: { model: 'actual-model', effort: 'high', serviceTier: 'priority', input: 1000, cachedInput: 800, output: 100, reasoning: 40, compactions: 1, source: 'codex-session' } }),
+    record('unlanded', 1, { outcome: 'gate-failed', tokens: { input: 3000, cached: 0, output: 300 } }),
+    record('waiting', 1, { outcome: 'pending-gate', tokens: { input: 10000, cached: 9000, output: 1000 } }),
+  ];
+  const result = report(history);
+  expect(result.tokensPerLandedTask).toEqual([{
+    taskClass: 'implementation', model: 'actual-model', landedTasks: 1, attempts: 2,
+    inputPerTask: 1500, cachedInputPerTask: 1200, outputPerTask: 150, reasoningPerTask: 60,
+    rawPerTask: 1650, compactionsPerTask: 3,
+  }]);
+  expect(result.nonLandingSpend).toEqual({ rawTokens: 3850, totalRawTokens: 4950, share: 3850 / 4950 });
+  expect(formatUsageReport(result)).toEqual([
+    'Tokens per landed task by class and winning model:',
+    '  implementation / actual-model: 1,650 raw; 1,500 input (1,200 cached); 150 output; 60 reasoning; 3 compactions.',
+    'Spend on attempts that did not land: 77.8% (3,850 / 4,950 raw tokens).',
+  ]);
+});
+
+test('goal report prints the landed usage rows and nonlanding share', async () => {
+  const h = harness();
+  const output: string[] = [];
+  const rows = [
+    record('cli-task', 1, { outcome: 'stopped', tokens: { input: 500, cached: 400, output: 50 } }),
+    record('cli-task', 2, { outcome: 'passed', tokens: { input: 1000, cached: 800, output: 100 },
+      usage: { model: 'gpt-6.1-sol', effort: 'high', serviceTier: 'priority', input: 1000, cachedInput: 800, output: 100, reasoning: 40, compactions: 1, source: 'codex-session' } }),
+  ];
+  try {
+    await runWorkerCommand('report', [], {
+      settings: h.settings,
+      store: { records: () => rows } as unknown as WorkerStore,
+      print: value => output.push(value),
+      env: {},
+    });
+    expect(output[0]).toContain('implementation / gpt-6.1-sol: 1,650 raw');
+    expect(output[0]).toContain('Spend on attempts that did not land: 33.3% (550 / 1,650 raw tokens).');
+  } finally {
+    h.dispose();
+  }
 });

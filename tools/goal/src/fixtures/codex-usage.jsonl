@@ -1,0 +1,7 @@
+{"timestamp":"2026-10-27T00:00:30.000Z","type":"token_usage_record","response_id":"before-attempt","payload":{"usage":{"input_tokens":9000,"cached_input_tokens":7000,"output_tokens":900,"reasoning_output_tokens":300}}}
+{"timestamp":"2026-10-27T00:01:01.000Z","type":"turn_context","payload":{"model":"gpt-6.1-sol","effort":"high","service_tier":"priority"}}
+{"timestamp":"2026-10-27T00:01:10.000Z","type":"token_usage_record","response_id":"response-1","payload":{"usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":100,"reasoning_output_tokens":60}}}
+{"timestamp":"2026-10-27T00:01:20.000Z","type":"compacted","payload":{"latest_token_usage_record":{"response_id":"response-1","usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":100,"reasoning_output_tokens":60}}}}
+{"timestamp":"2026-10-27T00:02:10.000Z","type":"token_usage_record","response_id":"response-1","payload":{"usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":100,"reasoning_output_tokens":60}}}
+{"timestamp":"2026-10-27T00:03:10.000Z","type":"token_usage_record","response_id":"response-2","payload":{"usage":{"input_tokens":2000,"cached_input_tokens":1200,"output_tokens":200,"reasoning_output_tokens":80}}}
+{"timestamp":"2026-10-27T00:04:10.000Z","type":"token_usage_record","response_id":"after-attempt","payload":{"usage":{"input_tokens":5000,"cached_input_tokens":3000,"output_tokens":500,"reasoning_output_tokens":200}}}
