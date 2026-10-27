@@ -2,6 +2,10 @@
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index generations.
 
+The optional `languages` request field is the reader's language chain, in priority order. Search follows semantic's
+label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
+Omitting `languages` keeps every language.
+
 ## Cost
 
 These are derivations from `src/search/`, `src/events/`, the called Access SQL, `db/search/` and the core/semantic schema, not measurements or guaranteed PostgreSQL plans.
@@ -45,6 +49,14 @@ The consumer-leading checkpoint index lets Retire examine the retired consumer's
 Relay discovery, freshness, reconciliation and retirement use cross-partition SQL joins/deletion on a shared pool: their fixed 4,096-partition cardinality does not make them independently executable on separately placed partition databases.
 A prefix holds at most three generations: the previous one during its retirement grace, the active one and the one being built. Rebuild exclusion uses a PostgreSQL session advisory lock keyed by alias; alias switching is delegated to OpenSearch.
 Full replay and reconcile are explicitly invoked whole-index maintenance, while discovery/retirement are periodic and freshness is cached/polled; no reconcile runs per indexed change.
+
+### Hit label choice
+
+- Touches: the labels, descriptions and `schema:inLanguage` fact of subjects the final check already holds.
+- Bound: no read, statement or engine request added; per hit and per item fact, work linear in R ranges (at most 8)
+  times its labels and descriptions.
+- Growth check: none; no read changes. `test/search/hit-text.test.ts`: "a language chain chooses one label and one
+  description per hit" proves the choice.
 
 ### Type facet
 

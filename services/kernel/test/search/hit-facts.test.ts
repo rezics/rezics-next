@@ -76,12 +76,21 @@ const subjects = [
   subject(id(7), 'schema:Organization', { en: 'Third Group' }),
   subject(id(8), 'schema:Organization', { en: 'Fourth Group' }),
   subject(far, 'schema:Organization', { en: 'Far Partition Press' }),
+  subject(id(12), 'schema:Article', { en: 'Localized article' }, [
+    author(id(13)),
+    { property: 'schema:inLanguage', value: 'en', facet: { kind: 'code' } },
+  ]),
+  subject(id(13), 'schema:Thing', { 'zh-Hant': '繁體作者', en: 'English author' }, [
+    { property: 'schema:inLanguage', value: 'zh-Hant', facet: { kind: 'code' } },
+  ]),
 ];
 const release = {
   types: {
     'schema:Book': { bases: [], facets: ['schema:author', 'schema:datePublished'] },
     'schema:Person': { bases: [], facets: [] },
     'schema:Organization': { bases: [], facets: [] },
+    'schema:Article': { bases: [], facets: ['schema:author'] },
+    'schema:Thing': { bases: [], facets: [] },
   },
   properties: {
     'schema:author': { datatype: 'wikibase-item' },
@@ -207,13 +216,27 @@ test('item fact labels follow the requested languages', async () => {
       id(2),
       {
         'schema:author': [
-          { kind: 'item', id: id(6), labels: {} },
-          { kind: 'item', id: id(7), labels: {} },
+          { kind: 'item', id: id(6), labels: { en: 'Harper Study Group' } },
+          { kind: 'item', id: id(7), labels: { en: 'Third Group' } },
           { kind: 'item', id: id(3), labels: { ja: 'アーシュラ・K・ル＝グウィン' } },
         ],
       },
     ],
   ]);
+});
+
+test("item fact labels follow the reader's language chain", async () => {
+  for (const languages of [['zh-Hans', 'zh', 'zh-Hant', 'en'], ['zh-TW'], ['ko'], ['en']]) {
+    const before = reads;
+    const answer = await service.search('anonymous', {
+      filter: { type: { in: ['schema:Article'] } },
+      properties: ['schema:author'],
+      languages,
+    });
+    const labels = languages[0] === 'en' ? { en: 'English author' } : { 'zh-Hant': '繁體作者' };
+    expect(factsOf(answer)).toEqual([[id(12), { 'schema:author': [{ kind: 'item', id: id(13), labels }] }]]);
+    expect(reads - before).toBe(2);
+  }
 });
 
 test('requested properties are validated', async () => {

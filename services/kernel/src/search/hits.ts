@@ -1,5 +1,6 @@
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { chooseLabel } from '../semantic/language.ts';
 import { codeFacet, discloseFacetValues } from './facets.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 
@@ -84,24 +85,35 @@ function cut(value: string): string {
   return value;
 }
 
-/** Texts by language, narrowed to `languages` when given. */
+/** Texts by language, choosing one through the reader's chain when given. */
 function texts(
   list: IndexedSubject['labels'],
   languages: readonly string[] | undefined,
+  original: string | undefined,
   map: (value: string) => string = (value) => value,
 ) {
-  const wanted = languages && new Set(languages);
-  return Object.fromEntries(
-    list.filter(({ language }) => !wanted || wanted.has(language)).map(({ language, value }) => [language, map(value)]),
-  );
+  if (languages) {
+    const chosen = chooseLabel(
+      Object.fromEntries(list.map(({ language, value }) => [language, value])),
+      languages,
+      original,
+    );
+    return chosen ? { [chosen.language]: map(chosen.value) } : {};
+  }
+  return Object.fromEntries(list.map(({ language, value }) => [language, map(value)]));
+}
+
+function originalLanguage(subject: IndexedSubject): string | undefined {
+  return subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value;
 }
 
 export function projectHit(subject: IndexedSubject, { descriptions, languages }: HitOptions): SearchHit {
+  const original = originalLanguage(subject);
   return {
     id: subject.id,
     type: subject.type,
-    labels: texts(subject.labels, languages),
-    ...(descriptions ? { descriptions: texts(subject.descriptions, languages, cut) } : {}),
+    labels: texts(subject.labels, languages, original),
+    ...(descriptions ? { descriptions: texts(subject.descriptions, languages, original, cut) } : {}),
   };
 }
 
@@ -153,7 +165,9 @@ export async function projectFacts(
         values.flatMap((value): Fact[] => {
           if (value.kind !== 'item') return [value];
           const target = visible.get(value.id);
-          return target ? [{ kind: 'item', id: value.id, labels: texts(target.labels, languages) }] : [];
+          return target
+            ? [{ kind: 'item', id: value.id, labels: texts(target.labels, languages, originalLanguage(target)) }]
+            : [];
         }),
       ]),
     ),

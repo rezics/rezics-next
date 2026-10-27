@@ -62,12 +62,46 @@ const subjects = [
   subject(22, 'schema:Note', { en: 'Note C' }, { en: `${'a'.repeat(198)} ${'b'.repeat(10)}` }),
   subject(23, 'schema:Note', { en: 'Note D' }, { en: 'y'.repeat(201) }),
   subject(30, 'schema:Unlisted', { en: 'Unlisted thing' }),
+  subject(
+    40,
+    'schema:Article',
+    { 'zh-Hant': '繁體標籤', en: 'English label' },
+    {
+      'zh-Hant': '繁體描述',
+      en: 'English description',
+    },
+  ),
+  {
+    ...subject(
+      41,
+      'schema:CreativeWork',
+      { ja: '原語の作品', en: 'Original work' },
+      {
+        ja: '原語の説明',
+        en: 'Original description',
+      },
+    ),
+    statements: [{ property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' as const } }],
+  },
+  subject(
+    42,
+    'schema:CreativeWork',
+    { ja: '原語の作品', en: 'Original work' },
+    {
+      ja: '原語の説明',
+      en: 'Original description',
+    },
+  ),
+  subject(43, 'schema:CreativeWork', { ja: '作品', fr: 'Œuvre' }, { ja: '説明', fr: 'Description' }),
+  subject(44, 'schema:CreativeWork', {}),
 ];
 const release = {
   types: {
     'schema:Book': { bases: [], facets: [] },
     'schema:Person': { bases: [], facets: [] },
     'schema:Note': { bases: [], facets: [] },
+    'schema:Article': { bases: [], facets: [] },
+    'schema:CreativeWork': { bases: [], facets: [] },
   },
   properties: {},
 };
@@ -161,7 +195,26 @@ test('descriptions are cut to 200 grapheme clusters and end with an ellipsis', a
     expect([...graphemes.segment(described(hit)?.en ?? '')].length).toBeLessThanOrEqual(200);
 });
 
-test('languages narrow labels and descriptions to the requested languages', async () => {
+test('a language chain chooses one label and one description per hit', async () => {
+  for (const languages of [['zh-Hans', 'zh', 'zh-Hant', 'en'], ['zh-TW'], ['en']]) {
+    const before = reads;
+    const answer = await service.search('anonymous', {
+      filter: { type: { in: ['schema:Article'] } },
+      descriptions: true,
+      languages,
+    });
+    const language = languages[0] === 'en' ? 'en' : 'zh-Hant';
+    expect(answer.subjects).toEqual([
+      {
+        id: id(40),
+        type: 'schema:Article',
+        labels: { [language]: language === 'en' ? 'English label' : '繁體標籤' },
+        descriptions: { [language]: language === 'en' ? 'English description' : '繁體描述' },
+      },
+    ]);
+    expect(reads - before).toBe(1);
+  }
+
   const japanese = await service.search('anonymous', {
     filter: people,
     sort: 'name',
@@ -170,8 +223,8 @@ test('languages narrow labels and descriptions to the requested languages', asyn
   });
   expect(japanese.subjects.map((hit) => [hit.id, hit.labels, described(hit)])).toEqual([
     [id(1), { ja: '所有せざる人々' }, { ja: 'アナレスとウラスの物語。' }],
-    [id(2), {}, {}],
-    [id(3), { ja: 'アーシュラ・K・ル＝グウィン' }, {}],
+    [id(2), { en: 'The Dispossessed' }, { en: 'A study edition with notes.' }],
+    [id(3), { ja: 'アーシュラ・K・ル＝グウィン' }, { en: 'American author (1929–2018).' }],
   ]);
 
   const both = await service.search('anonymous', {
@@ -181,19 +234,43 @@ test('languages narrow labels and descriptions to the requested languages', asyn
     languages: ['ja', 'en'],
   });
   expect(both.subjects.map((hit) => [hit.labels, described(hit)])).toEqual([
-    [
-      { en: 'The Dispossessed', ja: '所有せざる人々' },
-      { en: utopiaCut, ja: 'アナレスとウラスの物語。' },
-    ],
+    [{ ja: '所有せざる人々' }, { ja: 'アナレスとウラスの物語。' }],
     [{ en: 'The Dispossessed' }, { en: 'A study edition with notes.' }],
-    [{ en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' }, { en: 'American author (1929–2018).' }],
+    [{ ja: 'アーシュラ・K・ル＝グウィン' }, { en: 'American author (1929–2018).' }],
+  ]);
+
+  const englishFirst = await service.search('anonymous', {
+    filter: people,
+    sort: 'name',
+    descriptions: true,
+    languages: ['en', 'ja'],
+  });
+  expect(englishFirst.subjects.map((hit) => [hit.labels, described(hit)])).toEqual([
+    [{ en: 'The Dispossessed' }, { en: utopiaCut }],
+    [{ en: 'The Dispossessed' }, { en: 'A study edition with notes.' }],
+    [{ en: 'Ursula K. Le Guin' }, { en: 'American author (1929–2018).' }],
   ]);
 
   const labelsOnly = await service.search('anonymous', { filter: people, sort: 'name', languages: ['ja'] });
   expect(labelsOnly.subjects.map((hit) => [hit.labels, 'descriptions' in hit])).toEqual([
     [{ ja: '所有せざる人々' }, false],
-    [{}, false],
+    [{ en: 'The Dispossessed' }, false],
     [{ ja: 'アーシュラ・K・ル＝グウィン' }, false],
+  ]);
+});
+
+test('a hit falls back to its original language, then English, then its first label', async () => {
+  const answer = await service.search('anonymous', {
+    filter: { type: { in: ['schema:CreativeWork'] } },
+    sort: 'id',
+    descriptions: true,
+    languages: ['ko'],
+  });
+  expect(answer.subjects.map((hit) => [hit.id, hit.labels, described(hit)])).toEqual([
+    [id(41), { ja: '原語の作品' }, { ja: '原語の説明' }],
+    [id(42), { en: 'Original work' }, { en: 'Original description' }],
+    [id(43), { fr: 'Œuvre' }, { fr: 'Description' }],
+    [id(44), {}, {}],
   ]);
 });
 
