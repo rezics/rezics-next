@@ -182,7 +182,10 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const costs: Cost[] = [];
     for (let run = 0; run < repetitions; run++) {
       // DBOS return-existing enqueues update workflow_status; vacuum its tuple chain before every measured repetition.
-      await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
+      const workflowStatus = await db.admin.query<{ exists: boolean }>(
+        `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
+      );
+      if (workflowStatus.rows[0]!.exists) await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
       const measured = await capture(db, () => check.operation(db, scale, repetition));
       const cost = costOf(measured.capture);
       assertCatalogBound(check.name, scale, measured.capture, samples);
