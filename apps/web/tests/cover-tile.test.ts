@@ -70,8 +70,7 @@ async function stories(): Promise<{ origin: string; entries: Record<string, Stor
 
 function entryFor(entries: Record<string, StoryEntry>, file: string, name: string): StoryEntry {
   const entry = Object.values(entries).find(
-    (candidate) =>
-      candidate.type === 'story' && basename(candidate.importPath) === file && candidate.name === name,
+    (candidate) => candidate.type === 'story' && basename(candidate.importPath) === file && candidate.name === name,
   );
   if (!entry) throw new Error(`Missing ${file} story named ${name}.`);
   return entry;
@@ -109,7 +108,7 @@ function tagWith(html: string, attribute: string): string {
 }
 
 function classOf(tag: string): string {
-  return tag.match(/\bclass="([^"]*)"/)?.[1] ?? '';
+  return (tag.match(/\bclass="([^"]*)"/)?.[1] ?? '').replaceAll('&amp;', '&');
 }
 
 test('cover cards are one light surface with an edge-to-edge cover and padded text below', () => {
@@ -132,13 +131,17 @@ test('cover cards are one light surface with an edge-to-edge cover and padded te
   const secondary = tagWith(html, 'data-slot="cover-card-secondary"');
   const state = tagWith(html, 'data-slot="cover-card-state"');
   const actions = tagWith(html, 'data-slot="cover-card-actions"');
-  expect(classOf(tile)).toContain('bg-card');
-  expect(classOf(tile)).toContain('rounded-md');
-  expect(classOf(tile)).toContain('shadow-sm');
+  expect(classOf(tile)).toContain('bg-white');
+  expect(classOf(tile)).toContain('dark:bg-white');
+  expect(classOf(tile)).toContain('outline-black/10');
+  expect(classOf(tile)).toContain('outline-1');
+  expect(classOf(tile)).toContain('rounded-sm');
   expect(classOf(tile)).not.toMatch(/(?:^|\s)p-[^\s]+/);
   expect(classOf(text)).toMatch(/(?:^|\s)p-2(?:\s|$)/);
   expect(classOf(frame)).not.toMatch(/(?:^|\s)(?:bg-|border(?:-|\s)|p-[^\s]+)/);
-  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:rounded-none');
+  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:rounded-t-sm');
+  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:border-0');
+  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:bg-transparent');
   expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:ring-0');
   expect(frame).toContain('data-ratio="5:7"');
   expect(html.indexOf('data-slot="cover"')).toBeLessThan(html.indexOf('data-slot="cover-card-text"'));
@@ -148,9 +151,7 @@ test('cover cards are one light surface with an edge-to-edge cover and padded te
   expect(classOf(secondary)).toContain('text-center');
   expect(classOf(secondary)).toContain('line-clamp-1');
   expect(classOf(state)).toContain('items-center');
-  expect(html.indexOf('data-slot="cover-card-actions"')).toBeGreaterThan(
-    html.indexOf('data-slot="cover-card-text"'),
-  );
+  expect(html.indexOf('data-slot="cover-card-actions"')).toBeGreaterThan(html.indexOf('data-slot="cover-card-text"'));
   expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('role="progressbar"'));
   expect(html.indexOf('role="progressbar"')).toBeLessThan(html.indexOf('>35%</span>'));
   expect(classOf(actions)).not.toContain('absolute');
@@ -168,36 +169,46 @@ test('a card without progress keeps its menu before its status in the state row'
       menu: createElement('span', null, 'Remove'),
     }),
   );
-  const state = tagWith(html, 'data-slot="cover-card-state"');
-  expect(state).toContain('data-slot="cover-card-actions"');
-  expect(state).toContain('Planned');
-  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(
-    html.indexOf('>Planned</div>'),
-  );
+  expect(html).toContain('data-slot="cover-card-actions"');
+  expect(html).toContain('>Planned</div>');
+  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('>Planned</div>'));
   expect(html).not.toContain('role="progressbar"');
 });
 
 test('fallback ratios follow the product families and mixed grids tie to 5:7', () => {
   const families: [string[], string][] = [
     [['schema:Book'], '5:7'],
+    [['wd:Q47461344'], '5:7'],
     [['bf:Instance'], '5:7'],
+    [['wd:Q3331189'], '5:7'],
     [['schema:BookSeries'], '5:7'],
+    [['wd:Q277759'], '5:7'],
     [['schema:ComicSeries'], '5:7'],
+    [['wd:Q21198342'], '5:7'],
     [['schema:PublicationVolume'], '5:7'],
+    [['wd:Q1238720'], '5:7'],
     [['schema:TVSeries'], '5:7'],
+    [['wd:Q5398426'], '5:7'],
     [['schema:TVSeason'], '5:7'],
+    [['wd:Q3464665'], '5:7'],
     [['schema:Movie'], '5:7'],
-    [['wd:Q689445'], '3:4'],
-    [['wd:Q7889'], '3:4'],
-    [['wd:Q20631656'], '3:4'],
-    [['wd:Q209163'], '3:4'],
+    [['wd:Q11424'], '5:7'],
+    [['wd:Q1983062'], '5:7'],
+    [['wd:Q689445'], '5:7'],
+    [['wd:Q7889'], '5:7'],
+    [['wd:Q20631656'], '5:7'],
+    [['wd:Q209163'], '5:7'],
     [['schema:VideoGame'], '5:7'],
     [['schema:CreativeWork'], '5:7'],
     [['wd:Q7725310'], '5:7'],
     [['schema:Person'], '3:4'],
+    [['wd:Q5'], '3:4'],
     [['wd:Q95074'], '3:4'],
     [['schema:MusicAlbum'], '1:1'],
     [['schema:Organization'], '1:1'],
+    [['wd:Q43229'], '1:1'],
+    [['wd:Q482994'], '1:1'],
+    [['wd:Q219239'], '4:3'],
     [['rezics:Realm'], '1:1'],
     [['schema:Recipe'], '4:3'],
     [['schema:Place'], '4:3'],
@@ -214,7 +225,10 @@ test('fallback ratios follow the product families and mixed grids tie to 5:7', (
 
 test('definition ratios reach Cover unchanged and invalid ratios use the subject type default', async () => {
   const originalFetch = globalThis.fetch;
-  let release: { types: Record<string, { labels?: Record<string, string>; bases?: string[]; coverRatio?: string }> };
+  let release: {
+    types: Record<string, { labels?: Record<string, string>; bases?: string[]; coverRatio?: string }>;
+    properties: Record<string, unknown>;
+  };
   globalThis.fetch = async (input) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     if (url.pathname === '/v1/definitions/active') return Response.json({ digest: 'cover-test-release' });
@@ -240,6 +254,7 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
       workerEnv.KERNEL_ORIGIN = `https://definitions-cover-${index}.invalid`;
       release = {
         types: { 'example:Poster': { labels: { en: 'Poster' }, coverRatio: ratio } },
+        properties: {},
       };
       const frame = await typeFrame('example:Poster', 'en');
       expect(frame.ratio).toBe(ratio);
@@ -247,7 +262,7 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
     }
 
     workerEnv.KERNEL_ORIGIN = 'https://definitions-cover-invalid.invalid';
-    release = { types: { 'schema:Book': { labels: { en: 'Book' }, coverRatio: '65:1' } } };
+    release = { types: { 'schema:Book': { labels: { en: 'Book' }, coverRatio: '65:1' } }, properties: {} };
     const invalid = await typeFrame('schema:Book', 'en');
     expect(invalid.ratio).toBeUndefined();
     expect(frameRatio(renderFrame('schema:Book', invalid.ratio))).toBe('5:7');
@@ -256,84 +271,94 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
   }
 });
 
-test('all tile surfaces use CoverCard, and Space uses the localized definition name', async () => {
-  const surfaces = [
-    'src/library/shelf-view.tsx',
-    'src/library/continue.tsx',
-    'src/features/pages/data.tsx',
-    'src/features/pages/cover-list.tsx',
-    'src/library/mine-collections-page.tsx',
-    'src/library/mine-following-page.tsx',
-    'src/community/space-page.tsx',
-  ];
-  for (const path of surfaces) {
-    const source = await Bun.file(join(app, path)).text();
-    expect(source, path).toContain('<CoverCard');
-  }
-  const space = await Bun.file(join(app, 'src/community/space-page.tsx')).text();
-  const reader = await Bun.file(join(app, 'src/community/space.ts')).text();
-  expect(space).toContain('subject.typeName');
-  expect(reader).toContain('typeNames(');
-
-  for (const locale of ['en', 'zh-Hans']) {
-    const opened = await openStory('space.stories.tsx', 'Signed Out', locale, 1280);
-    try {
-      const types = opened.page.locator('[aria-labelledby="realm-published-heading"] [data-slot="cover-card-secondary"]');
-      await types.first().waitFor();
-      const labels = (await types.allTextContents()).map((label) => label.trim());
-      expect(labels.length).toBeGreaterThan(0);
-      expect(labels.every((label) => label === (locale === 'zh-Hans' ? '书籍' : 'book'))).toBe(true);
-      expect(labels.some((label) => label === 'Book' || label === 'schema:Book')).toBe(false);
-    } finally {
-      await opened.context.close();
+test(
+  'all tile surfaces use CoverCard, and Space uses the localized definition name',
+  async () => {
+    const surfaces = [
+      'src/library/shelf-view.tsx',
+      'src/library/continue.tsx',
+      'src/features/pages/data.tsx',
+      'src/features/pages/cover-list.tsx',
+      'src/library/mine-collections-page.tsx',
+      'src/library/mine-following-page.tsx',
+      'src/community/space-page.tsx',
+    ];
+    for (const path of surfaces) {
+      const source = await Bun.file(join(app, path)).text();
+      expect(source, path).toContain('<CoverCard');
     }
-  }
-}, timeout);
+    const space = await Bun.file(join(app, 'src/community/space-page.tsx')).text();
+    const reader = await Bun.file(join(app, 'src/community/space.ts')).text();
+    expect(space).toContain('subject.typeName');
+    expect(reader).toContain('typeNames(');
 
-test('the cover wall default fits two phone columns and about eight wide columns with 8 px gaps', async () => {
-  const layouts: Record<number, number> = { 390: 2, 1280: 8 };
-  let defaultWideTracks = 0;
-  for (const [widthText, expected] of Object.entries(layouts)) {
-    const width = Number(widthText);
-    const opened = await openStory('cover-wall.stories.tsx', 'Default', 'en', width);
-    try {
-      const grid = opened.page.locator('[data-slot="cover-grid"]');
-      await grid.waitFor();
-      expect(await grid.locator(':scope > article').count()).toBe(14);
-      const layout = await grid.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          tracks: style.gridTemplateColumns.trim().split(/\s+/).length,
-          rowGap: style.rowGap,
-          columnGap: style.columnGap,
-        };
-      });
-      expect(layout.rowGap).toBe('8px');
-      expect(layout.columnGap).toBe('8px');
-      if (width === 390) expect(layout.tracks).toBe(expected);
-      else {
-        expect(layout.tracks).toBeGreaterThanOrEqual(expected - 1);
-        expect(layout.tracks).toBeLessThanOrEqual(expected + 1);
-        defaultWideTracks = layout.tracks;
+    for (const locale of ['en', 'zh-Hans']) {
+      const opened = await openStory('space.stories.tsx', 'Signed Out', locale, 1280);
+      try {
+        const types = opened.page.locator(
+          '[aria-labelledby="realm-published-heading"] [data-slot="cover-card-secondary"]',
+        );
+        await types.first().waitFor();
+        const labels = (await types.allTextContents()).map((label) => label.trim());
+        expect(labels.length).toBeGreaterThan(0);
+        expect(labels.every((label) => label === (locale === 'zh-Hans' ? '书籍' : 'book'))).toBe(true);
+        expect(labels.some((label) => label === 'Book' || label === 'schema:Book')).toBe(false);
+      } finally {
+        await opened.context.close();
       }
-    } finally {
-      await opened.context.close();
     }
-  }
+  },
+  timeout,
+);
 
-  for (const name of ['Small', 'Large']) {
-    const opened = await openStory('cover-wall.stories.tsx', name, 'en', 1280);
-    try {
-      const grid = opened.page.locator('[data-slot="cover-grid"]');
-      await grid.waitFor();
-      expect(await grid.locator(':scope > article').count()).toBe(14);
-      const tracks = await grid.evaluate((element) =>
-        getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length,
-      );
-      if (name === 'Small') expect(tracks).toBeGreaterThan(defaultWideTracks);
-      else expect(tracks).toBeLessThan(defaultWideTracks);
-    } finally {
-      await opened.context.close();
+test(
+  'the cover wall default fits two phone columns and about eight wide columns with 8 px gaps',
+  async () => {
+    const layouts: Record<number, number> = { 390: 2, 1280: 8 };
+    let defaultWideTracks = 0;
+    for (const [widthText, expected] of Object.entries(layouts)) {
+      const width = Number(widthText);
+      const opened = await openStory('cover-wall.stories.tsx', 'Default', 'en', width);
+      try {
+        const grid = opened.page.locator('[data-slot="cover-grid"]');
+        await grid.waitFor();
+        expect(await grid.locator(':scope > article').count()).toBe(14);
+        const layout = await grid.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            tracks: style.gridTemplateColumns.trim().split(/\s+/).length,
+            rowGap: style.rowGap,
+            columnGap: style.columnGap,
+          };
+        });
+        expect(layout.rowGap).toBe('8px');
+        expect(layout.columnGap).toBe('8px');
+        if (width === 390) expect(layout.tracks).toBe(expected);
+        else {
+          expect(layout.tracks).toBeGreaterThanOrEqual(expected - 1);
+          expect(layout.tracks).toBeLessThanOrEqual(expected + 1);
+          defaultWideTracks = layout.tracks;
+        }
+      } finally {
+        await opened.context.close();
+      }
     }
-  }
-}, timeout);
+
+    for (const name of ['Small', 'Large']) {
+      const opened = await openStory('cover-wall.stories.tsx', name, 'en', 1280);
+      try {
+        const grid = opened.page.locator('[data-slot="cover-grid"]');
+        await grid.waitFor();
+        expect(await grid.locator(':scope > article').count()).toBe(14);
+        const tracks = await grid.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length,
+        );
+        if (name === 'Small') expect(tracks).toBeGreaterThan(defaultWideTracks);
+        else expect(tracks).toBeLessThan(defaultWideTracks);
+      } finally {
+        await opened.context.close();
+      }
+    }
+  },
+  timeout,
+);
