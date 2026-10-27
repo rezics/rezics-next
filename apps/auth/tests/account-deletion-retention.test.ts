@@ -108,7 +108,7 @@ const copy = {
       'Your posts and reviews.',
     ],
     attribution:
-      'These contributions stay as by “Deleted account”, frozen and no longer editable by anyone. No replacement curator is assigned.',
+      'These contributions remain attributed to “Deleted account”, frozen and no longer editable by anyone. No replacement curator is assigned.',
     prepare: 'If you do not want something to stay, make the Collection private or delete the post first.',
     privacy: 'To get a copy of your data, before or after deletion, contact mailto:privacy@example.test.',
   },
@@ -211,12 +211,12 @@ const copy = {
     erasedItems: [
       '你的个人资料、姓名、账号标识和头像。',
       '你的整个书库：书架条目、阅读进度和历史、藏本以及关注。',
-      '你的私密、不公开列出和已删除的合集。',
+      '你的私人、不公开列出和已删除的收藏集。',
     ],
     retained: '保留，但不再显示你的姓名',
-    retainedItems: ['你的公开合集及其当前笔记，按现状保留。', '你主动发布的阅读日志。', '你的帖子和书评。'],
+    retainedItems: ['你的公开收藏集及其当前笔记，按现状保留。', '你主动发布的阅读日志。', '你的帖子和书评。'],
     attribution: '这些贡献将显示为由“已删除的账号”发布，并被冻结，任何人都无法再编辑。不会指定接替的管理者。',
-    prepare: '如果不希望某项内容被保留，请先将合集设为私密或删除帖子。',
+    prepare: '如果不希望某项内容被保留，请先将收藏集设为私人或删除帖子。',
     privacy: '无论删除账户之前还是之后，如需获取你的数据副本，请联系隐私事务联系人：mailto:privacy@example.test。',
   },
   'zh-Hant': {
@@ -224,12 +224,12 @@ const copy = {
     erasedItems: [
       '你的個人資料、姓名、帳號識別名稱和頭像。',
       '你的整個書庫：書架項目、閱讀進度與歷史、藏本以及追蹤。',
-      '你的私人、不公開列出和已刪除的合集。',
+      '你的私人、不公開列出和已刪除的收藏集。',
     ],
     retained: '保留，但不再顯示你的姓名',
-    retainedItems: ['你的公開合集及其目前筆記，按現狀保留。', '你主動發布的閱讀日誌。', '你的貼文和書評。'],
+    retainedItems: ['你的公開收藏集及其目前筆記，按現狀保留。', '你主動發布的閱讀日誌。', '你的貼文和書評。'],
     attribution: '這些貢獻將顯示為由「已刪除的帳號」發布，並遭凍結，任何人都無法再編輯。不會指定接替的管理者。',
-    prepare: '如果不希望某項內容被保留，請先將合集設為私人或刪除貼文。',
+    prepare: '如果不希望某項內容被保留，請先將收藏集設為私人或刪除貼文。',
     privacy: '無論刪除帳戶之前還是之後，如需取得你的資料副本，請聯絡隱私事務聯絡人：mailto:privacy@example.test。',
   },
 };
