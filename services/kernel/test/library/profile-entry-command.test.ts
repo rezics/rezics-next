@@ -166,6 +166,7 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
 });
 
 test('the literal in_progress state follows once and preserves an explicit unfollow', async () => {
+  const storedPins: unknown[] = [];
   for (const explicitUnfollow of [false, true]) {
     const subjectId = await native.createSubject('recipe');
     if (explicitUnfollow) {
@@ -183,8 +184,9 @@ test('the literal in_progress state follows once and preserves an explicit unfol
     expect(after.sessions).toEqual(before.sessions);
     expect(after.copies).toEqual(before.copies);
     expect(after.entitlements).toEqual(before.entitlements);
-    expect((await fact(subjectId)).library_profile_pin).toEqual(pin(native.originalDigest, 'recipe'));
+    storedPins.push((await fact(subjectId)).library_profile_pin);
   }
+  expect(storedPins).toEqual([pin(native.originalDigest, 'recipe'), pin(native.originalDigest, 'recipe')]);
 });
 
 test('release replacement and rollback preserve raw facts until a genuine fresh value mutation selects the active profile', async () => {
