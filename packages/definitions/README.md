@@ -560,7 +560,9 @@ declaration wins during compilation, including absent capabilities and empty lis
 Abstract declarations without a class URI contribute registry data. Repeated IDs
 must have identical fully labelled bodies. `legacy-fixed-v1` can only be declared
 on an abstract class without a URI or descendants; accepting types cannot reference it.
-Releases without annotations retain their previous bytes and install no defaults.
+Releases without annotations omit `libraryProfiles`, retaining their previous bytes
+and installing no defaults. Validation also accepts an explicit empty registry and
+an id-only profile, which enables no capabilities.
 
 Labels belong to `presentation/<declaring-schema-group>/<locale>` under
 `libraryProfiles[profileId]`, using only `states[stateId]`,
