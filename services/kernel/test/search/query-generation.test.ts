@@ -18,7 +18,7 @@ if (!url) throw new Error("OPENSEARCH_URL must name the check's OpenSearch node"
 const engine = createOpenSearch(url);
 const prefix = `test-${crypto.randomUUID().slice(0, 8)}-`;
 const alias = subjectAlias(prefix);
-const ids = [crypto.randomUUID(), crypto.randomUUID()].sort();
+const ids = [Bun.randomUUIDv7(), Bun.randomUUIDv7()].sort();
 const overflowProperty = 'schema:author';
 const sorts = ['relevance', 'name', 'id', 'collections'] as const satisfies readonly SearchPlan['sort'][];
 // This additive input is deliberately isolated from Semantic identity and service readiness.
