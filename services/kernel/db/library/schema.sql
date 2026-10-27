@@ -373,6 +373,45 @@ CREATE TABLE library.entry (
 
 
 --
+-- Name: entry_deleted; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_deleted (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    requested_subject_id uuid,
+    state text NOT NULL,
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    activity_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    type_id uuid,
+    type_source_id uuid,
+    type_source_partition integer,
+    type_source_epoch integer,
+    type_source_position bigint,
+    incarnation_id uuid NOT NULL,
+    library_profile_pin jsonb,
+    deletion_id uuid NOT NULL,
+    deleted_revision integer NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    restore_until timestamp with time zone NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    CONSTRAINT entry_deleted_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_deleted_legacy_state_check CHECK (((library_profile_pin IS NOT NULL) OR (state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text])))),
+    CONSTRAINT entry_deleted_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
+    CONSTRAINT entry_deleted_restore_window CHECK ((restore_until = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT entry_deleted_revision_check CHECK (((revision >= 1) AND (revision <= 2147483644))),
+    CONSTRAINT entry_deleted_revision_step CHECK ((deleted_revision = (revision + 1))),
+    CONSTRAINT entry_deleted_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT entry_deleted_type_observation_check CHECK ((((type_id IS NULL) AND (type_source_id IS NULL) AND (type_source_partition IS NULL) AND (type_source_epoch IS NULL) AND (type_source_position IS NULL)) OR ((type_id IS NOT NULL) AND (type_source_id IS NOT NULL) AND (type_source_partition IS NOT NULL) AND (type_source_epoch IS NOT NULL) AND (type_source_position IS NOT NULL) AND ((type_source_partition >= 0) AND (type_source_partition <= 4095)) AND (type_source_epoch >= 1) AND (type_source_position >= 0) AND (type_source_partition = (((get_byte(uuid_send(type_source_id), 10) * 256) + get_byte(uuid_send(type_source_id), 11)) >> 4)))))
+);
+
+
+--
 -- Name: follow; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -996,6 +1035,14 @@ ALTER TABLE ONLY library.copy
 
 
 --
+-- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_deleted
+    ADD CONSTRAINT entry_deleted_pkey PRIMARY KEY (route, account_id, deletion_id);
+
+
+--
 -- Name: entry entry_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1328,6 +1375,13 @@ CREATE INDEX entry_account_state ON library.entry USING btree (route, account_id
 --
 
 CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_id, updated_at DESC, subject_id);
+
+
+--
+-- Name: entry_deleted_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_deleted_due ON library.entry_deleted USING btree (partition_no, restore_until, route, account_id, deletion_id);
 
 
 --
