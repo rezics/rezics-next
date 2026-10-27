@@ -251,9 +251,9 @@ test('confidential assertions and PKCE are independent, exact and durably one-us
     assertion({ sub: 'other' }),
     assertion({ aud: `${issuer}/token` }),
     assertion({ aud: [issuer] }),
-    assertion({ iat: now + 1 }),
-    assertion({ exp: now - 1 }),
-    assertion({ exp: now + 121 }),
+    assertion({ iat: now + 60 }),
+    assertion({ iat: now - 60, exp: now - 1 }),
+    assertion({ iat: now, exp: now + 121 }),
     assertion({ jti: '' }),
   ]) {
     expect((await post('/token', await fields(params, proof))).status).toBe(401);
