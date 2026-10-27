@@ -173,7 +173,8 @@ implement them in this stack.
   an overview with one section per status, In progress first as Continue, empty sections hidden. A type filter row
   (books, anime, …) appears when the library holds more than one type.
 - **Layouts.** Grid (default), List, and Table on wide screens; on narrow screens Table shows as List. The grid has
-  three sizes (four, three or two columns on a phone, default three; proportionally more on wide screens).
+  three sizes (small, medium by default, large), each with a minimum card width. Columns follow the container width
+  as [Cover cards](#cover-cards) describes; at wide widths small fits more cards and large fits fewer.
 - **Grid.** [Cover cards](#cover-cards) with the [progress row](#progress) for items in progress; the secondary line
   shows the active sort key ("Finished 3 days ago"); a badge counts new episodes or chapters past the reader's
   progress.
