@@ -28,6 +28,27 @@ if (import.meta.main) {
   const pool = createPool(process.env.DATABASE_URL!);
   pool.options.max = 1;
   const client = await createWorkClient(process.env.DATABASE_URL!);
+  let control = {
+    id: 0,
+    actor: process.env.MEMBERSHIP_ACTOR ?? '',
+    stop: process.env.MEMBERSHIP_STOP ?? '',
+    fail: process.env.MEMBERSHIP_FAIL === 'yes',
+  };
+  if (process.env.MEMBERSHIP_CONTROL === 'yes') {
+    let pending = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk: string) => {
+      pending += chunk;
+      let newline = pending.indexOf('\n');
+      while (newline >= 0) {
+        const line = pending.slice(0, newline);
+        pending = pending.slice(newline + 1);
+        control = JSON.parse(line) as typeof control;
+        console.log(`configured:${control.id}`);
+        newline = pending.indexOf('\n');
+      }
+    });
+  }
   const actions = new Map(LIFECYCLE_ACTIONS);
   const access = admittedAccess({ actions });
   const module: WorkModule = {
@@ -38,8 +59,7 @@ if (import.meta.main) {
         access,
         async authorize(reference) {
           if (reference !== 'authenticated-fixture') throw new Error('No approval');
-          const id = process.env.MEMBERSHIP_ACTOR!;
-          const request = await authenticated(pool, id);
+          const request = await authenticated(pool, control.actor);
           return {
             ...request,
             actor: await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, request.actor),
@@ -51,11 +71,11 @@ if (import.meta.main) {
         const original = ports[phase];
         // Stop after the native commit, before DBOS journals the step result.
         const wrap = async (...args: Parameters<typeof original>) => {
-          if (process.env.MEMBERSHIP_STOP === `before-${phase}`) {
-            console.log(`boundary:before-${phase}`);
+          if (control.stop === `before-${phase}`) {
+            console.log(`boundary:before-${phase}:${control.id}`);
             process.kill(process.pid, 'SIGSTOP');
           }
-          if (phase === 'publish' && process.env.MEMBERSHIP_FAIL === 'yes') throw new Error('Publication unavailable');
+          if (phase === 'publish' && control.fail) throw new Error('Publication unavailable');
           const result = await (original as Function)(...args);
           const accountId =
             phase === 'reserve'
@@ -67,8 +87,8 @@ if (import.meta.main) {
           );
           assert.deepEqual(missing.rows, []);
 
-          if (process.env.MEMBERSHIP_STOP === phase) {
-            console.log(`boundary:${phase}`);
+          if (control.stop === phase) {
+            console.log(`boundary:${phase}:${control.id}`);
             process.kill(process.pid, 'SIGSTOP');
           }
           return result;

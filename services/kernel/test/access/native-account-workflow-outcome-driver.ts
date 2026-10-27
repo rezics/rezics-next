@@ -848,10 +848,16 @@ async function makeFixture(
       },
     );
     const count = Math.max(1, options.subjects ?? 1);
-    for (let i = 0; i < count; i++) {
-      const child =
-        options.independentCredentials && i === 0 ? subjectPerson : await automated(owner, `fence-child-${i}`);
-      if (options.independentCredentials && i === 0) await createOperatorLink(owner.accountId, child.accountId);
+    for (let start = 0; start < count; start += 16) {
+      const end = Math.min(start + 16, count);
+      await Promise.all(
+        Array.from({ length: end - start }, async (_, offset) => {
+          const i = start + offset;
+          const child =
+            options.independentCredentials && i === 0 ? subjectPerson : await automated(owner, `fence-child-${i}`);
+          if (options.independentCredentials && i === 0) await createOperatorLink(owner.accountId, child.accountId);
+        }),
+      );
     }
   }
   if (family === 'opening') {

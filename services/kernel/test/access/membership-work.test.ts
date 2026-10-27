@@ -46,7 +46,18 @@ async function person() {
   await native.activate({ accountId, evidence: proof, key: key() });
   return accountId;
 }
-function worker(actor: string, stop = '', fail = false, registry = false) {
+type WorkerHandle = {
+  child: ReturnType<typeof Bun.spawn>;
+  boundary: string | undefined;
+  until(marker: string): Promise<void>;
+  configure?(actor: string, stop: string, fail: boolean): Promise<void>;
+  kill(): Promise<void>;
+  stop(): Promise<void>;
+  shutdown(): Promise<void>;
+};
+let sharedWorker: WorkerHandle | undefined;
+let controlId = 0;
+function spawnWorker(actor: string, stop = '', fail = false, registry = false, reusable = false): WorkerHandle {
   const child = Bun.spawn([process.execPath, `${import.meta.dir}/membership-work-fixture.ts`], {
     // The fixture's static SQL imports need the kernel Bun preload.
     cwd: `${import.meta.dir}/../..`,
@@ -56,17 +67,22 @@ function worker(actor: string, stop = '', fail = false, registry = false) {
       MEMBERSHIP_STOP: stop,
       MEMBERSHIP_FAIL: fail ? 'yes' : '',
       MEMBERSHIP_REGISTRY: registry ? 'yes' : '',
+      MEMBERSHIP_CONTROL: reusable ? 'yes' : '',
     },
+    stdin: reusable ? 'pipe' : 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
   let output = '';
   const reading = (async () => {
-    for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
+    for await (const chunk of child.stdout) {
+      output += new TextDecoder().decode(chunk);
+    }
   })();
   const errors = new Response(child.stderr).text();
-  return {
+  const handle: WorkerHandle = {
     child,
+    boundary: undefined,
     async until(marker: string) {
       const deadline = Date.now() + 20000;
       while (!output.includes(marker)) {
@@ -75,17 +91,44 @@ function worker(actor: string, stop = '', fail = false, registry = false) {
         await Bun.sleep(20);
       }
     },
+    async configure(nextActor, nextStop, nextFail) {
+      if (!reusable || !child.stdin) throw new Error('Worker does not accept control messages');
+      const id = ++controlId;
+      this.boundary = nextStop ? `boundary:${nextStop}:${id}` : undefined;
+      child.stdin.write(`${JSON.stringify({ id, actor: nextActor, stop: nextStop, fail: nextFail })}\n`);
+      await child.stdin.flush();
+      await this.until(`configured:${id}`);
+    },
     async kill() {
       child.kill('SIGKILL');
       await child.exited;
       await reading;
+      if (sharedWorker === handle) sharedWorker = undefined;
     },
     async stop() {
+      if (reusable) return;
       child.kill('SIGTERM');
       expect(await child.exited, await errors).toBe(0);
       await reading;
     },
+    async shutdown() {
+      if (child.stdin) await child.stdin.end();
+      child.kill('SIGTERM');
+      expect(await child.exited, await errors).toBe(0);
+      await reading;
+      if (sharedWorker === handle) sharedWorker = undefined;
+    },
   };
+  return handle;
+}
+async function worker(actor: string, stop = '', fail = false, registry = false): Promise<WorkerHandle> {
+  if (registry) return spawnWorker(actor, stop, fail, true);
+  if (!sharedWorker) {
+    sharedWorker = spawnWorker(actor, stop, fail, false, true);
+    await sharedWorker.until('worker-ready');
+  }
+  await sharedWorker.configure!(actor, stop, fail);
+  return sharedWorker;
 }
 async function inverseRows(accountId: string) {
   return (
@@ -112,38 +155,35 @@ async function superset(accountId: string) {
 }
 async function restartAt(actor: string, input: MembershipWorkInput, phase: string) {
   const id = `membership-test:${key()}`;
-  const handle = await enqueueMembership(client, id, input);
   expect(DBOS.isInitialized()).toBe(false);
-  const first = worker(actor, phase);
+  const first = await worker(actor, phase);
+  const handle = await enqueueMembership(client, id, input);
   try {
-    await first.until(`boundary:${phase}`);
+    await first.until(first.boundary!);
     await superset(input.kind === 'membership' ? input.memberAccountId : actor);
   } finally {
     await first.kill();
   }
   const before = await pool.query('SELECT function_id FROM dbos.operation_outputs WHERE workflow_uuid=$1', [id]);
-  const restarted = worker(actor);
-  try {
-    await restarted.until('worker-ready');
-    const result = await handle.getResult();
-    expect(result).toMatchObject({ status: 'completed' });
-    expect((await client.getWorkflow(id))!.workflowID).toBe(id);
-    await superset(input.kind === 'membership' ? input.memberAccountId : actor);
-    const history = await pool.query('SELECT function_id FROM dbos.operation_outputs WHERE workflow_uuid=$1', [id]);
-    expect(history.rowCount!).toBeGreaterThan(before.rowCount!);
-    return result;
-  } finally {
-    await restarted.stop();
-  }
+  const restarted = await worker(actor);
+  await restarted.until('worker-ready');
+  const result = await handle.getResult();
+  expect(result).toMatchObject({ status: 'completed' });
+  expect((await client.getWorkflow(id))!.workflowID).toBe(id);
+  await superset(input.kind === 'membership' ? input.memberAccountId : actor);
+  const history = await pool.query('SELECT function_id FROM dbos.operation_outputs WHERE workflow_uuid=$1', [id]);
+  expect(history.rowCount!).toBeGreaterThan(before.rowCount!);
+  return result;
 }
 afterAll(async () => {
+  await sharedWorker?.shutdown();
   await client.close();
   await pool.end();
 });
 
 test('accounts compose once before the single kernel launch with exactly the shared queues', async () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module.name === 'accounts')).toHaveLength(1);
-  const runtime = worker('', '', false, true);
+  const runtime = await worker('', '', false, true);
   try {
     await runtime.until('registry-ok');
     expect(await runtime.child.exited).toBe(0);
@@ -204,11 +244,11 @@ test('compensation persists an exact terminal barrier before cleanup and cannot 
       authorization: 'authenticated-fixture',
     };
     const id = `membership-test:${key()}`;
+    const first = await worker(owner, phase, true);
     const handle = await enqueueMembership(client, id, input);
-    const first = worker(owner, phase, true);
     let reservationId: string;
     try {
-      await first.until(`boundary:${phase}`);
+      await first.until(first.boundary!);
       await superset(member);
       expect(await authority(organizationId, member)).toEqual([]);
       reservationId =
@@ -230,7 +270,7 @@ test('compensation persists an exact terminal barrier before cleanup and cannot 
     } finally {
       await first.kill();
     }
-    const restarted = worker(owner);
+    const restarted = await worker(owner);
     try {
       await restarted.until('worker-ready');
       await expect(handle.getResult()).rejects.toThrow('Membership workflow step failed: publish');
@@ -301,12 +341,12 @@ test('cap1000 denies admission with typed membership_limit before authority and 
     authorization: 'authenticated-fixture',
   };
   const id = `membership-test:${key()}`;
+  const runtime = await worker(owner);
   const handle = await enqueueMembership(client, id, input);
   expect((await enqueueMembership(client, id, input)).workflowID).toBe(handle.workflowID);
   await expect(enqueueMembership(client, id, { ...input, role: 'owner' })).rejects.toMatchObject({
     code: 'membership_work_conflict',
   });
-  const runtime = worker(owner);
   try {
     await runtime.until('worker-ready');
     expect(await handle.getResult()).toEqual({ status: 'membership_limit', code: 'membership_limit' });
@@ -376,7 +416,7 @@ test('concurrent joins, role changes and leave retain the superset and last-owne
     role: 'member' as const,
     authorization: 'authenticated-fixture',
   };
-  const runtime = worker(owner);
+  const runtime = await worker(owner);
   try {
     await runtime.until('worker-ready');
     const joins = await Promise.all([

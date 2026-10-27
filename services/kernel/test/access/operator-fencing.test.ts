@@ -224,7 +224,14 @@ async function startKernelWorker() {
     if (value.done) throw new Error(`Worker exited: ${workerLog}`);
     output += new TextDecoder().decode(value.value);
   }
-  reader.releaseLock();
+  workerLog += output;
+  void (async () => {
+    while (true) {
+      const value = await reader.read();
+      if (value.done) return;
+      workerLog += new TextDecoder().decode(value.value);
+    }
+  })();
 }
 async function stopKernelWorker() {
   if (!worker) return;
@@ -252,23 +259,81 @@ async function link(operatorAccountId: string, subjectAccountId: string) {
   });
   return held;
 }
+async function seedUnrelatedSubjects(operatorAccountId: string, subjects: string[]) {
+  if (subjects.length === 0) return;
+  const links = subjects.map((accountId) => ({
+    accountId,
+    route: routeOf(accountId)!,
+    reservationId: newId(routeOf(operatorAccountId)!),
+    reservationTransactionId: randomUUID(),
+    relationTransactionId: randomUUID(),
+  }));
+  const accounts = await facts.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+     SELECT route,account_id,'actor','active',account_id,true
+     FROM unnest($1::integer[],$2::uuid[]) AS rows(route,account_id)`,
+    [links.map((link) => link.route), links.map((link) => link.accountId)],
+  );
+  await facts.query(
+    `INSERT INTO access.lifecycle_coordination
+       (route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+     SELECT $1, $2, reservation_id, subject_account_id, 'operator', transaction_id
+     FROM unnest($3::uuid[],$4::uuid[],$5::uuid[]) AS rows(reservation_id,subject_account_id,transaction_id)`,
+    [
+      routeOf(operatorAccountId),
+      operatorAccountId,
+      links.map((link) => link.reservationId),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationTransactionId),
+    ],
+  );
+  await facts.query(
+    `INSERT INTO access.operator_relation_slot
+       (route,subject_account_id,reservation_id,operator_account_id,terminal,transaction_id)
+     SELECT route,subject_account_id,reservation_id,$1,false,transaction_id
+     FROM unnest($2::integer[],$3::uuid[],$4::uuid[],$5::uuid[])
+       AS rows(route,subject_account_id,reservation_id,transaction_id)`,
+    [
+      operatorAccountId,
+      links.map((link) => link.route),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationId),
+      links.map((link) => link.relationTransactionId),
+    ],
+  );
+  const linked = await facts.query(
+    `WITH input AS MATERIALIZED (
+       SELECT * FROM unnest($1::integer[],$2::uuid[],$3::uuid[],$4::uuid[])
+         AS rows(route,account_id,reservation_id,transaction_id)
+     ), counter_time AS MATERIALIZED (
+       SELECT set_config('rezics.operator_at', transaction_timestamp()::text, true)
+     )
+     UPDATE access.account a
+     SET operator_account_id=$5,operator_reservation_id=i.reservation_id,transaction_id=i.transaction_id
+     FROM input i CROSS JOIN counter_time
+     WHERE a.account_id=i.account_id AND a.route=i.route`,
+    [
+      links.map((link) => link.route),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationId),
+      links.map((link) => link.relationTransactionId),
+      operatorAccountId,
+    ],
+  );
+  if (accounts.rowCount !== subjects.length || linked.rowCount !== subjects.length)
+    throw new Error(`Bulk fixture mismatch: accounts=${accounts.rowCount}, links=${linked.rowCount}`);
+}
 async function fixture() {
   const operator = await person();
   const credentials = [await person(), await person()];
   const credentialTokens = await Promise.all(credentials.map((value) => bearer(value.caller)));
   const subjects = credentials.map((value) => value.accountId);
-  // Remaining credentialless subjects use the native persisted account shape;
-  // all relationships and reservations go through native kernel commands.
-  for (let i = 2; i < 205; i++) {
-    const id = newId(0x7432);
-    await facts.query(
-      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
-      VALUES ($1,$2,'actor','active',$2,true)`,
-      [routeOf(id), id],
-    );
-    subjects.push(id);
-  }
+  // The two credential-bearing subjects use native commands; unrelated fixture
+  // accounts and their persisted responsibility rows are seeded in bulk.
   for (const subject of subjects) await link(operator.accountId, subject);
+  const unrelated = Array.from({ length: 203 }, () => newId(0x7432));
+  await seedUnrelatedSubjects(operator.accountId, unrelated);
+  subjects.push(...unrelated);
   const pending = await readyBindings().operators.reserveResponsibility({
     operatorAccountId: operator.accountId,
     subjectAccountId: newId(0x7432),
@@ -385,15 +450,32 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect(root.barrierReceiptId).toBe(result.receiptId);
     expect(root.allowlist.map((value) => value.step)).toEqual(['revoke-auth-sessions', 'operator-responsibility-page']);
     await startKernelWorker();
-    await waitFor(
-      async () =>
-        (
-          await facts.query(
-            'SELECT count(*)::integer AS n FROM access.account WHERE account_id=ANY($1::uuid[]) AND authn_fenced',
-            [f.subjects],
-          )
-        ).rows[0].n === 205,
-    );
+    try {
+      await waitFor(
+        async () =>
+          (
+            await facts.query(
+              'SELECT count(*)::integer AS n FROM access.account WHERE account_id=ANY($1::uuid[]) AND authn_fenced',
+              [f.subjects],
+            )
+          ).rows[0].n === 205,
+      );
+    } catch (error) {
+      const diagnostic = await facts.query(
+        `SELECT count(*)::integer AS total,
+          count(*) FILTER (WHERE a.authn_fenced)::integer AS fenced,
+          count(*) FILTER (WHERE a.operator_account_id=$2)::integer AS operated,
+          count(*) FILTER (WHERE a.operator_relation_version=1)::integer AS versioned,
+          (SELECT count(*)::integer FROM access.operator_relation_slot s WHERE s.subject_account_id=ANY($1::uuid[])) AS slots,
+          (SELECT count(*)::integer FROM access.lifecycle_coordination c WHERE c.related_account_id=ANY($1::uuid[]) AND c.account_id=$2 AND c.purpose='operator') AS holds
+        FROM access.account a WHERE a.account_id=ANY($1::uuid[])`,
+        [f.subjects, f.operator.accountId],
+      );
+      await Bun.sleep(50);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(diagnostic.rows[0])}\n${workerLog}`,
+      );
+    }
     expect(
       (
         await facts.query(
