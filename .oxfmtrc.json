@@ -8,6 +8,7 @@
     "contracts/**",
     "services/kernel/test/library/bulk-target-schema.test.ts",
     "services/kernel/test/library/type-preparation-schema.test.ts",
+    "services/kernel/test/rating/own-votes.test.ts",
     "packages/client/src/kernel/**",
     "packages/document/schema/**",
     "packages/ui/src/shadcn/**",

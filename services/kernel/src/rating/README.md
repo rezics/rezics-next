@@ -142,6 +142,15 @@ state and the population page omits that Realm.
 Unknown or unreadable subjects and unknown questions return `404`. A population figure is never combined with another
 population's votes.
 
+### Internal own-vote batch
+
+`readOwnVotes(client, actor, questionId, targetIds)` enriches shelves using the caller's repeatable-read client and
+snapshot. It requires the same current native account, authentication epoch and `rating:vote` scope as the own-vote
+GET. It rejects more than 100 raw targets before deduplication and rejects unroutable question or target IDs. Empty
+input still admits the caller. The Map uses exact requested target keys and GET values `{ units, revision, at }`;
+clears and missing votes are absent, while zero remains a vote. It does not resolve redirects or select a controller,
+population or shelf membership. This internal helper adds no HTTP endpoint or scope.
+
 ## Voter Realm membership
 
 `rating.voter_realm` belongs to the voter's route. Membership events update it in one command in the voter's
@@ -197,6 +206,14 @@ page is empty, the remaining `voter_realm` rows are deleted and the voter remain
 both votes and Realm memberships for reinstatement.
 
 ## Cost
+
+### Own-vote batch
+
+- Touches: one account primary-key point read and one vote batch with a point seek per distinct target by
+  `(route, voter_id, question_id, target_id)`.
+- Bound: at most 100 raw targets; at most one account row and one vote row per distinct target, with two statements
+  for nonempty input and one for empty input.
+- Growth check: `test/rating/growth-own-votes.test.ts`, test "own vote batch has input-bounded rows and constant statements as votes grow".
 
 ### Merge page
 
