@@ -32,7 +32,7 @@ async function check(
     name,
     ...(options.rule === undefined ? {} : { rule: options.rule }),
     ...(options.repetitions === undefined ? {} : { repetitions: options.repetitions }),
-    bounds: { rows: 'constant', blocks: 'linear', statements: 'linear' },
+    bounds: { rows: options.fixed ? 'linear' : 'constant', blocks: 'linear', statements: 'linear' },
     slack: { rows: { absolute: 0, relative: 0 } },
     grow: async (database, scale, previous) => {
       await database.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);
