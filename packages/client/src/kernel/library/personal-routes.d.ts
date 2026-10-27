@@ -1,13 +1,15 @@
 import type { Pool } from 'pg';
-import type { KernelClock } from '../clock.ts';
+import { type KernelClock } from '../clock.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { type ShelfReads } from './shelf-contract.ts';
 type Dependencies = {
     pool: Pool;
     tokens: KeyRing;
     access: () => Access;
     clock?: KernelClock;
+    shelves?: () => ShelfReads;
 };
 /** Private account-owned library transport. Domain commands retain authorization and receipts. */
 export declare function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -2388,9 +2390,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     subject: string;
                                     property: string;
                                     statement: string;
-                                    type?: string;
-                                    label?: string;
-                                    summary?: {
+                                    type: string;
+                                    label: string;
+                                    summary: {
                                         id: string;
                                         type: string;
                                         types: string[];
@@ -2425,7 +2427,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                                 obligations: string[];
                                             };
                                         } | null;
-                                    } | null;
+                                    };
                                 }[];
                                 count?: {
                                     value: number;
@@ -2596,6 +2598,42 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                 }[];
                                 count: {
                                     value: number;
@@ -3705,14 +3743,81 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 params: {};
                 query: {
                     view?: "BASIC" | "FULL";
-                    cursor?: string;
                     limit?: number;
-                    state?: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                    cursor?: string;
+                    state?: never;
+                    direction?: never;
+                    type?: string;
+                    orderBy?: never;
                 };
                 headers: unknown;
                 response: {
                     200: {
-                        libraryEntries: {
+                        libraryEntries: ({
+                            subject?: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
+                            subjectId: string;
+                            state: never;
+                            revision: number;
+                            createdAt: string;
+                            updatedAt: string;
+                            lastActivityAt: string;
+                            finishedAt: string | null;
+                            activeProgressSession: {
+                                id: string;
+                                subjectId: string;
+                                versionSubjectId: string | null;
+                                mode: "completed_units" | "cursor_position" | "scalar_amount";
+                                unit: never;
+                                total: string | null;
+                                amount: string | null;
+                                locator: string | null;
+                                position: string | null;
+                                completedUnitCount: number;
+                                state: "abandoned" | "active" | "completed";
+                                revision: number;
+                                startedAt: string;
+                                completedAt: string | null;
+                            } | null;
+                        } | {
                             subject?: {
                                 id: string;
                                 type: string;
@@ -3758,6 +3863,274 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             revision: number;
                             createdAt: string;
                             updatedAt: string;
+                        })[];
+                        next: string | null;
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryShelfSummary: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    type?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        tabs: {
+                            all: {
+                                total: number;
+                                shown: number;
+                            };
+                            in_progress: {
+                                total: number;
+                                shown: number;
+                            };
+                            planned: {
+                                total: number;
+                                shown: number;
+                            };
+                            completed: {
+                                total: number;
+                                shown: number;
+                            };
+                            paused: {
+                                total: number;
+                                shown: number;
+                            };
+                            dropped: {
+                                total: number;
+                                shown: number;
+                            };
+                            collections: {
+                                total: number;
+                                shown: number;
+                            };
+                        };
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryShelfTypes: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        types: {
+                            type: string;
+                            count: number;
                         }[];
                         next: string | null;
                     };

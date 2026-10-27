@@ -287,7 +287,7 @@ export function createAccess(config: AccessConfig): Access {
     requireAccessDeadline(context.deadline);
     return withConnection(context.pool, async (client) => {
       const bounded = deadlineClient(client, context.deadline);
-      await bounded.query('BEGIN READ ONLY');
+      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
         const pinned = atTimeClient(bounded, at);
         for (const check of checks) {
