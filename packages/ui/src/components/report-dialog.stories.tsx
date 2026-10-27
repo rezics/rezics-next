@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed } from '../test/waits.ts';
 import { settled, withSurface } from '../stories/support.tsx';
-import { Button } from './button.tsx';
+import { Button } from '@rezics/ui/shadcn/button';
 import { ReportDialog } from './report-dialog.tsx';
 
 const meta = {

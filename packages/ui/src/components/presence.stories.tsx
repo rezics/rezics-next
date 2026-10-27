@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { Button } from './button.tsx';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Presence } from './presence.tsx';
 
 const meta = {

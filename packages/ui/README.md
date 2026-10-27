@@ -1,6 +1,6 @@
 # Rezics UI
 
-`@rezics/ui` is Rezics's shared React component library. Import components from `@rezics/ui/button`, shared hooks from `@rezics/ui/hooks/use-is-mobile`, and the theme stylesheet from `@rezics/ui/styles.css`.
+`@rezics/ui` is Rezics's shared React component library. Import the base controls from `@rezics/ui/shadcn/<name>` (see below), the site's own components from `@rezics/ui/<name>` such as `@rezics/ui/cover`, shared hooks from `@rezics/ui/hooks/use-is-mobile`, and the theme stylesheet from `@rezics/ui/styles.css`.
 
 Run `bun run storybook` in this directory to review components. Run `bun run check` to type-check the package and run its unit and accessible browser story tests.
 
@@ -14,7 +14,8 @@ Before building any interface piece, look it up in [SHADCN.md](SHADCN.md), which
 
 The package uses shadcn's Rhea style on the Base UI primitives (`components.json`, style `base-rhea`). `apps/web/components.json` shares that configuration, so `bunx shadcn@latest add <name>` run from either directory writes into `packages/ui`.
 
-- Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; `src/index.ts` does not re-export them, because their names clash with the Ark components.
+- Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; `src/index.ts` exports only the rich-text editor, so a shadcn name never clashes with one of ours.
+- `src/components/` holds only what shadcn does not offer: the site's components (`Cover`, `Reactions`, `ContentActions`, `ReportDialog`, the rating components, `MediaImage`, `EntityPicker`, `DocumentBody`, `Prose` and the editor) and a few small helpers and display pieces with no shadcn counterpart. A component there never wraps a control that shadcn provides; the earlier Ark UI versions of those controls are removed.
 - The shadcn colour variables map to the Aura tokens in `src/styles.css`, layered after the Rhea defaults.
 - Stories for shadcn components are `src/components/shadcn-<name>.stories.tsx`, titled `shadcn/<Name>`.
 - `shadcn-sync.json` records the last successful sync time and CLI version. The daily GitHub check opens one shared `shadcn-sync` issue when that sync is more than seven days old; it never syncs components. Anyone with repository issue access can also run `bun run shadcn:sync-check` in this directory.

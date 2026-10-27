@@ -2,7 +2,7 @@ import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowBigUpIcon, InfoIcon } from 'lucide-react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { cn } from '../utils.ts';
-import { buttonVariants } from './button.tsx';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Hint, HintContent, HintTrigger } from './hint.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
@@ -28,7 +28,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const iconButton = buttonVariants({ variant: 'ghost', size: 'icon-md' });
+const iconButton = buttonVariants({ variant: 'ghost', size: 'icon' });
 
 export const Default: Story = {
   render: (args) => (

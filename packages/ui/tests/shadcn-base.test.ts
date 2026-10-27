@@ -151,8 +151,7 @@ test('every shadcn component is cloned into the one directory the shadcn CLI wri
   expect(readdirSync(shadcn).filter((file) => !file.endsWith('.tsx'))).toEqual([]);
   expect(written.filter((file) => /\.(stories|test)\./.test(file))).toEqual([]);
 
-  // Components are reachable as @rezics/ui/shadcn/<name> and never re-exported from the index, where they would
-  // clash with the Ark components' names.
+  // Components are reachable as @rezics/ui/shadcn/<name> and never re-exported from the index.
   const manifest = await readJson<Manifest>(join(root, 'package.json'));
   expect(manifest.exports?.['./shadcn/*']).toBe('./src/shadcn/*.tsx');
   expect(text(join(root, 'src', 'index.ts'))).not.toMatch(/shadcn/);

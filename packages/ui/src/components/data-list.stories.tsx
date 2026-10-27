@@ -1,7 +1,7 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { cn } from '../utils.ts';
-import { Badge } from './badge.tsx';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { DataList, DataListItem, DataListItemLabel, DataListItemValue } from './data-list.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (

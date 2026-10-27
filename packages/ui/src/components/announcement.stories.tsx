@@ -3,7 +3,7 @@ import { ArrowRightIcon, SparklesIcon } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Announcement, AnnouncementTitle } from './announcement.tsx';
-import { Badge } from './badge.tsx';
+import { Badge } from '@rezics/ui/shadcn/badge';
 
 const surface: Decorator = (Story, { parameters }) => (
   <div className={cn('bg-background p-6 font-sans text-foreground')}>

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
-import { Button } from './button.tsx';
+import { Button } from '@rezics/ui/shadcn/button';
 import {
   Steps,
   StepsCompletedContent,

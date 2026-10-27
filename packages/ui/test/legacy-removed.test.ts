@@ -21,7 +21,7 @@ const renamed = ['password-input', 'skip-nav', 'menu', 'segment-group', 'circula
 
 const legacy = [
   ...new Set([
-    ...moduleNames(shadcn).filter((name) => existsSync(join(components, `${name}.tsx`))),
+    ...moduleNames(shadcn),
     ...renamed,
     'button',
     'field',

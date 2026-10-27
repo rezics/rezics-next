@@ -1,7 +1,7 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { cn } from '../utils.ts';
-import { Button } from './button.tsx';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Frame, FrameDescription, FrameFooter, FrameHeader, FramePanel, FrameTitle } from './frame.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (

@@ -7,27 +7,7 @@ const root = join(import.meta.dir, '..');
 const components = join(root, 'src', 'components');
 
 // Components that must exist, each with a sibling story that runs as a browser test.
-const storied = [
-  'alert',
-  'avatar',
-  'badge',
-  'button',
-  'card',
-  'client-only',
-  'input',
-  'kbd',
-  'link-overlay',
-  'locale',
-  'localized-text',
-  'presence',
-  'scroll-area',
-  'separator',
-  'show',
-  'skeleton',
-  'skip-nav',
-  'spinner',
-  'status',
-];
+const storied = ['client-only', 'link-overlay', 'locale', 'localized-text', 'presence', 'show', 'status'];
 
 type Tokens = Record<string, string>;
 
