@@ -81,3 +81,43 @@ test('ordered implementation plan names shared owners and stays within its line 
   expect(plan).toContain('Contracts and imports land before production code');
   expect(plan).toContain('Retire `/library/shelf` client/API/tests after the shared engine is live');
 });
+
+test('profile migration and independent labels precede built-in Collections and their runtime', () => {
+  const plan = specification.slice(specification.indexOf('## Ordered implementation plan'), specification.indexOf('## Decisions fixed'));
+  const profileIndex = plan.indexOf('Definitions and Library implement the canonical profile registry and explicit default migration');
+  const builtinIndex = plan.indexOf('Library Collection owner adds built-in identity/read adapters');
+  expect(profileIndex).toBeGreaterThanOrEqual(0);
+  expect(builtinIndex).toBeGreaterThan(profileIndex);
+  expect(plan.slice(profileIndex, builtinIndex)).toContain('then independent labels');
+});
+
+test('the default profile migration preserves legacy state meanings in bounded pages', () => {
+  expect(specification).toContain('Existing fixed-key state values map without semantic loss to the canonical compatibility profile');
+  expect(specification).toContain('explicit migration in pages of at most `P`');
+  expect(specification).toContain('labels never choose or rewrite state identities');
+});
+
+test('shared cursor key, anonymous, and account lifetimes are adopted without local policy', async () => {
+  const cursor = specification.slice(specification.indexOf('One shared opaque encrypted cursor'), specification.indexOf('Growth acceptance'));
+  expect(cursor).toContain('viewer: null');
+  expect(cursor).toContain('deterministic and timeless');
+  expect(cursor).toContain('shared 15-minute lifetime');
+  expect(cursor).toContain('Retirement of a cursor key invalidates tokens for both viewer kinds');
+  expect(cursor).toContain('without local cryptography or a local TTL');
+  expect(outcomes).toContain('shared cursor lifetime and key retirement follow the common anonymous and account policy');
+  expect(driver).toContain('rotateListCursorKey(): Promise<void>');
+});
+
+test('Web shelf uses the actual shared Collection page and never keeps a template fork', () => {
+  expect(specification).toContain('The Web shelf page is this page for the account\'s built-in dynamic Collection');
+  expect(specification).toContain('with no shelf template fork');
+  expect(specification).toContain('Retire `/library/shelf` client/API/tests after the shared engine is live');
+});
+
+test('native growth acceptance measures first and deep pages with hidden candidates at each scale', () => {
+  expect(specification).toContain('native first and deep page plans at three account scales');
+  expect(specification).toContain('sparse catalogue filters, hidden subjects, filtered-empty intermediate pages');
+  expect(outcomes).toContain('first and deep native pages stay bounded with sparse catalog filters and hidden candidates at three scales');
+  expect(driver).toContain('candidateIds: readonly string[]');
+  expect(driver).toContain('buffers: number');
+});

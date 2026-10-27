@@ -468,3 +468,155 @@ test('three-scale native page work stays within the candidate cap and shared gro
   expect(new Set(samples.map((sample) => sample.rowsExamined)).size).toBe(1);
   expect(samples[2]!.buffers - samples[0]!.buffers).toBeLessThanOrEqual(64);
 });
+
+test('retired profile facts can lazily resolve their old pinned state Collections', async () => {
+  const subject = await subjectIn('game');
+  const state = driver.profiles.game.states[0]!;
+  await driver.retireProfile('game');
+
+  const view = await stateCollection('game');
+  expect(view.builtin).toMatchObject({
+    kind: 'state',
+    profileId: driver.profiles.game.profileId,
+    stateSetId: driver.profiles.game.stateSetId,
+    stateId: state.id,
+    meaningRevision: state.meaningRevision,
+  });
+  expect(subjectIds(await members(view.id))).toEqual([subject.id]);
+});
+
+test('dynamic members have no curated occurrence fields and reject every curation mutation', async () => {
+  const subject = await subjectIn('game');
+  const view = await builtin({ kind: 'everything' });
+  const member = (await members(view.id)).members[0]!;
+  expect(member).toMatchObject({ kind: 'dynamic', subjectId: subject.id });
+  expect(member).not.toHaveProperty('id');
+  expect(member).not.toHaveProperty('note');
+  expect(member).not.toHaveProperty('addedAt');
+
+  await problem(await write('owner', 'POST', `/v1/collections/${view.id}/members`, {
+    subjectId: driver.unknown.subjectId, note: 'must not persist',
+  }), 409, 'dynamic_membership_immutable');
+  await problem(await write('owner', 'PATCH', `/v1/collections/${view.id}/members/${subject.id}`, {
+    note: 'must not persist',
+  }), 409, 'dynamic_membership_immutable');
+  await problem(await write('owner', 'DELETE', `/v1/collections/${view.id}/members/${subject.id}`), 409,
+    'dynamic_membership_immutable');
+  await problem(await write('owner', 'POST', `/v1/collections/${view.id}/members/${subject.id}:move`, {
+    after: null,
+  }), 409, 'dynamic_membership_immutable');
+});
+
+test('curated Collections preserve curator order while dynamic members use the unique subject keyset', async () => {
+  const first = await subjectIn('recipe');
+  const second = await subjectIn('recipe');
+  const curated = await createCurated();
+  await okay(await write('owner', 'POST', `/v1/collections/${String(curated.id)}/members`, {
+    subjectId: second.id,
+  }));
+  await okay(await write('owner', 'POST', `/v1/collections/${String(curated.id)}/members`, {
+    subjectId: first.id,
+  }));
+
+  expect((await allMembers(String(curated.id))).map((item) => item.subjectId)).toEqual([second.id, first.id]);
+  expect((await allMembers((await builtin({ kind: 'everything' })).id)).map((item) => item.subjectId)).toEqual(
+    [first.id, second.id].sort(),
+  );
+});
+
+test('shared cursor lifetime and key retirement follow the common anonymous and account policy', async () => {
+  await subjectIn('game');
+  await subjectIn('game');
+  const privateView = await builtin({ kind: 'everything' });
+  const publicView = (await json<{ collection: DynamicCollectionView }>(await write(
+    'owner', 'PATCH', `/v1/collections/${privateView.id}`,
+    { revision: privateView.revision, title: privateView.title, description: privateView.description, visibility: 'public' },
+  ))).collection;
+  await driver.resumeAndSettle();
+
+  const anonymousFirst = await members(publicView.id, 'anonymous', { limit: 1 });
+  const anonymousAgain = await members(publicView.id, 'anonymous', { limit: 1 });
+  expect(anonymousFirst.next).toEqual(expect.any(String));
+  expect(anonymousAgain.next).toBe(anonymousFirst.next);
+  const anonymousCursor = anonymousFirst.next!;
+  const accountCursor = (await members(publicView.id, 'owner', { limit: 1 })).next!;
+
+  await driver.setTime('2030-01-02T00:15:00.000Z');
+  expect((await get('owner', queryPath(publicView.id, { limit: 1, cursor: accountCursor }))).status).toBe(200);
+  await driver.setTime('2030-01-02T00:15:00.001Z');
+  await problem(await get('owner', queryPath(publicView.id, { limit: 1, cursor: accountCursor })), 400, 'expired_cursor');
+  expect((await get('anonymous', queryPath(publicView.id, { limit: 1, cursor: anonymousCursor }))).status).toBe(200);
+
+  const liveAccountCursor = (await members(publicView.id, 'owner', { limit: 1 })).next!;
+  const liveAnonymousCursor = (await members(publicView.id, 'anonymous', { limit: 1 })).next!;
+  await driver.rotateListCursorKey();
+  await problem(await get('owner', queryPath(publicView.id, { limit: 1, cursor: liveAccountCursor })), 400, 'invalid_cursor');
+  await problem(await get('anonymous', queryPath(publicView.id, { limit: 1, cursor: liveAnonymousCursor })), 400,
+    'invalid_cursor');
+});
+
+test('first and deep native pages stay bounded with sparse catalog filters and hidden candidates at three scales', async () => {
+  const hiddenIds: string[] = [];
+  for (let index = 0; index < 120; index++) {
+    const hidden = await driver.provisionSubject('record', { ownerOnlyReadable: true });
+    hiddenIds.push(hidden.id);
+    await okay(await driver.setEntryState(hidden.id, driver.profiles.record.states[0]!.id));
+  }
+  const everything = await builtin({ kind: 'everything' });
+  const publicView = (await json<{ collection: DynamicCollectionView }>(await write(
+    'owner', 'PATCH', `/v1/collections/${everything.id}`,
+    { revision: everything.revision, title: everything.title, description: everything.description, visibility: 'public' },
+  ))).collection;
+  await driver.resumeAndSettle();
+  const sparse = { type: { in: [driver.profiles.record.typeId] } };
+  const pages = [];
+
+  for (const scale of [100, 1_000, 10_000]) {
+    await driver.seedUnrelatedFacts(scale);
+    await driver.resumeAndSettle();
+    const first = await driver.measure(() => get('anonymous', queryPath(publicView.id, {
+      limit: 10, filter: sparse,
+    })));
+    const firstPage = await json<CollectionMembersPage>(first.value.clone());
+    expect(firstPage.members).toEqual([]);
+    expect(firstPage.next).toEqual(expect.any(String));
+    const deep = await driver.measure(() => get('anonymous', queryPath(publicView.id, {
+      limit: 10, filter: sparse, cursor: firstPage.next!,
+    })));
+    expect((await json<CollectionMembersPage>(deep.value.clone())).members).toEqual([]);
+    pages.push(first, deep);
+  }
+
+  for (const page of pages) {
+    expect(page.candidateIds.length).toBeLessThanOrEqual(40);
+    expect(page.candidateIds.some((id) => hiddenIds.includes(id))).toBe(true);
+    expect(page.rowsExamined).toBeLessThanOrEqual(112);
+    expect(page.crossPartitionJoins).toBe(0);
+    expect(page.classifier).toBe('bounded-keyset');
+  }
+  for (const offset of [0, 2, 4]) {
+    expect(pages[offset + 1]!.statements).toBe(pages[offset]!.statements);
+    expect(pages[offset + 1]!.rowsExamined).toBe(pages[offset]!.rowsExamined);
+  }
+  expect(pages[5]!.buffers - pages[0]!.buffers).toBeLessThanOrEqual(64);
+});
+
+test('shared cursors bind Collection identity, the effective filter, and the admitted sort', async () => {
+  await subjectIn('game');
+  await subjectIn('game');
+  const everything = await builtin({ kind: 'everything' });
+  const stateView = await stateCollection('game');
+  const gameFilter = { type: { in: [driver.profiles.game.typeId] } };
+  const page = await members(everything.id, 'owner', { limit: 1, sort: 'id', filter: gameFilter });
+  expect(page.next).toEqual(expect.any(String));
+
+  await problem(await get('owner', queryPath(stateView.id, {
+    limit: 1, sort: 'id', filter: gameFilter, cursor: page.next!,
+  })), 400, 'invalid_cursor');
+  await problem(await get('owner', queryPath(everything.id, {
+    limit: 1, sort: 'id', filter: { type: { in: [driver.profiles.record.typeId] } }, cursor: page.next!,
+  })), 400, 'invalid_cursor');
+  await problem(await get('owner', queryPath(everything.id, {
+    limit: 1, sort: 'name', filter: gameFilter, cursor: page.next!,
+  })), 400, 'invalid_cursor');
+});

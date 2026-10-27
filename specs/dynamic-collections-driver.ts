@@ -116,6 +116,8 @@ export interface DynamicCollectionsDriver {
 
   setTime(instant: string): Promise<void>;
   now(): string;
+  /** Replace the shared list-cursor key ring and retire the key used by issued test cursors. */
+  rotateListCursorKey(): Promise<void>;
 
   /** Raw Response, preserving the production HTTP status, headers, and body. */
   request(as: Persona, input: {
@@ -154,7 +156,7 @@ export interface DynamicCollectionsDriver {
   resumeAndSettle(): Promise<void>;
   /** Redeliver the captured production projection events through the real consumer in the selected order. */
   replayProjectionEvents(order: 'forward' | 'reverse'): Promise<void>;
-  /** Seed unrelated library facts through production commands and preserve tested rows. */
+  /** Seed owner facts outside the selected profile/state predicate through production commands. */
   seedUnrelatedFacts(total: number): Promise<void>;
   inspect(): Promise<DynamicCollectionsInspection>;
   /** Measure the real callback's SQL only; setup, inspection and background consumer SQL are excluded. */
