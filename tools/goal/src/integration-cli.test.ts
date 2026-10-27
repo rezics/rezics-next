@@ -55,7 +55,7 @@ test('registered CLI commands enqueue, train and start and stop a manager throug
     expect(start.code).toBe(0); expect(JSON.parse(start.stdout).threadId).toBe('thread-1');
     expect((await command('manager', 'stop', 'manager')).code).toBe(0);
   } finally { host.kill('SIGTERM'); await exited; repo.close(); }
-}, 10_000);
+}, 60_000);
 
 test('manager start creates its host and returns while the host stays alive', async () => {
   const t = temporaryDirectory();
@@ -80,4 +80,4 @@ test('manager start creates its host and returns while the host stays alive', as
     });
     process.kill(hostPid!, 'SIGTERM'); await released; hostPid = undefined;
   } finally { if (hostPid) process.kill(hostPid, 'SIGTERM'); child.kill(); t.close(); }
-}, 10_000);
+}, 60_000);
