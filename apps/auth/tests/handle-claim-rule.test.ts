@@ -42,7 +42,7 @@ const fake = Bun.serve({
     const path = new URL(request.url).pathname;
     if (path === '/turnstile.js')
       return new Response(
-        'window.turnstile = { ready(fn) { fn(); }, render(el, options) { options.callback("token"); return "widget"; }, reset() {}, remove() {} };',
+        'window.turnstile = { ready(fn) { fn(); }, render(el, options) { this.options = options; options.callback("token"); return "widget"; }, reset() { this.options.callback("token"); }, remove() {} };',
         {
           headers: { 'content-type': 'text/javascript' },
         },
@@ -50,7 +50,10 @@ const fake = Bun.serve({
     if (path === '/session') return Response.json({ account_id: 'claim-test-account' });
     if (request.method === 'POST') {
       calls.push({ path, body: (await request.json()) as Record<string, unknown> });
-      return Response.json({ error: path === '/signup' ? 'handle_unavailable' : 'operation_denied' }, { status: 409 });
+      return Response.json(
+        { error: path === '/signup' ? 'handle_unavailable' : 'account_operation_denied' },
+        { status: 409 },
+      );
     }
     return new Response('Not Found', { status: 404 });
   },
