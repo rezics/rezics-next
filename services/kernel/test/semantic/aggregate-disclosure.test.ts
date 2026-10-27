@@ -171,10 +171,18 @@ test('typed inverse counts cannot sample foreign sources outside the page proof 
   const target = await fixture.create('Typed target');
   for (let i = 0; i < 8; i++) await fixture.create(`Typed source ${i}`, [target.id]);
   await fixture.drain();
-  const page = await fixture.inverse(target.id, '&limit=1&type=schema:Book');
+  const measured = await capture(db, () => fixture.inverse(target.id, '&limit=1&type=schema:Book'));
+  const page = measured.value;
   expect(page.links).toHaveLength(1);
   expect(page.links[0].type).toBe('schema:Book');
   expect(page.next).toEqual(expect.any(String));
+  // The type-only thousand-member sample is outside this page's five-candidate budget,
+  // even if a large fixed authorization baseline masks its growth in an aggregate Cost.
+  expect(
+    measured.capture.statements.filter(
+      (sql) => /\bsemantic\.(?:inbound|outbound)_link\b/.test(sql) && /\bLIMIT\s+1000\b/i.test(sql),
+    ),
+  ).toEqual([]);
   omitted(page);
 });
 
