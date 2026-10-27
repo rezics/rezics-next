@@ -677,6 +677,8 @@ work and no additional relation or growth check. Existing claim storage bounds r
 order), `handle` (one handle, normalized to lowercase using the lookup rules), or `agent` (one catalogue subject UUID).
 Each form returns
 `{ accounts: [...], next: null }`. The web builds an account's public page at `/@handle`, outside Realms and Zones.
+The `handle` and `agent` forms hide deleted accounts exactly like unknown handles or subjects, returning the same
+empty account list. The `ids` form retains deleted identities for attribution.
 
 The `agent` form resolves one `access.agent_page` pointer in the subject's route, then reads the named account by its
 own `(route, account_id)` key. The account row remains authoritative: the read returns an empty account list unless
@@ -1068,7 +1070,8 @@ the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts
 
 `GET /v1/agent-pages?cursor=&limit=` returns `{ agentPages, next }`, where each item is
 `{ handle, kind, lastModified }`. The public route uses `account:read_public_identity`.
-The limit defaults to 1000 and accepts integers from 1 through 1000; `next` is an opaque
+The limit defaults to 1000 and accepts integers from 1 through 1000. This 1,000 entry page limit is the
+server-to-server sitemap exception to the shared list maximum of 100. `next` is an opaque
 `encodeListCursor` cursor bound to the route, acting viewer and page size, or null at the end.
 Cursors expire after 15 minutes. Omit `cursor` for the first page and keep the same limit while
 continuing that walk.

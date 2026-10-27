@@ -182,7 +182,7 @@ test('profile patch sets and clears links, refuses invalid links and preserves t
   expect((await read('handle=profile_handle')).body.accounts[0].links).toEqual(maximum);
 });
 
-test('fencing and deletion erase biography and links, and a deleted handle matches the ids tombstone exactly', async () => {
+test('fencing and deletion erase biography and links, and a deleted handle answers like an unknown handle', async () => {
   for (const tombstone of [false, true]) {
     const handle = tombstone ? 'deleted_profile' : 'fenced_profile';
     const id = await person(handle);
@@ -201,19 +201,26 @@ test('fencing and deletion erase biography and links, and a deleted handle match
     const byHandle = await read(`handle=${handle}`);
     if (tombstone) {
       const byIds = await read(`ids=${id}`);
-      expect(byHandle.body.accounts[0]).toMatchObject(byIds.body.accounts[0]);
-      expect(byHandle.body.accounts[0]).toMatchObject({ subject: null, verified: false });
-      expect(Object.keys(byHandle.body.accounts[0]).sort()).toEqual([
-        'automated',
-        'displayName',
-        'handle',
-        'id',
-        'kind',
-        'operatorId',
-        'state',
-        'subject',
-        'verified',
-      ]);
+      const unknown = await read('handle=unknown_deleted_profile');
+      expect(unknown).toEqual({ status: 200, body: { accounts: [], next: null } });
+      expect(byHandle).toEqual(unknown);
+      expect(byIds).toEqual({
+        status: 200,
+        body: {
+          accounts: [
+            {
+              id,
+              kind: 'actor',
+              state: 'deleted',
+              handle: null,
+              displayName: null,
+              automated: false,
+              operatorId: null,
+            },
+          ],
+          next: null,
+        },
+      });
     } else expect(byHandle.body.accounts[0]).toMatchObject({ bio: null, links: [] });
   }
 });

@@ -81,6 +81,13 @@ beforeAll(async () => {
 });
 afterAll(async () => pool.end());
 
+test('agent pages README states the 1000 entry server-to-server sitemap exception to the shared maximum of 100', () => {
+  const readme = readFileSync(new URL('../../src/access/README.md', import.meta.url), 'utf8');
+  const section = readme.split('## Agent pages\n')[1]!.split('\n## ')[0]!;
+  expect(section).toContain('1,000 entry page limit');
+  expect(section).toContain('server-to-server sitemap exception to the shared list maximum of 100');
+});
+
 test('agent pages list exactly active unfenced handles in opaque keyset order', async () => {
   const expected = seeded.toSorted((a, b) => routeOf(a.id)! - routeOf(b.id)! || a.id.localeCompare(b.id));
   const found = [];

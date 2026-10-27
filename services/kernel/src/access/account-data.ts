@@ -79,7 +79,7 @@ export async function readPublicAccountByHandle(
   const claim = await handleRead.run(client, { route, handle });
   if (!claim) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
-  if (!row || row.state === 'pending') return [];
+  if (!row || row.state === 'pending' || row.state === 'deleted') return [];
   return publicIdentityForAccount(client, row);
 }
 
