@@ -41,7 +41,9 @@ const seededRelations = [
   'semantic.candidate',
   'semantic.adoption',
   'semantic.hidden_candidate',
+  'semantic.outbound_link',
   'semantic.definition_release',
+  'semantic.definition_activation',
 ] as const;
 const prefix = `facets-growth-${randomUUID().slice(0, 8)}`;
 const cursors: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(31)]]) };
@@ -262,6 +264,7 @@ function unrelatedPopulation(name: string): Population {
       const candidate = newId(route);
       const transactionId = randomUUID();
       const releaseDigest = `sha256:${createHash('sha256').update(`facet-release-${ordinal}-${id}`).digest('hex')}`;
+      const activationDigest = ordinal % unit === unit - 1 || ordinal % 8 === 7 ? bundledDigest : releaseDigest;
       const term = itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } })[0]!;
       const body = { value: { type: 'value', content: 'ja' }, qualifiers: [], references: [] };
       return {
@@ -368,11 +371,43 @@ function unrelatedPopulation(name: string): Population {
         'semantic.hidden_candidate': [
           { route, subject_id: id, candidate_id: candidate, visibility: 'hidden', security_revision: 1 },
         ],
+        'semantic.outbound_link': [
+          {
+            route,
+            subject_id: id,
+            property: 'schema:genre',
+            filter_value: '00000000-0000-0000-0000-000000000000',
+            order_key: ordinal.toString().padStart(12, '0'),
+            target_subject_id: id,
+            statement_id: candidate,
+            slot_id: slot,
+            relation: true,
+            source_type: 'schema:Book',
+            source_order_key: '',
+            outbound_order: 'name',
+            source_revision: 2,
+            source_security_revision: 0,
+            target_revision: 0,
+            target_type: 'schema:Book',
+            external: null,
+            value: 'value',
+            present: true,
+            recorded_transaction_id: transactionId,
+          },
+        ],
         'semantic.definition_release': [
           {
             route: 0,
             digest: releaseDigest,
             body: { types: {}, properties: {} },
+            recorded_transaction_id: transactionId,
+          },
+        ],
+        'semantic.definition_activation': [
+          {
+            route: 0,
+            head: ordinal + 2,
+            digest: activationDigest,
             recorded_transaction_id: transactionId,
           },
         ],
