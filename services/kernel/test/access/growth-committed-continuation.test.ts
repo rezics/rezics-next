@@ -24,13 +24,6 @@ const continuationId = derivedId(CONTINUATION_NAMESPACE, `${accountId}:fixed`, r
 const prefix = `wf:${'ab'.repeat(32)}`;
 const rowsPerScaleUnit = 500;
 
-function generatedId(ordinal = 'n', routeParameter = '$1', seedParameter = '$2'): string {
-  // Test-only UUIDs are derived inside PostgreSQL so large growth stages do not build million-item JS arrays.
-  return `(substr(${seedParameter}::text, 1, 8) || '-' || substr(${seedParameter}::text, 10, 4) ||
-    '-8000-' || lpad(to_hex(${routeParameter}::integer), 4, '0') || '-' ||
-    lpad(to_hex(${ordinal}::bigint), 12, '0'))::uuid`;
-}
-
 function expectIndex(plans: readonly unknown[], expected: string): void {
   let found = false;
   const visit = (node: unknown): void => {
@@ -177,6 +170,86 @@ async function insertUnrelatedContinuations(database: GrowthDatabase, count: num
   );
 }
 
+async function insertUnrelatedFenceHistory(database: GrowthDatabase, seed: string, from: number, to: number) {
+  const client = await database.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('CREATE TEMP TABLE growth_fence_ids (id uuid) ON COMMIT PRESERVE ROWS');
+    await client.query(
+      `INSERT INTO growth_fence_ids (id)
+       SELECT (substr($1::text,1,23)||$2::text||lpad(to_hex(n::bigint),8,'0'))::uuid
+       FROM generate_series($3::integer+1,$4::integer) n`,
+      [seed, route.toString(16).padStart(4, '0'), from, to],
+    );
+    await client.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+       SELECT $1,id,'actor','active',id,true FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.committed_continuation
+         (route,continuation_id,account_id,operation_key,operation_digest,command_key_prefix,
+          barrier_receipt_id,barrier_transaction_id,minimum_authn_epoch,allowlist,digest,
+          created_at,committed_expires_at,expires_at)
+       SELECT $1,id,id,'unrelated:'||id::text,repeat('b',64),$2,id,id,1,
+         $3::jsonb,repeat('c',64),
+         now(),now()+interval '5 minutes',now()+interval '5 minutes'
+       FROM growth_fence_ids`,
+      [
+        route,
+        prefix,
+        JSON.stringify([
+          { step: 'erase-auth-owner', target: accountId, key: `${prefix}:erase-auth-owner`, digest: 'a'.repeat(64) },
+        ]),
+      ],
+    );
+    await client.query(
+      `INSERT INTO access.lifecycle_coordination
+       SELECT $1,id,id,id,'operator',id FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.operator_relation_slot
+       SELECT $1,id,id,id,false,id FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.committed_continuation_entry
+       SELECT $1,id,'fence',id::text,'unrelated:'||id::text,repeat('a',64) FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.operator_fence_page(route,continuation_id,page_key,allowlist)
+       SELECT $1,id,repeat('0',64),'[]'::jsonb FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.lifecycle_fence_receipt(route,account_id,receipt_id,minimum_authn_epoch,kind,transaction_id)
+       SELECT $1,id,id,1,'fence',id FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO access.committed_continuation_completion(route,continuation_id,step,target,key,digest,receipt_id)
+       SELECT $1,id,'fence',id::text,id::text,repeat('a',64),id FROM growth_fence_ids`,
+      [route],
+    );
+    await client.query(
+      `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,
+         request_digest,epoch,position,transaction_id,response)
+       SELECT $1,'account',id,'access.operator.subject-fenced',id::text,$2,1,1,id,'{}'
+       FROM growth_fence_ids`,
+      [route >>> 4, Buffer.alloc(32)],
+    );
+    await client.query('DROP TABLE growth_fence_ids');
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase();
   fixtures = createPool(db.url);
@@ -202,68 +275,7 @@ test('one fanout page completion stays bounded as unrelated continuations and op
       const seed = Bun.randomUUIDv7();
       const from = previous * rowsPerScaleUnit;
       const to = scale * rowsPerScaleUnit;
-      const id = generatedId();
-      await database.admin.query(
-        `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
-         SELECT $1,${id},'actor','active',${id},true FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.committed_continuation
-           (route,continuation_id,account_id,operation_key,operation_digest,command_key_prefix,
-            barrier_receipt_id,barrier_transaction_id,minimum_authn_epoch,allowlist,digest,
-            created_at,committed_expires_at,expires_at)
-         SELECT $1,${id},${id},'unrelated:'||${id}::text,repeat('b',64),$5,${id},${id},1,
-           jsonb_build_array(jsonb_build_object('step','erase-auth-owner','target',${id}::text,
-           'key',$5::text||':erase-auth-owner','digest',repeat('a',64))),repeat('c',64),
-           now(),now()+interval '5 minutes',now()+interval '5 minutes'
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to, prefix],
-      );
-      await database.admin.query(
-        `INSERT INTO access.lifecycle_coordination
-         SELECT $1,${id},${id},${id},'operator',${id}
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.operator_relation_slot
-         SELECT $1,${id},${id},${id},false,${id}
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.committed_continuation_entry
-         SELECT $1,${id},'fence',${id}::text,'unrelated:'||${id}::text,repeat('a',64)
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.operator_fence_page(route,continuation_id,page_key,allowlist)
-         SELECT $1,${id},repeat('0',64),'[]'::jsonb
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.lifecycle_fence_receipt(route,account_id,receipt_id,minimum_authn_epoch,kind,transaction_id)
-         SELECT $1,${id},${id},1,'fence',${id}
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO access.committed_continuation_completion(route,continuation_id,step,target,key,digest,receipt_id)
-         SELECT $1,${id},'fence',${id}::text,${id}::text,repeat('a',64),${id}
-         FROM generate_series($3::integer+1,$4::integer) n`,
-        [route, seed, from, to],
-      );
-      await database.admin.query(
-        `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,
-           request_digest,epoch,position,transaction_id,response)
-         SELECT $1,'account',${generatedId('n', '$2', '$3')},'access.operator.subject-fenced',
-           ${generatedId('n', '$2', '$3')}::text,$6,1,1,${generatedId('n', '$2', '$3')},'{}'
-         FROM generate_series($4::integer+1,$5::integer) n`,
-        [route >>> 4, route, seed, from, to, Buffer.alloc(32)],
-      );
+      await insertUnrelatedFenceHistory(database, seed, from, to);
       await database.admin.query('ANALYZE access.account');
       await database.admin.query('ANALYZE access.committed_continuation');
       await database.admin.query('ANALYZE access.lifecycle_coordination');
@@ -354,7 +366,7 @@ test('one fanout page completion stays bounded as unrelated continuations and op
 
 async function lookupContinuation(database: GrowthDatabase): Promise<void> {
   await withConnection(database.pool, async (client) => {
-    await client.query('BEGIN READ ONLY');
+    await client.query('BEGIN');
     try {
       const row = await loadContinuation.run(client, { route, continuation_id: continuationId });
       const found = Array.isArray(row) ? row.length === 1 : row != null;
