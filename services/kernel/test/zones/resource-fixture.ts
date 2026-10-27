@@ -61,7 +61,9 @@ export async function resourceFixture() {
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(74)]]) },
       requestDeadlineMs: 30_000,
       access: (config) => {
-        const real = access.access(config);
+        // Lifecycle time may advance by months; credential expiry retains actual wall time.
+        // Commands still receive the kernel domain clock and bind their own authoritative permission time.
+        const real = access.access({ ...config, clock: () => new Date() });
         installResourceRoleCatalogue(real, resolveResourceRoles(config.actions));
         return real;
       },
