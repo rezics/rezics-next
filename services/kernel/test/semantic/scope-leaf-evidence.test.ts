@@ -119,7 +119,8 @@ test('unresolved witness work advances bounded native progress beyond two hundre
     );
     expect(hint.rows).toHaveLength(1);
     const recorded = hint.rows[0].witness_id as string;
-    const survivor = entries.filter((entry) => entry.candidate !== recorded).at(-1)!;
+    const survivor = entries.at(-1)!;
+    expect(recorded, 'the published native hint must be stale in this fixture').not.toBe(survivor.candidate);
     for (const entry of entries) if (entry !== survivor) await f.hideCandidate(subject, entry.candidate);
     const leaf: FactClause = { facet: 'statement', property: 'ex:credit', values: [target] };
     const expression = { statement: { property: 'ex:credit', in: [target] } };
@@ -201,10 +202,10 @@ test('current absence never comes from sampled or historically rejected witnesse
     after = evidence.progress;
   }
   expect(last).toBeDefined();
-  // A foreign/current visibility restoration behind progress cannot be certified absent by old rejected pages.
+  // Source-local moderation changes invalidate raw progress rather than certifying absence from old rejected pages.
   await f.hideCandidate(book, entries[0]!.candidate, 'restore');
-  const old = current(await read(db.pool, f.request(book, leaf, after), f.options()));
-  expect(old.coverage).toBeNull();
+  const old = await read(db.pool, f.request(book, leaf, after), f.options());
+  expect(old.state).toBe('basis_changed');
   expect(evaluate({ not: expression }, [old])).not.toBe(true);
   await finishWitnessRepair(db.pool, book);
   const fresh = current(await read(db.pool, f.request(book, leaf), f.options()));
