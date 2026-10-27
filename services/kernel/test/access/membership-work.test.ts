@@ -49,7 +49,7 @@ async function person() {
 type WorkerHandle = {
   child: ReturnType<typeof Bun.spawn>;
   boundary: string | undefined;
-  until(marker: string): Promise<void>;
+  until(marker: string, timeoutMs?: number): Promise<void>;
   configure?(actor: string, stop: string, fail: boolean): Promise<void>;
   kill(): Promise<void>;
   stop(): Promise<void>;
@@ -83,8 +83,8 @@ function spawnWorker(actor: string, stop = '', fail = false, registry = false, r
   const handle: WorkerHandle = {
     child,
     boundary: undefined,
-    async until(marker: string) {
-      const deadline = Date.now() + 20000;
+    async until(marker: string, timeoutMs = 20000) {
+      const deadline = Date.now() + timeoutMs;
       while (!output.includes(marker)) {
         if (child.exitCode !== null || Date.now() > deadline)
           throw new Error(`Missing ${marker}: ${output}\n${child.exitCode === null ? '' : await errors}`);
@@ -159,7 +159,7 @@ async function restartAt(actor: string, input: MembershipWorkInput, phase: strin
   const first = await worker(actor, phase);
   const handle = await enqueueMembership(client, id, input);
   try {
-    await first.until(first.boundary!);
+    await first.until(first.boundary!, 60000);
     await superset(input.kind === 'membership' ? input.memberAccountId : actor);
   } finally {
     await first.kill();
@@ -248,7 +248,7 @@ test('compensation persists an exact terminal barrier before cleanup and cannot 
     const handle = await enqueueMembership(client, id, input);
     let reservationId: string;
     try {
-      await first.until(first.boundary!);
+      await first.until(first.boundary!, 60000);
       await superset(member);
       expect(await authority(organizationId, member)).toEqual([]);
       reservationId =

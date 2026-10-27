@@ -235,8 +235,20 @@ async function startKernelWorker() {
 }
 async function stopKernelWorker() {
   if (!worker) return;
-  worker.kill('SIGTERM');
-  await worker.exited;
+  const child = worker;
+  child.kill('SIGTERM');
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const exited = await Promise.race([
+    child.exited.then(() => true),
+    new Promise<boolean>((resolve) => {
+      timeout = setTimeout(() => resolve(false), 5000);
+    }),
+  ]);
+  if (timeout) clearTimeout(timeout);
+  if (!exited) {
+    child.kill('SIGKILL');
+    await child.exited;
+  }
   worker = undefined;
 }
 async function waitFor(work: () => Promise<boolean>) {
