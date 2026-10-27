@@ -12,8 +12,6 @@ import {
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
-import { resourceAuthorization } from '../../../src/access/resource-authorization.ts';
-import { installStandingParentGrant } from '../../../src/access/standing-parent.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createPool } from '../../../src/database/pool.ts';
@@ -164,28 +162,14 @@ export async function createProfileEntryFixture() {
         key: entryKey(),
       });
     await grant(global, steward.actor.accountId, ['definitions:publish', 'definitions:activate']);
-    const parent = {
+    // Governance bootstrap already performed the Global parent's one-time installation.
+    // Extend its standing creation authority through ordinary, fully authorized grants.
+    await grants.create(context(steward.actor), {
       resource: global,
-      async validate(client: Parameters<Access['authorize']>[0]) {
-        const found = await client.query(
-          "SELECT 1 FROM semantic.context WHERE route=0 AND context_id=$1 AND kind='global'",
-          [GLOBAL_CONTEXT],
-        );
-        return found.rows.length === 1;
-      },
-    };
-    await installStandingParentGrant({
-      access,
-      parent,
-      context: context(steward.actor),
+      subject: { kind: 'active_accounts' },
       actions: ['subject:create', 'statement:propose'],
-      authority: resourceAuthorization({
-        access,
-        actor: steward.actor,
-        action: 'subject:create',
-        anchor: parent,
-        context: { ...context(steward.actor), partition: 0 },
-      }),
+      valid: '(,)',
+      key: entryKey(),
     });
 
     async function send(
