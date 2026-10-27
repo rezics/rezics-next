@@ -206,7 +206,7 @@ test('canonical readiness is an explicit native dependency, never an ordinary pa
   }
 });
 
-test('quota one charges its real lookahead without advancing the covered frontier to B', async () => {
+test('real raw prefix covers rejected and lookahead candidates with pinned generation and truthful exhaustion and failures', async () => {
   const { runtime, handle } = await prepared();
   assertPage(await runtime.prefix(handle, { quota: 1, budget: 2 }), native.slice(0, 1), ids[0]!, false, 2);
 });
