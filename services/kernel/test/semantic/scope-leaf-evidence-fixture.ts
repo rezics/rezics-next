@@ -83,10 +83,45 @@ export async function requiredExport<T>(relative: string, name: string): Promise
   return exports[name] as T;
 }
 export const leafReader = () => requiredExport<LeafReader>('semantic/scope-leaf-evidence', 'readScopeLeafEvidence');
-// Search must extract this from its existing checkHits evaluator, not duplicate it in this fixture.
+// Test-only certificate bridge. The actual Scope consumer mapping is separately Search-owned.
+// Resolve pure shared ports only after the native command/selection/Access baseline and reader.
 export type CurrentEvaluator = (filter: FilterDocument, evidence: readonly LeafEvidence[]) => RelationFacetMatch;
-export const currentEvaluator = () =>
-  requiredExport<CurrentEvaluator>('search/disclosure/check', 'evaluateCurrentFilter');
+type CurrentFilterPlan = {
+  leaves: readonly FactClause[];
+  evaluate(values: readonly RelationFacetMatch[]): RelationFacetMatch;
+};
+export async function currentEvaluator(): Promise<CurrentEvaluator> {
+  const compile = await requiredExport<(filter: FilterDocument) => CurrentFilterPlan>(
+    'search/current-filter-plan',
+    'compileCurrentFilter',
+  );
+  const holdsType = await requiredExport<(type: string, clause: Extract<FactClause, { facet: 'type' }>) => boolean>(
+    'search/current-leaf',
+    'holdsCurrentType',
+  );
+  const holdsStatements = await requiredExport<
+    (statements: readonly IndexedStatement[], clause: Extract<FactClause, { facet: 'statement' }>) => boolean
+  >('search/current-leaf', 'holdsCurrentStatements');
+  return (filter, evidence) => {
+    const plan = compile(filter);
+    expect(evidence).toHaveLength(plan.leaves.length);
+    return plan.evaluate(
+      plan.leaves.map((clause, index): RelationFacetMatch => {
+        const leaf = evidence[index]!;
+        if (leaf.state !== 'current') return 'not_proven';
+        const matches =
+          clause.facet === 'type'
+            ? leaf.type !== null && holdsType(leaf.type, clause)
+            : holdsStatements(
+                leaf.facts.map((fact) => fact.statement),
+                clause,
+              );
+        if (matches) return true;
+        return leaf.coverage !== null && leaf.coverage.basis === leaf.basis ? false : 'not_proven';
+      }),
+    );
+  };
+}
 export type IdentityBasis = { digest: string };
 export type BasisReader = (
   pool: Pool,

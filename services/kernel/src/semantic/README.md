@@ -178,7 +178,8 @@ A Context's custom relation types are one term extension: an immutable body addr
 ### Current leaf evidence
 
 This additive internal contract is a native implementation handoff, deliberately red until the independent export
-below exists. It preserves public `SubjectSource`, Search admission, deadlines, `checkHits` and its unknown/drop
+below exists. Its signature and fields are proposals for manager/Search review, not approved production ABI.
+It preserves public `SubjectSource`, Search admission, deadlines, `checkHits` and its unknown/drop
 policy. `SubjectSource.read` loads unrelated facts/history; `matchRelationFacets` samples a recorded witness and
 32 alternatives without caller accounting or continuation. Neither is this reader. The Search scope admission
 scaffold's callbacks are not implemented identity or evidence ports.
@@ -187,10 +188,15 @@ Semantic returns current selected facts, never a Boolean filter verdict. Search 
 units and qualifier matching and ONE shared AND/OR/NOT interpreter extracted from `disclosure/check.ts` for both
 `checkHits` and explicit point evaluation. No arbitrary AST, script, predicate, supplied positive evidence, fake
 Hit, public subject DTO, labels, renderer, private overlay or per-actor native allow cache enters this port.
-The proposed Search extraction is `disclosure/check.ts:evaluateCurrentFilter(filter: FilterDocument,
-evidence: readonly LeafEvidence[]): RelationFacetMatch`, with evidence aligned to the deterministic deduplicated
-leaf plan. It maps incomplete/noncurrent evidence to unknown and shares the existing leaf matcher and Boolean
-plan with `checkHits`; tests dynamically resolve it and never supply a handwritten interpreter.
+The actual shared Search ports are `current-filter-plan.ts:compileCurrentFilter`, `currentClauseKey` and
+`anyCurrentMatch`, and `current-leaf.ts:holdsCurrentType(type: string, clause: Extract<FactClause,
+{ facet: 'type' }>): boolean` / `holdsCurrentStatements(statements: readonly IndexedStatement[],
+clause: Extract<FactClause, { facet: 'statement' }>): boolean`. The native fixture dynamically resolves the shared
+matchers and `compileCurrentFilter(...).evaluate` after its native baseline. Its tiny test-only bridge aligns
+native evidence with plan leaves and maps a nonmatching window without a current coverage certificate to unknown;
+it contains no Boolean, range or qualifier interpreter. Final actual Scope consumer mapping/evaluation acceptance
+is separately Search-owned after the native export. Pure shared plan/matcher extraction can land first without
+importing this producer or waiting for a consumer adapter.
 Only currently admitted shapes are supported; this contract does not admit qualified relations that Search
 currently refuses. Qualifiers on supported material leaves remain normalized item qualifiers on the same statement.
 
@@ -256,8 +262,14 @@ export function readScopeLeafEvidence(
 
 `revalidate` is one opaque native witness identity previously returned by this reader, at most 128 ASCII bytes,
 never an allow token. It restricts work to that exact candidate/recording identity, while rechecking all current
-selection, source, original/terminal, fence and referenced-target authority. It cannot supply or override a body.
-It is mutually exclusive with `after`. Facts contain only public normalized facet data needed by the leaf; no
+selection, source-anchor Access/eligibility, fence and referenced-target authority. It cannot supply or override
+a body.
+It is mutually exclusive with `after`. `request.subject` is the ALREADY KNOWN live native source anchor.
+This reader does not discover or follow original-to-terminal mappings, scan aliases or return hidden terminal IDs.
+A redirected or unready source returns `not_ready`. It cannot certify an unprovided original anchor: actual
+original/terminal resolution and original/source/final Access belong to owner composition through the independent
+identity ports. The source anchor still receives real current Access/eligibility and selected-fact/fence/target
+checks. Facts contain only public normalized facet data needed by the leaf; no
 references, source tuple, raw body, private candidate content or labels. Type leaves return actual authoritative
 `subject.type`, no facts, a current selection coverage certificate and no progress. Denied/nonvisible sources
 return `not_ready` without revealing type, terminal identity or facts, not definitive leaf false.
@@ -297,7 +309,9 @@ absence. If neither proof applies, coverage stays null and the existing coalesce
 `current` means evidence was observed now, not that the leaf matches. With null coverage Search may use a matching
 current witness as a positive; otherwise the leaf is unknown, including under NOT. Nonmatching partial facts cannot
 prove false. A nonnull progress is raw unfinished work, never exhausted. An empty raw range may end progress while
-coverage remains null: this requests repair/readiness, not false or EOF. Search re-reads every earlier positive
+coverage remains null: this requests repair/readiness, not false or EOF. Unknown without a current absence
+certificate can remain readiness even after raw end and quiescence; nonempty historical pairs need not become
+false. Search re-reads every earlier positive
 before final disclosure, including original and terminal Access and current source authority. Any nonmatching
 final reread removes the old positive; it cannot fall back to its earlier truth value.
 
@@ -327,12 +341,17 @@ Unfinished reads with enough allowance strictly advance or explicitly report not
 the same32/256 sample. After finite quiescence and bounded existing maintenance, surviving witnesses257 and4096 are
 reachable in finite calls. A restored witness behind a keyset needs a FRESH traversal; no snapshot/latency guarantee
 under perpetual writes. Repair can publish a fresh useful hint so the owner can re-read all deterministic leaves
-for final evaluation without retaining historical truth in a token.
+for final evaluation without retaining historical truth in a token. That final replay, including previously
+expensive leaves, must fit aggregate256 and all native reservations; otherwise actual durable repair must supply
+bounded final witnesses. Finite last-survivor progress does not prove exhaustive traversal: that additionally
+requires the definitive complete selection/pair evidence assumptions above. A general bounded final-replay proof
+is still missing; no cached truth, hidden reread overspend or new absence/generation authority fills that gap.
 
 The existing encrypted position stays exactly
 `[basisDigest, settledCanonicalId, groupId, sourceOrdinal, aliasAfter, sourceAfter, ownerBasisDigest, formatVersion]`.
 Proposed `sourceAfter` is ONE fixed 18-byte native raw record, base64url encoded (24 ASCII bytes). The first byte
-contains format version1 in its high3 bits and Search deterministic leaf ordinal (0..31) in its low5 bits. The
+contains format version1 in its high3 bits and Search deterministic leaf ordinal (0..31) in its low5 bits. These
+record bounds derive from actual `FILTER_LIMITS.leaves = 32` and `FILTER_LIMITS.in = 64`, not new admission limits. The
 second byte contains phase (compact0, selection1, witness2) in its high2 bits and value ordinal in its low6 bits.
 The remaining16 bytes are a union: witness UUID16 in witness phase; otherwise unsigned big-endian sequence u64
 followed by eight zero bytes. Reject other versions/phases and nonzero padding. This uses the required128-bit
@@ -354,15 +373,15 @@ by this real evidence port in its own implementation, not claimed as covering ca
 
 Small independent production slices are (1) shared accounted selection/normalization extraction over real source,
 slots, witness evidence, fences and consent; (2) the independent leaf reader and bounded raw continuation over those
-helpers and proven pair coverage; (3) Search's shared evaluator extraction and final owner composition with actual
-identity ports. Existing witness storage/bootstrap/completeness and finite relay repair must land first where
-used; structural identity implementation remains separate. None is production code in this specification.
+helpers and proven pair coverage; (3) Search's pure shared plan/matcher extraction, independently landable before
+the native producer; (4) final owner composition with actual identity ports. Existing witness storage/bootstrap/
+completeness and finite relay repair must land first where used; structural identity implementation remains separate. None is production code in this specification.
 
 #### Native current leaf evidence read
 
 - Touches: one admitted source/type/selected property, bounded slot operations/Global selection or one possible-witness pair range, exact candidate/revision/release/public consent/moderation/retraction points and current foreign fences/targets; Access and identity metadata sweeps are independently charged as above.
 - Bound: actual usage <= each independent caller reservation; <=100 raw driver/witness keys plus one explicitly reserved lookahead per call, independent of unrelated properties/history and total relation degree; SQL rows/statements constant and blocks logarithmic at fixed step. Total resumable work may grow with the relevant witness range. No whole-subject snapshot or whole-degree fetch.
-- Growth check: `test/semantic/growth-scope-leaf-evidence.test.ts`, `leaf evidence cost is bounded under unrelated property history and relation growth`, separate legal `[64,512,4096]` axes at fixed caller step, one warmup and three repetitions capturing actual SQL rows/blocks/statements and native usage. Native behavior regressions are in `test/semantic/scope-leaf-evidence.test.ts`; missing exports fail only after real commands, actual selected facts and real Access succeed.
+- Growth check: `test/semantic/growth-scope-leaf-evidence.test.ts`, `leaf evidence cost is bounded under unrelated property history and relation growth`, separate legal `[64,512,4096]` axes at fixed caller step, one warmup and three repetitions capturing actual SQL rows/blocks/statements and native usage. Native behavior regressions are in `test/semantic/scope-leaf-evidence.test.ts`; these two files gate the leaf producer. `test/semantic/scope-leaf-identity-composition.test.ts` separately gates final Scope/Zone composition after actual terminal/group exports, preserving the eight-key and last-alias tests. Full native specification runs all three files; missing exports fail only after real commands, actual selected facts and real Access succeed.
 
 ## Cost
 
