@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const root = join(import.meta.dir, '..', '..', '..');
 const ui = join(root, 'packages', 'ui');
@@ -34,3 +34,35 @@ test('workspace sources do not import the legacy number input', () => {
 
   expect(matches, matches.join('\n')).toEqual([]);
 }, 120_000);
+
+test('workspace source scan skips generated output and files removed while reading', () => {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const tempRoot = mkdtempSync(join(root, '.temp', 'number-input-source-scan-'));
+  const generatedPath = join(tempRoot, 'apps', 'auth', 'src', 'paraglide', 'messages.ts');
+  const removedPath = join(tempRoot, 'apps', 'auth', 'src', 'removed.ts');
+  const ordinaryPath = join(tempRoot, 'packages', 'example', 'src', 'ordinary.ts');
+  const ordinaryLine = "import NumberInput from '@rezics/ui/number-input';";
+
+  try {
+    for (const path of [generatedPath, removedPath, ordinaryPath]) {
+      mkdirSync(dirname(path), { recursive: true });
+    }
+    writeFileSync(generatedPath, "import NumberInput from '@rezics/ui/number-input';\n");
+    writeFileSync(removedPath, 'export const removed = true;\n');
+    writeFileSync(ordinaryPath, `${ordinaryLine}\n`);
+
+    let removedFileWasRead = false;
+    const matches = scanWorkspaceSources(tempRoot, (path) => {
+      if (path === removedPath) {
+        removedFileWasRead = true;
+        unlinkSync(path);
+      }
+      return readFileSync(path, 'utf8');
+    });
+
+    expect(removedFileWasRead).toBe(true);
+    expect(matches).toEqual([`packages/example/src/ordinary.ts:1:${ordinaryLine}`]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
