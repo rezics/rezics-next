@@ -166,31 +166,39 @@ export class WorkerJob implements GateOutcomeSink {
       if (!(error instanceof TaskHeldForDependenciesError)) throw error;
     }
   }
+  /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
+  private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
+    if (this.starting.has(taskId)) return;
+    this.starting.add(taskId);
     try {
-      await this.follow(await this.tasks.retryHeld(taskId));
-    } catch (error) {
-      // Another process is starting it.
-      if (error instanceof LeaseHeldError) return;
-      if (!(error instanceof HeldTaskConflictError)) throw error;
-      const task = this.tasks.store.task(taskId),
-        ref = { taskId, attempt: task.currentAttempt };
-      const event = {
-        managerId: task.brief.manager,
-        taskId,
-        kind: 'spec-conflict' as const,
-        summary: `spec-conflict: refusing to release task because ${error.detail}`,
-      };
-      if (task.currentAttempt)
-        this.tasks.store.updateHeldRetryTask(ref, (current) => {
-          current.state = 'stopped';
-        });
-      else
-        this.tasks.store.updateTask(ref, (current) => {
-          current.state = 'stopped';
-        });
-      this.tasks.store.event(ref, 'manager-event', event);
-      this.inbox.deliver(event);
+      try {
+        await this.follow(await this.tasks.retryHeld(taskId));
+      } catch (error) {
+        // Another process is starting it.
+        if (error instanceof LeaseHeldError) return;
+        if (!(error instanceof HeldTaskConflictError)) throw error;
+        const task = this.tasks.store.task(taskId),
+          ref = { taskId, attempt: task.currentAttempt };
+        const event = {
+          managerId: task.brief.manager,
+          taskId,
+          kind: 'spec-conflict' as const,
+          summary: `spec-conflict: refusing to release task because ${error.detail}`,
+        };
+        if (task.currentAttempt)
+          this.tasks.store.updateHeldRetryTask(ref, (current) => {
+            current.state = 'stopped';
+          });
+        else
+          this.tasks.store.updateTask(ref, (current) => {
+            current.state = 'stopped';
+          });
+        this.tasks.store.event(ref, 'manager-event', event);
+        this.inbox.deliver(event);
+      }
+    } finally {
+      this.starting.delete(taskId);
     }
   }
   private hasCommit(ref: AttemptRef): boolean {
@@ -380,15 +388,16 @@ export class WorkerJob implements GateOutcomeSink {
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
     if (adoptRunning) this.releaseMetDependents();
     const tasks = store.tasks();
-    for (const task of !adoptRunning ? [] : tasks
-      .filter(
-        (t) =>
-          t.state === 'ready' &&
-          t.brief.after.length &&
-          this.tasks.dependenciesMet(t, tasks) &&
-          // A ready task with a pending retry intent is a retry, started from the intent.
-          store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
-      ))
+    for (const task of !adoptRunning
+      ? []
+      : tasks.filter(
+          (t) =>
+            t.state === 'ready' &&
+            t.brief.after.length &&
+            this.tasks.dependenciesMet(t, tasks) &&
+            // A ready task with a pending retry intent is a retry, started from the intent.
+            store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
+        ))
       this.track(
         this.startReleased(task.id).catch((error) => {
           if (store.task(task.id).state === 'ready') throw error;
