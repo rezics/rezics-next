@@ -13,11 +13,11 @@ Tiptap's maintained extensions so editing does not require a second document
 format. These are REZICS's versioned profiles of that model, not an upstream
 ProseMirror interchange standard.
 
-| Contract      | Responsibility                                                                                | Machine-readable artifact                                 |
-| ------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Document Core | Snapshot envelope and common node/mark shape                                                  | [Core schema](schema/rezics-document-core-v1.schema.json) |
-| Text          | Paragraphs, headings, quotations, lists, tasks, code, links, language, ruby and text emphasis | [Text schema](schema/rezics-text-v1.schema.json)          |
-| Blocks        | Text plus tables, images, media and opaque components                                         | [Blocks schema](schema/rezics-blocks-v1.schema.json)      |
+| Contract      | Responsibility                                                                                          | Machine-readable artifact                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Document Core | Snapshot envelope and common node/mark shape                                                            | [Core schema](schema/rezics-document-core-v1.schema.json) |
+| Text          | Paragraphs, headings, quotations, lists, tasks, code, links, language, ruby, mentions and text emphasis | [Text schema](schema/rezics-text-v1.schema.json)          |
+| Blocks        | Text plus tables, images, media and opaque components                                                   | [Blocks schema](schema/rezics-blocks-v1.schema.json)      |
 
 ```ts
 import { fromPlainText, parseDocument, serializeDocument } from '@rezics/document';
@@ -96,8 +96,11 @@ shape, fill and position vocabulary from
 `documentParagraphs` returns ordered `{id, text}` leaf units, including image
 alt text, media captions and component fallbacks. Ruby annotation text is
 excluded from the base-text projection; hard breaks become newlines.
-`documentText` joins units with newlines. The projection is for search and
-plain-text display, not a lossless export or a ProseMirror position map.
+`documentText` joins units with newlines. Both functions accept an optional
+`mentionText(accountId)` callback; without one each mention contributes a lone
+`@`. The projection is for search and plain-text display, not a lossless export
+or a ProseMirror position map.
+Mention nodes store only account IDs; resolving a current handle belongs to the site.
 
 ## Components and exchange
 
@@ -125,6 +128,7 @@ Renderers treat documents as untrusted data: use text/attribute APIs, admit safe
 link and media URL schemes, and never execute extension payloads. Content
 validation does not grant authority to a resource reference.
 
+The `mention` node is additive, so existing snapshots keep their meaning and validity under `rezics-document-v1`.
 Profile changes that alter meaning or reject an existing valid snapshot require
 a new document version. Additional advanced payloads use versioned component
 definitions rather than new basic text models. A consumer unable to represent

@@ -9,7 +9,9 @@ import {
   documentVersion,
   fromMarkdown,
   fromPlainText,
+  hasDocumentContent,
   parseDocument,
+  schemaForProfile,
   serializeDocument,
   textDocumentSchema,
   type DocumentNode,
@@ -41,11 +43,7 @@ const textWithMention = (profile: DocumentProfile): DocumentSnapshot =>
       {
         type: 'paragraph',
         attrs: { id: 'p1' },
-        content: [
-          { type: 'text', text: 'Before ' },
-          inlineMention(),
-          { type: 'text', text: ' after' },
-        ],
+        content: [{ type: 'text', text: 'Before ' }, inlineMention(), { type: 'text', text: ' after' }],
       },
     ],
     profile,
@@ -78,22 +76,30 @@ test('text and blocks mention snapshots validate, serialize and round-trip uncha
   }
 });
 
+test('ProseMirror profile schemas enforce mention account IDs and inline atom shape', () => {
+  for (const profile of profiles) {
+    const schema = schemaForProfile(profile);
+    const valid = textWithMention(profile);
+    const node = schema.nodeFromJSON(valid.doc);
+    node.check();
+    expect(findMention(node.toJSON() as DocumentNode)).toEqual(inlineMention());
+
+    const invalidId = textWithMention(profile);
+    invalidId.doc.content![0]!.content![1]!.attrs!.accountId = accountId.toUpperCase();
+    expect(() => schema.nodeFromJSON(invalidId.doc)).toThrow();
+  }
+});
+
 test('both published schemas and checkDocument reject malformed mentions', async () => {
   for (const profile of profiles) {
     const schema = await publishedSchema(profile);
     const invalidSnapshots = [
-      snapshot(
-        [{ type: 'paragraph', attrs: { id: 'p1' }, content: [{ type: 'mention', attrs: {} }] }],
-        profile,
-      ),
+      snapshot([{ type: 'paragraph', attrs: { id: 'p1' }, content: [{ type: 'mention', attrs: {} }] }], profile),
       snapshot(
         [{ type: 'paragraph', attrs: { id: 'p1' }, content: [inlineMention(accountId.toUpperCase())] }],
         profile,
       ),
-      snapshot(
-        [{ type: 'paragraph', attrs: { id: 'p1' }, content: [inlineMention('not-a-uuid')] }],
-        profile,
-      ),
+      snapshot([{ type: 'paragraph', attrs: { id: 'p1' }, content: [inlineMention('not-a-uuid')] }], profile),
       snapshot(
         [
           {
@@ -143,6 +149,7 @@ test('plain text projections use the optional mention callback and default to a 
   expect(documentText(value, mentionText)).toBe('@alice @bob');
   expect(documentParagraphs(value, mentionText)).toEqual([{ id: 'p1', text: '@alice @bob' }]);
   expect(documentText(value, () => '@carol @')).toBe('@carol @ @carol @');
+  expect(hasDocumentContent(value)).toBe(true);
 });
 
 test('Markdown imports @handles as plain text without creating mentions', () => {

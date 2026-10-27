@@ -232,41 +232,49 @@ export function fromPlainText(text: string, profile: DocumentProfile = 'text'): 
 }
 
 /** Base text excludes ruby annotations; hard breaks and opaque fallbacks remain visible. */
-function inlineText(node: DocumentNode): string {
+function inlineText(node: DocumentNode, mentionText?: (accountId: string) => string): string {
   if (node.type === 'text') return node.text ?? '';
   if (node.type === 'hardBreak') return '\n';
+  if (node.type === 'mention') {
+    const accountId = node.attrs?.accountId;
+    if (typeof accountId !== 'string') throw new TypeError('Invalid mention account ID');
+    return mentionText ? mentionText(accountId) : '@';
+  }
   if (node.type === 'extensionInline' || node.type === 'extensionBlock') return String(node.attrs?.fallback ?? '');
   if (node.type === 'image') return String(node.attrs?.alt ?? '');
   if (node.type === 'media') return String(node.attrs?.caption ?? '');
-  return (node.content ?? []).map(inlineText).join('');
+  return (node.content ?? []).map((child) => inlineText(child, mentionText)).join('');
 }
 
 const blockParagraphs = new WeakMap<object, readonly DocumentParagraph[]>();
 
-function paragraphsOf(block: DocumentNode): readonly DocumentParagraph[] {
-  const cached = blockParagraphs.get(block);
+function paragraphsOf(block: DocumentNode, mentionText?: (accountId: string) => string): readonly DocumentParagraph[] {
+  const cached = mentionText ? undefined : blockParagraphs.get(block);
   if (cached) return cached;
   const units: DocumentParagraph[] = [];
   const visit = (node: DocumentNode): void => {
     if (['paragraph', 'heading', 'codeBlock', 'image', 'media', 'extensionBlock'].includes(node.type)) {
-      units.push({ id: String(node.attrs?.id), text: inlineText(node) });
+      units.push({ id: String(node.attrs?.id), text: inlineText(node, mentionText) });
       return;
     }
     for (const child of node.content ?? []) visit(child);
   };
   visit(block);
-  if (Object.isFrozen(block)) blockParagraphs.set(block, units);
+  if (Object.isFrozen(block) && !mentionText) blockParagraphs.set(block, units);
   return units;
 }
 
 /** Ordered leaf text units for reading, indexing and revision-bound paragraph locators. */
-export function documentParagraphs(snapshot: DocumentSnapshot): DocumentParagraph[] {
+export function documentParagraphs(
+  snapshot: DocumentSnapshot,
+  mentionText?: (accountId: string) => string,
+): DocumentParagraph[] {
   parseDocument(snapshot);
-  return (snapshot.doc.content ?? []).flatMap((block) => paragraphsOf(block).map((unit) => ({ ...unit })));
+  return (snapshot.doc.content ?? []).flatMap((block) => paragraphsOf(block, mentionText).map((unit) => ({ ...unit })));
 }
 
-export function documentText(snapshot: DocumentSnapshot): string {
-  return documentParagraphs(snapshot)
+export function documentText(snapshot: DocumentSnapshot, mentionText?: (accountId: string) => string): string {
+  return documentParagraphs(snapshot, mentionText)
     .map((unit) => unit.text)
     .join('\n');
 }
@@ -276,8 +284,9 @@ export function hasDocumentContent(snapshot: DocumentSnapshot): boolean {
   const visit = (node: DocumentNode): boolean =>
     node.type === 'text'
       ? Boolean(node.text?.trim())
-      : ['image', 'media', 'extensionBlock', 'extensionInline', 'horizontalRule', 'table'].includes(node.type) ||
-        (node.content ?? []).some(visit);
+      : ['image', 'media', 'extensionBlock', 'extensionInline', 'horizontalRule', 'table', 'mention'].includes(
+          node.type,
+        ) || (node.content ?? []).some(visit);
   return visit(snapshot.doc);
 }
 
