@@ -8,7 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
-import { itemFacts } from '../../src/semantic/item.ts';
+import { itemFacts, relationSlotForApi } from '../../src/semantic/item.ts';
 import { slotId } from '../../src/semantic/slots.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -213,6 +213,17 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
   const seedAccount = newId(route);
   const subjectId = accountAgentId(seedAccount);
   const candidateId = newId(route);
+  const penNameId = newId(route);
+  const privateCandidateId = newId(route);
+  const privateProperty = 'rezics:penNameOf';
+  const privateSlot = relationSlotForApi(
+    penNameId,
+    privateProperty,
+    bundledRelease.properties[privateProperty]!.relation,
+    {
+      target: subjectId,
+    },
+  );
   const documentId = newId(route);
   const mediaId = newId(route);
   const transactionId = randomUUID();
@@ -328,6 +339,14 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
         current_facts: facts.length,
         current_release: bundledDigest,
       },
+      {
+        route,
+        subject_id: penNameId,
+        type: 'schema:Person',
+        recorded_transaction_id: transactionId,
+        current_facts: 0,
+        current_release: bundledDigest,
+      },
     ],
     'semantic.account_agent_subject': [
       {
@@ -346,7 +365,7 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
       subject_id: subjectId,
       recorded_transaction_id: transactionId,
     })),
-    'semantic.revision': subjectRevisionRows,
+    'semantic.revision': [...subjectRevisionRows, { ...subjectRevisionRows[0]!, subject_id: penNameId }],
     'semantic.candidate': [
       {
         route,
@@ -360,6 +379,39 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
         revision: 2,
         origin: 'proposal',
         view_order: 0,
+        relation: false,
+      },
+      {
+        route,
+        subject_id: penNameId,
+        candidate_id: privateCandidateId,
+        slot_id: privateSlot,
+        property: privateProperty,
+        rank: 'normal',
+        statement: {
+          rank: 'normal',
+          value: { type: 'value', content: subjectId },
+          qualifiers: [],
+          references: [],
+        },
+        release: bundledDigest,
+        revision: 1,
+        origin: 'proposal',
+        view_order: 0,
+        relation: true,
+      },
+    ],
+    // Seed every visibility relation the read probes so its plan is measured at population scale.
+    'semantic.statement_disclosure': [
+      {
+        route,
+        subject_id: penNameId,
+        candidate_id: privateCandidateId,
+        target_id: subjectId,
+        account_id: seedAccount,
+        property: privateProperty,
+        source_order_key: '0pen name',
+        target_order_key: '0person',
       },
     ],
     'semantic.acceptance': [
@@ -371,6 +423,15 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
         head: 1,
         verdict: 'reject',
         revision: 3,
+      },
+      {
+        route,
+        subject_id: penNameId,
+        context_id: GLOBAL_CONTEXT,
+        candidate_id: privateCandidateId,
+        head: 1,
+        verdict: 'accept',
+        revision: 1,
       },
     ],
     'semantic.acceptance_current': [
@@ -384,6 +445,16 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
         verdict: 'reject',
         revision: 3,
       },
+      {
+        route,
+        subject_id: penNameId,
+        context_id: GLOBAL_CONTEXT,
+        candidate_id: privateCandidateId,
+        slot_id: privateSlot,
+        head: 1,
+        verdict: 'accept',
+        revision: 1,
+      },
     ],
     'semantic.adoption': [
       {
@@ -395,6 +466,16 @@ function genericRows(name: string, ordinal: number, route: number): Readonly<Rec
         mode: 'replace',
         selection: [],
         revision: 5,
+      },
+      {
+        route,
+        subject_id: penNameId,
+        slot_id: privateSlot,
+        context_id: GLOBAL_CONTEXT,
+        head: 1,
+        mode: 'replace',
+        selection: [{ candidate: privateCandidateId, rank: 'normal' }],
+        revision: 1,
       },
     ],
     'semantic.hidden_candidate': [
