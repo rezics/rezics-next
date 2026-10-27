@@ -11,20 +11,14 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { globalReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
 import subjectExists from '../semantic/subject-exists.sql';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
-import {
-  createVoteCommands,
-  RatingQuestionNotFoundError,
-  VoteInvalidError,
-  VOTE_SCOPE,
-  type RatingQuestion,
-  type Vote,
-} from './votes.ts';
+import questionRead from './question-read.sql';
+import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage, readRatingQuestion } from './aggregate-read.ts';
 import {
   RatingAggregateResponseSchema,
@@ -74,10 +68,17 @@ function requirePersonalScope(actor: Actor, ...ids: string[]): void {
   if (ids.some((value) => routeOf(value) === null)) throw new ProblemError('not_found');
 }
 
-function requireRatingRead(actor: Actor, ...ids: string[]): void {
-  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-  if (!actor.scopes.includes(VOTE_SCOPE)) throw new ProblemError('forbidden');
+function requireRoutableIds(...ids: string[]): void {
   if (ids.some((value) => routeOf(value) === null)) throw new ProblemError('not_found');
+}
+
+function publicReadDetail(operationId: string, action: string) {
+  return {
+    operationId,
+    'x-action': action,
+    'x-exposure': 'public',
+    security: [{ bearerAuth: [] }, {}],
+  };
 }
 
 async function readableSubject(dependencies: ReadDependencies, actor: Actor, subjectId: string, deadline: number) {
@@ -119,20 +120,6 @@ function voteView(vote: Vote) {
   return { units: vote.units, revision: vote.revision, at: vote.changedAt };
 }
 
-function questionView(question: RatingQuestion) {
-  return {
-    id: question.id,
-    revision: question.revision,
-    label: question.label,
-    grain: question.grain,
-    scale: {
-      min: question.minimumUnits,
-      max: question.maximumUnits,
-      displayStep: question.stepUnits,
-    },
-  };
-}
-
 /** Private account-owned vote transport. Commands remain responsible for partition ownership and current account state. */
 export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   const config = () => ({ ...dependencies, access: dependencies.access() });
@@ -150,18 +137,12 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           closed,
         ),
         response: { 200: RatingAggregateResponseSchema, ...aggregateFailures },
-        detail: {
-          operationId: 'rating.aggregate_get',
-          'x-action': VOTE_SCOPE,
-          'x-exposure': 'gate:personal_library',
-          security: bearer,
-        },
+        detail: publicReadDetail('rating.aggregate_get', 'subject:read'),
       },
       async ({ actor, params, query, admission, job }) => {
-        requireRatingRead(actor, params.id, query.question);
         const populations = Array.isArray(query.population) ? query.population : [query.population];
         if (populations.length < 1 || populations.length > 20) throw new ProblemError('invalid_request');
-        requireRatingRead(actor, ...populations);
+        requireRoutableIds(params.id, query.question, ...populations);
         return admission.run('normal', job, async () => {
           if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
           const question = await readRatingQuestion(dependencies.pool, query.question);
@@ -194,15 +175,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         params: t.Object({ id }, closed),
         query: t.Object({ question: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed),
         response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures },
-        detail: {
-          operationId: 'rating.populations_get',
-          'x-action': VOTE_SCOPE,
-          'x-exposure': 'gate:personal_library',
-          security: bearer,
-        },
+        detail: publicReadDetail('rating.populations_get', 'subject:read'),
       },
       async ({ actor, params, query, admission, job }) => {
-        requireRatingRead(actor, params.id, query.question);
+        requireRoutableIds(params.id, query.question);
         return admission.run('normal', job, async () => {
           if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
           const question = await readRatingQuestion(dependencies.pool, query.question);
@@ -314,14 +290,35 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ questionId: id }, closed),
         response: { 200: RatingQuestionResponseSchema, ...failures },
-        detail: detail('rating.question_get'),
+        detail: publicReadDetail('rating.question_get', 'definitions:read'),
       },
-      async ({ actor, params, admission, job }) => {
-        requirePersonalScope(actor, params.questionId);
-        const question = await admission.run('normal', job, () =>
-          command(() => votes().readRatingQuestion(actor, params.questionId)),
+      async ({ params, authorize, admission, job }) => {
+        requireRoutableIds(params.questionId);
+        const check = await authorize({
+          route: 0,
+          id: GLOBAL_CONTEXT.id,
+          eligibility: globalReadEligibility('definitions:read'),
+        });
+        const question = await admission.run('normal', job, async () =>
+          withConnection(dependencies.pool, async (client) => {
+            const bounded = deadlineClient(client, job.deadline);
+            if (!(await check(bounded))) throw new ProblemError('not_found');
+            const row = await questionRead.run(bounded, { question_id: params.questionId });
+            if (!row) throw new ProblemError('not_found');
+            return row;
+          }),
         );
-        return questionView(question);
+        return {
+          id: question.id,
+          revision: question.revision,
+          label: question.label,
+          grain: question.grain,
+          scale: {
+            min: question.minimumUnits,
+            max: question.maximumUnits,
+            displayStep: question.stepUnits,
+          },
+        };
       },
     );
 }

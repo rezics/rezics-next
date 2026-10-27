@@ -15,7 +15,6 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
-import { VOTE_SCOPE } from './votes.ts';
 import sourceStatisticList from './source-statistic-list.sql';
 import sourceStatisticUpsert from './source-statistic-upsert.sql';
 import {
@@ -223,12 +222,6 @@ function sourceStatisticProblem(error: unknown): never {
   throw error;
 }
 
-function requireRatingRead(actor: Actor, ...ids: string[]): asserts actor is Extract<Actor, { kind: 'account' }> {
-  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-  if (!actor.scopes.includes(VOTE_SCOPE)) throw new ProblemError('forbidden');
-  if (ids.some((value) => routeOf(value) === null)) throw new ProblemError('not_found');
-}
-
 function detail(operationId: string, action: string, write = false) {
   return {
     operationId,
@@ -236,6 +229,15 @@ function detail(operationId: string, action: string, write = false) {
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
+  };
+}
+
+function publicReadDetail(operationId: string, action: string) {
+  return {
+    operationId,
+    'x-action': action,
+    'x-exposure': 'public',
+    security: [{ bearerAuth: [] }, {}],
   };
 }
 
@@ -264,10 +266,10 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ id }, closed),
         response: { 200: SourceStatisticListResponseSchema, ...failures },
-        detail: detail('rating.source_statistics_get', VOTE_SCOPE),
+        detail: publicReadDetail('rating.source_statistics_get', 'subject:read'),
       },
       async ({ actor, params, admission, job }) => {
-        requireRatingRead(actor, params.id);
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
         return admission.run('normal', job, async () => {
           const readable = await resolveSubject(
             {

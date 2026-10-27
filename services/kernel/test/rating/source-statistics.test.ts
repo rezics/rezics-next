@@ -156,10 +156,16 @@ afterAll(async () => {
 
 test('source statistic routes are mounted with distinct read and importer actions', () => {
   const document = openApiDocument(app);
-  expect(document.paths['/v1/subjects/{id}/source-statistics']?.get?.['x-action']).toBe('rating:vote');
+  expect(document.paths['/v1/subjects/{id}/source-statistics']?.get?.['x-action']).toBe('subject:read');
+  expect(document.paths['/v1/subjects/{id}/source-statistics']?.get?.['x-exposure']).toBe('public');
+  expect(document.paths['/v1/subjects/{id}/source-statistics']?.get?.security).toEqual([{ bearerAuth: [] }, {}]);
   expect(document.paths['/v1/subjects/{id}/source-statistics/{source}']?.put?.['x-action']).toBe(
     'source_statistic:write',
   );
+  expect(document.paths['/v1/subjects/{id}/source-statistics/{source}']?.put?.['x-exposure']).toBe(
+    'gate:personal_library',
+  );
+  expect(document.paths['/v1/subjects/{id}/source-statistics/{source}']?.put?.security).toEqual([{ bearerAuth: [] }]);
 });
 
 test('the importer writes and refreshes a labelled statistic without creating native votes', async () => {

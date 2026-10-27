@@ -199,7 +199,9 @@ test('aggregate routes are mounted once with their declared action', () => {
   };
   for (const [path, methods] of Object.entries(expected))
     for (const method of methods) {
-      expect(document.paths[path]?.[method]?.['x-action']).toBe('rating:vote');
+      expect(document.paths[path]?.[method]?.['x-action']).toBe('subject:read');
+      expect(document.paths[path]?.[method]?.['x-exposure']).toBe('public');
+      expect(document.paths[path]?.[method]?.security).toEqual([{ bearerAuth: [] }, {}]);
       const native = path.replace(/\{(\w+)\}/g, ':$1');
       expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
         1,

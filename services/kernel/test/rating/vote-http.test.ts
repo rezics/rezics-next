@@ -150,13 +150,27 @@ afterAll(async () => {
 
 test('rating question and own vote routes are mounted once with their declared action', () => {
   const document = openApiDocument(app);
-  const expected = {
-    '/v1/subjects/{id}/ratings/{questionId}/vote': ['put', 'delete', 'get'],
-    '/v1/rating-questions/{questionId}': ['get'],
-  };
-  for (const [path, methods] of Object.entries(expected))
+  const expected = [
+    {
+      path: '/v1/subjects/{id}/ratings/{questionId}/vote',
+      methods: ['put', 'delete', 'get'],
+      action: 'rating:vote',
+      exposure: 'gate:personal_library',
+      security: [{ bearerAuth: [] }],
+    },
+    {
+      path: '/v1/rating-questions/{questionId}',
+      methods: ['get'],
+      action: 'definitions:read',
+      exposure: 'public',
+      security: [{ bearerAuth: [] }, {}],
+    },
+  ];
+  for (const { path, methods, action, exposure, security } of expected)
     for (const method of methods) {
-      expect(document.paths[path]?.[method]?.['x-action']).toBe('rating:vote');
+      expect(document.paths[path]?.[method]?.['x-action']).toBe(action);
+      expect(document.paths[path]?.[method]?.['x-exposure']).toBe(exposure);
+      expect(document.paths[path]?.[method]?.security).toEqual(security);
       const native = path.replace(/\{(\w+)\}/g, ':$1');
       expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
         1,
@@ -207,11 +221,9 @@ test('rating question reads return the stored label, grain, and integer unit sca
 test('anonymous, suspended, and unscoped callers cannot use rating routes', async () => {
   const subjectId = await subject();
   const vote = `/v1/subjects/${subjectId}/ratings/00000000-0000-7000-8000-000000000001/vote`;
-  const question = '/v1/rating-questions/00000000-0000-7000-8000-000000000001';
   for (const persona of ['anonymous', 'suspended', 'unscoped'] as const) {
     const expected = persona === 'anonymous' ? [401] : [401, 403];
     for (const [method, path, body] of [
-      ['GET', question, undefined],
       ['GET', vote, undefined],
       ['PUT', vote, { units: 9 }],
       ['DELETE', vote, undefined],

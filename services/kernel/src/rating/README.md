@@ -61,26 +61,25 @@ appearance). Below that, only the count and how many more votes reveal the score
 threshold also hides its histogram, so a small Realm never reveals its members' individual votes. Ranked lists use a
 Bayesian weighted score whose prior comes from the same question and population, from at least 50 votes.
 
-A person's own vote is private to them unless they publish it with a review or on their public profile. It counts,
-anonymously, in the aggregates of the populations they belong to: an aggregate at or above the threshold reveals no
-individual vote, and a person who does not want to be counted clears the vote. Votes of suspended or banned
-accounts, and of members a Realm has removed, leave the affected aggregates.
+Aggregates of a readable subject are public facts. Anyone who can read the subject can read its Global figure; a Realm's
+figure follows that Realm's read visibility. A person's own vote stays private to them. It counts anonymously in the
+aggregates of the populations they belong to: an aggregate at or above the threshold reveals no individual vote, and a
+person who does not want to be counted clears the vote. Votes of suspended or banned accounts, and of members a Realm
+has removed, leave the affected aggregates.
 
 ## Display
 
 Every score is shown with its population and its count ("8.4 · 1,203 ratings on REZICS", "8.9 · 64 ratings in
 Realm Name"). The rules are the same on every surface:
 
-- **Headline.** The general site shows the Global population. A Realm-routed page or Zone shows that Realm's
-  population and says so in one line, with Global next to it.
-- **Several Realms.** Beside the distribution, the page lists the viewer's Realms, taken from their memberships
-  rather than from which aggregates exist, each with its own figure and count ("No ratings yet" when it has none),
-  ordered by count; the first three are shown and a picker pages through the rest and through every other
-  population that rated the target. Figures from different populations are never averaged, blended into a
-  personal number, or substituted for one another when one is missing.
+- **Headline.** The general site shows the Global population to anyone who can read the subject, including anonymous
+  readers. A Realm-routed page or Zone shows that Realm's population and says so in one line, with Global next to it.
+- **Several Realms.** The population picker pages through readable populations that rated the target. Anonymous
+  readers see the headline and readable populations through the picker; there is no "viewer's Realms" list. Figures
+  from different populations are never averaged, blended into a personal number, or substituted for one another when
+  one is missing.
 - **Cards.** A subject card (search, shelves, feeds) shows the headline population's figure for the site it is on,
-  with a population mark whenever it is not Global. A reader may pin which of their Realms is listed first on
-  subject pages; that preference never replaces the headline population on a page or a card.
+  with a population mark whenever it is not Global.
 - **Question.** The standard question is the default everywhere. A Realm's own questions are listed by name; the
   page never picks "the first" question of an unordered or partially read list.
 - **Writing.** The score control writes the viewer's one vote for the question shown. It is the same control on the
@@ -101,8 +100,9 @@ changing a vote later never rewrites an old review; the review shows the current
 
 ## HTTP
 
-Native rating HTTP routes require an authenticated account with the `rating:vote` action. Vote reads are private to
-the authenticated account; the target and question identify a vote but never select its owner.
+Vote routes require an authenticated account with `rating:vote` behind the `personal_library` gate. Vote reads are
+private to the authenticated account; the target and question identify a vote but never select its owner. Aggregate,
+population, question and source-statistics reads are public under subject and Realm read rules.
 
 - `PUT /v1/subjects/{id}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
@@ -110,13 +110,12 @@ the authenticated account; the target and question identify a vote but never sel
   `204 No Content`.
 - `GET` on the same path returns `{ "units", "revision", "at" }` for the caller's current vote. It returns `404`
   when no current vote exists, including after a clear.
-- `GET /v1/rating-questions/{questionId}` returns `{ "id", "revision", "label", "grain", "scale" }`, where
+- `GET /v1/rating-questions/{questionId}` is public and returns `{ "id", "revision", "label", "grain", "scale" }`, where
   `scale` contains integer `min`, `max` and `displayStep` values in stored units. The standard question therefore has
   a scale of `0` through `20` in steps of `1`; its display maps two stored units to one point on the `0` through `10`
   scale.
-- `GET /v1/subjects/{id}/source-statistics` returns each imported source statistic with its source, source
-  record id, source scale, mean, count, as-of date, licence and attribution. It requires `rating:vote` and discloses
-  the subject using the same read rules as other rating reads.
+- `GET /v1/subjects/{id}/source-statistics` is public under the subject's read rules. It returns each imported source
+  statistic with its source, source record id, source scale, mean, count, as-of date, licence and attribution.
 - `PUT /v1/subjects/{id}/source-statistics/{source}` replaces that source's statistic using a strict JSON body
   containing the source record id, scale, mean, count, as-of date, licence and attribution. It requires an
   `Idempotency-Key` and `source_statistic:write` on Global Context, held by the importer governance role.
@@ -124,8 +123,9 @@ the authenticated account; the target and question identify a vote but never sel
 Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
 requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.
 
-Aggregate reads require an authenticated account with `rating:vote` and disclose the subject through the same
-`subject:read` rules as other subject reads.
+Aggregate and population reads are public under the same `subject:read` rules as other subject reads. A Realm figure is
+returned only when the reader can read that Realm; otherwise the aggregate read returns zero without score or update
+state and the population page omits that Realm.
 
 - `GET /v1/subjects/{id}/ratings?question={id}&population={id}` accepts 1–20 `population` values; repeated
   query parameters request multiple populations, and Global uses the Global Context id. It returns one independent

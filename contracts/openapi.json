@@ -79562,10 +79562,11 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ],
-        "x-action": "rating:vote",
-        "x-exposure": "gate:personal_library"
+        "x-action": "definitions:read",
+        "x-exposure": "public"
       }
     },
     "/v1/realms": {
@@ -114970,10 +114971,11 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ],
-        "x-action": "rating:vote",
-        "x-exposure": "gate:personal_library"
+        "x-action": "subject:read",
+        "x-exposure": "public"
       }
     },
     "/v1/subjects/{id}/ratings/populations": {
@@ -115527,10 +115529,11 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ],
-        "x-action": "rating:vote",
-        "x-exposure": "gate:personal_library"
+        "x-action": "subject:read",
+        "x-exposure": "public"
       }
     },
     "/v1/subjects/{id}/ratings/{questionId}/vote": {
@@ -122670,10 +122673,11 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ],
-        "x-action": "rating:vote",
-        "x-exposure": "gate:personal_library"
+        "x-action": "subject:read",
+        "x-exposure": "public"
       }
     },
     "/v1/subjects/{id}/source-statistics/{source}": {
