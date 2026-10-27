@@ -619,8 +619,9 @@ test(
       reset();
       const page = await render(`/${locale}`, cookie);
       try {
-        const cards = page.locator('[data-slot="personal"] [data-slot="continue-card"]');
-        expect(await cards.count(), `${locale} cards`).toBe(3);
+        // Without a stylesheet both drawings of the cards show: the phone row first, then the grid.
+        const cards = page.locator('[data-slot="personal"] article');
+        expect(await cards.count(), `${locale} cards`).toBe(6);
         const newest = cards.nth(0);
         const older = cards.nth(1);
         const middle = cards.nth(2);
@@ -642,18 +643,14 @@ test(
         expect(await newest.locator('img').first().getAttribute('src')).toContain(`/media/${cover(23).media}/`);
         expect(await older.locator('img').count()).toBe(0);
         expect(await older.locator('[data-slot="cover"]').getAttribute('data-state')).toBe('placeholder');
-        // The progress is the unit and total the progress read returned, localized, with the percent and the bar.
-        const percent = (share: number) =>
-          new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(share);
+        // The progress is the unit and total the progress read returned, localized, on one row with the bar.
         const episode = await messageOf(locale, 'home_continue_episode_of', { amount: '3', total: '12' });
         const volume = await messageOf(locale, 'home_continue_volume_of', { amount: '5', total: '8' });
         const chapters = await messageOf(locale, 'home_continue_chapter', { amount: '12' });
         expect(await newest.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25');
         expect(squash(await newest.innerText())).toContain(episode);
-        expect(squash(await newest.innerText())).toContain(percent(0.25));
         expect(await middle.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('62.5');
         expect(squash(await middle.innerText())).toContain(volume);
-        expect(squash(await middle.innerText())).toContain(percent(0.625));
         // A count of completed units with no total names the count and draws no bar.
         expect(await older.getByRole('progressbar').count()).toBe(0);
         expect(squash(await older.innerText())).toContain(chapters);
@@ -712,7 +709,7 @@ test(
           });
           expect(squash(await list.locator('[data-slot="type-count"]').innerText())).toBe(count);
           // A row of covers: one frame per subject, one ratio for the whole row, an image only where there is one.
-          const items = list.locator('li');
+          const items = list.locator('article');
           expect(await items.count()).toBe(Math.min(subjects.length, 12));
           expect(await list.locator('[data-slot="cover"]').count()).toBe(await items.count());
           const ratios = await list
@@ -720,7 +717,9 @@ test(
             .evaluateAll((nodes) => [...new Set(nodes.map((node) => node.getAttribute('data-ratio')))]);
           expect(ratios, `${section.id} ratio`).toHaveLength(1);
           expect(await list.locator('img').count()).toBeGreaterThan(0);
-          expect(await list.locator('li:has(img)').count()).toBe(subjects.filter((subject) => subject.cover).length);
+          expect(await list.locator('article:has(img)').count()).toBe(
+            subjects.filter((subject) => subject.cover).length,
+          );
           expect(await list.locator('[data-state="placeholder"]').count()).toBe(
             subjects.filter((subject) => !subject.cover).length,
           );

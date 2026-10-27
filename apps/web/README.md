@@ -444,11 +444,14 @@ Each server render and browser session has its own query cache. Public reads sta
   size of the library, plus at most 6 progress reads (one per card shown), and 1 more D for the credential the reads
   send; signed out, 0. No R or A beyond the home page's existing session read; no other per-entry reads.
 - **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
-- **Card:** each card is one link to the progress session, named "Continue <title>", with no separate button. It shows
-  the progress the kernel returned: the unit and total with the share ("Episode 3 of 12"), the amount alone without a
-  total, a percent, or a short "In progress" line when the session holds no amount (a reading position). Below `sm`
-  the cards form one horizontally scrolling row of compact cards (thumbnail beside title and progress, 16rem wide); from
-  `sm` up they keep the grid. The home story's recorded sessions cover each case.
+- **Card:** each card is a `CoverCard`: the cover edge to edge, the title, the subject's type as the one secondary
+  line, and one `ProgressRow`. The card is one link to the progress session, named "Continue <title>", and its ⋯ menu
+  holds "Open subject page"; nothing else on it is interactive. The row shows the unit form the kernel's progress
+  allows ("Ep 3/12", "p. 120/310") with a bar for the share where there is a total, a percent as its own bar, the
+  amount alone with no bar where there is no total, and the state label "In progress" where only a reading position is
+  known or the session could not be read. Below `sm` the cards form a `CoverRow`; from `sm` up a `CoverGrid`. The
+  home story's recorded sessions cover each case. The catalogue rows of the home page are `CoverRow`s of `CoverCard`s
+  at every width, with the type under the title.
 
 ### Board page (`/<locale>/boards/<id>`)
 

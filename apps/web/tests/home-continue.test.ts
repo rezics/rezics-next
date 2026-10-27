@@ -425,13 +425,14 @@ test(
       // The row sits after the search box, and holds only entries in progress, newest first.
       const body = main(page.html);
       expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
+      // The cards are drawn twice, once for the phone row and once for the grid, so every link comes twice in order.
       const subjects = [
         ...(row ?? '').matchAll(new RegExp(`href="/${locale}/library/progress\\?subjectId=([^"]+)"`, 'g')),
       ].map((m) => m[1]);
-      expect(subjects).toEqual([id(23), id(25), id(21)]);
+      expect(subjects).toEqual([id(23), id(25), id(21), id(23), id(25), id(21)]);
       // Each card is one link; the card holds no second link to the subject.
       const hrefs = linksIn(row ?? '').map((link) => link.href);
-      expect(hrefs).toHaveLength(3);
+      expect(hrefs).toHaveLength(6);
       for (const n of [23, 25, 21]) expect(hrefs).toContain(`/${locale}/library/progress?subjectId=${id(n)}`);
       expect(row).toContain('Newest read');
       expect(row).not.toContain('Only planned');
@@ -448,7 +449,7 @@ test(
     }
     reset(crowded());
     const crowd = personal((await readPage('/en', cookie)).html) ?? '';
-    expect([...crowd.matchAll(/href="\/en\/library\/progress\?subjectId=/g)]).toHaveLength(6);
+    expect([...crowd.matchAll(/href="\/en\/library\/progress\?subjectId=/g)]).toHaveLength(12);
     expect(crowd).toContain('Crowded 9');
     expect(crowd).not.toContain('Crowded 3<');
   },

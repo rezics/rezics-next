@@ -7,6 +7,7 @@ import {
   type CompositionDocument,
 } from '@rezics/composition';
 import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
@@ -778,8 +779,18 @@ function countText(total: NonNullable<PreparedRead['total']>, locale: string): s
 }
 
 /**
- * One vertical of the home: a row of covers with the section's count and a link to the whole search. The row shares
- * one frame ratio, so a mixed row stays aligned, and each cover is named by the title beside it.
+ * A type's id as the line under a card's title: the name after its namespace, split into words. The id is all a read
+ * carries without another request for the type's definition, so an opaque identifier ("Q689445") shows nothing.
+ */
+export function typeText(type: string | undefined): string | undefined {
+  const name = type?.split(':').at(-1) ?? '';
+  if (/^[A-Z]?\d+$/.test(name)) return undefined;
+  return name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') || undefined;
+}
+
+/**
+ * One vertical of the home: a row of cover cards with the section's count and a link to the whole search. The row
+ * shares one frame ratio, so a mixed row stays aligned; each card links to its subject, with the type under the title.
  */
 function TypeList(props: Record<string, unknown>) {
   const read = useNodeRead(props.id);
@@ -830,24 +841,18 @@ function TypeList(props: Record<string, unknown>) {
           </a>
         )}
       </div>
-      <ul className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-2">
+      <CoverRow ratio={ratio} label={m.home_section_row({ title: title.text }, { locale: locale as never })}>
         {subjects.map(({ hit, text, subject }) => (
-          <li key={hit.id} className="w-40 shrink-0 snap-start">
-            <a
-              href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(hit.id)}`}
-              className="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <Cover subject={subject} cover={coverOf(hit.summary)} size="md" ratio={ratio} src={coverSrc} decorative />
-              <span
-                lang={text.lang}
-                className={`line-clamp-2 text-sm leading-snug font-medium break-words group-hover:underline ${linkClass} ${text.text ? 'text-foreground' : 'text-muted-foreground'}`}
-              >
-                {text.text || messages.unlabelled}
-              </span>
-            </a>
-          </li>
+          <CoverCard
+            key={hit.id}
+            href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(hit.id)}`}
+            cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
+            title={text.text || messages.unlabelled}
+            {...(text.lang ? { titleLang: text.lang } : {})}
+            secondary={typeText(hit.type)}
+          />
         ))}
-      </ul>
+      </CoverRow>
     </section>
   );
 }

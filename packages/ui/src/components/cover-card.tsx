@@ -34,6 +34,8 @@ export interface CoverCardProps {
   cover: Omit<CoverProps, 'size'>;
   title: string;
   titleLang?: string;
+  /** The link's accessible name when it says more than the title does ("Continue <title>"); it must contain the title. */
+  linkLabel?: string;
   secondary?: ReactNode;
   state?: ReactNode;
   menu?: ReactNode;
@@ -57,6 +59,7 @@ export function CoverCard({
   cover,
   title,
   titleLang,
+  linkLabel,
   secondary,
   state,
   menu,
@@ -152,6 +155,7 @@ export function CoverCard({
           <Link
             href={href}
             lang={titleLang}
+            aria-label={linkLabel}
             title={small ? title : undefined}
             onClick={onClick}
             className={
