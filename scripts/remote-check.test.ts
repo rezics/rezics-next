@@ -674,7 +674,15 @@ test('all ssh and rsync connections to a host share one control master', async (
 
   const sshEvents = events().filter((event) => event.kind !== 'rsync');
   const expectedControlPath = `ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/%C`;
-  expect(sshEvents.map((event) => event.kind)).toEqual(['probe', 'slot', 'run', 'status', 'returns', 'cleanup', 'release']);
+  expect(sshEvents.map((event) => event.kind)).toEqual([
+    'probe',
+    'slot',
+    'run',
+    'status',
+    'returns',
+    'cleanup',
+    'release',
+  ]);
   for (const event of sshEvents) {
     const options = event.options as string[];
     expect(options).toContain('ControlMaster=auto');
@@ -693,7 +701,9 @@ test('all ssh and rsync connections to a host share one control master', async (
   const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
   expect(statSync(controlDirectory).mode & 0o777).toBe(0o700);
   await remote(env, workspace(), ['true']);
-  const repeated = events().filter((event) => event.kind === 'probe').at(-1)!;
+  const repeated = events()
+    .filter((event) => event.kind === 'probe')
+    .at(-1)!;
   expect((repeated.options as string[]).filter((option) => option.startsWith('ControlPath='))).toEqual([
     expectedControlPath,
   ]);
@@ -727,12 +737,16 @@ test('provision-check-host installs and validates the sshd limits before reloadi
     `#!/usr/bin/env bun\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(process.env.PROVISION_SCRIPT_FILE!, await Bun.stdin.text());\n`,
   );
   chmodSync(ssh, 0o755);
-  const result = spawnSync('bash', [join(repository, 'scripts/provision-check-host.sh'), 'root@check.test', identity, '16', '800'], {
-    cwd: repository,
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PROVISION_SCRIPT_FILE: received },
-    encoding: 'utf8',
-    timeout: 20_000,
-  });
+  const result = spawnSync(
+    'bash',
+    [join(repository, 'scripts/provision-check-host.sh'), 'root@check.test', identity, '16', '800'],
+    {
+      cwd: repository,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PROVISION_SCRIPT_FILE: received },
+      encoding: 'utf8',
+      timeout: 20_000,
+    },
+  );
 
   expect(result.status).toBe(0);
   const sent = readFileSync(received, 'utf8');
