@@ -27,9 +27,21 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type Values = { [key: string]: Json };
 export type Kind = 'entry' | 'copy' | 'member' | 'collection' | 'label' | 'assignment' | 'log';
 export type Persona = 'owner' | 'other' | 'anonymous' | 'suspended' | 'platform';
-export type Surface = 'point' | 'entries' | 'state' | 'everything' | 'continue' | 'search'
-  | 'item-list' | 'sitemap' | 'public-pairs' | 'feed';
-export interface Reply<T> { response: Response; value?: T }
+export type Surface =
+  | 'point'
+  | 'entries'
+  | 'state'
+  | 'everything'
+  | 'continue'
+  | 'search'
+  | 'item-list'
+  | 'sitemap'
+  | 'public-pairs'
+  | 'feed';
+export interface Reply<T> {
+  response: Response;
+  value?: T;
+}
 export interface Target {
   kind: Kind;
   id: string;
@@ -97,9 +109,14 @@ export interface PageTrace {
 }
 export interface LibraryDeletionDriver {
   close(): Promise<void>;
-  seed(kind: Kind, options?: {
-    visibility?: 'private' | 'unlisted' | 'public'; historyRows?: number; duplicateSibling?: boolean;
-  }): Promise<Fixture>;
+  seed(
+    kind: Kind,
+    options?: {
+      visibility?: 'private' | 'unlisted' | 'public';
+      historyRows?: number;
+      duplicateSibling?: boolean;
+    },
+  ): Promise<Fixture>;
   /** Current kernel clock, shared by command, Access and due worker. */
   now(): Promise<string>;
   setTime(instant: string): Promise<void>;
@@ -121,9 +138,11 @@ export interface LibraryDeletionDriver {
   crashNext(point: 'before-commit' | 'after-commit-before-enqueue'): Promise<void>;
   restart(): Promise<void>;
   /** Park a production destructive page before its writing transaction's guard.
-   * after-durable-capture parks the actual committed account task delivery at T,
+   * after-durable-capture parks the actual committed record-purge task delivery at deletion T,
    * before its due wait/guard, retaining that original payload across restoration. */
-  holdNextPurge(stage?: 'before-guard' | 'after-durable-capture'): Promise<{ reached: Promise<void>; resume(): Promise<void> }>;
+  holdNextPurge(
+    stage?: 'before-guard' | 'after-durable-capture',
+  ): Promise<{ reached: Promise<void>; resume(): Promise<void> }>;
   /** Production operations create a collision; never mutate tombstones directly. */
   createConflict(fixture: Fixture, kind: 'replacement' | 'ordinal' | 'capacity' | 'name'): Promise<Target>;
   removeCurrentProfile(fixture: Fixture): Promise<void>;
@@ -132,19 +151,24 @@ export interface LibraryDeletionDriver {
   /** Actual listing source observation, applied later by the production target command. */
   observe(fixture: Fixture): Promise<ListingObservation>;
   apply(observation: ListingObservation): Promise<void>;
-  /** Accounts-owned soft-delete/restore commands; no Library-local account lifecycle. */
-  accountDelete(): Promise<{ generation: number; deletedAt: string; restoreUntil: string }>;
-  accountRestore(): Promise<{ generation: number }>;
+  /** Accounts-owned terminal deletion; no Library-local account restore or generation. */
+  accountDelete(): Promise<{ deletedAt: string }>;
   /** Built-in dynamic public output A committed, B pending; B contains a private-only subject.
    * Also seed active private/unlisted, previously-public-now-unlisted and already-deleted
    * Collections plus a published log. No user-saved query API is introduced. */
   retentionFixture(): Promise<{
-    public: Fixture; generationA: string[]; pendingOnlyId: string;
-    erased: Fixture[]; privateSourceMarker: string;
+    public: Fixture;
+    generationA: string[];
+    pendingOnlyId: string;
+    erased: Fixture[];
+    privateSourceMarker: string;
   }>;
   /** Actual raw retained published generation and de-identified attribution. */
   retained(fixture: Fixture): Promise<{
-    generation: string; subjectIds: string[]; attribution: Values; privateSource: Json;
+    generation: string;
+    subjectIds: string[];
+    attribution: Values;
+    privateSource: Json;
   }>;
   /** Same seeder at each legal geometric population, <=4096 total rows per axis;
    * grow unrelated same-partition and held-before-due rows while fixing one P-row

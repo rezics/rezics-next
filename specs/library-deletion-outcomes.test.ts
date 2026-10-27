@@ -8,11 +8,13 @@ let driver: LibraryDeletionDriver;
 beforeEach(async () => {
   const location = process.env.LIBRARY_DELETION_DRIVER;
   if (!location) throw new Error('Library deletion outcome driver is required');
-  if (!isAbsolute(location) && !location.startsWith('file:')) throw new Error('LIBRARY_DELETION_DRIVER must be absolute or a file URL');
+  if (!isAbsolute(location) && !location.startsWith('file:'))
+    throw new Error('LIBRARY_DELETION_DRIVER must be absolute or a file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
   if (url.protocol !== 'file:') throw new Error('LIBRARY_DELETION_DRIVER must use a file URL');
   const binding = await import(url.href);
-  if (typeof binding.createLibraryDeletionDriver !== 'function') throw new Error('Expected createLibraryDeletionDriver factory');
+  if (typeof binding.createLibraryDeletionDriver !== 'function')
+    throw new Error('Expected createLibraryDeletionDriver factory');
   driver = await binding.createLibraryDeletionDriver();
 });
 afterEach(async () => {
@@ -21,7 +23,18 @@ afterEach(async () => {
   await current?.close();
 });
 const kinds: Kind[] = ['entry', 'copy', 'member', 'collection', 'label', 'assignment', 'log'];
-const surfaces: Surface[] = ['point', 'entries', 'state', 'everything', 'continue', 'search', 'item-list', 'sitemap', 'public-pairs', 'feed'];
+const surfaces: Surface[] = [
+  'point',
+  'entries',
+  'state',
+  'everything',
+  'continue',
+  'search',
+  'item-list',
+  'sitemap',
+  'public-pairs',
+  'feed',
+];
 const day = 24 * 60 * 60 * 1000;
 const at = (time: string, days: number) => new Date(Date.parse(time) + days * day).toISOString();
 function success<T>(reply: Reply<T>): T {
@@ -39,7 +52,7 @@ async function hidden(f: Fixture) {
     for (const surface of surfaces) {
       const reply = await driver.read(actor, surface, f);
       expect(await reply.response.clone().text()).not.toContain(f.marker);
-      if (reply.response.ok) expect(success(reply).items.map(row => row.id)).not.toContain(f.target.id);
+      if (reply.response.ok) expect(success(reply).items.map((row) => row.id)).not.toContain(f.target.id);
       else expect([401, 403, 404]).toContain(reply.response.status);
     }
   }
@@ -66,7 +79,7 @@ function sameValues(before: Target, after: Target) {
 test('first-scope owned Library records hide on delete restore within thirty days and purge only through bounded authorized lifecycle', async () => {
   for (const kind of kinds) {
     const f = await driver.seed(kind, { visibility: 'public' });
-    expect(success(await driver.read('owner', f.primary, f)).items.map(row => row.id)).toContain(f.target.id);
+    expect(success(await driver.read('owner', f.primary, f)).items.map((row) => row.id)).toContain(f.target.id);
     const tombstone = await deleted(f);
     await hidden(f); // BEFORE projection workers run
     expect(success(await driver.deletionState('owner', tombstone)).values).toEqual(f.target.values);
@@ -81,7 +94,8 @@ test('other anonymous and suspended actors cannot delete restore read retained p
   for (const kind of kinds) {
     const f = await driver.seed(kind);
     const before = await driver.inspect(f);
-    for (const actor of ['other', 'anonymous', 'suspended'] as const) denied(await driver.delete(actor, f.target, 'delete'));
+    for (const actor of ['other', 'anonymous', 'suspended'] as const)
+      denied(await driver.delete(actor, f.target, 'delete'));
     expect(await driver.inspect(f)).toEqual(before);
     const tombstone = await deleted(f);
     const after = await driver.inspect(f);
@@ -89,7 +103,8 @@ test('other anonymous and suspended actors cannot delete restore read retained p
       denied(await driver.delete(actor, f.target, 'delete'));
       denied(await driver.restore(actor, tombstone, 'undo'));
       denied(await driver.deletionState(actor, tombstone));
-      if (kind === 'entry' || kind === 'copy' || kind === 'label' || kind === 'assignment') denied(await driver.reference(actor, tombstone));
+      if (kind === 'entry' || kind === 'copy' || kind === 'label' || kind === 'assignment')
+        denied(await driver.reference(actor, tombstone));
     }
     expect(await driver.inspect(f)).toEqual(after);
   }
@@ -99,7 +114,11 @@ test('public references expose only tombstone identity and private existence sta
   for (const kind of ['collection', 'member', 'log'] as const) {
     const f = await driver.seed(kind, { visibility: 'public' });
     const tombstone = await deleted(f);
-    expect(success(await driver.reference('anonymous', tombstone))).toEqual({ id: tombstone.id, kind, state: 'deleted' });
+    expect(success(await driver.reference('anonymous', tombstone))).toEqual({
+      id: tombstone.id,
+      kind,
+      state: 'deleted',
+    });
   }
   const f = await driver.seed('collection', { visibility: 'private' });
   const tombstone = await deleted(f);
@@ -138,13 +157,21 @@ test('exact kernel day-thirty rejects undo even when a legal hold has prevented 
 });
 
 test('replacement ordinal name and capacity collisions and stale CAS never overwrite newer facts or allocate another identity', async () => {
-  for (const [kind, collision] of [['entry', 'replacement'], ['member', 'ordinal'], ['member', 'capacity'], ['label', 'name'], ['assignment', 'capacity']] as const) {
+  for (const [kind, collision] of [
+    ['entry', 'replacement'],
+    ['member', 'ordinal'],
+    ['member', 'capacity'],
+    ['label', 'name'],
+    ['assignment', 'capacity'],
+  ] as const) {
     const f = await driver.seed(kind);
     const tombstone = await deleted(f);
     const replacement = await driver.createConflict(f, collision);
     const before = await driver.inspect(f);
     expect((await driver.restore('owner', tombstone, 'conflict')).response.status).toBe(409);
-    expect((await driver.delete('owner', { ...replacement, revision: replacement.revision - 1 }, 'stale')).response.status).toBe(409);
+    expect(
+      (await driver.delete('owner', { ...replacement, revision: replacement.revision - 1 }, 'stale')).response.status,
+    ).toBe(409);
     expect(await driver.inspect(f)).toEqual(before);
   }
 });
@@ -174,7 +201,7 @@ test('automatic due purge needs no platform grant and explicit early purge canno
     await driver.drain(); // no purge call, platform action, or account deletion
     const purged = await driver.inspect(f);
     expect(purged.target).toBeNull();
-    expect(purged.rows.filter(row => row.id === f.target.id)).toEqual([]);
+    expect(purged.rows.filter((row) => row.id === f.target.id)).toEqual([]);
     expect(JSON.stringify([purged.rows, purged.evidence])).not.toContain(f.marker);
     const trace = await driver.trace();
     expect(trace.committed.length).toBeGreaterThan(0);
@@ -216,11 +243,15 @@ test('purge preserves safe public skeleton references and never decrements visib
     await driver.drain();
     const purged = await driver.inspect(f);
     expect(purged.target).toBeNull();
-    expect(purged.rows.some(row => row.id === f.target.id)).toBe(true);
+    expect(purged.rows.some((row) => row.id === f.target.id)).toBe(true);
     expect(JSON.stringify([purged.rows, purged.evidence])).not.toContain(f.marker);
     expect(purged.publicCollectionCount).toBe(hiddenState.publicCollectionCount);
     expect(purged.pairs).toEqual(hiddenState.pairs);
-    expect(success(await driver.reference('anonymous', tombstone))).toEqual({ id: tombstone.id, kind, state: 'deleted' });
+    expect(success(await driver.reference('anonymous', tombstone))).toEqual({
+      id: tombstone.id,
+      kind,
+      state: 'deleted',
+    });
     await hidden(f);
   }
   const f = await driver.seed('member', { visibility: 'public', duplicateSibling: true });
@@ -250,20 +281,21 @@ test('stale positive projection and old page cursor cannot resurrect deletion or
   expect(stale.response.status).toBe(409);
 });
 
-test('Accounts restoration invalidates a parked old purge generation before private state reopens', async () => {
+test('restoring a private fact fences its parked stale purge before private state reopens', async () => {
   const f = await driver.seed('copy');
   const pause = await driver.holdNextPurge('after-durable-capture');
-  const deletion = await driver.accountDelete();
+  const tombstone = await deleted(f);
   await pause.reached;
   await hidden(f);
-  await driver.setTime(at(deletion.deletedAt, 29));
-  const restoration = await driver.accountRestore();
-  expect(restoration.generation).toBeGreaterThan(deletion.generation);
-  await driver.setTime(deletion.restoreUntil);
+  await driver.setTime(at(tombstone.deletedAt!, 29));
+  const restoration = success(await driver.restore('owner', tombstone, 'undo-parked-private-fact'));
+  expect(restoration.id).toBe(f.target.id);
+  expect(restoration.deletedAt).toBeNull();
+  await driver.setTime(tombstone.restoreUntil!);
   await pause.resume();
   await driver.drain();
   expect((await driver.inspect(f)).target?.values).toEqual(f.target.values);
-  expect(success(await driver.read('owner', f.primary, f)).items.map(row => row.id)).toContain(f.target.id);
+  expect(success(await driver.read('owner', f.primary, f)).items.map((row) => row.id)).toContain(f.target.id);
 });
 
 test('account retention freezes completed public A discards pending B and erases unlisted private deleted and log payload', async () => {
@@ -276,7 +308,7 @@ test('account retention freezes completed public A discards pending B and erases
   expect(retained.subjectIds).not.toContain(f.pendingOnlyId);
   expect(Object.keys(retained.attribution).sort()).toEqual(['id', 'kind', 'state']);
   expect(retained.attribution.state).toBe('deleted');
-  await driver.setTime(deletion.restoreUntil);
+  await driver.setTime(at(deletion.deletedAt, 30));
   await driver.drain();
   for (const erased of f.erased) {
     const state = await driver.inspect(erased);
@@ -295,12 +327,12 @@ test('child before parent pages recover rollback and commit before enqueue witho
     const f = await driver.seed('log', { historyRows: 257 });
     const deletion = await driver.accountDelete();
     await driver.crashNext(point);
-    await driver.setTime(deletion.restoreUntil);
+    await driver.setTime(at(deletion.deletedAt, 30));
     await driver.restart();
     await driver.drain();
     const trace = await driver.trace();
     expect(trace.committed.length).toBeGreaterThan(3);
-    expect(new Set(trace.committed.map(p => p.transactionId)).size).toBe(trace.committed.length);
+    expect(new Set(trace.committed.map((p) => p.transactionId)).size).toBe(trace.committed.length);
     for (const page of trace.committed) {
       expect(page.sourceLimit).toBeGreaterThan(0);
       expect(page.sourceLimit).toBeLessThanOrEqual(100);
@@ -311,12 +343,14 @@ test('child before parent pages recover rollback and commit before enqueue witho
       expect(page.guard.held).toBe(false);
       if (page.examinedKeys.length) expect(page.after).toBe(page.examinedKeys.at(-1)!);
     }
-    const phases = trace.committed.map(p => p.phase);
+    const phases = trace.committed.map((p) => p.phase);
     expect(phases.lastIndexOf('session-children')).toBeLessThan(phases.indexOf('session-parent'));
     expect(phases).toContain('session-children');
     expect(phases).toContain('session-parent');
     expect((await driver.inspect(f)).target).toBeNull();
-    expect((await driver.inspect(f)).rows.filter(row => /progress_(unit|change|session|head)/.test(row.relation))).toEqual([]);
+    expect(
+      (await driver.inspect(f)).rows.filter((row) => /progress_(unit|change|session|head)/.test(row.relation)),
+    ).toEqual([]);
   }
 });
 
@@ -345,7 +379,7 @@ test('real SQL examined rows blocks and statements stay bounded at three legal g
     samples.push({ rows: page.rowsExamined, blocks: page.sharedBlocks, statements: page.statements });
     expect((await driver.inspect(f)).target).toBeNull(); // held predecessors cannot starve it
   }
-  expect(Math.max(...samples.map(s => s.rows))).toBeLessThanOrEqual(Math.min(...samples.map(s => s.rows)) + 100);
-  expect(new Set(samples.map(s => s.statements)).size).toBe(1);
+  expect(Math.max(...samples.map((s) => s.rows))).toBeLessThanOrEqual(Math.min(...samples.map((s) => s.rows)) + 100);
+  expect(new Set(samples.map((s) => s.statements)).size).toBe(1);
   expect(samples[2]!.blocks).toBeLessThanOrEqual(samples[0]!.blocks * 4); // 16x population, fixed page
 });
