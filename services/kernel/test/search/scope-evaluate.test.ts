@@ -55,7 +55,7 @@ const statement = (property: string, content: unknown, qualifiers: ReturnType<ty
   qualifiers,
   rank: 'normal',
 });
-const prefix = `test-scope-evaluate-${randomUUID()}-`;
+const prefix = `test-scope-${randomUUID().replaceAll('-', '').slice(0, 24)}-`;
 const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
 const engineCalls: string[] = [];
 const searchesSince = (offset: number) =>
