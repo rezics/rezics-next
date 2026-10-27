@@ -188,3 +188,20 @@ test('a brief after a stabilize task that dev does not contain yet is held at di
     expect(h.tasks.dispatch(laterBrief).state).toBe('held');
   } finally { h.dispose(); }
 });
+
+test('an integrated research task wakes its manager with the report path', async () => {
+  const h = harness(), inbox: ManagerEvent[] = [];
+  try {
+    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]').replace('kind: implementation', 'kind: research'));
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    const research = h.tasks.dispatch(h.briefFile);
+    await job.start(research.id);
+    const commit = git(h.store.task(research.id).worktree, 'rev-parse', 'HEAD');
+    git(h.root, 'update-ref', 'refs/heads/dev', commit, git(h.root, 'rev-parse', 'dev'));
+    job.onGateOutcome({ ...merged(research.id, commit), changedFiles: ['docs/research/shelves.md'] }); await job.drain();
+    expect(h.store.task(research.id).state).toBe('integrated');
+    const notice = inbox.find(event => event.kind === 'instruction');
+    expect(notice?.managerId).toBe('fixture');
+    expect(notice?.summary).toContain('docs/research/shelves.md');
+  } finally { h.dispose(); }
+});
