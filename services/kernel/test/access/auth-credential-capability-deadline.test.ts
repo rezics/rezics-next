@@ -1,6 +1,7 @@
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 import { newId } from '../../src/route/route.ts';
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import type { CredentialEffectBinding, CredentialEffectAuthorization, SessionProof } from '@rezics/auth-contract';
 import type { Access } from '../../src/request/access.ts';
 import type { Pool } from 'pg';
@@ -236,4 +237,9 @@ test('credential capability uses an ample caller deadline unchanged', async () =
   ).rejects.toBe(accessReached);
 
   expect(f.accessDeadlines).toEqual([deadline]);
+});
+
+test('credential capability computes no deadline of its own', () => {
+  const source = readFileSync(new URL('../../src/access/auth-credential-capability.ts', import.meta.url), 'utf8');
+  expect(source).not.toMatch(/Date\.now\(\)\s*\+/);
 });
