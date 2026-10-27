@@ -623,18 +623,113 @@ test('a committed logical page survives denied replay before its DBOS checkpoint
   expect(revisions.rows.every((row) => row.body === null)).toBe(true);
 });
 
+test('every measured revision erasure is a HOT update while another backend holds a snapshot', async () => {
+  const { checkGrowth, openGrowthDatabase } = await import('../support/growth.ts');
+  const { nullErasedRevisionPage } = await import('../../src/content/erasure-workflow.ts');
+  const db = await openGrowthDatabase();
+  const rollback = new Error('Rollback measured cleanup');
+  let snapshot: import('pg').PoolClient | undefined;
+  const openedScales = new Set<number>();
+  const values = new Map<number, Awaited<ReturnType<typeof scope>>>();
+  const hotUpdates: { scale: number; updated: number; hot: number }[] = [];
+  const check = {
+    name: 'affected erasure revisions',
+    scales: [1, 8, 64] as const,
+    warmups: 1,
+    repetitions: 5,
+    bounds: { rows: 'linear' as const, statements: 'constant' as const, blocks: 'linear' as const },
+  };
+  const runsPerScale = (check.warmups ?? 1) + (check.repetitions ?? 5);
+  let nextRepetition = 0;
+  async function closeSnapshot(): Promise<void> {
+    if (!snapshot) return;
+    const current = snapshot;
+    snapshot = undefined;
+    try {
+      await current.query('ROLLBACK');
+    } finally {
+      current.release();
+    }
+  }
+  async function eraseRun(target: typeof db, scale: number, repetition: number, measured: boolean): Promise<void> {
+    const value = values.get(repetition)!;
+    try {
+      await runCommand(target.pool, { partition }, async (tx) => {
+        const before = measured
+          ? await tx.query<{ updated: string; hot: string }>(
+              `SELECT pg_stat_get_xact_tuples_updated('content.revision'::regclass) AS updated,
+                      pg_stat_get_xact_tuples_hot_updated('content.revision'::regclass) AS hot`,
+            )
+          : undefined;
+        expect(
+          await nullErasedRevisionPage(tx, {
+            route,
+            post_id: value.ids[0]!,
+            after_at: '-infinity',
+            after_id: value.ids[0]!,
+          }),
+        ).toHaveLength(scale);
+        if (measured) {
+          const counts = await tx.query<{ updated: string; hot: string }>(
+            `SELECT pg_stat_get_xact_tuples_updated('content.revision'::regclass) AS updated,
+                    pg_stat_get_xact_tuples_hot_updated('content.revision'::regclass) AS hot`,
+          );
+          const count = counts.rows[0]!;
+          const updated = Number(count.updated) - Number(before!.rows[0]!.updated);
+          const hot = Number(count.hot) - Number(before!.rows[0]!.hot);
+          if (updated !== scale || hot !== updated)
+            throw new Error(`Revision erasure was not entirely HOT: updated=${updated}, hot=${hot}`);
+          hotUpdates.push({ scale, updated, hot });
+        }
+        throw rollback;
+      });
+    } catch (error) {
+      if (error !== rollback) throw error;
+    }
+  }
+  try {
+    const report = await checkGrowth(db, {
+      ...check,
+      async grow(_target, scale) {
+        await closeSnapshot();
+        for (let run = 0; run < runsPerScale; run++) {
+          const value = await scope(1, scale);
+          await erasePostLogical(
+            { pool: fixture.pool, access: fixture.access, routeKey },
+            value.actor,
+            { postId: value.ids[0]!, reason: 'Erase' },
+            context(),
+          );
+          values.set(nextRepetition++, value);
+        }
+      },
+      async warmup(target, scale, repetition) {
+        if (!openedScales.has(scale)) {
+          snapshot = await target.admin.connect();
+          await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await snapshot.query('SELECT count(*) FROM content.revision');
+          openedScales.add(scale);
+        }
+        await eraseRun(target, scale, repetition, false);
+      },
+      async operation(target, scale, repetition) {
+        await eraseRun(target, scale, repetition, true);
+      },
+    });
+    expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
+    console.info('Revision erasure HOT updates under snapshot', JSON.stringify(hotUpdates));
+    console.info('Affected erasure growth', JSON.stringify(report.samples));
+  } finally {
+    await closeSnapshot();
+    await db.close();
+  }
+});
+
 test('checkGrowth proves fixed native erasure pages against unrelated and same-partition history', async () => {
   const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
   const { pageAuthorErasurePosts, nullErasedRevisionPage, eraseRevisionMedia } =
     await import('../../src/content/erasure-workflow.ts');
   const db = await openGrowthDatabase();
-  const selected = await scope(1, 100);
-  await erasePostLogical(
-    { pool: fixture.pool, access: fixture.access, routeKey },
-    selected.actor,
-    { postId: selected.ids[0]!, reason: 'Erase' },
-    context(),
-  );
   const population = {
     name: 'erasure-history',
     hotPartition: partition,
@@ -707,12 +802,33 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
   };
   const rollback = new Error('Rollback measured cleanup');
   try {
-    const report = await checkGrowth(db, {
+    const fixedOptions = {
       name: 'native content erasure pages',
-      scales: [32, 256, 2048],
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: (target, scale, previous) => seed(target, population, { from: previous, to: scale }),
-      async operation(target) {
+      scales: [32, 256, 2048] as const,
+      warmups: 1,
+      repetitions: 5,
+      bounds: { rows: 'constant' as const, statements: 'constant' as const, blocks: 'logarithmic' as const },
+    };
+    const fixedRunsPerScale = (fixedOptions.warmups ?? 1) + (fixedOptions.repetitions ?? 5);
+    const fixedScopes = new Map<number, Awaited<ReturnType<typeof scope>>>();
+    let nextFixedRepetition = 0;
+    const report = await checkGrowth(db, {
+      ...fixedOptions,
+      async grow(target, scale, previous) {
+        await seed(target, population, { from: previous, to: scale });
+        for (let run = 0; run < fixedRunsPerScale; run++) {
+          const value = await scope(1, 100);
+          await erasePostLogical(
+            { pool: fixture.pool, access: fixture.access, routeKey },
+            value.actor,
+            { postId: value.ids[0]!, reason: 'Erase' },
+            context(),
+          );
+          fixedScopes.set(nextFixedRepetition++, value);
+        }
+      },
+      async operation(target, _scale, repetition) {
+        const selected = fixedScopes.get(repetition)!;
         try {
           await runCommand(target.pool, { partition }, async (tx) => {
             const posts = await pageAuthorErasurePosts(tx, {
@@ -751,44 +867,6 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
     });
     expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
     console.info('Native erasure growth', JSON.stringify(report.samples));
-    // Affected-row and byte growth is deliberate and separate from unrelated
-    // history: every affected revision has the same fixed-size body and exact parent key.
-    const linearScopes = new Map<number, Awaited<ReturnType<typeof scope>>>();
-    const linear = await checkGrowth(db, {
-      name: 'affected erasure revisions',
-      scales: [1, 8, 64],
-      bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
-      async grow(target, scale) {
-        const value = await scope(1, scale);
-        await erasePostLogical(
-          { pool: fixture.pool, access: fixture.access, routeKey },
-          value.actor,
-          { postId: value.ids[0]!, reason: 'Erase' },
-          context(),
-        );
-        linearScopes.set(scale, value);
-        await target.admin.query('VACUUM (ANALYZE)');
-      },
-      async operation(target, scale) {
-        const value = linearScopes.get(scale)!;
-        try {
-          await runCommand(target.pool, { partition }, async (tx) => {
-            expect(
-              await nullErasedRevisionPage(tx, {
-                route,
-                post_id: value.ids[0]!,
-                after_at: '-infinity',
-                after_id: value.ids[0]!,
-              }),
-            ).toHaveLength(scale);
-            throw rollback;
-          });
-        } catch (error) {
-          if (error !== rollback) throw error;
-        }
-      },
-    });
-    console.info('Affected erasure growth', JSON.stringify(linear.samples));
   } finally {
     await db.close();
   }
