@@ -10,10 +10,13 @@ security settings on the Auth site and offers sign-out. Its controls stay disabl
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
 
-`bun run check` runs each non-host test file in its own isolated `bun test` process. Browser and dev-server tests use a
-separate pool with six lanes by default, matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to
-change that bound. Pure unit tests use a wider ten-lane pool by default, configurable with
-`WEB_UNIT_CHECK_CONCURRENCY`. Both pools schedule files by their latest recorded wall time, longest first, and update
+`bun run check` runs each non-host test file in its own `bun test` process. Browser and dev-server tests run through
+`scripts/isolated.ts`, which takes a host-wide stack slot for each file. Their separate pool has six lanes by default,
+matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to change that upper bound. The host lease
+sets the actual stack concurrency from `REZICS_STACK_SLOTS` (eight by default on this host). When the check already
+holds a stack slot, browser and dev-server files run one at a time inside that slot. Pure unit tests run directly,
+without the isolated wrapper or a slot, in a wider ten-lane pool configurable with `WEB_UNIT_CHECK_CONCURRENCY`. Both
+pools schedule files by their latest recorded wall time, longest first, and update
 [`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
 Durable Object state, so parallel servers do not share SQLite data.
 

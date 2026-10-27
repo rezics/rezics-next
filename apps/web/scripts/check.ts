@@ -84,6 +84,7 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
 
   const browserConcurrency = concurrency('WEB_BROWSER_CHECK_CONCURRENCY', 6, env);
   const unitConcurrency = concurrency('WEB_UNIT_CHECK_CONCURRENCY', 10, env);
+  const stackConcurrency = env.REZICS_STACK_SLOT === undefined ? browserConcurrency : 1;
   const browserFiles = options.files.filter((file) => isBrowserTest(file, directory));
   const unitFiles = options.files.filter((file) => !browserFiles.includes(file));
   const previous = readTimings(timingsFile);
@@ -95,11 +96,14 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
       create: () => undefined,
       run: async (file, database) => {
         const report = join(reportDirectory, `${database}.xml`);
+        const invocation = browserFiles.includes(file)
+          ? ['bun', 'scripts/isolated.ts', 'bun', 'test']
+          : ['bun', 'test'];
         recordRunMarker(env.WEB_CHECK_EVENTS, 'start', file);
         try {
           const result = await capture(
-            testInvocation[0]!,
-            [...testInvocation.slice(1), ...testCommand(file, report).slice(1)],
+            invocation[0]!,
+            [...invocation.slice(1), ...testCommand(file, report).slice(1)],
             env,
             directory,
           );
@@ -123,7 +127,7 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
         'web-browser',
         browserFiles,
         previous,
-        browserConcurrency,
+        stackConcurrency,
         {
           ...runner,
           onComplete: options.onComplete ?? reportOutcome,
@@ -149,7 +153,7 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
         .filter((outcome) => outcome.error)
         .map((outcome) => outcome.file)
         .sort(),
-      concurrency: { browser: browserConcurrency, unit: unitConcurrency },
+      concurrency: { browser: stackConcurrency, unit: unitConcurrency },
       timings,
     };
   } finally {

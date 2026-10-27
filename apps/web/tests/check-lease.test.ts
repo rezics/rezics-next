@@ -18,7 +18,7 @@ function addFakeTest(directory: string, events: string, name: string, options: F
     "import { expect, test } from 'bun:test';",
     "import { writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
-    options.stackHeavy ? "// Stack-heavy marker: import { chromium } from 'playwright';" : '',
+    options.stackHeavy ? `// Stack-heavy marker: import { chromium } from '${['play', 'wright'].join('')}';` : '',
     `const events = ${JSON.stringify(events)};`,
     `const name = ${JSON.stringify(name)};`,
     'test(name, async () => {',
@@ -63,6 +63,7 @@ function runOptions(
   };
   if (env.REZICS_STACK_SLOT === undefined) delete inherited.REZICS_STACK_SLOT;
   delete inherited.REZICS_STACK_LEASE;
+  delete inherited.WEB_TEST_STATE_DIR;
   return {
     files,
     directory: app,
