@@ -430,6 +430,13 @@ CREATE INDEX collection_member_subject ON library.collection_member USING btree 
 
 
 --
+-- Name: collection_sitemap_public_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_sitemap_public_page ON library.collection USING btree (route, collection_id) INCLUDE (updated_at) WHERE ((state = 'active'::text) AND (visibility = 'public'::text));
+
+
+--
 -- Name: copy_account_created; Type: INDEX; Schema: library; Owner: -
 --
 
