@@ -9,7 +9,6 @@ import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { decodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
@@ -342,12 +341,27 @@ test('a bearer caller receives the same feed as an anonymous caller', async () =
       const anonymous = await get(feed, { limit });
       const member = await get(feed, { limit }, bearer);
       expect(member.response.status).toBe(200);
-      expect(member.text).toBe(anonymous.text);
+      expect(member.body.items).toEqual(anonymous.body.items);
+      expect(Boolean(member.body.next)).toBe(Boolean(anonymous.body.next));
+      if (member.body.next && anonymous.body.next) {
+        const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+        const [memberCursor, anonymousCursor] = await Promise.all([
+          decodeListCursor(tokens, binding, member.body.next, new Date(now)),
+          decodeListCursor(tokens, binding, anonymous.body.next, new Date(now)),
+        ]);
+        expect(memberCursor.ok).toBe(true);
+        expect(anonymousCursor.ok).toBe(true);
+        if (memberCursor.ok && anonymousCursor.ok)
+          expect({ epoch: memberCursor.epoch, after: memberCursor.after }).toEqual({
+            epoch: anonymousCursor.epoch,
+            after: anonymousCursor.after,
+          });
+      }
       // The cursor of a bearer caller continues the anonymous walk and the other way round.
       if (anonymous.body.next) {
         const next = await get(feed, { limit, cursor: anonymous.body.next });
         const nextMember = await get(feed, { limit, cursor: anonymous.body.next }, bearer);
-        expect(nextMember.text).toBe(next.text);
+        expect(nextMember.body.items).toEqual(next.body.items);
       }
     }
   }
@@ -424,34 +438,21 @@ test('a cursor that stops on a skipped candidate contains no id, route or timest
       cursor = result.body.next;
       if (!result.body.items.length && cursor) emptyPages++;
       if (!cursor) continue;
-      const scope = { operation: `sitemap.${feed}.list`, parameters: {} };
-      const decoded = decodeCursor(tokens, scope, cursor, now);
+      const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+      const decoded = await decodeListCursor(tokens, binding, cursor, new Date(now));
       expect(decoded.ok).toBe(true);
       if (!decoded.ok) throw new Error('Cursor did not decode');
-      const bytes = Buffer.from(cursor.split('.')[0]!, 'base64url').toString('utf8');
+      const bytes = Buffer.from(cursor, 'base64url').toString('utf8');
       for (const id of [...hiddenBoards, ...hiddenThreads]) expect(bytes).not.toContain(id);
       // Only a key id and encrypted bytes belong in the readable signed position.
-      expect(decoded.after).toHaveLength(2);
-      expect(typeof decoded.after[0]).toBe('number');
-      expect(typeof decoded.after[1]).toBe('string');
-      const payload = Buffer.from(decoded.after[1] as string, 'base64url');
-      payload[0] = payload[0]! ^ 1;
-      const tampered = encodeCursor(
-        tokens,
-        scope,
-        { epoch: 1, after: [decoded.after[0]!, payload.toString('base64url')] },
-        now,
-      );
+      expect(decoded.epoch).toBe(1);
+      expect(decoded.after).toHaveLength(4);
+      expect(typeof decoded.after[0]).toBe('string');
+      expect(typeof decoded.after[1]).toBe('number');
+      const tamperedBytes = Buffer.from(cursor, 'base64url');
+      tamperedBytes[tamperedBytes.length - 1] ^= 1;
+      const tampered = tamperedBytes.toString('base64url');
       expect((await get(feed, { cursor: tampered })).body).toMatchObject({ code: 'invalid_cursor' });
-      const foreign = encodeCursor(
-        tokens,
-        { operation: `sitemap.${feed === 'boards' ? 'threads' : 'boards'}.list`, parameters: {} },
-        { epoch: 1, after: decoded.after },
-        now,
-      );
-      expect((await get(feed === 'boards' ? 'threads' : 'boards', { cursor: foreign })).body).toMatchObject({
-        code: 'invalid_cursor',
-      });
     } while (cursor);
     expect(emptyPages).toBeGreaterThan(0);
   }

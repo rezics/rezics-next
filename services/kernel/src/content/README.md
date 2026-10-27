@@ -198,6 +198,10 @@ exactly once. Threads under protected Realms and removed boards are never read. 
 newest first and resumes an unfinished probe on the next page, so any number of newer hidden candidates cannot
 make a board with a listed thread disappear.
 
+Board items come in strictly increasing `(route, id)` order. Thread items are board-major: boards follow that same
+order, then each board's threads follow `(created_at, thread_id)` order. Thread items do not carry either key, so a
+client cannot verify their order from the response alone.
+
 A page examines at most 4 × `limit` candidate rows. When it reaches that cap it returns what it found with a non-null
 `next`, possibly with no items; clients follow `next` until it is `null`.
 

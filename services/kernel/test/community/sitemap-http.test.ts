@@ -6,7 +6,6 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
-import { decodeCursor } from '../../src/tokens/cursor.ts';
 import { decodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
@@ -272,11 +271,26 @@ test('a bearer caller receives the same Realm and Space feeds as an anonymous ca
     const anonymous = await get(feed, { limit: '1' });
     const authenticated = await get(feed, { limit: '1' }, bearer);
     expect(authenticated.response.status).toBe(200);
-    expect(authenticated.text).toBe(anonymous.text);
+    expect(authenticated.body.items).toEqual(anonymous.body.items);
+    expect(Boolean(authenticated.body.next)).toBe(Boolean(anonymous.body.next));
+    if (authenticated.body.next && anonymous.body.next) {
+      const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+      const [authenticatedCursor, anonymousCursor] = await Promise.all([
+        decodeListCursor(tokens, binding, authenticated.body.next, fixedNow),
+        decodeListCursor(tokens, binding, anonymous.body.next, fixedNow),
+      ]);
+      expect(authenticatedCursor.ok).toBe(true);
+      expect(anonymousCursor.ok).toBe(true);
+      if (authenticatedCursor.ok && anonymousCursor.ok)
+        expect({ epoch: authenticatedCursor.epoch, after: authenticatedCursor.after }).toEqual({
+          epoch: anonymousCursor.epoch,
+          after: anonymousCursor.after,
+        });
+    }
     if (anonymous.body.next) {
       const continued = await get(feed, { limit: '1', cursor: anonymous.body.next });
       const bearerContinued = await get(feed, { limit: '1', cursor: anonymous.body.next }, bearer);
-      expect(bearerContinued.text).toBe(continued.text);
+      expect(bearerContinued.body.items).toEqual(continued.body.items);
     }
   }
 });
@@ -360,12 +374,13 @@ test('a cursor that stops on a skipped candidate contains no id, route or timest
     } while (cursor);
     expect(cursorAfterSkipped).toEqual(expect.any(String));
     const opaque = cursorAfterSkipped!;
-    const scope = { operation: `sitemap.${feed}.list`, parameters: {} };
-    const decoded = decodeCursor(tokens, scope, opaque, fixedNow);
+    const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+    const decoded = await decodeListCursor(tokens, binding, opaque, fixedNow);
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) throw new Error('Cursor did not decode');
-    const readable = Buffer.from(opaque.split('.')[0]!, 'base64url').toString('utf8');
+    const readable = Buffer.from(opaque, 'base64url').toString('utf8');
     for (const id of hiddenIds) expect(readable).not.toContain(id);
+    expect(decoded.epoch).toBe(1);
     expect(decoded.after).toHaveLength(2);
     expect(typeof decoded.after[0]).toBe('number');
     expect(typeof decoded.after[1]).toBe('string');

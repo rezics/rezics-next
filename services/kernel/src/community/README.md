@@ -112,6 +112,7 @@ may return fewer items than requested when candidates are skipped. Pages may con
 items, an exception to the shared list maximum of 100. Their positions use the shared opaque list cursor contract in
 [`../tokens/list-cursor.ts`](../tokens/list-cursor.ts), bound to the feed route, anonymous viewer and empty query.
 `lastModified` is the current head revision time; a Realm also uses the time of its newest board when that is later.
+Realm and Space items come in strictly increasing `(route, id)` order.
 
 ## Cost
 
