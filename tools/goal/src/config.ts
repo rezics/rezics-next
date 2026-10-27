@@ -349,20 +349,22 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     fence: store,
     sink: job,
     derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-    promote: () =>
-      promote({
-        settings,
-        job,
-        runGate: promotionGate,
-        derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-        ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
-      }),
+    promote: () => promoteNow(),
     runGate,
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
     handOff,
     ...options.train,
   });
+  function promoteNow(): Promise<void> {
+    return promote({
+        settings,
+        job,
+        runGate: promotionGate,
+        derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+        ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
+      });
+  }
   const landing: IntegrationRuntime['landing'] = (taskId) => {
     const task = store.task(taskId),
       ref = { taskId, attempt: task.currentAttempt };
@@ -468,6 +470,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         )
       );
     },
+    promote: () => promoteNow(),
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
       await job.recoverOrphans(options);
       await afterSettle();
