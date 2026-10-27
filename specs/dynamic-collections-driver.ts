@@ -120,20 +120,26 @@ export interface DynamicCollectionsDriver {
   rotateListCursorKey(): Promise<void>;
 
   /** Raw Response, preserving the production HTTP status, headers, and body. */
-  request(as: Persona, input: {
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-    path: string;
-    headers?: Record<string, string>;
-    body?: unknown;
-  }): Promise<Response>;
+  request(
+    as: Persona,
+    input: {
+      method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+      path: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+    },
+  ): Promise<Response>;
 
   /** Create a real subject through semantic's accepted production command. */
   provisionSubject(profile: ProfileName, options?: { ownerOnlyReadable?: boolean }): Promise<SubjectFixture>;
   /** Activate or retire an immutable compiled profile release through its trusted Definitions owner. */
-  activateProfileRelease(profile: ProfileName, input: {
-    releaseDigest: string;
-    states: readonly { id: string; meaningRevision: string; label: string }[];
-  }): Promise<ProfileFixture>;
+  activateProfileRelease(
+    profile: ProfileName,
+    input: {
+      releaseDigest: string;
+      states: readonly { id: string; meaningRevision: string; label: string }[];
+    },
+  ): Promise<ProfileFixture>;
   retireProfile(profile: ProfileName): Promise<void>;
   /** Add/remove a real viewer grant or eligibility fact through its source owner's production command. */
   setSubjectReadability(subjectId: string, viewer: 'owner' | 'other', readable: boolean): Promise<void>;
