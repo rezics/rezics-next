@@ -46,7 +46,7 @@ export async function pinLegacyFactsPage(
     // All validated routable IDs are greater than this first-page lower bound.
     after_id: after ?? '00000000-0000-0000-0000-000000000000',
     page_limit: limit,
-    pin: JSON.stringify(pin),
+    pin,
   });
   if (rows.some((row) => row.incompatible)) throw new Error('Incompatible unpinned legacy copy kind');
   return {
