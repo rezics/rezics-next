@@ -234,6 +234,16 @@ append, with no additional SQL. The API round trips are covered by
 - Bound: Rows O((s + 1) × labels), blocks O((s + 1) log N), five statements. Independent of P, of d, and of facts other than labels.
 - Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`, scales `[1, 4, 16]`.
 
+### Internal subject-page candidate window
+
+`pageSubjectPageCandidates(pool, ring, { partition, size?, cursor?, clock? })` visits only the supplied owner in one repeatable-read transaction. Size defaults to 20 and accepts integers from 1 through 1000. It returns internal `{ route, id }` keys and the actual owner component, preserving its bigint position. Empty windows finish with `[]` and null; missing and moved owners use the existing typed availability errors, while fenced owners remain readable. Signed cursors bind the owner and normalized size, validate the canonical routed key and actual epoch, and use the supplied kernel clock (system clock by default).
+
+The continuation names the last processed candidate. The key-only extra row remains unprocessed and is the first key of the next unchanged window. Hidden, taken-down and title-only subjects consume the same candidate budget. This primitive establishes neither indexability nor `lastModified`, global traversal or completed sitemap behavior. The eventual public service must perform current Access, visibility and publication checks before disclosing data.
+
+- Touches: `subject-page-candidates.sql` reads only one owner range through `subject_pkey(route, subject_id)`, at most s + 1 keys, plus one `core.partition` PK probe. It reads no facts, labels or eligibility state and never probes the next owner. Grow total subjects and the hot owner's long title-only/hidden runs while preserving unrelated partitions; fix candidate size and continuation.
+- Bound: At most s + 2 examined rows, O(log N + s) shared blocks, and five statements including BEGIN, timeout setting and COMMIT. Size is bounded before SQL; disclosure selectivity cannot increase the window.
+- Growth check: `test/semantic/growth-subject-page-candidates.test.ts`: `candidate window work stays bounded as unrelated and noindex populations grow`. Continuation: `test/semantic/subject-page-candidates.test.ts`: `candidate windows inspect one source partition and preserve the unprocessed sentinel`; `test/semantic/subject-page-candidates.test.ts`: `unchanged candidate traversal visits every hidden and title-only key exactly once`.
+
 ### Item projection and related labels
 
 - Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived under Subject summaries. Grow the related partitions and the total; the subject and its six related ids stay fixed.
