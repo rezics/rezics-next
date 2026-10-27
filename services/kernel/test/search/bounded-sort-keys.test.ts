@@ -230,6 +230,7 @@ test('native normalization bounds complete name sort values on writes while pres
     for (const [n, action] of bounded.entries()) {
       const original = manyBefore[n]!;
       if (action.op !== 'index' || original.op !== 'index') throw new Error('expected index action');
+      if (typeof original.document.name_sort !== 'string') throw new Error('expected named fixture');
       expect(action).toEqual({
         ...original,
         document: { ...original.document, name_sort: native.get(original.document.name_sort) },
