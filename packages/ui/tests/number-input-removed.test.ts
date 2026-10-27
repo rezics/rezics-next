@@ -4,6 +4,44 @@ import { dirname, join } from 'node:path';
 
 const root = join(import.meta.dir, '..', '..', '..');
 const ui = join(root, 'packages', 'ui');
+const numberInputImport = /(?:from\s*|import\s*\(|require\s*\()\s*['"][^'"]*number-input/;
+
+type SourceReader = (path: string) => string;
+
+function scanWorkspaceSources(rootDirectory: string, readSource: SourceReader = (path) => readFileSync(path, 'utf8')) {
+  const excluded = new Set([
+    'node_modules',
+    '.temp',
+    '.git',
+    '.next',
+    '.turbo',
+    '.output',
+    'dist',
+    'build',
+    'coverage',
+    'paraglide',
+  ]);
+  const matches: string[] = [];
+
+  for (const path of new Bun.Glob('**/src/**/*.{ts,tsx,js,jsx}').scanSync({ cwd: rootDirectory })) {
+    if (path.split('/').some((part) => excluded.has(part))) continue;
+
+    let source: string;
+    try {
+      source = readSource(join(rootDirectory, path));
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') continue;
+      throw error;
+    }
+
+    const lines = source.split('\n');
+    for (const [index, line] of lines.entries()) {
+      if (numberInputImport.test(line)) matches.push(`${path}:${index + 1}:${line}`);
+    }
+  }
+
+  return matches;
+}
 
 test('the legacy number input and its existence test are removed', () => {
   for (const path of [
@@ -20,18 +58,7 @@ test('the legacy number input and its existence test are removed', () => {
 });
 
 test('workspace sources do not import the legacy number input', () => {
-  const excluded = new Set(['node_modules', '.temp', '.git', '.next', '.turbo', 'dist', 'build', 'coverage']);
-  const pattern = /(?:from\s*|import\s*\(|require\s*\()\s*['"][^'"]*number-input/;
-  const matches: string[] = [];
-
-  for (const path of new Bun.Glob('**/src/**/*.{ts,tsx,js,jsx}').scanSync({ cwd: root })) {
-    if (path.split('/').some((part) => excluded.has(part))) continue;
-    const lines = readFileSync(join(root, path), 'utf8').split('\n');
-    for (const [index, line] of lines.entries()) {
-      if (pattern.test(line)) matches.push(`${path}:${index + 1}:${line}`);
-    }
-  }
-
+  const matches = scanWorkspaceSources(root);
   expect(matches, matches.join('\n')).toEqual([]);
 }, 120_000);
 
