@@ -27,7 +27,12 @@ const password = 'governance actions registration password with enough entropy';
 const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
 const semanticRoots = ['/v1/subjects', '/v1/contexts', '/v1/definitions'];
-const libraryCollections = '/v1/subjects/:id/collections';
+const semanticOperationPrefixes = ['subject.', 'statement.', 'context.', 'definitions.'];
+const foreignSubjectOperationIds = new Set([
+  'subject.set_reaction',
+  'subject.clear_reaction',
+  'subject.get_own_reaction',
+]);
 const semanticWrites = [
   'statement:propose',
   'context:accept',
@@ -65,6 +70,19 @@ type Answer = { response: Response; value: Record<string, any> };
 
 function underSemantic(path: string): boolean {
   return semanticRoots.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
+function isSemanticOperation(route: (typeof kernel.routes)[number]): boolean {
+  const operationId = route.hooks?.detail?.operationId;
+  const action = route.hooks?.detail?.['x-action'];
+  return (
+    underSemantic(route.path) &&
+    typeof operationId === 'string' &&
+    action !== 'reaction:set' &&
+    // Content reaction routes share the subject operationId namespace.
+    !foreignSubjectOperationIds.has(operationId) &&
+    semanticOperationPrefixes.some((prefix) => operationId.startsWith(prefix))
+  );
 }
 
 function anonymous(action: string, catalogue: ReturnType<typeof actionCatalogue>): boolean {
@@ -282,17 +300,43 @@ test('platform governance holds every semantic write action', () => {
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   const catalogue = actionCatalogue(kernel);
   const governance = resolveResourceRoles(catalogue).roles.get(PLATFORM_GOVERNANCE_ROLE);
+  const semanticRoutes = kernel.routes.filter(isSemanticOperation);
+  const semanticOperationIds = semanticRoutes
+    .map((route) => route.hooks?.detail?.operationId)
+    .filter((operationId): operationId is string => typeof operationId === 'string');
+  const excludedForeignOperationIds = kernel.routes
+    .flatMap((route) => {
+      const operationId = route.hooks?.detail?.operationId;
+      if (!underSemantic(route.path) || isSemanticOperation(route) || typeof operationId !== 'string') return [];
+      return [operationId];
+    })
+    .sort();
   const writes = [
     ...new Set(
-      kernel.routes.flatMap((route) => {
-        if (route.path === libraryCollections || !underSemantic(route.path)) return [];
+      semanticRoutes.flatMap((route) => {
         const action = route.hooks?.detail?.['x-action'];
         if (typeof action !== 'string' || action.endsWith(':read') || anonymous(action, catalogue)) return [];
         return [action];
       }),
     ),
   ].sort();
+  expect(semanticOperationIds).toEqual(
+    expect.arrayContaining(['subject.create', 'statement.hide', 'context.create', 'definitions.publish']),
+  );
   expect(writes).toEqual(expect.arrayContaining(semanticWrites));
+  expect(writes).not.toContain('reaction:set');
+  expect(writes).not.toContain('rating:vote');
+  expect(writes).not.toContain('collection:read');
+  expect(excludedForeignOperationIds).toEqual(
+    expect.arrayContaining([
+      'subject.set_reaction',
+      'subject.clear_reaction',
+      'subject.get_own_reaction',
+      'rating.vote_put',
+      'rating.vote_delete',
+      'subject_collection.list',
+    ]),
+  );
   expect(governance).toEqual(expect.arrayContaining(writes));
 });
 
