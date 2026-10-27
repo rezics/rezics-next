@@ -89,6 +89,22 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   expect(prompt).toContain('queued, not stuck');
 });
 
+test('a worker reports persistent tool and infrastructure failures as a tool blocker with the exact error', () => {
+  const task = {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      kind: 'implementation',
+      acceptance: { command: ['bun', 'test'], tests: ['x'] },
+    },
+  } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain(
+    'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
+  );
+});
+
 test('stabilize and critical-path starts skip the worker cap but not the memory floor', async () => {
   const { startsFirst } = await import('./launch.ts');
   expect(startsFirst({ taskClass: 'claim', brief: { target: 'stabilize' } } as never)).toBe(true);
