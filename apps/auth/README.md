@@ -6,7 +6,7 @@ Paraglide supplies the eight launch locales.
 
 Set `PRIVACY_CONTACT_URL` to the deployment's `https:` or `mailto:` privacy contact URL; missing or invalid values disable account deletion at request time.
 
-Pages compose the shared shadcn card, field, input, input-group, button, alert and checkbox components. Security
+Pages compose the shared shadcn card, field, input, input-group, button and alert components. Security
 lists also use shadcn items and badges. Password reveal buttons have localized show/hide names and stay disabled
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
 states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
@@ -143,9 +143,10 @@ The page heading has the same space below it as the sections have between them.
 ## Delete account
 
 `/account/delete` reads the signed-in account id from one `GET /session`. The page explains that deletion is permanent,
-signs the person out everywhere and cannot be undone. Before submitting, the person must confirm with a required
-checkbox and review the three prerequisites: no operated automated accounts, not the last owner of an organization,
-and no pending transfer. The server does not identify which precondition failed.
+signs the person out everywhere and cannot be undone. Before submitting, the person must type the localized confirmation
+phrase shown above the input (ignoring letter case, trimming surrounding whitespace and normalizing Unicode to NFC) and
+review the three prerequisites: no operated automated accounts, not the last owner of an organization, and no pending
+transfer. The server does not identify which precondition failed.
 
 Each attempt uses one operation key for `POST /account-operations/approve` and
 `POST /account-operations/execute`. A 401 `step_up_required` goes to `/step-up?return_to=%2Faccount%2Fdelete`; the page

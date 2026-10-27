@@ -268,7 +268,7 @@ for (const [locale, expected] of Object.entries(copy)) {
         extraHTTPHeaders: { 'Accept-Language': locale },
       });
       try {
-        await page.getByRole('checkbox').waitFor({ state: 'visible' });
+        await page.getByRole('textbox').waitFor({ state: 'visible' });
         expect(await page.locator('html').getAttribute('lang')).toBe(locale);
         for (const [heading, items] of [
           [expected.erased, expected.erasedItems],
@@ -351,7 +351,7 @@ test(
     await site('https://example.test/privacy');
     const { page } = await open('/account/delete');
     try {
-      await page.getByRole('checkbox').waitFor({ state: 'visible' });
+      await page.getByRole('textbox').waitFor({ state: 'visible' });
       const link = page.getByRole('link', { name: 'https://example.test/privacy', exact: true });
       expect(await link.isVisible()).toBe(true);
       expect(await link.getAttribute('href')).toBe('https://example.test/privacy');
@@ -362,6 +362,7 @@ test(
           })
           .isVisible(),
       ).toBe(true);
+      await page.getByRole('textbox').fill('delete my account');
       expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isEnabled()).toBe(true);
     } finally {
       await page.context().close();
@@ -378,7 +379,7 @@ for (const contact of [null, 'http://example.test/privacy', 'mailto:', 'mailto:n
       await site(contact);
       const { page } = await open('/account/delete');
       try {
-        await page.getByRole('checkbox').waitFor({ state: 'visible' });
+        await page.getByRole('textbox').waitFor({ state: 'visible' });
         for (const [heading, items] of [
           [copy.en.erased, copy.en.erasedItems],
           [copy.en.retained, copy.en.retainedItems],
@@ -394,7 +395,7 @@ for (const contact of [null, 'http://example.test/privacy', 'mailto:', 'mailto:n
             .isVisible(),
         ).toBe(true);
         expect(await page.getByRole('link', { name: /privacy/ }).count()).toBe(0);
-        await page.getByRole('checkbox').check();
+        await page.getByRole('textbox').fill('delete my account');
         expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isDisabled()).toBe(true);
         const writesBefore = calls.filter((call) => call.method !== 'GET').length;
         await page.locator('form').evaluate((form) => (form as HTMLFormElement).requestSubmit());

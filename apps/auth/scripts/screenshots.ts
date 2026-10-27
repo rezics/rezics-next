@@ -181,7 +181,7 @@ async function prepareState(page: Page, state: (typeof states)[number]): Promise
   } else if (state === 'security') {
     await page.locator('main li article').nth(2).waitFor({ state: 'visible' });
   } else if (state === 'account-delete') {
-    await page.getByRole('checkbox').waitFor({ state: 'visible' });
+    await page.getByRole('textbox').waitFor({ state: 'visible' });
   } else if (state === 'organization-new') {
     await page.locator('input[name="handle"]').waitFor({ state: 'visible' });
   }

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
-import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -19,6 +19,10 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
 const STEP_UP_URL = '/step-up?return_to=%2Faccount%2Fdelete';
 
+function normalizeConfirmation(value: string): string {
+  return value.trim().normalize('NFC').toLowerCase();
+}
+
 export const Route = createFileRoute('/account/delete')({
   head: () => ({ meta: [{ title: `${m.auth_account_delete_heading()} · REZICS` }] }),
   loader: () => readPrivacyContact(),
@@ -33,7 +37,9 @@ function DeleteAccountPage() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+  const confirmationPhrase = m.auth_account_delete_confirmation_phrase();
+  const confirmed = normalizeConfirmation(confirmation) === normalizeConfirmation(confirmationPhrase);
   const [confirmationError, setConfirmationError] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
@@ -41,6 +47,7 @@ function DeleteAccountPage() {
   const [deleted, setDeleted] = useState(false);
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
+  const confirmationInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -62,7 +69,7 @@ function DeleteAccountPage() {
   }, []);
 
   useLayoutEffect(() => {
-    if (confirmationError) document.getElementById('account-delete-checkbox')?.focus();
+    if (confirmationError) confirmationInput.current?.focus();
     else if (message) alert.current?.focus();
   }, [confirmationError, message]);
 
@@ -178,22 +185,30 @@ function DeleteAccountPage() {
         </ul>
       </div>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
+        <p>{m.auth_account_delete_finality()}</p>
         <Field id="account-delete-confirmation" data-invalid={confirmationError}>
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="account-delete-checkbox"
-              aria-invalid={confirmationError || undefined}
-              aria-describedby={confirmationError ? 'account-delete-confirmation-error' : undefined}
-              checked={confirmed}
-              onCheckedChange={(checked) => {
-                setConfirmed(checked);
-                if (checked) setConfirmationError(false);
-              }}
-            />
-            <FieldLabel htmlFor="account-delete-checkbox">{m.auth_account_delete_confirmation()}</FieldLabel>
-          </div>
+          <FieldLabel htmlFor="account-delete-input">
+            {m.auth_account_delete_confirmation_prompt({ phrase: confirmationPhrase })}
+          </FieldLabel>
+          <Input
+            ref={confirmationInput}
+            id="account-delete-input"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={pending}
+            aria-invalid={confirmationError || undefined}
+            aria-describedby={confirmationError ? 'account-delete-confirmation-error' : undefined}
+            value={confirmation}
+            onChange={(event) => {
+              const value = event.target.value;
+              setConfirmation(value);
+              if (normalizeConfirmation(value) === normalizeConfirmation(confirmationPhrase))
+                setConfirmationError(false);
+            }}
+          />
           {confirmationError ? (
-            <FieldError id="account-delete-confirmation-error">{m.auth_form_required()}</FieldError>
+            <FieldError id="account-delete-confirmation-error">{m.auth_account_delete_confirmation_error()}</FieldError>
           ) : null}
         </Field>
         {message ? (
@@ -209,7 +224,7 @@ function DeleteAccountPage() {
         <Button
           type="submit"
           variant="destructive"
-          disabled={!privacyContact || pending}
+          disabled={!privacyContact || pending || !confirmed}
           aria-busy={pending}
           className="w-full"
         >

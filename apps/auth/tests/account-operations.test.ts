@@ -123,7 +123,9 @@ function reset(overrides: Partial<typeof state> = {}) {
 }
 
 async function confirmDelete(page: Page) {
-  await page.getByRole('checkbox', { name: 'I understand that this cannot be undone', exact: true }).check();
+  await page
+    .getByRole('textbox', { name: 'Type “delete my account” to confirm.', exact: true })
+    .fill('delete my account');
   return page.getByRole('button', { name: 'Delete account', exact: true });
 }
 
@@ -148,7 +150,7 @@ test(
     const { page, origin } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
-      await page.getByRole('checkbox').waitFor({ state: 'visible' });
+      await page.getByRole('textbox').waitFor({ state: 'visible' });
       expect(await page.getByText(/permanently deletes your REZICS account/i).count()).toBe(1);
       expect(await page.getByText(/signs you out everywhere/i).count()).toBe(1);
       expect(await page.getByText(/cannot be undone/i).count()).toBeGreaterThan(0);
@@ -157,7 +159,7 @@ test(
       expect(await page.getByText(/no transfer is pending/i).count()).toBe(1);
 
       const button = page.getByRole('button', { name: 'Delete account', exact: true });
-      expect(await button.isEnabled()).toBe(true);
+      expect(await button.isDisabled()).toBe(true);
       const submit = await confirmDelete(page);
       await Promise.all([
         page.waitForResponse(
@@ -211,7 +213,7 @@ test(
       ]);
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
-      await page.getByRole('checkbox').waitFor({ state: 'visible' });
+      await page.getByRole('textbox').waitFor({ state: 'visible' });
       expect(state.sessionFresh).toBe(true);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {

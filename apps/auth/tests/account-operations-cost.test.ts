@@ -124,7 +124,9 @@ test(
       reset(scale);
       const { page, context } = await open('/account/delete');
       try {
-        await page.getByRole('checkbox', { name: 'I understand that this cannot be undone', exact: true }).check();
+        await page
+          .getByRole('textbox', { name: 'Type “delete my account” to confirm.', exact: true })
+          .fill('delete my account');
         await Promise.all([
           page.waitForResponse(
             (response) =>

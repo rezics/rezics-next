@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
 const command = process.argv.slice(2);
@@ -8,13 +8,14 @@ if (command.length === 0) {
   process.exitCode = 2;
 } else {
   const app = resolve(import.meta.dir, '..');
+  const cwd = process.cwd();
 
   process.exitCode = await stackRun(
     {
       label: 'auth isolated',
       root: resolve(app, '../..'),
-      cwd: app,
-      command: ['bun', 'scripts/isolated.ts', ...command],
+      cwd,
+      command: ['bun', relative(cwd, import.meta.filename), ...command],
       // The screenshot script writes the images the caller commits; a report option names a file the caller reads.
       keepsFiles: testKeepsFiles(command) || command.some((argument) => argument.endsWith('scripts/screenshots.ts')),
     },

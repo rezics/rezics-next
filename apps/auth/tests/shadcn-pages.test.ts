@@ -155,7 +155,7 @@ const pages = [
   ['/recovery#account_id=screenshot-account&token=screenshot-token', 'input[type="password"]'],
   ['/consent?client_id=screenshot-client&scope=openid+offline_access', 'main button[type="button"]'],
   ['/security', 'input[name="password"]'],
-  ['/account/delete', '[role="checkbox"]'],
+  ['/account/delete', 'input[type="text"]'],
   ['/organizations/new', 'input[name="handle"]'],
 ] as const;
 

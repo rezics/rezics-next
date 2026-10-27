@@ -123,11 +123,7 @@ function reset(overrides: Partial<typeof state> = {}) {
 }
 
 const confirmations = {
-  en: [
-    'delete my account',
-    'Type “delete my account” to confirm.',
-    'Deletion is final and cannot be undone.',
-  ],
+  en: ['delete my account', 'Type “delete my account” to confirm.', 'Deletion is final and cannot be undone.'],
   de: [
     'mein Konto löschen',
     'Gib zur Bestätigung „mein Konto löschen“ ein.',
@@ -148,21 +144,9 @@ const confirmations = {
     '確認のため「アカウントを削除」と入力してください。',
     'アカウントの削除は確定後に取り消せません。',
   ],
-  ko: [
-    '내 계정 삭제',
-    '확인하려면 “내 계정 삭제”를 입력하세요.',
-    '계정을 삭제하면 되돌릴 수 없습니다.',
-  ],
-  'zh-Hans': [
-    '删除我的账号',
-    '请输入“删除我的账号”以确认。',
-    '账号一经删除便无法恢复。',
-  ],
-  'zh-Hant': [
-    '刪除我的帳號',
-    '請輸入「刪除我的帳號」以確認。',
-    '帳號一經刪除便無法復原。',
-  ],
+  ko: ['내 계정 삭제', '확인하려면 “내 계정 삭제”를 입력하세요.', '계정을 삭제하면 되돌릴 수 없습니다.'],
+  'zh-Hans': ['删除我的账号', '请输入“删除我的账号”以确认。', '账号一经删除便无法恢复。'],
+  'zh-Hant': ['刪除我的帳號', '請輸入「刪除我的帳號」以確認。', '帳號一經刪除便無法復原。'],
 } as const;
 
 beforeAll(async () => {
@@ -218,7 +202,7 @@ test(
 );
 
 test(
-  "the page says plainly, before the control, that deletion is final and cannot be undone; its existing sections on what is erased and what is retained stay as they are, and it makes no promise of timing",
+  'the page says plainly, before the control, that deletion is final and cannot be undone; its existing sections on what is erased and what is retained stay as they are, and it makes no promise of timing',
   async () => {
     for (const [locale, [, label, outcome]] of Object.entries(confirmations)) {
       reset();
