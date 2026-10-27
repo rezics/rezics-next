@@ -1,5 +1,3 @@
-import { LocaleProvider } from '@rezics/ui/locale';
-import { SkipNavLink } from '@rezics/ui/skip-nav';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
@@ -62,6 +60,13 @@ const names = {
   fr: 'Français',
   es: 'Español',
 } as const;
+/** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
+const skipLink = cn(
+  'sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-9999 focus:rounded-xl focus:bg-primary',
+  'focus:px-4 focus:py-2 focus:text-sm focus:text-primary-foreground! focus:no-underline!',
+  // The offset keeps the ring visible against the primary fill.
+  'focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background focus:outline-none',
+);
 const messages = {
   shell_skip_to_content: m.shell_skip_to_content,
   shell_navigation: m.shell_navigation,
@@ -448,7 +453,6 @@ export function AppShell({
 }) {
   const location = useLocation();
   const router = useRouter();
-  const locale = getLocale();
   const [railCollapsed, setRailCollapsed] = useState(collapsed);
   useEffect(() => {
     const unsub = router.subscribe('onResolved', () => document.getElementById('main-content')?.focus());
@@ -459,51 +463,51 @@ export function AppShell({
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <LocaleProvider locale={locale}>
-      <SidebarProvider
-        className="flex-col"
-        open={!railCollapsed}
-        onOpenChange={(open) => {
-          setCollapsed(!open);
-          // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
-          setTimeout(() => {
-            document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
-          });
-        }}
-      >
-        <SkipNavLink id="main-content">{m.shell_skip_to_content()}</SkipNavLink>
-        <link
-          rel="preload"
-          href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
-          <div className="flex h-16 items-center gap-2 px-3">
-            <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
-            <Logo />
-            <div className="ms-auto flex items-center gap-2">
-              {location.pathname !== '/' && location.pathname !== '/search' ? (
-                <div className="hidden md:block">
-                  <ShellSearch />
-                </div>
-              ) : null}
-              <LanguageControl />
-              <ThemeControl />
-              <SessionControl session={session} csrfToken={csrfToken} />
-            </div>
+    <SidebarProvider
+      className="flex-col"
+      open={!railCollapsed}
+      onOpenChange={(open) => {
+        setCollapsed(!open);
+        // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+        setTimeout(() => {
+          document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+        });
+      }}
+    >
+      <a href="#main-content" className={skipLink}>
+        {m.shell_skip_to_content()}
+      </a>
+      <link
+        rel="preload"
+        href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
+        as="font"
+        type="font/woff2"
+        crossOrigin="anonymous"
+      />
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
+        <div className="flex h-16 items-center gap-2 px-3">
+          <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
+          <Logo />
+          <div className="ms-auto flex items-center gap-2">
+            {location.pathname !== '/' && location.pathname !== '/search' ? (
+              <div className="hidden md:block">
+                <ShellSearch />
+              </div>
+            ) : null}
+            <LanguageControl />
+            <ThemeControl />
+            <SessionControl session={session} csrfToken={csrfToken} />
           </div>
-        </header>
-        <ScriptFreeNavigation pathname={location.pathname} session={session} />
-        <div className="flex flex-1">
-          <NavigationColumn pathname={location.pathname} session={session} />
-          <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
-            <div className="mx-auto w-full max-w-5xl">{children}</div>
-          </SidebarInset>
         </div>
-      </SidebarProvider>
-    </LocaleProvider>
+      </header>
+      <ScriptFreeNavigation pathname={location.pathname} session={session} />
+      <div className="flex flex-1">
+        <NavigationColumn pathname={location.pathname} session={session} />
+        <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
 export function StatusPage({ heading, message }: { heading: string; message: string }) {

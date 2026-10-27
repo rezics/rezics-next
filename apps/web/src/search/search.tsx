@@ -2,6 +2,9 @@ import { localeChain } from '@rezics/composition';
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
+import { Cover, sharedRatio } from '@rezics/ui/cover';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import {
   Combobox,
   ComboboxContent,
@@ -9,11 +12,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-  useListCollection,
-} from '@rezics/ui/combobox';
-import { Cover, sharedRatio } from '@rezics/ui/cover';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+} from '@rezics/ui/shadcn/combobox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -554,15 +553,14 @@ export function ShellSearch() {
   const locale = getLocale();
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState('');
+  const [items, setItems] = useState<SuggestionItem[]>([]);
   const [types, setTypes] = useState<SuggestionResult['types']>({});
   const [failed, setFailed] = useState(false);
-  const collectionState = useListCollection({ initialItems: [] as SuggestionItem[] });
-  const collection = collectionState.collection;
   useEffect(() => {
     const value = inputValue.trim();
     setFailed(false);
     if (!value) {
-      collectionState.clear();
+      setItems([]);
       return;
     }
     const controller = new AbortController();
@@ -575,13 +573,13 @@ export function ShellSearch() {
           },
         );
         if (!response.ok) {
-          collectionState.clear();
+          setItems([]);
           setFailed(true);
           return;
         }
         const result = (await response.json()) as SuggestionResult;
         setTypes(result.types ?? {});
-        collectionState.set(
+        setItems(
           result.subjects.map((suggestion) => ({
             value: suggestion.id,
             label: localizedLabel(suggestion.labels, locale).text,
@@ -590,7 +588,7 @@ export function ShellSearch() {
         );
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          collectionState.clear();
+          setItems([]);
           setFailed(true);
         }
       }
@@ -609,62 +607,73 @@ export function ShellSearch() {
   };
   // One frame for the list, so covers of mixed types line up.
   const ratio = sharedRatio(
-    collection.items.map(({ suggestion }) => coverSubject(suggestion.id, '', suggestion.summary, suggestion.type)),
+    items.map(({ suggestion }) => coverSubject(suggestion.id, '', suggestion.summary, suggestion.type)),
   );
   return (
-    <Combobox
-      collection={collection}
-      onInputValueChange={({ inputValue: value }) => setInputValue(value)}
-      onValueChange={({ value }) => {
-        const id = value[0];
-        if (id) void navigate({ to: '/subjects/$id', params: { id } });
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && !event.currentTarget.getAttribute('aria-activedescendant')) {
-          event.preventDefault();
-          submit();
-        }
-      }}
-    >
-      <ComboboxInput
-        className="h-9 w-28 text-sm sm:w-44"
-        aria-label={m.search_label()}
-        placeholder={m.search_placeholder()}
-        showTrigger={false}
-      />
-      <ComboboxContent>
-        <ComboboxEmpty>{failed ? m.search_suggestions_failed() : m.search_no_suggestions()}</ComboboxEmpty>
-        <ComboboxList>
-          {collection.items.map((item) => {
-            const { suggestion } = item;
-            const typeName = localizedLabel(
-              Object.hasOwn(types, suggestion.type) ? (types[suggestion.type] ?? {}) : {},
-              locale,
-            );
-            return (
-              <ComboboxItem item={item} key={item.value} className="h-auto items-start gap-3 py-2">
-                <Cover
-                  subject={coverSubject(suggestion.id, item.label, suggestion.summary, suggestion.type)}
-                  cover={coverOf(suggestion.summary)}
-                  size="xs"
-                  ratio={ratio}
-                  src={coverSrc}
-                  decorative
-                />
-                <span className="flex min-w-0 flex-col">
-                  <span className="font-medium">{item.label}</span>
-                  <SubjectMeta
-                    type={typeName}
-                    year={hitYear(suggestion.facts)}
-                    locale={locale}
-                    className="text-xs text-muted-foreground"
+    // Without JavaScript the box is a plain form to the search page.
+    <form method="get" action={`/${locale}/search`}>
+      <Combobox
+        items={items}
+        filter={null}
+        value={null}
+        inputValue={inputValue}
+        onInputValueChange={(value, details) => {
+          // Choosing a suggestion would write its title into the box; the box is cleared on choosing instead.
+          if (details.reason !== 'item-press') setInputValue(value);
+        }}
+        onValueChange={(item: SuggestionItem | null) => {
+          if (!item) return;
+          setInputValue('');
+          void navigate({ to: '/subjects/$id', params: { id: item.value } });
+        }}
+      >
+        <ComboboxInput
+          name="q"
+          className="h-9 w-28 text-sm sm:w-44"
+          aria-label={m.search_label()}
+          placeholder={m.search_placeholder()}
+          showTrigger={false}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.currentTarget.getAttribute('aria-activedescendant')) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <ComboboxContent className="w-80">
+          <ComboboxEmpty>{failed ? m.search_suggestions_failed() : m.search_no_suggestions()}</ComboboxEmpty>
+          <ComboboxList>
+            {(item: SuggestionItem) => {
+              const { suggestion } = item;
+              const typeName = localizedLabel(
+                Object.hasOwn(types, suggestion.type) ? (types[suggestion.type] ?? {}) : {},
+                locale,
+              );
+              return (
+                <ComboboxItem value={item} key={item.value} className="h-auto items-start gap-3 py-2">
+                  <Cover
+                    subject={coverSubject(suggestion.id, item.label, suggestion.summary, suggestion.type)}
+                    cover={coverOf(suggestion.summary)}
+                    size="xs"
+                    ratio={ratio}
+                    src={coverSrc}
+                    decorative
                   />
-                </span>
-              </ComboboxItem>
-            );
-          })}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="font-medium">{item.label}</span>
+                    <SubjectMeta
+                      type={typeName}
+                      year={hitYear(suggestion.facts)}
+                      locale={locale}
+                      className="text-xs text-muted-foreground"
+                    />
+                  </span>
+                </ComboboxItem>
+              );
+            }}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </form>
   );
 }

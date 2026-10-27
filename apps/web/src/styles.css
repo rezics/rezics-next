@@ -4,7 +4,7 @@
 @import '@rezics/ui/styles.css';
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
-header [data-slot='combobox-control'] > [data-slot='input-group'] {
+header [data-slot='input-group'] {
   height: 36px;
   border-color: var(--border);
   border-radius: 9999px;
@@ -12,11 +12,11 @@ header [data-slot='combobox-control'] > [data-slot='input-group'] {
   box-shadow: none;
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']:hover {
+header [data-slot='input-group']:hover {
   border-color: var(--border);
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']::before {
+header [data-slot='input-group']::before {
   position: absolute;
   z-index: 1;
   inset-inline-start: 0.75rem;
@@ -29,7 +29,7 @@ header [data-slot='combobox-control'] > [data-slot='input-group']::before {
     no-repeat center / contain;
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']:has([data-slot='input-group-control']:focus-visible) {
+header [data-slot='input-group']:has([data-slot='input-group-control']:focus-visible) {
   border-color: var(--primary);
   outline: 2px solid var(--primary);
   outline-offset: 2px;

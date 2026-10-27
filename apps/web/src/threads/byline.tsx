@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
-import { initials } from '@rezics/ui/avatar-initials';
+import { initials } from './initials';
 import { cn } from '@rezics/ui/utils';
 import type { ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';

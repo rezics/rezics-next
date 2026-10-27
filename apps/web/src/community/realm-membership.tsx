@@ -1,4 +1,4 @@
-import { Button } from '@rezics/ui/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
