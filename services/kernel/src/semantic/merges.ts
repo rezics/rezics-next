@@ -47,7 +47,7 @@ export async function mergeSubjects(
     digest: Uint8Array;
     release: { digest: string; release: Release };
     authorization: CommandAuthorization;
-    deadline: number;
+    deadline?: number;
     clock?: () => Date;
   },
 ) {
