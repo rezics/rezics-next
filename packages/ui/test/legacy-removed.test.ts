@@ -13,8 +13,32 @@ const moduleNames = (directory: string) =>
     .filter((file) => /\.tsx?$/.test(file) && !file.endsWith('.stories.tsx'))
     .map((file) => file.replace(/\.tsx?$/, ''));
 
-/** Components the site still builds on, so they stay although they are not shadcn or are built on Ark UI. */
+/** Components the site still builds on, so they stay although they are not shadcn. */
 const keptLegacy = ['avatar-initials', 'locale'];
+
+/** Components built on Ark UI that nothing imports, so they are gone with the library. */
+const arkOnly = [
+  'announcement',
+  'bottom-navigation',
+  'client-only',
+  'data-list',
+  'environment',
+  'float',
+  'format',
+  'frame',
+  'highlight',
+  'hint',
+  'image-cropper',
+  'json-tree-view',
+  'link-overlay',
+  'marquee',
+  'presence',
+  'qr-code',
+  'status',
+  'steps',
+  'swap',
+  'timer',
+];
 
 /** Legacy components whose control shadcn provides under another name. */
 const renamed = ['password-input', 'skip-nav', 'menu', 'segment-group', 'circular-progress', 'autocomplete'];
@@ -23,6 +47,7 @@ const legacy = [
   ...new Set([
     ...moduleNames(shadcn),
     ...renamed,
+    ...arkOnly,
     'button',
     'field',
     'input',
@@ -143,23 +168,13 @@ test('every component packages/ui still exports has a story and passes the story
     ).toBeGreaterThan(0);
 }, 1_800_000);
 
-test('packages/ui depends on @ark-ui/react only if a kept component still imports it', () => {
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
-    dependencies: Record<string, string>;
-  };
-  const importers = workspaceSources().filter(
-    (file) =>
-      file.startsWith('packages/ui/src/') &&
-      !file.endsWith('.stories.tsx') &&
-      importsOf(file).some((path) => path.startsWith('@ark-ui/')),
+test('packages/ui does not depend on @ark-ui/react and no source file in the workspace imports it', () => {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>;
+  const declared = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].filter((field) =>
+    Object.keys((manifest[field] ?? {}) as Record<string, string>).some((name) => name.startsWith('@ark-ui/')),
   );
-  expect('@ark-ui/react' in manifest.dependencies, `kept importers: ${importers.join(', ') || 'none'}`).toBe(
-    importers.length > 0,
-  );
-  // Nothing outside the package reaches for Ark UI through it.
+  expect(declared).toEqual([]);
   expect(
-    workspaceSources().filter(
-      (file) => !file.startsWith('packages/ui/') && importsOf(file).some((path) => path.startsWith('@ark-ui/')),
-    ),
+    workspaceSources().filter((file) => importsOf(file).some((path) => path.startsWith('@ark-ui/'))),
   ).toEqual([]);
 });
