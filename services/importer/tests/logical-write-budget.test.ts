@@ -10,7 +10,10 @@ const rows = (neighbors: number) =>
 const isLaterA = (bytes: string) => {
   const request = JSON.parse(bytes);
   return (
-    request.commands[0].source.external_id === '1' && request.commands.some((c: { op: string }) => c.op !== 'create')
+    request.commands[0].source.external_id === '1' &&
+    request.commands.some(
+      (c: { op: string; source: { field_group: string } }) => c.op !== 'create' && c.source.field_group !== 'cover',
+    )
   );
 };
 
@@ -26,7 +29,7 @@ function alternating(): WriteSimulation {
     accepted: new Map(),
     onSend(request) {
       if (!isLaterA(JSON.stringify(request))) return;
-      return { status: ++physical % 2 ? 401 : 429, delayMs: physical % 2 ? 1 : 100 };
+      return { status: ++physical % 2 ? 401 : 429, delayMs: physical % 2 ? 1 : 50 };
     },
   };
 }
@@ -90,10 +93,11 @@ test('prior completed effects and exact envelope identities survive retry exhaus
     expect(pendingBytes(directory)).toEqual([original[0]!.bytes]);
     const effects = await driver.effects();
     delete writes.onSend;
+    const resumeStart = writes.invocations!.length;
     await driver.reopen();
     const resumed = await driver.run(rows(64).map((row) => ({ ...row, revision: 2 })));
     expect(resumed.result.status).toBe('committed');
-    const replay = writes.invocations![writes.invocations!.indexOf(original.at(-1)!) + 1]!;
+    const replay = writes.invocations![resumeStart]!;
     expect(replay.recordKey).toBe('1');
     expect(replay.bytes).toBe(original[0]!.bytes);
     expect(resumed.records.every((record) => record.acknowledged)).toBe(true);
