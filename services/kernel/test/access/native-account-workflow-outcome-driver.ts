@@ -809,8 +809,8 @@ async function makeFixture(
       await grantActions(
         owner.accountId,
         grantee.accountId,
-        ['access:grant', 'account:delete', 'account:manage'],
-        owner.bearer,
+        ['account:delete', 'account:manage'],
+        staff.bearer,
         reference('operator-manager-grant'),
       );
     }
@@ -1312,7 +1312,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const revokeCommand = createGrantCommands({
           pool: kernel,
           access: required(accessPort, 'Access is not composed'),
-          managementAction: 'access:grant',
+          managementAction: 'account:manage',
         });
         const input = {
           resource: { route: route(target), id: target },
@@ -2061,8 +2061,11 @@ async function observe(f: Fixture): Promise<Snapshot> {
        SELECT item.receipt_id::text AS business_receipt_id,item.key AS effect_key,item.digest AS effect_digest
        FROM access.committed_continuation_completion AS item
        JOIN access.committed_continuation AS continuation USING (route, continuation_id)
+       LEFT JOIN access.lifecycle_fence_receipt AS fence
+         ON fence.receipt_id=item.receipt_id
+        AND fence.account_id=split_part(item.target, ':', 1)::uuid
        WHERE continuation.route=$3 AND continuation.operation_key=$4
-         AND item.receipt_id=core.receipt.transaction_id
+         AND COALESCE(fence.transaction_id,item.receipt_id)=core.receipt.transaction_id
        LIMIT 1
      ) AS completion ON true
      WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]) OR response::text LIKE ANY($2::text[])
