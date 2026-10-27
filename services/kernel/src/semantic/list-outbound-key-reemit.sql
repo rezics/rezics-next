@@ -3,9 +3,9 @@ SELECT property, statement_id::text AS statement_id, slot_id::text AS slot_id,
        filter_value::text, order_key, relation, source_type, source_order_key,
        outbound_order, source_revision, source_security_revision::text, target_revision,
        target_type, external, value
-FROM semantic.outbound_link
+FROM semantic.outbound_link AS links
 WHERE route = :route::integer AND subject_id = :subject_id::uuid AND present AND relation
   AND (property, target_subject_id, statement_id, filter_value) >
     (:after_property::text, :after_target::uuid, :after_statement::uuid, :after_filter::uuid)
-ORDER BY property, target_subject_id, statement_id, filter_value
+ORDER BY links.property, links.target_subject_id, links.statement_id, links.filter_value
 LIMIT 101;

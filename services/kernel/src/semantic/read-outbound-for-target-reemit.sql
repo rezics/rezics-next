@@ -11,9 +11,11 @@ SELECT outbound.route, outbound.subject_id::text, outbound.property,
        outbound.source_revision, outbound.source_security_revision::text,
        outbound.target_revision, outbound.target_type, outbound.external, outbound.value
 FROM links
-JOIN semantic.outbound_link outbound
-  ON outbound.subject_id = links.subject_id AND outbound.property = links.property
- AND outbound.statement_id = links.statement_id AND outbound.filter_value = links.filter_value
- AND outbound.present AND outbound.relation
-WHERE outbound.route = :route::integer
+JOIN LATERAL (
+  SELECT * FROM semantic.outbound_link outbound
+  WHERE outbound.route = :route::integer AND outbound.subject_id = links.subject_id AND outbound.property = links.property
+    AND outbound.statement_id = links.statement_id AND outbound.filter_value = links.filter_value
+    AND outbound.present AND outbound.relation
+  LIMIT 1
+) outbound ON true
 ORDER BY outbound.route, outbound.subject_id, outbound.property, outbound.statement_id, outbound.filter_value;

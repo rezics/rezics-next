@@ -7,10 +7,13 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
   )
 ), accepted AS MATERIALIZED (
   SELECT c.*, COALESCE(old.present, false) AS was_present
-  FROM changes c CROSS JOIN input LEFT JOIN semantic.inbound_link old
-    ON old.route = input.route AND old.subject_id = c.subject_id AND old.property = c.property
-    AND old.source_subject_id = c.source_subject_id AND old.statement_id = c.statement_id
-    AND old.filter_value = c.filter_value
+  FROM changes c CROSS JOIN input LEFT JOIN LATERAL (
+    SELECT * FROM semantic.inbound_link old
+    WHERE old.route = input.route AND old.subject_id = c.subject_id AND old.property = c.property
+      AND old.source_subject_id = c.source_subject_id AND old.statement_id = c.statement_id
+      AND old.filter_value = c.filter_value
+    LIMIT 1
+  ) old ON true
   WHERE old.source_revision IS NULL OR old.source_revision < c.source_revision
      OR (old.source_revision = c.source_revision AND old.source_security_revision < c.source_security_revision)
 ), written AS (

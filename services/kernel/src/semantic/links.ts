@@ -406,7 +406,28 @@ function sourceOrder(order: string | null, keys: { name: string; date: string },
   return '';
 }
 
-function outboundProjectionRow(row: Record<string, unknown>): StoredOutboundChange {
+type OutboundProjectionRow = {
+  route: number;
+  subject_id: string;
+  property: string;
+  statement_id: string;
+  slot_id: string;
+  target: string | null;
+  filter_value: string;
+  order_key: string;
+  relation: boolean;
+  source_type: string;
+  source_order_key: string;
+  outbound_order: string | null;
+  source_revision: number;
+  source_security_revision: string;
+  target_revision: number;
+  target_type: string;
+  external: string | null;
+  value: string;
+};
+
+function outboundProjectionRow(row: OutboundProjectionRow): StoredOutboundChange {
   return {
     route: Number(row.route),
     subjectId: String(row.subject_id),
@@ -454,7 +475,7 @@ async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
     after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
     after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
-  })) as Record<string, unknown>[];
+  })) as Omit<OutboundProjectionRow, 'route' | 'subject_id'>[];
   const page = rows.slice(0, 100);
   if (page.length === 0) return;
   const keys = await readHolderKeys(pool, data.subject);
@@ -494,12 +515,7 @@ async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void
     const last = page.at(-1)!;
     await enqueueKeyContinuation(pool, {
       ...data,
-      cursor: [
-        String(last.property),
-        typeof last.target === 'string' ? last.target : NIL_UUID,
-        String(last.statement),
-        String(last.filter_value),
-      ],
+      cursor: [last.property, last.target ?? NIL_UUID, last.statement_id, last.filter_value],
     });
   }
 }
@@ -546,7 +562,7 @@ async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void
         }),
       ),
     )
-  ).flat() as Record<string, unknown>[];
+  ).flat() as OutboundProjectionRow[];
   const outbound = found.map((raw) => {
     const row = outboundProjectionRow(raw);
     row.targetType = targetType;
@@ -591,7 +607,10 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
     after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
     after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
     after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
-  })) as Record<string, unknown>[];
+  })) as (Omit<OutboundProjectionRow, 'route' | 'subject_id' | 'statement_id' | 'slot_id'> & {
+    statement: string;
+    slot: string;
+  })[];
   const page = rows.slice(0, 100);
   if (page.length === 0) return;
   const release = await readRelease(pool, data.release);

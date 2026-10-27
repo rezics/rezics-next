@@ -796,6 +796,13 @@ CREATE INDEX inbound_link_all_present ON semantic.inbound_link USING btree (rout
 
 
 --
+-- Name: inbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX inbound_link_key_reemit ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id, filter_value) WHERE present;
+
+
+--
 -- Name: inbound_link_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -807,6 +814,20 @@ CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, s
 --
 
 CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, subject_id, member_id) WHERE (phase <> 'done'::text);
+
+
+--
+-- Name: outbound_link_identity; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_identity ON semantic.outbound_link USING btree (route, subject_id, property, statement_id, filter_value) WHERE present;
+
+
+--
+-- Name: outbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_key_reemit ON semantic.outbound_link USING btree (route, subject_id, property, target_subject_id, statement_id, filter_value) WHERE (present AND relation);
 
 
 --

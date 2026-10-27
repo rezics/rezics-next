@@ -178,11 +178,11 @@ statements. Document instructions reuse the existing imported or authored field
 append, with no additional SQL. The API round trips are covered by
 `test/semantic/recipe-structure.test.ts`.
 
-### Relation-key re-emission
+### Key-change re-emission page
 
-- Touches: one page of the changed subject's outbound links per holder-key relay step, or one page of its inbound links plus the corresponding holder outbound rows per target-key step; each page updates its mirror projection and counters.
-- Bound: O(page) per relay step; O(degree) total work spread across steps, never in a request.
-- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, scales `[64, 512, 4096]`; per-step work stays bounded by the configured page size.
+- Touches: one indexed source projection range of at most 101 present rows, at most 100 changed mirror rows with fixed qualifier/filter fanout and fixed partitions, fixed identity/key point reads, and one continuation command. The four-part keyset cursor advances through the exact last examined row, including all filter rows and NIL targets.
+- Bound: rows and statements per step are independent of total degree and relation history; blocks are logarithmic in involved indexes. Mirror lookups probe the full stable identity, and inactive outbound rows use the exact tuple found by that probe. Total eventual catch-up is O(degree) over separate bounded steps, never one request or one relay snapshot.
+- Growth check: `test/semantic/growth-key-reemit.test.ts`, `holder key re-emission processes a bounded page as its out-degree grows` and `target key re-emission processes a bounded page as its in-degree grows`, `[64,512,4096]`.
 
 ### Batch label fill
 

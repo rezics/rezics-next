@@ -7,12 +7,12 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
     external text, value text, present boolean
   )
 ), checked AS MATERIALIZED (
-  SELECT c.*, old.order_key AS old_order_key, old.target_subject_id AS old_target_subject_id,
+  SELECT c.*, old.ctid AS old_tid, old.order_key AS old_order_key, old.target_subject_id AS old_target_subject_id,
          old.present AS was_present, old.source_revision AS old_source_revision,
          old.source_security_revision AS old_source_security_revision, old.target_revision AS old_target_revision
   FROM changes c CROSS JOIN input
   LEFT JOIN LATERAL (
-    SELECT * FROM semantic.outbound_link old
+    SELECT old.*, old.ctid FROM semantic.outbound_link old
     WHERE old.route = input.route AND old.subject_id = c.subject_id AND old.property = c.property
       AND old.filter_value = c.filter_value AND old.statement_id = c.statement_id AND old.present
     ORDER BY old.source_revision DESC, old.source_security_revision DESC, old.target_revision DESC
@@ -24,11 +24,15 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
      OR (c.source_revision = old.source_revision AND c.source_security_revision = old.source_security_revision
        AND c.target_revision >= old.target_revision)
 ), inactive AS (
+  -- The stable-identity probe already found these exact tuples in this statement's snapshot.
+  -- A tuple-id array keeps deactivation independent of the holder's display-key history.
   UPDATE semantic.outbound_link old SET present = false
-  FROM checked c CROSS JOIN input
-  WHERE old.route = input.route AND old.subject_id = c.subject_id AND old.property = c.property
-    AND old.filter_value = c.filter_value AND old.statement_id = c.statement_id AND old.present
-    AND (old.order_key, old.target_subject_id) IS DISTINCT FROM (c.order_key, c.target_subject_id)
+  FROM input
+  WHERE old.route = input.route AND old.ctid = ANY(ARRAY(
+    SELECT c.old_tid FROM checked c
+    WHERE c.was_present
+      AND (c.old_order_key, c.old_target_subject_id) IS DISTINCT FROM (c.order_key, c.target_subject_id)
+  ))
   RETURNING old.subject_id
 ), written AS (
   INSERT INTO semantic.outbound_link (
