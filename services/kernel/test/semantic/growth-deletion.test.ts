@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -17,6 +19,28 @@ let kernel: ReturnType<typeof createKernel>;
 const account = newId(22000);
 let now = new Date();
 const clock = () => new Date(now);
+// Refresh JWTs at the domain clock when moving beyond the restoration window.
+// Shared real-Access fixtures create accounts/grants; the native Access below validates these tokens.
+const signing = await generateKeyPair('ES256', { extractable: true });
+const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-deletion', alg: 'ES256' };
+const auth = {
+  issuer: 'https://auth.example.test',
+  audience: 'https://api.rezics.test',
+  jwksUrl: 'https://auth.example.test/jwks',
+  fetch: async () => Response.json({ keys: [jwk] }),
+};
+async function bearer(account: string, scopes: string[]) {
+  const at = Math.floor(clock().getTime() / 1000);
+  return new SignJWT({ client_id: 'web', scope: scopes.join(' '), authn_epoch: 1, auth_time: at, amr: ['pwd'] })
+    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
+    .setIssuer(auth.issuer)
+    .setAudience(auth.audience)
+    .setSubject(account)
+    .setIssuedAt(at)
+    .setExpirationTime(at + 300)
+    .sign(signing.privateKey);
+}
+
 const snak = (content: string) => ({
   property: { id: 'schema:url' },
   value: { type: 'value', content },
@@ -29,7 +53,7 @@ async function call(method: string, path: string, body?: unknown) {
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${real.bearer('owner')}`,
+        authorization: `Bearer ${await bearer(account, ['subject:create', 'subject:read', 'statement:propose', 'statement:delete', 'statement:restore', 'context:accept', 'context:adopt'])}`,
         'idempotency-key': `"${randomUUID()}"`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
@@ -71,7 +95,7 @@ beforeAll(async () => {
     await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', action);
   kernel = createKernel({
     pool: db.pool,
-    access: real.access,
+    access: (config) => createAccess({ ...config, auth }),
     clock,
     routeKey: new Uint8Array(32).fill(81),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) },

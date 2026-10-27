@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -21,6 +23,28 @@ const admin = new pg.Pool({ connectionString: url, max: 2 });
 const accounts = { owner: newId(21000), editor: newId(21001), stranger: newId(21002), platform: newId(21003) };
 let now = new Date();
 const clock = () => new Date(now);
+// Refresh JWTs at the domain clock when moving beyond the restoration window.
+// Shared real-Access fixtures create accounts/grants; the native Access below validates these tokens.
+const signing = await generateKeyPair('ES256', { extractable: true });
+const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-deletion', alg: 'ES256' };
+const auth = {
+  issuer: 'https://auth.example.test',
+  audience: 'https://api.rezics.test',
+  jwksUrl: 'https://auth.example.test/jwks',
+  fetch: async () => Response.json({ keys: [jwk] }),
+};
+async function bearer(account: string, scopes: string[]) {
+  const at = Math.floor(clock().getTime() / 1000);
+  return new SignJWT({ client_id: 'web', scope: scopes.join(' '), authn_epoch: 1, auth_time: at, amr: ['pwd'] })
+    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
+    .setIssuer(auth.issuer)
+    .setAudience(auth.audience)
+    .setSubject(account)
+    .setIssuedAt(at)
+    .setExpirationTime(at + 300)
+    .sign(signing.privateKey);
+}
+
 const day = 86_400_000;
 const actions = [
   'definitions:publish',
@@ -45,7 +69,7 @@ const real = await createRealAccess(admin, accounts, actions);
 const routeKey = new Uint8Array(32).fill(71);
 const kernel = createKernel({
   pool,
-  access: real.access,
+  access: (config) => createAccess({ ...config, auth }),
   clock,
   routeKey,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) },
@@ -60,7 +84,7 @@ async function call(method: string, path: string, persona?: Persona, body?: unkn
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        ...(persona ? { authorization: `Bearer ${real.bearer(persona)}` } : {}),
+        ...(persona ? { authorization: `Bearer ${await bearer(accounts[persona], actions)}` } : {}),
         'idempotency-key': key,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
@@ -391,9 +415,9 @@ test('account erasure de-identifies retained public contributions and automatica
   });
   status(proposed, 201);
   const privateCandidate = proposed.body.candidate;
-  const access = real.access({ actions: LIFECYCLE_ACTIONS });
+  const access = createAccess({ actions: LIFECYCLE_ACTIONS, auth, clock });
   await real.grant({ route: routeOf(accounts.owner)!, id: accounts.owner }, 'owner', 'account:delete');
-  const actor = await access.authenticate(real.bearer('owner'), { pool, deadline: Date.now() + 5000 });
+  const actor = await access.authenticate(await bearer(accounts.owner, actions), { pool, deadline: Date.now() + 5000 });
   const commands = createLifecycleCommands({ pool, access, clock });
   await commands.tombstone({ actor, deadline: Date.now() + 5000 }, { accountId: accounts.owner, key: randomUUID() });
   now = new Date(clock().getTime() + 30 * day);
