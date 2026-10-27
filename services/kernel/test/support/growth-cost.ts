@@ -158,10 +158,10 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
   const catalogStatements = statementEntries.filter(({ text, backend }) =>
     catalogKeys.has(catalogKey(backendAware, backend, text)),
   ).length;
-  const nonCatalogKeys = new Set(
+  const nonCatalogTexts = new Set(
     statementEntries
       .filter(({ text, backend }) => !catalogKeys.has(catalogKey(backendAware, backend, text)))
-      .map(({ text, backend }) => catalogKey(backendAware, backend, text)),
+      .map(({ text }) => text),
   );
   const firstCatalogStatement = statementEntries.find(({ text, backend }) =>
     catalogKeys.has(catalogKey(backendAware, backend, text)),
@@ -171,7 +171,7 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
     catalogKeys,
     backendAware,
     catalogStatements,
-    allowedStatements: nonCatalogKeys.size,
+    allowedStatements: nonCatalogTexts.size,
     firstCatalogStatement,
   };
 }
@@ -182,6 +182,21 @@ function catalogKey(backendAware: boolean, backend: number | undefined, text: st
 
 function isCatalogQuery(classification: CatalogClassification, text: string, backend: number | undefined): boolean {
   return classification.catalogKeys.has(catalogKey(classification.backendAware, backend, text));
+}
+
+function hasMatchingStatement(
+  statements: readonly string[],
+  statementBackends: readonly (number | undefined)[] | undefined,
+  planBackends: readonly (number | undefined)[] | undefined,
+  queryText: string | undefined,
+  backend: number | undefined,
+): boolean {
+  if (statementBackends === undefined || planBackends === undefined) return true;
+  if (queryText === undefined) return false;
+  return statements.some(
+    (statement, index) =>
+      catalogKey(true, statementBackends[index], statement) === catalogKey(true, backend, queryText),
+  );
 }
 
 export function catalogStatementBound(capture: Capture): CatalogClassification {
@@ -210,7 +225,9 @@ export function withoutCatalogTexts(
   const plans = capture.plans.flatMap((document, index) => {
     const backend = capture.planBackends?.[index];
     return documentEntries(document).some(
-      ({ queryText }) => queryText === undefined || !isCatalogQuery(catalog, queryText, backend),
+      ({ queryText }) =>
+        hasMatchingStatement(capture.statements, capture.statementBackends, capture.planBackends, queryText, backend) &&
+        (queryText === undefined || !isCatalogQuery(catalog, queryText, backend)),
     )
       ? [index]
       : [];
@@ -318,12 +335,18 @@ export function costOf(capture: Capture): Cost {
   let sharedHit = 0;
   let sharedRead = 0;
   const catalog = classifyCatalogStatements(capture);
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   let plans = 0;
 
   for (let index = 0; index < capture.plans.length; index++) {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
+      if (
+        backendAware &&
+        !hasMatchingStatement(capture.statements, capture.statementBackends, capture.planBackends, queryText, backend)
+      )
+        continue;
       if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
       plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
@@ -344,8 +367,23 @@ export function costOf(capture: Capture): Cost {
   const backgroundCosts = new Map<string, { rows: number; blocks: number; bounded: boolean }>();
   let backgroundRows = 0;
   let backgroundBlocks = 0;
-  for (const document of capture.backgroundPlans ?? []) {
+  const backgroundBackendAware =
+    capture.backgroundStatementBackends !== undefined && capture.backgroundPlanBackends !== undefined;
+  for (let index = 0; index < (capture.backgroundPlans ?? []).length; index++) {
+    const document = capture.backgroundPlans![index];
+    const backend = capture.backgroundPlanBackends?.[index];
     for (const entry of documentEntries(document)) {
+      if (
+        backgroundBackendAware &&
+        !hasMatchingStatement(
+          capture.backgroundStatements ?? [],
+          capture.backgroundStatementBackends,
+          capture.backgroundPlanBackends,
+          entry.queryText,
+          backend,
+        )
+      )
+        continue;
       const key = entry.queryText ?? '<unknown background statement>';
       const planCost = costOf({
         statements: [],

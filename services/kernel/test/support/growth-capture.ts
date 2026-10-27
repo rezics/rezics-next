@@ -18,18 +18,21 @@ export type GrowthDatabase = {
 export type SeedingCount = { statements: number; rowsWritten: number };
 
 type ActiveCapture = {
-  statements: string[];
+  statementRecords: StatementRecord[];
   plans: unknown[];
   readonly includeBackends: boolean;
-  statementBackends: (number | undefined)[];
   planBackends: (number | undefined)[];
-  backgroundStatements: string[];
   backgroundPlans: unknown[];
-  backgroundStatementBackends: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
   pending: Set<Promise<void>>;
-  clients: Set<PoolClient>;
   error?: Error;
+};
+type StatementRecord = {
+  readonly text: string;
+  readonly background: boolean;
+  readonly backend: number | undefined;
+  failed: boolean;
+  planCount: number;
 };
 type Attribution = {
   readonly capture: ActiveCapture;
@@ -38,7 +41,6 @@ type Attribution = {
 };
 type CaptureState = {
   active: ActiveCapture | undefined;
-  finishing: boolean;
   seeding: SeedingCount | undefined;
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
@@ -47,7 +49,7 @@ type CaptureState = {
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
-const rawClientQuery = new WeakMap<PoolClient, (statement: string) => unknown>();
+const clientStatement = new WeakMap<PoolClient, StatementRecord | undefined>();
 const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
@@ -100,13 +102,26 @@ function statementText(query: unknown): string | undefined {
   return typeof query.text === 'string' ? query.text : undefined;
 }
 
+function planQueryTexts(document: unknown): string[] {
+  const roots = Array.isArray(document) ? document : [document];
+  return roots.flatMap((root) =>
+    typeof root === 'object' && root !== null && 'Query Text' in root && typeof root['Query Text'] === 'string'
+      ? [root['Query Text']]
+      : [],
+  );
+}
+
+function normalizedStatement(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+}
+
 function backendPid(client: PoolClient): number | undefined {
   const processID = (client as PoolClient & { readonly processID?: unknown }).processID;
   return typeof processID === 'number' && Number.isSafeInteger(processID) ? processID : undefined;
 }
 
 const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
-const ENDS_TRANSACTION = /^\s*(?:ROLLBACK|ABORT|COMMIT|END)\b/i;
+const MAY_RESET_SETTING = /^\s*(?:ROLLBACK|ABORT|COMMIT|END)\b/i;
 const IN_FAILED_TRANSACTION = '25P02';
 
 function countWrites(counter: SeedingCount | undefined, result: unknown): void {
@@ -125,13 +140,14 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
  * An unrelated workflow running during a capture is therefore counted as the operation's; that can only make a bound
  * stricter, never hide cost. If a spurious failure traces to one, switch to lineage tracking. Other work is background.
  * The switch is an ordinary SET sent ahead of the statement on the
- * client's own queue and never counted. A rolled-back transaction or a failed statement can undo it, so the next
- * statement sends it again; a statement that ends a transaction sends none, since a failed transaction refuses it.
+ * client's own queue and never counted. A rollback, including one to a savepoint, or a failed statement can undo it,
+ * so queued statements reassert it; a statement that ends a transaction sends none, since a failed transaction can
+ * refuse it.
  */
 function intercept(client: PoolClient, state: CaptureState, explain: boolean): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
-  rawClientQuery.set(client, (statement) => query(statement));
   const pending: Array<Attribution | undefined> = [];
+  const pendingStatements: Array<StatementRecord | undefined> = [];
   let suppressAttribution = false;
   // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
   let explaining: boolean | undefined = false;
@@ -140,6 +156,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     const attribution = pending[0];
     if (attribution) clientAttribution.set(client, attribution);
     else clientAttribution.delete(client);
+    clientStatement.set(client, pendingStatements[0]);
   };
 
   const queryWithoutAttribution = (statement: string): unknown => {
@@ -170,18 +187,21 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     const text = statementText(args[0]);
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
+    let record: StatementRecord | undefined;
     if (explain && !suppressAttribution && text !== undefined && attribution) {
       const capture = attribution.capture;
-      (attribution.background ? capture.backgroundStatements : capture.statements).push(text);
-      if (capture.includeBackends)
-        (attribution.background ? capture.backgroundStatementBackends : capture.statementBackends).push(
-          backendPid(client),
-        );
-      capture.clients.add(client);
+      record = {
+        text,
+        background: attribution.background,
+        backend: capture.includeBackends ? backendPid(client) : undefined,
+        failed: false,
+        planCount: 0,
+      };
+      capture.statementRecords.push(record);
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
     if (explain && !suppressAttribution) {
-      if (text === undefined || !ENDS_TRANSACTION.test(text)) {
+      if (text === undefined || !MAY_RESET_SETTING.test(text)) {
         const wanted = state.active !== undefined;
         // A pg client queues concurrent queries. A preceding queued query may fail or roll back the transaction after
         // this call observes `explaining`, so reassert the setting between queued statements as well as on transitions.
@@ -189,18 +209,21 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       }
       // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
-      if (text !== undefined && ENDS_TRANSACTION.test(text)) explaining = undefined;
+      if (text !== undefined && MAY_RESET_SETTING.test(text)) explaining = undefined;
     }
     pending.push(attribution);
+    pendingStatements.push(record);
     refreshAttribution();
 
     let completed = false;
     const done = (failed: boolean, result?: unknown): void => {
       if (completed) return;
       completed = true;
+      if (record) record.failed = failed;
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
       pending.shift();
+      pendingStatements.shift();
       refreshAttribution();
     };
     const callback = args.at(-1);
@@ -279,19 +302,13 @@ function instrument(client: PoolClient, state: CaptureState): void {
 
     try {
       const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
-      const roots = Array.isArray(plan) ? plan : [plan];
-      if (
-        roots.some(
-          (root) =>
-            typeof root === 'object' &&
-            root !== null &&
-            'Query Text' in root &&
-            typeof root['Query Text'] === 'string' &&
-            root['Query Text'].includes('growth-capture-drain'),
-        )
-      )
-        return;
       const capture = attribution.capture;
+      const statement = clientStatement.get(client);
+      if (
+        statement &&
+        planQueryTexts(plan).some((text) => normalizedStatement(text) === normalizedStatement(statement.text))
+      )
+        statement.planCount++;
       (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
       if (capture.includeBackends)
         (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
@@ -345,7 +362,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = { active: undefined, finishing: false, seeding: undefined, setupTasks: new Set() };
+  const state: CaptureState = { active: undefined, seeding: undefined, setupTasks: new Set() };
   admin.on('connect', (client) => intercept(client, state, false));
   const database: GrowthDatabase = {
     url,
@@ -385,68 +402,62 @@ export async function capture<T>(
 ): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
-  if (state.active || state.finishing) throw new Error('A growth capture is already active for this database');
+  if (state.active) throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
 
   const active: ActiveCapture = {
-    statements: [],
+    statementRecords: [],
     plans: [],
     includeBackends: options.includeBackends === true,
-    statementBackends: [],
     planBackends: [],
-    backgroundStatements: [],
     backgroundPlans: [],
-    backgroundStatementBackends: [],
     backgroundPlanBackends: [],
     pending: new Set(),
-    clients: new Set(),
   };
   state.active = active;
   try {
     // Captures for separate databases can nest in one operation, such as Kernel calling Auth.
     const parent = growing.getStore();
-    const value = await growing.run(
-      { capture: active, background: false, ...(isAttribution(parent) ? { parent } : {}) },
-      operation,
-    );
-    state.active = undefined;
-    state.finishing = true;
-    while (active.pending.size > 0) await Promise.all([...active.pending]);
-    await Promise.all([...state.setupTasks]);
-    // A protocol barrier makes sure every NOTICE from a captured statement has been delivered before returning.
-    // Use the underlying query method so the marker itself is neither counted nor assigned a plan.
-    await Promise.all(
-      [...active.clients].map(async (client) => {
-        const flags = client as PoolClient & {
-          readonly ended?: boolean;
-          readonly ending?: boolean;
-          readonly _ending?: boolean;
-          readonly _queryable?: boolean;
-        };
-        if (flags.ended || flags.ending || flags._ending || flags._queryable === false) return;
-        try {
-          await rawClientQuery.get(client)?.('SELECT 1 /*growth-capture-drain*/');
-        } catch {
-          // A failed transaction rejects the barrier too; its earlier query responses have already drained the stream.
-        }
-      }),
-    );
-    await Promise.all([...state.setupTasks]);
+    let value!: T;
+    let operationError: unknown;
+    let operationFailed = false;
+    try {
+      value = await growing.run(
+        { capture: active, background: false, ...(isAttribution(parent) ? { parent } : {}) },
+        operation,
+      );
+    } catch (error) {
+      operationError = error;
+      operationFailed = true;
+    }
+    // node-postgres delivers a query's notices before its completion. Await every tracked query so its plan has been
+    // recorded before returning, including queries the operation queued without awaiting itself.
+    while (active.pending.size > 0 || state.setupTasks.size > 0) {
+      const pending = [...active.pending, ...state.setupTasks];
+      if (pending.length > 0) await Promise.all(pending);
+    }
+    if (operationFailed) throw operationError;
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
+    const foreground = active.statementRecords.filter(
+      ({ background, failed, planCount }) => !background && (!failed || planCount > 0),
+    );
+    const background = active.statementRecords.filter(
+      ({ background, failed, planCount }) => background && (!failed || planCount > 0),
+    );
     return {
       value,
       capture: {
-        statements: active.statements,
+        statements: foreground.map(({ text }) => text),
         plans: active.plans,
         ...(active.includeBackends
-          ? { statementBackends: active.statementBackends, planBackends: active.planBackends }
+          ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
           : {}),
-        backgroundStatements: active.backgroundStatements,
+        backgroundStatements: background.map(({ text }) => text),
         backgroundPlans: active.backgroundPlans,
         ...(active.includeBackends
           ? {
-              backgroundStatementBackends: active.backgroundStatementBackends,
+              backgroundStatementBackends: background.map(({ backend }) => backend),
               backgroundPlanBackends: active.backgroundPlanBackends,
             }
           : {}),
@@ -454,7 +465,6 @@ export async function capture<T>(
     };
   } finally {
     state.active = undefined;
-    state.finishing = false;
   }
 }
 

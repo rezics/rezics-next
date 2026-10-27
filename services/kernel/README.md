@@ -261,9 +261,10 @@ configuration from changing a query plan; disabling per-query parallel workers a
 from changing the work counted by a capture. `admin` connections are for setup and assertions and are not measured. A
 test can still use `SET LOCAL` for a planner option inside its transaction.
 
-Captures spanning connections can opt into `includeBackends` to match each plan to a statement on the same backend PID.
-Catalog-only statements are counted apart, with at most one allowed per distinct non-catalog query text per backend in a
-backend-aware capture, or per text otherwise; a statement that also reads data counts in full.
+Use `includeBackends` for captures spanning multiple connections; it matches each plan to statements from the same
+backend PID.
+Catalog-only statements are counted apart, with one allowed per distinct non-catalog query text across the measured run;
+a statement that also reads data counts in full.
 
 Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
 capture runs; workflows started by a schedule and their children, and loops started outside both, are reported as

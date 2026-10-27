@@ -26,10 +26,7 @@ export { openGrowthDatabase, capture, type GrowthDatabase } from './growth-captu
 export * from './growth-seed.ts';
 
 export function measure<T>(db: GrowthDatabase, operation: () => Promise<T>): Promise<{ value: T; cost: Cost }> {
-  return capture(db, operation, { includeBackends: true }).then(({ value, capture: raw }) => ({
-    value,
-    cost: costOf(raw),
-  }));
+  return capture(db, operation).then(({ value, capture: raw }) => ({ value, cost: costOf(raw) }));
 }
 
 export type GrowthCheck = {
@@ -234,7 +231,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
       );
       if (workflowStatus.rows[0]!.exists) await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
-      const measured = await capture(db, () => check.operation(db, scale, repetition), { includeBackends: true });
+      const measured = await capture(db, () => check.operation(db, scale, repetition));
       const cost = costOf(measured.capture);
       assertCatalogBound(check.name, scale, measured.capture, samples);
       costs.push(cost);
