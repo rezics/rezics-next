@@ -1,4 +1,5 @@
-import { env } from 'cloudflare:workers';
+import { env, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
+import { NonRetryableError } from 'cloudflare:workflows';
 import { authRequest } from './session/routes.ts';
 import { prepareSession } from './session/request.ts';
 import { cookie, clearCookie, SESSION_COOKIE, validId } from './session/cookies.ts';
@@ -16,6 +17,18 @@ import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { robotsResponse } from './sitemap/robots.ts';
 import { sitemapResponse, type SitemapEnv } from './sitemap/serve.ts';
+import { sitemapFeeds } from './sitemap/feeds.ts';
+import {
+  exportSitemapFeedSegment,
+  publishSitemapExport,
+  readSitemapFeedFiles,
+  sitemapR2Store,
+  sitemapStepRetryPolicy,
+  startDailySitemapExport,
+  startSitemapWorkflow,
+  type SitemapStepRunner,
+  type SitemapWorkflowBinding,
+} from './sitemap/export.ts';
 import { suggestSubjects } from './search/suggestions.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { orderStatusResponse } from './checkout/order.server.ts';
@@ -31,6 +44,171 @@ import {
 } from './paraglide/runtime.js';
 
 export { SessionStore } from './session/store.ts';
+
+type SitemapWorkflowEnv = SitemapEnv & {
+  PUBLIC_ORIGIN: string;
+  SITEMAP_EXPORT: SitemapWorkflowBinding;
+};
+
+type SitemapWorkflowParams = { runId?: string; feedType?: string; segment?: number };
+
+class WorkflowSitemapSteps implements SitemapStepRunner {
+  constructor(private readonly step: WorkflowStep) {}
+
+  do<T>(name: string, run: () => Promise<T>, retry: Parameters<SitemapStepRunner['do']>[2]): Promise<T> {
+    const result = this.step.do(
+      name,
+      {
+        retries: {
+          limit: retry.limit,
+          delay: ({ ctx, error }) => {
+            if (!retry.shouldRetry(error)) throw new NonRetryableError(error.message);
+            return retry.delay(error, ctx.attempt);
+          },
+        },
+      },
+      async () => {
+        try {
+          return (await run()) as never;
+        } catch (error) {
+          if (!retry.shouldRetry(error)) {
+            throw new NonRetryableError(error instanceof Error ? error.message : String(error));
+          }
+          throw error;
+        }
+      },
+    );
+    return result as Promise<T>;
+  }
+}
+
+export class SitemapExport extends WorkflowEntrypoint<SitemapWorkflowEnv, SitemapWorkflowParams> {
+  async run(event: Readonly<WorkflowEvent<SitemapWorkflowParams>>, step: WorkflowStep): Promise<void> {
+    const log = (record: { message: 'sitemap export failed'; feed: string; step: string; error: unknown }) =>
+      console.error(record.message, {
+        feed: record.feed,
+        step: record.step,
+        error: record.error instanceof Error ? record.error.message : String(record.error),
+      });
+    try {
+      const params = event.payload ?? {};
+      const runId = params.runId ?? event.instanceId;
+      const store = sitemapR2Store(this.env.SITEMAPS);
+      const runner = new WorkflowSitemapSteps(step);
+      const feeds = sitemapFeeds();
+      if (params.feedType) {
+        const feed = feeds.find((candidate) => candidate.type === params.feedType);
+        if (!feed) throw new Error(`Sitemap feed ${params.feedType} is not registered`);
+        const completed = await exportSitemapFeedSegment(
+          runId,
+          feed,
+          { runId, origin: this.env.PUBLIC_ORIGIN, store, runner, feeds: [feed], now: () => event.timestamp, log },
+          params.segment ?? 0,
+        );
+        if (!completed) {
+          const nextSegment = (params.segment ?? 0) + 1;
+          const nextId = `${runId}-${feed.type}-${nextSegment}`;
+          await runner.do(
+            `start-continuation-${nextSegment}`,
+            () =>
+              startSitemapWorkflow(this.env.SITEMAP_EXPORT, nextId, {
+                runId,
+                feedType: feed.type,
+                segment: nextSegment,
+              }),
+            sitemapStepRetryPolicy(),
+          );
+        }
+        return;
+      }
+
+      const indexSnapshot = await runner.do('capture-index', () => store.head('index.xml'), sitemapStepRetryPolicy());
+      for (const feed of feeds) {
+        if (!/^[a-z]+$/.test(feed.type))
+          throw new Error(`Sitemap feed type must contain lowercase letters: ${feed.type}`);
+      }
+      if (new Set(feeds.map((feed) => feed.type)).size !== feeds.length)
+        throw new Error('Sitemap feed types must be unique');
+      await Promise.all(
+        feeds.map((feed) =>
+          runner.do(
+            `start-feed-${feed.type}`,
+            () =>
+              startSitemapWorkflow(this.env.SITEMAP_EXPORT, `${runId}-${feed.type}`, {
+                runId,
+                feedType: feed.type,
+                segment: 0,
+              }),
+            sitemapStepRetryPolicy(),
+          ),
+        ),
+      );
+      await Promise.all(
+        feeds.map(async (feed) => {
+          let segment = 0;
+          for (;;) {
+            const childId = segment === 0 ? `${runId}-${feed.type}` : `${runId}-${feed.type}-${segment}`;
+            let poll = 0;
+            for (;;) {
+              const status = await runner.do(
+                `status-${feed.type}-${segment}-${poll}`,
+                async () => this.env.SITEMAP_EXPORT.get(childId).then((instance) => instance.status()),
+                sitemapStepRetryPolicy(),
+              );
+              if (status.status === 'complete') break;
+              if (status.status === 'errored' || status.status === 'terminated')
+                throw new Error(status.error?.message ?? `Sitemap feed ${feed.type} workflow ${childId} failed`);
+              await step.sleep(`wait-${feed.type}-${segment}-${poll}`, '5 minutes');
+              poll += 1;
+            }
+            const list = await runner.do(
+              `check-feed-list-${feed.type}-${segment}`,
+              () => store.head(`runs/${runId}/${feed.type}.json`),
+              sitemapStepRetryPolicy(),
+            );
+            if (list) return;
+            segment += 1;
+          }
+        }),
+      );
+      await runner.do(
+        'publish-index',
+        async () => {
+          const filesByFeed = new Map<string, Awaited<ReturnType<typeof readSitemapFeedFiles>>>();
+          for (const feed of feeds) filesByFeed.set(feed.type, await readSitemapFeedFiles(store, runId, feed.type));
+          await publishSitemapExport({
+            runId,
+            origin: this.env.PUBLIC_ORIGIN,
+            store,
+            indexSnapshot,
+            filesByFeed,
+            now: event.timestamp,
+            log,
+          });
+          return true;
+        },
+        sitemapStepRetryPolicy(),
+      );
+    } catch (error) {
+      const params = event.payload ?? {};
+      log({
+        message: 'sitemap export failed',
+        feed: params.feedType ?? 'publication',
+        step: params.feedType ? `feed-segment-${params.segment ?? 0}` : 'publish-index',
+        error,
+      });
+      throw error;
+    }
+  }
+}
+
+export function scheduled(
+  controller: ScheduledController,
+  workerEnv: SitemapWorkflowEnv,
+  context: ExecutionContext,
+): void {
+  context.waitUntil(startDailySitemapExport(workerEnv.SITEMAP_EXPORT, controller.scheduledTime));
+}
 
 defineCustomServerStrategy('custom-accept-language', {
   getLocale(request) {
@@ -171,6 +349,7 @@ export default {
       return problemResponse(error);
     }
   },
+  scheduled,
 };
 
 async function pageRedirect(request: Request, url: URL): Promise<Response | undefined> {

@@ -948,3 +948,16 @@ language through the client's `accept-language`.
   `MAX_PROFILE_BYTES` (1 MiB); no public-page work
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
+
+### Sitemap export
+
+- **Touches:** One daily Workflow normally walks each feed once in cursor order, with one full restart if a cursor is
+  rejected. A feed step reads at most 20 pages and packs at most 2,000 families; each shard gets one R2 `head` and a
+  `put` only when it is absent. Each feed keeps its file list in `runs/`; publication stages a run record and
+  conditionally puts `index.xml` after every feed finishes, then lists `shards/` and `runs/` for retention cleanup.
+- **Bound:** Feed requests are about N / 1,000 plus empty pages, a possible full restart, and retries. Each instance
+  runs at most 4,990 feed steps before continuing in a new instance with its cursor. At 50 million families a run
+  reads about 50,000 pages and writes up to about 17,000 shards when everything changed. Workers Free's 10 ms CPU
+  limit cannot run these steps; the export requires Paid Workers.
+- **Growth check:** `tests/sitemap-export.test.ts` runs 3,000, 30,000 and 300,000 synthetic families and checks linear
+  feed reads, R2 operations and steps, plus the maximum families held by one step.
