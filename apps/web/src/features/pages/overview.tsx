@@ -1,0 +1,635 @@
+import { pickLanguage, type PageRead } from '@rezics/composition';
+import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+import { createContext, useContext, type ReactNode } from 'react';
+import { coverSrc } from '../../media/cover-src';
+import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
+import { m } from '../../paraglide/messages.js';
+import { originalLanguage } from '../../subject/language';
+import type { Reader } from '../../subject/reader';
+import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
+import {
+  bestRank,
+  ExternalValue,
+  isRecord,
+  linkClass,
+  linkColor,
+  pageText,
+  spoilerLevel,
+  webUrl,
+  type PageLink,
+  type Sources,
+  type Stmt,
+} from './shared';
+import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
+
+/** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
+export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
+
+export type OverviewValue = {
+  locale: string;
+  subject: string | null;
+  link: PageLink;
+  reader: Reader;
+  labels: ValueLabels;
+  /** The frame a Zone's appearance fixes for every row. */
+  ratio?: CoverRatio;
+  /** The frame the page subject's type declares, for its own cover. */
+  frameRatio?: CoverRatio;
+  unlabelled: string;
+  spoilerShow: string;
+  details: string;
+  cover: string;
+  coverVia: string;
+  source: string;
+  sources: string;
+  sections: Map<string, Section>;
+};
+
+export const OverviewContext = createContext<OverviewValue | null>(null);
+
+const SUMMARY_PROPERTY = 'schema:abstract';
+const headingClass =
+  'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
+const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
+
+type SubjectRead = { subject: Subject; related: Related; summary?: SubjectCover | null };
+type Item = {
+  id: string;
+  label: ReturnType<typeof pageText>;
+  summary?: SubjectSummary;
+  type?: string;
+  /** Qualifier text such as a role or the credited name. */
+  notes: string[];
+  gated: boolean;
+};
+type Count = { value: number; exact: boolean };
+
+function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
+  const value = useContext(OverviewContext);
+  if (!value) return null;
+  return { value, section: value.sections.get(typeof id === 'string' ? id : '') };
+}
+
+function subjectRead(section: Section | undefined): SubjectRead | undefined {
+  if (!section?.ok || section.read.kind !== 'subject') return;
+  const { body } = section;
+  return isRecord(body.subject) && isRecord(body.related) ? (body as unknown as SubjectRead) : undefined;
+}
+
+function countText(count: Count, locale: string): string {
+  return m.home_section_count(
+    { count: `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}` },
+    { locale: locale as never },
+  );
+}
+
+function viewHref(value: OverviewValue, view: string): string | null {
+  return value.subject
+    ? `/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(value.subject)}/${view}`
+    : null;
+}
+
+/** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
+function Preview({
+  slot,
+  id,
+  title,
+  titleLang,
+  count,
+  more,
+  href,
+  locale,
+  children,
+}: {
+  slot: string;
+  id: string;
+  title: string;
+  titleLang?: string | undefined;
+  count?: Count | undefined;
+  more: boolean;
+  href: string | null;
+  locale: string;
+  children: ReactNode;
+}) {
+  return (
+    <section data-slot={slot} aria-labelledby={`${id}-title`} className={sectionClass}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id={`${id}-title`} lang={titleLang} className={headingClass}>
+            {title}
+          </h2>
+          {count && (
+            <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
+              {countText(count, locale)}
+            </span>
+          )}
+        </div>
+        {more && href && (
+          <a
+            data-slot="see-all"
+            href={href}
+            aria-describedby={`${id}-title`}
+            className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
+          >
+            {m.home_see_all({}, { locale: locale as never })}
+          </a>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A section whose read did not succeed says so with a retry; the rest of the page is unaffected. */
+function Failed({ slot, id, title, locale }: { slot: string; id: string; title: string; locale: string }) {
+  const options = { locale: locale as never };
+  return (
+    <section data-slot={slot} data-state="failed" aria-labelledby={`${id}-title`} className={sectionClass}>
+      <h2 id={`${id}-title`} className={headingClass}>
+        {title}
+      </h2>
+      <p role="status" className="text-sm text-muted-foreground">
+        {m.subject_section_failed({}, options)}
+      </p>
+      <a data-slot="retry" href="?" className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
+        {m.subject_section_retry({}, options)}
+      </a>
+    </section>
+  );
+}
+
+function ItemRow({ item, value, size }: { item: Item; value: OverviewValue; size: 'xs' | 'sm' }) {
+  const Link = value.link;
+  const title = item.label.text || value.unlabelled;
+  const body = (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="shrink-0">
+        <CoverFrame
+          subject={coverSubject(item.id, title, item.summary, item.type)}
+          cover={coverOf(item.summary)}
+          size={size}
+          src={coverSrc}
+          suitability={value.reader.suitability}
+          labels={value.labels.cover}
+          decorative
+          {...(value.ratio ? { ratio: value.ratio } : {})}
+        />
+      </div>
+      <div className="min-w-0">
+        <span
+          className={`${linkClass} font-medium break-words ${item.label.text ? linkColor : 'text-muted-foreground'}`}
+        >
+          <Link
+            href={`/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(item.id)}`}
+            {...(item.label.lang ? { lang: item.label.lang } : {})}
+          >
+            {title}
+          </Link>
+        </span>
+        {item.notes.length > 0 && <p className="text-sm break-words text-muted-foreground">{item.notes.join(' · ')}</p>}
+      </div>
+    </div>
+  );
+  return <li>{item.gated ? <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate> : body}</li>;
+}
+
+function Items({ items, value }: { items: Item[]; value: OverviewValue }) {
+  return (
+    <ul className="grid gap-3 sm:grid-cols-2 in-data-[density=compact]:gap-2">
+      {items.map((item, index) => (
+        <ItemRow key={`${item.id}-${index}`} item={item} value={value} size="sm" />
+      ))}
+    </ul>
+  );
+}
+
+function limitOf(props: Record<string, unknown>): number {
+  return typeof props.limit === 'number' && props.limit >= 1 ? props.limit : 12;
+}
+
+/** The holders a `links` read returned, in the kernel's order. */
+function linkItems(section: Section | undefined, limit: number): { items: Item[]; count: Count } | undefined {
+  if (!section?.ok || section.read.kind !== 'links' || !Array.isArray(section.body.links)) return;
+  const links = section.body.links.filter(isRecord).slice(0, limit);
+  const count = isRecord(section.body.count) ? section.body.count : undefined;
+  const items = links.flatMap((link): Item[] =>
+    typeof link.subject === 'string'
+      ? [
+          {
+            id: link.subject,
+            label: { text: typeof link.label === 'string' ? link.label : '', lang: undefined },
+            ...(isRecord(link.summary) ? { summary: link.summary as unknown as SubjectSummary } : {}),
+            ...(typeof link.type === 'string' ? { type: link.type } : {}),
+            notes: [],
+            gated: false,
+          },
+        ]
+      : [],
+  );
+  return {
+    items,
+    count: {
+      value: typeof count?.value === 'number' ? Math.max(count.value, items.length) : items.length,
+      exact: count ? count.exact === true : true,
+    },
+  };
+}
+
+/** What a qualifier shows in the reading view: an item as its label, text as itself; anything else stays out. */
+function noteOf(qualifier: Stmt['qualifiers'][number], related: Related, locale: string): string | null {
+  const { value, property } = qualifier;
+  if (value.type !== 'value') return null;
+  const content = value.content;
+  if (property.data_type === 'wikibase-item' && typeof content === 'string') {
+    const entry = Object.hasOwn(related, content) ? related[content] : undefined;
+    return pageText(entry?.labels, locale).text || null;
+  }
+  if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string')
+    return pageText({ [content.language]: content.text }, locale).text || null;
+  if (property.data_type === 'string' && typeof content === 'string' && content !== '') return content;
+  return null;
+}
+
+/** The statements the page subject holds for one property, shown as items with their qualifiers. */
+function statementItems(
+  section: Section | undefined,
+  property: unknown,
+  limit: number,
+  value: OverviewValue,
+): { items: Item[]; count: Count } | undefined {
+  const read = subjectRead(section);
+  if (!read || typeof property !== 'string') return;
+  const held = Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : undefined;
+  const statements = bestRank((held ?? []) as unknown as Stmt[]).filter(
+    (statement) =>
+      statement.value.type === 'value' &&
+      statement.property.data_type === 'wikibase-item' &&
+      typeof statement.value.content === 'string',
+  );
+  const items = statements.slice(0, limit).map((statement): Item => {
+    const target = statement.value.content as string;
+    const entry = Object.hasOwn(read.related, target) ? read.related[target] : undefined;
+    return {
+      id: entry?.redirect ?? target,
+      label: pageText(entry?.labels, value.locale),
+      notes: statement.qualifiers.flatMap((qualifier) => {
+        const note = noteOf(qualifier, read.related, value.locale);
+        return note === null ? [] : [note];
+      }),
+      gated: spoilerLevel(statement) > value.reader.spoilerLevel,
+    };
+  });
+  return { items, count: { value: statements.length, exact: true } };
+}
+
+function LinkSection(props: Record<string, unknown>, slot: string, title: string, view: string, forward: boolean) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  const id = String(props.id);
+  if (!section?.ok) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
+  const limit = limitOf(props);
+  const listed = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
+  if (!listed) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
+  if (listed.items.length === 0) return null;
+  const text = pageText(props.title, value.locale);
+  return (
+    <Preview
+      slot={slot}
+      id={id}
+      title={text.text || title}
+      titleLang={text.text ? text.lang : undefined}
+      count={listed.count}
+      more={!listed.count.exact || listed.count.value > listed.items.length}
+      href={viewHref(value, view)}
+      locale={value.locale}
+    >
+      <Items items={listed.items} value={value} />
+    </Preview>
+  );
+}
+
+export function RelationGroups(props: Record<string, unknown>) {
+  const locale = useContext(OverviewContext)?.locale ?? 'en';
+  return LinkSection(
+    props,
+    'relation-groups',
+    m.subject_relations({}, { locale: locale as never }),
+    'relations',
+    false,
+  );
+}
+
+export function Appearances(props: Record<string, unknown>) {
+  const locale = useContext(OverviewContext)?.locale ?? 'en';
+  return LinkSection(
+    props,
+    'appearances',
+    m.subject_characters({}, { locale: locale as never }),
+    'characters',
+    props.direction === 'forward',
+  );
+}
+
+export function Credits(props: Record<string, unknown>) {
+  const locale = useContext(OverviewContext)?.locale ?? 'en';
+  return LinkSection(
+    props,
+    'credits',
+    m.subject_credits({}, { locale: locale as never }),
+    'credits',
+    props.direction === 'forward',
+  );
+}
+
+export function CollectionList(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  const id = String(props.id);
+  const title = pageText(props.title, value.locale);
+  if (!section?.ok || section.read.kind !== 'collections' || !Array.isArray(section.body.collections))
+    return <Failed slot="collection-list" id={id} title={title.text} locale={value.locale} />;
+  const collections = section.body.collections.filter(isRecord).slice(0, limitOf(props));
+  if (collections.length === 0) return null;
+  const counted = isRecord(section.body.count) && typeof section.body.count.value === 'number';
+  const total = counted
+    ? Math.max((section.body.count as { value: number }).value, collections.length)
+    : collections.length;
+  const Link = value.link;
+  return (
+    <Preview
+      slot="collection-list"
+      id={id}
+      title={title.text}
+      titleLang={title.lang}
+      count={{ value: total, exact: true }}
+      more={total > collections.length}
+      href={viewHref(value, 'lists')}
+      locale={value.locale}
+    >
+      <ul className="space-y-2 break-words leading-7">
+        {collections.map((collection, index) => {
+          const curator = isRecord(collection.curator) ? collection.curator : undefined;
+          const name =
+            typeof curator?.displayName === 'string' && curator.displayName
+              ? curator.displayName
+              : typeof curator?.handle === 'string' && curator.handle
+                ? `@${curator.handle}`
+                : '';
+          const options = { locale: value.locale as never };
+          return (
+            <li key={typeof collection.id === 'string' ? collection.id : index}>
+              <span className={`${linkClass} ${linkColor} font-medium`}>
+                <Link
+                  href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                >
+                  {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
+                </Link>
+              </span>
+              {name && (
+                <span className="text-sm text-muted-foreground"> · {m.subject_collection_by({ name }, options)}</span>
+              )}
+              {typeof collection.multiplicity === 'number' && collection.multiplicity > 1 && (
+                <span className="text-sm text-muted-foreground">
+                  {' · '}
+                  {m.library_subject_multiplicity({ count: collection.multiplicity }, options)}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Preview>
+  );
+}
+
+export function Cover(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  if (!section) return null;
+  const read = subjectRead(section);
+  if (!read) return <Failed slot="subject-cover" id={String(props.id)} title={value.cover} locale={value.locale} />;
+  const original = originalLanguage(read.subject);
+  const title = pageText(read.subject.labels, value.locale, original).text || value.unlabelled;
+  return (
+    <div data-slot="subject-cover" className="w-60 max-w-full">
+      <CoverFrame
+        subject={coverSubject(read.subject.id, title, read.summary, read.subject.type)}
+        cover={coverOf(read.summary)}
+        size="lg"
+        src={coverSrc}
+        suitability={value.reader.suitability}
+        labels={value.labels.cover}
+        priority
+        caption
+        {...((value.frameRatio ?? value.ratio) ? { ratio: (value.frameRatio ?? value.ratio)! } : {})}
+      />
+    </div>
+  );
+}
+
+/** The summary document in the reader's language; one above the reader's spoiler level waits behind a reveal. */
+export function Summary(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  if (!section) return null;
+  const id = String(props.id);
+  const title = m.subject_about({}, { locale: value.locale as never });
+  const read = subjectRead(section);
+  if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
+  const held = Object.hasOwn(read.subject.statements, SUMMARY_PROPERTY)
+    ? read.subject.statements[SUMMARY_PROPERTY]
+    : undefined;
+  const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
+    const content = statement.value.type === 'value' ? statement.value.content : undefined;
+    const document = isRecord(content) ? readableDocument(content.document) : undefined;
+    return isRecord(content) && document && typeof content.language === 'string'
+      ? [{ statement, document, language: content.language }]
+      : [];
+  });
+  if (documents.length === 0) return null;
+  const language = pickLanguage(
+    documents.map((entry) => entry.language),
+    value.locale,
+    originalLanguage(read.subject),
+  );
+  const chosen = documents.find((entry) => entry.language === language) ?? documents[0]!;
+  const body = (
+    <div className="space-y-1">
+      <DocumentValue
+        document={chosen.document}
+        lang={chosen.language === value.locale ? undefined : chosen.language}
+        labels={value.labels}
+      />
+      <LanguageTag lang={chosen.language} locale={value.locale} />
+    </div>
+  );
+  return (
+    <section data-slot="subject-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
+      <h2 id={`${id}-title`} className={headingClass}>
+        {title}
+      </h2>
+      {spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
+        <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate>
+      ) : (
+        body
+      )}
+    </section>
+  );
+}
+
+function Unavailable({
+  slot,
+  id,
+  title,
+  text,
+  view,
+}: {
+  slot: string;
+  id: unknown;
+  title: string;
+  text: string;
+  view: string;
+}) {
+  const value = useContext(OverviewContext);
+  if (!value) return null;
+  const href = viewHref(value, view);
+  const key = typeof id === 'string' ? id : slot;
+  return (
+    <section data-slot={slot} data-state="unavailable" aria-labelledby={`${key}-title`} className={sectionClass}>
+      <h2 id={`${key}-title`} className={headingClass}>
+        {title}
+      </h2>
+      <Empty className="border p-6">
+        <EmptyHeader>
+          <EmptyTitle className="sr-only">{title}</EmptyTitle>
+          <EmptyDescription>{text}</EmptyDescription>
+        </EmptyHeader>
+        {href && (
+          <a href={href} className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
+            {title}
+          </a>
+        )}
+      </Empty>
+    </section>
+  );
+}
+
+export function RatingSummary(props: Record<string, unknown>) {
+  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  return (
+    <Unavailable
+      slot="rating-summary"
+      id={props.id}
+      title={m.subject_ratings({}, { locale })}
+      text={m.subject_ratings_unavailable({}, { locale })}
+      view="reviews"
+    />
+  );
+}
+
+export function ThreadList(props: Record<string, unknown>) {
+  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  return (
+    <Unavailable
+      slot="thread-list"
+      id={props.id}
+      title={m.subject_discussion({}, { locale })}
+      text={m.subject_threads_unavailable({}, { locale })}
+      view="discussion"
+    />
+  );
+}
+
+export function ReviewList(props: Record<string, unknown>) {
+  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  return (
+    <Unavailable
+      slot="review-list"
+      id={props.id}
+      title={m.subject_reviews({}, { locale })}
+      text={m.subject_reviews_unavailable({}, { locale })}
+      view="reviews"
+    />
+  );
+}
+
+/** Cover credit, fact sources and external identifiers, then a link to Details. */
+export function SourcesSection({
+  value,
+  sources,
+  id = 'subject-sources',
+}: {
+  value: OverviewValue;
+  sources: Sources;
+  id?: string;
+}) {
+  const Link = value.link;
+  const credit = sources.credit;
+  const details = viewHref(value, 'details');
+  return (
+    <section
+      data-slot="subject-sources"
+      aria-labelledby={id}
+      className="min-w-0 space-y-3 border-t border-border/60 pt-6"
+    >
+      <h2 id={id} className={headingClass}>
+        {value.sources}
+      </h2>
+      <ul className="space-y-1 text-sm break-words">
+        {credit && (
+          <li>
+            <span className="me-2 font-medium text-muted-foreground">{value.cover}</span>© {credit.rightsHolder}
+            {credit.via && (
+              <>
+                {' · '}
+                {value.coverVia}{' '}
+                {webUrl(credit.via.url) ? (
+                  <a className={`${linkClass} ${linkColor}`} href={credit.via.url}>
+                    {credit.via.name}
+                  </a>
+                ) : (
+                  credit.via.name
+                )}
+              </>
+            )}
+            {credit.license ? ` · ${credit.license}` : null}
+          </li>
+        )}
+        {sources.urls.map((url) => (
+          <li key={url}>
+            <span className="me-2 font-medium text-muted-foreground">{value.source}</span>
+            <ExternalValue value={url} />
+          </li>
+        ))}
+        {sources.identifiers.map(({ label, value: identifier }, index) => (
+          <li key={index}>
+            <span lang={label.lang} className="me-2 font-medium text-muted-foreground">
+              {label.text || value.unlabelled}
+            </span>
+            {identifier}
+          </li>
+        ))}
+      </ul>
+      {details && (
+        <p className={`${linkClass} ${linkColor} text-sm font-medium`}>
+          <Link href={details}>{value.details}</Link>
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function Sources(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state?.section) return null;
+  const { value, section } = state;
+  const id = String(props.id);
+  if (!section.ok || !section.sources)
+    return <Failed slot="subject-sources" id={id} title={value.sources} locale={value.locale} />;
+  return <SourcesSection value={value} sources={section.sources} id={`${id}-title`} />;
+}

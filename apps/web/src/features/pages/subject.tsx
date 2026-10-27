@@ -30,6 +30,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Whether the template places a node of this type anywhere, including inside slots. */
+function placesType(content: readonly unknown[], type: string): boolean {
+  return content.some(
+    (node) =>
+      isRecord(node) &&
+      (node.type === type ||
+        (isRecord(node.props) &&
+          Object.values(node.props).some((value) => Array.isArray(value) && placesType(value, type)))),
+  );
+}
+
 function problemError(value: unknown): Error {
   const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
   return new Error(code);
@@ -140,7 +151,7 @@ export function SubjectPage({
               components={{ ...layoutComponents, ...dataComponents }}
               root={PageRoot}
             />
-            <SubjectSources />
+            {!placesType(page.document.content, 'Sources') && <SubjectSources />}
           </div>
         </PageData>
       </PageHost>

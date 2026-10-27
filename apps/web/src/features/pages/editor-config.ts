@@ -8,6 +8,7 @@ type Schema = {
   const?: unknown;
   anyOf?: Schema[];
   properties?: Record<string, Schema>;
+  required?: string[];
   additionalProperties?: unknown;
   patternProperties?: unknown;
   items?: Schema;
@@ -61,6 +62,10 @@ function href(schema: Schema): boolean {
   return schema['~kind'] === 'String' && schema['~safety'] === 'href';
 }
 
+function subjectId(schema: Schema): boolean {
+  return schema['~kind'] === 'String' && schema['~safety'] === 'subjectId';
+}
+
 function curieArray(schema: Schema): boolean {
   return schema['~kind'] === 'Array' && schema.items !== undefined && curie(schema.items);
 }
@@ -108,7 +113,7 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
     };
   }
 
-  if (curie(schema) || href(schema)) return { type: 'text' };
+  if (curie(schema) || href(schema) || subjectId(schema)) return { type: 'text' };
 
   if (curieArray(schema)) {
     return {
@@ -170,6 +175,7 @@ function defaultFor(schema: Schema, component: string, prop: string, locale: str
   if (schema['~kind'] === 'Integer') return integerDefault(schema);
   if (href(schema)) return '/';
   if (curie(schema)) return 'schema:name';
+  if (subjectId(schema)) return '00000000-0000-8000-8000-000000000000';
   if (curieArray(schema)) {
     const count = Math.max(0, schema.minItems ?? 0);
     if (schema.maxItems !== undefined && count > schema.maxItems) {
@@ -318,7 +324,8 @@ export function editorConfig(registry: CompositionRegistry, { locale }: { locale
 
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       fields[prop] = fieldFor(propSchema, component.type, prop, locale);
-      defaultProps[prop] = defaultFor(propSchema, component.type, prop, locale);
+      // An optional prop starts absent, so a new node does not carry a filter or type nobody chose.
+      if (schema.required?.includes(prop)) defaultProps[prop] = defaultFor(propSchema, component.type, prop, locale);
     }
     for (const slot of component.slots) {
       fields[slot] = { type: 'slot' };

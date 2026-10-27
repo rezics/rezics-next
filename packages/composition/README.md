@@ -128,27 +128,35 @@ tokens: `density` (`compact` or `comfortable`), `radius` (`sm`, `md` or `lg`), `
 or `lg`). Every token is optional. Colours and type faces are not tokens; pages share the
 REZICS visual language.
 
-| Component            | Props                                                                                                               | Slots          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `Stack`              | `gap`: `sm`, `md` or `lg`                                                                                           | `children`     |
-| `Columns`            | `split`: `even`, `start` or `end`                                                                                   | `start`, `end` |
-| `Heading`            | `text` (localized text, 200), `level`: 1, 2, 3 or 4                                                                 |                |
-| `Text`               | `text` (localized text, 2,000)                                                                                      |                |
-| `Slot`               | `name`: one of `SLOT_NAMES`                                                                                         | `children`     |
-| `SubjectHeader`      | none                                                                                                                |                |
-| `Statements`         | `properties`: 1–32 unique `curie()` values                                                                          |                |
-| `MoreStatements`     | none                                                                                                                |                |
-| `SubjectList`        | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24                                         |                |
-| `RelationGroups`     | `property`: `curie()`, optional `filter`: subject UUID, optional `type`: `curie()`, `limit`: integer 1–24           |                |
-| `CollectionList`     | `title` (localized text, 120), `limit`: integer 1–6                                                                 |                |
-| `ReactionSummary`    | none                                                                                                                |                |
-| `AccountIdentity`    | none                                                                                                                |                |
-| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20                                                       |                |
-| `AccountPosts`       | `limit`: integer 1–20                                                                                               |                |
-| `AccountCollections` | `limit`: integer 1–24                                                                                               |                |
-| `SearchBox`          | `placeholder` (localized text, 80)                                                                                  |                |
-| `LinkGrid`           | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
-| `TypeList`           | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
+| Component            | Props                                                                                                                                             | Slots          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `Stack`              | `gap`: `sm`, `md` or `lg`                                                                                                                         | `children`     |
+| `Columns`            | `split`: `even`, `start` or `end`                                                                                                                 | `start`, `end` |
+| `Heading`            | `text` (localized text, 200), `level`: 1, 2, 3 or 4                                                                                               |                |
+| `Text`               | `text` (localized text, 2,000)                                                                                                                    |                |
+| `Slot`               | `name`: one of `SLOT_NAMES`                                                                                                                       | `children`     |
+| `SubjectHeader`      | none                                                                                                                                              |                |
+| `Statements`         | `properties`: 1–32 unique `curie()` values                                                                                                        |                |
+| `MoreStatements`     | none                                                                                                                                              |                |
+| `SubjectList`        | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24                                                                       |                |
+| `RelationGroups`     | optional `title` (localized text, 120), `property`: `curie()`, optional `filter`: subject UUID, optional `type`: `curie()`, `limit`: integer 1–24 |                |
+| `Cover`              | none                                                                                                                                              |                |
+| `Summary`            | none                                                                                                                                              |                |
+| `Appearances`        | optional `direction`: `forward` or `inverse`, `property`, optional `filter`, optional `type`, `limit`: integer 1–24                               |                |
+| `Credits`            | optional `direction`: `forward` or `inverse`, `property`, optional `filter`, optional `type`, `limit`: integer 1–24                               |                |
+| `RatingSummary`      | none                                                                                                                                              |                |
+| `ThreadList`         | none                                                                                                                                              |                |
+| `ReviewList`         | none                                                                                                                                              |                |
+| `Sources`            | none                                                                                                                                              |                |
+| `CollectionList`     | `title` (localized text, 120), `limit`: integer 1–6                                                                                               |                |
+| `ReactionSummary`    | none                                                                                                                                              |                |
+| `AccountIdentity`    | none                                                                                                                                              |                |
+| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20                                                                                     |                |
+| `AccountPosts`       | `limit`: integer 1–20                                                                                                                             |                |
+| `AccountCollections` | `limit`: integer 1–24                                                                                                                             |                |
+| `SearchBox`          | `placeholder` (localized text, 80)                                                                                                                |                |
+| `LinkGrid`           | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                                              |                |
+| `TypeList`           | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24                               |                |
 
 `SLOT_NAMES` is `header`, `hero`, `entity`, `aside`, `footer`, `actions` and `personal`. The
 host site fills the `actions` slot with its controls for the page subject, before any children
@@ -207,6 +215,20 @@ exceeds the preview.
 | `CollectionList`  | Public collections containing the subject                                                  | 6             |
 | `Sources`         | Cover credits, fact sources and external identifiers                                       | —             |
 | `MoreStatements`  | Facts no other component on the page shows                                                 | —             |
+
+`Cover`, `Summary` and `Sources` read the page subject. `Appearances` and `Credits` take the
+statements of one relation property in one of two directions. `inverse`, the default, is the
+`links` read `RelationGroups` uses: the subjects whose `property` statement points at the page
+subject, which is how a person's works and a character's appearances are found. `forward` takes
+the statements the page subject itself holds from the subject read it already shares, which is how
+a work's cast and staff are found; `filter` and `type` apply to `inverse` only. A forward list is
+the subject's statements of that property in statement order, previewed to `limit` with their
+count.
+
+`RatingSummary`, `ThreadList` and `ReviewList` plan no read: ratings, reviews and subject threads
+have no page read yet. They render an honest empty state with an invitation until each gets one.
+
+A section whose read did not succeed says so and offers a retry; the rest of the page renders.
 
 Full views use the same components with `paged: true`, which read one page and render a
 continuation link.

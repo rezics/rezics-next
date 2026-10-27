@@ -7,7 +7,7 @@ import {
   type CompositionDocument,
 } from '@rezics/composition';
 import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -15,6 +15,22 @@ import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { Related, Subject, Summary } from '../../subject/types';
 import type { PageDocument } from './render';
+import * as overview from './overview';
+import {
+  bestRank,
+  ExternalValue,
+  isRecord,
+  linkClass,
+  linkColor,
+  pageText,
+  PlainLink,
+  spoilerLevel,
+  webUrl,
+  type PageLink,
+  type Snak,
+  type Sources,
+  type Stmt,
+} from './shared';
 import {
   DocumentValue,
   LanguageTag,
@@ -58,8 +74,7 @@ const subjectMessages: SubjectMessages = {
   spoilerShow: 'Show spoiler',
 };
 
-type LinkProps = { href: string; lang?: string; children: ReactNode };
-type PageLink = ComponentType<LinkProps>;
+export { pageText };
 type Frame = { typeLabel?: string; ratio?: '2:3' | '3:4' | '1:1' | '4:3' };
 type Options = {
   locale: string;
@@ -68,17 +83,6 @@ type Options = {
   reader: Reader;
   frame: Frame;
   labels: ValueLabels;
-};
-type Snak = {
-  property: { id: string; data_type: string };
-  value: { type: string; content?: unknown };
-};
-// The kernel client infers statements as one large union; only these fields are read.
-type Stmt = Snak & {
-  id: string;
-  rank: string;
-  qualifiers: Snak[];
-  references: { parts: Snak[] }[];
 };
 type SubjectRead = {
   subject: Subject;
@@ -92,11 +96,6 @@ type SearchHit = Pick<Subject, 'id' | 'labels'> & {
 type SearchRead = {
   subjects: SearchHit[];
   total?: { value: number; relation: 'exact' | 'lower_bound' };
-};
-type Sources = {
-  credit: NonNullable<Summary['cover']>['credit'] | null;
-  urls: string[];
-  identifiers: { label: ReturnType<typeof pageText>; value: string }[];
 };
 type PreparedRead = {
   header?: ReactNode;
@@ -140,8 +139,6 @@ const PageContext = createContext<{
   sources: null,
   link: PlainLink,
 });
-const linkClass = 'underline-offset-4';
-const linkColor = 'text-primary';
 const listClass = 'space-y-5 in-data-[density=compact]:space-y-3';
 
 export function usePageLocale(): string {
@@ -150,48 +147,6 @@ export function usePageLocale(): string {
 
 export function usePageMessages(): PageMessages {
   return useContext(PageContext).messages;
-}
-
-/** Localized props and read text share the composition fallback chain; `original` is the subject's first language. */
-export function pageText(value: unknown, locale: string, original?: string) {
-  const safe = typeof value === 'string' || isRecord(value) ? value : '';
-  const picked = pickText(safe as string | Record<string, string>, locale, original);
-  return {
-    text: typeof picked.text === 'string' ? picked.text : '',
-    lang: picked.lang && picked.lang !== locale ? picked.lang : undefined,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function PlainLink({ href, lang, children }: LinkProps) {
-  return (
-    <a href={href} lang={lang}>
-      {children}
-    </a>
-  );
-}
-
-/** Only absolute web URLs become external links, including in references. */
-function webUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
-function ExternalValue({ value }: { value: string }) {
-  return webUrl(value) ? (
-    <a className={`${linkClass} ${linkColor} break-all`} href={value}>
-      {value}
-    </a>
-  ) : (
-    <span>{value}</span>
-  );
 }
 
 function itemLink(id: string, labels: unknown, options: Options) {
@@ -272,18 +227,6 @@ type Creator = { id: string; name: string; node: ReactNode };
 const CREATOR_PROPERTIES = ['schema:author', 'schema:creator', 'schema:director', 'schema:musicBy'];
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
 const MAX_CREATORS = 4;
-
-/** The spoiler level a statement is qualified with: 0 when it has none, 2 for a level that cannot be read. */
-function spoilerLevel(statement: Stmt): number {
-  let level = 0;
-  for (const qualifier of statement.qualifiers) {
-    if (qualifier.property.id !== SPOILER_PROPERTY) continue;
-    const content = qualifier.value.type === 'value' ? qualifier.value.content : undefined;
-    const amount = isRecord(content) ? Number(content.amount) : Number.NaN;
-    level = Math.max(level, Number.isInteger(amount) ? Math.min(2, Math.max(0, amount)) : 2);
-  }
-  return level;
-}
 
 function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {
   const { subject, summary } = read;
@@ -377,12 +320,6 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
       </div>
     </div>
   );
-}
-
-/** The statements that count: the preferred ones when there are any, else the normal ones. */
-function bestRank(statements: Stmt[]): Stmt[] {
-  const preferred = statements.filter((statement) => statement.rank === 'preferred');
-  return preferred.length ? preferred : statements.filter((statement) => statement.rank === 'normal');
 }
 
 /** Prepare every property once; multiple nodes can share the same subject read. */
@@ -624,82 +561,65 @@ export function PageData({
   const token =
     typeof appearance.cover === 'string' && Object.hasOwn(tokenRatios, appearance.cover) ? appearance.cover : '';
   const zoneRatio = token ? tokenRatios[token] : undefined;
+  const sections = new Map<string, overview.Section>();
+  for (const [id, key] of Object.entries(plan.nodes)) {
+    const planned = plan.reads[key];
+    const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
+    if (!planned) continue;
+    sections.set(
+      id,
+      result?.status === 200 && isRecord(result.body)
+        ? {
+            ok: true,
+            read: planned,
+            body: result.body,
+            ...(prepared.get(key)?.sources ? { sources: prepared.get(key)!.sources! } : {}),
+          }
+        : { ok: false },
+    );
+  }
+  const overviewValue: overview.OverviewValue = {
+    locale,
+    subject,
+    link,
+    reader,
+    labels,
+    unlabelled: resolved.unlabelled,
+    spoilerShow: resolved.spoilerShow,
+    details: resolved.details,
+    cover: resolved.cover,
+    coverVia: resolved.coverVia,
+    source: resolved.source,
+    sources: resolved.sources,
+    sections,
+    ...(zoneRatio ? { ratio: zoneRatio } : {}),
+    ...(ratio ? { frameRatio: ratio } : {}),
+  };
   return (
-    <PageContext.Provider
-      value={{
-        locale,
-        messages: resolved,
-        nodes,
-        subject,
-        sources,
-        link,
-        ...(zoneRatio ? { ratio: zoneRatio } : {}),
-      }}
-    >
-      {children}
-    </PageContext.Provider>
+    <overview.OverviewContext.Provider value={overviewValue}>
+      <PageContext.Provider
+        value={{
+          locale,
+          messages: resolved,
+          nodes,
+          subject,
+          sources,
+          link,
+          ...(zoneRatio ? { ratio: zoneRatio } : {}),
+        }}
+      >
+        {children}
+      </PageContext.Provider>
+    </overview.OverviewContext.Provider>
   );
 }
 
 /** The overview's last section: the cover's credit, the sources of the facts shown, identifiers, and Details. */
 export function SubjectSources() {
-  const { locale, messages, subject, sources, link: Link } = useContext(PageContext);
-  if (!subject || !sources) return null;
-  const credit = sources.credit;
-  return (
-    <section
-      data-slot="subject-sources"
-      aria-labelledby="subject-sources"
-      className="min-w-0 space-y-3 border-t border-border/60 pt-6"
-    >
-      <h2
-        id="subject-sources"
-        className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
-      >
-        {messages.sources}
-      </h2>
-      <ul className="space-y-1 text-sm break-words">
-        {credit && (
-          <li>
-            <span className="me-2 font-medium text-muted-foreground">{messages.cover}</span>© {credit.rightsHolder}
-            {credit.via && (
-              <>
-                {' · '}
-                {messages.coverVia}{' '}
-                {webUrl(credit.via.url) ? (
-                  <a className={`${linkClass} ${linkColor}`} href={credit.via.url}>
-                    {credit.via.name}
-                  </a>
-                ) : (
-                  credit.via.name
-                )}
-              </>
-            )}
-            {credit.license ? ` · ${credit.license}` : null}
-          </li>
-        )}
-        {sources.urls.map((url) => (
-          <li key={url}>
-            <span className="me-2 font-medium text-muted-foreground">{messages.source}</span>
-            <ExternalValue value={url} />
-          </li>
-        ))}
-        {sources.identifiers.map(({ label, value }, index) => (
-          <li key={index}>
-            <span lang={label.lang} className="me-2 font-medium text-muted-foreground">
-              {label.text || messages.unlabelled}
-            </span>
-            {value}
-          </li>
-        ))}
-      </ul>
-      <p className={`${linkClass} ${linkColor} text-sm font-medium`}>
-        <Link href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/details`}>
-          {messages.details}
-        </Link>
-      </p>
-    </section>
-  );
+  const { sources } = useContext(PageContext);
+  const value = useContext(overview.OverviewContext);
+  if (!value?.subject || !sources) return null;
+  return <overview.SourcesSection value={value} sources={sources} />;
 }
 
 function useNodeRead(id: unknown) {
@@ -827,6 +747,16 @@ function TypeListContent(props: Record<string, unknown>) {
 }
 
 export const dataComponents = {
+  Cover: overview.Cover,
+  Summary: overview.Summary,
+  RelationGroups: overview.RelationGroups,
+  Appearances: overview.Appearances,
+  Credits: overview.Credits,
+  RatingSummary: overview.RatingSummary,
+  ThreadList: overview.ThreadList,
+  ReviewList: overview.ReviewList,
+  CollectionList: overview.CollectionList,
+  Sources: overview.Sources,
   SubjectHeader,
   Statements,
   MoreStatements,

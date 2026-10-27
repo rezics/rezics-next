@@ -132,6 +132,30 @@
           "$ref": "#/$defs/RelationGroups"
         },
         {
+          "$ref": "#/$defs/Cover"
+        },
+        {
+          "$ref": "#/$defs/Summary"
+        },
+        {
+          "$ref": "#/$defs/Appearances"
+        },
+        {
+          "$ref": "#/$defs/Credits"
+        },
+        {
+          "$ref": "#/$defs/RatingSummary"
+        },
+        {
+          "$ref": "#/$defs/ThreadList"
+        },
+        {
+          "$ref": "#/$defs/ReviewList"
+        },
+        {
+          "$ref": "#/$defs/Sources"
+        },
+        {
           "$ref": "#/$defs/CollectionList"
         },
         {
@@ -597,6 +621,30 @@
               "maxLength": 64,
               "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
             },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120,
+                  "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                  },
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*(?![\\s\\S])"
+                  },
+                  "minProperties": 1,
+                  "maxProperties": 16
+                }
+              ]
+            },
             "property": {
               "type": "string",
               "maxLength": 128,
@@ -618,6 +666,266 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 24
+            }
+          }
+        }
+      }
+    },
+    "Cover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Cover"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Summary"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "Appearances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Appearances"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "property", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "forward"
+                },
+                {
+                  "type": "string",
+                  "const": "inverse"
+                }
+              ]
+            },
+            "property": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "filter": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "type": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            }
+          }
+        }
+      }
+    },
+    "Credits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Credits"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "property", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "forward"
+                },
+                {
+                  "type": "string",
+                  "const": "inverse"
+                }
+              ]
+            },
+            "property": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "filter": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "type": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            }
+          }
+        }
+      }
+    },
+    "RatingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "RatingSummary"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "ThreadList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ThreadList"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "ReviewList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ReviewList"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "Sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Sources"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
             }
           }
         }

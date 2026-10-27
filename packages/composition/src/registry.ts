@@ -287,6 +287,32 @@ const appearance = Type.Object(
 const readSubject: ComponentRead = (_props, page) =>
   page.subject === null ? null : { kind: 'subject', id: page.subject };
 
+/**
+ * The inverse links of the page subject for one property. Appearances and credits share it with `RelationGroups`; a
+ * component that reads `direction: 'forward'` takes the statements the subject itself holds from the subject read.
+ */
+const linkProps = {
+  property: curie(),
+  filter: Type.Optional(subjectId()),
+  type: Type.Optional(curie()),
+  limit: Type.Integer({ minimum: 1, maximum: 24 }),
+} as const;
+
+const readLinks: ComponentRead = (props, page) =>
+  page.subject === null
+    ? null
+    : {
+        kind: 'links',
+        id: page.subject,
+        property: props.property as string,
+        ...(props.filter === undefined ? {} : { filter: props.filter as string }),
+        ...(props.type === undefined ? {} : { type: props.type as string }),
+        limit: props.limit as number,
+      };
+
+const readDirected: ComponentRead = (props, page) =>
+  props.direction === 'forward' ? readSubject(props, page) : readLinks(props, page);
+
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),
   components: [
@@ -352,26 +378,45 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'RelationGroups',
-      props: Type.Object(
-        {
-          property: curie(),
-          filter: Type.Optional(subjectId()),
-          type: Type.Optional(curie()),
-          limit: Type.Integer({ minimum: 1, maximum: 24 }),
-        },
-        closed,
-      ),
-      read: (props, page) =>
-        page.subject === null
-          ? null
-          : {
-              kind: 'links',
-              id: page.subject,
-              property: props.property as string,
-              ...(props.filter === undefined ? {} : { filter: props.filter as string }),
-              ...(props.type === undefined ? {} : { type: props.type as string }),
-              limit: props.limit as number,
-            },
+      props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
+      read: readLinks,
+    },
+    {
+      type: 'Cover',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'Summary',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'Appearances',
+      props: Type.Object({ direction: Type.Optional(enumeration(['forward', 'inverse'])), ...linkProps }, closed),
+      read: readDirected,
+    },
+    {
+      type: 'Credits',
+      props: Type.Object({ direction: Type.Optional(enumeration(['forward', 'inverse'])), ...linkProps }, closed),
+      read: readDirected,
+    },
+    {
+      type: 'RatingSummary',
+      props: Type.Object({}, closed),
+    },
+    {
+      type: 'ThreadList',
+      props: Type.Object({}, closed),
+    },
+    {
+      type: 'ReviewList',
+      props: Type.Object({}, closed),
+    },
+    {
+      type: 'Sources',
+      props: Type.Object({}, closed),
+      read: readSubject,
     },
     {
       type: 'CollectionList',

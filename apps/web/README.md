@@ -623,6 +623,18 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   route, one image per cover variant the browser picks, counted under Download. Rendering stays O(s)
 - **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`
 
+### Subject data components
+
+- **Touches:** No request of their own. `Cover`, `Summary`, `Sources`, a forward `Appearances` or `Credits`, and the
+  subject header share the page's one subject read; `RelationGroups`, an inverse `Appearances` or `Credits` and
+  `CollectionList` render the bodies of the template's planned `links` and `collections` reads. `RatingSummary`,
+  `ThreadList` and `ReviewList` plan no read. A read that did not succeed renders its section as a failed state with a
+  retry link, and the other sections render from their own reads
+- **Bound:** 0 K, D, R and A beyond the page read, and no more than the template's 16 planned reads. A preview renders
+  at most its `limit` items (24 for links, 6 for collections) whatever the read returned, so rendering is
+  O(limit × sections) plus O(s) for the shared subject read
+- **Growth check:** `tests/subject-data-components.test.ts`: `Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and Sources render from their page reads with a bounded preview, a count and a link to the full view`
+
 ### Subject library slot
 
 - **Touches:** In parallel with the subject page, read one session credential, the viewer's FULL library entry when
