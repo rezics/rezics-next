@@ -40,10 +40,11 @@ type NativeResponse = {
 function transport() {
   const calls: { method: string; path: string; body: unknown; response?: unknown }[] = [];
   const search: OpenSearch = {
-    async request<T>(method, path, body, options) {
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, body] = args;
       const call: (typeof calls)[number] = { method, path, body };
       calls.push(call);
-      const response = await engine.request<T>(method, path, body, options);
+      const response = await engine.request<T>(...args);
       call.response = response.body;
       return response;
     },
