@@ -4,7 +4,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId } from '../../src/route/route.ts';
-import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { sealSitemapPosition } from '../../src/content/sitemap.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
@@ -40,7 +40,12 @@ async function page(feed: Feed, values: Record<string, string>) {
 /** A cursor that starts a walk at the first board of a route, as an earlier page of the same feed would. */
 function cursorAtRoute(feed: Feed, route: number): string {
   const id = `00000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}00000000`;
-  return encodeCursor(tokens, { operation: `sitemap.${feed}.list`, parameters: {} }, { epoch: 1, after: [id] });
+  return sealSitemapPosition(
+    tokens,
+    { operation: `sitemap.${feed}.list`, parameters: {} },
+    `content.sitemap.${feed}.cursor.encryption.v1`,
+    { boardId: id, scanning: false, thread: null },
+  );
 }
 
 /** One published board with one listed thread, optionally in its own Realm. */

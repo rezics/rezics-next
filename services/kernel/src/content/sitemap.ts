@@ -1,9 +1,10 @@
+import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { indexedReadAccess, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
-import { isErasedPlaceholder } from './model.ts';
-import type { ReadContext } from './model.ts';
+import { isErasedPlaceholder, type ReadContext } from './model.ts';
 import { discloseThreads, type ThreadView } from './reads.ts';
 import newestThreads from './sitemap-board-newest.sql';
 import pageBoards from './sitemap-board-page.sql';
@@ -23,20 +24,118 @@ export class InvalidSitemapCursorError extends Error {
 }
 
 export const SITEMAP_MAX_LIMIT = 1000;
-/** A page examines at most this many candidate rows for each requested item. */
 const CANDIDATES_PER_ITEM = 4;
-/** A board is listed when one of its newest threads is; a board with only unlisted threads that new is thin. */
-const NEWEST_THREADS = 8;
 const MAX_DISCLOSURE = 200;
 const ZERO_ID = '00000000-0000-0000-0000-000000000000';
+const MAX_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const MICROSECOND_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 /** Sitemap cursors cross partitions, so no partition epoch applies. */
 const CURSOR_EPOCH = 1;
 
-type Position = { boardId: string; thread: { createdAt: string; id: string } | null };
+type Feed = 'boards' | 'threads';
+type Position = {
+  boardId: string;
+  /** An unfinished board's thread range continues on the next page, including when no thread was read yet. */
+  scanning: boolean;
+  thread: { createdAt: string; id: string } | null;
+};
 
-function binding(operation: string): CursorBinding {
-  return { operation, parameters: {} };
+function binding(feed: Feed): CursorBinding {
+  return { operation: `sitemap.${feed}.list`, parameters: {} };
+}
+
+function cipherKey(ring: KeyRing, kid: number, purpose: string): Buffer {
+  const key = ring.keys.get(kid);
+  if (!key || key.byteLength < 32) throw new InvalidSitemapCursorError();
+  return createHmac('sha256', key).update(purpose).digest();
+}
+
+/** Seal a feed's position inside the shared signed cursor. Give each feed its own encryption purpose.
+ * Identical positions issued at the same instant have identical bytes for anonymous and bearer callers. */
+export function sealSitemapPosition(
+  ring: KeyRing,
+  scope: CursorBinding,
+  purpose: string,
+  position: unknown,
+  now = Date.now(),
+): string {
+  const plaintext = JSON.stringify(position);
+  if (typeof plaintext !== 'string') throw new TypeError('Invalid sitemap position');
+  // A separately derived HMAC nonce binds the IV to plaintext and issue time, with a 96-bit collision bound.
+  // Identical plaintext at the same instant intentionally produces the same ciphertext.
+  const iv = createHmac('sha256', cipherKey(ring, ring.current, `${purpose}.nonce`))
+    .update(JSON.stringify([scope, now, plaintext]))
+    .digest()
+    .subarray(0, 12);
+  const cipher = createCipheriv('aes-256-gcm', cipherKey(ring, ring.current, purpose), iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const payload = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64url');
+  return encodeCursor(ring, scope, { epoch: CURSOR_EPOCH, after: [ring.current, payload] }, now);
+}
+
+/** Open a feed position; callers validate their position's shape after authentication and decryption. */
+export function openSitemapPosition(
+  ring: KeyRing,
+  scope: CursorBinding,
+  purpose: string,
+  token: string,
+  now = Date.now(),
+): unknown {
+  try {
+    const decoded = decodeCursor(ring, scope, token, now);
+    if (!decoded.ok || decoded.epoch !== CURSOR_EPOCH || decoded.after.length !== 2) throw new Error();
+    const [kid, payload] = decoded.after;
+    if (typeof kid !== 'number' || typeof payload !== 'string' || !/^[A-Za-z0-9_-]+$/.test(payload)) throw new Error();
+    const bytes = Buffer.from(payload, 'base64url');
+    if (bytes.length < 29 || bytes.toString('base64url') !== payload) throw new Error();
+    const cipher = createDecipheriv('aes-256-gcm', cipherKey(ring, kid, purpose), bytes.subarray(0, 12));
+    cipher.setAuthTag(bytes.subarray(12, 28));
+    return JSON.parse(Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString('utf8')) as unknown;
+  } catch {
+    throw new InvalidSitemapCursorError();
+  }
+}
+
+function purpose(feed: Feed): string {
+  return `content.sitemap.${feed}.cursor.encryption.v1`;
+}
+
+function decodePosition(dependencies: ContentBoardDependencies, feed: Feed, cursor?: string): Position | null {
+  if (cursor === undefined) return null;
+  const position = openSitemapPosition(
+    dependencies.tokens,
+    binding(feed),
+    purpose(feed),
+    cursor,
+    (dependencies.cursorNow ?? Date.now)(),
+  );
+  if (
+    !position ||
+    typeof position !== 'object' ||
+    !('boardId' in position) ||
+    typeof position.boardId !== 'string' ||
+    routeOf(position.boardId) === null ||
+    !('scanning' in position) ||
+    typeof position.scanning !== 'boolean' ||
+    !('thread' in position)
+  )
+    throw new InvalidSitemapCursorError();
+  const thread = position.thread;
+  if (
+    thread !== null &&
+    (!position.scanning ||
+      !thread ||
+      typeof thread !== 'object' ||
+      !('createdAt' in thread) ||
+      typeof thread.createdAt !== 'string' ||
+      !MICROSECOND_INSTANT.test(thread.createdAt) ||
+      !Number.isFinite(Date.parse(thread.createdAt)) ||
+      !('id' in thread) ||
+      typeof thread.id !== 'string' ||
+      routeOf(thread.id) === null)
+  )
+    throw new InvalidSitemapCursorError();
+  return { boardId: position.boardId, scanning: position.scanning, thread: thread as Position['thread'] };
 }
 
 function instant(value: string): string {
@@ -44,7 +143,7 @@ function instant(value: string): string {
   return value.replace(/(\.\d{3})000Z$/, '$1Z');
 }
 
-/** A thread is listed when the anonymous public board page shows it with its first post available. */
+/** The board page's shared disclosure, with the sitemap's available opening-post requirement. */
 function isListedThread(thread: ThreadView | null, boardId: string): thread is ThreadView {
   return (
     thread !== null &&
@@ -55,197 +154,106 @@ function isListedThread(thread: ThreadView | null, boardId: string): thread is T
   );
 }
 
-function pageLimit(input: SitemapInput): number {
+async function listSitemap(
+  dependencies: ContentBoardDependencies,
+  deadline: number,
+  feed: Feed,
+  input: SitemapInput,
+): Promise<SitemapPage<SitemapBoard | SitemapThread>> {
   const limit = input.limit ?? SITEMAP_MAX_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > SITEMAP_MAX_LIMIT)
     throw new RangeError(`Page limit must be 1 to ${SITEMAP_MAX_LIMIT}`);
-  return limit;
-}
-
-function decodePosition(
-  dependencies: ContentBoardDependencies,
-  operation: string,
-  cursor: string | undefined,
-): Position | null {
-  if (cursor === undefined) return null;
-  const now = (dependencies.cursorNow ?? Date.now)();
-  const decoded = decodeCursor(dependencies.tokens, binding(operation), cursor, now);
-  if (!decoded.ok || decoded.epoch !== CURSOR_EPOCH) throw new InvalidSitemapCursorError();
-  const [boardId, createdAt, threadId] = decoded.after;
-  if (typeof boardId !== 'string' || routeOf(boardId) === null) throw new InvalidSitemapCursorError();
-  if (decoded.after.length === 1) return { boardId, thread: null };
-  if (
-    decoded.after.length !== 3 ||
-    typeof createdAt !== 'string' ||
-    !MICROSECOND_INSTANT.test(createdAt) ||
-    typeof threadId !== 'string' ||
-    routeOf(threadId) === null
-  )
-    throw new InvalidSitemapCursorError();
-  return { boardId, thread: { createdAt, id: threadId } };
-}
-
-function encodePosition(dependencies: ContentBoardDependencies, operation: string, position: Position): string {
-  const now = (dependencies.cursorNow ?? Date.now)();
-  const after = position.thread
-    ? [position.boardId, position.thread.createdAt, position.thread.id]
-    : [position.boardId];
-  return encodeCursor(dependencies.tokens, binding(operation), { epoch: CURSOR_EPOCH, after }, now);
-}
-
-async function fetchBoards(dependencies: ContentBoardDependencies, after: string | null, limit: number) {
-  const route = after === null ? null : routeOf(after);
-  return withConnection(dependencies.pool, (client) =>
-    pageBoards.run(client, { route: route ?? -1, board_id: after ?? ZERO_ID, limit }),
-  );
-}
-
-/** Every feed evaluates as the anonymous reader, whatever the caller sends. */
-function anonymousReader(deadline: number): ReadContext {
-  return { actor: { kind: 'anonymous' }, deadline };
-}
-
-/** The creation time of the board's newest listed thread, looked for among its newest few candidates only. */
-async function newestListedThread(
-  dependencies: ContentBoardDependencies,
-  readDependencies: ContentBoardDependencies,
-  boardId: string,
-  reader: ReadContext,
-): Promise<string | null> {
-  const candidates = await withConnection(dependencies.pool, (client) =>
-    newestThreads.run(client, { route: routeOf(boardId)!, board_id: boardId, limit: NEWEST_THREADS }),
-  );
-  for (const candidate of candidates) {
-    const [disclosed] = await discloseThreads(readDependencies, [candidate.thread_id], reader);
-    if (isListedThread(disclosed!.value, boardId)) return instant(candidate.created_at!);
+  let position = decodePosition(dependencies, feed, input.cursor);
+  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
+  const reader: ReadContext = { actor: { kind: 'anonymous' }, deadline };
+  const items: (SitemapBoard | SitemapThread)[] = [];
+  let budget = limit * CANDIDATES_PER_ITEM;
+  let finished = false;
+  while (budget > 0 && items.length < limit) {
+    if (!position?.scanning) {
+      // Read only the board we will process. Charging a prefetched board without advancing to it could lose it
+      // when the page runs out of budget; advancing past it could lose its threads.
+      const after = position?.boardId;
+      const rows = await withConnection(dependencies.pool, (client) =>
+        pageBoards.run(client, { route: after ? routeOf(after)! : -1, board_id: after ?? ZERO_ID, limit: 1 }),
+      );
+      if (!rows.length) {
+        finished = true;
+        break;
+      }
+      budget--;
+      position = { boardId: rows[0]!.board_id, scanning: true, thread: null };
+    }
+    const boardId: string = position.boardId;
+    const board = await readRealmBoard(readDependencies, boardId, reader);
+    if (!board.value) {
+      position = { boardId, scanning: false, thread: null };
+      continue;
+    }
+    while (budget > 0 && items.length < limit && position.scanning) {
+      const want = feed === 'boards' ? 1 : Math.min(budget, limit - items.length, MAX_DISCLOSURE);
+      const after: Position['thread'] = position.thread;
+      const parameters: { route: number; board_id: string; created_at: string; thread_id: string; limit: number } = {
+        route: routeOf(boardId)!,
+        board_id: boardId,
+        created_at: after?.createdAt ?? (feed === 'boards' ? 'infinity' : '-infinity'),
+        thread_id: after?.id ?? (feed === 'boards' ? MAX_ID : ZERO_ID),
+        limit: want,
+      };
+      const rows: readonly (typeof pageThreads)['~reylo']['element'][] = await withConnection(
+        dependencies.pool,
+        (client) => (feed === 'boards' ? newestThreads.run(client, parameters) : pageThreads.run(client, parameters)),
+      );
+      budget -= rows.length;
+      const disclosed = await discloseThreads(
+        readDependencies,
+        rows.map((row) => row.thread_id),
+        reader,
+      );
+      for (const [index, row] of rows.entries()) {
+        position = { boardId, scanning: true, thread: { createdAt: row.created_at!, id: row.thread_id } };
+        const thread = disclosed[index]!.value;
+        if (!isListedThread(thread, boardId)) continue;
+        if (feed === 'boards') {
+          items.push({ id: boardId, lastModified: instant(row.created_at!) });
+          position = { boardId, scanning: false, thread: null };
+          break;
+        }
+        items.push({ id: thread.id, title: thread.title, lastModified: instant(row.last_activity_at!) });
+      }
+      if (rows.length < want) position = { boardId, scanning: false, thread: null };
+    }
   }
-  return null;
+  return {
+    items,
+    next:
+      finished || position === null
+        ? null
+        : sealSitemapPosition(
+            dependencies.tokens,
+            binding(feed),
+            purpose(feed),
+            position,
+            (dependencies.cursorNow ?? Date.now)(),
+          ),
+  };
 }
 
-/** Keyset page of the boards an anonymous reader can open and that have a listed thread. Candidate ids carry no
- * authority; each goes through the current board and Realm disclosure checks. */
+/** Boards with at least one listed thread. The newest listed thread determines lastModified; if the scan budget
+ * ends before finding one, the encrypted cursor continues that board's descending thread range. */
 export async function listSitemapBoards(
   dependencies: ContentBoardDependencies,
   deadline: number,
   input: SitemapInput = {},
 ): Promise<SitemapPage<SitemapBoard>> {
-  const limit = pageLimit(input);
-  const operation = 'sitemap.boards.list';
-  const position = decodePosition(dependencies, operation, input.cursor);
-  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
-  const reader = anonymousReader(deadline);
-  const items: SitemapBoard[] = [];
-  let last = position?.boardId ?? null;
-  let budget = limit * CANDIDATES_PER_ITEM;
-  let exhausted = false;
-  while (!exhausted && items.length < limit && budget > 0) {
-    const chunk = Math.min(budget, limit - items.length);
-    const rows = await fetchBoards(dependencies, last, chunk);
-    budget -= rows.length;
-    let stopped = false;
-    for (const { board_id: id } of rows) {
-      if (items.length >= limit) {
-        stopped = true;
-        break;
-      }
-      last = id;
-      const board = await readRealmBoard(readDependencies, id, reader);
-      if (!board.value) continue;
-      const lastModified = await newestListedThread(dependencies, readDependencies, id, reader);
-      if (lastModified) items.push({ id, lastModified });
-    }
-    if (!stopped && rows.length < chunk) exhausted = true;
-  }
-  return {
-    items,
-    next: exhausted || last === null ? null : encodePosition(dependencies, operation, { boardId: last, thread: null }),
-  };
+  return listSitemap(dependencies, deadline, 'boards', input);
 }
 
-/** Keyset page of the threads an anonymous reader can open, walked board by board in creation order. Threads of an
- * unlisted board are never read. Candidate ids carry no authority; the shared thread disclosure decides. */
+/** Threads walk listed containers in immutable creation order, reusing the anonymous board page's disclosure. */
 export async function listSitemapThreads(
   dependencies: ContentBoardDependencies,
   deadline: number,
   input: SitemapInput = {},
 ): Promise<SitemapPage<SitemapThread>> {
-  const limit = pageLimit(input);
-  const operation = 'sitemap.threads.list';
-  const start = decodePosition(dependencies, operation, input.cursor);
-  const readDependencies = { ...dependencies, access: indexedReadAccess(dependencies.access) };
-  const reader = anonymousReader(deadline);
-  const items: SitemapThread[] = [];
-  let position = start;
-  let resume = start?.thread ? start.boardId : null;
-  let budget = limit * CANDIDATES_PER_ITEM;
-  let finished = false;
-  let stopped = false;
-  while (!finished && !stopped && items.length < limit && budget > 0) {
-    let boards: { id: string; resumed: boolean }[];
-    let last = false;
-    if (resume !== null) {
-      boards = [{ id: resume, resumed: true }];
-      resume = null;
-    } else {
-      const chunk = Math.min(budget, limit - items.length);
-      const rows = await fetchBoards(dependencies, position?.boardId ?? null, chunk);
-      budget -= rows.length;
-      boards = rows.map((row) => ({ id: row.board_id, resumed: false }));
-      last = rows.length < chunk;
-    }
-    for (const { id, resumed } of boards) {
-      if (items.length >= limit || budget <= 0) {
-        stopped = true;
-        break;
-      }
-      position = { boardId: id, thread: resumed ? (start?.thread ?? null) : null };
-      const board = await readRealmBoard(readDependencies, id, reader);
-      if (!board.value) {
-        position = { boardId: id, thread: null };
-        continue;
-      }
-      let after = position.thread;
-      for (;;) {
-        if (items.length >= limit || budget <= 0) {
-          stopped = true;
-          break;
-        }
-        const want = Math.min(budget, limit - items.length, MAX_DISCLOSURE);
-        const rows = await withConnection(dependencies.pool, (client) =>
-          pageThreads.run(client, {
-            route: routeOf(id)!,
-            board_id: id,
-            created_at: after?.createdAt ?? '-infinity',
-            thread_id: after?.id ?? ZERO_ID,
-            limit: want,
-          }),
-        );
-        budget -= rows.length;
-        const disclosed = await discloseThreads(
-          readDependencies,
-          rows.map((row) => row.thread_id),
-          reader,
-        );
-        for (const [index, row] of rows.entries()) {
-          after = { createdAt: row.created_at!, id: row.thread_id };
-          position = { boardId: id, thread: after };
-          const thread = disclosed[index]!.value;
-          if (isListedThread(thread, id))
-            items.push({ id: thread!.id, title: thread!.title, lastModified: instant(row.last_activity_at!) });
-          if (items.length >= limit) break;
-        }
-        if (items.length >= limit) {
-          stopped = true;
-          break;
-        }
-        if (rows.length < want) {
-          position = { boardId: id, thread: null };
-          break;
-        }
-      }
-      if (stopped) break;
-    }
-    if (!stopped && last) finished = true;
-  }
-  return { items, next: finished || position === null ? null : encodePosition(dependencies, operation, position) };
+  return listSitemap(dependencies, deadline, 'threads', input) as Promise<SitemapPage<SitemapThread>>;
 }

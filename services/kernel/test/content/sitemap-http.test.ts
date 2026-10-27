@@ -9,6 +9,7 @@ import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
@@ -360,4 +361,66 @@ test('lastModified follows a new reply and a new thread', async () => {
   const afterThread = await read();
   expect(afterThread.board! > before.board!).toBe(true);
   expect(afterThread.thread).toBe(afterReply.thread);
+});
+
+test('a cursor that stops on a skipped candidate contains no id, route or timestamp of that candidate in its decoded bytes', async () => {
+  const hiddenRealm = await realm('protected');
+  const hiddenBoards = [];
+  for (let i = 0; i < 6; i++) hiddenBoards.push(await board(hiddenRealm));
+  const visibleBoard = await board(null);
+  const hiddenThreads = [];
+  for (let i = 0; i < 12; i++) hiddenThreads.push(await thread(visibleBoard, { thread: 'draft' }));
+  await thread(visibleBoard);
+  for (const feed of ['boards', 'threads'] as const) {
+    let cursor: string | null = null;
+    let emptyPages = 0;
+    do {
+      const result = await get(feed, { limit: '1', ...(cursor ? { cursor } : {}) });
+      expect(result.response.status).toBe(200);
+      cursor = result.body.next;
+      if (!result.body.items.length && cursor) emptyPages++;
+      if (!cursor) continue;
+      const scope = { operation: `sitemap.${feed}.list`, parameters: {} };
+      const decoded = decodeCursor(tokens, scope, cursor, now);
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) throw new Error('Cursor did not decode');
+      const bytes = Buffer.from(cursor.split('.')[0]!, 'base64url').toString('utf8');
+      for (const id of [...hiddenBoards, ...hiddenThreads]) expect(bytes).not.toContain(id);
+      // Only a key id and encrypted bytes belong in the readable signed position.
+      expect(decoded.after).toHaveLength(2);
+      expect(typeof decoded.after[0]).toBe('number');
+      expect(typeof decoded.after[1]).toBe('string');
+      const payload = Buffer.from(decoded.after[1] as string, 'base64url');
+      payload[0] = payload[0]! ^ 1;
+      const tampered = encodeCursor(
+        tokens,
+        scope,
+        { epoch: 1, after: [decoded.after[0]!, payload.toString('base64url')] },
+        now,
+      );
+      expect((await get(feed, { cursor: tampered })).body).toMatchObject({ code: 'invalid_cursor' });
+      const foreign = encodeCursor(
+        tokens,
+        { operation: `sitemap.${feed === 'boards' ? 'threads' : 'boards'}.list`, parameters: {} },
+        { epoch: 1, after: decoded.after },
+        now,
+      );
+      expect((await get(feed === 'boards' ? 'threads' : 'boards', { cursor: foreign })).body).toMatchObject({
+        code: 'invalid_cursor',
+      });
+    } while (cursor);
+    expect(emptyPages).toBeGreaterThan(0);
+  }
+});
+
+test('a board stays listed when more than eight newer candidates are hidden', async () => {
+  const id = await board(null);
+  const listed = await thread(id);
+  for (let i = 0; i < 12; i++) await thread(id, { thread: i % 2 ? 'draft' : 'taken_down' });
+  const threads = (await walk('threads', 1)).items;
+  const boards = (await walk('boards', 1)).items;
+  expect(threads.some((item) => item.id === listed)).toBe(true);
+  expect(boards.find((item) => item.id === id)?.lastModified).toBe(
+    threads.find((item) => item.id === listed)?.lastModified,
+  );
 });

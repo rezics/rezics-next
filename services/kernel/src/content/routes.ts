@@ -125,7 +125,7 @@ const writeFailures = {
 };
 const SITEMAP_DESCRIPTION = (kind: 'boards' | 'threads') =>
   `Keyset feed of the public ${kind} for sitemaps, the same for every caller: it lists exactly what an anonymous ` +
-  `reader can open, whatever bearer the request carries. Each page examines a bounded number of candidates, so it ` +
+  `reader can open, whatever bearer the request carries. Each page examines at most 4 × \`limit\` candidate rows, so it ` +
   `may return fewer than \`limit\` items, even none, with a non-null \`next\`. Follow \`next\` until it is ` +
   `\`null\`. \`lastModified\` is the last significant change of what the page shows; a post edit or removal does ` +
   `not advance it.`;

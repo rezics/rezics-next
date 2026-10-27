@@ -91,26 +91,31 @@ shared shape that other modules' feeds reuse.
 
 These feeds return up to 1,000 entries per page (`limit` 1–1000, default 1000), an exception to the shared list
 maximum of 100. `cursor` is an opaque string from a previous `next` and is bound to its feed; any other value is
-`invalid_cursor`.
+`invalid_cursor`. The position is AES-256-GCM encrypted inside the signed cursor, with a separate HMAC-derived
+key per feed. Skipped candidates reveal no identity, route or creation time. Other feeds can reuse
+`sealSitemapPosition` and `openSitemapPosition`, supplying their own encryption purpose and validating the opened
+position.
 
 Every caller gets the same bytes. A feed evaluates as the anonymous reader even when the request carries a bearer, and
 lists exactly what an anonymous reader can open:
 
-- **Boards:** published and not taken down, with no Realm or a public Realm, and with a listed thread among its newest
-  candidates. An empty board is a thin page and is not listed.
+- **Boards:** published and not taken down, with no Realm or a public Realm, and with at least one listed thread. An empty board is a thin page and is not listed.
 - **Threads:** published and available, on a listed board, passing the thread disclosure of the anonymous
   `listBoardThreads` page (the shared `discloseThreads`), with an available opening post.
 - Nothing under a protected Realm or a removed board, and no draft, protected, taken-down or erased thread, is listed.
 
 Keyset order uses immutable keys: boards by `(route, board_id)`, and threads board by board through
 `board_thread_page_idx` by `(created_at, thread_id)`. A walk lists every item that stays listed for the whole walk
-exactly once. Threads of unlisted boards are never read.
+exactly once. Threads under protected Realms and removed boards are never read. The board feed probes threads
+newest first and resumes an unfinished probe on the next page, so any number of newer hidden candidates cannot
+make a board with a listed thread disappear.
 
 A page examines at most 4 × `limit` candidate rows. When it reaches that cap it returns what it found with a non-null
 `next`, possibly with no items; clients follow `next` until it is `null`.
 
 `lastModified` is the last significant change of what the page shows, from columns the write paths already maintain:
-for a thread `board_thread.last_activity_at`; for a board its newest listed thread's `created_at`. Post edits and
+for a thread `board_thread.last_activity_at`; for a board its newest listed thread's `created_at` (or its own
+`created_at` if there is none, though thin boards are omitted). Post edits and
 removals do not advance it, and no feed adds a write-path update, index or migration.
 
 ## Reactions
@@ -408,13 +413,13 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 ### Sitemap board feed
 
-- **Touches:** One keyset seek of at most 4L `content.board` rows by `(route, board_id)`, in chunks of at most L. Each candidate gets the shared board and Realm disclosure (primary-key probes, at most one Realm check), and each survivor one bounded probe of its newest `board_thread_page_idx` candidates (at most 8, then the shared thread disclosure until one is listed).
-- **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. A full walk visits the listed boards and the unlisted boards the cap skips.
+- **Touches:** Keyset seeks of `content.board` by `(route, board_id)` and, for each disclosed board, a descending `board_thread_page_idx` probe with the shared thread disclosure until one is listed. Board and thread candidates total at most 4L; an encrypted cursor resumes an unfinished probe. Board and Realm checks use primary-key probes.
+- **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. A full walk visits boards and their bounded newest-first probes; threads under protected Realms and removed boards are never scanned.
 - **Growth check:** `test/content/growth-sitemap.test.ts`, `Sitemap boards page, listed items`, and `Sitemap boards page, protected Realm content`, at 200, 1600 and 12800 listed boards or protected Realm boards behind a fixed page. Rows and statements stay constant; blocks stay logarithmic.
 
 ### Sitemap thread feed
 
-- **Touches:** The board seek above, and for each listed board one keyset range of `board_thread_page_idx` rows by `(created_at, thread_id)` in pages of at most 200, with the shared thread disclosure per candidate. Candidates, board and thread, total at most 4L per page.
+- **Touches:** The board seek above, and for each disclosed board one keyset range of `board_thread_page_idx` rows by `(created_at, thread_id)` in pages of at most 200, with the shared thread disclosure per candidate. Candidates, board and thread, total at most 4L per page.
 - **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. Threads of protected Realms and removed boards are never scanned.
 - **Growth check:** `test/content/growth-sitemap.test.ts`, `Sitemap threads page, listed items`, and `Sitemap threads page, protected Realm content`, at 200, 1600 and 12800 listed threads or protected Realm threads behind a fixed page. Rows and statements stay constant; blocks stay logarithmic.
 
