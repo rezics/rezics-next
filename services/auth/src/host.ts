@@ -195,6 +195,7 @@ export function credentialEffectTransport(
       ['/credential-effects/apply', 'apply'],
     ]).get(url.pathname);
     if (!command) return fallback(request);
+    const deadline = Date.now() + 3000;
     const response = (body: unknown, status = 200) =>
       Response.json(body, {
         status,
@@ -245,11 +246,17 @@ export function credentialEffectTransport(
         )
           return denied(401);
       }
-      if (command === 'approve')
-        return response(await service.internal.approveCredentialEffect({ ...input, effectRef }));
-      return response(
-        await service.internal.applyCredentialEffect({ ...input, effectRef, authorization: string(body.reference) }),
-      );
+      if (command === 'approve') {
+        const requestInput = { ...input, effectRef, deadline };
+        return response(await service.internal.approveCredentialEffect(requestInput));
+      }
+      const requestInput = {
+        ...input,
+        effectRef,
+        authorization: string(body.reference),
+        deadline,
+      };
+      return response(await service.internal.applyCredentialEffect(requestInput));
     } catch (error) {
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);

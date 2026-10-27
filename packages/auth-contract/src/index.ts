@@ -101,12 +101,40 @@ export interface CredentialFloorReceipt extends InvalidationReceipt {
  * floor; its invalidated source session grants no consume/replay authority.
  */
 export type CredentialFloorPort<Purpose extends CredentialFloorPurpose = CredentialFloorPurpose> = (input: {
+  /** Auth's request deadline; kernel request paths always pass it. */
+  deadline?: number;
   stage: CredentialEffectBinding<Purpose>;
   consumedOpening: CredentialEffectAuthorization<Purpose>;
   expectedPreviousFloor: number;
   key: string;
   purpose: Purpose;
 }) => Promise<CredentialFloorReceipt>;
+
+const credentialRequestDeadlines = new WeakMap<SessionProof, number>();
+
+/** Preserve the active request deadline while Auth invokes a credential port.
+ * Normally the port input carries the deadline directly. This context lets
+ * trusted adapters that only forward the proof keep the same request boundary.
+ */
+export async function withCredentialRequestDeadline<T>(
+  proof: SessionProof,
+  deadline: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = credentialRequestDeadlines.get(proof);
+  credentialRequestDeadlines.set(proof, deadline);
+  try {
+    return await work();
+  } finally {
+    if (previous === undefined) credentialRequestDeadlines.delete(proof);
+    else credentialRequestDeadlines.set(proof, previous);
+  }
+}
+
+/** Read only the deadline attached to this live trusted proof callback. */
+export function credentialRequestDeadline(proof: SessionProof): number | undefined {
+  return credentialRequestDeadlines.get(proof);
+}
 
 /** The session input stays byte-for-byte equivalent to the existing contract. */
 export type SessionAuthorizationInput = {
@@ -122,6 +150,8 @@ export type CredentialAuthorizationInput = {
     purpose: Purpose;
     operationKey: string;
     effectReference: string;
+    /** Auth's request deadline. SessionAuthorizationInput remains unchanged. */
+    deadline?: number;
   };
 }[CredentialPurpose];
 
@@ -232,6 +262,8 @@ export interface CredentialApprovalPorts<Purpose extends CredentialFloorPurpose>
   approveCredentialEffect?(input: {
     stage: CredentialEffectBinding<Purpose>;
     human: SessionProof;
+    /** Deadline of the request Auth is serving. */
+    deadline?: number;
   }): Promise<{ reference: string; expiresAt: string }>;
   /** Resolve the exact native opening from authorization and compare its binding
    * to stage. Repeat the same formula, current human/operator/subject state,
@@ -246,6 +278,8 @@ export interface CredentialApprovalPorts<Purpose extends CredentialFloorPurpose>
     consumedOpening?: CredentialEffectAuthorization<Purpose>;
     floorReceipt?: CredentialFloorReceipt;
     replay: boolean;
+    /** Deadline of the request Auth is serving. */
+    deadline?: number;
   }): Promise<void>;
   advanceCredentialFloor?(input: Parameters<CredentialFloorPort<Purpose>>[0]): Promise<CredentialFloorReceipt>;
 }

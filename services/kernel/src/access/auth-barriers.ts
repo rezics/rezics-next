@@ -8,6 +8,7 @@ import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { runCommand, authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf, newId } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import credentialRead from './auth-barriers-credential-read.sql';
@@ -190,6 +191,9 @@ export function createCredentialFloorHook(config: {
 }): CredentialFloorPort {
   return async (value) => {
     const input = structuredClone(value);
+    const deadline = input.deadline ?? deadlineFor(3000);
+    input.deadline = deadline;
+    requireAccessDeadline(deadline);
     const { stage, consumedOpening: opening, expectedPreviousFloor: previous } = input;
     const route = routeOf(stage.subjectAccountId);
     allowed(
@@ -216,8 +220,8 @@ export function createCredentialFloorHook(config: {
           }
         : null;
     }
-    const digest = createHash('sha256').update(canonicalize(input)!).digest();
-    const deadline = deadlineFor(AUTH_BARRIER_BUDGET_MS);
+    const { deadline: _deadline, ...operation } = input;
+    const digest = createHash('sha256').update(canonicalize(operation)!).digest();
     const result = await runCommand(
       config.pool,
       {

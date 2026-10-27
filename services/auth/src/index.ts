@@ -264,6 +264,8 @@ export interface AuthService {
       key: string;
       subjectAccountId: string;
       headers: Headers;
+      /** Deadline created at the Auth request boundary. */
+      deadline?: number;
     }): Promise<{ reference: string; expiresAt: string }>;
     /** Resolve the same immutable stage; consume an exact credential authorization,
      * compare its binding with Auth's stage, then revalidate current authority at
@@ -290,6 +292,8 @@ export interface AuthService {
       key: string;
       subjectAccountId: string;
       headers: Headers;
+      /** Deadline created at the Auth request boundary. */
+      deadline?: number;
     }): Promise<{ receiptId: string; replayed: boolean }>;
     /** Auth-owned point-read verifier; no minting path. */
     verifyCredentialEffect: CredentialEffectVerifier;

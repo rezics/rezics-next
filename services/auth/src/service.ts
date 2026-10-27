@@ -23,6 +23,7 @@ import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import { recoveryDelivery } from './recovery-delivery.ts';
+import { withCredentialRequestDeadline } from '@rezics/auth-contract';
 import type { PoolClient } from 'pg';
 import {
   createProvisioningEvidenceVerifier,
@@ -535,15 +536,21 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   function freshCredentialProof(human: SessionProof, subjectId: string) {
     if (human.account_id === subjectId) freshAuthentication(human);
   }
-  async function withCredentialProof<T>(human: SessionProof, callback: () => Promise<T>): Promise<T> {
+  async function withCredentialProof<T>(
+    human: SessionProof,
+    callback: () => Promise<T>,
+    deadline?: number,
+  ): Promise<T> {
     const scope = { proof: human, live: true };
-    return proofScope.run(scope, async () => {
-      try {
-        return await callback();
-      } finally {
-        scope.live = false;
-      }
-    });
+    const work = () =>
+      proofScope.run(scope, async () => {
+        try {
+          return await callback();
+        } finally {
+          scope.live = false;
+        }
+      });
+    return deadline === undefined ? work() : withCredentialRequestDeadline(human, deadline, work);
   }
   async function credentialStage(
     input: { key: string; effectRef: string; subjectAccountId: string },
@@ -1118,18 +1125,26 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return withCredentialProof(human, () => work(human));
       },
       async approveCredentialEffect(input) {
+        // Direct internal callers also receive one boundary deadline here;
+        // Auth hosts pass the one created when their request arrived.
+        const deadline = input.deadline ?? Date.now() + 3000;
         if (!trustedAccess.approveCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
         freshCredentialProof(human, input.subjectAccountId);
         await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
         if (!stage.row.committed_at) await credentials.current(database, stage);
-        const approval = await withCredentialProof(human, () => {
-          if (trustedAccess.passkeys) return trustedAccess.approveCredentialEffect!({ stage: stage.binding, human });
-          const purpose = stage.binding.purpose;
-          if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
-          return trustedAccess.approveCredentialEffect!({ stage: { ...stage.binding, purpose }, human });
-        });
+        const approval = await withCredentialProof(
+          human,
+          () => {
+            if (trustedAccess.passkeys)
+              return trustedAccess.approveCredentialEffect!({ stage: stage.binding, human, deadline });
+            const purpose = stage.binding.purpose;
+            if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+            return trustedAccess.approveCredentialEffect!({ stage: { ...stage.binding, purpose }, human, deadline });
+          },
+          deadline,
+        );
         const expires = Date.parse(approval?.expiresAt);
         const source = proofSources.get(human);
         if (
@@ -1149,6 +1164,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return { reference: approval.reference, expiresAt: approval.expiresAt };
       },
       async applyCredentialEffect(input) {
+        // Direct internal callers also receive one boundary deadline here;
+        // Auth hosts pass the one created when their request arrived.
+        const deadline = input.deadline ?? Date.now() + 3000;
         if (!trustedAccess.revalidateCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
         freshCredentialProof(human, input.subjectAccountId);
@@ -1168,21 +1186,26 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             human,
             authorization,
             replay,
+            deadline,
             ...(consumedOpening ? { consumedOpening } : {}),
             ...(floorReceipt ? { floorReceipt } : {}),
             ...(committedOpeningReceiptId ? { committedOpeningReceiptId } : {}),
           };
-          await withCredentialProof(human, () => {
-            if (trustedAccess.passkeys) return trustedAccess.revalidateCredentialEffect!(validation);
-            const purpose = validation.stage.purpose;
-            if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
-            const { consumedOpening: opening, ...pendingValidation } = validation;
-            return trustedAccess.revalidateCredentialEffect!({
-              ...pendingValidation,
-              stage: { ...validation.stage, purpose },
-              ...(opening ? { consumedOpening: { ...opening, purpose } } : {}),
-            });
-          });
+          await withCredentialProof(
+            human,
+            () => {
+              if (trustedAccess.passkeys) return trustedAccess.revalidateCredentialEffect!(validation);
+              const purpose = validation.stage.purpose;
+              if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+              const { consumedOpening: opening, ...pendingValidation } = validation;
+              return trustedAccess.revalidateCredentialEffect!({
+                ...pendingValidation,
+                stage: { ...validation.stage, purpose },
+                ...(opening ? { consumedOpening: { ...opening, purpose } } : {}),
+              });
+            },
+            deadline,
+          );
         };
         if (stage.row.committed_at) {
           await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
@@ -1196,19 +1219,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           operationKey: stage.binding.operationKey,
           effectReference: stage.binding.effectReference,
           human,
+          deadline,
         };
         const purpose = stage.binding.purpose;
         const receipt = await withCredentialProof<
           EffectAuthorization | CredentialEffectAuthorization<CredentialFloorPurpose>
-        >(human, () => {
-          if (purpose === 'add-passkey' || purpose === 'remove-passkey') {
-            if (subject.automated || human.account_id !== subject.accountId) throw new Denied();
-            if (!trustedAccess.consumePasskeyAuthorization) throw new Denied(503);
-            return trustedAccess.consumePasskeyAuthorization({ ...consumeInput, purpose });
-          }
-          if (!trustedAccess.consumeAuthorization) throw new Denied(503);
-          return trustedAccess.consumeAuthorization({ ...consumeInput, purpose });
-        });
+        >(
+          human,
+          () => {
+            if (purpose === 'add-passkey' || purpose === 'remove-passkey') {
+              if (subject.automated || human.account_id !== subject.accountId) throw new Denied();
+              if (!trustedAccess.consumePasskeyAuthorization) throw new Denied(503);
+              return trustedAccess.consumePasskeyAuthorization({ ...consumeInput, purpose });
+            }
+            if (!trustedAccess.consumeAuthorization) throw new Denied(503);
+            return trustedAccess.consumeAuthorization({ ...consumeInput, purpose });
+          },
+          deadline,
+        );
         const b = stage.binding;
         if (
           !receipt?.receiptId ||
@@ -1281,24 +1309,29 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           let floor: CredentialFloorReceipt | undefined;
           if (destructive) {
             if (!trustedAccess.advanceCredentialFloor) throw new Denied(503);
-            floor = await withCredentialProof(human, () => {
-              const input = {
-                stage: b,
-                consumedOpening: consumed,
-                expectedPreviousFloor: subject.authnEpoch,
-                key: b.operationKey,
-                purpose: b.purpose,
-              };
-              if (trustedAccess.passkeys) return trustedAccess.advanceCredentialFloor!(input);
-              const purpose = b.purpose;
-              if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
-              return trustedAccess.advanceCredentialFloor!({
-                ...input,
-                stage: { ...b, purpose },
-                consumedOpening: { ...consumed, purpose },
-                purpose,
-              });
-            });
+            floor = await withCredentialProof(
+              human,
+              () => {
+                const input = {
+                  stage: b,
+                  consumedOpening: consumed,
+                  expectedPreviousFloor: subject.authnEpoch,
+                  key: b.operationKey,
+                  purpose: b.purpose,
+                  deadline,
+                };
+                if (trustedAccess.passkeys) return trustedAccess.advanceCredentialFloor!(input);
+                const purpose = b.purpose;
+                if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+                return trustedAccess.advanceCredentialFloor!({
+                  ...input,
+                  stage: { ...b, purpose },
+                  consumedOpening: { ...consumed, purpose },
+                  purpose,
+                });
+              },
+              deadline,
+            );
             if (
               !floor?.receiptId ||
               floor.accountId !== b.subjectAccountId ||
@@ -1458,10 +1491,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
     },
     async handler(request) {
+      const url = new URL(request.url);
+      const deadline = Date.now() + 3000;
       try {
         const protocol = await website.handler(request);
         if (protocol) return protocol;
-        const url = new URL(request.url);
         if (url.origin !== options.issuer || url.search) throw new Denied(400);
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
@@ -1869,6 +1903,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             effectRef: stage.binding.effectReference,
             subjectAccountId: human.account_id,
             headers: request.headers,
+            deadline,
           };
           const reference = stage.row.committed_at
             ? stage.row.opening_reference

@@ -186,6 +186,7 @@ test('credential binding and stage commands are typed nonsecret locators', () =>
     key: string;
     subjectAccountId: string;
     headers: Headers;
+    deadline?: number;
   }>();
   expectTypeOf<Parameters<Internal['applyCredentialEffect']>[0]>().toEqualTypeOf<{
     authorization: string;
@@ -193,6 +194,7 @@ test('credential binding and stage commands are typed nonsecret locators', () =>
     key: string;
     subjectAccountId: string;
     headers: Headers;
+    deadline?: number;
   }>();
 });
 

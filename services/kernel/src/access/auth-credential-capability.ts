@@ -12,6 +12,7 @@ import consumedWorkflow from './auth-credential-capability-workflow-read.sql';
 import reservationRead from './operator-reservation.sql';
 import memberRead from './operator-member.sql';
 import { createCredentialFloorHook } from './auth-barriers.ts';
+import { requireAccessDeadline } from './unavailable.ts';
 import type {
   AuthSessionPort,
   CredentialApprovalPorts,
@@ -25,6 +26,7 @@ import type {
   CredentialFloorReceipt,
   TrustedAccessPorts,
 } from '@rezics/auth-contract';
+import { credentialRequestDeadline } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -98,6 +100,13 @@ export type CredentialCapability = Required<
 
 function configured(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid credential capability configuration');
+}
+
+function requestDeadline(deadline: number | undefined): number {
+  if (typeof deadline !== 'number' || !Number.isFinite(deadline))
+    throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+  requireAccessDeadline(deadline);
+  return deadline;
 }
 
 /** Native exact credential capability. Configuration is validated synchronously
@@ -201,6 +210,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     attempt?: CommandAttempt,
     selected?: NativeConsumed,
   ) {
+    const deadline = requestDeadline(input.deadline);
     const { stage: binding, consumedOpening: opening, expectedPreviousFloor: previous } = input;
     allowed(
       opening &&
@@ -343,7 +353,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
       resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
     } else allowed(subject.accountId === human.accountId);
-    const boundary = { pool, deadline: Date.now() + 1000 };
+    const boundary = { pool, deadline };
     const context = attempt ? commandAccessContext(boundary, attempt) : boundary;
     const proof = Object.freeze({}) as CredentialFloorIdentity;
     floorIdentities.set(proof, { actor, account: human, pool });
@@ -354,8 +364,11 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     }
   }
   const advanceCredentialFloor = createCredentialFloorHook({ pool, access, validate: validateNative });
-  async function authenticate(human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human']) {
-    const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline: Date.now() + 3000 });
+  async function authenticate(
+    human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human'],
+    deadline: number,
+  ) {
+    const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline });
     allowed(
       actor.accountId === human.account_id &&
         actor.clientId === human.client_id &&
@@ -366,12 +379,13 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     return actor;
   }
   return {
-    async approveCredentialEffect({ stage: binding, human }) {
-      const actor = await authenticate(human);
+    async approveCredentialEffect({ stage: binding, human, deadline: suppliedDeadline }) {
+      const deadline = requestDeadline(suppliedDeadline ?? credentialRequestDeadline(human));
+      const actor = await authenticate(human, deadline);
       allowed(same(await stage(binding, actor), binding));
       const subject = await readAccount(pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
       allowed(subject && subject.kind === 'actor' && subject.state === 'active' && !subject.fenced);
-      const context = { pool, deadline: Date.now() + 3000 };
+      const context = { pool, deadline };
       let opening: CredentialOpeningLocator;
       let expiresAt: string;
       if (subject.operatorAccountId === null) {
@@ -407,6 +421,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       return { reference: seal(referenceKeys, SCOPE, locator(opening)), expiresAt };
     },
     async revalidateCredentialEffect(input) {
+      const deadline = requestDeadline(input.deadline ?? credentialRequestDeadline(input.human));
       const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
       allowed(same(pick(reference), pick(input.stage)));
       const own = reference.kind === 'workflow-approval';
@@ -414,7 +429,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         reference.kind === 'workflow-approval'
           ? await credentialWorkflowApprovals(workflowApprovals).readConsumedCredential(reference.reference, {
               pool,
-              deadline: Date.now() + 3000,
+              deadline,
             })
           : await consumedOperator.run(pool, {
               route: routeOf(reference.operatorAccountId)!,
@@ -470,9 +485,10 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       }
       // After an own-human barrier Auth's source session is revoked. Only the
       // exact committed native receipt can continue this one in-flight callback.
-      if (!(own && prior)) await authenticate(input.human);
+      if (!(own && prior)) await authenticate(input.human, deadline);
       await validateNative(
         {
+          deadline,
           stage: input.stage,
           consumedOpening: opening,
           expectedPreviousFloor: opening.subjectEpoch,
@@ -498,6 +514,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         !input.effectReference
       )
         throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+      const deadline = requestDeadline(input.deadline ?? credentialRequestDeadline(input.human));
       const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
       allowed(
         reference.subjectAccountId === input.subjectAccountId &&
@@ -505,7 +522,6 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           reference.operationKey === input.operationKey &&
           reference.effectReference === input.effectReference,
       );
-      const deadline = Date.now() + 3000;
       const actor = await access.authenticate(await accessTokenForProof(input.human), { pool, deadline });
       allowed(
         actor.accountId === input.human.account_id &&
