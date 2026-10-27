@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { newId } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
@@ -107,9 +108,10 @@ test('sealed subject identity is actor-neutral bounded source-home metadata for 
   const privateAccess = f.real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
   await f.real.grant(resource(root), 'reader', 'subject:read');
   async function allowed(id: string) {
+    const actor = await privateAccess.authenticate(f.real.bearer('reader'), { pool: db.pool, deadline: deadline() });
     const check = await accessCheck(
       privateAccess,
-      f.reader,
+      actor,
       'subject:read',
       {
         ...resource(id),
@@ -228,9 +230,16 @@ test('sealed subject identity discovers all two hundred fifty seven stored origi
           deadline(),
         ),
       ).toBe(true);
-      await withRequestDeadline(deadline(), () =>
-        commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
-      );
+      const key = randomUUID();
+      for (let attempt = 0; ; attempt++) {
+        const actor = await f.access.authenticate(f.real.bearer('editor'), { pool: db.pool, deadline: deadline() });
+        try {
+          await withRequestDeadline(deadline(), () => commands.addMember(actor, collection.id, { subjectId: id }, key));
+          break;
+        } catch (error) {
+          if (!(error instanceof AccessUnavailableError) || error.reason !== 'deadline' || attempt === 2) throw error;
+        }
+      }
     },
   });
   await f.baseline(last);

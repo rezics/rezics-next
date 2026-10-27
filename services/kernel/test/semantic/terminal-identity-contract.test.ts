@@ -100,6 +100,7 @@ test('terminal anchors use released same-client RR Access and native preparation
   });
   const single = db.openPool({ max: 1 });
   try {
+    const singleReader = await access.authenticate(f.real.bearer('reader'), { pool: single, deadline: deadline() });
     const authorization = await f.authorization('subject:merge');
     let nativeT: AuthoritativeTime | undefined;
     await runCommand(
@@ -117,6 +118,7 @@ test('terminal anchors use released same-client RR Access and native preparation
               read(single, source, {
                 ...readOptions(f),
                 access,
+                actor: singleReader,
                 nativeT: attempt.time,
               }),
             );
@@ -136,7 +138,11 @@ test('terminal anchors use released same-client RR Access and native preparation
 
   // An installed native authenticated-only catalogue proves original and terminal grants independently.
   const privateAccess = f.real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
-  const options = { ...readOptions(f), access: privateAccess };
+  const privateReader = await privateAccess.authenticate(f.real.bearer('reader'), {
+    pool: db.pool,
+    deadline: deadline(),
+  });
+  const options = { ...readOptions(f), access: privateAccess, actor: privateReader };
   await f.real.grant(resource(source), 'reader', 'subject:read');
   expect(await read(db.pool, source, options)).toBeNull();
   await f.real.grant(resource(root), 'reader', 'subject:read');

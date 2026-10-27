@@ -119,10 +119,12 @@ export async function identityFixture(pool: Pool, admin: Pool) {
   for (const action of ['subject:create', 'subject:merge', 'moderation:hide', 'moderation:takedown'])
     await real.grant(globalResource, 'editor', action);
   await bootstrapRelease(pool, bundledRelease);
-  const editor = await access.authenticate(real.bearer('editor'), { pool, deadline: deadline() });
-  const reader = await access.authenticate(real.bearer('reader'), { pool, deadline: deadline() });
-  const other = await access.authenticate(real.bearer('other'), { pool, deadline: deadline() });
+  let editor = await access.authenticate(real.bearer('editor'), { pool, deadline: deadline() });
+  let reader = await access.authenticate(real.bearer('reader'), { pool, deadline: deadline() });
+  let other = await access.authenticate(real.bearer('other'), { pool, deadline: deadline() });
   async function authorization(action: string) {
+    // Each setup command is a new native request, not a renewal of an expired request identity.
+    editor = await access.authenticate(real.bearer('editor'), { pool, deadline: deadline() });
     return accessCommandAuthorization(
       access,
       editor,
@@ -181,6 +183,16 @@ export async function identityFixture(pool: Pool, admin: Pool) {
     throw new Error('Native alias maintenance did not finish');
   }
   async function baseline(id: string, actor: Actor = reader) {
+    if (actor.kind === 'account') {
+      const accountId = actor.accountId;
+      const persona = (['editor', 'reader', 'other'] as const).find((name) => accounts[name] === accountId);
+      if (persona) {
+        actor = await access.authenticate(real.bearer(persona), { pool, deadline: deadline() });
+        if (persona === 'editor') editor = actor;
+        else if (persona === 'other') other = actor;
+        else reader = actor;
+      }
+    }
     const target = resource(id);
     const check = await accessCheck(
       access,
@@ -228,9 +240,15 @@ export async function identityFixture(pool: Pool, admin: Pool) {
     accounts,
     real,
     access,
-    editor,
-    reader,
-    other,
+    get editor() {
+      return editor;
+    },
+    get reader() {
+      return reader;
+    },
+    get other() {
+      return other;
+    },
     create,
     merge,
     hide,

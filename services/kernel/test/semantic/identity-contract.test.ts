@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 import { randomUUID } from 'node:crypto';
 import { newId } from '../../src/route/route.ts';
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -89,17 +90,23 @@ test('resumable alias groups find the last readable member beyond two hundred fi
         deadline(),
       ),
     ).toBe(true);
-    // This baseline uses the existing full resolver; give its cold rendering a real request budget.
-    await withRequestDeadline(deadline(), () =>
-      commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
-    );
+    // Cold rendering can exhaust short-lived Access evidence. Retry as a new real request, preserving receipts.
+    async function add(collectionId: string) {
+      const key = randomUUID();
+      for (let attempt = 0; ; attempt++) {
+        const actor = await f.access.authenticate(f.real.bearer('editor'), { pool: db.pool, deadline: deadline() });
+        try {
+          await withRequestDeadline(deadline(), () => commands.addMember(actor, collectionId, { subjectId: id }, key));
+          return;
+        } catch (error) {
+          if (!(error instanceof AccessUnavailableError) || error.reason !== 'deadline' || attempt === 2) throw error;
+        }
+      }
+    }
+    await add(collection.id);
     if (storedCount++ === 0) {
-      await withRequestDeadline(deadline(), () =>
-        commands.addMember(f.editor, collection.id, { subjectId: id }, randomUUID()),
-      );
-      await withRequestDeadline(deadline(), () =>
-        commands.addMember(f.editor, overlap.id, { subjectId: id }, randomUUID()),
-      );
+      await add(collection.id);
+      await add(overlap.id);
     }
   }
   const { root, originals, last } = await f.aliases(257, { stored });
@@ -286,15 +293,21 @@ test('alias raw keys confer no subject or source authority and malformed allocat
   const window = await groupStep(group, root, basis, null, 100);
   expect(window.originals).toContain(last);
   const privateAccess = f.real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
+  const privateReader = await privateAccess.authenticate(f.real.bearer('reader'), {
+    pool: db.pool,
+    deadline: deadline(),
+  });
   await f.real.grant(resource(root), 'reader', 'subject:read');
-  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess })).toBeNull();
+  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess, actor: privateReader })).toBeNull();
   await f.real.grant(resource(last), 'reader', 'subject:read');
-  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess })).toMatchObject({
+  expect(
+    await terminal(db.pool, last, { ...readOptions(f), access: privateAccess, actor: privateReader }),
+  ).toMatchObject({
     state: 'ready',
     id: root,
   });
   await f.real.revoke(resource(root), 'reader', 'subject:read');
-  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess })).toBeNull();
+  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess, actor: privateReader })).toBeNull();
 
   const commands = createCollectionCommands({ pool: db.pool, access: f.access });
   const source = (
@@ -322,7 +335,7 @@ test('alias raw keys confer no subject or source authority and malformed allocat
   expect(await sourceAllowed()).toBe(false);
   // A successful earlier group read cannot bypass either current denial.
   expect(window.originals).toContain(last);
-  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess })).toBeNull();
+  expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess, actor: privateReader })).toBeNull();
 });
 
 test('an explicitly larger native survivor repoints inherited alias groups without a lexical-order assumption', async () => {
