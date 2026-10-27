@@ -26,7 +26,7 @@ const admit = defineQuery<
   cardinality: admissionStatement.cardinality,
 });
 
-/** Internal primitive: one route, one native statement, at most 1000 deletions.
+/** Internal primitive: one route, one native statement, at most 1000 counter and chunk ledger deletions combined.
  * Only the registered effect below admits maintenance against local ownership.
  */
 export async function expireWriteRateCounters(client: AccessClient, route: number): Promise<number> {

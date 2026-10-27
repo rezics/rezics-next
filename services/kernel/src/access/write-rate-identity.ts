@@ -1,3 +1,4 @@
+import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { createHmac } from 'node:crypto';
@@ -44,6 +45,24 @@ export function bindAccountRateIdentity(
       rateClass,
     }),
   );
+}
+
+// A restore's account facts are held privately until its final formula permits.
+const pendingDurable = new WeakMap<AccountActor, Parameters<typeof bindAccountRateIdentity>>();
+export function stageDurableRateIdentity(
+  actor: AccountActor,
+  context: WriteRateContext,
+  facts: Parameters<typeof bindAccountRateIdentity>[2],
+  time: AuthoritativeTime,
+): void {
+  const at = new Date(authoritativeTimeValue(time));
+  pendingDurable.set(actor, [actor, context, facts, Infinity, () => at]);
+}
+
+export function finishDurableRateIdentity(actor: AccountActor, allowed: boolean): void {
+  const pending = pendingDurable.get(actor);
+  pendingDurable.delete(actor);
+  if (allowed && pending) bindAccountRateIdentity(...pending);
 }
 
 /** Canonical socket/proxy attribution. IPv6 interface identifiers share a /64. */

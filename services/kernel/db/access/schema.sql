@@ -1075,6 +1075,23 @@ CREATE TABLE access.workflow_approval (
 
 
 --
+-- Name: write_rate_chunk; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE UNLOGGED TABLE access.write_rate_chunk (
+    route integer NOT NULL,
+    identity_digest text NOT NULL,
+    operation_id uuid NOT NULL,
+    chunk_index bigint NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT write_rate_chunk_chunk_index_check CHECK (((chunk_index >= 0) AND (chunk_index <= '9007199254740991'::bigint))),
+    CONSTRAINT write_rate_chunk_expires_at_check CHECK (isfinite(expires_at)),
+    CONSTRAINT write_rate_chunk_identity_digest_check CHECK ((identity_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT write_rate_chunk_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: write_rate_counter; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1349,6 +1366,14 @@ ALTER TABLE ONLY access.workflow_approval
 
 
 --
+-- Name: write_rate_chunk write_rate_chunk_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.write_rate_chunk
+    ADD CONSTRAINT write_rate_chunk_pkey PRIMARY KEY (route, identity_digest, operation_id, chunk_index);
+
+
+--
 -- Name: write_rate_counter write_rate_counter_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1466,6 +1491,13 @@ CREATE UNIQUE INDEX resource_role_grant_open ON access.resource_role_grant USING
 --
 
 CREATE INDEX workflow_approval_expiry ON access.workflow_approval USING btree (route, expires_at, approval_id);
+
+
+--
+-- Name: write_rate_chunk_expiry; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX write_rate_chunk_expiry ON access.write_rate_chunk USING btree (route, expires_at, identity_digest, operation_id, chunk_index);
 
 
 --

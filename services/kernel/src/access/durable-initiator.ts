@@ -1,3 +1,4 @@
+import { finishDurableRateIdentity } from './write-rate-identity.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
@@ -239,9 +240,13 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
               throw new DurableInitiatorUnavailableError();
           }),
         );
+        finishDurableRateIdentity(actor, true);
         return actor;
       } catch (error) {
-        if (actor) discardDurableIdentity(config.access, actor);
+        if (actor) {
+          finishDurableRateIdentity(actor, false);
+          discardDurableIdentity(config.access, actor);
+        }
         throwAccessUnavailable(error);
         throwEvidenceFailure(error);
         throw new DurableInitiatorUnavailableError();

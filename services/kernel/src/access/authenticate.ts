@@ -15,7 +15,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAssignment } from './delegation-commands.ts';
-import { bindAccountRateIdentity } from './write-rate-identity.ts';
+import { bindAccountRateIdentity, stageDurableRateIdentity } from './write-rate-identity.ts';
 
 export type AuthenticationConfig = {
   issuer: string;
@@ -280,7 +280,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         durableTime: time,
         durableAction: facts.action,
       });
-      bindAccountRateIdentity(actor, { ...context, actor }, account, Infinity, clock);
+      stageDurableRateIdentity(actor, { pool: context.pool, actor, deadline }, account, time);
       return actor;
     },
     discardDurable(actor: AccountActor): void {
