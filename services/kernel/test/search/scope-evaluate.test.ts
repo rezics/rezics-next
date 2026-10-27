@@ -340,9 +340,9 @@ test('overflow absence stays unknown through NOT while decisive true OR and fals
     [within({ not: relation([omitted]) }), false],
     [within(unknown), 'not_proven'],
     [within({ not: unknown }), 'not_proven'],
-    [within({ not: { not: unknown } }), 'not_proven'],
+    [within({ not: { and: [{ not: unknown }] } }), 'not_proven'],
     [{ or: [books, within(unknown)] }, true],
-    [{ and: [people, within(unknown)] }, false],
+    [within({ and: [{ not: books }, unknown] }), false],
     [within({ not: { or: [unknown, relation([omitted])] } }), false],
   ];
   for (const [filter, expected] of cases) expect((await evaluate(filter, [id])).results).toEqual([expected]);
