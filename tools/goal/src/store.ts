@@ -245,7 +245,9 @@ export class WorkerStore implements AttemptFence {
   cancelStopped(ref: AttemptRef): void {
     this.db.transaction(() => {
       const task = this.task(ref.taskId), attempt = this.attempt(ref);
-      if (task.currentAttempt !== ref.attempt || task.state !== 'stopped' || attempt.state !== 'stopped')
+      // A held or released task whose current attempt has stopped has no worker either.
+      if (task.currentAttempt !== ref.attempt || !['stopped', 'held', 'ready'].includes(task.state)
+        || !['stopped', 'exited'].includes(attempt.state))
         throw new Error('only a stopped current task can be cancelled');
       task.state = 'cancelled'; this.saveTask(task);
     }).immediate();
