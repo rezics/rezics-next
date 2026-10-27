@@ -110,9 +110,24 @@ export const ZonePageRequestSchema = t.Object(
 /** The existing common page response with a top-level public Zone shell. */
 export const ZonePageResponseSchema = extendPageResponseSchema({ zone: ZonePublicSchema });
 
-// Composition documents retain their shared TypeScript type. Their registry-specific validation remains
-// validateZoneStarter's responsibility when resource commands are added.
-const compositionDocumentSchema = t.Unsafe<CompositionDocument>(t.Any());
+// Keep the shared CompositionDocument envelope while leaving registry-specific validation to
+// validateZoneStarter when resource commands are added.
+const compositionNodeSchema = t.Object(
+  {
+    type: t.String(),
+    props: t.Object({ id: t.String() }, { additionalProperties: t.Any() }),
+  },
+  closed,
+);
+const compositionDocumentSchema = t.Unsafe<CompositionDocument>(
+  t.Object(
+    {
+      root: t.Object({ props: t.Record(t.String(), t.Any()) }, closed),
+      content: t.Array(compositionNodeSchema),
+    },
+    closed,
+  ),
+);
 const zoneStarterSchema = t.Object(
   {
     labels: configurationLabelsSchema,
