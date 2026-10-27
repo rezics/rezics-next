@@ -58,34 +58,23 @@ export async function membershipFixture() {
     'copy:create',
     'access:grant',
   ];
-  const token = await new SignJWT({
-    client_id: 'web',
-    scope: scopes.join(' '),
-    authn_epoch: 1,
-    auth_time: Math.floor(Date.now() / 1000),
-    amr: ['pwd'],
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
-    .setIssuer('https://auth.zones.test')
-    .setAudience('https://api.rezics.test')
-    .setSubject(owner)
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .sign(signing.privateKey);
-  const viewerToken = await new SignJWT({
-    client_id: 'web',
-    scope: scopes.join(' '),
-    authn_epoch: 1,
-    auth_time: Math.floor(Date.now() / 1000),
-    amr: ['pwd'],
-  })
-    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
-    .setIssuer('https://auth.zones.test')
-    .setAudience('https://api.rezics.test')
-    .setSubject(viewer)
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .sign(signing.privateKey);
+  async function bearer(accountId: string) {
+    const issuedAt = Math.floor(Date.now() / 1000);
+    return new SignJWT({
+      client_id: 'web',
+      scope: scopes.join(' '),
+      authn_epoch: 1,
+      auth_time: issuedAt,
+      amr: ['pwd'],
+    })
+      .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
+      .setIssuer('https://auth.zones.test')
+      .setAudience('https://api.rezics.test')
+      .setSubject(accountId)
+      .setIssuedAt(issuedAt)
+      .setExpirationTime(issuedAt + 300)
+      .sign(signing.privateKey);
+  }
   const app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(83),
@@ -111,7 +100,10 @@ export async function membershipFixture() {
       new Request(`https://kernel.test${path}`, {
         method,
         headers: {
-          ...(publicRead === true ? {} : { authorization: `Bearer ${publicRead === 'viewer' ? viewerToken : token}` }),
+          // Refresh legal five-minute credentials for long native growth setup and repetitions.
+          ...(publicRead === true
+            ? {}
+            : { authorization: `Bearer ${await bearer(publicRead === 'viewer' ? viewer : owner)}` }),
           ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
