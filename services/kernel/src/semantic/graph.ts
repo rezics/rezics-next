@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
+import type { Release } from '@rezics/definitions';
 import type { KeyRing } from '../tokens/seal.ts';
 import { encodeCursor } from '../tokens/cursor.ts';
-import type { Item } from './item.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withReadTransaction } from './read.ts';
@@ -10,19 +10,19 @@ import { SubjectRedirectError, redirectOf } from './merges.ts';
 import readVisibility from './read-visibility.sql';
 import readGraphExpansions from './read-graph-expansions.sql';
 import readTypes from './read-item-types.sql';
-import readLabelChoices from './read-label-choices.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
-import { slotId } from './slots.ts';
-import { chooseLabel } from './language.ts';
+import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const EDGE_LIMIT = 500;
+const SUMMARY_CHUNK_SIZE = 256;
+// The anchor and at most one new node per emitted edge: ceil(501 / 256) = 2 chunks for the whole graph.
+const MAX_SUMMARY_CHUNKS = Math.ceil((EDGE_LIMIT + 1) / SUMMARY_CHUNK_SIZE);
 
 export type GraphDirection = 'out' | 'in' | 'both';
 type EdgeDirection = Exclude<GraphDirection, 'both'>;
 
 type Expansion = { node: string; property: string; direction: EdgeDirection };
-type GraphNode = { id: string; type: string; label: string };
+type GraphNode = { id: string; type: string; label: string; summary: SubjectSummary };
 type GraphEdge = { from: string; property: string; to: string; statement: string };
 type TruncatedExpansion = {
   node: string;
@@ -54,9 +54,6 @@ type ExpansionRow = {
   epoch: number;
 };
 
-type LabelChoice = { labels: Item['labels']; original: string | null };
-type NodeDetails = { type: string; labels: Item['labels']; original: string | null };
-
 function groupsOf(ids: readonly string[]): Map<number, string[]> {
   const groups = new Map<number, string[]>();
   for (const id of new Set(ids)) {
@@ -70,31 +67,17 @@ function groupsOf(ids: readonly string[]): Map<number, string[]> {
   return groups;
 }
 
-async function detailsFor(client: PoolClient, ids: readonly string[]): Promise<Map<string, NodeDetails>> {
-  const details = new Map<string, NodeDetails>();
+async function visibleIdsFor(client: PoolClient, ids: readonly string[]): Promise<string[]> {
+  const visible: string[] = [];
   for (const [partition, subjects] of groupsOf(ids)) {
     const rows = (await readTypes.run(client, {
       partition_no: partition,
       routes: subjects.map((id) => routeOf(id)!),
       subject_ids: subjects,
     })) as { id: string; type: string }[];
-    const choices = (await readLabelChoices.run(client, {
-      partition_no: partition,
-      context_id: GLOBAL_CONTEXT,
-      subjects: subjects.map((id) => ({ route: routeOf(id)!, id, original: slotId(id, 'schema:inLanguage') })),
-    })) as { id: string; labels: Item['labels']; original: string | null }[];
-    const labels = new Map<string, LabelChoice>();
-    for (const row of choices) labels.set(row.id, { labels: row.labels ?? {}, original: row.original });
-    for (const row of rows) {
-      const choice = labels.get(row.id);
-      details.set(row.id, {
-        type: row.type,
-        labels: choice?.labels ?? {},
-        original: choice?.original ?? null,
-      });
-    }
+    for (const row of rows) visible.push(row.id);
   }
-  return details;
+  return visible;
 }
 
 function directionsOf(direction: GraphDirection): EdgeDirection[] {
@@ -205,6 +188,8 @@ export async function listSubjectGraph(
     depth: 1 | 2;
     limit: number;
     languages: readonly string[];
+    release: Release;
+    authorizeSummary: SummaryDependencies['authorize'];
     authorize: (client: PoolClient) => Promise<boolean>;
   },
 ): Promise<SubjectGraph> {
@@ -227,7 +212,6 @@ export async function listSubjectGraph(
     // Ordered graph pages must stop in the index; a bitmap plan reads every edge in a hub before applying LIMIT.
     await client.query('SET LOCAL enable_bitmapscan = off');
 
-    const nodeDetails = await detailsFor(client, [options.subject]);
     const visibleNodes = new Set([options.subject]);
     let frontier = [options.subject];
     const edges: GraphEdge[] = [];
@@ -276,35 +260,56 @@ export async function listSubjectGraph(
       }
 
       const previouslyVisible = new Set(visibleNodes);
-      const details = await detailsFor(
+      const visible = await visibleIdsFor(
         client,
-        [...discovered].filter((id) => !nodeDetails.has(id)),
+        [...discovered].filter((id) => !visibleNodes.has(id)),
       );
-      for (const [id, detail] of details) {
-        nodeDetails.set(id, detail);
-        visibleNodes.add(id);
-      }
+      for (const id of visible) visibleNodes.add(id);
       frontier = [...discovered].filter((id) => visibleNodes.has(id) && !previouslyVisible.has(id));
     }
 
-    const nodes = [...visibleNodes].flatMap((id) => {
-      const detail = nodeDetails.get(id);
-      if (!detail) return [];
-      return [
-        {
-          id,
-          type: detail.type,
-          label: chooseLabel(detail.labels, options.languages, detail.original)?.value ?? '',
-        },
-      ];
-    });
-    const visibleEdges = edges.filter((edge) => visibleNodes.has(edge.from) && visibleNodes.has(edge.to));
     return {
-      nodes,
-      edges: visibleEdges.slice(0, EDGE_LIMIT),
+      ids: [...visibleNodes],
+      edges,
       truncated,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
   });
-  return graph;
+  // Access evidence preparation uses the pool before its checks run; release the traversal connection first.
+  const summaries = new Map<string, SubjectSummary | null>();
+  for (let chunk = 0; chunk < MAX_SUMMARY_CHUNKS; chunk++) {
+    const batch = graph.ids.slice(chunk * SUMMARY_CHUNK_SIZE, (chunk + 1) * SUMMARY_CHUNK_SIZE);
+    if (!batch.length) break;
+    const filled = await readSubjectSummaries(
+      { client: { query: pool.query.bind(pool) }, pool, release: options.release, authorize: options.authorizeSummary },
+      batch,
+      { languages: options.languages },
+    );
+    for (const [id, summary] of filled) summaries.set(id, summary);
+  }
+  const disclosedEdges = graph.edges.filter((edge) => summaries.get(edge.from) && summaries.get(edge.to));
+  const neighbours = new Map<string, string[]>();
+  for (const edge of disclosedEdges) {
+    for (const [from, to] of [
+      [edge.from, edge.to],
+      [edge.to, edge.from],
+    ] as const) {
+      const group = neighbours.get(from) ?? [];
+      group.push(to);
+      neighbours.set(from, group);
+    }
+  }
+  // Removing an unreadable bridge must also remove nodes that no longer connect to the anchor.
+  const connected = new Set<string>(summaries.get(options.subject) ? [options.subject] : []);
+  for (const id of connected) for (const neighbour of neighbours.get(id) ?? []) connected.add(neighbour);
+  const nodes = graph.ids.flatMap((id) => {
+    const summary = summaries.get(id);
+    return summary && connected.has(id) ? [{ id, type: summary.type, label: summary.label?.value ?? '', summary }] : [];
+  });
+  return {
+    nodes,
+    edges: disclosedEdges.filter((edge) => connected.has(edge.from) && connected.has(edge.to)).slice(0, EDGE_LIMIT),
+    truncated: graph.truncated.filter((entry) => connected.has(entry.node)),
+    component: graph.component,
+  };
 }

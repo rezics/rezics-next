@@ -243,7 +243,19 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     language: 'ja, en;q=0.5',
   });
   expect(works.response.status).toBe(200);
-  expect(works.body.nodes[0]).toEqual({ id: workA.id, type: 'ex:Work', label: '日本語 Work A' });
+  expect(works.body.nodes[0]).toEqual({
+    id: workA.id,
+    type: 'ex:Work',
+    label: '日本語 Work A',
+    summary: {
+      id: workA.id,
+      type: 'ex:Work',
+      types: ['ex:Work'],
+      label: { value: '日本語 Work A', language: 'ja' },
+      creativeWork: false,
+      cover: null,
+    },
+  });
   expect(works.body.nodes.map((node: { id: string }) => node.id)).toEqual(
     expect.arrayContaining([workA.id, workB.id, workC.id, workD.id, workE.id]),
   );
@@ -398,6 +410,8 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
         depth: 2,
         limit: 12,
         languages: ['en'],
+        release,
+        authorizeSummary: async () => true,
         authorize: async () => true,
       });
       expect(graph.edges).toHaveLength(12);
@@ -409,7 +423,19 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
           count: expect.any(Number),
         }),
       ]);
-      expect(graph.nodes).toContainEqual({ id: growthTarget, type: 'ex:Work', label: 'Growth target' });
+      expect(graph.nodes).toContainEqual({
+        id: growthTarget,
+        type: 'ex:Work',
+        label: 'Growth target',
+        summary: {
+          id: growthTarget,
+          type: 'ex:Work',
+          types: ['ex:Work'],
+          label: { value: 'Growth target', language: 'en' },
+          creativeWork: false,
+          cover: null,
+        },
+      });
       expect(partitionOf(targetRoute)).toBe(partitionOf(anchorRoute));
     },
   });

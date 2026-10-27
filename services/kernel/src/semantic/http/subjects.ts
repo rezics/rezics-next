@@ -187,7 +187,7 @@ const graphResponse = t.Object(
   {
     nodes: t.Array(
       t.Object(
-        { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String() },
+        { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String(), summary: SubjectSummarySchema },
         { additionalProperties: false },
       ),
     ),
@@ -1605,7 +1605,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null)
           throw new ProblemError('invalid_request', { errors: [{ pointer: '/id', code: 'invalid_format' }] });
@@ -1624,17 +1624,31 @@ function subjectRoutes(
         const seen = [...session.components];
         await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const summaryChecks = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listSubjectGraph(pool, tokens, {
-              subject: params.id,
-              properties,
-              direction: query.direction,
-              depth: query.depth as 1 | 2,
-              limit: query.limit ?? 12,
-              languages: languageRanges(request.headers.get('accept-language')),
-              authorize: check,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectGraph(pool, tokens, {
+                subject: params.id,
+                properties,
+                direction: query.direction,
+                depth: query.depth as 1 | 2,
+                limit: query.limit ?? 12,
+                languages: languageRanges(request.headers.get('accept-language')),
+                release: active.release,
+                async authorizeSummary(client, id, batch) {
+                  const route = routeOf(id);
+                  if (route === null) return false;
+                  let pending = summaryChecks.get(id);
+                  if (!pending) {
+                    pending = authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                    summaryChecks.set(id, pending);
+                  }
+                  return (await pending)(client);
+                },
+                authorize: check,
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
