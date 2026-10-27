@@ -291,7 +291,9 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
   }
   return (
     <li className="relative flex items-start gap-4 py-5 sm:gap-5">
-      <SubjectCover subject={session.subject} ratio={ratio} size="sm" className="!w-12 sm:!w-24" />
+      <div className="w-12 shrink-0 sm:w-24">
+        <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
+      </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div>
           <Link

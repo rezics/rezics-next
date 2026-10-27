@@ -265,7 +265,9 @@ function SessionEditor({
       <header className="space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <div className="flex items-start gap-5 sm:gap-7">
-          <SubjectCover subject={session.subject} ratio={ratio} size="md" className="!w-24 sm:!w-40" priority />
+          <div className="w-24 shrink-0 sm:w-40">
+            <SubjectCover subject={session.subject} ratio={ratio} size="fill" priority />
+          </div>
           <div className="min-w-0 flex-1 space-y-4">
             <div className="space-y-1">
               <p className="work-title text-2xl font-medium sm:text-3xl">
