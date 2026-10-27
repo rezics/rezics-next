@@ -102,10 +102,12 @@ export function controlSocketDirectoryPath(runtimeDirectory: string | undefined,
 }
 
 function controlSocketDirectory(): string {
-  const directory = controlSocketDirectoryPath(process.env.XDG_RUNTIME_DIR, process.getuid());
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('remote-check: a POSIX user id is required');
+  const directory = controlSocketDirectoryPath(process.env.XDG_RUNTIME_DIR, uid);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const info = lstatSync(directory);
-  if (!info.isDirectory() || info.uid !== process.getuid()) {
+  if (!info.isDirectory() || info.uid !== uid) {
     throw new Error(`remote-check: SSH control directory is not a user-owned directory: ${directory}`);
   }
   if ((info.mode & 0o777) !== 0o700) chmodSync(directory, 0o700);

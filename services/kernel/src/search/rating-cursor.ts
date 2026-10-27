@@ -11,6 +11,8 @@ export type RatingCursorResult =
 
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const PREFIX = 'rating-v1';
+// Native name_sort uses null for names beyond this UTF-16 bound; preserve that missing-last position.
+const MAX_NAME_LENGTH = 512;
 // The shared token decoder caps the entire encoded token at this length.
 const MAX_TOKEN_LENGTH = 4_096;
 
@@ -39,9 +41,7 @@ function validPosition(epoch: number | null, phase: unknown, after: unknown): af
     [name, id] = after;
   } else return false;
   return (
-    typeof name === 'string' &&
-    name.length <= MAX_TOKEN_LENGTH &&
-    name.isWellFormed() &&
+    (name === null || (typeof name === 'string' && name.length <= MAX_NAME_LENGTH && name.isWellFormed())) &&
     typeof id === 'string' &&
     id.length === 36 &&
     routeOf(id) !== null

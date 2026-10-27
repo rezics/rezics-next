@@ -36,7 +36,7 @@ test('rating metadata rejects malformed Global literals and private populations 
 test('each signed metadata field requires its exact primitive type before eligibility comparison', () => {
   const valid: SearchSortValue[] = ['rating-v1', context.questionId, context.populationId, 1, 'scored', 0, 'A', id];
   for (const index of [0, 1, 2, 4, 6, 7]) {
-    for (const value of [null, 0]) {
+    for (const value of index === 6 ? [0] : [null, 0]) {
       const changed = [...valid];
       changed[index] = value;
       expect(decodeRatingCursor(ring, binding, { ...context, priorEpoch: 2 }, wire(changed), 1001)).toEqual(invalid);
