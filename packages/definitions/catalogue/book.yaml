@@ -33,6 +33,7 @@ classes:
       - partOfSeries
     annotations:
       facets: author genre keywords partOfSeries datePublished contributor inLanguage
+      schema_org_type: https://schema.org/Book
   Edition:
     is_a: CreativeWork
     class_uri: bf:Instance
@@ -60,6 +61,7 @@ classes:
       - translator
     annotations:
       facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage illustrator director musicBy producer productionCompany screenwriter developer voiceActor
+      schema_org_type: https://schema.org/Book
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork

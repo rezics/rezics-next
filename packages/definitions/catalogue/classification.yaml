@@ -22,10 +22,14 @@ classes:
       - inScheme
       - broader
       - focus
+    annotations:
+      schema_org_type: https://schema.org/DefinedTerm
   ConceptScheme:
     is_a: Thing
     class_uri: skos:ConceptScheme
     description: A scheme of concepts, created and adopted like any other subject.
+    annotations:
+      schema_org_type: https://schema.org/DefinedTermSet
 slots:
   inScheme:
     slot_uri: skos:inScheme

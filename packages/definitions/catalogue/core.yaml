@@ -61,6 +61,7 @@ classes:
       (https://www.wikidata.org/wiki/Q2620972).
     annotations:
       facets: contributor genre keywords partOfSeries
+      schema_org_type: https://schema.org/CreativeWork
   Character:
     abstract: true
     is_a: Thing
@@ -89,6 +90,7 @@ classes:
       - vndbId
     annotations:
       cover_ratio: 3:4
+      schema_org_type: https://schema.org/Person
   Organization:
     is_a: Thing
     slots:
@@ -98,10 +100,14 @@ classes:
     description: An organization.
     exact_mappings:
       - wd:Q43229
+    annotations:
+      schema_org_type: https://schema.org/Organization
   Food:
     is_a: Thing
     class_uri: wd:Q2095
     description: A substance consumed to provide nutritional support for the body.
+    annotations:
+      schema_org_type: https://schema.org/Thing
   SoftwareApplication:
     is_a: Thing
     class_uri: schema:SoftwareApplication
@@ -110,6 +116,7 @@ classes:
       - wd:Q166142
     annotations:
       cover_ratio: 1:1
+      schema_org_type: https://schema.org/SoftwareApplication
 slots:
   madeFromMaterial:
     slot_uri: wdt:P186

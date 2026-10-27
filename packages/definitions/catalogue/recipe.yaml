@@ -32,6 +32,7 @@ classes:
     annotations:
       facets: author keywords datePublished cookTime recipeYield
       cover_ratio: 4:3
+      schema_org_type: https://schema.org/Recipe
 slots:
   recipeInstructions:
     slot_uri: schema:recipeInstructions

@@ -29,3 +29,4 @@ classes:
     annotations:
       facets: contributor partOfSeries genre keywords inLanguage
       cover_ratio: 1:1
+      schema_org_type: https://schema.org/MusicAlbum

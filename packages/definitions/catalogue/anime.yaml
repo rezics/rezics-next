@@ -51,6 +51,7 @@ classes:
       - workFormat
     annotations:
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
+      schema_org_type: https://schema.org/TVSeries
   Movie:
     is_a: LaunchWork
     class_uri: schema:Movie
@@ -84,6 +85,7 @@ classes:
       - workFormat
     annotations:
       facets: workFormat genre keywords datePublished author illustrator director musicBy producer productionCompany screenwriter developer voiceActor contributor character partOfSeries
+      schema_org_type: https://schema.org/Movie
   TVSeason:
     is_a: LaunchWork
     class_uri: schema:TVSeason
@@ -117,6 +119,7 @@ classes:
       - workFormat
     annotations:
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
+      schema_org_type: https://schema.org/TVSeason
   Episode:
     is_a: LaunchWork
     class_uri: schema:Episode
@@ -147,6 +150,7 @@ classes:
       - keywords
     annotations:
       facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage author illustrator screenwriter producer
+      schema_org_type: https://schema.org/Episode
 slots:
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes

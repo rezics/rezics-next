@@ -25,13 +25,16 @@ async function fixture(schemaType?: unknown) {
 }
 const metadata = (release: Release) => release.types['ex:Work'] as unknown as { schemaOrgType?: unknown };
 
-test('an explicit schema.org type is portable release metadata', async () => {
+test('a fixture profile changes its JSON-LD type through configuration alone', async () => {
+  const jsonLdTypes: string[] = [];
   for (const type of ['CreativeWork', 'Book', '3DModel']) {
     const iri = `https://schema.org/${type}`;
     const release = await fixture(iri);
     expect(metadata(release).schemaOrgType).toBe(iri);
     expect(validateRelease(release)).toEqual([]);
+    jsonLdTypes.push((metadata(release).schemaOrgType as string).slice('https://schema.org/'.length));
   }
+  expect(jsonLdTypes).toEqual(['CreativeWork', 'Book', '3DModel']);
 });
 
 test('missing legacy metadata stays valid and unsafe type IRIs are rejected', async () => {

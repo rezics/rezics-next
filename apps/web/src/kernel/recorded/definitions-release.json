@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:3bd4d98802586cb478194f8fd6bf6ed0d5d0f209a57db8743b63d4b9ed599fa3",
+  "digest": "sha256:62ffcac2e2acd972d9c96e71fbad6621aabf50ca71bbaeb78983c94a4ce2cdd5",
   "release": {
     "types": {
       "wd:Q95074": {
@@ -48,7 +48,8 @@
           "ko": "허구의 캐릭터",
           "zh-Hans": "虚构角色",
           "zh-Hant": "虛構角色"
-        }
+        },
+        "schemaOrgType": "https://schema.org/Thing"
       },
       "wd:Q209163": {
         "iri": "http://www.wikidata.org/entity/Q209163",
@@ -141,7 +142,8 @@
           "ko": "확장팩",
           "zh-Hans": "资料片",
           "zh-Hant": "資料片"
-        }
+        },
+        "schemaOrgType": "https://schema.org/CreativeWork"
       },
       "wd:Q689445": {
         "iri": "http://www.wikidata.org/entity/Q689445",
@@ -213,7 +215,8 @@
           "wdt:P3180",
           "wdt:P361",
           "wdt:P725"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/VideoGame"
       },
       "bf:Instance": {
         "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
@@ -297,7 +300,8 @@
           "es": "edición, traducción o versión",
           "fr": "version, édition ou traduction",
           "zh-Hans": "作品版本或翻译"
-        }
+        },
+        "schemaOrgType": "https://schema.org/Book"
       },
       "schema:Book": {
         "iri": "http://schema.org/Book",
@@ -363,7 +367,8 @@
           "fr": "œuvre écrite",
           "ko": "저작물",
           "zh-Hans": "书面作品"
-        }
+        },
+        "schemaOrgType": "https://schema.org/Book"
       },
       "wd:Q7725310": {
         "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -416,7 +421,8 @@
           "fr": "série d'œuvres",
           "zh-Hans": "系列创意作品",
           "zh-Hant": "系列創意作品"
-        }
+        },
+        "schemaOrgType": "https://schema.org/CreativeWorkSeries"
       },
       "schema:Movie": {
         "iri": "http://schema.org/Movie",
@@ -497,7 +503,8 @@
           "wdt:P725",
           "wdt:P7937",
           "wdt:P973"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/Movie"
       },
       "skos:Concept": {
         "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -523,7 +530,8 @@
           "schema:url",
           "skos:broader",
           "skos:inScheme"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/DefinedTerm"
       },
       "wd:Q20631656": {
         "iri": "http://www.wikidata.org/entity/Q20631656",
@@ -595,7 +603,8 @@
           "ko": "출시 버전",
           "zh-Hans": "软件发布",
           "zh-Hant": "軟體發布"
-        }
+        },
+        "schemaOrgType": "https://schema.org/CreativeWork"
       },
       "schema:Person": {
         "iri": "http://schema.org/Person",
@@ -614,6 +623,7 @@
         "mappings": ["wd:Q5"],
         "coverRatio": "3:4",
         "properties": [
+          "rezics:penNameOf",
           "schema:birthDate",
           "schema:deathDate",
           "schema:image",
@@ -629,7 +639,8 @@
           "es": "ser humano",
           "fr": "être humain",
           "zh-Hans": "人类"
-        }
+        },
+        "schemaOrgType": "https://schema.org/Person"
       },
       "schema:Recipe": {
         "iri": "http://schema.org/Recipe",
@@ -661,7 +672,8 @@
           "schema:sameAs",
           "schema:url",
           "wdt:P186"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/Recipe"
       },
       "schema:Episode": {
         "iri": "http://schema.org/Episode",
@@ -741,7 +753,8 @@
           "wdt:P361",
           "wdt:P58",
           "wdt:P725"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/Episode"
       },
       "schema:TVSeason": {
         "iri": "http://schema.org/TVSeason",
@@ -829,7 +842,8 @@
           "fr": "saison de série télévisée",
           "zh-Hans": "编播季",
           "zh-Hant": "編播季"
-        }
+        },
+        "schemaOrgType": "https://schema.org/TVSeason"
       },
       "schema:TVSeries": {
         "iri": "http://schema.org/TVSeries",
@@ -918,7 +932,8 @@
           "ja": "テレビ番組シリーズ",
           "zh-Hans": "电视系列节目",
           "zh-Hant": "電視系列節目"
-        }
+        },
+        "schemaOrgType": "https://schema.org/TVSeries"
       },
       "schema:VideoGame": {
         "iri": "http://schema.org/VideoGame",
@@ -1000,7 +1015,8 @@
           "wdt:P58",
           "wdt:P725",
           "wdt:P973"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/VideoGame"
       },
       "schema:BookSeries": {
         "iri": "http://schema.org/BookSeries",
@@ -1059,7 +1075,8 @@
           "wdt:P2635",
           "wdt:P361",
           "wdt:P973"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/BookSeries"
       },
       "schema:MusicAlbum": {
         "iri": "http://schema.org/MusicAlbum",
@@ -1108,7 +1125,8 @@
           "wdt:P179",
           "wdt:P361",
           "wdt:P5732"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/MusicAlbum"
       },
       "schema:ComicSeries": {
         "iri": "http://schema.org/ComicSeries",
@@ -1182,7 +1200,8 @@
           "ko": "일본의 만화 시리즈",
           "zh-Hans": "日本系列漫画",
           "zh-Hant": "日本系列漫畫"
-        }
+        },
+        "schemaOrgType": "https://schema.org/ComicSeries"
       },
       "skos:ConceptScheme": {
         "iri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
@@ -1200,7 +1219,8 @@
         },
         "mappings": [],
         "coverRatio": "1:1",
-        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"]
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "schemaOrgType": "https://schema.org/DefinedTermSet"
       },
       "schema:Organization": {
         "iri": "http://schema.org/Organization",
@@ -1218,7 +1238,8 @@
         },
         "mappings": ["wd:Q43229"],
         "coverRatio": "1:1",
-        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"]
+        "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
+        "schemaOrgType": "https://schema.org/Organization"
       },
       "schema:PublicationVolume": {
         "iri": "http://schema.org/PublicationVolume",
@@ -1285,7 +1306,8 @@
           "wdt:P361",
           "wdt:P5732",
           "wdt:P725"
-        ]
+        ],
+        "schemaOrgType": "https://schema.org/PublicationVolume"
       },
       "wd:Q2095": {
         "iri": "http://www.wikidata.org/entity/Q2095",
@@ -1303,7 +1325,8 @@
         "bases": ["schema:Thing"],
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "facets": [],
-        "coverRatio": "1:1"
+        "coverRatio": "1:1",
+        "schemaOrgType": "https://schema.org/Thing"
       },
       "schema:SoftwareApplication": {
         "iri": "http://schema.org/SoftwareApplication",
@@ -1321,7 +1344,8 @@
         "bases": ["schema:Thing"],
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "facets": [],
-        "coverRatio": "1:1"
+        "coverRatio": "1:1",
+        "schemaOrgType": "https://schema.org/SoftwareApplication"
       },
       "wd:Q2620972": {
         "iri": "http://www.wikidata.org/entity/Q2620972",
@@ -1365,7 +1389,8 @@
           "wdt:P361"
         ],
         "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
-        "coverRatio": "2:3"
+        "coverRatio": "2:3",
+        "schemaOrgType": "https://schema.org/CreativeWork"
       }
     },
     "format": "https://rezics.com/definitions/release/1",
@@ -5365,6 +5390,54 @@
           }
         },
         "targets": ["wd:Q2620972"]
+      },
+      "rezics:penNameOf": {
+        "iri": "https://rezics.com/vocab/penNameOf",
+        "labels": {
+          "de": "Pseudonym von",
+          "en": "pen name of",
+          "es": "seudónimo de",
+          "fr": "pseudonyme de",
+          "ja": "筆名の使用者",
+          "ko": "필명 사용자",
+          "zh-Hans": "笔名使用者",
+          "zh-Hant": "筆名使用者"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "disclosure": "sourceOrConsent",
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:penNames",
+          "inverseLabels": {
+            "de": "Pseudonyme",
+            "en": "pen names",
+            "es": "seudónimos",
+            "fr": "pseudonymes",
+            "ja": "筆名",
+            "ko": "필명",
+            "zh-Hans": "笔名",
+            "zh-Hant": "筆名"
+          }
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "descriptions": {
+          "de": "Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.",
+          "en": "The person or organization behind this pen name or collective name.",
+          "es": "La persona u organización detrás de este seudónimo o nombre colectivo.",
+          "fr": "La personne ou organisation derrière ce pseudonyme ou nom collectif.",
+          "ja": "この筆名または共同名義を使用する人物または組織。",
+          "ko": "이 필명 또는 공동 명의를 사용하는 사람이나 조직.",
+          "zh-Hans": "使用此笔名或共同名义的个人或组织。",
+          "zh-Hant": "使用此筆名或共同名義的個人或組織。"
+        }
       }
     }
   },

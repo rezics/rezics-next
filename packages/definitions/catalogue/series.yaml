@@ -22,6 +22,7 @@ classes:
       and the VNDB tag filter (https://vndb.org/d11). A curated list is a collection, not a series.
     annotations:
       facets: genre keywords contributor partOfSeries
+      schema_org_type: https://schema.org/CreativeWorkSeries
   BookSeries:
     is_a: CreativeWorkSeries
     class_uri: schema:BookSeries
@@ -43,6 +44,7 @@ classes:
       - descriptiveLink
     annotations:
       facets: genre keywords startDate publisher contributor partOfSeries
+      schema_org_type: https://schema.org/BookSeries
 slots:
   publishedIn:
     slot_uri: wdt:P1433

@@ -30,6 +30,7 @@ classes:
       - wd:Q21198342
     annotations:
       facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
+      schema_org_type: https://schema.org/ComicSeries
     slots:
       - abstract
       - author
@@ -58,6 +59,7 @@ classes:
       - wd:Q1238720
     annotations:
       facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
+      schema_org_type: https://schema.org/PublicationVolume
     slots:
       - author
       - illustrator

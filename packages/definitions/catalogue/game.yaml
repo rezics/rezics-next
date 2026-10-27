@@ -66,6 +66,7 @@ classes:
     annotations:
       facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
       cover_ratio: 3:4
+      schema_org_type: https://schema.org/CreativeWork
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
@@ -96,6 +97,7 @@ classes:
       - numberOfPlayers
     annotations:
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers author director musicBy producer productionCompany developer voiceActor publisher character partOfSeries
+      schema_org_type: https://schema.org/VideoGame
   GameAddOn:
     is_a: LaunchWork
     class_uri: wd:Q209163
@@ -130,6 +132,7 @@ classes:
     annotations:
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
       cover_ratio: 3:4
+      schema_org_type: https://schema.org/CreativeWork
 slots:
   gamePlatform:
     slot_uri: schema:gamePlatform

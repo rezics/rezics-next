@@ -40,6 +40,7 @@ classes:
       - bangumiCharacterId
     annotations:
       facets: keywords gender bloodType birthDate height weight
+      schema_org_type: https://schema.org/Thing
 slots:
   gender:
     slot_uri: schema:gender

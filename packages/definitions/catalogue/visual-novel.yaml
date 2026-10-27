@@ -35,6 +35,7 @@ classes:
       - spinOffOf
     annotations:
       facets: genre keywords character contributor author director illustrator musicBy translator voiceActor partOfSeries inLanguage
+      schema_org_type: https://schema.org/VideoGame
 slots:
   partOfWork:
     slot_uri: wdt:P361

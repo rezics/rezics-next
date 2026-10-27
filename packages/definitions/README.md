@@ -69,7 +69,39 @@ presentation group for the schema file that defines the property. Types may carr
 inherits the nearest annotated base's ratio when a type has no annotation of its
 own. A type may also carry `schemaOrgType`, a full `https://schema.org/Type` IRI
 that consumers use as the JSON-LD `@type`; a release without it stays valid, and
-consumers fall back to `CreativeWork`.
+the release defines no default. Consumers choose their fallback for older releases.
+
+Bundled values are presentation correspondences for JSON-LD. They do not replace
+native type IRIs, bases or mappings; they do not assert ontology equivalence or
+guarantee Schema.org rich-result eligibility. In particular, book works and
+editions retain separate native identities even though both serialize as `Book`.
+
+| Native type                  | Schema.org serialization type            |
+| ---------------------------- | ---------------------------------------- |
+| `schema:Book`                | `https://schema.org/Book`                |
+| `bf:Instance`                | `https://schema.org/Book`                |
+| `schema:VideoGame`           | `https://schema.org/VideoGame`           |
+| `wd:Q689445`                 | `https://schema.org/VideoGame`           |
+| `wd:Q20631656`               | `https://schema.org/CreativeWork`        |
+| `wd:Q209163`                 | `https://schema.org/CreativeWork`        |
+| `wd:Q2620972`                | `https://schema.org/CreativeWork`        |
+| `schema:TVSeries`            | `https://schema.org/TVSeries`            |
+| `schema:Movie`               | `https://schema.org/Movie`               |
+| `schema:TVSeason`            | `https://schema.org/TVSeason`            |
+| `schema:Episode`             | `https://schema.org/Episode`             |
+| `schema:ComicSeries`         | `https://schema.org/ComicSeries`         |
+| `schema:PublicationVolume`   | `https://schema.org/PublicationVolume`   |
+| `wd:Q95074`                  | `https://schema.org/Thing`               |
+| `wd:Q2095`                   | `https://schema.org/Thing`               |
+| `wd:Q7725310`                | `https://schema.org/CreativeWorkSeries`  |
+| `schema:BookSeries`          | `https://schema.org/BookSeries`          |
+| `schema:Person`              | `https://schema.org/Person`              |
+| `schema:Organization`        | `https://schema.org/Organization`        |
+| `schema:SoftwareApplication` | `https://schema.org/SoftwareApplication` |
+| `skos:Concept`               | `https://schema.org/DefinedTerm`         |
+| `skos:ConceptScheme`         | `https://schema.org/DefinedTermSet`      |
+| `schema:Recipe`              | `https://schema.org/Recipe`              |
+| `schema:MusicAlbum`          | `https://schema.org/MusicAlbum`          |
 
 The relation groups are `order`, `derivation`, `world`, `membership`, and
 `association` for the Relations view; `credit` for staff and cast in Credits and
@@ -396,7 +428,7 @@ Source conventions:
   (other origins, queries, fragments, extra path segments, nonstrings); nothing is fetched. The
   transport is explicit only: no value is inferred from class names, Wikidata ids, mappings or
   ancestors, and subclasses do not inherit it. Older releases and types without the annotation omit
-  the field, and consumers use `CreativeWork`.
+  the field; the release defines no default, so consumers choose their fallback.
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is
   `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the
