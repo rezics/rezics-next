@@ -1098,6 +1098,13 @@ CREATE INDEX progress_session_active ON library.progress_session USING btree (ro
 
 
 --
+-- Name: progress_session_owner_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_owner_seek ON library.progress_session USING btree (route, account_id, session_id);
+
+
+--
 -- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
