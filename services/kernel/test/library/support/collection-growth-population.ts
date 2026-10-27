@@ -3,6 +3,7 @@ import { routeOf } from '../../../src/route/route.ts';
 
 const ROWS_PER_SCALE = 1_024;
 let nextOrdinal = 0;
+let populationNamespace = 0;
 
 type PopulationCounts = {
   accounts: number;
@@ -26,7 +27,12 @@ export async function seedCollectionGrowthPopulation(
 ): Promise<void> {
   const scaleDelta = scale - previous;
   if (scaleDelta <= 0) return;
-  if (previous === 0) nextOrdinal = 0;
+  if (previous === 0) {
+    // Use the UUIDv7 payload as a per-case namespace because growth database handles share the test database URL.
+    populationNamespace += 1;
+    if (populationNamespace > 0x0fff) throw new RangeError('Collection growth population namespace is exhausted');
+    nextOrdinal = 0;
+  }
   const curatorRoute = routeOf(curatorId);
   if (curatorRoute === null) throw new Error('Collection growth curator must have a native route');
 
@@ -36,21 +42,27 @@ export async function seedCollectionGrowthPopulation(
   const result = await database.admin.query<PopulationCounts>(
     `WITH input AS MATERIALIZED (
        SELECT $1::bigint AS start, $2::integer AS population_count, $3::integer AS curator_route,
-              $4::uuid AS curator_id, $5::uuid AS subject_id, transaction_timestamp() AS seeded_at
+              $4::uuid AS curator_id, $5::uuid AS subject_id, $6::integer AS namespace,
+              transaction_timestamp() AS seeded_at
      ), generated AS MATERIALIZED (
        SELECT input.start + series.ordinal AS ordinal
        FROM input CROSS JOIN generate_series(1, input.population_count) AS series(ordinal)
      ), owner_routes AS MATERIALIZED (
-       SELECT ordinal, (ordinal % 65536)::integer AS route FROM generated
+       SELECT generated.ordinal, (generated.ordinal % 65536)::integer AS route, input.namespace
+       FROM generated CROSS JOIN input
      ), other_owners AS MATERIALIZED (
        SELECT routes.ordinal, routes.route,
-         ('53000000-0000-7000-8000-' || lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS curator_id,
-         ('54000000-0000-7000-8000-' || lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS guest_id,
-         ('51100000-0000-7000-8000-' || lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS collection_id
+         ('53000000-0000-7' || lpad(to_hex(routes.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS curator_id,
+         ('54000000-0000-7' || lpad(to_hex(routes.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS guest_id,
+         ('51100000-0000-7' || lpad(to_hex(routes.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(routes.route), 4, '0') || lpad(to_hex(routes.ordinal), 8, '0'))::uuid AS collection_id
        FROM owner_routes routes
      ), organizations AS MATERIALIZED (
        SELECT slots.slot,
-         ('55000000-0000-7000-8000-' || lpad(to_hex(input.curator_route), 4, '0') ||
+         ('55000000-0000-7' || lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(input.curator_route), 4, '0') ||
           lpad(to_hex(input.start * 2 + slots.slot), 8, '0'))::uuid AS organization_id
        FROM input CROSS JOIN generate_series(1, 2) AS slots(slot)
      ), collection_rows AS MATERIALIZED (
@@ -59,7 +71,8 @@ export async function seedCollectionGrowthPopulation(
        FROM other_owners owners
        UNION ALL
        SELECT input.curator_route,
-              ('51000000-0000-7000-8000-' || lpad(to_hex(input.curator_route), 4, '0') ||
+              ('51000000-0000-7' || lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
+               lpad(to_hex(input.curator_route), 4, '0') ||
                lpad(to_hex(owners.ordinal), 8, '0'))::uuid,
               input.curator_id, owners.guest_id, owners.ordinal, 'same'::text
        FROM input CROSS JOIN other_owners owners
@@ -72,11 +85,13 @@ export async function seedCollectionGrowthPopulation(
        FROM input CROSS JOIN organizations
      ), memberships AS MATERIALIZED (
        SELECT owners.route AS account_route, owners.guest_id, organizations.organization_id,
-         ('56000000-0000-7000-8000-' || lpad(to_hex(owners.route), 4, '0') ||
+         ('56000000-0000-7' || lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(owners.route), 4, '0') ||
           lpad(to_hex(owners.ordinal * 2 + organizations.slot), 8, '0'))::uuid AS reservation_id,
-         ('57000000-0000-7000-8000-' || lpad(to_hex(owners.route), 4, '0') ||
+         ('57000000-0000-7' || lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
+          lpad(to_hex(owners.route), 4, '0') ||
           lpad(to_hex(owners.ordinal * 2 + organizations.slot), 8, '0'))::uuid AS source_transaction_id
-       FROM other_owners owners CROSS JOIN organizations
+       FROM other_owners owners CROSS JOIN organizations CROSS JOIN input
      ), inserted_accounts AS (
        INSERT INTO access.account
          (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch,
@@ -96,10 +111,12 @@ export async function seedCollectionGrowthPopulation(
        INSERT INTO library.collection_member
          (route, collection_id, member_id, subject_id, note, ordinal_key, added_at, transaction_id)
        SELECT inserted.route, inserted.collection_id,
-              ((CASE rows.population WHEN 'same' THEN '52000000-0000-7000-8000-' ELSE '52100000-0000-7000-8000-' END) ||
+              ((CASE rows.population WHEN 'same' THEN '52000000-0000-7' ELSE '52100000-0000-7' END) ||
+               lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
                lpad(to_hex(rows.route), 4, '0') || lpad(to_hex(rows.ordinal), 8, '0'))::uuid,
               input.subject_id, NULL, 'a0000', input.seeded_at,
-              ((CASE rows.population WHEN 'same' THEN '52000000-0000-7000-8000-' ELSE '52100000-0000-7000-8000-' END) ||
+              ((CASE rows.population WHEN 'same' THEN '52000000-0000-7' ELSE '52100000-0000-7' END) ||
+               lpad(to_hex(input.namespace), 3, '0') || '-8000-' ||
                lpad(to_hex(rows.route), 4, '0') || lpad(to_hex(rows.ordinal), 8, '0'))::uuid
        FROM inserted_collections inserted
        JOIN collection_rows rows USING (route, collection_id)
@@ -164,7 +181,7 @@ export async function seedCollectionGrowthPopulation(
        (SELECT count(*)::integer FROM inserted_denials) AS denials,
        (SELECT count(*)::integer FROM inserted_organization_members) AS "organizationMembers",
        (SELECT count(*)::integer FROM inserted_inverse) AS "inverseRows"`,
-    [start, count, curatorRoute, curatorId, subjectId],
+    [start, count, curatorRoute, curatorId, subjectId, populationNamespace],
   );
 
   const expected: PopulationCounts = {
