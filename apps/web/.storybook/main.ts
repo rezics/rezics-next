@@ -32,18 +32,12 @@ const config: StorybookConfig = {
     config.optimizeDeps ??= {};
     // These packages install dependencies in their own node_modules, so a bare id does not resolve from web.
     const throughWorkspace = (id: string): string =>
-      id === '@ark-ui/react' || id.startsWith('@ark-ui/react/')
-        ? `@rezics/ui > ${id}`
-        : id === 'canonicalize' || id === 'typebox' || id.startsWith('@noble/hashes/')
-          ? `@rezics/composition > ${id}`
-          : id;
+      id === 'canonicalize' || id === 'typebox' || id.startsWith('@noble/hashes/') ? `@rezics/composition > ${id}` : id;
     // `@rezics/ui/*` entries are source modules, which the optimizer cannot prebundle.
     const included = (config.optimizeDeps.include ?? []).filter((id) => !id.startsWith('@rezics/ui/'));
     config.optimizeDeps.include = [
       ...new Set([
         ...included.map(throughWorkspace),
-        '@rezics/ui > @ark-ui/react/locale',
-        '@rezics/ui > @ark-ui/react/fieldset',
         '@rezics/composition > canonicalize',
         '@rezics/composition > typebox',
         '@rezics/composition > @noble/hashes/sha2.js',

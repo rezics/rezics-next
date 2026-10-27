@@ -15,7 +15,7 @@ Before building any interface piece, look it up in [SHADCN.md](SHADCN.md), which
 The package uses shadcn's Rhea style on the Base UI primitives (`components.json`, style `base-rhea`). `apps/web/components.json` shares that configuration, so `bunx shadcn@latest add <name>` run from either directory writes into `packages/ui`.
 
 - Files in `src/shadcn/` are exactly what the shadcn CLI writes. Never edit them by hand: brand changes belong in `src/styles.css`, and our own components in `src/components/`. Import them as `@rezics/ui/shadcn/<name>`; `src/index.ts` exports only the rich-text editor, so a shadcn name never clashes with one of ours.
-- `src/components/` holds only what shadcn does not offer: the site's components (`Cover`, `Reactions`, `ContentActions`, `ReportDialog`, the rating components, `MediaImage`, `EntityPicker`, `DocumentBody`, `Prose` and the editor) and a few small helpers and display pieces with no shadcn counterpart. A component there never wraps a control that shadcn provides; the earlier Ark UI versions of those controls are removed.
+- `src/components/` holds only what shadcn does not offer: the site's components (`Cover`, `Reactions`, `ContentActions`, `ReportDialog`, the rating components, `MediaImage`, `EntityPicker`, `DocumentBody`, `Prose` and the editor) and a few small helpers and display pieces with no shadcn counterpart. A component there never wraps a control that shadcn provides.
 - The shadcn colour variables map to the Aura tokens in `src/styles.css`, layered after the Rhea defaults.
 - Stories for shadcn components are `src/components/shadcn-<name>.stories.tsx`, titled `shadcn/<Name>`.
 - `shadcn-sync.json` records the last successful sync time and CLI version. The daily GitHub check opens one shared `shadcn-sync` issue when that sync is more than seven days old; it never syncs components. Anyone with repository issue access can also run `bun run shadcn:sync-check` in this directory.
@@ -24,7 +24,7 @@ The package uses shadcn's Rhea style on the Base UI primitives (`components.json
 
 ## Editor and document body
 
-The rich-text editor keeps Tiptap and the document model (`@rezics/document`) and draws its controls from the shadcn primitives, with no Ark UI: `dropdown-menu` for the block menu, `toggle`, `button` and `tooltip` for the selection menu and the touch bar, `sheet` for the touch block picker, `command` for the slash menu, and `field` with `input` for the link and image forms. Two things stay in our own components, because shadcn has no equivalent: Tiptap's bubble menu places the selection and link menus against a range of text (a shadcn popover anchors to a trigger element), and the toolbar role with one tab stop and arrow-key travel is not in the registry.
+The rich-text editor keeps Tiptap and the document model (`@rezics/document`) and draws its controls from the shadcn primitives: `dropdown-menu` for the block menu, `toggle`, `button` and `tooltip` for the selection menu and the touch bar, `sheet` for the touch block picker, `command` for the slash menu, and `field` with `input` for the link and image forms. Two things stay in our own components, because shadcn has no equivalent: Tiptap's bubble menu places the selection and link menus against a range of text (a shadcn popover anchors to a trigger element), and the toolbar role with one tab stop and arrow-key travel is not in the registry.
 
 shadcn menus and sheets render in a portal on the page, not inside the story canvas, so a story finds them with `screen`. A layer that takes focus must hand it back through Tiptap's frame-deferred restore (`returnFocus` in `editor-selection-menu.tsx`); wait for the editor to hold focus before sending the next key.
 
@@ -32,7 +32,7 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 ## Content feedback
 
-`Reactions`, `ContentActions`, `ReportDialog` and the rating components are built from shadcn primitives (`button`, `popover`, `dropdown-menu`, `alert-dialog`, `dialog`, `radio-group`, `field`, `textarea`, `slider`, `badge`) and import no Ark UI.
+`Reactions`, `ContentActions`, `ReportDialog` and the rating components are built from shadcn primitives (`button`, `popover`, `dropdown-menu`, `alert-dialog`, `dialog`, `radio-group`, `field`, `textarea`, `slider`, `badge`).
 
 - On a detail page the reaction cluster sits top right and reporting lives in the `ContentActions` overflow menu; there is no visible report button.
 - `Reactions` shows and offers every kind unless `kinds` narrows it: a subject admits like, love, laugh, insightful and sad, so its cluster passes those five and never shows upvote or downvote. `disabled` turns the chips and the React trigger off until the page has hydrated.

@@ -29,17 +29,7 @@ export default defineConfig({
   // Fonts must stay on the site origin; the page policy does not allow data: fonts.
   build: { assetsInlineLimit: 0 },
   optimizeDeps: {
-    include: [
-      '@ark-ui/react',
-      '@ark-ui/react/menu',
-      '@ark-ui/react/select',
-      '@ark-ui/react/dialog',
-      '@ark-ui/react/locale',
-      'lucide-react',
-      '@rezics/ui/menu',
-      '@rezics/ui/select',
-      '@rezics/ui/button',
-    ],
+    include: ['lucide-react', '@rezics/ui/menu', '@rezics/ui/select', '@rezics/ui/button'],
   },
   plugins: [
     paraglideVitePlugin({ project: './project.inlang' }),

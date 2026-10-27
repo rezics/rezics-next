@@ -22,7 +22,6 @@
     "shadcn:sync-check": "bun scripts/shadcn-sync-check.ts"
   },
   "dependencies": {
-    "@ark-ui/react": "5.39.3",
     "@base-ui/react": "1.9.0",
     "@fontsource-variable/geist-mono": "5.3.0",
     "@fontsource-variable/manrope": "5.3.0",

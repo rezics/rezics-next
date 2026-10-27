@@ -5,18 +5,6 @@ import tailwindcss from '@tailwindcss/vite';
 
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const components = local('../src/components');
-const arkEntries = [
-  ...new Set(
-    readdirSync(components)
-      .filter((file) => file.endsWith('.tsx'))
-      .flatMap((file) =>
-        [...readFileSync(`${components}/${file}`, 'utf8').matchAll(/from ['"](@ark-ui\/react(?:\/[\w-]+)?)/g)].map(
-          (match) => match[1]!,
-        ),
-      ),
-  ),
-].sort();
-
 // The shadcn components import their primitives from many packages. Pre-bundle them up front: Vite otherwise
 // optimizes each on first use, reloads the page mid-run, and loads React twice.
 const shadcn = local('../src/shadcn');
@@ -43,7 +31,7 @@ const config: StorybookConfig = {
     config.plugins.push(tailwindcss());
     config.optimizeDeps ??= {};
     config.optimizeDeps.include = [
-      ...new Set([...(config.optimizeDeps.include ?? []), ...arkEntries, ...shadcnEntries, 'date-fns/locale']),
+      ...new Set([...(config.optimizeDeps.include ?? []), ...shadcnEntries, 'date-fns/locale']),
     ];
     return config;
   },

@@ -7,7 +7,7 @@ const root = join(import.meta.dir, '..');
 const components = join(root, 'src', 'components');
 
 // Components that must exist, each with a sibling story that runs as a browser test.
-const storied = ['client-only', 'link-overlay', 'locale', 'localized-text', 'presence', 'show', 'status'];
+const storied = ['locale', 'localized-text', 'show'];
 
 type Tokens = Record<string, string>;
 

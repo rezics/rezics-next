@@ -1,5 +1,5 @@
 import type { Preview } from '@storybook/react-vite';
-import { LocaleProvider } from '@ark-ui/react/locale';
+import { LocaleProvider } from '../src/components/locale.tsx';
 import { configure } from 'storybook/test';
 import './preview.css';
 

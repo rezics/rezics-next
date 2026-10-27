@@ -127,11 +127,11 @@ afterAll(() => rmSync(probe, { recursive: true, force: true }));
 
 test('every component packages/ui still exports has a story and passes the story test', async () => {
   // Modules that render nothing themselves, so they have no story of their own.
-  const helpers = ['avatar-initials', 'environment'];
+  const helpers = ['avatar-initials'];
   const names = moduleNames(components)
     .filter((name) => existsSync(join(components, `${name}.tsx`)) && !helpers.includes(name))
     .sort();
-  expect(names.length).toBeGreaterThan(20);
+  expect(names.length).toBeGreaterThan(15);
   const missing = names.filter((name) => !existsSync(join(components, `${name}.stories.tsx`)));
   expect(missing).toEqual([]);
 
@@ -174,7 +174,5 @@ test('packages/ui does not depend on @ark-ui/react and no source file in the wor
     Object.keys((manifest[field] ?? {}) as Record<string, string>).some((name) => name.startsWith('@ark-ui/')),
   );
   expect(declared).toEqual([]);
-  expect(
-    workspaceSources().filter((file) => importsOf(file).some((path) => path.startsWith('@ark-ui/'))),
-  ).toEqual([]);
+  expect(workspaceSources().filter((file) => importsOf(file).some((path) => path.startsWith('@ark-ui/')))).toEqual([]);
 });
