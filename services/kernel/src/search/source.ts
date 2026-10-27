@@ -12,6 +12,9 @@ export type RelationFacetProbe = {
   value: string;
 };
 
+/** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
+export type RelationFacetMatch = boolean | 'not_proven';
+
 /**
  * Filterable form of a statement value.
  * `year` is the astronomical year of a time value.
@@ -75,10 +78,12 @@ export interface SubjectSource {
    * invalid input, including a qualifiers field, rejects. The aligned boolean array preserves probe order
    * and duplicates; each result matches only the probe's subject, property and value.
    * Missing, hidden, taken-down and redirected subjects return false.
+   * `true` and `false` are definitive current truth and absence. `not_proven` is bounded witness
+   * uncertainty: the source could not prove membership within its bound, and it is never `false`.
    * Optional for historical mocks. Search must fail closed
    * when an overflow probe is needed and this method is absent.
    */
-  matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<boolean[]>;
+  matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
 }
 
 /** Active public Collection counts for subjects in one partition. Only the count is read. */
