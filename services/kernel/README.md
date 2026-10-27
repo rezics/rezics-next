@@ -247,7 +247,7 @@ shared blocks and statements, never time. Use `checkGrowth` from `test/support/g
 add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
 fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
 `linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
-API from `test/support/growth.ts`.
+API from `test/support/growth.ts`. The largest scale in a check must not exceed 4096.
 
 Each measured session in the instrumented `pool` and `openPool` connections pins `max_parallel_workers_per_gather = 0`
 and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`, `effective_cache_size = 4GB`,

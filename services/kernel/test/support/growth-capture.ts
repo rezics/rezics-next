@@ -111,7 +111,8 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
  * statements of a capture and off otherwise. Statements in the operation's async scope and statements issued inside
  * a DBOS workflow while a capture runs belong to the operation, even when the queue runner executes that workflow.
  * An unrelated workflow running during a capture is therefore counted as the operation's; that can only make a bound
- * stricter, never hide cost. Other work is background. The switch is an ordinary SET sent ahead of the statement on the
+ * stricter, never hide cost. If a spurious failure traces to one, switch to lineage tracking. Other work is background.
+ * The switch is an ordinary SET sent ahead of the statement on the
  * client's own queue and never counted. A rolled-back transaction or a failed statement can undo it, so the next
  * statement sends it again; a statement that ends a transaction sends none, since a failed transaction refuses it.
  */

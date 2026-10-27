@@ -151,12 +151,14 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const firstRatio = second / first;
   const secondRatio = third / second;
   if (
-    scales.some((scale) => !Number.isFinite(scale) || scale <= 0) ||
+    scales.some((scale) => !Number.isFinite(scale) || scale <= 0 || scale > 4096) ||
     !(first < second && second < third) ||
     firstRatio < 4 ||
     Math.abs(firstRatio - secondRatio) / Math.max(firstRatio, secondRatio) >= 1e-9
   ) {
-    throw new TypeError('Growth scales must be positive, increasing and equally spaced by a ratio of at least four');
+    throw new TypeError(
+      'Growth scales must be positive, increasing and equally spaced by a ratio of at least four, with a largest scale no greater than 4096',
+    );
   }
   if (!Number.isSafeInteger(repetitions) || repetitions < 1)
     throw new RangeError('Growth repetitions must be a positive safe integer');
