@@ -119,18 +119,27 @@ async function openStory(name: string, visitor: string, locale: string) {
 async function watchStoryReports(page: Page) {
   await page.addInitScript(() => {
     const finished: { storyId?: string; reporters?: { type?: string }[] }[] = [];
-    let channel:
-      | { on?: (event: string, listener: (payload: { storyId?: string; reporters?: { type?: string }[] }) => void) => void }
-      | undefined;
-    Object.defineProperty(window, '__rezicsStoryFinishes', { configurable: true, value: finished });
-    Object.defineProperty(window, '__STORYBOOK_ADDONS_CHANNEL__', {
-      configurable: true,
-      get: () => channel,
-      set: (next: typeof channel) => {
-        channel = next;
-        channel?.on?.('storyFinished', (payload) => finished.push(payload));
-      },
-    });
+    const target = window as Window & {
+      __rezicsStoryFinishes?: typeof finished;
+      __STORYBOOK_ADDONS_CHANNEL__?: {
+        on?: (event: string, listener: (payload: (typeof finished)[number]) => void) => void;
+      };
+    };
+    target.__rezicsStoryFinishes = finished;
+    let attached: typeof target.__STORYBOOK_ADDONS_CHANNEL__;
+    const attach = () => {
+      const channel = target.__STORYBOOK_ADDONS_CHANNEL__;
+      if (!channel) return false;
+      if (channel !== attached) {
+        attached = channel;
+        channel.on?.('storyFinished', (payload) => finished.push(payload));
+      }
+      return true;
+    };
+    const interval = window.setInterval(() => {
+      if (attach()) window.clearInterval(interval);
+    }, 0);
+    if (attach()) window.clearInterval(interval);
   });
 }
 
