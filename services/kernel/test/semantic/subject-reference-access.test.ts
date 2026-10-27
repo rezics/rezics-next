@@ -11,6 +11,7 @@ import { accessCheck, type AccessClient, type Resource } from '../../src/request
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
 import { mergeSubjects, SubjectRedirectError } from '../../src/semantic/merges.ts';
 import { readSubjectReference } from '../../src/semantic/references.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
@@ -71,7 +72,8 @@ test('authenticated installed Access checks references against real grants and r
   const access = real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
   const context = { pool, deadline: Date.now() + 5000 };
   const actor = await access.authenticate(real.bearer('reader'), context);
-  const prepare = () => accessCheck(access, actor, 'subject:read', f.resource, context);
+  const resource = { ...f.resource, eligibility: subjectReadEligibility(f.resource) };
+  const prepare = () => accessCheck(access, actor, 'subject:read', resource, context);
   const denied = await prepare();
   expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => denied(client)))).toBeNull();
   await real.grant(f.resource, 'reader', 'subject:read');
