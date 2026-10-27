@@ -214,3 +214,34 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
     expect(models).toEqual(['model-a', 'model-a', 'model-a', 'model-b']);
   } finally { h.dispose(); }
 });
+
+test('a retry leaves an engine the routing table no longer offers for its class', async () => {
+  const h = harness(`#!/usr/bin/env bun
+import {writeFileSync} from 'node:fs'; import {spawnSync} from 'node:child_process';
+const model = process.argv[process.argv.indexOf('-m') + 1];
+if (model === 'model-a') {
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({status:'blocked',summary:'stuck',blocker:{kind:'spec-conflict',detail:'cannot satisfy'},approaches:[]})}}));
+  console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}})); process.exit(0);
+}
+writeFileSync('result.txt','accepted');spawnSync('git',['add','result.txt']);spawnSync('git',['commit','-m','Complete result']);
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
+`); h.settings.gate = ['true']; simpleBrief(h.briefFile);
+  try {
+    const routing = JSON.parse(readFileSync(h.settings.routingFile, 'utf8'));
+    const profile = (model: string) => ({ cli: 'codex', model, effort: 'high', poolClass: h.settings.pools[0]!.classes[0] });
+    const route = (model: string) => { for (const value of Object.values(routing.classes) as { first: unknown; fallbacks?: unknown[] }[]) { value.first = profile(model); value.fallbacks = []; } };
+    routing.experiments = [];
+    route('model-a');
+    const routingFile = join(h.settings.stateDirectory, 'routing-dropped.json');
+    writeFileSync(routingFile, JSON.stringify(routing));
+    h.settings.routingFile = routingFile;
+    const runtime = createRuntime({ tasks: h.tasks });
+    const task = h.tasks.dispatch(h.briefFile);
+    await runtime.job.start(task.id); await runtime.job.drain();
+    // The table drops model-a; the retry must not keep it.
+    route('model-b'); writeFileSync(routingFile, JSON.stringify(routing));
+    await runtime.job.start(task.id); await runtime.job.drain();
+    expect(h.store.attempts(task.id).map(attempt => attempt.profile.model)).toEqual(['model-a', 'model-b']);
+  } finally { h.dispose(); }
+});

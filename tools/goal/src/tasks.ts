@@ -344,22 +344,24 @@ export class WorkerTasks {
     return worker;
   }
   /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
-  private retryWillHold(taskId: string, options: RetryOptions): boolean {
+  /** Whether a retry only records a held contract, which needs no worker, and whether its start goes first. */
+  private retryPlan(taskId: string, options: RetryOptions): { hold: boolean; first: boolean } {
     try {
       const task = this.store.task(taskId);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
-      if (!reshaped && task.state !== 'held') return false;
-      return !this.dependenciesMet({ brief: reshaped?.brief ?? task.brief });
+      const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
+      const hold = (reshaped !== undefined || task.state === 'held') && !this.dependenciesMet({ brief: next.brief });
+      return { hold, first: startsFirst(next) };
     } catch {
       // The retry itself reports the error under the task's lease.
-      return false;
+      return { hold: false, first: startsFirst(this.store.task(taskId)) };
     }
   }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
-    if (!leased && !this.retryWillHold(taskId, options))
-      await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)));
+    const plan = leased ? undefined : this.retryPlan(taskId, options);
+    if (plan && !plan.hold) await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first);
     const lease = leased
       ? undefined
       : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
@@ -395,9 +397,19 @@ export class WorkerTasks {
       const oldConfigDirectory = old
         ? this.settings.pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
-      const route = old
-        ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
-        : routeTask(nextBrief, task.sequence, readRouting(this.settings.routingFile));
+      const table = readRouting(this.settings.routingFile);
+      // A retry keeps its engine while the routing table still offers it for the class; an engine the table dropped
+      // (a failing or disallowed pool) is routed afresh, so table changes reach retries at once.
+      const routable = (candidate: Profile) =>
+        nextTaskClass === 'mechanical' ||
+        [
+          ...retryFallbacks(table, nextTaskClass),
+          ...table.experiments.filter((e) => e.open && e.class === nextTaskClass).flatMap((e) => e.profiles),
+        ].some((offered) => offered.cli === candidate.cli && offered.model === candidate.model);
+      const route =
+        old && routable(old.profile)
+          ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
+          : routeTask(nextBrief, task.sequence, table);
       const readings = this.settings.pools.map((pool) =>
         withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
       );
