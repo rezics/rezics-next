@@ -9,13 +9,15 @@ const limit = 4;
 const route = 63; // Three empty partitions, then fifteen empty routes, before the fixed public population.
 const tokens = testTokens();
 const now = new Date('2026-10-27T01:00:00Z');
+const seedBatch = 500;
 let db: GrowthDatabase;
 let app: ReturnType<typeof testKernel>;
 let denied: ReturnType<typeof testKernel>;
+let seedGeneration = 0;
 const columns =
   '(route,collection_id,curator_account_id,title,visibility,state,revision,created_at,updated_at,transaction_id)';
 function id(n: number) {
-  return `10000000-0000-7000-8000-003f${n.toString(16).padStart(8, '0')}`;
+  return `${(0x10000000 + seedGeneration).toString(16).padStart(8, '0')}-0000-7000-8000-003f${n.toString(16).padStart(8, '0')}`;
 }
 
 beforeAll(async () => {
@@ -36,35 +38,55 @@ afterAll(async () => {
 
 async function fixed() {
   await db.admin.query('DELETE FROM library.collection');
+  seedGeneration += 1;
   // Enough same-route rows for the production planner to prefer the bounded partial-index seek.
-  await db.admin.query(
-    `INSERT INTO library.collection ${columns}
-    SELECT $1,id,$2,'Fixed','public','active',1,'2026-01-01','2026-05-01',id
-    FROM (SELECT ('10000000-0000-7000-8000-003f'||lpad(to_hex(n),8,'0'))::uuid id
-      FROM generate_series(1,32000) n) s`,
-    [route, id(99999)],
-  );
+  for (let first = 1; first <= 32000; first += seedBatch) {
+    await db.admin.query(
+      `INSERT INTO library.collection ${columns}
+      SELECT $1,id,$2,'Fixed','public','active',1,'2026-01-01','2026-05-01',id
+      FROM (SELECT (lpad(to_hex(268435456 + $3::int),8,'0')||'-0000-7000-8000-003f'||lpad(to_hex(n),8,'0'))::uuid id
+        FROM generate_series($4::int,$5::int) n) s`,
+      [route, id(99999), seedGeneration, first, Math.min(first + seedBatch - 1, 32000)],
+    );
+  }
   // Empty interval seeks also need a fixed same-route population: otherwise the planner reasonably uses the
   // primary key for a tiny route and filters its handful of private rows. Keep that choice out of the growth axis.
-  await db.admin.query(`INSERT INTO library.collection ${columns}
-    SELECT r,id,('10000000-0000-7000-8000-'||lpad(to_hex(r),4,'0')||'0001869f')::uuid,
-      'Fixed private','private','active',1,'2026-01-01','2026-05-01',id
-    FROM (SELECT r,('30000000-0000-7000-8000-'||lpad(to_hex(r),4,'0')||lpad(to_hex(n),8,'0'))::uuid id
-      FROM generate_series(0,62) r,generate_series(1,2000) n) s`);
+  for (let first = 0; first < 63 * 2000; first += seedBatch) {
+    await db.admin.query(
+      `WITH generated AS (
+        SELECT i, (i / 2000)::int AS r, (i % 2000 + 1)::int AS n
+        FROM generate_series($1::int,$2::int) i
+      )
+      INSERT INTO library.collection ${columns}
+      SELECT r, id, (lpad(to_hex(268435456 + $3::int),8,'0')||'-0000-7000-8000-'
+        ||lpad(to_hex(r),4,'0')||'0001869f')::uuid,
+        'Fixed private','private','active',1,'2026-01-01','2026-05-01',id
+      FROM (SELECT r,
+        (lpad(to_hex(805306368 + $3::int),8,'0')||'-0000-7000-8000-'
+          ||lpad(to_hex(r),4,'0')||lpad(to_hex(n),8,'0'))::uuid AS id
+        FROM generated) s`,
+      [first, Math.min(first + seedBatch - 1, 63 * 2000 - 1), seedGeneration],
+    );
+  }
 }
 async function grow(dimension: 'listed' | 'hidden' | 'denied', previous: number, scale: number) {
   if (previous === 0) await fixed();
-  await db.admin.query(
-    `INSERT INTO library.collection ${columns}
-    SELECT r,id,('10000000-0000-7000-8000-'||lpad(to_hex(r),4,'0')||'0001869f')::uuid,'Growing',
-      CASE WHEN $4 AND n%3=0 THEN 'private' WHEN $4 AND n%3=1 THEN 'unlisted' ELSE 'public' END,
-      CASE WHEN $4 AND n%3=2 THEN 'deleted' ELSE 'active' END,
-      1,'2026-01-01','2026-05-01',$1::uuid
-    FROM (SELECT n,CASE WHEN $4 THEN n%64 ELSE 63 END r,
-      ('20000000-0000-7000-8000-'||lpad(to_hex(CASE WHEN $4 THEN n%64 ELSE 63 END),4,'0')
-        ||lpad(to_hex(n),8,'0'))::uuid id FROM generate_series($2::int+1,$3::int) n) s`,
-    [id(99999), previous, scale, dimension === 'hidden'],
-  );
+  for (let first = previous + 1; first <= scale; first += seedBatch) {
+    await db.admin.query(
+      `INSERT INTO library.collection ${columns}
+      SELECT r,id,(lpad(to_hex(268435456 + $5::int),8,'0')||'-0000-7000-8000-'
+        ||lpad(to_hex(r),4,'0')||'0001869f')::uuid,'Growing',
+        CASE WHEN $4 AND n%3=0 THEN 'private' WHEN $4 AND n%3=1 THEN 'unlisted' ELSE 'public' END,
+        CASE WHEN $4 AND n%3=2 THEN 'deleted' ELSE 'active' END,
+        1,'2026-01-01','2026-05-01',$1::uuid
+      FROM (SELECT n,CASE WHEN $4 THEN n%64 ELSE 63 END r,
+        (lpad(to_hex(536870912 + $5::int),8,'0')||'-0000-7000-8000-'
+          ||lpad(to_hex(CASE WHEN $4 THEN n%64 ELSE 63 END),4,'0')
+          ||lpad(to_hex(n),8,'0'))::uuid id
+        FROM generate_series($2::int,$3::int) n) s`,
+      [id(99999), first, Math.min(first + seedBatch - 1, scale), dimension === 'hidden', seedGeneration],
+    );
+  }
 }
 async function page(kernel: typeof app, cursor?: string) {
   const response = await kernel.handle(
