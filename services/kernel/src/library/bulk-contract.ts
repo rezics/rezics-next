@@ -47,6 +47,8 @@ export type BulkCounters = Readonly<{
   failed: number;
   cancelled: number;
 }>;
+/** Public roll-up; failed includes conflicts, denials, failures and cancelled targets. */
+export type BulkSummary = Readonly<{ changed: number; unchanged: number; failed: number }>;
 export type OperationView = Readonly<{
   id: string;
   action: BulkAdmission['action'];
@@ -58,6 +60,8 @@ export type OperationView = Readonly<{
   occurrencesComplete: boolean;
   cancelRequested: boolean;
   counts: BulkCounters;
+  /** Null until discovery/expansion is complete and every target is terminal. */
+  summary: BulkSummary | null;
   admittedAt: string;
   targetBoundAt: string | null;
   expiresAt: string;
@@ -80,7 +84,7 @@ export type OutcomePage = { outcomes: readonly OutcomeView[]; next: string | nul
 /** Frozen on source; an absent slot generation also changes on create/delete ABA. */
 export type EntryExpectation =
   | { kind: 'present'; incarnation: string; admissionSequence: DecimalSequence; revision: number }
-  | { kind: 'absent'; generation: DecimalSequence };
+  | { kind: 'absent'; slotGeneration: DecimalSequence };
 export type SubjectTarget = Readonly<{
   kind: 'subject'; operationId: string; ordinal: DecimalSequence;
   subjectId: string; requestedSubjectId: string | null; expected: EntryExpectation;
@@ -101,13 +105,17 @@ export type BulkSource = Readonly<{
 }>;
 export type Checkpoint = Readonly<{
   operationId: string; generation: number; phase: BulkPhase;
+  /** Immutable per-phase keyset boundary; never a shelf sort or Collection ordinal. */
   after: DecimalSequence; highWater: DecimalSequence;
+  /** Monotonic operation-wide budget index. A refused chunk retries this exact index. */
+  nextChunkIndex: number;
 }>;
 /** Data never includes manifest arrays. Native intent remains until enqueue acknowledgement. */
 export type SegmentInput = Readonly<{ operationId: string; route: number; generation: number }>;
 export type EnqueueIntent = Readonly<{ workflowId: string; input: SegmentInput; queue: 'workflows' }>;
 export type PageCommit = Readonly<{
-  checkpoint: Checkpoint; targets: readonly ImmutableTarget[]; complete: boolean; enqueue: EnqueueIntent;
+  checkpoint: Checkpoint; chunkIndex: number; targets: readonly ImmutableTarget[];
+  complete: boolean; enqueue: EnqueueIntent;
 }>;
 export type OccurrencePage = Readonly<{
   operationId: string; collectionId: string; page: DecimalSequence;
@@ -163,7 +171,7 @@ export type TargetRow = Readonly<{
 }>;
 export type DiscoveryPage = Readonly<{
   previous: Checkpoint; next: Checkpoint; scanned: number;
-  selected: readonly SubjectTarget[]; sealed: boolean;
+  chunkIndex: number; selected: readonly SubjectTarget[]; sealed: boolean;
 }>;
 export type Transition = Readonly<{
   operationId: string; ordinal: DecimalSequence; from: 'pending' | 'reconciling';
