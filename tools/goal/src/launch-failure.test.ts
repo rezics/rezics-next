@@ -179,3 +179,16 @@ test('the host starts a ready task whose dispatching process is gone, once', asy
     expect(h.store.task(task.id).currentAttempt).toBe(1);
   } finally { h.dispose(); }
 }, 60_000);
+
+test('check host transport failures are recognized as capacity, ordinary tool failures are not', async () => {
+  const { CHECK_HOST_TRANSPORT } = await import('./records.ts');
+  for (const detail of [
+    'Connection closed by 159.195.212.125 port 22',
+    'RemoteTransportError: host a',
+    'kex_exchange_identification: read: Connection reset by peer',
+    'acceptance exited 255 after SSH to check host a timed out',
+    'rsync error: unexplained error (code 255)',
+  ]) expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(true);
+  for (const detail of ['Error loading config.toml: invalid transport', 'test failed: expected 3 received 2'])
+    expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(false);
+});

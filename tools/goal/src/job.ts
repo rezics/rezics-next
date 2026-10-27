@@ -18,7 +18,7 @@ import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, ty
 import { classifyFailure } from './failures.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import { makeRecord, readMeasurement, reportedApproaches, MODEL_AT_CAPACITY } from './records.ts';
+import { makeRecord, readMeasurement, reportedApproaches, CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import {
@@ -675,7 +675,8 @@ export class WorkerJob implements GateOutcomeSink {
       } else {
         const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
         // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
-        capacity = kind === 'tool' && MODEL_AT_CAPACITY.test(`${attempt.result ?? ''}\n${attempt.blocker ?? ''}`);
+        const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
+        capacity = kind === 'tool' && (MODEL_AT_CAPACITY.test(detail) || CHECK_HOST_TRANSPORT.test(detail));
         if (kind === 'tool' && previous?.failureKind === 'tool' && !capacity) {
           const firstLine = (
             previous.result ||
