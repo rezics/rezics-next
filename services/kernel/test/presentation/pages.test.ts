@@ -113,13 +113,10 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(Object.keys(answer.body.reads).sort()).toEqual(['r0', 'r1']);
   const standalone = await call('GET', `/v1/subjects/${id}`);
   expect(answer.body.reads.r0).toEqual({ status: 200, body: standalone.body });
-  const search = await call('POST', '/v1/subjects:search', {
-    filter: { statement: { property: 'schema:author', in: [id] } },
-    sort: 'name',
-    limit: 6,
-  });
-  expect(answer.body.reads.r1.status).toBe(search.response.status);
-  expect(withoutRequestId(answer.body.reads.r1.body)).toEqual(withoutRequestId(search.body));
+  const links = await call('GET', `/v1/subjects/${id}/links?property=schema%3Aauthor&limit=6`);
+  expect(answer.body.reads.r1.status).toBe(links.response.status);
+  expect(links.response.status).toBe(200);
+  expect(withoutRequestId(answer.body.reads.r1.body)).toEqual(withoutRequestId(links.body));
 });
 
 test('a subject without a type template falls back through its structural bases', async () => {
