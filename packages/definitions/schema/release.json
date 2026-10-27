@@ -74,6 +74,15 @@
         }
       }
     },
+    "libraryProfiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_.-]{0,63}$(?![\\s\\S])": {
+          "$ref": "#/$defs/libraryProfile"
+        }
+      }
+    },
     "filters": {
       "type": "object",
       "additionalProperties": false,
@@ -86,6 +95,315 @@
     }
   },
   "$defs": {
+    "libraryId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,63}$(?![\\s\\S])"
+    },
+    "libraryLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "en": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "de": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "es": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "fr": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "ja": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "ko": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "zh-Hans": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "zh-Hant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "en"
+      ]
+    },
+    "libraryDecimal": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$(?![\\s\\S])"
+    },
+    "libraryState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "labels": {
+          "$ref": "#/$defs/libraryLabels"
+        },
+        "role": {
+          "enum": [
+            "planned",
+            "active",
+            "completed",
+            "paused",
+            "dropped"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "labels"
+      ]
+    },
+    "libraryUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "labels": {
+          "$ref": "#/$defs/libraryLabels"
+        },
+        "dimension": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "minimum": {
+          "$ref": "#/$defs/libraryDecimal"
+        },
+        "maximum": {
+          "$ref": "#/$defs/libraryDecimal"
+        },
+        "precision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "totalPolicy": {
+          "enum": [
+            "optional",
+            "required",
+            "forbidden"
+          ]
+        },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "none",
+                "session_local"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "structure": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "none"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "labels",
+        "identity",
+        "structure"
+      ]
+    },
+    "libraryStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "labels": {
+          "$ref": "#/$defs/libraryLabels"
+        }
+      },
+      "required": [
+        "id",
+        "labels"
+      ]
+    },
+    "libraryCopyKind": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "labels": {
+          "$ref": "#/$defs/libraryLabels"
+        },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/libraryStatus"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "id",
+        "labels",
+        "statuses"
+      ]
+    },
+    "libraryProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/libraryId"
+        },
+        "entryStateSet": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/libraryId"
+            },
+            "states": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/libraryState"
+              },
+              "minItems": 1,
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "id",
+            "states"
+          ]
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "scalar_amount",
+                      "cursor_position",
+                      "completed_units"
+                    ]
+                  },
+                  "units": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/libraryUnit"
+                    },
+                    "minItems": 1,
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "mode",
+                  "units"
+                ]
+              },
+              "minItems": 0,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "allowed"
+          ]
+        },
+        "copies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/libraryCopyKind"
+              },
+              "minItems": 0,
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "kinds"
+          ]
+        },
+        "importSources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/libraryId"
+              },
+              "mappingVersion": {
+                "$ref": "#/$defs/libraryId"
+              },
+              "recordKinds": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/libraryId"
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "id",
+              "mappingVersion",
+              "recordKinds"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
     "iri": {
       "type": "string",
       "pattern": "(?:^[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u0020\\u007f-\\u009f<>\"{}|\\\\^`]*$)(?![\\s\\S])",
@@ -178,6 +496,18 @@
         "coverRatio": {
           "type": "string",
           "pattern": "^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\\s\\S])"
+        },
+        "library": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profileId": {
+              "$ref": "#/$defs/libraryId"
+            }
+          },
+          "required": [
+            "profileId"
+          ]
         },
         "schemaOrgType": {
           "type": "string",

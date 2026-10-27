@@ -546,6 +546,47 @@ because it indicates a compiler defect.
 
 ## Term extensions
 
+## Library profiles
+
+The compiler implements the [agreed library profile format](src/library-profile-design.md).
+`Release.libraryProfiles?: Record<string, LibraryProfile>` is the canonical registry;
+`TypeDefinition.library?: { profileId: string }` is its closed, same-release reference.
+The package exports `LibraryProfile`, `LibraryProfileReference`, `LibraryLabels`,
+`LibraryProgressMode`, `LibraryProgressUnit`, `LibraryProfileSource` and the
+`LibraryProfilePin` provenance union. Pins describe consumer data; this package
+does not infer accepting types, authorize writes or execute migrations.
+
+Declare a native `annotations.library` mapping on a class, with an `id` and optional
+`entryStateSet`, `progress`, `copies` and `importSources`. The nearest whole source
+declaration wins during compilation, including absent capabilities and empty lists.
+Abstract declarations without a class URI contribute registry data. Repeated IDs
+must have identical fully labelled bodies. `legacy-fixed-v1` can only be declared
+on an abstract class without a URI or descendants; accepting types cannot reference it.
+Releases without annotations retain their previous bytes and install no defaults.
+
+Labels belong to `presentation/<declaring-schema-group>/<locale>` under
+`libraryProfiles[profileId]`, using only `states[stateId]`,
+`units[mode][unitId]`, `copyKinds[kindId]` and
+`copyStatuses[kindId][statusId]`. Every leaf needs English; the eight supported
+locales and 1–80 Unicode code point bound apply recursively. Source labels,
+foreign homes, duplicate contributions and unknown members reject.
+
+The three modes are `scalar_amount`, `cursor_position` and `completed_units`.
+Units are bounded data IDs with per-pair decimal string bounds, optional precision
+and total policy. Bounds compare exactly; absent precision retains twelve integer
+and six fractional digits, including fractional counts. Identity is `none` for
+scalar/cursor and `session_local` for opaque sparse completed sets; structure is
+`none`. Import declarations are inert data, never executable adapters.
+
+Compilation traverses supplied source, memoized ancestry and presentation data;
+each canonical registry entry is charged once, plus each type reference. Consumers
+use a type reference and one registry lookup. Validation retains the complete
+4 MiB/1,024 type/4,096 property bounds and the profile cardinalities in the linked
+format, with no extra per-profile byte cap. The two library acceptance files cover
+closure, exact bounds, provenance, full cardinalities and 10/100 manifest growth.
+
+## Term extensions
+
 `@rezics/definitions/extension` holds the format of a Context's custom relation types: an immutable body
 (`format` `https://rezics.com/definitions/extension/1`, the Context's `context` id and its `terms`) addressed by
 `extensionDigest`. A term is a relation property in the Context's namespace: its CURIE is `c<context id as 32 hex>:<localName>`,

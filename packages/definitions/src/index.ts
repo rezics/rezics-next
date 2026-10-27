@@ -5,6 +5,16 @@ import { createHash } from 'node:crypto';
 import { checkSync } from 'recheck/lib/browser.js';
 import { Compile } from 'typebox/schema';
 import schema from '../schema/release.json';
+import { libraryProfileSemantics, type LibraryProfile, type LibraryProfileReference } from './library-profile.ts';
+export type {
+  LibraryLabels,
+  LibraryProgressMode,
+  LibraryProgressUnit,
+  LibraryProfile,
+  LibraryProfileReference,
+  LibraryProfilePin,
+  LibraryProfileSource,
+} from './library-profile.ts';
 
 export const RELEASE_FORMAT = 'https://rezics.com/definitions/release/1';
 // Headroom over the bundled catalogue plus 100 launch-grain verticals (3 types and 12 properties each).
@@ -40,6 +50,7 @@ export type TypeDefinition = {
   coverRatio?: string;
   /** Explicit https://schema.org/Type IRI used as JSON-LD @type; absent in older releases. */
   schemaOrgType?: string;
+  library?: LibraryProfileReference;
 };
 export type RelationGroup =
   | 'order'
@@ -93,6 +104,7 @@ export type Release = {
   properties: Record<string, PropertyDefinition>;
   contexts?: Record<string, ContextSettings>;
   filters?: Record<string, SavedFilter>;
+  libraryProfiles?: Record<string, LibraryProfile>;
 };
 export type ReleaseViolation = { pointer: string; code: 'invalid' | 'unsafe_pattern' | 'limit' };
 
@@ -276,6 +288,11 @@ function exceedsSize(value: unknown): boolean {
 }
 
 function semantics(release: Release, add: (pointer: string, code?: ReleaseViolation['code']) => void) {
+  for (const [key, profile] of Object.entries(release.libraryProfiles ?? {})) {
+    const pointer = at('/libraryProfiles', key);
+    if (key !== profile.id) add(at(pointer, 'id'));
+    libraryProfileSemantics(profile, (child) => add(pointer + child));
+  }
   const expand = (curie: string): string | undefined => {
     const match = /^([a-z][a-z0-9_]*):([^\s]+)$(?![\s\S])/u.exec(curie);
     return match && own(release.prefixes, match[1]!) ? release.prefixes[match[1]!] + match[2]! : undefined;
@@ -332,6 +349,13 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   }
   for (const [key, type] of Object.entries(release.types)) {
     const pointer = at('/types', key);
+    if (
+      type.library &&
+      (type.library.profileId === 'legacy-fixed-v1' ||
+        !release.libraryProfiles ||
+        !own(release.libraryProfiles, type.library.profileId))
+    )
+      add(at(pointer, 'library'));
     list(type.properties, at(pointer, 'properties'), release.properties);
     type.bases.forEach((base, index) => {
       if (expand(base) === undefined) add(at(at(pointer, 'bases'), index));

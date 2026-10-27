@@ -4,6 +4,7 @@ import canonicalize from 'canonicalize';
 import { posix } from 'node:path';
 import { checkSync } from 'recheck/lib/browser.js';
 import releaseSchema from '../schema/release.json';
+import { compileLibraryProfiles } from './compile-library-profiles.ts';
 import {
   DATA_TYPES,
   RELEASE_FORMAT,
@@ -210,7 +211,7 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets cover_ratio schema_org_type', annotationLocation);
+            allowed(definition.annotations, 'facets cover_ratio schema_org_type library', annotationLocation);
             const annotations = object(definition.annotations);
             const facets = annotations.facets;
             if (facets !== undefined && typeof facets !== 'string')
@@ -266,7 +267,24 @@ export async function compileCatalogue(input: {
   }
   if (!Object.hasOwn(input.schemas, input.root))
     add({ file: input.root, pointer: '' }, 'invalid', 'Root schema is missing');
+  const library = compileLibraryProfiles(parsed, add);
   stop();
+
+  // Native library mappings are compiler data, outside LinkML's scalar annotations ABI.
+  // Preserve every other source field and all ordinary LinkML induction and linting.
+  const linkmlSchemas = { ...input.schemas };
+  for (const [file, source] of Object.entries(parsed)) {
+    const copy = structuredClone(source);
+    let changed = false;
+    for (const definition of Object.values(object(copy.classes))) {
+      const annotations = object(object(definition).annotations);
+      if (Object.hasOwn(annotations, 'library')) {
+        delete annotations.library;
+        changed = true;
+      }
+    }
+    if (changed) linkmlSchemas[file] = JSON.stringify(copy);
+  }
 
   const fileFor = (id: unknown) => files.find((file) => parsed[file]!.id === id) ?? input.root;
   const report = (value: SchemaValidationReport) => {
@@ -286,7 +304,7 @@ export async function compileCatalogue(input: {
   let derived: Node = object(undefined);
   let globals: Node = object(undefined);
   try {
-    const loaded = LinkML.loadFromPath(input.root, input.schemas);
+    const loaded = LinkML.loadFromPath(input.root, linkmlSchemas);
     report(loaded.report);
     if (loaded.view) report(LinkML.lint(loaded.view));
     stop();
@@ -306,7 +324,7 @@ export async function compileCatalogue(input: {
       imports: [`./${posix.basename(input.root)}`],
       classes: { [carrier]: { abstract: true, slots: Object.keys(object(inventory.slots)).sort(compare) } },
     });
-    const all = LinkML.loadFromPath(path, { ...input.schemas, [path]: wrapper });
+    const all = LinkML.loadFromPath(path, { ...linkmlSchemas, [path]: wrapper });
     report(all.report);
     stop();
     if (!all.view) throw new Error('Cannot induce catalogue slots');
@@ -529,6 +547,8 @@ export async function compileCatalogue(input: {
       ...(effectiveCoverRatio === undefined ? {} : { coverRatio: effectiveCoverRatio }),
       ...(typeof ownSchemaOrgType === 'string' ? { schemaOrgType: ownSchemaOrgType } : {}),
     };
+    const reference = library.reference(term.name);
+    if (reference) release.types[term.key]!.library = reference;
   }
   for (const term of slots) {
     const { value: slot, location } = term;
@@ -775,7 +795,9 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions libraryProfiles', { file, pointer: '' });
+    if (Object.hasOwn(labels, 'libraryProfiles'))
+      library.presentation(parts.length === 2 ? parts[0] : undefined, tag, labels.libraryProfiles, file);
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
         add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
@@ -1007,6 +1029,9 @@ export async function compileCatalogue(input: {
     for (const item of savedEntries.sort((left, right) => compare(left.key, right.key))) filters[item.key] = item.value;
     release.filters = filters;
   }
+  stop();
+  const registry = library.registry();
+  if (registry) release.libraryProfiles = registry;
   stop();
   const defects = validateRelease(release);
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);
