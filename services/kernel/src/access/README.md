@@ -160,6 +160,34 @@ account returns `subject: null` and `verified: false`.
   requests grow` and `pending agent verification page stays bounded as decided requests grow`, scales `[256, 1024,
   4096]`, seeded in `grow` with at least one warm-up.
 
+### Agent verification policy
+
+Verification establishes authority to represent a catalogue subject. Reviewers check evidence in this order,
+strongest first:
+
+1. A challenge on the subject's established official site or domain.
+2. Authenticated confirmation from an established official account.
+3. Confirmation from a publisher or distributor, reached through a contact found independently.
+4. Private documents plus proof of authority to represent, as an escalation only.
+
+A link or screenshot alone is never enough. Reviewers record which evidence they checked and why they decided.
+The claimant is told the outcome and may add evidence or appeal by applying again.
+
+Verification grants answering as the subject (official speech) and the profile link. It grants no catalogue
+editing power: corrections follow the ordinary evidence and permission rules. An organization speaks through its
+organization account and its members, never through a person's credentials.
+
+Readers see `Verified representative of <subject>`, linked to that subject, with an explanation that verification
+is not an endorsement. Public reads show only the current verification state and never the evidence.
+
+The account may release verification; governance may revoke it. A dispute is resolved by revocation followed by a
+new reviewed application, never by automatic transfer to the next applicant. There is no fixed expiry. A re-check
+follows an event such as a compromise, a change of domain control or a complaint.
+
+`gate:agent-verification` stays closed until the release and revocation workflow is merged and this policy is in
+place. The existing request/approval implementation alone does not satisfy that gate. The
+[verification research](../../../../docs/research/agent-verification.md) supplies the evidence behind these decisions.
+
 ## Operator responsibility pages
 
 `createOperatorCommands` remains an internal privileged application port; it has no public list route.
@@ -867,3 +895,91 @@ Cost:
   `test/access/growth-agent-pages.test.ts`, “public change time stays bounded as accounts grow”,
   measures a profile update against the same account populations at scales [256, 1024, 4096]
   with one warm-up per scale.
+
+
+## Account deletion policy
+
+Deletion is terminal. Before the deletion barrier, the person must confirm freshly after being told the
+consequences; after the barrier there is no cancellation window. A future reversible deactivation would be a
+separate state, never restoration of a deleted account. The sources discussed in the
+[deletion report, §1](../../../../docs/research/account-deletion.md#1-cooling-off-and-cancellation-matches-an-established-pattern)
+share no cooling-off rule. A committed continuation's expiry limits cleanup authority, not the person's choice.
+Expired cleanup leaves the account deleted; governance renewal continues the unfinished steps.
+
+There is no self-serve export at launch. Before or after deletion, a person may request a copy of their data through
+the platform's privacy contact. The deletion confirmation names that channel. Self-serve export is a later feature
+of each data owner. The confirmation also describes the terminal barrier, retained contributions and attribution,
+operator/ownership consequences, and lists every owned OAuth client. Owned OAuth clients are deleted with the
+account through the [Auth schema](../../../auth/db/schema.sql)'s `auth_client_userId_fkey` cascade; this ends other
+people's grants to those clients as well. The physical cleanup gaps below and in [Auth](../../../auth/README.md#known-retention-gaps)
+remain work to do, not exceptions to the policy.
+
+A deleted account's public identity is `{ id, state, kind }` only. Readers see “Deleted account” or
+“Deleted organization”, never the old name, handle or profile, and never a person-or-automated label. This is
+**de-identified attribution**, not anonymous data: the stable id can still link retained content. Posts and reviews
+remain subject to [Content's erasure rules](../content/README.md#subject-threads), and catalogue history to
+[Semantic's history rules](../semantic/README.md). Where those documents do not state an account-deletion retention
+rule, the owner decides; account deletion does not invent a content or catalogue erasure cascade.
+
+Statutory erasure requests are separate from product deletion. A missing export, a last-owner dispute, a suspension
+or a pending bot handoff never delays the legal response. Product eligibility and cleanup authority are not the
+privacy contact's response clock.
+
+## Retention inventory
+
+This inventory describes current storage and implemented cleanup, including account-linked ids, digests and
+payloads that remain personal data. A retention purpose describes the store's operational use, not a new legal
+basis or permission for indefinite retention. “No deadline” means no enforced erasure deadline was found. Expiry
+of authority, a closed validity interval or a terminal flag does not itself erase a row. Except where noted, the
+[Access schema](../../db/access/schema.sql) has no account-deletion cascade. Auth has its
+[own inventory](../../../auth/README.md#retention-inventory); other domains decide their own data lifetimes.
+
+| Store / schema citation | Account-linked personal fields or payload | Erasure or de-identification trigger and deadline | Retention purpose |
+| --- | --- | --- | --- |
+| `access.account`, identity/profile group ([schema](../../db/access/schema.sql), [fence SQL](lifecycle-fence.sql)) | Handle, display name, avatar URL/id, biography, links, birth date, content preferences, suspension reason, registration ids/deadline, operator/controller ids | Tombstone clears these in the barrier transaction; public views and speaker listing become false. | Keep only the lifecycle tombstone for attribution and refusal of future authority. |
+| `access.account`, remaining state ([schema](../../db/access/schema.sql)) | Stable account id/kind, timestamps, authentication floor/fence receipt, relation version/reservation, handle operation id, inverse status, rate tier, verified/pending subject and receipt ids | No erasure trigger or deadline for these residual fields; public disclosure is restricted by the deletion policy. | Terminal identity and replay/fencing; no deletion-retention purpose specified for every residual field. |
+| `access.account_preferences` ([schema](../../db/access/schema.sql), [writer](preferences.ts)) | Account id, spoiler level, suitability, version | No deletion trigger or deadline. | Private viewer choices. |
+| `access.handle_claim` ([schema](../../db/access/schema.sql), [lifecycle](lifecycle.ts), [expiry](lifecycle-handle-expire.sql), [reservation](lifecycle-handle-reserve.sql)) | Handle/account mapping, reservation and operation ids, expected prior handle, deadlines | Registration/transition release can delete exact claims; expired unheld pending/reserved claims can be deleted or overwritten. Current deletion cleanup reserves the old handle for 30 days; expiry alone does not physically purge it. No bounded purge deadline. | Registration exclusion, rename redirects and reuse protection; retirement policy is separate work. |
+| `access.lifecycle_handle_operation`, `access.lifecycle_handle_effect`, `access.lifecycle_registration_expiry` ([schema](../../db/access/schema.sql)) | Account, handles/expected handle, operation/reservation ids, effects and transactions | Completion/registration expiry records terminal state; no erasure trigger or deadline. | Idempotent handle and registration recovery. |
+| `access.organization_member` ([schema](../../db/access/schema.sql)) | Organization/member ids, role, validity history, transaction | Membership removal closes intervals; no account-deletion purge or deadline. | Temporal membership authority/history. |
+| `access.lifecycle_membership_slot`, `access.operator_relation_slot` ([schema](../../db/access/schema.sql)) | Member/organization or operator/subject ids, reservations, terminal state | Terminalization preserves rows; no erasure trigger or deadline. | Prevent reservation reuse. |
+| `access.membership_inverse`, `access.membership_inverse_terminal` ([schema](../../db/access/schema.sql), [release](membership-inverse-20261025093747-release.sql)) | Account/group ids, reservation and source/proof transactions | Verified release deletes the live inverse row; terminal proof remains. No deletion deadline or proof purge. | Bounded inverse traversal and release proof. |
+| `access.lifecycle_coordination` ([schema](../../db/access/schema.sql), [operator release](operator-release.sql), [membership release](lifecycle-membership-release.sql)) | Account and related account ids, reservation, purpose | Exact durable release deletes the hold when responsibility/membership resolves; holds have no TTL or erasure deadline. | Prevent orphaned authority during coordinated operations. |
+| `access.principal_assignment` ([schema](../../db/access/schema.sql)) | Principal, assigned actor, creator principal, request id, issued/current validity and revocation time | Revocation closes authority; no physical erasure trigger or deadline. | Delegation provenance and temporal authority. |
+| `access.resource_grant`, `access.resource_role_grant` ([schema](../../db/access/schema.sql), [grant revoke](grant-revoke.sql), [role mutation](role-grant-mutate.sql)) | Identity/organization subject, account resource ids, roles/actions, validity, transaction | Explicit revoke/change deletes or replaces selected grants; account deletion has no blanket purge or deadline. | Current resource permission and role assignment. |
+| `access.resource_denial` ([schema](../../db/access/schema.sql)) | Subject/resource ids, reason, action, role and validity | No account erasure trigger or deadline. | Resource-specific denials. |
+| `access.resource_initialization`, `access.standing_parent_installation`, `access.governance_bootstrap`, `access.governance_reach` ([schema](../../db/access/schema.sql)) | Account resource/actor ids, bootstrap account, actions, creator id, initialization time and transaction links | No account erasure trigger or deadline. | Creation idempotency, standing permissions and governance provenance. |
+| `access.rating_counter_controller` ([schema](../../db/access/schema.sql)) | Account/controller ids and effective times | No erasure trigger or deadline. | Rating counting identity history. |
+| `access.lifecycle_fence_receipt`, `access.credential_floor_receipt` ([schema](../../db/access/schema.sql)) | Account, prior/current operator, reservation/continuation ids, floor, operation/effect/opening references/digests, transactions | No erasure trigger or deadline. | Authenticate barriers and make reductions replay-safe. |
+| `access.operator_opening_receipt` ([schema](../../db/access/schema.sql)) | Acting human, operator/subject, client/scopes, requested-by delegation, epochs, credential operation/effect, consumption and expiry | Authority expires within its bounded lifetime; no physical erasure trigger or deadline. | Prove authorized operator session/credential openings. |
+| `access.workflow_approval` ([schema](../../db/access/schema.sql), [sweep](workflow-approvals-sweep.sql)) | Actor/client/scopes, requested-by, operation JSON (ids, handles, membership/credential references), keys/digests, epochs | Expiry within 300 seconds (credential approvals within 60); bounded sweep removes expired rows when invoked. No registered sweep schedule or completion deadline. | Short-lived workflow authorization. |
+| `access.committed_continuation`, `access.committed_continuation_entry`, `access.committed_continuation_completion`, `access.operator_fence_page` ([schema](../../db/access/schema.sql), [implementation](committed-continuations.ts)) | Account, prior handle/operator/reservation, operation key/digests, allowlist targets/keys, receipt links, cursors and completions | Expiry refuses use; completion/renewal preserves the root and evidence. No physical erasure trigger or deadline. | Finish only committed cleanup and prevent repeat effects. |
+| `access.agent_verification_request` ([schema](../../db/access/schema.sql), [review](agent-verification.ts)) | Account/kind, requester/reviewer, catalogue subject, statement/links (evidence), decision reason, problem detail and receipts | Withdrawal/decision/failure changes state; no evidence or request erasure trigger or deadline, including on account deletion. | Review and appeal evidence; duration unspecified. |
+| `access.write_rate_counter` ([schema](../../db/access/schema.sql), [expiry SQL](write-rate-expiry.sql), [scheduler](write-rate-expiry.ts)) | Identity digest, command family, count, expiry and route | Eligible 48 hours after counter expiry; optional admitted partition schedule visits one of sixteen routes each minute, 1000 rows per visit. No total backlog deadline; unconfigured partitions have no schedule. | Temporary abuse protection; digests are account-linkable, not anonymous. |
+| `core.receipt` ([core schema](../../db/schema.sql)) | Principal/actor id, command/idempotency key, request digest, response JSON (including verification evidence/review, handle or approval results), transaction and time | No account erasure trigger or deadline. | Command idempotency and stable replay. |
+| `core.outbox`, `editorial.write_basis` ([core schema](../../db/schema.sql), [event payload catalogue](events.ts)) | Event subject/data (including old handles, relationships, verification request ids/problem types), principal/client, requested-by, transaction/time | No account erasure trigger or deadline identified. | Event delivery/replay and editorial provenance. |
+| Kernel DBOS workflow/step/event/message/status payloads ([work retention](../work/retention.ts), [verification work](agent-verification-work.ts), [account effect](account-agent-effect.ts)) | Account/operation/request ids, workflow inputs/results and durable effect progress | Terminal history eligible after `KERNEL_WORKFLOW_RETENTION_DAYS` (default 30, range 7–365); every ten minutes, at most 60 batches of 1000. Running work remains; no account-deletion trigger or backlog deadline. | Durable execution/recovery and bounded diagnostic history. |
+
+`access.exposure_opening` stores platform group intervals, not account identities; account-linked provenance of its
+commands is covered by the shared receipt, write-basis and outbox rows above.
+
+### Known retention gaps
+
+- `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
+- The deleted handle projection in [account-data.ts](account-data.ts) still returns extra null/false fields, including `automated`; convergence to the policy's exact three-field identity is separate implementation work.
+- Semantic can clear an account-agent label, but [the Access synchronization effect](account-agent-effect.ts) skips deleted accounts and has no deletion event binding; cross-owner label erasure is not demonstrated here.
+- `access.account_preferences` has no account-deletion erasure trigger or deadline.
+- Handle claims can physically outlive their 30-day redirect expiry; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline. Handle retirement is separate work.
+- Membership history, terminal slots/proofs and principal assignments have no erasure schedule; live inverse/coordination cleanup depends on workflow completion without a deadline.
+- Grants/role grants, denials, resource initialization/standing records and governance provenance have no account-deletion retention schedule; retained denial reasons also need minimization.
+- Rating controller history has no erasure trigger or justified retention duration.
+- Fence, credential-floor and operator-opening receipts have no erasure/minimization schedule; expired opening authority leaves personal payloads stored.
+- Workflow approval expiry has a sweep primitive but no registered scheduler or bounded erasure deadline.
+- Continuation roots, children, completions and fan-out pages retain prior handles/relations indefinitely. No alert was found for a committed deletion continuation expiring before cleanup finishes; governance renewal exists but is not an alert.
+- Verification requests/evidence, reviewer reasons and failure details have no deletion or retention deadline; a field for the decision reason alone does not ensure the policy's evidence-check record or outcome notification.
+- Write-rate cleanup is optional per deployment partition and batch-limited; no deadline covers missing admission, contention or backlog.
+- Shared receipts, outbox events and write-basis records retain personal payloads without an erasure schedule; their operational purposes do not settle indefinite personal-data retention.
+- Kernel workflow retention covers terminal work only, with no deletion-specific scrub, stuck-work deadline or backlog guarantee.
+- Logs and telemetry outside these stores have no documented account-data inventory, erasure trigger or retention deadline here.
+- Backups/replicas and restore procedures have no documented expiry or deletion-replay barrier. A restored backup could bring back a deleted identity; prevention is not demonstrated.
+- The platform privacy contact must be published and named in deletion confirmation; these services do not define its address or a request-tracking/response process. Owner-provided self-serve export remains future work.
