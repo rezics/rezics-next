@@ -11,6 +11,7 @@ import { ProblemError } from '../http/problem.ts';
 import accountRead from './account-read.sql';
 import publicPage from './public-identity-page.sql';
 import publicRead from './account-public-read.sql';
+import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId } from '../semantic/agents.ts';
 
@@ -79,6 +80,29 @@ export async function readPublicAccountByHandle(
   if (!claim) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending') return [];
+  return publicIdentityForAccount(client, row);
+}
+
+/** Resolve a verified catalogue subject through its pointer, then confirm it against the account authority. */
+export async function readPublicAccountByAgent(
+  client: Pool,
+  subjectId: string,
+): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
+  const route = routeOf(subjectId);
+  if (route === null) return [];
+  const pointer = await agentPageRead.run(client, { route, subject_id: subjectId });
+  if (!pointer) return [];
+  const accountRoute = routeOf(pointer.accountId);
+  if (accountRoute === null) return [];
+  const row = await publicRead.run(client, { route: accountRoute, account_id: pointer.accountId });
+  if (!row || row.state !== 'active' || !row.agentVerified || row.agentSubjectId !== subjectId) return [];
+  return publicIdentityForAccount(client, row);
+}
+
+async function publicIdentityForAccount(
+  client: Pool,
+  row: NonNullable<Awaited<ReturnType<typeof publicRead.run>>>,
+): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   if (row.state === 'deleted' && row.kind === 'organization')
     return [{ id: row.accountId, kind: 'organization', state: 'deleted' }];
   const identity: PublicIdentityFields = {

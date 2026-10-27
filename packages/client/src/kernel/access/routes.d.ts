@@ -4785,6 +4785,8 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                     ids: string;
                 } | {
                     handle: string;
+                } | {
+                    agent: string;
                 };
                 headers: unknown;
                 response: {

@@ -4,6 +4,7 @@ import { AccountAgentVerificationError } from '../semantic/agents.ts';
 import {
   AgentVerificationAccountError,
   AgentVerificationConflictError,
+  AgentVerificationPageConflictError,
   clearPendingAgentVerification,
   completeAgentVerification,
   failAgentVerification,
@@ -11,6 +12,7 @@ import {
   mergeVerifiedAgent,
   readAgentVerificationWorkflowRequest,
   recordPendingAgentVerification,
+  writeAgentVerificationPage,
   type AgentVerificationWorkflowRequest,
 } from './agent-verification.ts';
 
@@ -63,6 +65,20 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.merge', retriesAllowed: true, maxAttempts: 10 },
   );
 
+  const writePage = DBOS.registerStep(
+    async (request: AgentVerificationWorkflowRequest, receiptId: string): Promise<WorkResult> => {
+      try {
+        await writeAgentVerificationPage(context.pool, { ...request, receiptId });
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof AgentVerificationPageConflictError)
+          return { ok: false, problem: problem(error, error.problemType) };
+        throw error;
+      }
+    },
+    { name: 'accounts.agent-verification.write-page', retriesAllowed: true, maxAttempts: 10 },
+  );
+
   const complete = DBOS.registerStep(
     (request: AgentVerificationWorkflowRequest, receiptId: string) =>
       completeAgentVerification(context.pool, { ...request, receiptId }, context.clock),
@@ -113,6 +129,13 @@ export function registerAgentVerificationWork(context: WorkContext): void {
       if (!merged.ok) {
         await clear(request, receiptId);
         await fail(request, receiptId, merged.problem);
+        return;
+      }
+
+      const page = await writePage(request, receiptId);
+      if (!page.ok) {
+        await clear(request, receiptId);
+        await fail(request, receiptId, page.problem);
         return;
       }
 

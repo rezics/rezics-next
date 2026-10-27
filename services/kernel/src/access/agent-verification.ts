@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import { runCommand } from '../command/command.ts';
+import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -23,6 +24,7 @@ import decideRequest from './agent-verification-decision.sql';
 import accountPending from './agent-verification-account-pending.sql';
 import accountComplete from './agent-verification-account-complete.sql';
 import accountClear from './agent-verification-account-clear.sql';
+import agentPageInsert from './agent-verification-page-insert.sql';
 import requestApproved from './agent-verification-request-approved.sql';
 import requestFailed from './agent-verification-request-failed.sql';
 
@@ -110,6 +112,15 @@ export class AgentVerificationAccountError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AgentVerificationAccountError';
+  }
+}
+
+export class AgentVerificationPageConflictError extends Error {
+  readonly problemType = 'agent_verification_page_conflict';
+
+  constructor() {
+    super('The catalogue subject already points to another verification');
+    this.name = 'AgentVerificationPageConflictError';
   }
 }
 
@@ -728,6 +739,26 @@ export async function mergeVerifiedAgent(
     account: input.accountId,
     catalogue: input.catalogueSubjectId,
     receipt: input.receiptId,
+  });
+}
+
+/** Persist the public-page pointer on the subject's route after Semantic has accepted the merge. */
+export async function writeAgentVerificationPage(
+  pool: Pool,
+  input: AgentVerificationWorkflowRequest & { receiptId: string },
+): Promise<void> {
+  const route = routeOf(input.catalogueSubjectId);
+  if (route === null) throw new AgentVerificationAccountError('The catalogue subject route is invalid');
+  await withConnection(pool, async (client) => {
+    const [page] = rows(
+      await agentPageInsert.run(client, {
+        route,
+        subject_id: input.catalogueSubjectId,
+        account_id: input.accountId,
+        verification_receipt_id: input.receiptId,
+      }),
+    );
+    if (!page) throw new AgentVerificationPageConflictError();
   });
 }
 

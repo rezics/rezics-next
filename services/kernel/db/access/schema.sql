@@ -455,6 +455,19 @@ CREATE TABLE access.account_preferences (
 
 
 --
+-- Name: agent_page; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.agent_page (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    verification_receipt_id uuid NOT NULL,
+    CONSTRAINT agent_page_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+
+--
 -- Name: agent_verification_request; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1141,6 +1154,14 @@ ALTER TABLE ONLY access.account
 
 ALTER TABLE ONLY access.account_preferences
     ADD CONSTRAINT account_preferences_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: agent_page agent_page_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.agent_page
+    ADD CONSTRAINT agent_page_pkey PRIMARY KEY (route, subject_id);
 
 
 --

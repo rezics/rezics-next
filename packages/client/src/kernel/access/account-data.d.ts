@@ -70,6 +70,8 @@ export type PublicHandleIdentity = PublicIdentityFields & {
 };
 /** Resolve only an active claim, then read the account on its own anchor. */
 export declare function readPublicAccountByHandle(client: Pool, handle: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
+/** Resolve a verified catalogue subject through its pointer, then confirm it against the account authority. */
+export declare function readPublicAccountByAgent(client: Pool, subjectId: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */

@@ -642,8 +642,16 @@ work and no additional relation or growth check. Existing claim storage bounds r
 ### Public identity read
 
 `GET /v1/accounts` accepts exactly one of `ids` (1–100 comma-separated account UUIDs, deduplicated in first-request
-order) or `handle` (one handle, normalized to lowercase using the lookup rules). Both return
+order), `handle` (one handle, normalized to lowercase using the lookup rules), or `agent` (one catalogue subject UUID).
+Each form returns
 `{ accounts: [...], next: null }`. The web builds an account's public page at `/@handle`, outside Realms and Zones.
+
+The `agent` form resolves one `access.agent_page` pointer in the subject's route, then reads the named account by its
+own `(route, account_id)` key. The account row remains authoritative: the read returns an empty account list unless
+it is present, active, marked verified and still names the requested subject. Approval writes this pointer in its own
+receipt-bound workflow step after Semantic's merge and before the account is marked verified. An exact replay confirms
+the existing pointer; a subject already pointing at another account fails with a typed workflow problem. The page table
+is backfilled from accounts already verified when the migration runs. Reversal owns pointer removal.
 
 - Returns per visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state` (`active` or
   `deleted`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
@@ -655,6 +663,21 @@ order) or `handle` (one handle, normalized to lowercase using the lookup rules).
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
   logarithmic buffers.
+
+### Agent page lookup
+
+- Touches: one `agent_page` primary-key point read in the subject's route and one anchored `account_pkey(route,
+  account_id)` point read; the account row must still verify the subject.
+- Bound: rows and statements constant; blocks logarithmic in verified agents.
+- Growth check: `test/access/growth-agent-page-lookup.test.ts`, `agent page lookup stays within its bound as unrelated
+  verified subjects grow`, scales [256, 1024, 4096], seeded in `grow`, with one warm-up.
+
+### Agent page pointer write
+
+- Touches: one insert or primary-key probe in the subject's partition inside the approval workflow.
+- Bound: rows and statements constant per approval.
+- Growth check: `test/access/growth-agent-page-lookup.test.ts`, `agent page pointer write stays within its bound as
+  subject pointers grow`, scales [256, 1024, 4096], seeded in `grow`, with one warm-up.
 
 ### Organization speakers page
 

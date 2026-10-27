@@ -29,6 +29,7 @@ import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
 import { normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
+  readPublicAccountByAgent,
   readPublicAccountByHandle,
   readPublicIdentities,
   type PublicIdentity,
@@ -301,7 +302,7 @@ const publicReadFailures = {
 };
 const accountUuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const accountIdPattern = new RegExp(`^${accountUuidPattern}$`);
-const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string }>(
+const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string } | { agent: string }>(
   t.Union([
     t.Object(
       {
@@ -314,6 +315,7 @@ const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string }>(
       closed,
     ),
     t.Object({ handle: t.String({ minLength: 1, maxLength: 64, pattern: HANDLE_LOOKUP_PATTERN.source }) }, closed),
+    t.Object({ agent: t.String({ minLength: 36, maxLength: 36, pattern: accountUuidPattern }) }, closed),
   ]),
 );
 const response = <S extends TSchema>(schema: S) =>
@@ -756,6 +758,7 @@ export function accessRoutes(
         const accounts = await admission.run('normal', job, async () => {
           if ('handle' in query)
             return readPublicAccountByHandle(dependencies.pool, normalizeLookupHandle(query.handle));
+          if ('agent' in query) return readPublicAccountByAgent(dependencies.pool, query.agent);
           const requested = query.ids.split(',');
           if (
             requested.length < 1 ||

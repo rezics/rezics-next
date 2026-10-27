@@ -67,6 +67,10 @@ export declare class AgentVerificationAccountError extends Error {
     readonly problemType = "account_verification_unavailable";
     constructor(message: string);
 }
+export declare class AgentVerificationPageConflictError extends Error {
+    readonly problemType = "agent_verification_page_conflict";
+    constructor();
+}
 /** One status lookup for the actor's own latest request or a managed organization. */
 export declare function readLatestAgentVerificationRequest(pool: Pool, access: Access, context: VerificationContext, accountId: string): Promise<AgentVerificationRequest | null>;
 /** Pending governance page; the partial index excludes every decided request. */
@@ -104,6 +108,10 @@ export declare function recordPendingAgentVerification(pool: Pool, input: AgentV
 }, clock: () => Date): Promise<void>;
 /** Idempotent semantic step. The semantic service uses the committed decision receipt as its merge receipt. */
 export declare function mergeVerifiedAgent(pool: Pool, input: AgentVerificationWorkflowRequest & {
+    receiptId: string;
+}): Promise<void>;
+/** Persist the public-page pointer on the subject's route after Semantic has accepted the merge. */
+export declare function writeAgentVerificationPage(pool: Pool, input: AgentVerificationWorkflowRequest & {
     receiptId: string;
 }): Promise<void>;
 /** Completion is a second, idempotent point command after the semantic merge commits. */
