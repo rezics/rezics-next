@@ -59,7 +59,7 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
       'A pilot stranded in the Sahara meets a small prince who has left his asteroid, and learns from him what matters.',
     );
     // The recorded template nests SubjectHeader and the actions Slot inside the header Slot.
-    expect(page.document.content[0]).toMatchObject({
+    expect(structuredClone(page.document.content[0])).toMatchObject({
       type: 'Slot',
       props: { name: 'header', children: [{ type: 'SubjectHeader' }, { type: 'Slot', props: { name: 'actions' } }] },
     });
@@ -96,7 +96,7 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
     const { subject, related } = page.reads.r0.body;
     const author = subject.statements['schema:author'][0]!.value.content;
     const authorLabel = related[author as keyof typeof related].labels.en;
-    expect(jsonLd).toMatchObject({
+    expect(structuredClone(jsonLd)).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'Book',
       '@id': `https://rezics.com/id/${subject.id}`,
