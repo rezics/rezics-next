@@ -55,9 +55,7 @@ test('account page reads enforce each standalone page limit', () => {
     { pointer: '/content/0/props/limit', code: 'invalid' },
   ]);
   expect(errors('AccountPosts', { limit: 0 })).toEqual([{ pointer: '/content/0/props/limit', code: 'invalid' }]);
-  expect(errors('AccountCollections', { limit: 25 })).toEqual([
-    { pointer: '/content/0/props/limit', code: 'invalid' },
-  ]);
+  expect(errors('AccountCollections', { limit: 25 })).toEqual([{ pointer: '/content/0/props/limit', code: 'invalid' }]);
 });
 
 test('publish-time page cost counts account lists', () => {
