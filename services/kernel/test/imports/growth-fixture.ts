@@ -874,7 +874,7 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
     for (const batch of await runtime.importTransport.batches(commands))
       for (const result of batch.results) {
         if (result.status !== 200 && result.status !== 201)
-          throw new Error(`Bulk replacement public write was rejected: ${result.status}`);
+          throw new Error(`Bulk replacement public write was rejected: ${JSON.stringify(result)}`);
         const owner = preparedOwners.get(result.key);
         if (!owner) throw new Error('Bulk replacement response was not prepared');
         bindings.acknowledge(owner, result.key, { results: [result] });
@@ -969,7 +969,8 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
         const item = prepared.get(result.key);
         if (!item) throw new Error('Private-plan response was not prepared');
         bindings.acknowledge(item.owner, result.key, { results: [result] });
-        if (result.status !== 200 && result.status !== 201) throw new Error('Private-plan public write was rejected');
+        if (result.status !== 200 && result.status !== 201)
+          throw new Error(`Private-plan public write was rejected: ${JSON.stringify(result)}`);
         const id = 'value' in result && 'id' in result.value ? result.value.id : undefined;
         if (id) anchor(source, item.owner.external_id, id);
       }
@@ -1131,7 +1132,13 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       const seed = state!.seed;
       const record = recordFor(
         seed,
-        seed.scenario === 'unchanged' ? 'same' : seed.scenario === 'new' ? 'new' : 'after',
+        seed.scenario === 'unchanged'
+          ? 'same'
+          : seed.scenario === 'new'
+            ? 'new'
+            : seed.scenario === 'revision'
+              ? 'before'
+              : 'after',
       );
       yield { source: 'bangumi' as const, key: '1', revision: null, payload: { ...record, id: 1 } };
     })();
@@ -1154,7 +1161,11 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
     };
   }
 
+  const warmedScenarios = new Set<Scenario>();
   async function warmScenario(seed: Readonly<Seed>, fixture: Fixture) {
+    // Native query objects belong to this runtime. Warm each scenario once; every seed
+    // still builds its own real baseline and stages all of the measured page work.
+    if (warmedScenarios.has(seed.scenario)) return;
     const measuredState = state;
     if (!measuredState) throw new Error('Growth warm-up requires a staged measured seed');
     const measuredSource = ownedSource;
@@ -1213,6 +1224,7 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       fixturePartitions.clear();
       for (const partition of measuredPartitions) fixturePartitions.add(partition);
     }
+    warmedScenarios.add(seed.scenario);
   }
 
   return {
