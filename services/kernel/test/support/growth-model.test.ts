@@ -78,3 +78,13 @@ test('a scale whose repetitions spread beyond their uncertainty makes the series
   expect(result.families.linear.factor).toBe(0);
   expect(result.outcome).toBe('insufficient-evidence');
 });
+
+test('a feasible family fit stays compatible when its slope interval has room', () => {
+  const scales = [1, 4, 16, 64, 256];
+  const points = scales.map((scale) => {
+    const value = 100 + 1000 * (scale - 1);
+    return { scale, repetitions: [value, value, value], uncertainty: value * 0.95 };
+  });
+
+  expect(classifySeries(points, 'logarithmic').outcome).toBe('compatible');
+});

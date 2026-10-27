@@ -120,7 +120,8 @@ function isFeasible(
     }
   }
 
-  const b = minimumB;
+  // Prefer the interior of a feasible range so rounding at its edge does not reject a valid intercept.
+  const b = Number.isFinite(maximumB) && maximumB > minimumB ? minimumB + (maximumB - minimumB) / 2 : minimumB;
   const lowerA = Math.max(0, ...intervals.map(({ lower }, index) => lower - b * coordinates[index]!));
   const upperA = Math.min(...intervals.map(({ upper }, index) => upper - b * coordinates[index]!));
   return noGreaterThan(lowerA, upperA);
