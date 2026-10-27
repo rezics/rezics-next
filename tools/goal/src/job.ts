@@ -166,31 +166,39 @@ export class WorkerJob implements GateOutcomeSink {
       if (!(error instanceof TaskHeldForDependenciesError)) throw error;
     }
   }
+  /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
+  private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
+    if (this.starting.has(taskId)) return;
+    this.starting.add(taskId);
     try {
-      await this.follow(await this.tasks.retryHeld(taskId));
-    } catch (error) {
-      // Another process is starting it.
-      if (error instanceof LeaseHeldError) return;
-      if (!(error instanceof HeldTaskConflictError)) throw error;
-      const task = this.tasks.store.task(taskId),
-        ref = { taskId, attempt: task.currentAttempt };
-      const event = {
-        managerId: task.brief.manager,
-        taskId,
-        kind: 'spec-conflict' as const,
-        summary: `spec-conflict: refusing to release task because ${error.detail}`,
-      };
-      if (task.currentAttempt)
-        this.tasks.store.updateHeldRetryTask(ref, (current) => {
-          current.state = 'stopped';
-        });
-      else
-        this.tasks.store.updateTask(ref, (current) => {
-          current.state = 'stopped';
-        });
-      this.tasks.store.event(ref, 'manager-event', event);
-      this.inbox.deliver(event);
+      try {
+        await this.follow(await this.tasks.retryHeld(taskId));
+      } catch (error) {
+        // Another process is starting it.
+        if (error instanceof LeaseHeldError) return;
+        if (!(error instanceof HeldTaskConflictError)) throw error;
+        const task = this.tasks.store.task(taskId),
+          ref = { taskId, attempt: task.currentAttempt };
+        const event = {
+          managerId: task.brief.manager,
+          taskId,
+          kind: 'spec-conflict' as const,
+          summary: `spec-conflict: refusing to release task because ${error.detail}`,
+        };
+        if (task.currentAttempt)
+          this.tasks.store.updateHeldRetryTask(ref, (current) => {
+            current.state = 'stopped';
+          });
+        else
+          this.tasks.store.updateTask(ref, (current) => {
+            current.state = 'stopped';
+          });
+        this.tasks.store.event(ref, 'manager-event', event);
+        this.inbox.deliver(event);
+      }
+    } finally {
+      this.starting.delete(taskId);
     }
   }
   private hasCommit(ref: AttemptRef): boolean {
