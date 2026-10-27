@@ -10,3 +10,6 @@ export type Related = Read['related'] &
       redirect?: string;
     }
   >;
+
+/** The cover summary the kernel returns with a subject read. */
+export type Summary = NonNullable<Read['summary']>;

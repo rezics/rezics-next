@@ -4,7 +4,10 @@ import { env } from 'cloudflare:workers';
 import { requestLocale } from '../kernel/client.ts';
 
 export type Release = FilterRelease & {
-  types: Record<string, { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[] }>;
+  types: Record<
+    string,
+    { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[]; coverRatio?: string }
+  >;
   properties: Record<string, { labels?: Record<string, string>; datatype: string; value?: { pattern?: string } }>;
 };
 
@@ -97,6 +100,33 @@ export async function typeNames(types: Iterable<string>, locale: string): Promis
     if (label) names.set(type, label);
   }
   return names;
+}
+
+const coverRatios = new Set<string>(['2:3', '3:4', '1:1', '4:3']);
+
+/**
+ * The type's name in the reader's language and the cover frame its definition declares, taken from the nearest type
+ * of its own bases that declares one. A type the release does not know has neither.
+ */
+export async function typeFrame(
+  type: string,
+  locale: string,
+): Promise<{ label?: string; ratio?: '2:3' | '3:4' | '1:1' | '4:3' }> {
+  let release: Release;
+  try {
+    release = await readRelease();
+  } catch {
+    return {};
+  }
+  const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
+  if (!definition) return {};
+  const label = definition.labels ? pickText(definition.labels, locale).text : '';
+  for (const name of [type, ...(definition.bases ?? [])]) {
+    const ratio = Object.hasOwn(release.types, name) ? release.types[name]?.coverRatio : undefined;
+    if (ratio !== undefined && coverRatios.has(ratio))
+      return { ...(label ? { label } : {}), ratio: ratio as '2:3' | '3:4' | '1:1' | '4:3' };
+  }
+  return label ? { label } : {};
 }
 
 /** Names each subject's type in the reader's language, in place; a type with no name keeps none and is not shown. */

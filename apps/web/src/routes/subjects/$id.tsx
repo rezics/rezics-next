@@ -2,11 +2,19 @@ import { createFileRoute, Link, notFound, redirect, useRouter } from '@tanstack/
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { ReactNode } from 'react';
-import { loadSubjectPage, SubjectPage, subjectPageJsonLd, subjectPageTitle } from '../../features/pages/subject';
+import {
+  loadSubjectPage,
+  SubjectPage,
+  subjectPageJsonLd,
+  subjectPageTitle,
+  subjectPageType,
+} from '../../features/pages/subject';
 import { kernelClient } from '../../kernel/client';
 import { loadSubjectLibrarySlot } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
 import type { SessionEnv } from '../../session/client';
+import { typeFrame } from '../../subject/definitions';
+import { loadReader } from '../../subject/load-reader';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { env } from 'cloudflare:workers';
@@ -38,20 +46,24 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
-    const [result, library] = await Promise.all([
+    const request = getRequest();
+    const [result, library, reader] = await Promise.all([
       loadSubjectPage(client, data.id),
       loadSubjectLibrarySlot(
         client,
-        getRequest(),
+        request,
         env as Partial<SessionEnv>,
         data.id,
         data.loadCollections,
         data.slotResult,
       ),
+      loadReader(client, request, env as Partial<SessionEnv>),
     ]);
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'redirect') throw redirect({ href: `/${data.locale}/subjects/${result.id}`, statusCode: 308 });
-    return { page: result.page, library };
+    const type = subjectPageType(result.page);
+    const frame = type ? await typeFrame(type, data.locale) : {};
+    return { page: result.page, library, reader, frame };
   });
 
 export const Route = createFileRoute('/subjects/$id')({
@@ -96,7 +108,7 @@ function SubjectLink({ href, lang, children }: { href: string; lang?: string; ch
 }
 
 function SubjectRoute() {
-  const { page, library } = Route.useLoaderData();
+  const { page, library, reader, frame } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   return (
     <SubjectPage
@@ -109,7 +121,19 @@ function SubjectRoute() {
         sources: m.subject_sources(),
         aliases: m.subject_aliases(),
         search: m.search_submit(),
+        cover: m.subject_cover(),
+        coverCredit: m.subject_cover_credit(),
+        coverReveal: m.subject_cover_reveal(),
+        coverWithheld: m.subject_cover_withheld(),
+        coverVia: m.subject_cover_via(),
+        details: m.subject_details(),
+        documentSpoiler: m.thread_reveal_spoiler(),
+        source: m.subject_source(),
+        spoilerShow: m.subject_spoiler_show(),
       }}
+      reader={reader}
+      {...(frame.label ? { typeLabel: frame.label } : {})}
+      {...(frame.ratio ? { ratio: frame.ratio } : {})}
       link={SubjectLink}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}

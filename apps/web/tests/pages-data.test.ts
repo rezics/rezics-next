@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { dataComponents, PageData, type PageMessages } from '../src/features/pages/data.tsx';
+import { dataComponents, PageData, SubjectSources, type PageMessages } from '../src/features/pages/data.tsx';
 import { layoutComponents, pageDefinitions, PageRoot } from '../src/features/pages/layout.tsx';
 import { CompositionRender } from '../src/features/pages/render.tsx';
 
@@ -118,8 +118,18 @@ test("data components render the subject read in the reader's locale", () => {
   expect(html).not.toContain('000-old');
   expect(text(html)).toMatch(/Illustrator Unknown value/);
   expect(text(html)).toMatch(/Published 1943/);
-  expect(html.match(/href="https:\/\/example\.com\/a"/g)).toHaveLength(1);
-  expect(html.match(/Antoine de/g)).toHaveLength(1);
+  // A fact's sources are listed once, in the Sources section, not under the fact.
+  expect(html).not.toContain('https://example.com/a');
+  const sources = renderToString(
+    createElement(
+      PageData,
+      { locale: 'fr', subject: subjectId, document, reads: ok, messages } as never,
+      createElement(SubjectSources),
+    ),
+  );
+  expect(sources.match(/href="https:\/\/example\.com\/a"/g)).toHaveLength(1);
+  // The author is linked from the header and from the fact row.
+  expect(html.match(new RegExp(`href="/fr/subjects/${author}"`, 'g'))).toHaveLength(2);
   const order = ['Auteur', 'Pages', 'ISBN', 'Illustrator', 'Published', 'Œuvres', 'Fin'].map((needle) =>
     html.indexOf(needle),
   );

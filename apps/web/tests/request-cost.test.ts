@@ -312,11 +312,15 @@ test('subject page stays within its bound as s grows', async () => {
     kernelAuthorizations.length = 0;
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toHaveLength(2);
-    expect(kernelCalls).toEqual(
+    // The type's name comes from the definitions release: at most the active pointer and the release, whatever s is.
+    const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
+    expect(definitions.length).toBeLessThanOrEqual(2);
+    const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
+    expect(page).toHaveLength(2);
+    expect(page).toEqual(
       expect.arrayContaining(['POST /v1/pages:read', `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`]),
     );
-    expect(kernelAuthorizations).toEqual([null, null]);
+    expect(kernelAuthorizations).toEqual(kernelCalls.map(() => null));
   }
 }, 300_000);
 test('board page stays within its bound as s grows', async () => {

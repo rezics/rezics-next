@@ -7,7 +7,7 @@ import {
   type PresentationProfile,
 } from '@rezics/composition';
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
-import type { Related, Subject } from '../subject/types';
+import type { Related, Subject, Summary } from '../subject/types';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
@@ -67,6 +67,8 @@ type Fixtures = {
   redirects: Record<string, string>;
   /** Structural bases by type, copied from the bundled definitions release. */
   types: Record<string, { bases: string[] }>;
+  /** The cover summary a subject read returns beside the subject, by subject id; a subject with none has none. */
+  summaries?: Record<string, Summary>;
 };
 
 export type KernelRecording = { status: number; [key: string]: unknown };
@@ -406,7 +408,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** The same subject payload `GET /v1/subjects/:id` returns, including a merged subject's survivor. */
-function subjectPayload(fixtures: Fixtures, id: string): { subject: Subject; related: Related } | undefined {
+function subjectPayload(
+  fixtures: Fixtures,
+  id: string,
+): { subject: Subject; related: Related; summary?: Summary } | undefined {
   const target = fixtures.redirects[id] ?? id;
   const subject = fixtures.subjects.find((item) => item.id === target);
   if (!subject) return undefined;
@@ -432,7 +437,9 @@ function subjectPayload(fixtures: Fixtures, id: string): { subject: Subject; rel
       statement.qualifiers.forEach(visit);
       statement.references.flatMap((reference) => reference.parts).forEach(visit);
     }
-  return { subject, related };
+  const summary =
+    fixtures.summaries && Object.hasOwn(fixtures.summaries, target) ? fixtures.summaries[target] : undefined;
+  return { subject, related, ...(summary ? { summary } : {}) };
 }
 
 function byEnglishLabel(left: Subject, right: Subject): number {

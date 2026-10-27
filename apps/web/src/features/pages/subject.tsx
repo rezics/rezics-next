@@ -2,8 +2,9 @@ import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
 import { originalLanguage } from '../../subject/language';
+import type { Reader } from '../../subject/reader';
 import type { Related, Subject } from '../../subject/types';
-import { dataComponents, PageData, pageText, type PageMessages } from './data';
+import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
@@ -69,6 +70,11 @@ export function subjectPageTitle(page: SubjectPageData, locale: string): string 
   return read ? pageText(read.subject.labels, locale, originalLanguage(read.subject)).text : '';
 }
 
+/** The subject's type CURIE, when its read succeeded. */
+export function subjectPageType(page: SubjectPageData): string | undefined {
+  return subjectBody(page)?.subject.type;
+}
+
 export function subjectPageJsonLd(page: SubjectPageData, locale: string): string | undefined {
   const read = subjectBody(page);
   return read
@@ -92,6 +98,9 @@ export function SubjectPage({
   actions,
   nonce,
   renderJsonLd = true,
+  reader,
+  typeLabel,
+  ratio,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -100,6 +109,12 @@ export function SubjectPage({
   actions?: (subject: SubjectActionsInput) => ReactNode;
   nonce?: string;
   renderJsonLd?: boolean;
+  /** The reader's spoiler and suitability settings; anonymous readers get the defaults. */
+  reader?: Reader;
+  /** The subject type's name in the reader's language, from the definitions release. */
+  typeLabel?: string;
+  /** The cover frame the definitions release declares for the subject's type. */
+  ratio?: ComponentProps<typeof PageData>['ratio'];
 }) {
   const read = subjectBody(page);
   const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
@@ -114,13 +129,19 @@ export function SubjectPage({
           reads={page.reads}
           messages={messages}
           {...(link ? { link } : {})}
+          {...(reader ? { reader } : {})}
+          {...(typeLabel ? { typeLabel } : {})}
+          {...(ratio ? { ratio } : {})}
         >
-          <CompositionRender
-            document={page.document}
-            definitions={pageDefinitions}
-            components={{ ...layoutComponents, ...dataComponents }}
-            root={PageRoot}
-          />
+          <div className="flex w-full flex-col gap-8">
+            <CompositionRender
+              document={page.document}
+              definitions={pageDefinitions}
+              components={{ ...layoutComponents, ...dataComponents }}
+              root={PageRoot}
+            />
+            <SubjectSources />
+          </div>
         </PageData>
       </PageHost>
       {renderJsonLd && jsonLd !== undefined && (

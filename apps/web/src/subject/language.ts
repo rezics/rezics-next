@@ -33,6 +33,28 @@ export function originalLanguage(subject: Subject): string | undefined {
   }
 }
 
+/** The title the subject was first written under, with its language, when it has one. */
+export function originalTitle(subject: Subject): { text: string; lang: string } | undefined {
+  const lang = originalLanguage(subject);
+  if (lang === undefined) return undefined;
+  const label = Object.hasOwn(subject.labels, lang) ? subject.labels[lang] : undefined;
+  if (label) return { text: label, lang };
+  for (const statement of statementsOf(subject, NAME_PROPERTY)) {
+    const content = statement.value.type === 'value' ? statement.value.content : undefined;
+    if (record(content) && content.language === lang && typeof content.text === 'string' && content.text)
+      return { text: content.text, lang };
+  }
+}
+
+/** The name of a language the reader did not ask for, in the reader's language; undefined for their own. */
+export function foreignLanguageName(lang: string | null | undefined, locale: string): string | undefined {
+  if (!lang || lang === locale) return undefined;
+  const primary = (tag: string) => tag.split('-')[0];
+  // The unqualified language (`zh` for a `zh-Hans` reader) is theirs too.
+  if (lang === primary(locale)) return undefined;
+  return languageName(lang, locale);
+}
+
 /** A language's name in the reader's language; a code the platform has no name for has none. */
 export function languageName(code: string, locale: string): string | undefined {
   if (!LANGUAGE_CODE.test(code)) return undefined;

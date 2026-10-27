@@ -5,17 +5,41 @@ import {
   platformRegistry,
   shownProperties,
   type CompositionDocument,
-} from '@rezics/composition';
-import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
-import { coverSrc } from '../../media/cover-src';
-import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
-import { m } from '../../paraglide/messages.js';
-import { languageName, LANGUAGE_PROPERTY, originalLanguage } from '../../subject/language';
-import type { Related, Subject } from '../../subject/types';
-import type { PageDocument } from './render';
+} from "@rezics/composition";
+import { Cover, sharedRatio, type CoverRatio } from "@rezics/ui/cover";
+import {
+  createContext,
+  useContext,
+  type ComponentType,
+  type ReactNode,
+} from "react";
+import { coverSrc } from "../../media/cover-src";
+import {
+  coverOf,
+  coverSubject,
+  type SubjectSummary,
+} from "../../media/summary";
+import { m } from "../../paraglide/messages.js";
+import {
+  languageName,
+  LANGUAGE_PROPERTY,
+  originalLanguage,
+  originalTitle,
+} from "../../subject/language";
+import { defaultReader, type Reader } from "../../subject/reader";
+import type { Related, Subject, Summary } from "../../subject/types";
+import type { PageDocument } from "./render";
+import {
+  DocumentValue,
+  LanguageTag,
+  MediaValue,
+  readableDocument,
+  SPOILER_PROPERTY,
+  SpoilerGate,
+  type ValueLabels,
+} from "./values";
 
-export type PageMessages = {
+type CoreMessages = {
   unknown: string;
   none: string;
   unlabelled: string;
@@ -23,14 +47,71 @@ export type PageMessages = {
   aliases: string;
   search: string;
 };
+type SubjectMessages = {
+  cover: string;
+  coverCredit: string;
+  coverReveal: string;
+  coverWithheld: string;
+  coverVia: string;
+  details: string;
+  documentSpoiler: string;
+  source: string;
+  spoilerShow: string;
+};
+/** The subject page's own strings are optional so that a host that has none yet still renders the page. */
+export type PageMessages = CoreMessages & SubjectMessages;
+const subjectMessages: SubjectMessages = {
+  cover: "Cover",
+  coverCredit: "Cover credit",
+  coverReveal: "Show cover",
+  coverWithheld: "Sensitive cover",
+  coverVia: "via",
+  details: "Details",
+  documentSpoiler: "Reveal spoiler",
+  source: "Source",
+  spoilerShow: "Show spoiler",
+};
 
 type LinkProps = { href: string; lang?: string; children: ReactNode };
 type PageLink = ComponentType<LinkProps>;
-type Options = { locale: string; messages: PageMessages; link: PageLink };
-type Snak = { property: { id: string; data_type: string }; value: { type: string; content?: unknown } };
-type SubjectRead = { subject: Subject; related: Related };
-type SearchHit = Pick<Subject, 'id' | 'labels'> & { type?: string; summary?: SubjectSummary };
-type SearchRead = { subjects: SearchHit[]; total?: { value: number; relation: 'exact' | 'lower_bound' } };
+type Frame = { typeLabel?: string; ratio?: "2:3" | "3:4" | "1:1" | "4:3" };
+type Options = {
+  locale: string;
+  messages: CoreMessages & SubjectMessages;
+  link: PageLink;
+  reader: Reader;
+  frame: Frame;
+  labels: ValueLabels;
+};
+type Snak = {
+  property: { id: string; data_type: string };
+  value: { type: string; content?: unknown };
+};
+// The kernel client infers statements as one large union; only these fields are read.
+type Stmt = Snak & {
+  id: string;
+  rank: string;
+  qualifiers: Snak[];
+  references: { parts: Snak[] }[];
+};
+type SubjectRead = {
+  subject: Subject;
+  related: Related;
+  summary?: Summary | null;
+};
+type SearchHit = Pick<Subject, "id" | "labels"> & {
+  type?: string;
+  summary?: SubjectSummary;
+};
+type SearchRead = {
+  subjects: SearchHit[];
+  total?: { value: number; relation: "exact" | "lower_bound" };
+};
+type Sources = {
+  credit: NonNullable<Summary["cover"]>["credit"] | null;
+  urls: string[];
+  identifiers: { label: ReturnType<typeof pageText>; value: string }[];
+};
 type PreparedRead = {
   header?: ReactNode;
   groups?: Map<string, ReactNode>;
@@ -38,25 +119,44 @@ type PreparedRead = {
   list?: ReactNode[];
   /** The hits of a search read with their cover summaries, and the read's total count. */
   hits?: SearchHit[];
-  total?: SearchRead['total'];
+  total?: SearchRead["total"];
+  sources?: Sources;
 };
 
 /** A Zone's `cover` appearance token chooses the frame shared by its rows. */
-const tokenRatios: Record<string, CoverRatio> = { portrait: '2:3', square: '1:1', landscape: '4:3' };
+const tokenRatios: Record<string, CoverRatio> = {
+  portrait: "2:3",
+  square: "1:1",
+  landscape: "4:3",
+};
 
 const PageContext = createContext<{
   locale: string;
   messages: PageMessages;
   nodes: Map<string, PreparedRead>;
   ratio?: CoverRatio;
+  subject: string | null;
+  sources: Sources | null;
+  link: PageLink;
 }>({
-  locale: 'en',
-  messages: { unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' },
+  locale: "en",
+  messages: {
+    unknown: "",
+    none: "",
+    unlabelled: "",
+    sources: "",
+    aliases: "",
+    search: "",
+    ...subjectMessages,
+  },
   nodes: new Map(),
+  subject: null,
+  sources: null,
+  link: PlainLink,
 });
-const linkClass = 'underline-offset-4';
-const linkColor = 'text-primary';
-const listClass = 'space-y-5 in-data-[density=compact]:space-y-3';
+const linkClass = "underline-offset-4";
+const linkColor = "text-primary";
+const listClass = "space-y-5 in-data-[density=compact]:space-y-3";
 
 export function usePageLocale(): string {
   return useContext(PageContext).locale;
@@ -68,16 +168,20 @@ export function usePageMessages(): PageMessages {
 
 /** Localized props and read text share the composition fallback chain; `original` is the subject's first language. */
 export function pageText(value: unknown, locale: string, original?: string) {
-  const safe = typeof value === 'string' || isRecord(value) ? value : '';
-  const picked = pickText(safe as string | Record<string, string>, locale, original);
+  const safe = typeof value === "string" || isRecord(value) ? value : "";
+  const picked = pickText(
+    safe as string | Record<string, string>,
+    locale,
+    original,
+  );
   return {
-    text: typeof picked.text === 'string' ? picked.text : '',
+    text: typeof picked.text === "string" ? picked.text : "",
     lang: picked.lang && picked.lang !== locale ? picked.lang : undefined,
   };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function PlainLink({ href, lang, children }: LinkProps) {
@@ -92,7 +196,7 @@ function PlainLink({ href, lang, children }: LinkProps) {
 function webUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    return url.protocol === "https:" || url.protocol === "http:";
   } catch {
     return false;
   }
@@ -112,7 +216,9 @@ function itemLink(id: string, labels: unknown, options: Options) {
   const label = pageText(labels, options.locale);
   const Link = options.link;
   return (
-    <span className={`${linkClass} ${label.text ? linkColor : 'text-muted-foreground'}`}>
+    <span
+      className={`${linkClass} ${label.text ? linkColor : "text-muted-foreground"}`}
+    >
       <Link
         href={`/${encodeURIComponent(options.locale)}/subjects/${encodeURIComponent(id)}`}
         {...(label.lang ? { lang: label.lang } : {})}
@@ -123,149 +229,436 @@ function itemLink(id: string, labels: unknown, options: Options) {
   );
 }
 
-function timeText(value: Record<string, unknown>, locale: string): string | null {
-  if (typeof value.time !== 'string') return null;
+function timeText(
+  value: Record<string, unknown>,
+  locale: string,
+): string | null {
+  if (typeof value.time !== "string") return null;
   const match = /^([+-]?\d{4,})-(\d{2})-(\d{2})T/.exec(value.time);
-  if (!match || ![9, 10, 11].includes(value.precision as number)) return value.time;
+  if (!match || ![9, 10, 11].includes(value.precision as number))
+    return value.time;
   const date = new Date(0);
   // Kernel dates use 00 for the month/day omitted at year/month precision.
   // setUTCFullYear also preserves years 0–99 instead of adding 1900.
-  date.setUTCFullYear(Number(match[1]), Math.max(1, Number(match[2])) - 1, Math.max(1, Number(match[3])));
+  date.setUTCFullYear(
+    Number(match[1]),
+    Math.max(1, Number(match[2])) - 1,
+    Math.max(1, Number(match[3])),
+  );
   if (!Number.isFinite(date.getTime())) return value.time;
   return new Intl.DateTimeFormat(locale, {
-    timeZone: 'UTC',
-    year: 'numeric',
-    ...(value.precision === 10 || value.precision === 11 ? { month: 'long' } : {}),
-    ...(value.precision === 11 ? { day: 'numeric' } : {}),
+    timeZone: "UTC",
+    year: "numeric",
+    ...(value.precision === 10 || value.precision === 11
+      ? { month: "long" }
+      : {}),
+    ...(value.precision === 11 ? { day: "numeric" } : {}),
   }).format(date);
 }
 
-function inlineValue(snak: Snak, related: Related, options: Options): ReactNode {
+function inlineValue(
+  snak: Snak,
+  related: Related,
+  options: Options,
+): ReactNode {
   const { value, property } = snak;
-  if (value.type === 'somevalue' || value.type === 'novalue') {
+  if (value.type === "somevalue" || value.type === "novalue") {
     return (
       <span className="text-muted-foreground">
-        {value.type === 'somevalue' ? options.messages.unknown : options.messages.none}
+        {value.type === "somevalue"
+          ? options.messages.unknown
+          : options.messages.none}
       </span>
     );
   }
-  if (value.type !== 'value') return null;
+  if (value.type !== "value") return null;
   const content = value.content;
-  if (property.data_type === 'wikibase-item' && typeof content === 'string') {
-    const entry = Object.hasOwn(related, content) ? related[content] : undefined;
+  if (property.data_type === "wikibase-item" && typeof content === "string") {
+    const entry = Object.hasOwn(related, content)
+      ? related[content]
+      : undefined;
     return itemLink(entry?.redirect ?? content, entry?.labels, options);
   }
-  if (property.data_type === 'quantity' && isRecord(content) && typeof content.amount === 'string') {
+  if (
+    property.data_type === "quantity" &&
+    isRecord(content) &&
+    typeof content.amount === "string"
+  ) {
     const amount = Number(content.amount);
-    const formatted = Number.isFinite(amount) ? new Intl.NumberFormat(options.locale).format(amount) : content.amount;
+    const formatted = Number.isFinite(amount)
+      ? new Intl.NumberFormat(options.locale).format(amount)
+      : content.amount;
     return (
       <span>
         {formatted}
-        {typeof content.unit === 'string' && content.unit !== '1' ? ` ${content.unit}` : ''}
+        {typeof content.unit === "string" && content.unit !== "1"
+          ? ` ${content.unit}`
+          : ""}
       </span>
     );
   }
-  if (property.data_type === 'time' && isRecord(content)) return <span>{timeText(content, options.locale)}</span>;
-  if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string') {
+  if (property.data_type === "time" && isRecord(content))
+    return <span>{timeText(content, options.locale)}</span>;
+  if (
+    property.data_type === "monolingualtext" &&
+    isRecord(content) &&
+    typeof content.language === "string"
+  ) {
     const text = pageText({ [content.language]: content.text }, options.locale);
     return <span lang={text.lang}>{text.text}</span>;
   }
-  if (typeof content !== 'string') return null;
+  if (typeof content !== "string" || content === "") return null;
+  // A media id or a document is shown by the statement's own view; as a qualifier it has no reading form.
+  if (property.data_type === "media") return null;
   if (property.id === LANGUAGE_PROPERTY) {
     const name = languageName(content, options.locale);
     return name === undefined ? null : <span>{name}</span>;
   }
-  return property.data_type === 'url' ? <ExternalValue value={content} /> : <span>{content}</span>;
+  return property.data_type === "url" ? (
+    <ExternalValue value={content} />
+  ) : (
+    <span>{content}</span>
+  );
 }
 
-function subjectHeader(subject: Subject, options: Options) {
+type Creator = { id: string; name: string; node: ReactNode };
+
+/** The properties that name a subject's principal creators, in the order the first one present is used. */
+const CREATOR_PROPERTIES = [
+  "schema:author",
+  "schema:creator",
+  "schema:director",
+  "schema:musicBy",
+];
+const DATE_PROPERTIES = [
+  "schema:datePublished",
+  "schema:startDate",
+  "schema:dateCreated",
+];
+const MAX_CREATORS = 4;
+
+/** The spoiler level a statement is qualified with: 0 when it has none, 2 for a level that cannot be read. */
+function spoilerLevel(statement: Stmt): number {
+  let level = 0;
+  for (const qualifier of statement.qualifiers) {
+    if (qualifier.property.id !== SPOILER_PROPERTY) continue;
+    const content =
+      qualifier.value.type === "value" ? qualifier.value.content : undefined;
+    const amount = isRecord(content) ? Number(content.amount) : Number.NaN;
+    level = Math.max(
+      level,
+      Number.isInteger(amount) ? Math.min(2, Math.max(0, amount)) : 2,
+    );
+  }
+  return level;
+}
+
+function subjectHeader(
+  read: SubjectRead,
+  creators: Creator[],
+  date: string | null,
+  options: Options,
+) {
+  const { subject, summary } = read;
   const original = originalLanguage(subject);
   const label = pageText(subject.labels, options.locale, original);
+  const title = label.text || options.messages.unlabelled;
+  const first = originalTitle(subject);
+  const quiet =
+    first && label.text && first.text !== label.text ? first : undefined;
   const description = pageText(subject.descriptions, options.locale, original);
   // Select a language for the alias list with the same policy as scalar text.
   const aliasLanguage = pickLanguage(
-    Object.keys(subject.aliases).filter((lang) => subject.aliases[lang]?.length),
+    Object.keys(subject.aliases).filter(
+      (lang) => subject.aliases[lang]?.length,
+    ),
     options.locale,
     original,
   );
   const aliases = aliasLanguage ? (subject.aliases[aliasLanguage] ?? []) : [];
+  const coverFor = {
+    ...coverSubject(subject.id, title, summary, subject.type),
+    ...(creators[0] ? { byline: creators[0].name } : {}),
+  };
+  const cover = (size: "sm" | "lg") => (
+    <Cover
+      subject={coverFor}
+      cover={coverOf(summary)}
+      size={size}
+      src={coverSrc}
+      suitability={options.reader.suitability}
+      labels={options.labels.cover}
+      {...(options.frame.ratio ? { ratio: options.frame.ratio } : {})}
+      {...(size === "lg"
+        ? { priority: true, caption: true }
+        : { decorative: true })}
+    />
+  );
+  const facts = [options.frame.typeLabel, date].filter(
+    (fact): fact is string => !!fact,
+  );
   return (
-    <header className="min-w-0 space-y-3 in-data-[density=compact]:space-y-2">
-      <h1
-        lang={label.lang}
-        className={`font-serif text-4xl font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
-      >
-        {label.text || options.messages.unlabelled}
-      </h1>
-      {description.text && (
-        <p lang={description.lang} className="max-w-prose text-pretty leading-7 text-muted-foreground">
-          {description.text}
-        </p>
-      )}
-      {aliases.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">{options.messages.aliases}</h2>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {aliases.map((alias, index) => {
-              const text = pageText({ [aliasLanguage!]: alias }, options.locale);
-              return (
-                <li key={index} lang={text.lang}>
-                  {text.text}
-                </li>
-              );
-            })}
-          </ul>
+    <div className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
+      <div className="flex min-w-0 gap-4 sm:gap-6">
+        <div className="shrink-0">
+          <div className="sm:hidden">{cover("sm")}</div>
+          <div className="hidden w-60 sm:block">{cover("lg")}</div>
         </div>
-      )}
-    </header>
+        <div className="min-w-0 flex-1 space-y-2 in-data-[density=compact]:space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1
+              lang={label.lang}
+              className={`min-w-0 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? "" : " text-muted-foreground"}`}
+            >
+              {title}
+            </h1>
+            {label.text && (
+              <LanguageTag lang={label.lang} locale={options.locale} />
+            )}
+          </div>
+          {quiet && (
+            <p
+              lang={quiet.lang}
+              className="font-serif text-lg text-muted-foreground"
+            >
+              {quiet.text}
+            </p>
+          )}
+          {facts.length > 0 && (
+            <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
+          )}
+          {creators.length > 0 && (
+            <p data-slot="subject-creators" className="text-sm font-medium">
+              {creators.map((creator, index) => (
+                <span key={creator.id}>
+                  {index > 0 && ", "}
+                  {creator.node}
+                </span>
+              ))}
+            </p>
+          )}
+          {description.text && (
+            <div className="space-y-1">
+              <p
+                lang={description.lang}
+                className="max-w-prose text-pretty leading-7 text-muted-foreground"
+              >
+                {description.text}
+              </p>
+              <LanguageTag lang={description.lang} locale={options.locale} />
+            </div>
+          )}
+          {aliases.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                {options.messages.aliases}
+              </h2>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {aliases.map((alias, index) => {
+                  const text = pageText(
+                    { [aliasLanguage!]: alias },
+                    options.locale,
+                  );
+                  return (
+                    <li key={index} lang={text.lang}>
+                      {text.text}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
+/** The statements that count: the preferred ones when there are any, else the normal ones. */
+function bestRank(statements: Stmt[]): Stmt[] {
+  const preferred = statements.filter(
+    (statement) => statement.rank === "preferred",
+  );
+  return preferred.length
+    ? preferred
+    : statements.filter((statement) => statement.rank === "normal");
+}
+
 /** Prepare every property once; multiple nodes can share the same subject read. */
-function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>): PreparedRead {
+function prepareSubject(
+  read: SubjectRead,
+  options: Options,
+  shown: Set<string>,
+): PreparedRead {
   const groups = new Map<string, ReactNode>();
   const relatedLabel = (id: string) =>
-    pageText(Object.hasOwn(read.related, id) ? read.related[id]?.labels : {}, options.locale);
-  for (const [property, statements] of Object.entries(read.subject.statements)) {
-    const preferred: typeof statements = [];
-    const normal: typeof statements = [];
-    for (const statement of statements) {
-      if (statement.rank === 'preferred') preferred.push(statement);
-      else if (statement.rank === 'normal') normal.push(statement);
+    pageText(
+      Object.hasOwn(read.related, id) ? read.related[id]?.labels : {},
+      options.locale,
+    );
+  const { reader } = options;
+  const original = originalLanguage(read.subject);
+  const headerMedia = read.summary?.cover?.media;
+  const coverFor = coverSubject(
+    read.subject.id,
+    pageText(read.subject.labels, options.locale, original).text ||
+      options.messages.unlabelled,
+    read.summary,
+    read.subject.type,
+  );
+  const urls = new Set<string>();
+  const identifiers: Sources["identifiers"] = [];
+  const named: Record<string, Creator[]> = {};
+  const dates: Record<string, string> = {};
+
+  const presentable = (statement: Stmt): ReactNode => {
+    const { value, property } = statement;
+    if (value.type === "value" && property.data_type === "media") {
+      // The cover the header draws is not repeated; any other image is a frame of its own.
+      if (typeof value.content !== "string" || value.content === headerMedia)
+        return null;
+      return (
+        <MediaValue
+          subject={coverFor}
+          cover={null}
+          suitability={reader.suitability}
+          labels={options.labels.cover}
+          {...(options.frame.ratio ? { ratio: options.frame.ratio } : {})}
+        />
+      );
     }
-    const chosen = preferred.length ? preferred : normal;
+    if (value.type === "value" && property.data_type === "document") {
+      const content = value.content;
+      const document = isRecord(content)
+        ? readableDocument(content.document)
+        : undefined;
+      if (
+        !isRecord(content) ||
+        document === undefined ||
+        typeof content.language !== "string"
+      )
+        return null;
+      const lang =
+        content.language === options.locale ? undefined : content.language;
+      return (
+        <div className="space-y-1">
+          <DocumentValue
+            document={document}
+            lang={lang}
+            labels={options.labels}
+          />
+          <LanguageTag lang={content.language} locale={options.locale} />
+        </div>
+      );
+    }
+    return inlineValue(statement, read.related, options);
+  };
+
+  for (const [property, all] of Object.entries(read.subject.statements)) {
+    let chosen = bestRank(all as unknown as Stmt[]);
     if (!chosen.length) continue;
+    // A summary is one document per language; the page shows the one the reader's chain reaches first.
+    const documents = chosen.flatMap((statement) =>
+      statement.value.type === "value" &&
+      statement.property.data_type === "document" &&
+      isRecord(statement.value.content) &&
+      typeof statement.value.content.language === "string"
+        ? [statement.value.content.language]
+        : [],
+    );
+    if (documents.length > 1) {
+      const language = pickLanguage(documents, options.locale, original);
+      chosen = chosen.filter((statement) => {
+        const content = statement.value.content;
+        return !isRecord(content) || content.language === language;
+      });
+    }
     const label = relatedLabel(property);
-    const sources = new Set<string>();
     const values = chosen.flatMap((statement) => {
       // A value the page cannot present, such as a language with no name, stays out of the reading view.
-      const value = inlineValue(statement, read.related, options);
+      const value = presentable(statement);
       if (value === null) return [];
-      for (const reference of statement.references) {
-        for (const part of reference.parts) {
-          if (
-            part.property.data_type === 'url' &&
-            part.value.type === 'value' &&
-            typeof part.value.content === 'string'
-          )
-            sources.add(part.value.content);
+      const gated = spoilerLevel(statement) > reader.spoilerLevel;
+      const content =
+        statement.value.type === "value" ? statement.value.content : undefined;
+      if (!gated) {
+        for (const reference of statement.references) {
+          for (const part of reference.parts) {
+            if (
+              part.property.data_type === "url" &&
+              part.value.type === "value" &&
+              typeof part.value.content === "string"
+            )
+              urls.add(part.value.content);
+          }
+        }
+        if (
+          statement.property.data_type === "external-id" &&
+          typeof content === "string"
+        )
+          identifiers.push({ label, value: content });
+        if (
+          CREATOR_PROPERTIES.includes(property) &&
+          statement.property.data_type === "wikibase-item"
+        ) {
+          if (typeof content === "string") {
+            const entry = Object.hasOwn(read.related, content)
+              ? read.related[content]
+              : undefined;
+            const id = entry?.redirect ?? content;
+            const name = pageText(entry?.labels, options.locale).text;
+            (named[property] ??= []).push({
+              id,
+              name,
+              node: itemLink(id, entry?.labels, options),
+            });
+          }
+        }
+        if (
+          DATE_PROPERTIES.includes(property) &&
+          isRecord(content) &&
+          !(property in dates)
+        ) {
+          const date = timeText(content, options.locale);
+          if (date) dates[property] = date;
         }
       }
-      return [
-        <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
+      const qualifiers = statement.qualifiers.flatMap((qualifier) => {
+        if (qualifier.property.id === SPOILER_PROPERTY) return [];
+        const shownValue = inlineValue(qualifier, read.related, options);
+        return shownValue === null ? [] : [{ qualifier, shownValue }];
+      });
+      const body = (
+        <>
           {value}
-          {statement.qualifiers.length > 0 && (
+          {qualifiers.length > 0 && (
             <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              {statement.qualifiers.map((qualifier, index) => {
+              {qualifiers.map(({ qualifier, shownValue }, index) => {
                 const name = relatedLabel(qualifier.property.id);
                 return (
                   <div className="contents" key={index}>
-                    <dt lang={name.lang}>{name.text || options.messages.unlabelled}</dt>
-                    <dd>{inlineValue(qualifier, read.related, options)}</dd>
+                    <dt lang={name.lang}>
+                      {name.text || options.messages.unlabelled}
+                    </dt>
+                    <dd>{shownValue}</dd>
                   </div>
                 );
               })}
             </dl>
+          )}
+        </>
+      );
+      return [
+        <dd
+          key={statement.id}
+          className="min-w-0 space-y-2 break-words sm:col-start-2"
+        >
+          {gated ? (
+            <SpoilerGate label={options.messages.spoilerShow}>
+              {body}
+            </SpoilerGate>
+          ) : (
+            body
           )}
         </dd>,
       ];
@@ -281,25 +674,27 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           {label.text || options.messages.unlabelled}
         </dt>
         {values}
-        {sources.size > 0 && (
-          <dd className="min-w-0 space-y-1 text-sm sm:col-start-2">
-            <span className="font-medium text-muted-foreground">{options.messages.sources}</span>
-            <ul className="list-disc space-y-1 ps-5">
-              {[...sources].map((source) => (
-                <li key={source}>
-                  <ExternalValue value={source} />
-                </li>
-              ))}
-            </ul>
-          </dd>
-        )}
       </div>,
     );
   }
+  const creators = (
+    named[
+      CREATOR_PROPERTIES.find((property) => named[property]?.length) ?? ""
+    ] ?? []
+  ).slice(0, MAX_CREATORS);
+  const date =
+    dates[DATE_PROPERTIES.find((property) => property in dates) ?? ""] ?? null;
   return {
-    header: subjectHeader(read.subject, options),
+    header: subjectHeader(read, creators, date, options),
     groups,
-    more: [...groups].filter(([property]) => !shown.has(property)).map(([, group]) => group),
+    more: [...groups]
+      .filter(([property]) => !shown.has(property))
+      .map(([, group]) => group),
+    sources: {
+      credit: read.summary?.cover?.credit ?? null,
+      urls: [...urls],
+      identifiers,
+    },
   };
 }
 
@@ -310,6 +705,9 @@ export function PageData({
   reads,
   messages,
   link = PlainLink,
+  reader = defaultReader,
+  typeLabel,
+  ratio,
   children,
 }: {
   locale: string;
@@ -318,24 +716,60 @@ export function PageData({
   reads: Record<string, { status: number; body: unknown }>;
   messages: PageMessages;
   link?: PageLink;
+  reader?: Reader;
+  typeLabel?: string;
+  ratio?: Frame["ratio"];
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
   const plan = planReads(platformRegistry, composition, { subject });
   const shown = new Set(shownProperties(composition));
-  const options = { locale, messages, link };
+  const resolved = { ...subjectMessages, ...messages };
+  const labels: ValueLabels = {
+    spoilerShow: resolved.spoilerShow,
+    documentSpoiler: resolved.documentSpoiler,
+    cover: {
+      withheld: resolved.coverWithheld,
+      reveal: resolved.coverReveal,
+      credit: resolved.coverCredit,
+      via: resolved.coverVia,
+    },
+  };
+  const options: Options = {
+    locale,
+    messages: resolved,
+    link,
+    reader,
+    frame: { ...(typeLabel ? { typeLabel } : {}), ...(ratio ? { ratio } : {}) },
+    labels,
+  };
   const prepared = new Map<string, PreparedRead>();
+  let sources: Sources | null = null;
   for (const [key, planned] of Object.entries(plan.reads)) {
     const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
     if (result?.status !== 200 || !isRecord(result.body)) continue;
-    if (planned.kind === 'subject' && isRecord(result.body.subject) && isRecord(result.body.related)) {
-      prepared.set(key, prepareSubject(result.body as SubjectRead, options, shown));
-    } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
-      const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
+    if (
+      planned.kind === "subject" &&
+      isRecord(result.body.subject) &&
+      isRecord(result.body.related)
+    ) {
+      const read = prepareSubject(result.body as SubjectRead, options, shown);
+      prepared.set(key, read);
+      if (planned.id === subject) sources = read.sources ?? null;
+    } else if (
+      planned.kind === "search" &&
+      Array.isArray(result.body.subjects)
+    ) {
+      const subjects = (result.body as SearchRead).subjects.slice(
+        0,
+        planned.body.limit,
+      );
       const total = (result.body as SearchRead).total;
       prepared.set(key, {
-        list: subjects.map((item) => <li key={item.id}>{itemLink(item.id, item.labels, options)}</li>),
+        list: subjects.map((item) => (
+          <li key={item.id}>{itemLink(item.id, item.labels, options)}</li>
+        )),
         hits: subjects,
         ...(total ? { total } : {}),
       });
@@ -346,19 +780,114 @@ export function PageData({
     const read = prepared.get(key);
     if (read) nodes.set(id, read);
   }
-  const appearance = isRecord(composition.root.props.appearance) ? composition.root.props.appearance : {};
+  const appearance = isRecord(composition.root.props.appearance)
+    ? composition.root.props.appearance
+    : {};
   const token =
-    typeof appearance.cover === 'string' && Object.hasOwn(tokenRatios, appearance.cover) ? appearance.cover : '';
-  const ratio = token ? tokenRatios[token] : undefined;
+    typeof appearance.cover === "string" &&
+    Object.hasOwn(tokenRatios, appearance.cover)
+      ? appearance.cover
+      : "";
+  const zoneRatio = token ? tokenRatios[token] : undefined;
   return (
-    <PageContext.Provider value={{ locale, messages, nodes, ...(ratio ? { ratio } : {}) }}>
+    <PageContext.Provider
+      value={{
+        locale,
+        messages: resolved,
+        nodes,
+        subject,
+        sources,
+        link,
+        ...(zoneRatio ? { ratio: zoneRatio } : {}),
+      }}
+    >
       {children}
     </PageContext.Provider>
   );
 }
 
+/** The overview's last section: the cover's credit, the sources of the facts shown, identifiers, and Details. */
+export function SubjectSources() {
+  const {
+    locale,
+    messages,
+    subject,
+    sources,
+    link: Link,
+  } = useContext(PageContext);
+  if (!subject || !sources) return null;
+  const credit = sources.credit;
+  return (
+    <section
+      data-slot="subject-sources"
+      aria-labelledby="subject-sources"
+      className="min-w-0 space-y-3 border-t border-border/60 pt-6"
+    >
+      <h2
+        id="subject-sources"
+        className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
+      >
+        {messages.sources}
+      </h2>
+      <ul className="space-y-1 text-sm break-words">
+        {credit && (
+          <li>
+            <span className="me-2 font-medium text-muted-foreground">
+              {messages.cover}
+            </span>
+            © {credit.rightsHolder}
+            {credit.via && (
+              <>
+                {" · "}
+                {messages.coverVia}{" "}
+                {webUrl(credit.via.url) ? (
+                  <a
+                    className={`${linkClass} ${linkColor}`}
+                    href={credit.via.url}
+                  >
+                    {credit.via.name}
+                  </a>
+                ) : (
+                  credit.via.name
+                )}
+              </>
+            )}
+            {credit.license ? ` · ${credit.license}` : null}
+          </li>
+        )}
+        {sources.urls.map((url) => (
+          <li key={url}>
+            <span className="me-2 font-medium text-muted-foreground">
+              {messages.source}
+            </span>
+            <ExternalValue value={url} />
+          </li>
+        ))}
+        {sources.identifiers.map(({ label, value }, index) => (
+          <li key={index}>
+            <span
+              lang={label.lang}
+              className="me-2 font-medium text-muted-foreground"
+            >
+              {label.text || messages.unlabelled}
+            </span>
+            {value}
+          </li>
+        ))}
+      </ul>
+      <p className={`${linkClass} ${linkColor} text-sm font-medium`}>
+        <Link
+          href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/details`}
+        >
+          {messages.details}
+        </Link>
+      </p>
+    </section>
+  );
+}
+
 function useNodeRead(id: unknown) {
-  return useContext(PageContext).nodes.get(typeof id === 'string' ? id : '');
+  return useContext(PageContext).nodes.get(typeof id === "string" ? id : "");
 }
 
 function SubjectHeader(props: Record<string, unknown>) {
@@ -369,7 +898,9 @@ function Statements(props: Record<string, unknown>) {
   const read = useNodeRead(props.id);
   const properties = Array.isArray(props.properties) ? props.properties : [];
   const groups = properties.flatMap((property) =>
-    typeof property === 'string' && read?.groups?.has(property) ? [read.groups.get(property)] : [],
+    typeof property === "string" && read?.groups?.has(property)
+      ? [read.groups.get(property)]
+      : [],
   );
   return groups.length ? <dl className={listClass}>{groups}</dl> : null;
 }
@@ -384,8 +915,11 @@ function SubjectList(props: Record<string, unknown>) {
 }
 
 /** The bounded count of a search read: a lower bound is shown with a plus sign. */
-function countText(total: NonNullable<PreparedRead['total']>, locale: string): string {
-  return `${new Intl.NumberFormat(locale).format(total.value)}${total.relation === 'lower_bound' ? '+' : ''}`;
+function countText(
+  total: NonNullable<PreparedRead["total"]>,
+  locale: string,
+): string {
+  return `${new Intl.NumberFormat(locale).format(total.value)}${total.relation === "lower_bound" ? "+" : ""}`;
 }
 
 /**
@@ -398,11 +932,18 @@ function TypeList(props: Record<string, unknown>) {
   const title = pageText(props.title, locale);
   if (!read?.hits?.length) return null;
   const hits = read.hits;
-  const id = typeof props.id === 'string' ? props.id : 'type-list';
-  const type = Array.isArray(props.types) && typeof props.types[0] === 'string' ? props.types[0] : undefined;
+  const id = typeof props.id === "string" ? props.id : "type-list";
+  const type =
+    Array.isArray(props.types) && typeof props.types[0] === "string"
+      ? props.types[0]
+      : undefined;
   const subjects = hits.map((hit) => {
     const text = pageText(hit.labels, locale);
-    return { hit, text, subject: coverSubject(hit.id, text.text, hit.summary, hit.type) };
+    return {
+      hit,
+      text,
+      subject: coverSubject(hit.id, text.text, hit.summary, hit.type),
+    };
   });
   const ratio = zoneRatio ?? sharedRatio(subjects.map((item) => item.subject));
   return (
@@ -421,8 +962,14 @@ function TypeList(props: Record<string, unknown>) {
             {title.text}
           </h2>
           {read.total && (
-            <span data-slot="type-count" className="text-sm text-muted-foreground tabular-nums">
-              {m.home_section_count({ count: countText(read.total, locale) }, { locale: locale as never })}
+            <span
+              data-slot="type-count"
+              className="text-sm text-muted-foreground tabular-nums"
+            >
+              {m.home_section_count(
+                { count: countText(read.total, locale) },
+                { locale: locale as never },
+              )}
             </span>
           )}
         </div>
@@ -444,10 +991,17 @@ function TypeList(props: Record<string, unknown>) {
               href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(hit.id)}`}
               className="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              <Cover subject={subject} cover={coverOf(hit.summary)} size="md" ratio={ratio} src={coverSrc} decorative />
+              <Cover
+                subject={subject}
+                cover={coverOf(hit.summary)}
+                size="md"
+                ratio={ratio}
+                src={coverSrc}
+                decorative
+              />
               <span
                 lang={text.lang}
-                className={`line-clamp-2 text-sm leading-snug font-medium break-words group-hover:underline ${linkClass} ${text.text ? 'text-foreground' : 'text-muted-foreground'}`}
+                className={`line-clamp-2 text-sm leading-snug font-medium break-words group-hover:underline ${linkClass} ${text.text ? "text-foreground" : "text-muted-foreground"}`}
               >
                 {text.text || messages.unlabelled}
               </span>
@@ -477,4 +1031,10 @@ function TypeListContent(props: Record<string, unknown>) {
   );
 }
 
-export const dataComponents = { SubjectHeader, Statements, MoreStatements, SubjectList, TypeList };
+export const dataComponents = {
+  SubjectHeader,
+  Statements,
+  MoreStatements,
+  SubjectList,
+  TypeList,
+};

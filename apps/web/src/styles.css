@@ -59,7 +59,14 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   text-decoration-line: underline;
 }
 
-:is(.rezics-document, .prose, [data-slot='field-description'], [data-slot='empty-description'])
+:is(
+    .rezics-document,
+    .prose,
+    [data-slot='field-description'],
+    [data-slot='empty-description'],
+    [data-slot='subject-sources'],
+    [data-slot='subject-creators']
+  )
   a:not([data-slot$='button']) {
   text-decoration-line: underline;
 }

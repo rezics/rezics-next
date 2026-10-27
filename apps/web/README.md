@@ -208,8 +208,8 @@ Run `bun run screenshots` to capture every story in all eight locales and both t
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
 full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
 Files are named `<story id>.<locale>.<theme>.png` and land in `.temp/screenshots/` at the repository root.
-A subject-page capture at that viewport is 1280×721 pixels. Choose a story id or glob, and repeat locale and theme,
-with:
+A page that fits the viewport, such as the missing-subject page, is captured at 1280×720 pixels; a longer page is
+captured whole. Choose a story id or glob, and repeat locale and theme, with:
 
 ```sh
 bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>] [--out <dir>]
@@ -610,6 +610,18 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`;
   `services/kernel/test/semantic/growth-reads.test.ts`: `the fact writer refuses more than 512 facts for one subject`;
   `Anchored subject read stays within its bound as the subject's history grows`
+
+### Subject page header and reading settings
+
+- **Touches:** One definitions read for the type's name and cover frame, served from the cache when warm (the active
+  pointer for 60 s, a release by digest for good). For a signed-in reader, in parallel with the page read, one session
+  credential read and one `GET /v1/accounts/<id>/preferences` for `spoilerLevel` and `suitability`; an anonymous reader
+  uses the defaults and reads nothing. The header, value views, reveal controls and Sources render locally from the
+  page read's subject, cover summary and related fills
+- **Bound:** at most 2 K for definitions on a cold cache and 0 when warm, whatever s is; signed in, 1 more K and at most
+  1 more D, and a failed settings read shows the default (hidden) page; 0 R/A. Cover images load through the media
+  route, one image per cover variant the browser picks, counted under Download. Rendering stays O(s)
+- **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`
 
 ### Subject library slot
 

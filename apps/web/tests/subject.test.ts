@@ -186,7 +186,8 @@ test(
     expect(text).toContain(kokoro.descriptions.en!);
     for (const id of ['schema:author', 'schema:genre', 'schema:isbn', 'schema:numberOfPages'])
       expect(text).toContain(property(id).labels.en);
-    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true });
+    // The author is linked from the header and from the fact row; both go to the same page.
+    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
     expect(await author.getAttribute('href')).toBe(`/en/subjects/${soseki.id}`);
     // Only the best rank shows: the preferred genre, not the deprecated one.
     expect(text).toContain(novel.labels.en!);
@@ -218,7 +219,8 @@ test(
     // Property labels come in English and Japanese only, so a Korean page names properties in English.
     page = await open(`/ko/subjects/${kokoro.id}`, { javaScriptEnabled: false });
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.ko);
-    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true });
+    // The author is linked from the header and from the fact row; both go to the same page.
+    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
     expect(await author.getAttribute('href')).toBe(`/ko/subjects/${soseki.id}`);
     expect(await author.evaluate((element) => element.closest('[lang]')?.getAttribute('lang'))).toBe('en');
     expect(await languageOf(page, `main :text-is("${property('schema:numberOfPages').labels.en}")`)).toBe('en');
@@ -297,7 +299,7 @@ test(
     await page.evaluate(() => {
       (window as unknown as { kept: boolean }).kept = true;
     });
-    await page.getByRole('link', { name: soseki.labels.en!, exact: true }).click();
+    await page.getByRole('link', { name: soseki.labels.en!, exact: true }).first().click();
     await page.waitForURL(`${origin}/en/subjects/${soseki.id}`);
     await page.getByRole('heading', { level: 1, name: soseki.labels.en! }).waitFor();
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
