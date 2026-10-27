@@ -62,7 +62,11 @@ const release = {
     'schema:Person': { facets: [], labels: { en: 'Person' } },
   },
   properties: {
-    [author]: { datatype: 'wikibase-item', qualifiers: [role.property, language.property] },
+    [author]: {
+      datatype: 'wikibase-item',
+      qualifiers: [role.property, language.property],
+      relation: { group: 'credit' },
+    },
     [role.property]: { datatype: 'wikibase-item' },
     [language.property]: { datatype: 'wikibase-item' },
   },
@@ -341,19 +345,27 @@ test('overflow facets exclude unresolved filter candidates and keep at-least cou
   expect(env.calls[0]!.params.has_overflow).toBeUndefined();
 });
 
-test('overflow search keeps qualifiers on one statement and final security checks authoritative', async () => {
+test('overflow search rejects qualified relations and keeps final security checks authoritative', async () => {
   const qualifiers = [role, language].map((q) => ({ property: q.property, value: q.in[0]! }));
   const entries = [
-    book(1, [...filler(), by(target, [qualifiers[0]!]), by(target, [qualifiers[1]!])]),
+    book(1, [...filler(), by(id(9999))]),
     ...Array.from({ length: 7 }, (_, n) => book(n + 2, [...filler(), by(target, qualifiers)])),
   ];
   const env = await deployment(entries);
+  const qualified = await env.request('search', { filter: value([role, language]) });
+  expect(qualified.status).toBe(400);
+  expect(await qualified.json()).toMatchObject({
+    code: 'invalid_request',
+    errors: [{ pointer: '/filter/statement/qualifiers', code: 'unsupported' }],
+  });
+  expect(env.calls).toEqual([]);
+  expect(env.probes).toEqual([]);
   env.fake.put({ ...entries[2]!, visibility: 'hidden' });
   env.fake.put({ ...entries[3]!, visibility: 'taken_down' });
   env.fake.put({ ...entries[4]!, redirect: entries[1]!.id });
   env.fake.put({ ...entries[5]!, securityRevision: 2 });
   env.fake.remove(entries[6]!.id);
-  const page = await env.search(value([role, language]), { limit: 2, descriptions: true, languages: ['en'] });
+  const page = await env.search(value(), { limit: 2, descriptions: true, languages: ['en'] });
   expect(ids(page)).toEqual([entries[1]!.id, entries[7]!.id]);
   expect(page.subjects[0].descriptions).toEqual({ en: 'Current description' });
   expect(env.probes.flatMap((call) => call.probes).map((point) => point.subject)).toEqual([
@@ -361,14 +373,15 @@ test('overflow search keeps qualifiers on one statement and final security check
     entries[1]!.id,
     entries[7]!.id,
   ]);
-  expect(env.probes[0]!.probes[0]!.qualifiers).toHaveLength(2);
+  for (const point of env.probes.flatMap((call) => call.probes))
+    expect(Object.keys(point).sort()).toEqual(['property', 'subject', 'value']);
   await engine.request(
     'POST',
     `/${env.index}/_update/${entries[7]!.id}`,
     { doc: { partition: 11 } },
     { query: { refresh: true } },
   );
-  expect(ids(await env.search(value([role, language])))).toEqual([entries[1]!.id]);
+  expect(ids(await env.search(value()))).toEqual([entries[1]!.id]);
   env.allow(false);
   const denied = await env.request('search', { filter: value() });
   expect(denied.status).toBe(403);
