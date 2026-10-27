@@ -314,6 +314,62 @@ export function docker(args: string[]): string {
 
 type DockerCommand = (args: string[]) => string;
 
+const POSTGRES_LOG_TAIL_LINES = 300;
+const POSTGRES_ERROR_SEVERITIES = ['ERROR', 'FATAL', 'PANIC'] as const;
+type PostgresErrorSeverity = (typeof POSTGRES_ERROR_SEVERITIES)[number];
+
+type PostgresErrorCount = { count: number; firstMessage: string };
+
+/** Summarize server error records from a bounded tail of PostgreSQL's prefixed log output. */
+export function formatPostgresErrors(output: string): string | null {
+  const grouped = new Map<string, Map<PostgresErrorSeverity, PostgresErrorCount>>();
+  const lines = output.split(/\r\n?|\n/).slice(-POSTGRES_LOG_TAIL_LINES);
+
+  for (const line of lines) {
+    const match = line.match(/\[([0-9A-Z]{5})\]\s+(ERROR|FATAL|PANIC):\s*(.*)$/);
+    if (!match) continue;
+
+    const sqlstate = match[1]!;
+    const severity = match[2] as PostgresErrorSeverity;
+    const message = match[3]!.trim();
+    const severities = grouped.get(sqlstate) ?? new Map<PostgresErrorSeverity, PostgresErrorCount>();
+    const previous = severities.get(severity);
+    if (previous) previous.count += 1;
+    else severities.set(severity, { count: 1, firstMessage: message });
+    grouped.set(sqlstate, severities);
+  }
+
+  if (grouped.size === 0) return null;
+
+  const summary = [`PostgreSQL server errors from the last ${POSTGRES_LOG_TAIL_LINES} log lines, grouped by SQLSTATE:`];
+  for (const sqlstate of [...grouped.keys()].sort()) {
+    for (const severity of POSTGRES_ERROR_SEVERITIES) {
+      const entry = grouped.get(sqlstate)!.get(severity);
+      if (entry) summary.push(`  ${sqlstate} ${severity}: ${entry.count}; first: ${entry.firstMessage}`);
+    }
+  }
+  return summary.join('\n');
+}
+
+/** Read and summarize PostgreSQL's recent error records; this runs only after a failed check. */
+export function reportPostgresErrors(
+  containerId: string,
+  dockerCommand: DockerCommand = docker,
+  write: (message: string) => void = (message) => process.stderr.write(message),
+): void {
+  if (!containerId) return;
+
+  let logs: string;
+  try {
+    logs = dockerCommand(['logs', '--tail', String(POSTGRES_LOG_TAIL_LINES), containerId]);
+  } catch {
+    return;
+  }
+
+  const summary = formatPostgresErrors(logs);
+  if (summary) write(`${summary}\n`);
+}
+
 export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
   return dockerCommand([
     'run',
@@ -345,6 +401,8 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
     '-c',
     'max_connections=500',
+    '-c',
+    'log_line_prefix=%m [%p] [%e] ',
   ]);
 }
 
@@ -384,23 +442,6 @@ export function cleanup(
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
-}
-
-function logPostgresIfStopped(containerId: string): void {
-  if (!containerId) return;
-
-  try {
-    if (docker(['inspect', '--format', '{{.State.Running}}', containerId]) === 'true') return;
-  } catch {
-    // Try to fetch logs even if inspect cannot find the container.
-  }
-
-  try {
-    const logs = docker(['logs', '--tail', '50', containerId]);
-    if (logs) process.stderr.write(`${logs}\n`);
-  } catch (error) {
-    console.error(error);
-  }
 }
 
 function fail(message: string): never {
@@ -573,7 +614,7 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
-    logPostgresIfStopped(container);
+    reportPostgresErrors(container);
     console.error(error);
     process.exitCode = 1;
   } finally {
