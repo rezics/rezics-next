@@ -156,7 +156,7 @@ Platform governance reviews `GET /v1/verification-requests?state=pending`, which
 `{ verificationRequests, next }` with an opaque `encodeListCursor` cursor bound to the route, governance viewer,
 pending state, ordering and page size, and a limit from 1 to 100. The approval and rejection routes,
 `POST /v1/verification-requests/{requestId}:approve` and `:reject`, accept an optional reason of at most 500 characters.
-Both require `account:verify_agent` on the Global Context, held by `platform.governance`. The six verification routes
+Both require `account:verify_agent` on the Global Context, held by `platform.governance`. All verification routes
 stay closed behind `gate:agent-verification` until governance opens that exposure group. The public handle identity
 read remains public.
 
@@ -166,6 +166,39 @@ marks the request approved. A semantic refusal clears the pending account marker
 failed request. The semantic catalogue node survives the merge. Receipt-bound commands and the semantic merge make
 workflow replay and restart converge. Rejection changes only its request. Request, withdrawal, approval, rejection,
 failure and verification each emit a registered Access event.
+
+`POST /v1/accounts/{accountId}:revokeVerification` accepts `{ reason? }` (at most 500
+characters) and requires `account:verify_agent` on the Global Context. Send `{}` when omitting the reason.
+`POST /v1/accounts/{accountId}:releaseVerification` takes no body and requires the account's own
+`account:update`, or `account:manage` for an organization. Both routes use the same exposure gate and return
+`{ reversal }`, including the account, catalogue subject, original verification receipt, decision receipt,
+requester, reversal kind (`released` or `revoked`) and nullable reason. A rejected application is not a reversal.
+
+The reversal decision commits in the account's partition. This is the first workflow step: atomically save the
+receipt and registered `agent-verification.reversing.v1` event, set `agent_verified` false, clear the active subject
+and receipt, and retain the subject and reversal receipt in the pending fields. Both public lookup directions
+stop advertising the link immediately: the handle uses the account's own agent, and `GET /v1/accounts?agent=`
+checks the account's current verified state before returning a page pointer. The pointer may still exist then.
+The pending marker prevents a new application until cleanup finishes.
+
+The outbox effect queues durable `accounts.agent-verification-reversal` work, bound to the decision receipt.
+It calls Semantic's `unverifyAccountAgent` as mechanical platform work, deletes the exact original receipt's
+`access.agent_page` pointer in the subject's partition, then clears the pending marker and emits the registered
+`agent-verification.reversed.v1` event atomically in the account's partition. Both events and the decision receipt
+retain the reversal kind and reason. Commands, Semantic's reversal and pointer deletion are idempotent across
+replay and process loss. Old deliveries check the pending reversal receipt before unmerging, so they cannot undo a
+newer verification. The account may submit a new reviewed application after completion.
+
+The account agent effect also consumes `account-tombstoned.v1`. A deleted verified account commits the same
+reversal, with kind `revoked` and reason `Account deleted`; durable outbox delivery runs the same cleanup workflow.
+If approval or reversal is pending, the effect retries until that work completes, then converges from current state.
+An old activation or rename delivery also converges from the deleted row. No catalogue agent remains linked after
+cleanup; independently held catalogue facts and links remain Semantic's responsibility.
+
+Cost: reversal touches one account point read/update per Access step and one exact pointer deletion. Access rows
+and statements stay constant; Semantic's reversal touches O(links moved from the account node), independent of
+the catalogue agent's in-degree. No additional growth check is required. Reversal coverage is in
+`test/access/agent-verification-reversal.test.ts`, alongside Semantic's reversal tests.
 
 The handle identity read returns `subject: { id, label, type }` for an active account, using its derived account agent
 until verification and the catalogue subject afterward. It returns `verified: false` or `true` accordingly; a deleted
@@ -205,8 +238,7 @@ The account may release verification; governance may revoke it. A dispute is res
 new reviewed application, never by automatic transfer to the next applicant. There is no fixed expiry. A re-check
 follows an event such as a compromise, a change of domain control or a complaint.
 
-`gate:agent-verification` stays closed until the release and revocation workflow is merged and this policy is in
-place. The existing request/approval implementation alone does not satisfy that gate. The
+`gate:agent-verification` remains closed until governance explicitly opens it under this evidence and review policy. The
 [verification research](../../../../docs/research/agent-verification.md) supplies the evidence behind these decisions.
 
 ## Operator responsibility pages

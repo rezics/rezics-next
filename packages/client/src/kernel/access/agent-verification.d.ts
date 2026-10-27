@@ -83,6 +83,15 @@ export declare function createAgentVerificationCommands(config: {
     access: Access;
     clock: () => Date;
 }): {
+    revoke(context: VerificationContext, input: {
+        accountId: string;
+        key: string;
+        reason?: string;
+    }): Promise<CommandOutcome<AgentVerificationReversal>>;
+    release(context: VerificationContext, input: {
+        accountId: string;
+        key: string;
+    }): Promise<CommandOutcome<AgentVerificationReversal>>;
     request(context: VerificationContext, input: AgentVerificationRequestInput): Promise<CommandOutcome<AgentVerificationRequest>>;
     withdraw(context: VerificationContext, input: {
         accountId: string;
@@ -133,4 +142,20 @@ export declare function failAgentVerification(pool: Pool, input: AgentVerificati
     };
 }, clock: () => Date): Promise<void>;
 export declare function loadVerificationRequestRow(pool: Pool, requestId: string): Promise<VerificationRow | null>;
+export type AgentVerificationReversal = {
+    accountId: string;
+    catalogueSubjectId: string;
+    verificationReceiptId: string;
+    receiptId: string;
+    requestedBy: string;
+    kind: 'released' | 'revoked';
+    reason: string | null;
+};
+/** A tombstone is committed authority for mechanical reversal; it grants no new user permission. */
+export declare function reverseDeletedAccountAgent(pool: Pool, accountId: string): Promise<void>;
+/** Platform work only: Semantic checks its own durable reversal receipt. */
+export declare function unmergeVerifiedAgent(pool: Pool, input: AgentVerificationReversal): Promise<void>;
+export declare function removeAgentVerificationPage(pool: Pool, input: AgentVerificationReversal): Promise<void>;
+/** A distinct receipt makes final cleanup and the terminal event atomic and replay-safe. */
+export declare function finishAgentVerificationReversal(pool: Pool, input: AgentVerificationReversal, clock: () => Date): Promise<void>;
 export {};

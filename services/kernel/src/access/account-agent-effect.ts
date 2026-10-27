@@ -6,10 +6,12 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { ACCESS_EVENTS } from './events.ts';
+import { reverseDeletedAccountAgent } from './agent-verification.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
 
 export const ACCOUNT_AGENT_EVENT_TYPES = [
+  'com.rezics.access.account-tombstoned.v1',
   'com.rezics.access.actor-activated.v1',
   'com.rezics.access.organization-created.v1',
   'com.rezics.access.account-display-name-changed.v1',
@@ -80,6 +82,10 @@ export async function applyAccountAgentEffect(pool: Pool, event: CloudEvent): Pr
   const route = routeOf(accountId)!;
   const account = await withConnection(pool, (client) => readAccount(client, route, accountId));
   if (!account) return;
+  if (account.state === 'deleted') {
+    await reverseDeletedAccountAgent(pool, accountId);
+    return;
+  }
   const options = accountAgentOptions(account);
   if (!options) return;
   await ensureAccountAgent(pool, options);

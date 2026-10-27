@@ -454,7 +454,8 @@ async function main(): Promise<void> {
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
-  if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1') cleanupStale();
+  // Remote hosts are shared: only this run's explicit cleanup may remove their containers.
+  if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
   const searchImage = buildSearchImage();
   container = startPostgresContainer();
   searchContainer = docker([

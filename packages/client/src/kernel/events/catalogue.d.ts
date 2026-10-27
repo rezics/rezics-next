@@ -426,6 +426,24 @@ declare const productEventTypes: {
     readonly 'com.rezics.access.account-display-name-changed.v1': Type.TObject<{
         accountId: Type.TString;
     }>;
+    readonly 'com.rezics.access.agent-verification.reversing.v1': Type.TObject<{
+        accountId: Type.TString;
+        catalogueSubjectId: Type.TString;
+        verificationReceiptId: Type.TString;
+        receiptId: Type.TString;
+        requestedBy: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"released">, Type.TLiteral<"revoked">]>;
+        reason: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.agent-verification.reversed.v1': Type.TObject<{
+        accountId: Type.TString;
+        catalogueSubjectId: Type.TString;
+        verificationReceiptId: Type.TString;
+        receiptId: Type.TString;
+        requestedBy: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"released">, Type.TLiteral<"revoked">]>;
+        reason: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
     readonly 'com.rezics.access.agent-verification.requested.v1': Type.TObject<{
         requestId: Type.TString;
         accountId: Type.TString;

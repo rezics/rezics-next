@@ -52,6 +52,19 @@ import {
   type PendingVerificationPage,
 } from './agent-verification.ts';
 
+const agentVerificationReversal = t.Object(
+  {
+    accountId: t.String({ format: 'uuid' }),
+    catalogueSubjectId: t.String({ format: 'uuid' }),
+    verificationReceiptId: t.String({ format: 'uuid' }),
+    receiptId: t.String({ format: 'uuid' }),
+    requestedBy: t.String({ format: 'uuid' }),
+    kind: t.Union([t.Literal('released'), t.Literal('revoked')]),
+    reason: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const publicIdentity = t.Object(
@@ -611,6 +624,71 @@ export function accessRoutes(
           );
           session.record(result);
           return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'revokeVerification'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.revoke_verification'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().revoke(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { reversal: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'releaseVerification'),
+      {
+        headers,
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: {
+          200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.release_verification'),
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent-verification',
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().release(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return { reversal: result.value };
         } catch (error) {
           verificationDenied(error);
         }

@@ -1,4 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { Value } from 'typebox/value';
+import { ACCESS_EVENTS } from './events.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { AccountAgentVerificationError } from '../semantic/agents.ts';
 import {
@@ -10,6 +12,10 @@ import {
   failAgentVerification,
   finishAgentVerification,
   mergeVerifiedAgent,
+  unmergeVerifiedAgent,
+  removeAgentVerificationPage,
+  finishAgentVerificationReversal,
+  type AgentVerificationReversal,
   readAgentVerificationWorkflowRequest,
   recordPendingAgentVerification,
   writeAgentVerificationPage,
@@ -27,6 +33,48 @@ function problem(error: Error, type?: string): { type: string; detail: string } 
 
 /** Register the durable, receipt-bound account-agent approval workflow and its outbox effect. */
 export function registerAgentVerificationWork(context: WorkContext): void {
+  const reversalWorkflow = 'accounts.agent-verification-reversal';
+  const unmerge = DBOS.registerStep(
+    (decision: AgentVerificationReversal) => unmergeVerifiedAgent(context.pool, decision),
+    { name: `${reversalWorkflow}.unmerge`, retriesAllowed: true, maxAttempts: 10 },
+  );
+  const removePage = DBOS.registerStep(
+    (decision: AgentVerificationReversal) => removeAgentVerificationPage(context.pool, decision),
+    { name: `${reversalWorkflow}.remove-page`, retriesAllowed: true, maxAttempts: 10 },
+  );
+  const finishReversal = DBOS.registerStep(
+    (decision: AgentVerificationReversal) => finishAgentVerificationReversal(context.pool, decision, context.clock),
+    { name: `${reversalWorkflow}.finish`, retriesAllowed: true, maxAttempts: 10 },
+  );
+  DBOS.registerWorkflow(
+    async (decision: AgentVerificationReversal) => {
+      await unmerge(decision);
+      await removePage(decision);
+      await finishReversal(decision);
+    },
+    { name: reversalWorkflow },
+  );
+  context.addEffects([
+    {
+      name: 'agent_verification_reversal',
+      types: ['com.rezics.access.agent-verification.reversing.v1'],
+      async run(event) {
+        if (!Value.Check(ACCESS_EVENTS['com.rezics.access.agent-verification.reversing.v1'], event.data))
+          throw new TypeError('Invalid account agent verification reversal event');
+        const decision = event.data as AgentVerificationReversal;
+        await context.client.enqueue(
+          {
+            workflowName: reversalWorkflow,
+            queueName: 'workflows',
+            workflowID: `${reversalWorkflow}:${decision.accountId}:${decision.receiptId}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          decision,
+        );
+      },
+    },
+  ]);
+
   const readDecision = DBOS.registerStep(
     async (requestId: string, receiptId: string): Promise<AgentVerificationWorkflowRequest> => {
       const request = await readAgentVerificationWorkflowRequest(context.pool, requestId);

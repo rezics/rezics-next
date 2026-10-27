@@ -23,6 +23,9 @@ export type MediaImportContext = Readonly<{
 export type MediaCropTuple = [left: number, top: number, width: number, height: number];
 export declare function mediaCropTuple(fragment?: string): MediaCropTuple | null;
 export declare function mediaCropFragment(crop: readonly (number | null)[] | null): string | undefined;
+export declare class MediaImportConflictError extends Error {
+    constructor();
+}
 /** Reserve in the command transaction. Cover claims remain in their caller's
  * command transaction; this port grants no publication permission.
  */

@@ -1,8 +1,9 @@
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
 import { type CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type Access, type ActionCatalogue } from '../request/access.ts';
+import { type Access, type Actor, type ActionCatalogue } from '../request/access.ts';
 import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
 export declare const OPERATOR_RECEIPT_TTL_MS = 60000;
 export declare class OperatorDeniedError extends Error {
@@ -36,7 +37,9 @@ export type OperatorConfig = {
     actions: ActionCatalogue;
     /** Registered colon-form account/access permission protecting the operator resource. */
     managementAction: string;
-    /** Trusted shared cursor signing keys; required only for responsibilityPage. */
+    /** Trusted kernel clock; defaults to the clock installed on Access. */
+    clock?: KernelClock;
+    /** Trusted shared token keys; required only for responsibility pages. */
     cursorKeys?: KeyRing;
 };
 /** Internal trusted application boundary, deliberately absent from public routes.
@@ -119,14 +122,26 @@ export declare function createOperatorCommands(config: OperatorConfig): {
         subjectAccountId: string;
         reservationId: string;
     }>>;
-    /** Bounded operator-local page for the later durable suspension fanout. It
-     * includes pending reservations conservatively. It is not relation authority.
+    /** Bounded operator-local observation, including pending reservations; not relation authority.
+     * Trusted composition supplies the authenticated viewer, never a request body's viewer id.
      */
-    responsibilityPage(input: {
+    responsibilityPage: (input: {
         operatorAccountId: string;
         limit?: number;
         cursor?: string;
-    }): Promise<{
+    }, viewer?: Actor) => Promise<{
+        operators: {
+            reservationId: string;
+            subjectAccountId: string;
+        }[];
+        next: string | null;
+    }>;
+    /** Internal fanout work cursors stay on the seal and never reach a list reader. */
+    responsibilityWorkPage: (input: {
+        operatorAccountId: string;
+        limit?: number;
+        cursor?: string;
+    }) => Promise<{
         operators: {
             reservationId: string;
             subjectAccountId: string;

@@ -100,6 +100,19 @@ const exposure = (open: boolean) =>
   );
 
 /** Exact public command return values; command keys, credentials and opening context stay private. */
+const verificationReversal = Type.Object(
+  {
+    accountId: identity,
+    catalogueSubjectId: identity,
+    verificationReceiptId: identity,
+    receiptId: identity,
+    requestedBy: identity,
+    kind: Type.Union([Type.Literal('released'), Type.Literal('revoked')]),
+    reason: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const ACCESS_EVENTS = {
   'com.rezics.access.organization-close.page.v1': Type.Object(
     {
@@ -277,6 +290,8 @@ export const ACCESS_EVENTS = {
     { accountId: identity },
     { additionalProperties: false },
   ),
+  'com.rezics.access.agent-verification.reversing.v1': verificationReversal,
+  'com.rezics.access.agent-verification.reversed.v1': verificationReversal,
   'com.rezics.access.agent-verification.requested.v1': Type.Object(
     { requestId: identity, accountId: identity, catalogueSubjectId: identity },
     { additionalProperties: false },

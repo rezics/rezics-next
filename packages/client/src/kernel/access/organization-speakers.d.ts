@@ -10,4 +10,5 @@ export declare function readOrganizationSpeakers(pool: Pool, tokens: KeyRing, at
     accountId: string;
     limit?: number;
     cursor?: string;
+    viewer?: string | null;
 }): Promise<OrganizationSpeakersPage>;

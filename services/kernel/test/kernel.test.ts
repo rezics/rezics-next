@@ -74,6 +74,8 @@ const typed = [
   'POST /v1/accounts/:accountId/$requestVerification',
   'GET /v1/accounts/:accountId/verification',
   'POST /v1/accounts/:accountId/$withdrawVerification',
+  'POST /v1/accounts/:accountId/$revokeVerification',
+  'POST /v1/accounts/:accountId/$releaseVerification',
   'GET /v1/verification-requests',
   'POST /v1/verification-requests/:requestId/$approve',
   'POST /v1/verification-requests/:requestId/$reject',

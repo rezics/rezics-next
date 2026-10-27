@@ -94,5 +94,6 @@ export type AgentPagesPage = {
 export declare function readAgentPages(client: Queryable, tokens: KeyRing, input: {
     cursor?: string;
     limit?: number;
+    viewer?: string | null;
 }, at?: Date): Promise<AgentPagesPage>;
 export {};

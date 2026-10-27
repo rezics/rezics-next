@@ -24,6 +24,8 @@ import decideRequest from './agent-verification-decision.sql';
 import accountPending from './agent-verification-account-pending.sql';
 import accountComplete from './agent-verification-account-complete.sql';
 import accountClear from './agent-verification-account-clear.sql';
+import accountReverse from './agent-verification-account-reverse.sql';
+import agentPageDelete from './agent-verification-page-delete.sql';
 import agentPageInsert from './agent-verification-page-insert.sql';
 import requestApproved from './agent-verification-request-approved.sql';
 import requestFailed from './agent-verification-request-failed.sql';
@@ -191,16 +193,19 @@ function validRequestInput(input: AgentVerificationRequestInput): boolean {
   );
 }
 
-function humanAccount(account: VerificationAccount | null, actor: Extract<Actor, { kind: 'account' }>): boolean {
+function currentActorAccount(account: VerificationAccount | null, actor: Extract<Actor, { kind: 'account' }>): boolean {
   return (
     account !== null &&
     account.accountId === actor.accountId &&
     account.kind === 'actor' &&
-    account.operatorAccountId === null &&
     account.state === 'active' &&
     !account.fenced &&
     BigInt(account.minimumAuthnEpoch) <= BigInt(actor.authnEpoch)
   );
+}
+
+function humanAccount(account: VerificationAccount | null, actor: Extract<Actor, { kind: 'account' }>): boolean {
+  return currentActorAccount(account, actor) && account?.operatorAccountId === null;
 }
 
 function freshAccountAuthorization(
@@ -209,6 +214,7 @@ function freshAccountAuthorization(
   accountId: string,
   action: string,
   context: VerificationContext,
+  reversing = false,
 ) {
   const route = routeOf(accountId);
   if (actor.kind !== 'account' || route === null || context.pool === undefined)
@@ -231,24 +237,25 @@ function freshAccountAuthorization(
                 route: actingRoute,
                 account_id: actor.accountId,
               })) as VerificationAccount | null);
-        if (!humanAccount(acting, actor)) return false;
+        if (!(reversing ? currentActorAccount(acting, actor) : humanAccount(acting, actor))) return false;
         return (
           target?.state === 'active' &&
           !target.fenced &&
-          ((actor.accountId === accountId && target.kind === 'actor' && !target.agentVerified) ||
+          ((actor.accountId === accountId && target.kind === 'actor') ||
             (actor.accountId !== accountId && target.kind === 'organization')) &&
-          !target.agentVerified &&
-          target.agentSubjectId === null &&
-          target.pendingAgentSubjectId === null &&
-          target.pendingAgentReceiptId === null
+          (reversing ||
+            (!target.agentVerified &&
+              target.agentSubjectId === null &&
+              target.pendingAgentSubjectId === null &&
+              target.pendingAgentReceiptId === null))
         );
       },
     },
-    context: { pool: context.pool, deadline: context.deadline, partition: 0 },
+    context: { pool: context.pool, deadline: context.deadline, partition: reversing ? partitionOf(route) : 0 },
   });
 }
 
-function globalCommandAuthorization(access: Access, actor: Actor, context: VerificationContext) {
+function globalCommandAuthorization(access: Access, actor: Actor, context: VerificationContext, partition = 0) {
   if (actor.kind !== 'account' || context.pool === undefined) throw new AgentVerificationDeniedError();
   return resourceAuthorization({
     access,
@@ -264,7 +271,7 @@ function globalCommandAuthorization(access: Access, actor: Actor, context: Verif
         return row?.global === true;
       },
     },
-    context: { pool: context.pool, deadline: context.deadline, partition: 0 },
+    context: { pool: context.pool, deadline: context.deadline, partition },
   });
 }
 
@@ -405,6 +412,12 @@ export async function readPendingAgentVerificationRequests(
 
 export function createAgentVerificationCommands(config: { pool: Pool; access: Access; clock: () => Date }) {
   return {
+    async revoke(context: VerificationContext, input: { accountId: string; key: string; reason?: string }) {
+      return reverse(config, context, input, 'revoked');
+    },
+    async release(context: VerificationContext, input: { accountId: string; key: string }) {
+      return reverse(config, context, input, 'released');
+    },
     async request(
       context: VerificationContext,
       input: AgentVerificationRequestInput,
@@ -957,4 +970,183 @@ export async function failAgentVerification(
 
 export async function loadVerificationRequestRow(pool: Pool, requestId: string): Promise<VerificationRow | null> {
   return rows<VerificationRow>(await requestRead.run(pool, { request_id: requestId }))[0] ?? null;
+}
+
+export type AgentVerificationReversal = {
+  accountId: string;
+  catalogueSubjectId: string;
+  verificationReceiptId: string;
+  receiptId: string;
+  requestedBy: string;
+  kind: 'released' | 'revoked';
+  reason: string | null;
+};
+
+async function reverse(
+  config: { pool: Pool; access: Access; clock: () => Date },
+  context: VerificationContext,
+  input: { accountId: string; key: string; reason?: string },
+  kind: AgentVerificationReversal['kind'],
+): Promise<CommandOutcome<AgentVerificationReversal>> {
+  input = { ...input };
+  const { actor } = context;
+  const route = routeOf(input.accountId);
+  if (
+    actor.kind !== 'account' ||
+    context.pool !== config.pool ||
+    route === null ||
+    typeof input.key !== 'string' ||
+    input.key.length < 1 ||
+    input.key.length > 255 ||
+    (input.reason !== undefined && (typeof input.reason !== 'string' || Array.from(input.reason).length > 500))
+  )
+    throw new ProblemError('invalid_request');
+  const authorization =
+    kind === 'revoked'
+      ? globalCommandAuthorization(config.access, actor, context, partitionOf(route))
+      : freshAccountAuthorization(
+          config.access,
+          actor,
+          input.accountId,
+          actor.accountId === input.accountId ? 'account:update' : 'account:manage',
+          context,
+          true,
+        );
+  return runCommand(
+    config.pool,
+    {
+      partition: partitionOf(route),
+      clock: config.clock,
+      deadline: context.deadline,
+      authorization,
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      receipt: {
+        actorAccountId: actor.accountId,
+        kind: `access.agent-verification.${kind}`,
+        key: input.key,
+        digest: requestDigest('account.reverse_agent_verification', actor, {
+          accountId: input.accountId,
+          kind,
+          reason: input.reason ?? null,
+        }),
+      },
+    },
+    (tx, { transactionId }) =>
+      commitReversal(tx as PoolClient, input.accountId, transactionId, actor.accountId, kind, input.reason ?? null),
+  );
+}
+
+/** The committed decision is also step one: hide both lookups before any graph cleanup. */
+async function commitReversal(
+  tx: PoolClient,
+  accountId: string,
+  receiptId: string,
+  requestedBy: string,
+  kind: AgentVerificationReversal['kind'],
+  reason: string | null,
+) {
+  const [previous] = rows(
+    await accountReverse.run(tx, {
+      route: routeOf(accountId)!,
+      account_id: accountId,
+      receipt_id: receiptId,
+      transaction_id: receiptId,
+    }),
+  );
+  if (!previous?.catalogueSubjectId || !previous.verificationReceiptId) throw new AgentVerificationConflictError();
+  const value: AgentVerificationReversal = {
+    accountId,
+    receiptId,
+    requestedBy,
+    kind,
+    reason,
+    catalogueSubjectId: previous.catalogueSubjectId,
+    verificationReceiptId: previous.verificationReceiptId,
+  };
+  return {
+    value,
+    events: [
+      { type: 'com.rezics.access.agent-verification.reversing.v1', subject: accountId, data: value },
+      { type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } },
+    ],
+  };
+}
+
+/** A tombstone is committed authority for mechanical reversal; it grants no new user permission. */
+export async function reverseDeletedAccountAgent(pool: Pool, accountId: string): Promise<void> {
+  const route = routeOf(accountId)!;
+  const account = await accountRead.run(pool, { route, account_id: accountId });
+  if (account?.state !== 'deleted') return;
+  if (account.pendingAgentReceiptId !== null) throw new Error('Account agent work is still pending');
+  if (!account.agentVerified) return;
+  await runCommand(
+    pool,
+    {
+      partition: partitionOf(route),
+      receipt: {
+        actorAccountId: accountId,
+        kind: 'access.agent-verification.deleted',
+        key: `delete:${account.agentVerificationReceiptId}`,
+        digest: createHash('sha256').update(accountId).digest(),
+      },
+    },
+    (tx, { transactionId }) =>
+      commitReversal(tx as PoolClient, accountId, transactionId, accountId, 'revoked', 'Account deleted'),
+  );
+}
+
+/** Platform work only: Semantic checks its own durable reversal receipt. */
+export async function unmergeVerifiedAgent(pool: Pool, input: AgentVerificationReversal): Promise<void> {
+  const account = await accountRead.run(pool, { route: routeOf(input.accountId)!, account_id: input.accountId });
+  // Old outbox delivery after workflow retention must not undo a newer reviewed verification.
+  if (account?.pendingAgentReceiptId !== input.receiptId || account.pendingAgentSubjectId !== input.catalogueSubjectId)
+    return;
+  const { unverifyAccountAgent } = await import('../semantic/account-agents.ts');
+  await unverifyAccountAgent(pool, { account: input.accountId, receipt: input.receiptId });
+}
+
+export async function removeAgentVerificationPage(pool: Pool, input: AgentVerificationReversal): Promise<void> {
+  await agentPageDelete.run(pool, {
+    route: routeOf(input.catalogueSubjectId)!,
+    subject_id: input.catalogueSubjectId,
+    account_id: input.accountId,
+    verification_receipt_id: input.verificationReceiptId,
+  });
+}
+
+/** A distinct receipt makes final cleanup and the terminal event atomic and replay-safe. */
+export async function finishAgentVerificationReversal(
+  pool: Pool,
+  input: AgentVerificationReversal,
+  clock: () => Date,
+): Promise<void> {
+  await runCommand(
+    pool,
+    {
+      partition: partitionOf(routeOf(input.accountId)!),
+      clock,
+      receipt: {
+        actorAccountId: input.requestedBy,
+        kind: 'access.agent-verification.reversed',
+        key: input.receiptId,
+        digest: createHash('sha256').update(JSON.stringify(input)).digest(),
+      },
+    },
+    async (tx, { transactionId }) => {
+      const [cleared] = rows(
+        await accountClear.run(tx as PoolClient, {
+          route: routeOf(input.accountId)!,
+          account_id: input.accountId,
+          catalogue_subject_id: input.catalogueSubjectId,
+          receipt_id: input.receiptId,
+          transaction_id: transactionId,
+        }),
+      );
+      if (!cleared) throw new AgentVerificationConflictError();
+      return {
+        value: { accountId: input.accountId },
+        events: [{ type: 'com.rezics.access.agent-verification.reversed.v1', subject: input.accountId, data: input }],
+      };
+    },
+  );
 }
