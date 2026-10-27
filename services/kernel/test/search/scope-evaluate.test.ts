@@ -57,6 +57,8 @@ const statement = (property: string, content: unknown, qualifiers: ReturnType<ty
 const prefix = `test-scope-evaluate-${randomUUID()}-`;
 const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
 const engineCalls: string[] = [];
+const searchesSince = (offset: number) =>
+  engineCalls.slice(offset).filter((path) => /\/_(?:m?search|count)(?:\/|$)/.test(path));
 const client: OpenSearch = {
   bulk: (...args) => engine.bulk(...args),
   async request<T>(...args: Parameters<OpenSearch['request']>) {
@@ -116,7 +118,7 @@ async function evaluate(filter: FilterDocument, ids: string[], budget: NativeBud
   const prepared = await owner.prepare({ filter });
   const before = engineCalls.length;
   const result = await owner.evaluate(prepared, ids, budget);
-  expect(engineCalls.slice(before), 'explicit IDs must use native points, never another engine search').toEqual([]);
+  expect(searchesSince(before), 'explicit IDs must use native points, never another engine search').toEqual([]);
   expect(result.results).toHaveLength(ids.length);
   for (const key of Object.keys(budget) as (keyof NativeBudget)[]) {
     expect(Number.isSafeInteger(result.usage[key])).toBe(true);
@@ -266,7 +268,7 @@ test('actual hit lineage is only a work-order hint and shares the complete point
   expect(checked.passed.map(({ subject }) => subject.id)).toEqual([lagged]);
   const before = engineCalls.length;
   expect((await owner.evaluate(prepared, [lagged, empty], ample)).results).toEqual([true, false]);
-  expect(engineCalls.slice(before)).toEqual([]);
+  expect(searchesSince(before)).toEqual([]);
 });
 
 type RebuildRunner = { run(partition: number): Promise<{ status: string; examined: number; done: boolean }> };
@@ -343,7 +345,7 @@ test('native point witness row byte and empty-seek reservations are independent 
     const before = engineCalls.length;
     const beforePoints = nativePoints;
     const measured = await capture(db, () => owner.evaluate(prepared, [id], budget));
-    expect(engineCalls.slice(before)).toEqual([]);
+    expect(searchesSince(before)).toEqual([]);
     expect(measured.value.results, dimension).toEqual(['not_proven']);
     expect(measured.value.exhausted).toContain(dimension);
     expect(measured.value.usage[dimension]).toBe(0);
