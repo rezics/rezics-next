@@ -596,11 +596,19 @@ export class MergeTrain {
         if (integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
-          const commands = integrationChecks.map((check) => check.command);
+          // The workspace typecheck covers only the workspaces this change can affect (scripts/typecheck.ts reads
+          // TYPECHECK_CHANGED); a scoped result is a baseline only for the same change, so the key names it.
+          const changed = result.changedFiles.join('\n');
+          const commands = integrationChecks.map((check) =>
+            check.command.join(' ').includes('scripts/typecheck.ts')
+              ? ['env', `TYPECHECK_CHANGED=${changed}`, ...check.command]
+              : check.command,
+          );
           const checked = await runIntegrationChecks(commands, trainTree, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
-          const key = `integration-check:${JSON.stringify(integrationChecks)}`;
+          const scoped = commands.some((command) => command[0] === 'env');
+          const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed).toString(16)}` : ''}`;
           // An integrated candidate is dev's next head, so its result is that head's baseline.
           o.queue.saveBaseline(candidate, key, checked);
           if (!checked.passed) {
