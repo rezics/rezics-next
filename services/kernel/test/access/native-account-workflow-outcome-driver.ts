@@ -714,12 +714,9 @@ async function makeFixture(
       ? owner
       : family === 'fence-operator'
         ? await person('fence-caller')
-        : family === 'subject-delete'
-          ? owner
-          : family === 'operator-delete'
-            ? await person('operator-delete-caller')
-            : await person(`${family}-caller`);
-  const operatorManager = family === 'operator-delete' ? await person('operator-delete-manager') : undefined;
+        : await person(`${family}-caller`);
+  const operatorManager =
+    family === 'operator-delete' || family === 'subject-delete' ? await person(`${family}-manager`) : undefined;
   let staleCaller: string | undefined;
   if (family === 'opening') {
     staleCaller = callerPerson.bearer;
@@ -750,7 +747,7 @@ async function makeFixture(
   const principalAssignment =
     family === 'opening'
       ? null
-      : family === 'operator-delete'
+      : family === 'operator-delete' || family === 'subject-delete'
         ? await delegate(required(operatorManager, 'Operator manager fixture is missing'), callerPerson)
         : await selfDelegate(callerPerson);
   const requestedBy = principalAssignment?.requestedBy ?? null;
@@ -802,6 +799,16 @@ async function makeFixture(
   }
   if (family === 'subject-delete') {
     relation = await createOperatorLink(owner.accountId, subjectPerson.accountId);
+    const manager = required(operatorManager, 'Subject deletion manager fixture is missing');
+    for (const grantee of [manager, callerPerson]) {
+      await grantActions(
+        owner.accountId,
+        grantee.accountId,
+        ['account:delete', 'account:manage'],
+        owner.bearer,
+        reference('subject-manager-grant'),
+      );
+    }
   }
   if (family === 'operator-delete') {
     const manager = required(operatorManager, 'Operator manager fixture is missing');
@@ -979,6 +986,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
   let closed = false;
   const continuationOwners = new Map<string, Fixture>();
   const stepsCache = new WeakMap<Fixture, ProtectedStep[]>();
+  const startedDeleteOperations = new Set<string>();
   const driver: NativeAccountWorkflowDriver = {
     fixture: makeFixture,
     async approve(caller, work) {
@@ -1119,47 +1127,52 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           ).commandKeyPrefix;
           let value: unknown;
           if (work.operation.kind === 'delete') {
-            const completion = executeWorkflow(reference, work);
-            completion.catch(() => {});
-            let settled = false;
-            void completion.then(
-              () => {
-                settled = true;
-              },
-              () => {
-                settled = true;
-              },
-            );
-            const until = Date.now() + 30_000;
-            let continuation: Awaited<ReturnType<ReturnType<typeof native>['continuations']['read']>> = null;
-            while (!settled && Date.now() < until) {
-              continuation = await native().continuations.read(work.operationKey, work.operation.accountId);
-              if (continuation) break;
-              await Bun.sleep(5);
-            }
-            if (continuation) {
-              await Promise.race([
-                continuationReached,
-                completion.then(
-                  () => undefined,
-                  () => undefined,
-                ),
-              ]);
-              if (continuationPausedAtStep) {
-                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-                completion
-                  .finally(() => {
-                    const currentPending = pendingWorkflows.get(work.operationKey);
-                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                    if (stepObserver === executionObserver) stepObserver = priorObserver;
-                  })
-                  .catch(() => {});
-                pendingCompletion = true;
-                return { outcome: 'denied' as const };
+            if (startedDeleteOperations.has(work.operationKey)) {
+              value = await workflows().resumeOperation(work.operationKey);
+            } else {
+              startedDeleteOperations.add(work.operationKey);
+              const completion = executeWorkflow(reference, work);
+              completion.catch(() => {});
+              let settled = false;
+              void completion.then(
+                () => {
+                  settled = true;
+                },
+                () => {
+                  settled = true;
+                },
+              );
+              const until = Date.now() + 30_000;
+              let continuation: Awaited<ReturnType<ReturnType<typeof native>['continuations']['read']>> = null;
+              while (!settled && Date.now() < until) {
+                continuation = await native().continuations.read(work.operationKey, work.operation.accountId);
+                if (continuation) break;
+                await Bun.sleep(5);
               }
+              if (continuation) {
+                await Promise.race([
+                  continuationReached,
+                  completion.then(
+                    () => undefined,
+                    () => undefined,
+                  ),
+                ]);
+                if (continuationPausedAtStep) {
+                  pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+                  completion
+                    .finally(() => {
+                      const currentPending = pendingWorkflows.get(work.operationKey);
+                      if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                      if (stepObserver === executionObserver) stepObserver = priorObserver;
+                    })
+                    .catch(() => {});
+                  pendingCompletion = true;
+                  return { outcome: 'denied' as const };
+                }
+              }
+              if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
+              value = await completion;
             }
-            if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
-            value = await completion;
           } else {
             value = await executeWorkflow(reference, work);
           }
@@ -1280,9 +1293,6 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
               : operation.kind === 'opening'
                 ? f.managementAction
                 : 'account:manage';
-      const currentApproval = await driver.approve(f.caller, f.work);
-      if (currentApproval.outcome !== 'approved') throw new Error('Native approval could not be renewed');
-      const approvalRow = await driver.approval(currentApproval.reference);
       const actor = await required(accessPort, 'Access is not composed').authenticate(f.caller, context());
       if (fact === 'actor-grant' || fact === 'principal-grant') {
         const principal = actor.requestedBy ? /^urn:rezics:request:([^:]+):/.exec(actor.requestedBy)?.[1] : undefined;
@@ -1305,16 +1315,15 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const target =
           operation.kind === 'delete' && operation.responsibility && actor.accountId !== operation.accountId
             ? operation.responsibility.operatorAccountId
-            : (approvalRow?.resourceId ??
-              (operation.kind === 'delete'
-                ? operation.accountId
-                : operation.kind === 'fence-operator'
-                  ? PLATFORM_RESOURCE.id
-                  : operation.kind === 'opening'
-                    ? operation.operatorAccountId
-                    : operation.kind === 'transfer'
-                      ? operation.previous.operatorAccountId
-                      : PLATFORM_RESOURCE.id));
+            : operation.kind === 'delete'
+              ? operation.accountId
+              : operation.kind === 'fence-operator'
+                ? PLATFORM_RESOURCE.id
+                : operation.kind === 'opening'
+                  ? operation.operatorAccountId
+                  : operation.kind === 'transfer'
+                    ? operation.previous.operatorAccountId
+                    : PLATFORM_RESOURCE.id;
         const targetAction =
           operation.kind === 'delete' && operation.responsibility && actor.accountId !== operation.accountId
             ? 'account:manage'
@@ -1507,6 +1516,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         await new Promise<never>(() => {});
       };
       try {
+        if (f.work.operation.kind === 'delete') startedDeleteOperations.add(f.work.operationKey);
         const execution = executeWorkflow(referenceValue, f.work);
         await Promise.race([
           committed,
