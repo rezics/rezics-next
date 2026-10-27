@@ -45,8 +45,19 @@ export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; cod
 export const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
+const REMOTE_TRANSPORT_FAILURE = 75;
 
 export class Aborted extends Error {}
+
+export class RemoteTransportError extends Error {
+  constructor(
+    readonly host: string,
+    readonly step: string,
+  ) {
+    super(`remote-check: connection to ${host} failed during ${step} before a result`);
+    this.name = 'RemoteTransportError';
+  }
+}
 
 export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
@@ -146,6 +157,7 @@ const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), '
  */
 function runScript(id: string, directory: string, cwd: string, command: string[], hostName: string): string {
   const wrapperDirectory = `${directory}/.temp/check-host`;
+  const statusFile = `${directory}/exit-status`;
   const systemdScript = `host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
     bun install --frozen-lockfile
@@ -165,6 +177,7 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
       fi
     fi
     peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak" 2>/dev/null) && echo "remote-check: peak memory of the run $((peak / 1048576)) MiB" >&2
+    printf '%s\\n' "$code" > ${quote(statusFile)}
     exit $code`;
   return `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
@@ -177,6 +190,11 @@ exec systemd-run --scope --quiet --collect --slice=${SLICE} --unit=rezics-check-
 function cleanupScript(id: string, directory: string): string {
   return `systemctl stop rezics-check-${id}.scope >/dev/null 2>&1
 rm -rf -- ${directory}`;
+}
+
+/** Reads the command's recorded exit status when ssh itself reports 255. */
+function statusScript(directory: string): string {
+  return `# REMOTE_CHECK_STATUS\ncat -- ${quote(`${directory}/exit-status`)}`;
 }
 
 /** Tracked and untracked files that exist, without Git's own data, installed packages and local scratch space. */
@@ -594,6 +612,7 @@ async function runLeased(
     const synced = await finished(sync, signal);
     reportDuration('rsync', rsyncStarted, host.name);
     if (signal.aborted) throw new Aborted();
+    if ([12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload');
     if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
 
     console.error(`remote-check: running on ${host.name}`);
@@ -607,8 +626,23 @@ async function runLeased(
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
-    const code = await finished(run, signal);
+    let code = await finished(run, signal);
     if (signal.aborted) throw new Aborted();
+    if (code === 255) {
+      const status = Bun.spawn(['ssh', ...sshOptions(host), host.address, statusScript(directory)], {
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'ignore',
+      });
+      const [statusCode, output] = await Promise.all([finished(status, signal), new Response(status.stdout).text()]);
+      if (signal.aborted) throw new Aborted();
+      const recorded = output.trim();
+      const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
+      if (statusCode !== 0 || !Number.isInteger(parsed) || parsed > 255) {
+        throw new RemoteTransportError(host.name, 'remote command');
+      }
+      code = parsed;
+    }
     await copyReturns(host, directory, options, signal);
     if (signal.aborted) throw new Aborted();
     return code;
@@ -737,8 +771,13 @@ if (import.meta.main) {
   try {
     process.exitCode = await remoteCheck(parse(process.argv.slice(2)), controller.signal);
   } catch (error) {
-    if (!(error instanceof Aborted)) console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
+    if (error instanceof RemoteTransportError) {
+      console.error(error.message);
+      process.exitCode = REMOTE_TRANSPORT_FAILURE;
+    } else {
+      if (!(error instanceof Aborted)) console.error(error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    }
   }
   if (received !== undefined) process.exitCode = 128 + received;
 }

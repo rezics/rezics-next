@@ -105,14 +105,27 @@ if (script.includes('MemAvailable')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+} else if (script.includes('REMOTE_CHECK_STATUS')) {
+  log({ kind: 'status' });
+  const statusFile = dir + '/' + hostKey + '.status';
+  if (!existsSync(statusFile)) process.exit(1);
+  console.log(readFileSync(statusFile, 'utf8'));
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
   log({ kind: 'returns', paths });
   const present = new Set(config.present ?? []);
   for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
 } else if (script.includes('systemd-run')) {
+  const runNumber = count('run');
   log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1] });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
+  const statusFile = dir + '/' + hostKey + '.status';
+  if (runNumber < (config.transportFailures ?? 0)) {
+    rmSync(statusFile, { force: true });
+    process.exit(255);
+  }
+  const result = config.exit ?? 0;
+  writeFileSync(statusFile, String(result));
   if (script.includes('remote-check: bun install') && script.includes('remote-check: command')) {
     console.error('remote-check: bun install 0.125 s on ' + host);
     console.error('remote-check: command 0.250 s on ' + host);
@@ -123,21 +136,27 @@ if (script.includes('MemAvailable')) {
     console.log('started');
     process.on('SIGTERM', () => process.exit(143));
     setInterval(() => {}, 1000);
-  } else process.exit(config.exit ?? 0);
+  } else process.exit(result);
 } else {
   log({ kind: 'cleanup', script });
 }
 `;
 
 const fakeRsync = `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 const input = await Bun.stdin.text();
+const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
+const address = remote?.slice(0, remote.indexOf(':'));
+const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config.json', 'utf8'))[address] ?? {} : {};
+const code = config.rsyncExit ?? 0;
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   destination: args.at(-1),
   files: input.split('\\0').filter(Boolean),
+  code,
 }) + '\\n');
+process.exit(code);
 `;
 
 const fakeDocker = `#!/usr/bin/env bun
@@ -154,6 +173,8 @@ type HostConfig = {
   slots?: number;
   down?: boolean;
   exit?: number;
+  transportFailures?: number;
+  rsyncExit?: number;
   stdout?: string;
   stderr?: string;
   hang?: boolean;
@@ -340,6 +361,35 @@ test("the remote run's output streams back and its exit code becomes the local e
   const cleanup = seen.find((event) => event.kind === 'cleanup')!.script as string;
   expect(cleanup).toContain('rm -rf');
   expect(cleanup).toMatch(/\/srv\/rezics-check\/runs\/[a-z0-9-]+/);
+});
+
+test("a remote run whose connection drops before the command's exit status arrives ends with the transport failure code", async () => {
+  const { env, events } = scenario({ a: { available: 8e9, transportFailures: 1 } });
+  const result = await remote(env, workspace());
+
+  expect(result.code).toBe(75);
+  expect(result.stderr).toContain('connection to a failed during remote command before a result');
+  expect(events().filter((event) => event.kind === 'status')).toHaveLength(1);
+});
+
+test('a remote command that itself exits 255 keeps its exit code', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, exit: 255 } });
+  const result = await remote(env, workspace());
+
+  expect(result.code).toBe(255);
+  expect(result.stderr).not.toContain('before a result');
+  expect(events().filter((event) => event.kind === 'status')).toHaveLength(1);
+});
+
+test('rsync connection errors are reported as transport failures before the command runs', async () => {
+  for (const exit of [12, 30, 35, 255]) {
+    const { env, events } = scenario({ a: { available: 8e9, rsyncExit: exit } });
+    const result = await remote(env, workspace());
+
+    expect(result.code).toBe(75);
+    expect(result.stderr).toContain('connection to a failed during workspace upload before a result');
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+  }
 });
 
 test('a host with no free slot is skipped and with none free the check waits', async () => {

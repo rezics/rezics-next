@@ -8,7 +8,7 @@ const gate = join(repository, 'scripts/gate.ts');
 // A fake ssh answers each kind of remote script by what it contains; a fake rsync and a fake bun record what reaches
 // them. Nothing here touches a network or installs packages.
 const fakeSsh = `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const script = args.at(-1)!;
@@ -38,14 +38,27 @@ if (script.includes('MemAvailable')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+} else if (script.includes('REMOTE_CHECK_STATUS')) {
+  log({ kind: 'status' });
+  if (!existsSync(dir + '/status')) process.exit(1);
+  console.log(readFileSync(dir + '/status', 'utf8'));
 } else if (script.includes('systemd-run')) {
-  log({ kind: 'run', script });
-  console.log('remote gate output');
+  const countFile = dir + '/run-count';
+  const count = (existsSync(countFile) ? Number(readFileSync(countFile, 'utf8')) : 0) + 1;
+  writeFileSync(countFile, String(count));
+  log({ kind: 'run', script, count });
+  if (process.env.FAKE_DROP_FIRST_RUN === '1' && count === 1) process.exit(255);
   if (process.env.FAKE_HANG) {
+    console.log('remote gate output');
     console.log('started');
     process.on('SIGTERM', () => process.exit(143));
     setInterval(() => {}, 1000);
-  } else process.exit(Number(process.env.FAKE_EXIT ?? 0));
+  } else {
+    const code = Number(process.env.FAKE_EXIT ?? 0);
+    writeFileSync(dir + '/status', String(code));
+    console.log('remote gate output');
+    process.exit(code);
+  }
 } else {
   log({ kind: 'cleanup', script });
 }
@@ -164,6 +177,18 @@ test('with KERNEL_CHECK_REMOTE set the root gate runs whole on one check host an
   // The requested number of slots is held on that one host and all are released after the run directory is removed.
   expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(3);
   expect(seen.map((event) => event.kind).slice(-4)).toEqual(['cleanup', 'release', 'release', 'release']);
+});
+
+test('the gate retries its remote run once after a transport failure and exits with the second run\'s code', async () => {
+  const { env, events } = scenario(1);
+  const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_EXIT: '7', GATE_REMOTE_SLOTS: '1' });
+
+  expect(result.code).toBe(7);
+  expect(result.stderr).toContain('transport failure; retrying once');
+  const seen = events();
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(2);
+  expect(seen.filter((event) => event.kind === 'status')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'rsync')).toHaveLength(2);
 });
 
 test('the gate asks for six slots and forwards no concurrency unless set', async () => {

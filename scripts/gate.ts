@@ -32,9 +32,7 @@ function positiveInteger(name: string, value: string): number {
 }
 
 /** Hands the gate to a check host and returns its exit code; a signal sent here is passed on so the host cleans up. */
-async function runRemotely(): Promise<number> {
-  const slots = positiveInteger('GATE_REMOTE_SLOTS', process.env.GATE_REMOTE_SLOTS ?? '6');
-  const concurrency = process.env.GATE_CONCURRENCY;
+async function runRemoteAttempt(slots: number, concurrency: string | undefined): Promise<number> {
   const child = Bun.spawn(
     [
       process.execPath,
@@ -59,6 +57,17 @@ async function runRemotely(): Promise<number> {
   } finally {
     for (const [name, forward] of forwarders) process.off(name, forward);
   }
+}
+
+/** Retries a dropped remote connection once; a signal sent here is passed on so the host cleans up. */
+async function runRemotely(): Promise<number> {
+  const slots = positiveInteger('GATE_REMOTE_SLOTS', process.env.GATE_REMOTE_SLOTS ?? '6');
+  const concurrency = process.env.GATE_CONCURRENCY;
+  const code = await runRemoteAttempt(slots, concurrency);
+  if (code !== 75) return code;
+
+  process.stderr.write('gate: remote run had a transport failure; retrying once\n');
+  return await runRemoteAttempt(slots, concurrency);
 }
 
 async function run(command: string[], cwd: string): Promise<void> {
