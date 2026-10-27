@@ -14,10 +14,10 @@ Research date: 2026-10-28. Independent evidence and recommendation; not an adopt
 
 The recommendation was derived from the candidate, the permitted epoch-mechanism evidence, repository code and primary engine sources. Other native-phase comparison reports and their conclusions were not read. Repository observations refer to base `7a0bac51baaf3bd973f92be43680297c4f5a7345`. The engine image is pinned to 3.9.0 in [its Dockerfile](../../services/kernel/db/search/opensearch/Dockerfile).
 
-| Primary project | Pinned revision and reusable cache under the main checkout's `.reference/` | Licence |
-| --- | --- | --- |
-| [OpenSearch](https://github.com/opensearch-project/OpenSearch/tree/4ee42a94e87f66fbf1e62a9871b1b87f91e02472) | Tag `3.9.0`, `4ee42a94e87f66fbf1e62a9871b1b87f91e02472`; `search-rating-populations/opensearch` | Apache-2.0, `LICENSE.txt`; `NOTICE.txt` |
-| [OpenSearch documentation](https://github.com/opensearch-project/documentation-website/tree/9bf360dee6e0930aa0bd66ba91e992b9ee2828bf) | `9bf360dee6e0930aa0bd66ba91e992b9ee2828bf`; `search-rating-populations/documentation-website` | Apache-2.0, `LICENSE`; `NOTICE` |
+| Primary project                                                                                                                       | Pinned revision and reusable cache under the main checkout's `.reference/`                      | Licence                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------- |
+| [OpenSearch](https://github.com/opensearch-project/OpenSearch/tree/4ee42a94e87f66fbf1e62a9871b1b87f91e02472)                          | Tag `3.9.0`, `4ee42a94e87f66fbf1e62a9871b1b87f91e02472`; `search-rating-populations/opensearch` | Apache-2.0, `LICENSE.txt`; `NOTICE.txt` |
+| [OpenSearch documentation](https://github.com/opensearch-project/documentation-website/tree/9bf360dee6e0930aa0bd66ba91e992b9ee2828bf) | `9bf360dee6e0930aa0bd66ba91e992b9ee2828bf`; `search-rating-populations/documentation-website`   | Apache-2.0, `LICENSE`; `NOTICE`         |
 
 Existing `.reference/INDEX.md` entries already identify these projects/revisions; no clone or index metadata addition was needed. Git source inspection and official documentation were used, including the pinned paths linked below. One uncached documentation blob could not be fetched through the cache's promisor remote; the official [Boolean-query page][bool] supplied that evidence instead. No reference project was installed, built or run, and no source files or long passages are proposed for copying. Current documentation URLs can change; the pinned source governs version-specific implementation claims.
 
@@ -46,14 +46,14 @@ For an eligible epoch, the native predicate is `P = bool.filter([term(epoch,E), 
 
 Disjointness follows because no document satisfies both P and its negation; exhaustiveness follows because every member of D satisfies one. Every A score, including **zero**, exceeds the unscored sentinel. Thus every A document precedes every B document. Within A, native score/name/id sorting equals effective-score/name/id sorting. Within B, effective scores are equal, so name/id alone is exactly the remaining comparator. The required unique id resolves equal scores, equal names and multiple missing names. This proves `sort(A) ++ sort(B)` equals the complete effective order, without truncating and reranking a combined prefix.
 
-| Indexed state under eligible E | Phase and comparator consequence |
-| --- | --- |
-| Epoch E, score 8 or 0 | A; 8 precedes 0, and 0 precedes every unscored subject |
-| Old epoch, score 10 | B; the old 10 has no ordering or public-eligibility force |
-| Null/missing epoch, numeric score | B; name/id only |
-| Epoch E, null/missing score | B; name/id only |
-| Old/null/missing epoch and no score | B; same name/id order as every other B document |
-| Any indexed state, native E is null | B; A has no hits |
+| Indexed state under eligible E      | Phase and comparator consequence                          |
+| ----------------------------------- | --------------------------------------------------------- |
+| Epoch E, score 8 or 0               | A; 8 precedes 0, and 0 precedes every unscored subject    |
+| Old epoch, score 10                 | B; the old 10 has no ordering or public-eligibility force |
+| Null/missing epoch, numeric score   | B; name/id only                                           |
+| Epoch E, null/missing score         | B; name/id only                                           |
+| Old/null/missing epoch and no score | B; same name/id order as every other B document           |
+| Any indexed state, native E is null | B; A has no hits                                          |
 
 For example, an old-epoch score 10 with name `a`, current score 0 with name `z`, and missing score with name `b` order as current zero, old `a`, missing `b`. Raw score sorting and dropping all old epochs fail that example. Epoch-then-score sorting separately fails when B contains two different old epochs: an epoch ordered earlier with name `z` must still follow an epoch ordered later with name `a`. The two-phase construction succeeds because B ignores every stale epoch and numeric value.
 
@@ -141,13 +141,13 @@ Two phases may evaluate the common predicate twice and perform separate counts. 
 
 Returned/source work is separately bounded: at most 200 combined candidates per round, 600 per response, with current disclosure/figure reads grouped by those candidates' partitions and no source lookup for count-only hits. Carry forward existing source concurrency and payload bounds; any new rating-proof API needs its own bounded batch contract. This is a call/payload budget, not a benchmark, SQL-plan proof or guarantee about matched-engine complexity.
 
-| Alternative | Assessment for this stack |
-| --- | --- |
-| Conditional numeric script | Same fixed indexed comparator in one stream; simpler tuple and phase handling. Requires per-document script evaluation and its operational permissions/cache handling. Does not solve per-figure projection lag, generation races or live key movement. |
-| Two native phases | Exact fixed mixed-epoch candidate order without a rating sort script; up to two phase searches, explicit phase cursor and total composition. Requires the safeguards above. Recommended candidate for the owning implementation. |
-| Current-epoch filter only / raw score sort / reranked prefix | Incorrect: respectively loses unscored subjects, ranks stale scores, or can miss a globally earlier subject outside the prefix. |
-| Immutable published generation | Can support stable index traversal if actually immutable and retained; alias promotion alone does not make it immutable or prove current native eligibility. More publication/retention coordination. |
-| Epoch-specific fields or reused slots | Possible materialization tradeoff with bounded retention and cursor lifetime coordination; no need to introduce them for the proved phase construction. Unbounded field growth or overwriting a live cursor's slot is not a safe shortcut. |
+| Alternative                                                  | Assessment for this stack                                                                                                                                                                                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Conditional numeric script                                   | Same fixed indexed comparator in one stream; simpler tuple and phase handling. Requires per-document script evaluation and its operational permissions/cache handling. Does not solve per-figure projection lag, generation races or live key movement. |
+| Two native phases                                            | Exact fixed mixed-epoch candidate order without a rating sort script; up to two phase searches, explicit phase cursor and total composition. Requires the safeguards above. Recommended candidate for the owning implementation.                        |
+| Current-epoch filter only / raw score sort / reranked prefix | Incorrect: respectively loses unscored subjects, ranks stale scores, or can miss a globally earlier subject outside the prefix.                                                                                                                         |
+| Immutable published generation                               | Can support stable index traversal if actually immutable and retained; alias promotion alone does not make it immutable or prove current native eligibility. More publication/retention coordination.                                                   |
+| Epoch-specific fields or reused slots                        | Possible materialization tradeoff with bounded retention and cursor lifetime coordination; no need to introduce them for the proved phase construction. Unbounded field growth or overwriting a live cursor's slot is not a safe shortcut.              |
 
 The shared primary-source pattern is to express membership with indexed predicates, order by doc values with a unique tie breaker, preserve returned continuation values, and distinguish counted matches from fetched hits. Aliases atomically change routing, not the identity of a sequence of independent searches. These patterns support native phase concatenation as an alternative the earlier script recommendation did not analyze; they provide no measured performance result.
 
