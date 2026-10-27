@@ -61,7 +61,7 @@ test("undoToast(label, onUndo) shows the action's result with an Undo button for
   const { undoToast } = await import('../src/components/undo-toast.tsx');
   const { toast } = await import('../src/shadcn/toast.tsx');
   const events: unknown[] = [];
-  const unsubscribe = toast.subscribe((event) => events.push(event));
+  const unsubscribe = toast[' subscribe']((event) => events.push(event));
   let calls = 0;
   try {
     undoToast('Post deleted', () => {
