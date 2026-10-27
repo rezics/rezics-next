@@ -49,6 +49,10 @@ export const Grid: Story = {
     container.style.width = '';
     const frames = articles.map((article) => article.querySelector('[data-slot=cover]')!.getBoundingClientRect());
     await expect(frames.every((frame) => Math.abs(frame.height - frames[0]!.height) < 1)).toBe(true);
+    await expect(getComputedStyle(articles[0]!).borderTopLeftRadius).toBe('3px');
+    const frame = articles[0]!.querySelector('[data-slot=aspect-ratio]')!;
+    await expect(getComputedStyle(frame).borderTopLeftRadius).toBe('3px');
+    await expect(getComputedStyle(frame).borderBottomLeftRadius).toBe('0px');
     const titleLink = within(articles[0]!).getByRole('link');
     for (const slot of ['cover', 'cover-card-secondary']) {
       const box = articles[0]!.querySelector(`[data-slot=${slot}]`)!.getBoundingClientRect();
