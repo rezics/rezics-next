@@ -111,3 +111,10 @@ test('a capacity waiter counts only live, older tickets ahead of it and clears e
   expect(exists(joinPath(queue, ended))).toBe(false);
   expect(waitersAhead(queue, live)).toBe(0);
 });
+
+test('a worker is told where reference projects are and to read the ones its contract names', () => {
+  const task = { worktree: '/work/trees/t1', branch: 'worker/t1', brief: { markdown: 'Do the thing.', kind: 'implementation', acceptance: { command: ['bun', 'test'], tests: ['x'] } } } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain('/repo/main/.reference/');
+  expect(prompt).toContain('read that source for the surface you build before you design it');
+});
