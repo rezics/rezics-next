@@ -76,9 +76,27 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 
 ## Sitemaps
 
-`/sitemap.xml` is an index of sharded sitemaps, each with at most 50,000 URLs, generated from paged keyset reads of
-indexable pages (server-to-server feeds that may return up to 1,000 entries per page, above the usual list limit) with `lastmod` from the last change of what the page shows. Each URL lists its locale alternates
-with `xhtml:link`. Sitemaps never list a page that is `noindex`, closed or removed. `/robots.txt` names the index.
+`/sitemap.xml` is one flat index of gzip sitemap files at the site root, `/sitemap-{type}-{digest}.xml.gz`;
+`/robots.txt` names the index. Each file holds pages of one type: at most 3,000 pages with all their locale URLs
+(24,000 URLs), and at most 40,000,000 bytes uncompressed, below the protocol's 50,000 URLs and 50 MB. A page's
+locale URLs stay in one file.
+
+Every locale URL is its own entry with `lastmod` and lists the same page in all eight locales, itself included,
+with `xhtml:link`. `x-default` stays in page heads only. `changefreq` and `priority` are omitted.
+
+Sitemaps are generated outside the request path once a day from paged keyset reads of indexable pages. The
+server-to-server feeds may return up to 1,000 entries per page, above the usual list limit. The export reads each
+feed to its end: only `next: null` ends a feed; a short or empty page does not. It writes changed files to object
+storage under their content digest and replaces the index only after every feed and file succeeded. A failed
+export leaves the previous index public. A request never starts a scan.
+
+A page's `lastmod` is the last change of what the page shows, as its feed reports it. A file's `lastmod` in the
+index is when that file last changed. Neither is the export time.
+
+Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
+answers its new status at once and leaves the sitemaps at the next export, within about a day.
+
+The evidence is in [docs/research/sitemaps-at-scale.md](research/sitemaps-at-scale.md).
 
 ## Status and change
 
