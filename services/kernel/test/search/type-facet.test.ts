@@ -63,10 +63,10 @@ const release = {
     'schema:Book': {
       bases: [],
       facets: ['schema:author', 'schema:datePublished'],
-      labels: { en: 'Book', 'zh-Hant': '書籍' },
+      labels: { en: 'Book', 'zh-Hant': '書籍', 'zh-Hans': '书籍' },
     },
-    'schema:Person': { bases: [], facets: [], labels: { en: 'Person', fr: 'Personne' } },
-    'schema:Movie': { bases: [], facets: [], labels: { en: 'Movie' } },
+    'schema:Person': { bases: [], facets: [], labels: { en: 'Person', fr: 'Personne', 'zh-Hans': '人物' } },
+    'schema:Movie': { bases: [], facets: [], labels: { en: 'Movie', 'zh-Hans': '电影' } },
   },
   properties: {
     'schema:author': { datatype: 'wikibase-item', qualifiers: ['rezics:role'] },
@@ -169,6 +169,32 @@ test('a type facet counts matches per subject type with release labels', async (
   expect(reads).toBe(before);
   const operation = openApiDocument(kernel).paths['/v1/subjects:facets']!.post!;
   expect(JSON.stringify(operation.responses)).not.toContain('"format":"uuid"');
+});
+
+test("type facet labels follow the reader's language chain", async () => {
+  const chinese = await service.facets('anonymous', {
+    facets: types(),
+    languages: ['zh-Hans', 'zh', 'zh-Hant'],
+  });
+  expect(chinese.facets[0]!.values.map(({ value, labels }) => ({ value, labels }))).toEqual([
+    { value: 'schema:Book', labels: { 'zh-Hans': '书籍' } },
+    { value: 'schema:Person', labels: { 'zh-Hans': '人物' } },
+    { value: 'schema:Movie', labels: { 'zh-Hans': '电影' } },
+  ]);
+
+  const english = await service.facets('anonymous', { facets: types(), languages: ['en'] });
+  expect(english.facets[0]!.values.map(({ value, labels }) => ({ value, labels }))).toEqual([
+    { value: 'schema:Book', labels: { en: 'Book' } },
+    { value: 'schema:Person', labels: { en: 'Person' } },
+    { value: 'schema:Movie', labels: { en: 'Movie' } },
+  ]);
+
+  const all = await service.facets('anonymous', { facets: types() });
+  expect(all.facets[0]!.values).toEqual([
+    expected('schema:Book', 4),
+    expected('schema:Person', 2),
+    expected('schema:Movie', 1),
+  ]);
 });
 
 test('a type facet counts within the text and filter, including a type filter', async () => {

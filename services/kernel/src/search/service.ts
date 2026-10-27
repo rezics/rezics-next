@@ -23,7 +23,7 @@ import {
 } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
-import { admitProperties, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
+import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import {
@@ -73,11 +73,12 @@ async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-function project(subject: IndexedSubject): Result {
+function project(subject: IndexedSubject, languages?: readonly string[]): Result {
+  const hit = projectHit(subject, { descriptions: false, ...(languages === undefined ? {} : { languages }) });
   return {
-    id: subject.id,
-    type: subject.type,
-    labels: Object.fromEntries(subject.labels.map(({ language, value }) => [language, value])),
+    id: hit.id,
+    type: hit.type,
+    labels: hit.labels,
   };
 }
 
@@ -378,8 +379,14 @@ export function createSearchService({
       };
     },
 
-    async facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest, now = Date.now()) {
-      const facets = validateFacets(request);
+    async facets(
+      principal: 'anonymous' | `account:${string}`,
+      request: FacetRequest & { languages?: string[] },
+      now = Date.now(),
+    ) {
+      const { languages: languageChain, ...facetRequest } = request;
+      const { languages } = validateHitOptions({ languages: languageChain });
+      const facets = validateFacets(facetRequest);
       const { text, filter } = validate({
         ...(request.text === undefined ? {} : { text: request.text }),
         filter: request.filter,
@@ -419,12 +426,20 @@ export function createSearchService({
           values: facet.values
             .flatMap(({ value, count }): FacetValue[] => {
               if (facet.property === 'type') {
-                const labels = typeFacetLabels(current, value);
+                const available = typeFacetLabels(current, value);
+                const labels =
+                  available && languages
+                    ? chooseTexts(
+                        Object.entries(available).map(([language, text]) => ({ language, value: text })),
+                        languages,
+                        undefined,
+                      )
+                    : available;
                 return labels ? [{ value, count, labels }] : [];
               }
               if (coded.has(facet.property)) return [{ value, count, labels: {} }];
               const subject = subjects.get(value);
-              return subject ? [{ value, count, labels: project(subject).labels }] : [];
+              return subject ? [{ value, count, labels: project(subject, languages).labels }] : [];
             })
             .slice(0, facets[index]!.size),
         })),
@@ -433,10 +448,11 @@ export function createSearchService({
       };
     },
 
-    async suggest(q: string, limit = 8) {
+    async suggest(q: string, limit = 8, languages?: string[]) {
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
+      const options = validateHitOptions({ languages });
       const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit }));
       const generation = await generationOf(hits);
       const { passed } = await sourceRequest(() =>
@@ -446,7 +462,10 @@ export function createSearchService({
           new Map(),
         ),
       );
-      return { subjects: passed.slice(0, limit).map(({ subject }) => project(subject)), as_of: await asOf(generation) };
+      return {
+        subjects: passed.slice(0, limit).map(({ subject }) => project(subject, options.languages)),
+        as_of: await asOf(generation),
+      };
     },
   };
 }

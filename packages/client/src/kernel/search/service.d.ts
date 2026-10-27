@@ -39,7 +39,9 @@ export declare function createSearchService({ pool, client, prefix, source, curs
         next: string | null;
         as_of: string;
     }>;
-    facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest, now?: number): Promise<{
+    facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest & {
+        languages?: string[];
+    }, now?: number): Promise<{
         facets: {
             property: string;
             relation: "exact" | "lower_bound";
@@ -51,7 +53,7 @@ export declare function createSearchService({ pool, client, prefix, source, curs
         };
         as_of: string;
     }>;
-    suggest(q: string, limit?: number): Promise<{
+    suggest(q: string, limit?: number, languages?: string[]): Promise<{
         subjects: Result[];
         as_of: string;
     }>;

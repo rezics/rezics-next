@@ -130,6 +130,65 @@ test('facet values count subjects, top k first, with their labels', async () => 
   ]);
 });
 
+test("facet value labels follow the reader's language chain", async () => {
+  fake.put({
+    ...people[0]!,
+    labels: [
+      { language: 'zh-Hant', value: '作者甲' },
+      { language: 'en', value: 'Author A' },
+    ],
+  });
+  try {
+    const chinese = await service.facets('anonymous', {
+      filter: booksOnly,
+      facets: authors(),
+      languages: ['zh-Hans', 'zh', 'zh-Hant', 'en'],
+    });
+    expect(chinese.facets[0]!.values.find(({ value }) => value === a)!.labels).toEqual({ 'zh-Hant': '作者甲' });
+
+    const english = await service.facets('anonymous', {
+      filter: booksOnly,
+      facets: authors(),
+      languages: ['en'],
+    });
+    expect(english.facets[0]!.values.find(({ value }) => value === a)!.labels).toEqual({ en: 'Author A' });
+
+    const all = await service.facets('anonymous', { filter: booksOnly, facets: authors() });
+    expect(all.facets[0]!.values.find(({ value }) => value === a)!.labels).toEqual({
+      'zh-Hant': '作者甲',
+      en: 'Author A',
+    });
+
+    const kernel = createKernel({
+      pool,
+      routeKey: new Uint8Array(32).fill(13),
+      search: service,
+      access: {
+        async authenticate() {
+          throw new Error('no credentials in this test');
+        },
+        async authorize() {
+          return true;
+        },
+      },
+    });
+    const invalid = await kernel.handle(
+      new Request('http://kernel.test/v1/subjects:facets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ filter: booksOnly, facets: authors(), languages: ['en', 'en'] }),
+      }),
+    );
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      code: 'invalid_request',
+      errors: [{ pointer: '/languages/1', code: 'invalid_format' }],
+    });
+  } finally {
+    fake.put(people[0]!);
+  }
+});
+
 test('values whose own subject cannot be disclosed are dropped', async () => {
   const answer = await service.facets('anonymous', { filter: booksOnly, facets: authors(10) });
   expect(answer.facets[0]!.values.map(({ value, count }) => [value, count])).toEqual([

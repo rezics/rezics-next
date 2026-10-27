@@ -422,8 +422,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Hit label choice
 
+Search hits, item facts, facet values and suggestions use the same label choice.
+
 - Touches: the labels, descriptions and `schema:inLanguage` fact of subjects the final check already holds.
-- Bound: no read, statement or engine request added; per hit and per item fact, work linear in R ranges (at most 8)
-  times its labels and descriptions.
-- Growth check: none; no read changes. `test/search/hit-text.test.ts`: "a language chain chooses one label and one
-  description per hit" proves the choice.
+- Bound: no read, statement or engine request added; per returned subject, work linear in R ranges (at most 8) times its labels and descriptions.
+- Growth check: none; no read changes. `test/search/facet-counts.test.ts`: "facet value labels follow the reader's language chain" and `test/search/service.test.ts`: "typeahead labels follow the reader's language chain" prove the choice.

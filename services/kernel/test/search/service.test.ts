@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
@@ -285,6 +286,47 @@ test('typeahead suggests only subjects that pass the final check', async () => {
   await problem(service.suggest('字'.repeat(65)), 'invalid_request', range('/q'));
   await problem(service.suggest('Koko', 11), 'invalid_request', range('/limit'));
   await problem(service.suggest('Koko', 0), 'invalid_request', range('/limit'));
+});
+
+test("typeahead labels follow the reader's language chain", async () => {
+  const labelledKanata = {
+    ...kanata,
+    labels: [
+      { language: 'en', value: 'Kokoro no Kanata' },
+      { language: 'zh-Hant', value: '心之彼方' },
+    ],
+  };
+  const { service } = await deployment([kokoro, labelledKanata, connect, miso]);
+  const languages = ['zh-Hans', 'zh', 'zh-Hant'];
+  const direct = await service.suggest('Koko', 8, languages);
+  expect(direct.subjects.find(({ id }) => id === kanata.id)!.labels).toEqual({ 'zh-Hant': '心之彼方' });
+
+  const kernel = createKernel({
+    pool,
+    routeKey: new Uint8Array(32).fill(13),
+    search: service,
+    access: {
+      async authenticate() {
+        throw new Error('no credentials in this test');
+      },
+      async authorize() {
+        return true;
+      },
+    },
+  });
+  const response = await kernel.handle(
+    new Request('http://kernel.test/v1/subjects:suggest?q=Koko&languages=zh-Hans&languages=zh&languages=zh-Hant'),
+  );
+  expect(response.status).toBe(200);
+  const answer = (await response.json()) as { subjects: { id: string; labels: Record<string, string> }[] };
+  expect(answer.subjects.find(({ id }) => id === kanata.id)!.labels).toEqual({ 'zh-Hant': '心之彼方' });
+
+  const invalid = await kernel.handle(new Request('http://kernel.test/v1/subjects:suggest?q=Koko&languages=bad%21'));
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({
+    code: 'invalid_request',
+    errors: [{ pointer: '/languages/0', code: 'invalid_format' }],
+  });
 });
 
 test('an unreachable node, a missing alias or a missing template is index_not_ready', async () => {

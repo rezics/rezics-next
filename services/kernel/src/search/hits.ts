@@ -86,7 +86,7 @@ function cut(value: string): string {
 }
 
 /** Texts by language, choosing one through the reader's chain when given. */
-function texts(
+export function chooseTexts(
   list: IndexedSubject['labels'],
   languages: readonly string[] | undefined,
   original: string | undefined,
@@ -112,8 +112,8 @@ export function projectHit(subject: IndexedSubject, { descriptions, languages }:
   return {
     id: subject.id,
     type: subject.type,
-    labels: texts(subject.labels, languages, original),
-    ...(descriptions ? { descriptions: texts(subject.descriptions, languages, original, cut) } : {}),
+    labels: chooseTexts(subject.labels, languages, original),
+    ...(descriptions ? { descriptions: chooseTexts(subject.descriptions, languages, original, cut) } : {}),
   };
 }
 
@@ -166,7 +166,13 @@ export async function projectFacts(
           if (value.kind !== 'item') return [value];
           const target = visible.get(value.id);
           return target
-            ? [{ kind: 'item', id: value.id, labels: texts(target.labels, languages, originalLanguage(target)) }]
+            ? [
+                {
+                  kind: 'item',
+                  id: value.id,
+                  labels: chooseTexts(target.labels, languages, originalLanguage(target)),
+                },
+              ]
             : [];
         }),
       ]),

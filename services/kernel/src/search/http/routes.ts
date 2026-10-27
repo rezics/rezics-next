@@ -179,6 +179,7 @@ export function searchRoutes<App>(
           {
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
+            languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
             facets: t.Array(
               t.Object(
                 {
@@ -202,6 +203,8 @@ export function searchRoutes<App>(
         },
         detail: {
           operationId: 'subject.facets',
+          description:
+            'Optional languages selects one label per facet value in preference order. Omit it to return all labels.',
           'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
@@ -222,7 +225,14 @@ export function searchRoutes<App>(
     .get(
       customMethod('/v1/subjects', 'suggest'),
       {
-        query: t.Object({ q: t.String(), limit: t.Optional(t.IntegerString()) }, object),
+        query: t.Object(
+          {
+            q: t.String(),
+            limit: t.Optional(t.IntegerString()),
+            languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
+          },
+          object,
+        ),
         response: {
           200: suggestResponse,
           400: problemSchema('invalid_request'),
@@ -232,6 +242,8 @@ export function searchRoutes<App>(
         },
         detail: {
           operationId: 'subject.suggest',
+          description:
+            'Repeat languages in preference order to select one label per suggestion. Omit it to return all labels.',
           'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
@@ -247,7 +259,7 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return fill(await search.suggest(query.q, query.limit), authorize);
+          return fill(await search.suggest(query.q, query.limit, query.languages), authorize, query.languages);
         });
       },
     );

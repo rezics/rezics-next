@@ -221,6 +221,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                     body: {
                         text?: string;
                         filter?: any;
+                        languages?: string[];
                         facets: {
                             property: string;
                             size?: number;
@@ -345,6 +346,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     query: import("typebox").TObject<{
         q: import("typebox").TString;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+        languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -450,6 +452,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     };
     detail: {
         operationId: string;
+        description: string;
         'x-exposure': string;
         'x-action': string;
         security: ({
@@ -675,6 +678,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
         query: import("typebox").TObject<{
             q: import("typebox").TString;
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+            languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
         }>;
         response: {
             200: import("typebox").TObject<{
@@ -780,6 +784,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
         };
         detail: {
             operationId: string;
+            description: string;
             'x-exposure': string;
             'x-action': string;
             security: ({
@@ -813,6 +818,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     query: {
         q: string;
         limit?: number;
+        languages?: string[];
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -848,6 +854,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     query: import("typebox").TObject<{
         q: import("typebox").TString;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
+        languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -953,6 +960,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     };
     detail: {
         operationId: string;
+        description: string;
         'x-exposure': string;
         'x-action': string;
         security: ({
