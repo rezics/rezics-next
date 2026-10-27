@@ -481,8 +481,8 @@ test('subject summaries for a page use two bounded reads per partition, not one 
       await captureUnforcedIndexes(db, 'subject summary page', scale, () => operation(db, scale), {
         'semantic.subject': 'subject_pkey',
         'semantic.fact': ['fact_label', 'fact_terms'],
-        'semantic.outbound_link': 'outbound_link_present',
-        'content.media': 'media_pkey',
+        'semantic.outbound_link': ['outbound_link_present', 'outbound_link_identity'],
+        'content.media': ['media_pkey', 'media_cover_reference_idx'],
         'content.media_variant': 'media_variant_pkey',
       });
     },
@@ -529,8 +529,8 @@ test('a representative cover read stays flat as the work gains editions', async 
       await captureUnforcedIndexes(db, 'representative edition cover', scale, operation, {
         'semantic.subject': 'subject_pkey',
         'semantic.fact': ['fact_label', 'fact_terms'],
-        'semantic.outbound_link': 'outbound_link_present',
-        'content.media': 'media_pkey',
+        'semantic.outbound_link': ['outbound_link_present', 'outbound_link_identity'],
+        'content.media': ['media_pkey', 'media_cover_reference_idx'],
         'content.media_variant': 'media_variant_pkey',
       });
     },
