@@ -1,0 +1,31 @@
+# First public scope
+
+Which user-facing systems the first public release contains, who owns each, and what is deferred. The evidence is
+[the system inventory](research/system-inventory.md); systems built but not polished stay closed behind platform
+grants until they are. An owner is the Goal that dispatches the system's work; collaborators own their own modules.
+
+| System | Owner | First public scope |
+| --- | --- | --- |
+| Subject pages, relations, editions and credits | web | In ([subject pages](subject-pages.md)) |
+| Catalogue, editorial contributions, identity resolution, definitions and vertical editors | semantic | In |
+| Provider imports and bridges | imports | In: books, recipes, VNDB, Bangumi |
+| Search, facets and discovery | search | In |
+| Library, Collections, progress and copies | commerce (kernel), web | In ([library and Collections](library-and-collections.md)): profiles, labels, curated and built-in dynamic Collections; user-saved dynamic queries later |
+| Ratings and reviews | content | In |
+| Posts, threads and boards | content | In |
+| Articles, hosted works and media | content | Closed behind grants until polished |
+| Realms and Spaces | accounts | In |
+| Zones | semantic | In: a Zone is a routed site over saved scopes and mounted Collections |
+| Agents and public profiles | accounts | In (one agent, one page) |
+| Moderation, reports and appeals | content | In: reports and moderator resolution across owners; appeals minimal |
+| Notifications | content; accounts for preferences | In, minimal: in-app notices for replies, mentions and moderation outcomes, with per-kind preferences and send-time access checks; no email |
+| Follows | accounts, commerce | In: follow edges and counts |
+| Feeds | none | Deferred: home shows Continue and catalogue rows, not a following feed |
+| Recommendations and rankings | none | Deferred: rankings are curated Collections and search sorted by rating |
+| Commerce, offers, orders and points | commerce | In |
+| Accounts, authentication, preferences and deletion | accounts | In |
+| Sitemaps, metadata, sharing and SEO | web | In ([SEO](seo.md)) |
+| Partner API and external participation | none | Deferred; Collection export as schema.org ItemList is part of Collections |
+
+A system that is In has an owner who keeps its contract in its owning document and dispatches its work; a deferred
+system gets an owner when it is scheduled. Change this table when the scope changes.
