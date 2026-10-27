@@ -882,6 +882,7 @@ test(
 
       await page.getByRole('link', { name: 'Start again', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\?/);
+      await hydrated(page);
       expect(await page.locator('main').innerText()).toContain('Completed');
       expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
       await page.getByRole('button', { name: 'Start', exact: true }).click();

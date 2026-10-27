@@ -10,6 +10,7 @@ import { EllipsisIcon } from 'lucide-react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import {
@@ -391,13 +392,12 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
         </div>
       ) : (
         <p>
-          <Link
-            to="/library/progress"
-            search={{ subjectId: session.subjectId }}
+          <a
+            href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
             className="text-primary underline-offset-4 hover:underline"
           >
             {m.library_progress_restart()}
-          </Link>
+          </a>
         </p>
       )}
       <section role="region" aria-labelledby={changesHeading} className="space-y-3">
