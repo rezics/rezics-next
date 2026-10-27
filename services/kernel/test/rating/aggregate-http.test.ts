@@ -194,8 +194,8 @@ afterAll(async () => {
 test('aggregate routes are mounted once with their declared action', () => {
   const document = openApiDocument(app);
   const expected = {
-    '/v1/subjects/{subjectId}/ratings': ['get'],
-    '/v1/subjects/{subjectId}/ratings/populations': ['get'],
+    '/v1/subjects/{id}/ratings': ['get'],
+    '/v1/subjects/{id}/ratings/populations': ['get'],
   };
   for (const [path, methods] of Object.entries(expected))
     for (const method of methods) {

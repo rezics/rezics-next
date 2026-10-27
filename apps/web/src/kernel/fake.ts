@@ -37,6 +37,15 @@ import libraryProgressUnitsRecording from './recorded/library-progress-units.jso
 import libraryPublishedLogRecording from './recorded/library-published-log.json';
 import libraryPublishedLogsRecording from './recorded/library-published-logs.json';
 import settingsPreferencesRecording from './recorded/settings-preferences.json';
+import myRealmsRecording from './recorded/my-realms.json';
+import realmBoardsRecording from './recorded/realm-boards.json';
+import realmMemberRecording from './recorded/realm-member.json';
+import realmParticipationRecording from './recorded/realm-participation.json';
+import realmPublicationsRecording from './recorded/realm-publications.json';
+import realmRecording from './recorded/realm.json';
+import realmSubjectsRecording from './recorded/realm-subjects.json';
+import spaceAddressRecording from './recorded/space-address.json';
+import spaceRecording from './recorded/space.json';
 
 const platformProfile = platformProfileJson as PresentationProfile;
 const platformDigest = profileDigest(platformProfile);
@@ -53,10 +62,10 @@ export type KernelRecording = { status: number; [key: string]: unknown };
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
 
-function resourceId(recording: KernelRecording | undefined, key: string): string | undefined {
+function resourceId(recording: KernelRecording | undefined, key: string, idKey = 'id'): string | undefined {
   const value = recording?.[key];
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const id = (value as { id?: unknown }).id;
+  const id = (value as Record<string, unknown>)[idKey];
   return typeof id === 'string' ? id : undefined;
 }
 
@@ -88,9 +97,10 @@ async function pageRecording(
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
-const requestKeys = new Set(['status', 'query', 'filterType']);
+const requestKeys = new Set(['status', 'query', 'filterType', 'address']);
 
 function recordedResponse(recording: KernelRecording): Response {
+  if (recording.status === 204) return new Response(null, { status: 204 });
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(recording)) {
     if (requestKeys.has(key)) continue;
@@ -155,6 +165,47 @@ function libraryRecording(
   return undefined;
 }
 
+/**
+ * Community reads by path. The Space, its Realm and everything read from the Realm hang off the recorded ids; a
+ * published subject is answered from the recorded subject summaries before the generic subject recording.
+ */
+function communityRecording(
+  method: string,
+  pathname: string,
+  recordings: Record<string, KernelRecording>,
+): KernelRecording | undefined {
+  if (method !== 'GET') return undefined;
+  if (pathname === '/v1/me/realms') return recordings['my-realms'];
+  const address = /^\/v1\/spaceAddresses\/([^/]+)$/.exec(pathname);
+  if (address?.[1]) {
+    const recorded = recordings['space-address'];
+    return recorded && decodeURIComponent(address[1]) === recorded.address ? recorded : undefined;
+  }
+  const space = /^\/v1\/spaces\/([^/]+)$/.exec(pathname);
+  if (space?.[1])
+    return decodeURIComponent(space[1]) === resourceId(recordings.space, 'space', 'spaceId')
+      ? recordings.space
+      : undefined;
+  const realm = /^\/v1\/realms\/([^/]+)(?:\/(boards|publications|members\/me|participation))?$/.exec(pathname);
+  if (realm?.[1] && decodeURIComponent(realm[1]) === resourceId(recordings.realm, 'realm', 'realmId')) {
+    const parts: Record<string, string> = {
+      boards: 'realm-boards',
+      publications: 'realm-publications',
+      'members/me': 'realm-member',
+      participation: 'realm-participation',
+    };
+    return recordings[realm[2] ? parts[realm[2]]! : 'realm'];
+  }
+  return undefined;
+}
+
+/** The recorded summary of one published subject, in the shape of `GET /v1/subjects/:id`. */
+function publishedSubject(id: string, recordings: Record<string, KernelRecording>): KernelRecording | undefined {
+  const subjects = recordings['realm-subjects']?.subjects;
+  const payload = isRecord(subjects) ? subjects[id] : undefined;
+  return isRecord(payload) ? { status: 200, ...payload } : undefined;
+}
+
 async function selectRecording(
   request: Request,
   pathname: string,
@@ -164,11 +215,15 @@ async function selectRecording(
   if (library) return library;
   if (request.method === 'GET' && pathname === `/v1/accounts/${storyViewerId}/preferences`)
     return recordings['settings-preferences'];
+  const community = communityRecording(request.method, pathname, recordings);
+  if (community) return community;
   if (request.method === 'GET') {
     if (pathname === '/v1/accounts') return recordings.accounts;
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
       const id = decodeURIComponent(subject[1]);
+      const published = publishedSubject(id, recordings);
+      if (published) return published;
       if (id === resourceId(recordings['subject-uncovered'], 'subject')) return recordings['subject-uncovered'];
       return recordings[id === missingSubjectId ? 'missing-subject' : 'subject'];
     }
@@ -274,6 +329,15 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'definitions-release': definitionsReleaseRecording,
     'settings-preferences': settingsPreferencesRecording,
     ...libraryStoryRecordings(),
+    'my-realms': myRealmsRecording,
+    realm: realmRecording,
+    'realm-boards': realmBoardsRecording,
+    'realm-member': realmMemberRecording,
+    'realm-participation': realmParticipationRecording,
+    'realm-publications': realmPublicationsRecording,
+    'realm-subjects': realmSubjectsRecording,
+    space: spaceRecording,
+    'space-address': spaceAddressRecording,
   });
 }
 

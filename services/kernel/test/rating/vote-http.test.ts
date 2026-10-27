@@ -151,7 +151,7 @@ afterAll(async () => {
 test('rating question and own vote routes are mounted once with their declared action', () => {
   const document = openApiDocument(app);
   const expected = {
-    '/v1/subjects/{subjectId}/ratings/{questionId}/vote': ['put', 'delete', 'get'],
+    '/v1/subjects/{id}/ratings/{questionId}/vote': ['put', 'delete', 'get'],
     '/v1/rating-questions/{questionId}': ['get'],
   };
   for (const [path, methods] of Object.entries(expected))

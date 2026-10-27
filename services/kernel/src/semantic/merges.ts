@@ -118,8 +118,10 @@ export async function mergeSubjectsInCommand(
   const gone = await mergeSubject(tx, options.redirected);
   const linked = await accountAgentsForSubjects(tx, [options.survivor, options.redirected]);
   if (options.allowAccountAgent) {
-    if (kept.type !== 'schema:Person' && kept.type !== 'schema:Organization')
-      throw new AccountAgentVerificationError('The catalogue subject must be a person or organization');
+    if (gone.type !== 'schema:Person' && gone.type !== 'schema:Organization')
+      throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
+    if (gone.type !== kept.type)
+      throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
     if (linked.has(options.survivor))
       throw new AccountAgentVerificationError('The catalogue subject is already an account agent');
   } else {

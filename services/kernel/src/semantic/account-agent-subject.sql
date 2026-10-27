@@ -4,10 +4,8 @@ WITH input AS NOT MATERIALIZED (
 SELECT subject.subject_id::text AS id,
        subject.type,
        latest.revision,
-       subject.current_facts,
        subject.current_release AS release,
        COALESCE(labels.label_values, '{}'::jsonb) AS labels,
-       COALESCE(labels.sequences, '{}'::jsonb) AS label_sequences,
        redirect.target::text AS redirect
 FROM input
 JOIN semantic.subject AS subject
@@ -20,12 +18,11 @@ JOIN LATERAL (
   LIMIT 1
 ) AS latest ON true
 LEFT JOIN LATERAL (
-  SELECT jsonb_object_agg(language, body) FILTER (WHERE operation = 'assert') AS label_values,
-         jsonb_object_agg(language, log_seq) AS sequences
+  SELECT jsonb_object_agg(language, body) AS label_values
   FROM (
-    SELECT DISTINCT ON (language) language, body, operation, log_seq
+    SELECT DISTINCT ON (language) language, body, log_seq
     FROM semantic.fact
-    WHERE route = input.route AND subject_id = input.subject_id AND kind = 'label'
+    WHERE route = input.route AND subject_id = input.subject_id AND kind = 'label' AND operation = 'assert'
     ORDER BY language, log_seq DESC
   ) AS current_labels
 ) AS labels ON true

@@ -366,11 +366,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
   for (const route of sourceStatistics.routes) {
     const segments = route.path.split('/');
-    const shape = segments.map((segment) => (segment.startsWith(':') ? ':' : segment));
     for (const [position, segment] of segments.entries()) {
       if (segment.startsWith(':')) {
         const name = segment.slice(1);
-        const key = JSON.stringify([shape, position]);
+        const key = JSON.stringify(
+          segments.slice(0, position).map((prefixSegment) => (prefixSegment.startsWith(':') ? ':' : prefixSegment)),
+        );
         const first = parameterNames.get(key);
         if (first && first.name !== name) {
           throw new Error(
@@ -408,30 +409,16 @@ type KernelComposition = ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof contextRoutes>;
 
-type Routes = KernelComposition['~Routes'];
-type Subjects = Routes['v1']['subjects'];
-
-/** Subject transports use both parameter names for the same URL position. Eden needs
- * one key to retain a single subjects({ id }) entry point with all its child routes. */
-type ClientRoutes = Omit<Routes, 'v1'> & {
-  v1: Omit<Routes['v1'], 'subjects'> & {
-    documents: Routes['v1']['documents'];
-    subjects: Omit<Subjects, ':id' | ':subjectId'> & {
-      ':id': Subjects[':id'] & Subjects[':subjectId'];
-    };
-  };
-};
-
 export type Kernel = KernelComposition;
 
-/** The Eden contract uses one parameter name for each URL position. */
+/** createKernel guarantees one parameter name for each route position. */
 export type ClientKernel = Elysia<
   KernelComposition['~Prefix'],
   'local',
   KernelComposition['~Singleton'],
   KernelComposition['~Definitions'],
   KernelComposition['~Metadata'],
-  ClientRoutes,
+  KernelComposition['~Routes'],
   KernelComposition['~Ephemeral'],
   KernelComposition['~Volatile']
 >;

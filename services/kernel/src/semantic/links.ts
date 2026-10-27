@@ -22,7 +22,7 @@ import { SubjectNotFoundError } from './candidates.ts';
 import { moveMergePage } from './merge-moves.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { accountAgentsForSubjects } from './agents.ts';
-import { AGENT_LINKED, LINKS_MOVING, SUBJECT_MERGED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
+import { LINKS_MOVING, SUBJECT_MERGED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
@@ -227,22 +227,22 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
   for (const partition of [...grouped.keys()].sort((a, b) => a - b)) {
     await applyChanges(pool, grouped.get(partition)!);
   }
-  const linked = envelopes.flatMap((envelope) =>
+  const merges = envelopes.flatMap((envelope) =>
     envelope.events.flatMap((event) => {
-      if (event.type !== AGENT_LINKED) return [];
-      const data = event.data as { account: string; subject: string };
+      if (event.type !== SUBJECT_MERGED) return [];
+      const data = event.data as { id: string; survivor: string };
       return [data];
     }),
   );
   const agentLinks = await accountAgentsForSubjects(
     pool,
-    linked.map((event) => event.subject),
+    merges.map((event) => event.survivor),
   );
   const verificationBySubject = new Map<string, { account: string; receipt: string }>();
-  for (const event of linked) {
-    const link = agentLinks.get(event.subject);
-    if (link?.verified && link.receipt_id && link.account === event.account)
-      verificationBySubject.set(event.subject, { account: event.account, receipt: link.receipt_id });
+  for (const event of merges) {
+    const link = agentLinks.get(event.survivor);
+    if (link?.verified && link.receipt_id && link.agent_id === event.id)
+      verificationBySubject.set(event.survivor, { account: link.account, receipt: link.receipt_id });
   }
   const moved = new Set<string>();
   for (const envelope of envelopes) {

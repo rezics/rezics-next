@@ -9,11 +9,14 @@ import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from './agents.ts';
 import { AccountAgentScopeGrowthError, AccountAgentVerificationError } from './agents.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
-import { SUBJECT_REVISED, AGENT_LINKED } from './events.ts';
+import { SUBJECT_REVISED } from './events.ts';
 import accountAgentSubject from './account-agent-subject.sql';
 import insertAccountAgentSubject from './account-agent-subject-insert.sql';
 import verifyAccountAgentSubject from './account-agent-subject-verify.sql';
 import syncLabel from './account-agent-sync-label.sql';
+import insertSubject from './create-subject.sql';
+import createRevision from './create-revision.sql';
+import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { writeSubject } from './subject.ts';
 import { mergeSubjectsInCommand } from './merges.ts';
 
@@ -25,10 +28,8 @@ type AgentSubjectRow = {
   id: string;
   type: string;
   revision: number;
-  current_facts: number;
   release: string;
   labels: Record<string, string>;
-  label_sequences: Record<string, number>;
   redirect: string | null;
 };
 
@@ -130,54 +131,18 @@ async function currentSubject(tx: Queryable, subjectId: string): Promise<{ subje
   throw new AccountAgentVerificationError('Account agent redirect chain is too long');
 }
 
-function labelFacts(subject: string, row: AgentSubjectRow, name: string, language: string) {
-  const desired = Object.keys(row.labels).length === 1 && row.labels[language] === name;
-  if (desired) return [];
-  const changes: {
-    slot_id: string;
-    language: string;
-    body: string;
-    operation: 'assert' | 'retract';
-    log_seq: number;
-  }[] = [];
-  for (const [currentLanguage, currentName] of Object.entries(row.labels)) {
-    if (currentLanguage === language) continue;
-    const [fact] = itemFacts(subject, { labels: { [currentLanguage]: currentName } });
-    if (!fact) continue;
-    changes.push({
-      slot_id: fact.slot_id,
-      language: currentLanguage,
-      body: currentName,
-      operation: 'retract',
-      log_seq: (row.label_sequences[currentLanguage] ?? 0) + 1,
-    });
-  }
-  if (row.labels[language] !== name) {
-    const [fact] = itemFacts(subject, { labels: { [language]: name } });
-    if (fact)
-      changes.push({
-        slot_id: fact.slot_id,
-        language,
-        body: name,
-        operation: 'assert',
-        log_seq: (row.label_sequences[language] ?? 0) + 1,
-      });
-  }
-  return changes;
-}
-
 async function syncAgentLabel(
   tx: CommandTransaction,
   transactionId: string,
   route: number,
   row: AgentSubjectRow,
-  name: string,
+  name: string | null,
   language: string,
 ): Promise<{ subject: Item; changed: boolean; events: { type: string; subject: string; data: unknown }[] }> {
-  const facts = labelFacts(row.id, row, name, language);
-  if (!facts.length) return { subject: await subjectFromRow(tx, row), changed: false, events: [] };
-  if (row.current_facts + facts.length > 512 || facts.some((fact) => fact.log_seq > 32))
-    throw new TypeError('Account agent name history is full');
+  const labels = name === null ? {} : { [language]: name };
+  if (Object.keys(row.labels).length === Object.keys(labels).length && (name === null || row.labels[language] === name))
+    return { subject: await subjectFromRow(tx, row), changed: false, events: [] };
+  const facts = name === null ? [] : itemFacts(row.id, { labels });
   const release = await activeRelease(tx);
   if (!release) throw new Error('Global definition release is not active');
   await syncLabel.run(tx as PoolClient, {
@@ -190,11 +155,6 @@ async function syncAgentLabel(
     source: null,
     labels: facts,
   });
-  const labels = { ...row.labels };
-  for (const fact of facts) {
-    if (fact.operation === 'retract') delete labels[fact.language];
-    else labels[fact.language] = fact.body;
-  }
   const subject = resolveItem(
     row.id,
     agentFacts(labels),
@@ -215,10 +175,35 @@ async function syncAgentLabel(
   };
 }
 
+// Ordinary catalogue creation requires a label. A nameless account node has no label facts to validate or write.
+async function createUnlabeledAgent(
+  tx: CommandTransaction,
+  transactionId: string,
+  id: string,
+  type: string,
+  release: string,
+) {
+  const route = routeOf(id)!;
+  await insertSubject.run(tx, {
+    route,
+    subject_id: id,
+    type,
+    transaction_id: transactionId,
+    current_facts: 0,
+    current_release: release,
+  });
+  await createRevision.run(tx, { route, subject_id: id, release, transaction_id: transactionId, source: null });
+  await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
+  return {
+    value: resolveItem(id, [], type, {}, { revision: 1, release, context: GLOBAL_CONTEXT }),
+    events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }],
+  };
+}
+
 async function ensureInTransaction(
   tx: CommandTransaction,
   transactionId: string,
-  options: { account: Account; kind: AgentKind; name: string; language?: string },
+  options: { account: Account; kind: AgentKind; name: string | null; language?: string },
 ): Promise<{
   value: { subject: Item; created: boolean };
   events: { type: string; subject: string; data: unknown }[];
@@ -245,15 +230,20 @@ async function ensureInTransaction(
           : 'schema:SoftwareApplication';
     if (options.kind === 'software' && !active.release.types[type])
       throw new AccountAgentScopeGrowthError('packages/definitions/sources/vndb.yaml');
-    const created = await writeSubject(tx, transactionId, {
-      target: { route: agentRoute, id: agentId },
-      item: { type, labels: { [language]: options.name } },
-      release: active,
-    });
+    if (!active.release.types[type])
+      throw new AccountAgentVerificationError('The account agent kind is absent from the active definition release');
+    const created =
+      options.name === null
+        ? await createUnlabeledAgent(tx, transactionId, agentId, type, active.digest)
+        : await writeSubject(tx, transactionId, {
+            target: { route: agentRoute, id: agentId },
+            item: { type, labels: { [language]: options.name } },
+            release: active,
+          });
     await createAccountAgentBackLink(tx, account, agentRoute, agentId);
     return {
       value: { subject: created.value, created: true },
-      events: [...created.events, { type: AGENT_LINKED, subject: agentId, data: { account, subject: agentId } }],
+      events: created.events,
       changed: true,
     };
   }
@@ -280,11 +270,11 @@ async function ensureInTransaction(
 /** Ensure one account graph agent at its deterministic account-partition id. */
 export async function ensureAccountAgent(
   pool: Pool,
-  options: { account: Account; kind: AgentKind; name: string; language?: string },
+  options: { account: Account; kind: AgentKind; name: string | null; language?: string },
 ): Promise<{ subject: Item; created: boolean }>;
 export async function ensureAccountAgent(
   pool: Pool,
-  options: { account: Account; kind: AgentKind; name: string; language?: string },
+  options: { account: Account; kind: AgentKind; name: string | null; language?: string },
 ): Promise<{ subject: Item; created: boolean }> {
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
@@ -381,10 +371,7 @@ export async function verifyAccountAgent(
       const catalogue = await currentSubject(tx, options.catalogue);
       return {
         value: { ...merged.value, subject: catalogue.subject },
-        events: [
-          ...merged.events,
-          { type: AGENT_LINKED, subject: options.catalogue, data: { account, subject: options.catalogue } },
-        ],
+        events: merged.events,
       };
     });
     return {

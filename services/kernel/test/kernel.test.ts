@@ -195,16 +195,16 @@ const typed = [
   'GET /v1/subjects/:id/collections',
   'GET /v1/subjects/:id/reactions',
   'GET /v1/rating-questions/:questionId',
-  'GET /v1/subjects/:subjectId/ratings',
-  'GET /v1/subjects/:subjectId/ratings/populations',
-  'PUT /v1/subjects/:subjectId/ratings/:questionId/vote',
-  'DELETE /v1/subjects/:subjectId/ratings/:questionId/vote',
-  'GET /v1/subjects/:subjectId/ratings/:questionId/vote',
+  'GET /v1/subjects/:id/ratings',
+  'GET /v1/subjects/:id/ratings/populations',
+  'PUT /v1/subjects/:id/ratings/:questionId/vote',
+  'DELETE /v1/subjects/:id/ratings/:questionId/vote',
+  'GET /v1/subjects/:id/ratings/:questionId/vote',
   'GET /v1/subjects/:id/threads',
   'GET /v1/accounts/:accountId/threads',
   'GET /v1/accounts/:accountId/posts',
-  'GET /v1/subjects/:subjectId/source-statistics',
-  'PUT /v1/subjects/:subjectId/source-statistics/:source',
+  'GET /v1/subjects/:id/source-statistics',
+  'PUT /v1/subjects/:id/source-statistics/:source',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;

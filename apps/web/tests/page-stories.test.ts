@@ -402,6 +402,16 @@ test(
       "type PublishedLogsResponse = Data<ReturnType<KernelClient['publishedLogs']['get']>>;",
       "type PublishedLogResponse = Data<ReturnType<ReturnType<KernelClient['publishedLogs']>['get']>>;",
       "type PreferencesResponse = Data<ReturnType<ReturnType<KernelClient['accounts']>['preferences']['get']>>;",
+      "type SpaceAddressResponse = Data<ReturnType<ReturnType<KernelClient['spaceAddresses']>['get']>>;",
+      "type SpaceResponse = Data<ReturnType<ReturnType<KernelClient['spaces']>['get']>>;",
+      "type RealmRoutes = ReturnType<KernelClient['realms']>;",
+      "type RealmResponse = Data<ReturnType<RealmRoutes['get']>>;",
+      "type RealmBoardsResponse = Data<ReturnType<RealmRoutes['boards']['get']>>;",
+      "type RealmPublicationsResponse = Data<ReturnType<RealmRoutes['publications']['get']>>;",
+      "type RealmMemberResponse = Data<ReturnType<RealmRoutes['members']['me']['get']>>;",
+      'type RealmSubjectsResponse = { subjects: Record<string, SubjectResponse> };',
+      'type NoContentResponse = { status: 204 };',
+      "type MyRealmsResponse = Data<ReturnType<KernelClient['me']['realms']['get']>>;",
     ];
     const responseType: Record<string, string> = {
       'accounts.json': 'AccountsResponse',
@@ -432,6 +442,15 @@ test(
       'library-published-log.json': 'PublishedLogResponse',
       'library-published-logs.json': 'PublishedLogsResponse',
       'settings-preferences.json': 'PreferencesResponse',
+      'space-address.json': 'SpaceAddressResponse',
+      'space.json': 'SpaceResponse',
+      'realm.json': 'RealmResponse',
+      'realm-boards.json': 'RealmBoardsResponse',
+      'realm-publications.json': 'RealmPublicationsResponse',
+      'realm-member.json': 'RealmMemberResponse',
+      'realm-subjects.json': 'RealmSubjectsResponse',
+      'realm-participation.json': 'NoContentResponse',
+      'my-realms.json': 'MyRealmsResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);

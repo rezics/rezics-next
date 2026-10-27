@@ -139,9 +139,9 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
   const votes = () => createVoteCommands(config());
   return app
     .get(
-      '/v1/subjects/:subjectId/ratings',
+      '/v1/subjects/:id/ratings',
       {
-        params: t.Object({ subjectId: id }, closed),
+        params: t.Object({ id }, closed),
         query: t.Object(
           {
             question: id,
@@ -158,13 +158,12 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         },
       },
       async ({ actor, params, query, admission, job }) => {
-        requireRatingRead(actor, params.subjectId, query.question);
+        requireRatingRead(actor, params.id, query.question);
         const populations = Array.isArray(query.population) ? query.population : [query.population];
         if (populations.length < 1 || populations.length > 20) throw new ProblemError('invalid_request');
         requireRatingRead(actor, ...populations);
         return admission.run('normal', job, async () => {
-          if (!(await readableSubject(config(), actor, params.subjectId, job.deadline)))
-            throw new ProblemError('not_found');
+          if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
           const question = await readRatingQuestion(dependencies.pool, query.question);
           if (!question) throw new ProblemError('not_found');
           const figures = await Promise.all(
@@ -178,21 +177,21 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
               const figure = await readAggregateFigure(dependencies.pool, {
                 questionId: question.id,
                 populationId: population,
-                targetId: params.subjectId,
+                targetId: params.id,
                 grain: question.grain,
               });
               if (!figure) throw new ProblemError('not_found');
               return figure;
             }),
           );
-          return { question: question.id, subject: params.subjectId, figures };
+          return { question: question.id, subject: params.id, figures };
         });
       },
     )
     .get(
-      '/v1/subjects/:subjectId/ratings/populations',
+      '/v1/subjects/:id/ratings/populations',
       {
-        params: t.Object({ subjectId: id }, closed),
+        params: t.Object({ id }, closed),
         query: t.Object({ question: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed),
         response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures },
         detail: {
@@ -203,15 +202,14 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         },
       },
       async ({ actor, params, query, admission, job }) => {
-        requireRatingRead(actor, params.subjectId, query.question);
+        requireRatingRead(actor, params.id, query.question);
         return admission.run('normal', job, async () => {
-          if (!(await readableSubject(config(), actor, params.subjectId, job.deadline)))
-            throw new ProblemError('not_found');
+          if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
           const question = await readRatingQuestion(dependencies.pool, query.question);
           if (!question) throw new ProblemError('not_found');
           const binding: CursorBinding = {
             operation: 'rating.population-page',
-            parameters: { subjectId: params.subjectId, questionId: question.id },
+            parameters: { subjectId: params.id, questionId: question.id },
           };
           let after: string | null = null;
           if (query.cursor !== undefined) {
@@ -229,7 +227,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           }
           const page = await readRatingPopulationPage(dependencies.pool, {
             questionId: question.id,
-            targetId: params.subjectId,
+            targetId: params.id,
             after,
             limit: 20,
           });
@@ -256,24 +254,20 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       },
     )
     .put(
-      '/v1/subjects/:subjectId/ratings/:questionId/vote',
+      '/v1/subjects/:id/ratings/:questionId/vote',
       {
-        params: t.Object({ subjectId: id, questionId: id }, closed),
+        params: t.Object({ id, questionId: id }, closed),
         headers,
         body: RatingVoteInputSchema,
         response: { 200: RatingVoteResponseSchema, ...failures },
         detail: detail('rating.vote_put', true),
       },
       async ({ actor, params, body, headers, admission, job }) => {
-        requirePersonalScope(actor, params.subjectId, params.questionId);
+        requirePersonalScope(actor, params.id, params.questionId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(() =>
-            votes().putVote(
-              actor,
-              { questionId: params.questionId, targetId: params.subjectId, units: body.units },
-              key,
-            ),
+            votes().putVote(actor, { questionId: params.questionId, targetId: params.id, units: body.units }, key),
           ),
         );
         if (!result) throw new ProblemError('not_found');
@@ -281,35 +275,35 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       },
     )
     .delete(
-      '/v1/subjects/:subjectId/ratings/:questionId/vote',
+      '/v1/subjects/:id/ratings/:questionId/vote',
       {
-        params: t.Object({ subjectId: id, questionId: id }, closed),
+        params: t.Object({ id, questionId: id }, closed),
         headers,
         response: { 204: t.Void(), ...failures },
         detail: detail('rating.vote_delete', true),
       },
       async ({ actor, params, headers, admission, job, set }) => {
-        requirePersonalScope(actor, params.subjectId, params.questionId);
+        requirePersonalScope(actor, params.id, params.questionId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         await admission.run('normal', job, () =>
           command(() =>
-            votes().putVote(actor, { questionId: params.questionId, targetId: params.subjectId, units: null }, key),
+            votes().putVote(actor, { questionId: params.questionId, targetId: params.id, units: null }, key),
           ),
         );
         set.status = 204;
       },
     )
     .get(
-      '/v1/subjects/:subjectId/ratings/:questionId/vote',
+      '/v1/subjects/:id/ratings/:questionId/vote',
       {
-        params: t.Object({ subjectId: id, questionId: id }, closed),
+        params: t.Object({ id, questionId: id }, closed),
         response: { 200: RatingVoteResponseSchema, ...failures },
         detail: detail('rating.vote_get'),
       },
       async ({ actor, params, admission, job }) => {
-        requirePersonalScope(actor, params.subjectId, params.questionId);
+        requirePersonalScope(actor, params.id, params.questionId);
         const result = await admission.run('normal', job, () =>
-          command(() => votes().readOwnVote(actor, params.questionId, params.subjectId)),
+          command(() => votes().readOwnVote(actor, params.questionId, params.id)),
         );
         if (!result || result.units === null) throw new ProblemError('not_found');
         return voteView(result);
