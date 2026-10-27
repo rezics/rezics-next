@@ -359,6 +359,53 @@ CREATE TABLE library.follow (
 
 
 --
+-- Name: label_assignment; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.label_assignment (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    label_id uuid NOT NULL,
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_after timestamp with time zone,
+    CONSTRAINT label_assignment_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT label_assignment_check1 CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
+    CONSTRAINT label_assignment_check2 CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT label_assignment_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT label_assignment_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: personal_label; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.personal_label (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    label_id uuid NOT NULL,
+    normalized_name text NOT NULL COLLATE pg_catalog."C",
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_after timestamp with time zone,
+    CONSTRAINT personal_label_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT personal_label_check1 CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
+    CONSTRAINT personal_label_check2 CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT personal_label_normalized_name_check CHECK (((char_length(normalized_name) >= 1) AND (char_length(normalized_name) <= 100))),
+    CONSTRAINT personal_label_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT personal_label_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: progress_change; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -875,6 +922,22 @@ ALTER TABLE ONLY library.follow
 
 
 --
+-- Name: label_assignment label_assignment_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_pkey PRIMARY KEY (route, account_id, subject_id, label_id);
+
+
+--
+-- Name: personal_label personal_label_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.personal_label
+    ADD CONSTRAINT personal_label_pkey PRIMARY KEY (route, account_id, label_id);
+
+
+--
 -- Name: progress_change progress_change_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1253,6 +1316,34 @@ CREATE INDEX follow_account_page ON library.follow USING btree (route, account_i
 
 
 --
+-- Name: label_assignment_owner_label; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_owner_label ON library.label_assignment USING btree (route, account_id, label_id, subject_id);
+
+
+--
+-- Name: label_assignment_purge_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_purge_due ON library.label_assignment USING btree (route, purge_after, account_id, subject_id, label_id) WHERE (deleted_at IS NOT NULL);
+
+
+--
+-- Name: personal_label_live_name; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX personal_label_live_name ON library.personal_label USING btree (route, account_id, normalized_name) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: personal_label_purge_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX personal_label_purge_due ON library.personal_label USING btree (route, purge_after, account_id, label_id) WHERE (deleted_at IS NOT NULL);
+
+
+--
 -- Name: progress_session_account_subject; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1335,6 +1426,14 @@ CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_p
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: label_assignment label_assignment_route_account_id_label_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_route_account_id_label_id_fkey FOREIGN KEY (route, account_id, label_id) REFERENCES library.personal_label(route, account_id, label_id);
 
 
 --
