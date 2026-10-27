@@ -21,6 +21,7 @@ import type { Access, AccountActor, Resource } from '../../../src/request/access
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import { linkProjection } from '../../../src/semantic/links.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
 
@@ -102,6 +103,21 @@ export async function createProfileEntryFixture() {
     const warm = await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
     expect([200, 404]).toContain(warm.status);
     expect(access).toBeDefined();
+    const projection = linkProjection(pool);
+    const partitions = new Set([0]);
+    // The current resolver waits for this native consumer even on unrelated entry events.
+    // Run the real relay, as the deployed worker would, rather than forging checkpoints.
+    async function drainSubjectLinks() {
+      for (let step = 0; step < 20; step++) {
+        let pending = false;
+        for (const partition of partitions) {
+          const result = await projection.run(partition);
+          pending ||= result.status === 'busy' || result.envelopes > 0;
+        }
+        if (!pending) return;
+      }
+      throw new Error('Native Semantic link projection did not drain');
+    }
     const commands = createEntryCommands({ pool, access, tokens });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
 
@@ -118,6 +134,7 @@ export async function createProfileEntryFixture() {
     async function identity(scopes: readonly string[]) {
       const key = entryKey();
       const accountId = lifecycle.registrationTarget(key);
+      partitions.add(partitionOf(routeOf(accountId)!));
       const handle = `profile_${key.replaceAll('-', '')}`;
       const reservation = await lifecycle.reserveHandle({ accountId, handle, key });
       const input = { accountId, handle, reservationId: reservation.value.reservationId, key };
@@ -179,6 +196,7 @@ export async function createProfileEntryFixture() {
       body?: unknown,
       key = entryKey(),
     ) {
+      await drainSubjectLinks();
       const bearer =
         persona === 'owner'
           ? owner.bearer
@@ -245,6 +263,8 @@ export async function createProfileEntryFixture() {
       expect(response.status).toBe(201);
       const body = (await response.json()) as { subject: { id: string; type: string } };
       expect(body.subject.type).toBe(entryTypes[vertical]);
+      partitions.add(partitionOf(routeOf(body.subject.id)!));
+      await drainSubjectLinks();
       return body.subject.id;
     }
     async function inspect(accountId = owner.actor.accountId) {
