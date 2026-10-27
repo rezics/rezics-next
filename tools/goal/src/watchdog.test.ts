@@ -98,6 +98,7 @@ test('a shared failure signature reports its attempts, tasks, goals and one exam
         attempt: 1,
         state: 'exited',
         endedAt: minutesAgo(3),
+        failureKind: 'tool',
         result: 'SSH exit 255: host refused the connection',
       },
       {
@@ -105,6 +106,7 @@ test('a shared failure signature reports its attempts, tasks, goals and one exam
         attempt: 2,
         state: 'exited',
         endedAt: minutesAgo(8),
+        failureKind: 'tool',
         result: 'SSH exit 255: host refused the connection',
       },
       {
@@ -112,6 +114,7 @@ test('a shared failure signature reports its attempts, tasks, goals and one exam
         attempt: 1,
         state: 'exited',
         endedAt: minutesAgo(27),
+        result: JSON.stringify({ status: 'blocked', summary: 'needs intervention' }),
         blocker: 'SSH exit 255: host refused the connection',
       },
       {
@@ -119,6 +122,7 @@ test('a shared failure signature reports its attempts, tasks, goals and one exam
         attempt: 2,
         state: 'exited',
         endedAt: minutesAgo(31),
+        failureKind: 'tool',
         result: 'SSH exit 255: too old to count',
       },
     ];
@@ -160,9 +164,9 @@ test('failure signatures classify each documented infrastructure error', () => {
     const attempts: Partial<Attempt>[] = [];
     for (const [index, [, error]] of kinds.entries())
       attempts.push(
-        { taskId: 'task-a', attempt: index + 1, endedAt: minutesAgo(4), result: error },
-        { taskId: 'task-a', attempt: index + 10, endedAt: minutesAgo(8), result: error },
-        { taskId: 'task-b', attempt: index + 1, endedAt: minutesAgo(12), blocker: error },
+        { taskId: 'task-a', attempt: index + 1, endedAt: minutesAgo(4), failureKind: 'tool', result: error },
+        { taskId: 'task-a', attempt: index + 10, endedAt: minutesAgo(8), failureKind: 'tool', result: error },
+        { taskId: 'task-b', attempt: index + 1, endedAt: minutesAgo(12), failureKind: 'tool', blocker: error },
       );
     const delivered: string[] = [];
     expect(
@@ -176,6 +180,65 @@ test('failure signatures classify each documented infrastructure error', () => {
       ),
     ).toBe(kinds.length);
     expect(delivered.map((message) => message.match(/^Incident: ([^:]+)/)?.[1])).toEqual(kinds.map(([name]) => name));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a successful attempt whose summary mentions a lease, a slot wait or a connection error never counts toward an incident', () => {
+  const root = temporaryDirectory('goal-watchdog-success-signatures-');
+  try {
+    const tasks = [
+      { id: 'task-a', brief: { goal: 'alpha' } },
+      { id: 'task-b', brief: { goal: 'beta' } },
+    ] as unknown as Partial<Task>[];
+    const summaries = [
+      'Lease held after waiting 30000ms',
+      'remote-check: every check slot is busy; waiting for a free one',
+      'SSH exit 255: host refused the connection',
+    ];
+    const attempts: Partial<Attempt>[] = summaries.flatMap((summary, index) => {
+      const result = JSON.stringify({ status: 'success', summary });
+      return [
+        {
+          taskId: 'task-a',
+          attempt: index + 1,
+          state: 'exited',
+          endedAt: minutesAgo(4),
+          failureKind: null,
+          result,
+        },
+        {
+          taskId: 'task-a',
+          attempt: index + 10,
+          state: 'exited',
+          endedAt: minutesAgo(8),
+          failureKind: null,
+          result,
+        },
+        {
+          taskId: 'task-b',
+          attempt: index + 1,
+          state: 'exited',
+          endedAt: minutesAgo(12),
+          failureKind: null,
+          result,
+        },
+      ];
+    });
+    const delivered: string[] = [];
+
+    expect(
+      watch(
+        store(tasks, attempts),
+        root,
+        { stabilize: 'none', integration: 'none' },
+        root,
+        (message) => delivered.push(message),
+        now,
+      ),
+    ).toBe(0);
+    expect(delivered).toEqual([]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

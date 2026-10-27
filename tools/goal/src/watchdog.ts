@@ -117,6 +117,26 @@ function failureSignature(error: string): (typeof SIGNATURES)[number] | undefine
   return SIGNATURES.find((signature) => signature.pattern.test(error));
 }
 
+function reportsBlocked(result: string): boolean {
+  let end = result.lastIndexOf('}');
+  while (end >= 0) {
+    let start = result.lastIndexOf('{', end);
+    while (start >= 0) {
+      try {
+        const value = JSON.parse(result.slice(start, end + 1));
+        if (value && typeof value === 'object' && 'status' in value) return value.status === 'blocked';
+      } catch {
+        /* A result can wrap its final status object in prose. */
+      }
+      if (start === 0) break;
+      start = result.lastIndexOf('{', start - 1);
+    }
+    if (end === 0) break;
+    end = result.lastIndexOf('}', end - 1);
+  }
+  return false;
+}
+
 function failureIncidents(
   store: Pick<WorkerStore, 'attemptsEndedBetween'>,
   tasks: ReturnType<WorkerStore['tasks']>,
@@ -131,6 +151,7 @@ function failureIncidents(
   >();
   for (const attempt of store.attemptsEndedBetween(start, end)) {
     const result = typeof attempt.result === 'string' ? attempt.result : '';
+    if (!attempt.failureKind && !reportsBlocked(result)) continue;
     const blocker = typeof attempt.blocker === 'string' ? attempt.blocker : '';
     const error = [result, blocker].filter(Boolean).join('\n');
     const signature = failureSignature(error);
