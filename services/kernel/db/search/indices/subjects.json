@@ -95,6 +95,9 @@
       "statements": {
         "type": "keyword"
       },
+      "relation_facet_overflow": {
+        "type": "keyword"
+      },
       "facts": {
         "type": "nested",
         "properties": {

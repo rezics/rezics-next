@@ -19,6 +19,8 @@ export type SubjectDocument = {
   statements: string[];
   /** One entry per facet-capable statement, in source order, with exact duplicates removed. */
   facts: SubjectFact[];
+  /** Declared relation facet properties whose complete value sets exceeded the source sample bound. */
+  relation_facet_overflow?: string[];
   /** Active public Collections listing this subject. Omitted unless counts are supplied. */
   public_collection_count?: number;
 };
@@ -78,6 +80,9 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
     facts: subjectFacts(subject.statements),
+    ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
+      ? {}
+      : { relation_facet_overflow: uniqueValues(subject.relationFacetOverflow) }),
   };
 }
 
