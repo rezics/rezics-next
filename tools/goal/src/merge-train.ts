@@ -11,6 +11,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import type { IntegrationTarget } from './types.ts';
 import {
   changedFiles,
   diffLineCount,
@@ -117,9 +118,9 @@ export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
   cwd: string,
   logPath: string,
+  execute: GateRunner = gateRunner(600_000),
 ): Promise<GateResult & { failedCommand?: readonly string[] }> {
   // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
-  const execute = gateRunner(600_000);
   let output = '';
   let passed = true,
     timedOut = false;
@@ -134,7 +135,7 @@ export async function runIntegrationChecks(
       `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`,
     );
   };
-  // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors. Installing
+  // Every check runs: a later check may be the only one that exercises its own errors. Installing
   // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
   // and run at once, each into its own log section, which keeps the landing as long as its slowest check.
   // A check that installs or generates writes the tree, so those run one at a time, before and after the read-only
@@ -257,7 +258,10 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
   }
 }
 
-function taskIntegrationTarget(stateDirectory: string, taskId: string): { target?: string; manager?: string } {
+function taskIntegrationTarget(
+  stateDirectory: string,
+  taskId: string,
+): { target?: string; manager?: string; goal?: string; base?: string } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
@@ -265,14 +269,39 @@ function taskIntegrationTarget(stateDirectory: string, taskId: string): { target
   try {
     const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
     if (!row) return {};
-    const brief = (JSON.parse(row.body) as { brief?: { target?: string; manager?: string } }).brief;
+    const task = JSON.parse(row.body) as {
+      base?: unknown;
+      brief?: { target?: unknown; manager?: unknown; goal?: unknown };
+    };
+    const brief = task.brief;
     return {
-      ...(brief?.target ? { target: brief.target } : {}),
-      ...(brief?.manager ? { manager: brief.manager } : {}),
+      ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
+      ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
+      ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
+      ...(typeof task.base === 'string' ? { base: task.base } : {}),
     };
   } finally {
     db.close();
   }
+}
+
+const CONTROL_PLANE_PATH = 'tools/goal/';
+const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
+  ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
+  ['bun', 'test', 'tools/goal/src'],
+];
+
+function isAncestor(cwd: string, ancestor: string, descendant: string): boolean {
+  return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
+}
+
+function changedPathsBetween(cwd: string, base: string, head: string): string[] {
+  const changed = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  if (changed.status !== 0) throw new Error(changed.stderr.trim() || 'Cannot read task changes');
+  return changed.stdout.split('\0').filter(Boolean);
 }
 
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
@@ -533,13 +562,19 @@ export class MergeTrain {
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
-    const stabilize = recorded.target === 'stabilize';
-    const targetBranch = stabilize
-      ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')
-      : (o.integrationBranch ?? mainBranch);
+    let integrationTarget: IntegrationTarget =
+      recorded.target === 'stabilize' ? 'stabilize' : o.integrationBranch !== undefined ? 'integration' : 'main';
+    let targetBranch =
+      integrationTarget === 'stabilize'
+        ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')
+        : integrationTarget === 'integration'
+          ? o.integrationBranch!
+          : mainBranch;
+    let targetRef = `refs/heads/${targetBranch}`;
+    let controlPlane = false;
+    let stabilize = integrationTarget === 'stabilize';
     // A stabilize task uses the same rebase, check and compare-and-swap path, aimed at the stabilize branch.
-    const integratesIntoDev = stabilize || o.integrationBranch !== undefined;
-    const targetRef = `refs/heads/${targetBranch}`;
+    let integratesIntoDev = integrationTarget !== 'main';
     const started = Date.now();
     const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
     writeFileSync(logPath, '');
@@ -557,32 +592,46 @@ export class MergeTrain {
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
     const runGate = o.runGate ?? gateRunner();
+    const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
+    const recoverAlreadyIntegrated = (): boolean => {
+      if (!entry.candidate) return false;
+      try {
+        git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
+      } catch {
+        return false;
+      }
+      result.passed = true;
+      result.stage = 'merge';
+      result.mergedCommit = entry.candidate;
+      if (controlPlane) this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      else if (stabilize) {
+        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
+        git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
+        added = true;
+        this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+      }
+      return true;
+    };
     try {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
-      // Recover an advance that committed before its outcome was saved.
-      let alreadyIntegrated = false;
-      if (entry.candidate) {
-        try {
-          git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
-          alreadyIntegrated = true;
-        } catch {}
-      }
-      if (alreadyIntegrated && entry.candidate) {
-        result.passed = true;
-        result.stage = 'merge';
-        result.mergedCommit = entry.candidate;
-        if (stabilize) {
-          mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-          git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
-          added = true;
-          this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
-        }
-        return result;
-      }
+      if (recoverAlreadyIntegrated()) return result;
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      // Use the task's recorded base so unrelated changes on its original integration branch do not affect routing.
+      if (recorded.goal === 'control-plane' && recorded.base && isAncestor(o.mainCheckout, recorded.base, tip)) {
+        const taskChanges = changedPathsBetween(o.mainCheckout, recorded.base, tip);
+        controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+      }
+      if (controlPlane) {
+        integrationTarget = 'main';
+        targetBranch = mainBranch;
+        targetRef = `refs/heads/${targetBranch}`;
+        stabilize = false;
+        integratesIntoDev = false;
+      }
+      // Recover an advance that committed before its outcome was saved.
+      if (recoverAlreadyIntegrated()) return result;
       const originalBase = git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
@@ -636,7 +685,7 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
         this.checkScope(scopeCheckedFiles, request, logPath);
-        if (integratesIntoDev) {
+        if (integratesIntoDev || controlPlane) {
           const formatCommand = o.formatCommand ?? [
             resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
             ...FORMAT_FLAGS,
@@ -740,12 +789,29 @@ export class MergeTrain {
           result.stage = 'gate';
           return result;
         }
+        if (controlPlane) {
+          stage = 'gate';
+          appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
+          const checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (!checked.passed) {
+            result.timedOut = checked.timedOut;
+            result.firstFailure = firstFailure(checked.output);
+            if (checked.failedCommand) result.failedCommand = [...checked.failedCommand];
+            result.stage = stage;
+            return result;
+          }
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+            throw new Error('Control-plane checks changed the candidate commit');
+          git(trainTree, 'diff', '--quiet', 'HEAD', '--');
+        }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
-        if (integratesIntoDev && integrationChecks.length) {
+        if (!controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
           // The workspace typecheck covers only the workspaces this change can affect (scripts/typecheck.ts reads
@@ -794,7 +860,7 @@ export class MergeTrain {
             appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
         }
-        if (!integratesIntoDev) {
+        if (!integratesIntoDev && !controlPlane) {
           stage = 'gate';
           appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
           const gated = await runGate(request.gate, trainTree, logPath);
@@ -841,7 +907,7 @@ export class MergeTrain {
           if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
             throw new Error('Main checkout HEAD changed');
-          if (integratesIntoDev) {
+          if (integratesIntoDev || controlPlane) {
             o.beforeIntegrationAdvance?.();
             try {
               git(o.mainCheckout, 'update-ref', targetRef, candidate, base);
@@ -867,7 +933,8 @@ export class MergeTrain {
           targetBranch,
           logPath,
         );
-        if (stabilize)
+        if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
+        else if (stabilize)
           this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return result;
       }
@@ -890,6 +957,161 @@ export class MergeTrain {
         } catch {}
         git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
       }
+    }
+  }
+
+  /** Publish a checked control-plane commit through the candidate branches without moving a ref past its current head. */
+  private propagateControlPlaneCommit(
+    mainCommit: string,
+    taskId: string,
+    managerId: string | undefined,
+    logPath: string,
+  ): void {
+    const mainBranch = this.options.mainBranch ?? 'main';
+    const stabilizeBranch =
+      this.options.stabilizeBranch ?? localBranchSettings(this.options.mainCheckout).stabilizeBranch ?? 'stabilize';
+    const devBranch = this.options.integrationBranch ?? 'dev';
+    if (!this.commitIsAncestor(mainCommit, mainBranch)) {
+      appendFileSync(
+        logPath,
+        `Cannot propagate control-plane commit ${mainCommit}: it is no longer on ${mainBranch}.\n`,
+      );
+      return;
+    }
+
+    const stableRef = `refs/heads/${stabilizeBranch}`;
+    const stableHead = spawnSync('git', ['rev-parse', '--verify', stableRef], {
+      cwd: this.options.mainCheckout,
+      encoding: 'utf8',
+    });
+    let devSource = mainCommit;
+    let sourceBranch = mainBranch;
+    if (stableHead.status === 0) {
+      const merged = this.mergeCommitIntoBranch(mainCommit, mainBranch, stabilizeBranch, logPath);
+      if (merged.conflicts) {
+        this.notifyControlPlaneConflict(taskId, managerId, mainBranch, mainCommit, stabilizeBranch, merged.conflicts);
+        return;
+      }
+      if (merged.error) {
+        appendFileSync(logPath, `Cannot merge ${mainBranch} into ${stabilizeBranch}: ${merged.error}\n`);
+        return;
+      }
+      if (!merged.commit) return;
+      devSource = merged.commit;
+      sourceBranch = stabilizeBranch;
+    } else
+      appendFileSync(
+        logPath,
+        `No ${stabilizeBranch} branch exists; merging ${mainBranch} directly into ${devBranch}.\n`,
+      );
+
+    const merged = this.mergeCommitIntoBranch(devSource, sourceBranch, devBranch, logPath);
+    if (merged.conflicts) {
+      this.notifyControlPlaneConflict(taskId, managerId, sourceBranch, devSource, devBranch, merged.conflicts);
+      return;
+    }
+    if (merged.error) appendFileSync(logPath, `Cannot merge ${sourceBranch} into ${devBranch}: ${merged.error}\n`);
+  }
+
+  /** Build a non-fast-forward merge away from the checkout, then compare-and-swap the target ref. */
+  private mergeCommitIntoBranch(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    logPath: string,
+  ): { commit?: string; conflicts?: string[]; error?: string } {
+    const checkout = this.options.mainCheckout;
+    const targetRef = `refs/heads/${targetBranch}`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const targetResult = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+        cwd: checkout,
+        encoding: 'utf8',
+      });
+      if (targetResult.status !== 0)
+        return { error: `branch ${targetBranch} does not exist: ${targetResult.stderr.trim() || 'missing ref'}` };
+      const targetHead = targetResult.stdout.trim();
+      if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
+
+      const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
+      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+      try {
+        git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
+        const merged = spawnSync(
+          'git',
+          ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
+          { cwd: tree, encoding: 'utf8' },
+        );
+        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}`;
+        if (merged.status !== 0) {
+          const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+          try {
+            git(tree, 'merge', '--abort');
+          } catch {}
+          appendFileSync(
+            logPath,
+            `Merge ${sourceBranch} ${sourceCommit} into ${targetBranch} aborted${conflicts.length ? ` on ${conflicts.join(', ')}` : ''}: ${output}\n`,
+          );
+          return conflicts.length ? { conflicts } : { error: output.trim() || 'merge failed without conflict paths' };
+        }
+
+        const commit = git(tree, 'rev-parse', 'HEAD');
+        this.options.beforePromotionAdvance?.();
+        try {
+          git(checkout, 'update-ref', targetRef, commit, targetHead);
+          return { commit };
+        } catch (error) {
+          const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+            cwd: checkout,
+            encoding: 'utf8',
+          });
+          if (current.status === 0 && current.stdout.trim() !== targetHead) {
+            appendFileSync(logPath, `${targetBranch} moved during merge; retrying against ${current.stdout.trim()}.\n`);
+            continue;
+          }
+          return { error: String(error) };
+        }
+      } catch (error) {
+        return { error: String(error) };
+      } finally {
+        try {
+          git(checkout, 'worktree', 'remove', '--force', tree);
+        } catch {}
+      }
+    }
+    return { error: `${targetBranch} moved during all five merge attempts` };
+  }
+
+  private notifyControlPlaneConflict(
+    taskId: string,
+    managerId: string | undefined,
+    sourceBranch: string,
+    sourceCommit: string,
+    targetBranch: string,
+    files: readonly string[],
+  ): void {
+    const summary =
+      `Task ${taskId} ${sourceBranch} ${sourceCommit} conflicts with ${targetBranch}: ${files.join(', ')}. ${targetBranch} was left unchanged.`.replace(
+        /[\r\n]+/g,
+        ' ',
+      );
+    const supermanager =
+      this.options.supermanager ??
+      localBranchSettings(this.options.mainCheckout).supermanager ??
+      defaults.integration.supermanager;
+    const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      const inbox = new SqliteManagerInbox(
+        db,
+        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+      );
+      for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
+    } finally {
+      owned?.close();
     }
   }
 

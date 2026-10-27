@@ -12,6 +12,7 @@ export type TaskKind =
   | 'specification'
   | 'research'
   | 'mechanical';
+export type IntegrationTarget = 'main' | 'integration' | 'stabilize';
 export type TaskClass = TaskKind | 'critical-path';
 /** serviceTier overrides the Codex service tier for work on this profile: 'default' (standard) or 'fast'. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };

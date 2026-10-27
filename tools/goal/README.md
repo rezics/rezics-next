@@ -255,6 +255,14 @@ A landing is refused only for newly failing test files, named in its gate failur
 allowed. Errors before any test-file result use diagnostic-line comparison. An unverified baseline also allows
 landing with a log note. The train's existing integration checks are unchanged.
 
+A `control-plane` task whose actual changed files are all under `tools/goal/` rebases onto `main`, formats its changes,
+then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` before `main` advances. The train compare-and-
+swaps `main`, then merges the checked main commit into `stabilize` and merges that resulting stabilize head into the
+integration branch, also using compare-and-swap. A conflict aborts that merge, leaves its target branch unchanged, and
+notifies the task manager and supermanager. When no stabilize branch exists, the checked main commit merges directly
+into the integration branch. A control-plane task that changes a file outside `tools/goal/`, and tasks from other
+Goals, continue to integrate into the integration branch as before.
+
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
