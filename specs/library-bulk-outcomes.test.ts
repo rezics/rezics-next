@@ -82,7 +82,13 @@ test('explicit status deduplicates subjects and replays admission and target rec
   await d.replay(op.id); await d.settle();
   expect((await read(d, op.id)).counts).toEqual(done.counts);
   expect((await all(d, op.id)).map(row => row.state)).toEqual(['applied', 'applied']);
-  expect((await post(d, { ...body, state: 'paused' }, key)).status).toBe(409);
+  const beforeConflict = await d.inspect();
+  const conflict = await post(d, { ...body, state: 'paused' }, key);
+  expect(conflict.status).toBe(422);
+  expect(await conflict.json()).toMatchObject({ code: 'idempotency_conflict' });
+  const afterConflict = await d.inspect();
+  expect(afterConflict.operations).toHaveLength(beforeConflict.operations.length);
+  expect(afterConflict.entries).toEqual(beforeConflict.entries);
 }));
 
 test('explicit admission rejects empty over-limit mixed selection and unknown predicates', () => usingDriver(async d => {
@@ -269,25 +275,65 @@ test('one target denial records partial completion and continues other authorize
   expect(view.phase).toBe('completed_with_errors'); expect(view.counts.applied).toBe(1); expect(view.counts.denied).toBe(1);
 }));
 
-test('bulk add preserves duplicates appends once per operation and returns the same member on replay', () => usingDriver(async d => {
-  const [id] = await d.provisionEntries(1);
-  const collectionId = await d.provisionCollection({ members: [id!, id!] });
-  const body: BulkAdmission = { action: 'add_to_collection', collectionId, selection: explicit([id!, id!]) };
-  const op = await admit(d, body); await finish(d, op.id, 1);
-  const memberId = (await all(d, op.id))[0]!.resultingMemberId; expect(memberId).not.toBeNull();
-  await d.replay(op.id); await d.settle();
-  expect((await all(d, op.id))[0]!.resultingMemberId).toBe(memberId);
-  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toHaveLength(3);
-  const second = await admit(d, body); await finish(d, second.id, 1);
-  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toHaveLength(4);
+test('bulk add skips existing occurrences preserves duplicates and appends one missing subject per operation', () => usingDriver(async d => {
+  const [present, missing] = await d.provisionEntries(2);
+  const collectionId = await d.provisionCollection({ members: [present!, present!] });
+  const existingMembers = (await d.inspect()).members.filter(row => row.collectionId === collectionId);
+  const skipBody: BulkAdmission = { action: 'add_to_collection', collectionId, selection: explicit([present!, present!]) };
+  const skipped = await admit(d, skipBody);
+  const skippedView = await finish(d, skipped.id, 0);
+  expect(skippedView.counts.no_effect).toBe(1);
+  expect(skippedView.summary).toEqual({ changed: 0, unchanged: 1, failed: 0 });
+  expect(await all(d, skipped.id)).toMatchObject([{ state: 'no_effect', resultingMemberId: null }]);
+  await d.replay(skipped.id); await d.settle();
+  const afterReplay = (await d.inspect()).members.filter(row => row.collectionId === collectionId);
+  expect(afterReplay).toEqual(existingMembers);
+  const secondSkip = await admit(d, skipBody);
+  const secondSkipView = await finish(d, secondSkip.id, 0);
+  expect(secondSkipView.summary).toEqual({ changed: 0, unchanged: 1, failed: 0 });
+  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toEqual(existingMembers);
+
+  const emptyCollection = await d.provisionCollection();
+  const appendBody: BulkAdmission = { action: 'add_to_collection', collectionId: emptyCollection, selection: explicit([missing!]) };
+  const appended = await admit(d, appendBody);
+  const appendedView = await finish(d, appended.id, 1);
+  expect(appendedView.summary).toEqual({ changed: 1, unchanged: 0, failed: 0 });
+  const appendedOutcome = (await all(d, appended.id))[0]!;
+  const resultingMemberId = appendedOutcome.resultingMemberId;
+  expect(resultingMemberId).not.toBeNull();
+  await d.replay(appended.id); await d.settle();
+  expect((await all(d, appended.id))[0]!.resultingMemberId).toBe(resultingMemberId);
+  expect((await d.inspect()).members.filter(row => row.collectionId === emptyCollection).map(row => row.id)).toEqual([resultingMemberId]);
+
+  const laterSkip = await admit(d, appendBody);
+  const laterSkipView = await finish(d, laterSkip.id, 0);
+  expect(laterSkipView.counts.no_effect).toBe(1);
+  expect(laterSkipView.summary).toEqual({ changed: 0, unchanged: 1, failed: 0 });
+  const intentionalDuplicate = await d.appendMember(emptyCollection, missing!);
+  expect(intentionalDuplicate).not.toBe(resultingMemberId);
+  expect((await d.inspect()).members.filter(row => row.collectionId === emptyCollection).map(row => row.id)).toEqual([resultingMemberId, intentionalDuplicate]);
 }));
 
-test('Collection capacity refusal is a failed target and never silent duplicate suppression', () => usingDriver(async d => {
-  const [id] = await d.provisionEntries(1);
-  const collectionId = await d.provisionCollection({ members: Array.from({ length: 5000 }, () => id!) });
-  const op = await admit(d, { action: 'add_to_collection', collectionId, selection: explicit([id!]) }); await d.settle();
-  expect((await all(d, op.id))[0]).toMatchObject({ state: 'failed', reason: 'collection_full' });
-  expect((await read(d, op.id)).phase).toBe('completed_with_errors');
+test('Collection capacity skips present subjects and fails only when an absent subject needs an append', () => usingDriver(async d => {
+  const [present, absent] = await d.provisionEntries(2);
+  const collectionId = await d.provisionCollection({ members: Array.from({ length: 5000 }, () => present!) });
+  const fullMembers = (await d.inspect()).members.filter(row => row.collectionId === collectionId);
+  expect(fullMembers).toHaveLength(5000);
+  const skipped = await admit(d, { action: 'add_to_collection', collectionId, selection: explicit([present!]) });
+  const skippedView = await finish(d, skipped.id, 0);
+  expect(skippedView.counts.no_effect).toBe(1);
+  expect(skippedView.summary).toEqual({ changed: 0, unchanged: 1, failed: 0 });
+  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toEqual(fullMembers);
+
+  const failed = await admit(d, { action: 'add_to_collection', collectionId, selection: explicit([absent!]) });
+  await d.settle();
+  expect((await all(d, failed.id))[0]).toMatchObject({ state: 'failed', reason: 'collection_full' });
+  const failedView = await read(d, failed.id);
+  counters(failedView);
+  expect(failedView.phase).toBe('completed_with_errors');
+  expect(failedView.counts.failed).toBe(1);
+  expect(failedView.summary).toEqual({ changed: 0, unchanged: 0, failed: 1 });
+  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toEqual(fullMembers);
   expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toHaveLength(5000);
 }));
 
@@ -375,15 +421,26 @@ test('crashes at discovery commit and seal recover atomic manifest checkpoint an
 }));
 
 test('crashes before target commit after commit and before or after acknowledgement never duplicate effects', () => usingDriver(async d => {
-  const ids = await d.provisionEntries(1); const collectionId = await d.provisionCollection();
-  for (const boundary of ['before_target_commit', 'after_target_commit', 'before_outcome_ack', 'after_outcome_ack'] as const) {
+  const ids = await d.provisionEntries(4);
+  for (const [index, boundary] of ['before_target_commit', 'after_target_commit', 'before_outcome_ack', 'after_outcome_ack'].entries()) {
+    const collectionId = await d.provisionCollection();
+    const subjectId = ids[index]!;
     await d.crashAt(boundary);
-    const op = await admit(d, { action: 'add_to_collection', collectionId, selection: explicit(ids) });
+    const op = await admit(d, { action: 'add_to_collection', collectionId, selection: explicit([subjectId]) });
     await d.runUntil(boundary); await d.restart(); await finish(d, op.id, 1);
-    const before = await page(d, op.id); await d.replay(op.id); await d.settle();
+    const before = await page(d, op.id);
+    const beforeTarget = (await d.inspect()).targets.find(row => row.operationId === op.id)!;
+    const memberId = before.outcomes[0]!.resultingMemberId;
+    expect(before.outcomes[0]).toMatchObject({ state: 'applied', resultingMemberId: expect.any(String) });
+    expect((await d.inspect()).members.filter(row => row.collectionId === collectionId).map(row => row.id)).toEqual([memberId]);
+    await d.replay(op.id); await d.settle();
     expect(await page(d, op.id)).toEqual(before);
+    const afterTarget = (await d.inspect()).targets.find(row => row.operationId === op.id)!;
+    expect(afterTarget.receipt).toEqual(beforeTarget.receipt);
+    expect(afterTarget.evidence).toEqual(beforeTarget.evidence);
+    expect((await d.inspect()).members.filter(row => row.collectionId === collectionId).map(row => row.id)).toEqual([memberId]);
   }
-  expect((await d.inspect()).members.filter(row => row.collectionId === collectionId)).toHaveLength(4);
+  expect((await d.inspect()).members).toHaveLength(4);
 }));
 
 test('occurrence transfer commit and acknowledgement crashes preserve immutable pages across partitions', () => usingDriver(async d => {
@@ -473,7 +530,7 @@ test('cursor key rotation retirement and clock expiry use the accounts opaque he
   const fresh = (await page(d, op.id)).next!;
   await d.setTime(new Date(Date.parse(d.now()) + 15 * 60_000 + 1).toISOString());
   const response = await d.request('owner', { method: 'GET', path: `/v1/libraryOperations/${op.id}/outcomes?limit=20&cursor=${fresh}` });
-  expect(response.status).toBe(400); expect(await response.json()).toMatchObject({ code: 'stale_cursor' });
+  expect(response.status).toBe(400); expect(await response.json()).toMatchObject({ code: 'invalid_cursor' });
 }));
 
 test('durable chunk budgets retry the same index and unavailability is retryable without logical counter drift', () => usingDriver(async d => {
@@ -503,7 +560,7 @@ test('native expiry and bounded GC prevent retained DBOS segments and stale admi
   await d.resume(); await d.replay(op.id); await d.settle();
   expect((await d.inspect()).entries[0]!.state).toBe('planned');
   await d.collect({ dbos: true, native: true });
-  expect((await post(d, body, key)).status).toBe(410);
+  expect((await admit(d, body, key)).id).toBe(replayOp.id);
   await d.replay(replayOp.id); await d.settle();
   expect((await d.inspect()).entries[0]!.state).toBe('planned');
 }));

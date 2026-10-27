@@ -63,7 +63,7 @@ export interface LibraryBulkDriver {
   readonly unknownMemberId: string;
   setTime(instant: string): Promise<void>;
   now(): string;
-  /** A fresh <kernel epoch milliseconds>.<UUIDv4> key, no product rules. */
+  /** A fresh JSON-encoded UUIDv4 Idempotency-Key header value, no product rules. */
   key(): string;
   request(as: Persona, input: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string;
     body?: unknown; headers?: Record<string, string> }): Promise<Response>;

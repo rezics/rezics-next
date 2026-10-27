@@ -12,13 +12,13 @@ import type { EntryState } from './entry-model.ts';
 export const BULK_PAGE_LIMIT = 100;
 export const BULK_SEGMENT_PAGES = 100;
 export const BULK_EXECUTION_HOURS = 24;
-export const BULK_RESULTS_HOURS = 24;
+export const BULK_RESULTS_HOURS = 48;
 export const BULK_COMMAND_DEADLINE_MS = 5_000;
 export const BULK_ADMISSION_BODY_BYTES = 16_384;
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
   | { kind: 'explicit'; targets: readonly { subjectId: string }[] }
-  | { kind: 'query'; filter: { state?: EntryState; primaryType?: string } };
+  | { kind: 'query'; filter: { state?: EntryState; /** Raw type identifier; no per-id length cap. The shelf reader's opaque type-key codec is a dependency. */ primaryType?: string } };
 export type OccurrenceSelection = { kind: 'occurrences'; memberIds: readonly string[] };
 export type BulkAdmission =
   | { action: 'set_status'; state: EntryState; selection: SubjectSelection }

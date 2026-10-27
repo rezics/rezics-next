@@ -1,8 +1,8 @@
 # Private library bulk operations
 
 This is the proposed contract for durable private operations over a person's saved library and one of their
-Collections. It defines no routes or runtime behavior in this change. The implementation belongs to the existing
-library module and its composed worker.
+Collections. It defines route schemas but does not mount routes or implement runtime behavior in this change. The
+implementation belongs to the existing library module and its composed worker.
 
 The contract adopts bounded discovery-time matching and a frozen private manifest. Its UI and concurrency behavior
 follows the [query-scoped bulk report](../../../../docs/research/library-query-bulk.md), especially “Proposed
@@ -73,10 +73,12 @@ leaves progress sessions and history, copies, follows and Collection members int
 that it removes the library entry only. Full erasure is a separate explicit action.
 
 Each target is its own stable, idempotent native command. Target-specific conflict or denial is recorded and other
-authorized targets continue. A current source or target authority loss stops undispatched work operation-wide;
-already committed effects remain. Restored identity and source/target authority are checked again at every target
-attempt and replay, using the exact durable initiator. A stored actor, successful enqueue or `trustedAccount` call is
-not continuing authority.
+authorized targets continue. A denial tied to one subject or occurrence is target-specific; loss of source action,
+account, consent, delegation, source gate or the target Collection gate/resource authority is operation-wide and
+stops undispatched work. Already committed effects remain. Restored identity and source/target authority are checked
+again at every target attempt and replay, using the exact durable initiator. A stored actor, successful enqueue or
+`trustedAccount` call is not continuing authority. An empty discovered selection completes after admission checks
+with zero targets and zero effects.
 
 ## HTTP contract
 
@@ -86,22 +88,28 @@ operation IDs have the same `404` response for summary, outcome and cancellation
 
 The additive route action catalogue entries are `library_operation:create`, `library_operation:read`,
 `library_operation:list_outcomes`, and `library_operation:cancel`. They are route authorization data, not grants and
-not effect authority. The create/read/outcome/cancel routes use the existing `personal_library` exposure gate.
-Membership operations also require the target Collection's existing `collections` gate. The operation checks the
-existing effect scopes and current source and target authorities: `library_entry:update` for status, ordinary
-validated entry creation and library-authorized membership work; `library_entry:delete` for entry removal; and
-`collection:update` plus the installed Collection resource permission for membership mutation. Every target
-command rechecks at its authoritative time. Adding these action names creates no role, grant, scope or bypass.
+not effect authority. All routes use the existing `personal_library` exposure gate and bind the operation to the
+authenticated account; a foreign or unknown operation has the same `404`. The read and outcome routes also require
+the existing `library_entry:list` scope. Cancellation and every target attempt require the operation's existing
+effect authority to remain live. Membership operations also require the target Collection's existing `collections`
+gate. Their effects require `collection:update` and the installed Collection resource permission; additions also
+require the existing `subject:read` checks. Status changes use `library_entry:update`, explicit absent-entry status
+uses the same validated create semantics, and library removal uses `library_entry:delete`. Query discovery requires
+the existing library-list authority. Every source and target check runs against current authority at its authoritative
+time. Adding these action names creates no role, grant, scope or bypass.
 
 Requests are strict, closed objects. The request body is at most 16 KiB; unknown properties fail with `400`.
-Supported saved-entry states are the current `EntryState` values. The `primaryType` predicate is a bounded primitive
-string, validated by the existing subject resolver. Explicit subject and member arrays contain 1–100 identifiers
-before deduplication; an empty list is invalid. The query selection may match any number of entries.
+Supported saved-entry states are the current `EntryState` values. `primaryType` is a primitive identifier string;
+bulk adds no per-identifier length cap or type allowlist and validates it through the shelf reader's type-key
+representation. The body limit bounds the serialized request. This port deliberately remains additive while the
+read-contract/type-key refinement supplies the opaque bounded representation for long identifiers. Explicit subject
+and member arrays contain 1–100 identifiers before deduplication; an empty list is invalid. The query selection may
+match any number of entries.
 
 ### Start an operation
 
-`POST /v1/libraryOperations` requires the ordinary `idempotency-key` header. It returns `202 Accepted`, a
-`Location: /v1/libraryOperations/{operationId}` header and this body:
+`POST /v1/libraryOperations` requires the repository's JSON-encoded structured `Idempotency-Key` header (a quoted
+UUIDv4 string). It returns `202 Accepted`, a `Location: /v1/libraryOperations/{operationId}` header and this body:
 
 ```json
 {
@@ -124,8 +132,7 @@ type OccurrenceSelection = { kind: 'occurrences'; memberIds: string[] };
 type BulkAdmission =
   | { action: 'set_status'; state: EntryState; selection: SubjectSelection }
   | { action: 'add_to_collection'; collectionId: string; selection: SubjectSelection }
-  | { action: 'remove_from_collection'; collectionId: string;
-      selection: SubjectSelection | OccurrenceSelection }
+  | { action: 'remove_from_collection'; collectionId: string; selection: SubjectSelection | OccurrenceSelection }
   | { action: 'remove_from_library'; selection: SubjectSelection };
 ```
 
@@ -133,18 +140,31 @@ This route validates and authorizes the request, captures the immutable source a
 operation plus its creation receipt and initial enqueue intent, and starts asynchronous discovery. A successful
 HTTP response means that native admission is durable; it does not mean that discovery, selection or mutation has
 completed. If enqueue is unavailable, the native intent remains recoverable and the same key returns the same
-operation. A changed request with the same key is an idempotency conflict.
+operation. A changed request with the same key is an `idempotency_conflict` (`422`). A same-key replay is supported
+for 48 hours from receipt commit; outside that bounded window it is not a permanent deduplication promise.
 
 ### Read status and outcomes
 
-`GET /v1/libraryOperations/{operationId}` returns `{ "operation": OperationView }`. The operation summary is bounded
+`GET /v1/libraryOperations/{operationId}` returns `200 { "operation": OperationView }`. The operation summary is bounded
 and contains counters, never the manifest or outcome array. `OperationView` includes the operation ID, action,
 selection kind, requested state or target Collection, phase, selection and occurrence completeness, cancellation
 request, counters, optional terminal summary, admission/high-water/expiry timestamps, finish time and a bounded
 reason.
 
+The exact response envelopes are `OperationResult = { operation: OperationView }`,
+`OutcomePage = { outcomes: OutcomeView[], next: string | null }`, and
+`OutcomeView = { ordinal, subjectId, memberId, state, reason, resultingMemberId }`. `OperationView` has `id`,
+`action`, `selectionKind`, `state`, `collectionId`, `phase`, `selectionComplete`, `occurrencesComplete`,
+`cancelRequested`, `counts`, `summary`, `admittedAt`, `targetBoundAt`, `expiresAt`, `resultsExpireAt`,
+`finishedAt`, and `reason`. The exact field types and closed unions are in [`bulk-contract.ts`](bulk-contract.ts).
+No account or actor identity is chosen in request data or returned as a client-selected field.
+
 Counters distinguish raw candidates, selected subjects, raw Collection occurrences, captured occurrences, immutable
-effect targets and each target state. The invariant is
+effect targets and each target state. `selectedSubjects` counts distinct explicit/query-selected subject IDs and is
+zero for direct occurrence selection. `scannedOccurrences` counts raw target member candidates read; it is zero for
+direct occurrence selection. `capturedOccurrences` counts immutable occurrence targets, including explicit member
+selection and subject-based Collection expansion. `targets` counts effect targets: subjects for status, add and
+library removal; member occurrences for Collection removal. The invariant is
 `targets = pending + reconciling + applied + no_effect + conflict + denied + failed + cancelled`. Counters are
 maintained in the same source transaction as each unique target transition; a replay cannot increment them twice.
 Reads use the operation row's fixed counters and do not count the manifest.
@@ -156,24 +176,28 @@ categories. `completed` means no failed target; `completed_with_errors` means at
 discovery has `selectionComplete = false` and no complete manifest summary. An operation with an unknown target
 receipt remains reconciling and never emits a terminal summary.
 
-`GET /v1/libraryOperations/{operationId}/outcomes?limit=20&cursor=...&state=...` returns
-`{ "outcomes": OutcomeView[], "next": string | null }`. `limit` is 1–20; the fixed-size growth check uses 20.
+`GET /v1/libraryOperations/{operationId}/outcomes?limit=20&cursor=...&state=...` returns `200`
+`{ "outcomes": OutcomeView[], "next": string | null }`. `limit` defaults to 20 and is 1–20; the fixed-size growth check uses 20.
 `state` is an optional exact target-state filter. A page carries only bounded private rows, ordered by immutable
 operation ordinal. It includes the subject ID, a nullable member ID, state, reason and nullable resulting member ID.
 This endpoint is not a second operation summary and never exposes unrelated manifest entries.
 
-Use the accounts-owned `encodeListCursor` and `decodeListCursor` from `src/tokens/list-cursor.ts`, with the kernel
-clock. Bind `route` to `GET /v1/libraryOperations/{operationId}/outcomes`, `viewer` to the authenticated account ID,
-and `query` to the operation ID, page size and state filter. The cursor position is the immutable outcome ordinal;
-its epoch is a positive operation outcome generation. Tampered, expired, retired-key, foreign-viewer, foreign-route,
-foreign-operation, changed-filter or changed-page-size cursors fail closed as invalid/stale cursors. Cursors reveal no
-position, operation ID or query. Outcome pages are current keyset views, not a snapshot of outcome states; state
-filters are evaluated at each page read.
+Use the accounts-owned async `encodeListCursor(ring, binding, position, now)` and
+`decodeListCursor(ring, binding, token, now)` from `src/tokens/list-cursor.ts`, passing the kernel clock's `Date`.
+The binding has `route: string`, `viewer: string | null`, and
+`query: Readonly<Record<string, string | number | boolean | null>>`. Bind `route` to
+`GET /v1/libraryOperations/{operationId}/outcomes`, `viewer` to the authenticated account ID, and `query` to the
+operation ID, page size and state filter. Use `position: { epoch: 1, after: [ordinal] }`; ordinals are immutable,
+append-only decimal keys, and the cursor is a current keyset view rather than a snapshot. Do not compare the cursor
+epoch to changing outcome counters. A helper result with `ok: false`, including expired or retired-key tokens, maps
+to `400 invalid_cursor`. Route, viewer, operation, filter and page-size binding mismatches and tampering also map to
+`400 invalid_cursor`. Cursors reveal no position, operation ID or query. Outcome state is current at each page read;
+a state filter is evaluated on that read.
 
 ### Cancel
 
-`POST /v1/libraryOperations/{operationId}:cancel` takes an empty strict body and a normal idempotency key. It
-returns `202` and the bounded operation view. Cancellation is a request, not rollback: stop between discovery
+`POST /v1/libraryOperations/{operationId}:cancel` takes an empty strict body and the same JSON-encoded structured
+`Idempotency-Key` convention. It returns `202 { "operation": OperationView }`. Cancellation is a request, not rollback: stop between discovery
 pages and target commands, reconcile any in-flight target receipt, then mark untouched frozen targets cancelled in
 bounded pages. Do not compensate for prior effects or overwrite later edits. Partial discovery remains explicitly
 incomplete. Repeated cancellation with the same key replays the same receipt; a distinct cancel key returns the
@@ -181,29 +205,29 @@ current state without reopening work.
 
 ## Phases and outcome transitions
 
-| Operation phase | Native work and transition rule |
-| --- | --- |
-| `queued` | The owner partition has the source, creation receipt, high-water and enqueue intent. No target effect is inferred from DBOS registration. |
-| `discovering` | Read at most 100 raw source candidates, including nonmatches; atomically commit the manifest page, raw-scan counters, checkpoint and next-segment intent. |
-| `expanding` | For Collection removal, transfer selected subject IDs in immutable pages, capture the target Collection high-water, scan its member index once, and acknowledge each occurrence page across partitions. No member is removed until expansion is sealed. |
-| `applying` | Execute stable target commands in bounded chunks. Each rechecks restored initiator, source and target authority, then uses the frozen target and exact receipt key. |
-| `reconciling` | A commit/checkpoint/ack gap or unavailable receipt is unknown. Read the exact target receipt or retry the same receipt key; never infer from current row state or create a fresh key. |
-| `completed` | All selection/expansion is sealed, all targets are terminal, and every target is `applied` or `no_effect`. |
-| `completed_with_errors` | All selection/expansion is sealed and all targets are terminal, with at least one conflict, denial or failure. Prior effects remain. |
-| `cancelled` | Cancellation is drained; in-flight effects have exact receipts, untouched targets are cancelled, and incomplete discovery remains labelled incomplete. |
-| `stopped` | Operation-wide authority loss or missing immutable source stops dispatch. Prior effects remain; unknown receipts stay reconciling and suppress summary. |
-| `expired` | Execution horizon is closed. A retained DBOS segment cannot issue another effect; it may only reconcile exact prior receipts and finish bounded accounting. |
+| Operation phase         | Native work and transition rule                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queued`                | The owner partition has the source, creation receipt, high-water and enqueue intent. No target effect is inferred from DBOS registration.                                                                                                               |
+| `discovering`           | Read at most 100 raw source candidates, including nonmatches; atomically commit the manifest page, raw-scan counters, checkpoint and next-segment intent.                                                                                               |
+| `expanding`             | For Collection removal, transfer selected subject IDs in immutable pages, capture the target Collection high-water, scan its member index once, and acknowledge each occurrence page across partitions. No member is removed until expansion is sealed. |
+| `applying`              | Execute stable target commands in bounded chunks. Each rechecks restored initiator, source and target authority, then uses the frozen target and exact receipt key.                                                                                     |
+| `reconciling`           | A commit/checkpoint/ack gap or unavailable receipt is unknown. Read the exact target receipt or retry the same receipt key; never infer from current row state or create a fresh key.                                                                   |
+| `completed`             | All selection/expansion is sealed, all targets are terminal, and every target is `applied` or `no_effect`.                                                                                                                                              |
+| `completed_with_errors` | All selection/expansion is sealed and all targets are terminal, with at least one conflict, denial or failure. Prior effects remain.                                                                                                                    |
+| `cancelled`             | Cancellation is drained; in-flight effects have exact receipts, untouched targets are cancelled, and incomplete discovery remains labelled incomplete.                                                                                                  |
+| `stopped`               | Operation-wide authority loss or missing immutable source stops dispatch. Prior effects remain; unknown receipts stay reconciling and suppress summary.                                                                                                 |
+| `expired`               | Execution horizon is closed. A retained DBOS segment cannot issue another effect; it may only reconcile exact prior receipts and finish bounded accounting.                                                                                             |
 
-| Target state | Meaning |
-| --- | --- |
-| `pending` | Frozen target has no terminal receipt yet. |
-| `reconciling` | An attempt may have committed, but exact receipt evidence is not currently available. No new key or current-state inference is allowed. |
-| `applied` | The native target command receipt proves the intended mutation committed. |
-| `no_effect` | A native receipt proves the desired status was already present at the captured revision/incarnation, or the subject was already in the authorized target Collection. |
-| `conflict` | Exact expected revision/incarnation/member was missing or changed, or an absent entry's slot generation changed. |
-| `denied` | Current target-specific authority denies this target. Other targets continue while operation-wide authority remains valid. |
-| `failed` | The target command failed for a durable, target-specific reason such as Collection capacity. |
-| `cancelled` | The target was not dispatched because cancellation, operation-wide authority loss or expiry closed the remaining work. |
+| Target state  | Meaning                                                                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pending`     | Frozen target has no terminal receipt yet.                                                                                                                           |
+| `reconciling` | An attempt may have committed, but exact receipt evidence is not currently available. No new key or current-state inference is allowed.                              |
+| `applied`     | The native target command receipt proves the intended mutation committed.                                                                                            |
+| `no_effect`   | A native receipt proves the desired status was already present at the captured revision/incarnation, or the subject was already in the authorized target Collection. |
+| `conflict`    | Exact expected revision/incarnation/member was missing or changed, or an absent entry's slot generation changed.                                                     |
+| `denied`      | Current target-specific authority denies this target. Other targets continue while operation-wide authority remains valid.                                           |
+| `failed`      | The target command failed for a durable, target-specific reason such as Collection capacity.                                                                         |
+| `cancelled`   | The target was not dispatched because cancellation, operation-wide authority loss or expiry closed the remaining work.                                               |
 
 Every pending/reconciling-to-terminal transition is compare-and-swap and unique by `(route, operation_id, ordinal)`.
 It updates exactly one terminal counter and the summary generation. Source-bound immutable target evidence and the
@@ -335,20 +359,21 @@ Chunks/pages are retried without a transaction or connection held during a durab
 
 ## Cancellation, expiry and garbage collection
 
-Execution and retry stop 24 hours after admission. The source row, target rows, exact target evidence and creation
-initiator evidence remain available through a 48-hour HTTP idempotency/results window. Admission and cancel keys
-are supported for 48 hours from their committed receipt. During that window, a matching retry returns the same
-operation or an expired tombstone response; changed input conflicts. After the window, no permanent key-deduplication
-or result promise is made, and clients must create a new key only for new intent. Native command receipts may remain
-longer, but the API does not depend on indefinite receipt retention.
+Execution and effect retries stop 24 hours after admission. The source row, target rows, exact target evidence,
+creation initiator evidence and operation/cancel command receipts remain available through the 48-hour HTTP
+idempotency/results window. During that window, a matching retry returns the same operation or an expired tombstone
+response; changed input conflicts. At the end of the window, bounded GC removes only the bulk-owned source/target
+evidence and exact `library.bulk.*` native receipts after the operation is terminal or expired. No permanent POST
+deduplication or result promise is made outside this window; a valid, separately authorized POST may then create a
+new operation. There is no new `410` problem or timestamp-prefixed key format.
 
 At the 24-hour execution boundary, persist `expired` before any retained workflow can run another target effect.
 Drain/reconcile in-flight effects by their exact receipts, cancel untouched targets in pages, and suppress summary
 while a target remains unknown. If immutable source or receipt evidence is missing, fail closed and stop. At the
 48-hour results boundary, retain only a bounded admission tombstone with owner, operation ID, digest and expired
-state through the end of the advertised idempotency window; then delete it. Keep target/source evidence no longer
-than needed for that boundary. A request outside this window is not a supported retry and cannot reopen a retained
-terminal DBOS segment.
+state until the idempotency window closes; then delete it together with the bulk-owned receipts. A request outside
+this window is not a supported retry and cannot reopen a retained terminal DBOS segment. An old native workflow ID
+whose source or receipt evidence has been collected must fail closed before any new effect.
 
 The native sweeper is route-keyset based and removes at most 100 target/transfer rows per native transaction. It
 uses the expiry index, never a table count or full manifest aggregation. Delete target pages first and source pages
@@ -371,7 +396,8 @@ statements, plus logarithmic B-tree blocks. It never counts manifest rows. A fix
 examined target rows, one keyset statement and logarithmic seek cost. Receipt reconciliation is a point lookup by
 the exact receipt key. Counters change in the same transaction as one unique target transition.
 
-The acceptance suite must run cost checks with shared catalogue classification and no planner settings:
+Run `checkGrowth` with the shared catalogue classifier, no planner settings, and at least one warm-up for every
+measured statement:
 
 - Admission replay, operation summary and fixed 20-row outcome page grow independently across 256, 1,024 and
   4,096 unrelated operations, targets and accounts. Warm every measured statement at least once. Rows and
@@ -385,8 +411,9 @@ The acceptance suite must run cost checks with shared catalogue classification a
   operation/state/ordinal indexes. No summary executes `COUNT(*)` over targets. Crash gaps include after a native
   page commit, after seal, before/after enqueue, before/after target commit and before/after source acknowledgement.
 
-These are proposed bounds, not measured PostgreSQL plans. The implementation must add native growth evidence for
-the indexes and query shapes before documenting measured performance.
+These are proposed bounds, not measured PostgreSQL plans. The split names the exact test files and literal growth-test
+titles. Implementations must add native growth evidence for the indexes and query shapes before documenting measured
+performance.
 
 ## Implementation split
 
@@ -396,6 +423,8 @@ one writer. Every proposed acceptance is expected to fail before its slice is im
 process or changes an existing action's grant.
 
 ### Shared sequence and slot-generation storage
+
+- After: none; this establishes the shared data prerequisite for the other slices.
 
 - Paths: `services/kernel/db/library/migrations/<timestamp>_library_bulk_and_admission_sequence.sql`,
   `services/kernel/db/library/schema.sql`, `services/kernel/src/library/entry-store-entry-insert.sql`,
@@ -410,6 +439,8 @@ process or changes an existing action's grant.
 
 ### Native bulk store and fixed counters
 
+- After: shared sequence and slot-generation storage.
+
 - Paths: `services/kernel/src/library/bulk-store.ts`,
   `services/kernel/src/library/bulk-store-operation.sql`,
   `services/kernel/src/library/bulk-store-targets.sql`,
@@ -420,8 +451,11 @@ process or changes an existing action's grant.
 - Call sites: `createBulkStore`, operation lookup, atomic manifest/checkpoint/intent commit, unique target
   transition and fixed-counter summary lookup.
 - Proposed failing acceptance: `bulk page commit and terminal transition are atomic unique and use indexed counters` in `services/kernel/test/library/bulk-store.test.ts`.
+- Proposed failing growth acceptance: `manifest insertion and pending-target access use operation indexes as retained targets grow` in `services/kernel/test/library/bulk-store-growth.test.ts`.
 
 ### Admission and operation route module
+
+- After: shared sequence and slot-generation storage; native bulk store and fixed counters.
 
 - Paths: `services/kernel/src/library/bulk-admission.ts`,
   `services/kernel/src/library/bulk-admission.sql`,
@@ -429,13 +463,16 @@ process or changes an existing action's grant.
   `services/kernel/src/library/bulk-routes.ts`,
   `services/kernel/src/library/personal-routes.ts`,
   `services/kernel/test/library/bulk-admission.test.ts`,
-  `specs/library-bulk-driver.ts`.
+  `specs/library-bulk-driver.ts`, `specs/library-bulk-outcomes.test.ts`.
 - Call sites: mounted private library route group, operation create/read/outcome/cancel handlers and the real-kernel
   driver's setup/request mapping. The route module owns all four paths; later outcome logic plugs into the already
   typed `BulkOperations` port without editing that shared route file.
 - Proposed failing acceptance: `bulk admission binds the authenticated initiator freezes only bounded request bytes and returns a recoverable 202 resource` in `services/kernel/test/library/bulk-admission.test.ts`.
+- Proposed failing growth acceptance: `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts` in `specs/library-bulk-outcomes.test.ts`.
 
 ### Bounded entry discovery and manifest sealing
+
+- After: shared sequence and slot-generation storage; native bulk store and fixed counters.
 
 - Paths: `services/kernel/src/library/bulk-discovery.ts`,
   `services/kernel/src/library/bulk-discovery-page.sql`,
@@ -445,8 +482,11 @@ process or changes an existing action's grant.
 - Call sites: native entry high-water read, `discoverBulkPage`, and atomic checkpoint/manifest/intent commit. Worker
   registration is owned by the worker slice.
 - Proposed failing acceptance: `query discovery scans bounded raw pages freezes matching before effects and excludes new incarnations above its high-water` in `services/kernel/test/library/bulk-discovery.test.ts`.
+- Proposed failing growth acceptance: `discovery pages stay bounded across sparse entries and unrelated histories` in `services/kernel/test/library/bulk-discovery-growth.test.ts`.
 
 ### Collection occurrence transfer and capture
+
+- After: shared sequence and slot-generation storage; native bulk store and bounded entry discovery.
 
 - Paths: `services/kernel/src/library/bulk-occurrences.ts`,
   `services/kernel/src/library/bulk-occurrence-page.sql`,
@@ -457,8 +497,11 @@ process or changes an existing action's grant.
 - Call sites: `captureCollectionPage`, `acknowledgeOccurrencePage`, target-side subject transfer and immutable
   occurrence acknowledgement. The target scan uses one raw member keyset and a separate target high-water.
 - Proposed failing acceptance: `subject-scoped removal captures every pre-high-water occurrence once and later additions survive cross-partition replay` in `services/kernel/test/library/bulk-occurrences.test.ts`.
+- Proposed failing growth acceptance: `occurrence capture scans each target Collection once as duplicates and unrelated members grow` in `services/kernel/test/library/bulk-occurrence-growth.test.ts`.
 
 ### Entry status and library removal targets
+
+- After: shared sequence and slot-generation storage; native bulk store.
 
 - Paths: `services/kernel/src/library/bulk-entry-targets.ts`,
   `services/kernel/src/library/bulk-entry-status.sql`,
@@ -473,6 +516,8 @@ process or changes an existing action's grant.
 
 ### Collection add and occurrence target commands
 
+- After: shared sequence and slot-generation storage; native bulk store.
+
 - Paths: `services/kernel/src/library/bulk-collection-targets.ts`,
   `services/kernel/src/library/bulk-collection-add.sql`,
   `services/kernel/src/library/bulk-collection-remove.sql`,
@@ -484,8 +529,11 @@ process or changes an existing action's grant.
 - Call sites: existing `collection:update` authorization, capacity/respace handling, member insert and exact member
   delete. The atomic bulk membership check is additive and does not constrain ordinary additions.
 - Proposed failing acceptance: `bulk add skips a present subject receipts one append per missing subject and preserves ordinary duplicate members` in `services/kernel/test/library/bulk-collection-targets.test.ts`.
+- Proposed failing growth acceptance: `bulk Collection target commands stay indexed as duplicate membership grows` in `services/kernel/test/library/bulk-collection-growth.test.ts`.
 
 ### Worker recovery, cancellation and expiry
+
+- After: admission, discovery, occurrence capture, entry targets and Collection targets.
 
 - Paths: `services/kernel/src/library/bulk-work.ts`,
   `services/kernel/src/library/bulk-cancel.ts`,
@@ -501,6 +549,8 @@ process or changes an existing action's grant.
 
 ### Outcome pagination and growth accounting
 
+- After: native bulk store and admission route/schema; use the accounts cursor contract as a dependency.
+
 - Paths: `services/kernel/src/library/bulk-outcomes.ts`,
   `services/kernel/src/library/bulk-outcome-page.sql`,
   `services/kernel/test/library/bulk-outcomes.test.ts`,
@@ -508,6 +558,7 @@ process or changes an existing action's grant.
 - Call sites: typed `BulkOperations` outcome and summary ports and the outcome handler already mounted by the
   admission-owned route module. It depends on the accounts-owned opaque cursor API; it does not rewrite it.
 - Proposed failing acceptance: `outcome pages bind viewer operation query and size while summary is constant work and never counts targets` in `services/kernel/test/library/bulk-outcomes.test.ts`.
+- Proposed failing growth acceptance: `operation status and outcome pages avoid manifest recounts as receipts and targets grow` in `services/kernel/test/library/bulk-outcome-growth.test.ts`.
 
 The cursor helper and rate chunk port are prerequisites, not replacements for library authorization. If either
 accounts contract is not yet available when an implementation is scheduled, order the dependent slice after its
