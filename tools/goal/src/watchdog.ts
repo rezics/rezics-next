@@ -35,7 +35,8 @@ const SIGNATURES = [
   { name: 'lease or lock timeouts', pattern: /Lease held|lease.*timeout|lock.*timeout|timeout.*(?:lease|lock)/i },
   {
     name: 'remote slot waits',
-    pattern: /remote-check:.*(?:slot.*wait|wait.*slot)|waiting for (?:a |every )?(?:remote )?(?:check )?slot|Waiting for host capacity/i,
+    pattern:
+      /remote-check:.*(?:slot.*wait|wait.*slot)|waiting for (?:a |every )?(?:remote )?(?:check )?slot|Waiting for host capacity/i,
   },
 ] as const;
 
@@ -100,7 +101,10 @@ function failureIncidents(
       taskId: attempt.taskId,
       attempt: attempt.attempt,
       goal: taskById.get(attempt.taskId)?.brief.goal ?? attempt.taskId,
-      error: exampleError.slice(0, 200).replace(/[\r\n\t]/g, ' ').trim(),
+      error: exampleError
+        .slice(0, 200)
+        .replace(/[\r\n\t]/g, ' ')
+        .trim(),
     });
     grouped.set(signature.name, group);
   }
@@ -158,7 +162,10 @@ function isAncestor(checkout: string, ancestor: string, descendant: string): boo
 }
 
 function head(checkout: string, branch: string): string | undefined {
-  const result = spawnSync('git', ['rev-parse', '--verify', '-q', `refs/heads/${branch}`], { cwd: checkout, encoding: 'utf8' });
+  const result = spawnSync('git', ['rev-parse', '--verify', '-q', `refs/heads/${branch}`], {
+    cwd: checkout,
+    encoding: 'utf8',
+  });
   return result.status === 0 ? result.stdout.trim() : undefined;
 }
 
