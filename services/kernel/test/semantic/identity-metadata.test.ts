@@ -56,6 +56,7 @@ async function point(read: SealedIdentityReader, original: string) {
       expect(f.real.readChecks).toHaveLength(priorReads);
       const sql = measured.capture.statements.join('\n');
       expect(sql).not.toMatch(/\b(?:access|auth)\./i);
+      expect(sql).not.toMatch(/\b(?:type|payload|labels)\b|SELECT\s+\*/i);
       expect(sql).not.toMatch(
         /semantic\.(?:fact|revision|label|outbound_link|inbound_link|merge_member|definition_release)\b/i,
       );

@@ -452,29 +452,20 @@ The last type is imported type-only from `subject.ts`; implementation must not i
 ```ts
 // terminal-identity.ts
 export type IdentityReadOptions = Readonly<{
-  access: Access;
-  actor: Actor;
-  deadline: number;
-  nativeT?: AuthoritativeTime;
+  access: Access; actor: Actor; deadline: number; nativeT?: AuthoritativeTime;
 }>;
 export type TerminalIdentity =
   | { state: 'ready'; id: string; components: readonly SubjectComponent[] }
   | { state: 'not_ready' }
   | null;
 export function readTerminalSubjectIdentity(
-  pool: Pool,
-  id: string,
-  options: IdentityReadOptions,
+  pool: Pool, id: string, options: IdentityReadOptions
 ): Promise<TerminalIdentity>;
 
 // identity-basis.ts: internal metadata, never an Access or browser API
 export type IdentityBasis = Readonly<{ digest: string }>;
 export type HomeIdentity = Readonly<{
-  partition: number;
-  epoch: number;
-  home: string;
-  generation: bigint;
-  pending: bigint;
+  partition: number; epoch: number; home: string; generation: bigint; pending: bigint;
 }>;
 export type BasisRead = { state: 'ready'; basis: IdentityBasis } | { state: 'not_ready' };
 export function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
@@ -484,23 +475,13 @@ export function readIdentityBasis(pool: Pool, options: { deadline: number }): Pr
 export type AliasWindow =
   | { state: 'not_ready' | 'basis_changed' }
   | {
-      state: 'ready';
-      originals: readonly string[];
-      after: string | null;
-      exhausted: boolean;
-      examined: number;
-      points: number;
+      state: 'ready'; originals: readonly string[]; after: string | null;
+      exhausted: boolean; examined: number; points: number;
     };
-export function readSubjectAliasGroup(
-  pool: Pool,
-  options: {
-    terminal: string;
-    basis: IdentityBasis;
-    after: string | null;
-    limit: number;
-    deadline: number;
-  },
-): Promise<AliasWindow>;
+export function readSubjectAliasGroup(pool: Pool, options: {
+  terminal: string; basis: IdentityBasis; after: string | null;
+  limit: number; deadline: number;
+}): Promise<AliasWindow>;
 ```
 
 `readIdentityHome` reads one home on the supplied client, including a command transaction. `home` is the current
@@ -614,42 +595,29 @@ The narrow internal handoff is:
 ```ts
 // identity-maintenance.ts; metadata writer owns implementations and SQL
 export type IdentityMutation = Readonly<{
-  original: string;
-  previous: string | null;
-  target: string | null;
+  original: string; previous: string | null; target: string | null;
 }>;
 export type IdentityObligation = Readonly<{
-  original: string;
-  version: bigint;
-  epoch: number;
-  home: string;
-  target: string | null;
+  original: string; version: bigint; epoch: number; home: string; target: string | null;
 }>;
 export type SealedSubjectIdentity =
   | { state: 'ready'; terminal: string; home: HomeIdentity }
-  | { state: 'not_ready' }
-  | null;
-export function readSealedSubjectIdentity(client: PoolClient, original: string): Promise<SealedSubjectIdentity>;
+  | { state: 'not_ready' } | null;
+export function readSealedSubjectIdentity(
+  client: PoolClient, original: string
+): Promise<SealedSubjectIdentity>;
 export function readHomeIdentity(client: PoolClient, partition: number): Promise<HomeIdentity>;
-export function readIdentityReadiness(
-  client: PoolClient,
-  mapping: {
-    original: string;
-    target: string | null;
-  },
-): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
+export function readIdentityReadiness(client: PoolClient, mapping: {
+  original: string; target: string | null;
+}): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
 export function recordIdentityMutation(
-  client: PoolClient,
-  mutation: IdentityMutation,
+  client: PoolClient, mutation: IdentityMutation
 ): Promise<IdentityObligation | null>;
-export function advanceIdentityObligation(
-  client: PoolClient,
-  options: {
-    obligation: IdentityObligation;
-    expected: { phase: string; after: readonly string[] };
-    next: { phase: string; after: readonly string[] } | { sealed: true };
-  },
-): Promise<boolean>;
+export function advanceIdentityObligation(client: PoolClient, options: {
+  obligation: IdentityObligation;
+  expected: { phase: string; after: readonly string[] };
+  next: { phase: string; after: readonly string[] } | { sealed: true };
+}): Promise<boolean>;
 ```
 
 All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
@@ -701,7 +669,8 @@ advance that generation. The terminal recheck compares the observed original map
 readiness additionally requires home pending zero. None of these checks reads maintenance jobs, revisions or history.
 
 An authorized terminal read is ready only after the original's current obligation is sealed and its direct
-terminal is currently live. The source-local sealed metadata port does not establish that terminal condition. Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
+terminal is currently live. The source-local sealed metadata port does not establish that terminal condition.
+Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
 acknowledgement transactions must keep that condition truthful through nested merges; a parent cannot acknowledge
 before every inherited member has durable current-terminal coverage. A newly created member derived from an existing
 redirect is covered by that originating obligation, not an independent unchecked inverse authority. Initial rollout
