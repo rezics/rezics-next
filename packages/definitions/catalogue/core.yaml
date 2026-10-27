@@ -52,7 +52,7 @@ classes:
       - expansionCounterpart
       - storyArc
     annotations:
-      cover_ratio: 2:3
+      cover_ratio: 3:4
   StoryArc:
     is_a: CreativeWork
     class_uri: wd:Q2620972
