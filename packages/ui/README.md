@@ -60,8 +60,8 @@ The frame ratio comes from the subject's type, never from the image, so grids an
 
 | Type family                                      | Frame ratio (width:height) |
 | ------------------------------------------------ | -------------------------- |
-| Book, edition, manga, light novel, comic volume  | 2:3                        |
-| Anime series or film, live-action series or film | 2:3 (poster)               |
+| Book, edition, manga, light novel, comic volume  | 3:4                        |
+| Anime series or film, live-action series or film | 3:4 (poster)               |
 | Visual novel, game                               | 3:4 (package art)          |
 | Music release                                    | 1:1                        |
 | Recipe, place, event                             | 4:3                        |
@@ -70,9 +70,9 @@ The frame ratio comes from the subject's type, never from the image, so grids an
 
 `coverRatio(types)` in `@rezics/ui/cover` holds this table by type CURIE as the fallback. When the definition release carries a `coverRatio` annotation for the type, the site resolves it and passes it as the `ratio` prop, which wins over the table.
 
-The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 2:3 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
+The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 3:4 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
 
-A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 2:3 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
+A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 3:4 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
 
 An image whose own ratio is within 15% of the frame fills it (`object-fit: cover`). A wider or taller image is shown whole (`object-fit: contain`) on a backdrop of its own placeholder colour, so landscape package art or a square album cover in a portrait slot is never cut to a sliver. Portraits of characters and people keep the top of the image when they are cropped (`object-position: top`); other images keep their stored focal point, or the centre.
 
@@ -101,8 +101,9 @@ Import `CoverCard`, `CoverGrid` and `CoverRow` from `@rezics/ui/cover-card`.
 Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
 mode, relation, edition and character tiles) follows one pattern:
 
-- The cover is the card's top, edge to edge: no padding, border or background frame around it. The card and the
-  cover share the outer corner radius; the card's own surface starts below the cover.
+- The cover is the only box: rounded corners, no padding, border, background, shadow or card surface around it or
+  below it. Title, secondary text and state sit directly on the page background under the cover, as in mature shelf
+  apps (Readest's library `BookItem`, Koodo Reader's `bookCoverItem`).
 - Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
   relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
   the subject page.
@@ -124,7 +125,13 @@ number never sit on separate lines. Where a unit is meaningful the number may be
 
 ## Shelves
 
-A person's library follows what mature shelf apps share ([research](../../docs/research/library-shelves.md)):
+A person's library follows what mature shelf apps share ([research](../../docs/research/library-shelves.md)). Work on
+the shelf or its cover tiles starts by reading the reference source kept in the main checkout's `.reference/shelves/`
+(index in `.reference/INDEX.md`): Readest `apps/readest-app/src/app/library/components/` (`BookItem.tsx`,
+`Bookshelf.tsx`, `ReadingProgress`), Koodo Reader `src/components/bookCoverItem/` and `bookCardItem/`, Kavita
+`UI/Web/src/app/cards/`, Komga `next-ui/src/components/book/card/BookCard.vue` and Stump
+`packages/browser/src/components/book/BookCard.tsx`. Learn the density, spacing and progress placement there and
+implement them in this stack.
 
 - **Structure.** Status tabs with counts (All, In progress, Planned, Completed, Paused, Dropped, Collections). All is
   an overview with one section per status, In progress first as Continue, empty sections hidden. A type filter row
