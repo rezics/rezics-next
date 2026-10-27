@@ -175,12 +175,6 @@ A Context's custom relation types are one term extension: an immutable body addr
 
 ## Cost
 
-### Subject identity reference
-
-- Touches: one `core.partition` primary-key probe, one route-leading `semantic.subject` primary-key probe filtered by native visibility, and one descending `semantic.redirect` primary-key range limited to the latest row. The mandatory caller's Access check runs on that same snapshot and retains its own evidence cost. No projection, checkpoint, pending-member, definition, fact, relation, label, media or summary reads.
-- Bound: two data statements and three transaction-control statements; at most three examined relation rows, O(log N) blocks, and constant result bytes independent of type/label size, unrelated subjects, redirect/editorial history and relation degree. Invalid ids perform no SQL; missing and nonvisible identities skip Access, and denied sources disclose neither identity nor redirect.
-- Growth check: `test/semantic/growth-subject-reference.test.ts`: `reference resolution stays bounded as unrelated history and relation degree grow`.
-
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
 Let N be total subjects, P subjects in the anchor partition, F stored fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
 For several subjects, F denotes their maximum; logarithms mean `log(2 + size)`.
@@ -199,6 +193,12 @@ Counts below exclude the separately listed authorization cost unless a subsectio
 For commands, K denotes seven framework statements per successful fresh attempt: BEGIN, two SETs, time SELECT, another SET, fence SQL, COMMIT; add one receipt SELECT when configured and the body statements below.
 The fence statement updates one `core.partition` row through `partition_pkey`, inserts one `core.outbox` row per event through `outbox_pkey`, and optionally one `core.receipt` and one `editorial.write_basis` row through `receipt_pkey`, `write_basis_pkey` and `write_basis_partition_no_position_key`; their partition foreign keys probe `partition_pkey`.
 Contention retries stop at three attempts; fence waits and retries use the deadline (default two seconds), so the stated counts are per attempt, with extra constant-size partition polls, rather than a claim about machine speed.
+
+### Subject identity reference
+
+- Touches: one `core.partition` primary-key probe, one route-leading `semantic.subject` primary-key probe filtered by native visibility, and one descending `semantic.redirect` primary-key range limited to the latest row. The mandatory caller's Access check runs on that same snapshot and retains its own evidence cost. No projection, checkpoint, pending-member, definition, fact, relation, label, media or summary reads.
+- Bound: two data statements and three transaction-control statements; at most three examined relation rows, O(log N) blocks, and constant result bytes independent of type/label size, unrelated subjects, redirect/editorial history and relation degree. Invalid ids perform no SQL; missing and nonvisible identities skip Access, and denied sources disclose neither identity nor redirect.
+- Growth check: `test/semantic/growth-subject-reference.test.ts`: `reference resolution stays bounded as unrelated history and relation degree grow`.
 
 ### Command and receipt
 

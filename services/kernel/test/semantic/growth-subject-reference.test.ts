@@ -97,7 +97,13 @@ test('reference resolution stays bounded as unrelated history and relation degre
               if (axis === 'redirects')
                 return {
                   'semantic.redirect': [
-                    { route, subject_id: id, sequence: ordinal + 1, target, recorded_transaction_id: transaction },
+                    {
+                      route,
+                      subject_id: id,
+                      sequence: ordinal + 1,
+                      target: ordinal === scale - 1 ? target : '00000000-0000-0000-0000-000000000000',
+                      recorded_transaction_id: transaction,
+                    },
                   ],
                 };
               if (axis === 'editorial') {
