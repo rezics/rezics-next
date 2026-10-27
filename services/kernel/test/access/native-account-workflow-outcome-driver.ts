@@ -125,6 +125,7 @@ let restoreEvidenceReader: (() => void) | undefined;
 let evidenceUnavailable = false;
 const pendingWorkflows = new Map<string, PendingWorkflow>();
 const completedCrashSteps = new Set<string>();
+const continuedOperations = new Set<string>();
 const originalRegisterStep = DBOS.registerStep.bind(DBOS);
 DBOS.registerStep = (<This, Args extends unknown[], Return>(
   func: (this: This, ...args: Args) => Promise<Return>,
@@ -1102,7 +1103,11 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         if (work.operation.kind === 'delete' && name === 'erase-auth-owner') {
           const view = await native().continuations.read(work.operationKey, work.operation.accountId);
           const target = stepTargetFromArgs(fixture, name, args);
-          if (view && !completedCrashSteps.has(crashStepKey(fixture, name, target))) {
+          if (
+            view &&
+            !completedCrashSteps.has(crashStepKey(fixture, name, target)) &&
+            !continuedOperations.has(work.operationKey)
+          ) {
             continuationPausedAtStep = true;
             continuationPaused?.();
             await new Promise<void>((resolve) => {
@@ -1127,52 +1132,51 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           ).commandKeyPrefix;
           let value: unknown;
           if (work.operation.kind === 'delete') {
-            if (startedDeleteOperations.has(work.operationKey)) {
-              value = await workflows().resumeOperation(work.operationKey);
-            } else {
-              startedDeleteOperations.add(work.operationKey);
-              const completion = executeWorkflow(reference, work);
-              completion.catch(() => {});
-              let settled = false;
-              void completion.then(
-                () => {
-                  settled = true;
-                },
-                () => {
-                  settled = true;
-                },
-              );
-              const until = Date.now() + 30_000;
-              let continuation: Awaited<ReturnType<ReturnType<typeof native>['continuations']['read']>> = null;
-              while (!settled && Date.now() < until) {
-                continuation = await native().continuations.read(work.operationKey, work.operation.accountId);
-                if (continuation) break;
-                await Bun.sleep(5);
-              }
-              if (continuation) {
-                await Promise.race([
-                  continuationReached,
-                  completion.then(
-                    () => undefined,
-                    () => undefined,
-                  ),
-                ]);
-                if (continuationPausedAtStep) {
-                  pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-                  completion
-                    .finally(() => {
-                      const currentPending = pendingWorkflows.get(work.operationKey);
-                      if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                      if (stepObserver === executionObserver) stepObserver = priorObserver;
-                    })
-                    .catch(() => {});
-                  pendingCompletion = true;
-                  return { outcome: 'denied' as const };
-                }
-              }
-              if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
-              value = await completion;
+            const firstAttempt = !startedDeleteOperations.has(work.operationKey);
+            startedDeleteOperations.add(work.operationKey);
+            const completion = firstAttempt
+              ? executeWorkflow(reference, work)
+              : workflows().resumeOperation(work.operationKey);
+            completion.catch(() => {});
+            let settled = false;
+            void completion.then(
+              () => {
+                settled = true;
+              },
+              () => {
+                settled = true;
+              },
+            );
+            const until = Date.now() + 30_000;
+            let continuation: Awaited<ReturnType<ReturnType<typeof native>['continuations']['read']>> = null;
+            while (!settled && Date.now() < until) {
+              continuation = await native().continuations.read(work.operationKey, work.operation.accountId);
+              if (continuation) break;
+              await Bun.sleep(5);
             }
+            if (continuation) {
+              await Promise.race([
+                continuationReached,
+                completion.then(
+                  () => undefined,
+                  () => undefined,
+                ),
+              ]);
+              if (continuationPausedAtStep) {
+                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+                completion
+                  .finally(() => {
+                    const currentPending = pendingWorkflows.get(work.operationKey);
+                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                    if (stepObserver === executionObserver) stepObserver = priorObserver;
+                  })
+                  .catch(() => {});
+                pendingCompletion = true;
+                return { outcome: 'denied' as const };
+              }
+            }
+            if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
+            value = await completion;
           } else {
             value = await executeWorkflow(reference, work);
           }
@@ -1631,6 +1635,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
           pendingWorkflows.delete(f.work.operationKey);
         }
         await native().continuations.continueCommitted(referenceValue);
+        if (f) continuedOperations.add(f.work.operationKey);
         activeHook = undefined;
         return { outcome: 'continued' };
       } catch (error) {
