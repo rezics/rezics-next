@@ -10,10 +10,11 @@ import { Cover, coverRatio, sharedRatio, type CoverRatio } from '@rezics/ui/cove
 import { ProgressRow } from '@rezics/ui/progress-row';
 
 const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: 'https://definitions-cover-test.invalid' };
+const app = join(import.meta.dir, '..');
+mock.module('../src/kernel/client.ts', () => ({ requestLocale: () => 'en' }));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const { typeFrame } = await import('../src/subject/definitions.ts');
 
-const app = join(import.meta.dir, '..');
 const timeout = 900_000;
 let storybookChild: ChildProcess | undefined;
 let browser: Browser | undefined;
