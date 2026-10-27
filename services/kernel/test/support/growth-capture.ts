@@ -2,7 +2,7 @@ import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
-import type { Capture } from './growth-cost.ts';
+import { costOf, type Capture } from './growth-cost.ts';
 
 export type GrowthDatabase = {
   readonly url: string;
@@ -20,15 +20,23 @@ type ActiveCapture = {
   plans: unknown[];
   backgroundStatements: string[];
   backgroundPlans: unknown[];
+  attributedStatements: Array<{ statement: string; attribution: 'operation' | 'workflow' | 'background' }>;
+  attributedPlans: Array<{ plan: unknown; attribution: 'operation' | 'workflow' | 'background' }>;
   pending: Set<Promise<void>>;
   error?: Error;
 };
 type Attribution = {
   readonly capture: ActiveCapture;
   readonly background: boolean;
+  readonly workflow?: boolean;
   readonly parent?: Attribution;
 };
-type CaptureState = { active: ActiveCapture | undefined; setupError?: Error; setupTasks: Set<Promise<void>> };
+type CaptureState = {
+  active: ActiveCapture | undefined;
+  setupError?: Error;
+  setupTasks: Set<Promise<void>>;
+  captureSequence: number;
+};
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const growing = new AsyncLocalStorage<Attribution>();
@@ -40,11 +48,18 @@ function isAttribution(value: Attribution | undefined): value is Attribution {
 
 function currentAttribution(state: CaptureState): Attribution | undefined {
   for (let current = growing.getStore(); isAttribution(current); current = current.parent)
-    if (current.capture === state.active) return current;
+    if (current.capture === state.active)
+      return DBOS.workflowID === undefined ? current : { ...current, workflow: true };
   // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
   // control to the queue. The SDK singleton is shared by kernel and auth workspaces in this test process.
-  if (state.active && DBOS.workflowID !== undefined) return { capture: state.active, background: false };
+  if (state.active && DBOS.workflowID !== undefined)
+    return { capture: state.active, background: false, workflow: true };
   return undefined;
+}
+
+function attributionKind(attribution: Attribution): 'operation' | 'workflow' | 'background' {
+  if (attribution.background) return 'background';
+  return attribution.workflow ? 'workflow' : 'operation';
 }
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
@@ -74,36 +89,136 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+function planEntries(documents: readonly unknown[]): Array<{ queryText?: string; plan: Record<string, unknown> }> {
+  const entries: Array<{ queryText?: string; plan: Record<string, unknown> }> = [];
+  const add = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) add(entry);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (typeof record['Node Type'] === 'string') {
+      entries.push({ plan: record });
+      return;
+    }
+    if (typeof record.Plan === 'object' && record.Plan !== null && !Array.isArray(record.Plan)) {
+      entries.push({
+        ...(typeof record['Query Text'] === 'string' ? { queryText: record['Query Text'] } : {}),
+        plan: record.Plan as Record<string, unknown>,
+      });
+    }
+  };
+  documents.forEach(add);
+  return entries;
+}
+
+function planNodeRows(root: Record<string, unknown>): unknown[] {
+  const rows: unknown[] = [];
+  const visit = (node: Record<string, unknown>): void => {
+    rows.push({
+      node: node['Node Type'],
+      ...(typeof node.Schema === 'string' ? { schema: node.Schema } : {}),
+      ...(typeof node['Relation Name'] === 'string' ? { relation: node['Relation Name'] } : {}),
+      actualRows: node['Actual Rows'],
+      actualLoops: node['Actual Loops'],
+      rowsRemovedByFilter: node['Rows Removed by Filter'],
+      rowsRemovedByIndexRecheck: node['Rows Removed by Index Recheck'],
+    });
+    if (Array.isArray(node.Plans))
+      for (const child of node.Plans)
+        if (typeof child === 'object' && child !== null && !Array.isArray(child))
+          visit(child as Record<string, unknown>);
+  };
+  visit(root);
+  return rows;
+}
+
+function logCaptureEvidence(
+  sequence: number,
+  capture: Capture & {
+    readonly attributedStatements: ActiveCapture['attributedStatements'];
+    readonly attributedPlans: ActiveCapture['attributedPlans'];
+  },
+): void {
+  const entries = planEntries(capture.plans);
+  const backgroundEntries = planEntries(capture.backgroundPlans ?? []);
+  const summarize = (statements: readonly string[], plans: typeof entries, attribution: 'operation' | 'background') => {
+    const texts = [...new Set(statements)];
+    return {
+      attribution,
+      cost: costOf({
+        statements,
+        plans: attribution === 'operation' ? capture.plans : [],
+        ...(attribution === 'background'
+          ? { backgroundStatements: statements, backgroundPlans: capture.backgroundPlans ?? [] }
+          : {}),
+      }),
+      statements: texts.map((statement) => {
+        const matching = plans.filter((entry) => entry.queryText === statement);
+        const statementCapture = {
+          statements: Array(statements.filter((text) => text === statement).length).fill(statement),
+          plans: matching.map(({ plan }) => ({ Plan: plan, 'Query Text': statement })),
+        };
+        return {
+          statement,
+          count: statements.filter((text) => text === statement).length,
+          cost: costOf(statementCapture),
+          plans: matching.map((entry) => ({ queryText: entry.queryText, nodes: planNodeRows(entry.plan) })),
+        };
+      }),
+      plansWithoutMatchingStatement: plans
+        .filter((entry) => !statements.includes(entry.queryText ?? ''))
+        .map((entry) => ({
+          queryText: entry.queryText,
+          nodes: planNodeRows(entry.plan),
+        })),
+    };
+  };
+  console.info(
+    `growth capture evidence ${JSON.stringify({
+      sequence,
+      statementAttribution: capture.attributedStatements,
+      planAttribution: capture.attributedPlans.map(({ plan, attribution }) => ({
+        attribution,
+        plans: planEntries([plan]).map((entry) => ({ queryText: entry.queryText, nodes: planNodeRows(entry.plan) })),
+      })),
+      operation: summarize(capture.statements, entries, 'operation'),
+      background: summarize(capture.backgroundStatements ?? [], backgroundEntries, 'background'),
+    })}`,
+  );
+}
+
 function statementText(query: unknown): string | undefined {
   if (typeof query === 'string') return query;
   if (typeof query !== 'object' || query === null || !('text' in query)) return undefined;
   return typeof query.text === 'string' ? query.text : undefined;
 }
 
-function intercept(client: PoolClient, state: CaptureState): void {
+function intercept(client: PoolClient, state: CaptureState): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
-  const pending: Attribution[] = [];
-  let inFlight: Attribution | undefined;
+  const pending: Array<Attribution | undefined> = [];
+  let suppressAttribution = false;
+  const refreshAttribution = (): void => {
+    const inFlight = pending[0];
+    if (inFlight) clientAttribution.set(client, inFlight);
+    else clientAttribution.delete(client);
+  };
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
     const text = statementText(args[0]);
-    let attribution = currentAttribution(state);
-    if (!attribution && state.active) attribution = { capture: state.active, background: true };
+    let attribution = suppressAttribution ? undefined : currentAttribution(state);
+    if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     if (text !== undefined && attribution) {
       (attribution.background ? attribution.capture.backgroundStatements : attribution.capture.statements).push(text);
+      attribution.capture.attributedStatements.push({ statement: text, attribution: attributionKind(attribution) });
     }
-    if (attribution) {
-      pending.push(attribution);
-      inFlight ??= attribution;
-      clientAttribution.set(client, inFlight);
-    }
+    pending.push(attribution);
+    refreshAttribution();
 
     const done = (): void => {
-      if (!attribution) return;
       pending.shift();
-      inFlight = pending[0];
-      if (inFlight) clientAttribution.set(client, inFlight);
-      else clientAttribution.delete(client);
+      refreshAttribution();
     };
     const callback = args.at(-1);
     if (typeof callback === 'function') {
@@ -118,10 +233,22 @@ function intercept(client: PoolClient, state: CaptureState): void {
         finishBackground?.();
         return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
       };
-      return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
+      try {
+        return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
+      } catch (error) {
+        done();
+        finishBackground?.();
+        throw error;
+      }
     }
 
-    const outcome = (query as (...values: unknown[]) => unknown)(...args);
+    let outcome: unknown;
+    try {
+      outcome = (query as (...values: unknown[]) => unknown)(...args);
+    } catch (error) {
+      done();
+      throw error;
+    }
     if (outcome instanceof Promise) {
       if (attribution?.background) {
         const task = Promise.resolve(outcome).then(
@@ -132,13 +259,29 @@ function intercept(client: PoolClient, state: CaptureState): void {
         void task.then(() => attribution!.capture.pending.delete(task));
       }
       outcome.then(done, done);
+    } else if (typeof outcome === 'object' && outcome !== null && 'once' in outcome) {
+      const stream = outcome as { once?: (event: string, listener: () => void) => unknown };
+      if (typeof stream.once === 'function') {
+        stream.once('end', done);
+        stream.once('error', done);
+      } else done();
+    } else {
+      done();
     }
     return outcome;
   }) as PoolClient['query'];
+
+  return (statement) => {
+    suppressAttribution = true;
+    try {
+      return client.query(statement);
+    } finally {
+      suppressAttribution = false;
+    }
+  };
 }
 
 function instrument(client: PoolClient, state: CaptureState): void {
-  const query = client.query.bind(client) as PoolClient['query'];
   client.on('notice', (notice) => {
     const attribution = clientAttribution.get(client);
     const message = notice.message;
@@ -147,23 +290,22 @@ function instrument(client: PoolClient, state: CaptureState): void {
       return;
 
     try {
-      (attribution.background ? attribution.capture.backgroundPlans : attribution.capture.plans).push(
-        JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown,
-      );
+      const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
+      (attribution.background ? attribution.capture.backgroundPlans : attribution.capture.plans).push(plan);
+      attribution.capture.attributedPlans.push({ plan, attribution: attributionKind(attribution) });
     } catch (error) {
       attribution.capture.error ??= asError(error);
     }
   });
 
-  const setupQueries = setupStatements.map((statement) => query(statement));
+  const queryWithoutAttribution = intercept(client, state);
+  const setupQueries = setupStatements.map(queryWithoutAttribution);
   const setupTask = Promise.allSettled(setupQueries).then((results) => {
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') state.setupError ??= asError(failed.reason);
   });
   state.setupTasks.add(setupTask);
   void setupTask.then(() => state.setupTasks.delete(setupTask));
-
-  intercept(client, state);
 }
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
@@ -201,7 +343,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = { active: undefined, setupTasks: new Set() };
+  const state: CaptureState = { active: undefined, setupTasks: new Set(), captureSequence: 0 };
   const database: GrowthDatabase = {
     url,
     pool,
@@ -241,12 +383,15 @@ export async function capture<T>(
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
   if (state.active) throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
+  const sequence = ++state.captureSequence;
 
   const active: ActiveCapture = {
     statements: [],
     plans: [],
     backgroundStatements: [],
     backgroundPlans: [],
+    attributedStatements: [],
+    attributedPlans: [],
     pending: new Set(),
   };
   state.active = active;
@@ -262,7 +407,7 @@ export async function capture<T>(
     await Promise.all([...state.setupTasks]);
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
-    return {
+    const result = {
       value,
       capture: {
         statements: active.statements,
@@ -271,6 +416,13 @@ export async function capture<T>(
         backgroundPlans: active.backgroundPlans,
       },
     };
+    if (process.env.GROWTH_CAPTURE_TRACE === '1')
+      logCaptureEvidence(sequence, {
+        ...result.capture,
+        attributedStatements: active.attributedStatements,
+        attributedPlans: active.attributedPlans,
+      });
+    return result;
   } finally {
     state.active = undefined;
   }
