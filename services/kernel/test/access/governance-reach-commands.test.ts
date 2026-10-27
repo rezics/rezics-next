@@ -72,9 +72,10 @@ async function seedPost(route: number, authorId: string) {
     );
     await client.query(
       `INSERT INTO content.thread
-         (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-       VALUES ($1,$2,$3,$4,'Governance reach thread','published',1,$5)`,
-      [route, threadId, authorId, boardId, transactionId],
+         (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,
+          first_post_id)
+       VALUES ($1,$2,$3,$4,'Governance reach thread','published',1,$5,$6)`,
+      [route, threadId, authorId, boardId, transactionId, postId],
     );
     await client.query(
       `INSERT INTO content.post
@@ -90,11 +91,6 @@ async function seedPost(route: number, authorId: string) {
        VALUES ($1,$2,$3,$4,$5,sha256($5),'Governance reach fixture','CC0-1.0','{}',$6,'available',$7)`,
       [route, threadId, postId, revisionId, body, boardId, transactionId],
     );
-    await client.query('UPDATE content.thread SET first_post_id=$3 WHERE route=$1 AND thread_id=$2', [
-      route,
-      threadId,
-      postId,
-    ]);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
