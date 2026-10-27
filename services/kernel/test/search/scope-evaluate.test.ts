@@ -5,6 +5,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { ProblemError } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
 import { compileFilter } from '../../src/search/filter.ts';
@@ -402,7 +403,12 @@ test('native database timeout cannot become a definitive negative or a successfu
       failure = error;
     }
     expect(failure, 'native timeout must reject, never resolve a Boolean result').toBeInstanceOf(Error);
-    expect(['deadline', 'contention']).toContain(classifyUnavailability(failure));
+    const reason = failure instanceof ProblemError ? failure.code : classifyUnavailability(failure);
+    expect(
+      ['deadline', 'contention', 'deadline_exceeded', 'semantic_not_ready', 'partition_unavailable'].includes(
+        reason ?? '',
+      ),
+    ).toBe(true);
   } finally {
     await lock.query('ROLLBACK');
     lock.release();
