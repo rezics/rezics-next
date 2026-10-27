@@ -14,16 +14,15 @@ const PREFIX = 'rating-v1';
 // The shared token decoder caps the entire encoded token at this length.
 const MAX_TOKEN_LENGTH = 4_096;
 
-function validContext(context: RatingCursorContext): boolean {
+function validContext(context: unknown): context is RatingCursorContext {
+  if (context === null || typeof context !== 'object' || Array.isArray(context)) return false;
+  const { questionId, populationId, priorEpoch } = context as Record<string, unknown>;
   return (
-    context !== null &&
-    typeof context === 'object' &&
-    !Array.isArray(context) &&
-    typeof context.questionId === 'string' &&
-    context.questionId.length === 36 &&
-    routeOf(context.questionId) !== null &&
-    context.populationId === GLOBAL_CONTEXT &&
-    (context.priorEpoch === null || (Number.isSafeInteger(context.priorEpoch) && context.priorEpoch > 0))
+    typeof questionId === 'string' &&
+    questionId.length === 36 &&
+    routeOf(questionId) !== null &&
+    populationId === GLOBAL_CONTEXT &&
+    (priorEpoch === null || (typeof priorEpoch === 'number' && Number.isSafeInteger(priorEpoch) && priorEpoch > 0))
   );
 }
 
@@ -82,7 +81,7 @@ export function decodeRatingCursor(
   const decoded = decodeSearchCursor(ring, binding, token, now);
   if (!decoded.ok) return decoded;
   const [prefix, questionId, populationId, priorEpoch, phase, ...after] = decoded.after;
-  const signedContext = { questionId, populationId, priorEpoch } as RatingCursorContext;
+  const signedContext = { questionId, populationId, priorEpoch };
   if (
     prefix !== PREFIX ||
     !validContext(signedContext) ||
@@ -90,7 +89,6 @@ export function decodeRatingCursor(
     !validContext(context)
   )
     return { ok: false, reason: 'invalid' };
-  if (questionId !== context.questionId || priorEpoch !== context.priorEpoch)
-    return { ok: false, reason: 'restart' };
+  if (questionId !== context.questionId || priorEpoch !== context.priorEpoch) return { ok: false, reason: 'restart' };
   return { ok: true, generation: decoded.generation, phase: phase as RatingPhase, after };
 }
