@@ -30,16 +30,25 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     mkdirSync(join(root, 'runs'));
     writeFileSync(logPath, 'complete session log\n');
     const task = {
-      id: 'task', worktree: root, base, taskClass: 'implementation',
+      id: 'task',
+      worktree: root,
+      base,
+      taskClass: 'implementation',
       brief: { markdown: 'Unchanged contract contents.', acceptance: { command: ['bun', 'test', 'src/a.test.ts'] } },
     } as unknown as Task;
     const attempt = {
-      taskId: 'task', attempt: 4, logPath, evidencePath,
+      taskId: 'task',
+      attempt: 4,
+      logPath,
+      evidencePath,
       failure: {
-        fingerprint: 'fingerprint', assertion: 'AssertionError: expected 2 to equal 1',
+        fingerprint: 'fingerprint',
+        assertion: 'AssertionError: expected 2 to equal 1',
         excerpt: Array.from({ length: 90 }, (_, index) => `failure output line ${index + 1}`).join('\n'),
       },
-      failureCommand: ['bun', 'test', 'src/failing.test.ts'], failureOnBase: false, failureLogPath: logPath,
+      failureCommand: ['bun', 'test', 'src/failing.test.ts'],
+      failureOnBase: false,
+      failureLogPath: logPath,
       approaches: [
         { approach: 'first discarded', result: 'did not help' },
         { approach: 'second approach', result: 'still failed' },
@@ -76,7 +85,9 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     expect(prompt).toContain('# Retry manifest');
     expect(prompt).toContain('First failing command: bun test src/failing.test.ts');
     expect(prompt).not.toContain(`Continue from this retry manifest:\n${directory}`);
-    expect(prompt).toContain('The fields are status, summary, blocker and approaches; a non-null blocker has kind and detail.');
+    expect(prompt).toContain(
+      'The fields are status, summary, blocker and approaches; a non-null blocker has kind and detail.',
+    );
     expect(prompt).not.toContain('"additionalProperties"');
   } finally {
     rmSync(root, { recursive: true, force: true });

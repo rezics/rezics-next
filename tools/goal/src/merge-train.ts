@@ -47,7 +47,10 @@ export async function runIntegrationChecks(
     if (!result.passed && !failedCommand) failedCommand = [...command];
     passed &&= result.passed;
     timedOut ||= result.timedOut;
-    appendFileSync(logPath, `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`);
+    appendFileSync(
+      logPath,
+      `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`,
+    );
   };
   // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors. Installing
   // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
@@ -585,7 +588,8 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
-        const configuredChecks = typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const configuredChecks =
+          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );

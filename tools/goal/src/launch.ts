@@ -272,7 +272,10 @@ async function awaitHostCapacity(store: WorkerStore, stateDirectory: string): Pr
   for (;;) {
     let capacity = DEFAULT_CAPACITY;
     try {
-      capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(join(stateDirectory, 'capacity.json'), 'utf8')) as Partial<HostCapacity>) };
+      capacity = {
+        ...DEFAULT_CAPACITY,
+        ...(JSON.parse(readFileSync(join(stateDirectory, 'capacity.json'), 'utf8')) as Partial<HostCapacity>),
+      };
     } catch {
       /* Defaults. */
     }

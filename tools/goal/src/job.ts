@@ -380,15 +380,16 @@ export class WorkerJob implements GateOutcomeSink {
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
     if (adoptRunning) this.releaseMetDependents();
     const tasks = store.tasks();
-    for (const task of !adoptRunning ? [] : tasks
-      .filter(
-        (t) =>
-          t.state === 'ready' &&
-          t.brief.after.length &&
-          this.tasks.dependenciesMet(t, tasks) &&
-          // A ready task with a pending retry intent is a retry, started from the intent.
-          store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
-      ))
+    for (const task of !adoptRunning
+      ? []
+      : tasks.filter(
+          (t) =>
+            t.state === 'ready' &&
+            t.brief.after.length &&
+            this.tasks.dependenciesMet(t, tasks) &&
+            // A ready task with a pending retry intent is a retry, started from the intent.
+            store.retryIntent({ taskId: t.id, attempt: t.currentAttempt })?.status !== 'pending',
+        ))
       this.track(
         this.startReleased(task.id).catch((error) => {
           if (store.task(task.id).state === 'ready') throw error;
