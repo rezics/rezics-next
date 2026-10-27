@@ -200,15 +200,7 @@ test(
        render: (_, { loaded }) => <pre data-result>{JSON.stringify(loaded.result)}</pre> };`,
     );
     const child = Bun.spawn(
-      [
-        'bun',
-        join(app, 'node_modules/.bin/storybook'),
-        'dev',
-        '--ci',
-        '--disable-telemetry',
-        '--port',
-        String(port),
-      ],
+      ['bun', join(app, 'node_modules/.bin/storybook'), 'dev', '--ci', '--disable-telemetry', '--port', String(port)],
       { cwd: directory, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, BROWSER: 'none' } },
     );
     const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
@@ -220,8 +212,10 @@ test(
         try {
           if ((await fetch(`${origin}/index.json`)).ok) break;
         } catch {}
-        if (child.exitCode !== null || Date.now() > deadline)
+        if (child.exitCode !== null || Date.now() > deadline) {
+          if (child.exitCode === null) child.kill();
           throw new Error(`Storybook did not start: ${(await output).join('\n')}`);
+        }
         await Bun.sleep(100);
       }
       browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
