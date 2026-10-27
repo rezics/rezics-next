@@ -629,7 +629,7 @@ export function accessRoutes(
         },
         detail: {
           operationId: 'account.read_public_identity',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'public',
           'x-action': 'account:read_public_identity',
           security: [{ bearerAuth: [] }, {}],
         },

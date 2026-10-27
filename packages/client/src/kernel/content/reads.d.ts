@@ -3,6 +3,7 @@ import { type Access, type Actor, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
+declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
 export type RealmDisclosureScope = {
     realmId?: string | null;
     realmResource?: Resource;
@@ -56,6 +57,12 @@ export type ReactionCountFreshness = Readonly<{
     position: string;
 }>;
 type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+export type SubjectReactionKind = (typeof subjectReactionKinds)[number];
+export type SubjectReactionCount = Readonly<{
+    kind: SubjectReactionKind;
+    count: number;
+}>;
+export type SubjectReactionCounts = readonly SubjectReactionCount[];
 type Counted<T> = T extends ErasedPlaceholder & {
     readonly revisionId?: never;
 } ? T : T & {
@@ -69,6 +76,8 @@ export declare function withReactionCounts<T extends {
     readonly items: readonly Counted<T>[];
     readonly reactionsAsOf: ReactionCountFreshness | null;
 }>;
+/** Read at most five relayed subject totals per id with one statement per target partition. */
+export declare function readSubjectReactionCounts(dependencies: Pick<ContentReadDependencies, 'pool'>, subjectIds: readonly string[], deadline?: number): Promise<Map<string, SubjectReactionCounts>>;
 export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
  * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */

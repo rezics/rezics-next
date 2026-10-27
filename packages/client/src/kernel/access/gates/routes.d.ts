@@ -2342,6 +2342,12 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
@@ -5413,6 +5419,12 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     epoch: number;
                                     position: string;
                                 } | null;
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
                             };
                             400: {
                                 type: unknown;

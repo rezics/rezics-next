@@ -336,6 +336,25 @@ export async function readPendingAgentVerificationRequests(
 ): Promise<PendingVerificationPage> {
   const { actor } = context;
   if (actor.kind !== 'account') throw new AgentVerificationDeniedError();
+  const limit = input.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
+  if (!Number.isFinite(at.getTime())) throw new ProblemError('invalid_request');
+  let afterCreated = FIRST_CREATED_AT;
+  let afterRequest = FIRST_REQUEST_ID;
+  if (input.cursor !== undefined) {
+    const decoded = decodeCursor(tokens, PENDING_CURSOR_BINDING, input.cursor, at.getTime());
+    if (
+      !decoded.ok ||
+      decoded.epoch !== 1 ||
+      decoded.after.length !== 2 ||
+      typeof decoded.after[0] !== 'string' ||
+      typeof decoded.after[1] !== 'string' ||
+      routeOf(decoded.after[1]) !== 0
+    )
+      throw new ProblemError('invalid_cursor');
+    afterCreated = decoded.after[0];
+    afterRequest = decoded.after[1];
+  }
   const result = await authorizeRead(
     pool,
     access,
@@ -356,25 +375,6 @@ export async function readPendingAgentVerificationRequests(
   );
   if (!result.allowed) throw new AgentVerificationDeniedError();
 
-  const limit = input.limit ?? 20;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
-  if (!Number.isFinite(at.getTime())) throw new ProblemError('invalid_request');
-  let afterCreated = FIRST_CREATED_AT;
-  let afterRequest = FIRST_REQUEST_ID;
-  if (input.cursor !== undefined) {
-    const decoded = decodeCursor(tokens, PENDING_CURSOR_BINDING, input.cursor, at.getTime());
-    if (
-      !decoded.ok ||
-      decoded.epoch !== 1 ||
-      decoded.after.length !== 2 ||
-      typeof decoded.after[0] !== 'string' ||
-      typeof decoded.after[1] !== 'string' ||
-      routeOf(decoded.after[1]) !== 0
-    )
-      throw new ProblemError('invalid_cursor');
-    afterCreated = decoded.after[0];
-    afterRequest = decoded.after[1];
-  }
   const page = rows<VerificationRow>(result.value as VerificationRow[] | VerificationRow | null);
   const selected = page.slice(0, limit);
   return {
@@ -449,7 +449,7 @@ export function createAgentVerificationCommands(config: { pool: Pool; access: Ac
                 requested_by: actor.accountId,
                 catalogue_subject_id: input.subject,
                 statement: input.statement,
-                links: JSON.stringify(input.links),
+                links: input.links,
                 transaction_id: transactionId,
               }),
             );

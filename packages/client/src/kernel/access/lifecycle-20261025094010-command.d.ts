@@ -10,6 +10,11 @@ type Mutation = {
     kind: string;
     key: string;
     input: unknown;
+    additionalEvents?: () => Array<{
+        type: string;
+        subject?: string;
+        data: unknown;
+    }>;
     actor?: AccountActor;
     deadline?: number;
     authorization?: CommandAuthorization;

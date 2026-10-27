@@ -2349,6 +2349,12 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;

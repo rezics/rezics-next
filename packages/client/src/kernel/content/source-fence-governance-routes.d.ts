@@ -2338,6 +2338,12 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;

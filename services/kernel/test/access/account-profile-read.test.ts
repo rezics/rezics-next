@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -11,6 +12,9 @@ import {
 } from '../../src/access/lifecycle.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { readAccount } from '../../src/access/account-data.ts';
+import { accountAgentId } from '../../src/semantic/agents.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -74,6 +78,7 @@ async function read(query: string) {
   return { status: response.status, body: await response.json() };
 }
 beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
   accountId = await person('profile_handle');
 });
 afterAll(async () => {
@@ -90,6 +95,7 @@ test('handle reads the public profile and ids keep their identity projection wit
       links,
     },
   });
+  await ensureAccountAgent(pool, { account: accountId, kind: 'person', name: 'Profile', language: 'en' });
   const identity = {
     id: accountId,
     kind: 'actor',
@@ -109,7 +115,8 @@ test('handle reads the public profile and ids keep their identity projection wit
           bio: 'A biography',
           links,
           avatar: null,
-          subject: null,
+          subject: { id: accountAgentId(accountId), label: 'Profile', type: 'schema:Person' },
+          verified: false,
         },
       ],
       next: null,
@@ -193,7 +200,9 @@ test('fencing and deletion erase biography and links, and a deleted handle match
     expect(stored.rows).toEqual([{ biography: null, links: [] }]);
     const byHandle = await read(`handle=${handle}`);
     if (tombstone) {
-      expect(byHandle).toEqual(await read(`ids=${id}`));
+      const byIds = await read(`ids=${id}`);
+      expect(byHandle.body.accounts[0]).toMatchObject(byIds.body.accounts[0]);
+      expect(byHandle.body.accounts[0]).toMatchObject({ subject: null, verified: false });
       expect(Object.keys(byHandle.body.accounts[0]).sort()).toEqual([
         'automated',
         'displayName',
@@ -202,6 +211,8 @@ test('fencing and deletion erase biography and links, and a deleted handle match
         'kind',
         'operatorId',
         'state',
+        'subject',
+        'verified',
       ]);
     } else expect(byHandle.body.accounts[0]).toMatchObject({ bio: null, links: [] });
   }

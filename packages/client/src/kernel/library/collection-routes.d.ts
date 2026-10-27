@@ -2349,6 +2349,12 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
@@ -3041,6 +3047,147 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     };
                 };
                 error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        accounts: {
+            ":accountId": {
+                collections: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            accountId: string;
+                        };
+                        query: {
+                            view?: "BASIC" | "FULL";
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                collections: {
+                                    curator?: {
+                                        id: string;
+                                        handle: string | null;
+                                        displayName: string | null;
+                                    } | null;
+                                    id: string;
+                                    curatorAccountId: string;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    revision: number;
+                                    memberCount: number;
+                                    createdAt: string;
+                                    updatedAt: string;
+                                }[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
             };
         };
     };

@@ -51,19 +51,7 @@ export declare function createKernelAccessResolver(options: {
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export declare function createKernel(dependencies: KernelDependencies): Kernel;
 type KernelComposition = ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
-type Routes = KernelComposition['~Routes'];
-type Subjects = Routes['v1']['subjects'];
-/** Subject transports use both parameter names for the same URL position. Eden needs
- * one key to retain a single subjects({ id }) entry point with all its child routes. */
-type ClientRoutes = Omit<Routes, 'v1'> & {
-    v1: Omit<Routes['v1'], 'subjects'> & {
-        documents: Routes['v1']['documents'];
-        subjects: Omit<Subjects, ':id' | ':subjectId'> & {
-            ':id': Subjects[':id'] & Subjects[':subjectId'];
-        };
-    };
-};
 export type Kernel = KernelComposition;
-/** The Eden contract uses one parameter name for each URL position. */
-export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], ClientRoutes, KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
+/** createKernel guarantees one parameter name for each route position. */
+export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], KernelComposition['~Routes'], KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;
 export {};

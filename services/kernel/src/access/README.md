@@ -135,8 +135,9 @@ request, and `POST /v1/accounts/{accountId}:withdrawVerification` withdraws its 
 Platform governance reviews `GET /v1/verification-requests?state=pending`, which returns
 `{ verificationRequests, next }` with a signed cursor and a limit from 1 to 100. The approval and rejection routes,
 `POST /v1/verification-requests/{requestId}:approve` and `:reject`, accept an optional reason of at most 500 characters.
-Both require `account:verify_agent` on the Global Context, held by `platform.governance`. The routes and the public
-handle identity read stay closed behind `gate:agent-verification` until governance opens that exposure group.
+Both require `account:verify_agent` on the Global Context, held by `platform.governance`. The six verification routes
+stay closed behind `gate:agent-verification` until governance opens that exposure group. The public handle identity
+read remains public.
 
 Approval first records its decision receipt and queues the durable `accounts.agent-verification` workflow. The workflow
 rechecks and marks the account in its own partition, calls Semantic's `verifyAccountAgent` as platform work, then

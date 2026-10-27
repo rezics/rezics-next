@@ -2386,6 +2386,12 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
@@ -2804,12 +2810,12 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 "source-statistics": {
                     get: {
                         body: unknown;
                         params: {
-                            subjectId: string;
+                            id: string;
                         };
                         query: unknown;
                         headers: unknown;
@@ -2951,9 +2957,9 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     schemas: {};
     response: {};
     error: [];
-}, "put", "/v1/subjects/:subjectId/source-statistics/:source", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "put", "/v1/subjects/:id/source-statistics/:source", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        subjectId: import("typebox").TString;
+        id: import("typebox").TString;
         source: import("typebox").TLiteral<"vndb">;
     }>;
     headers: import("typebox").TObject<{
@@ -3159,7 +3165,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/subjects/:subjectId/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job }: {
+}, {}, "/v1/subjects/:id/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -3396,7 +3402,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            subjectId: import("typebox").TString;
+            id: import("typebox").TString;
             source: import("typebox").TLiteral<"vndb">;
         }>;
         headers: import("typebox").TObject<{
@@ -3602,7 +3608,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             }[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         };
-    }, {}, "/v1/subjects/:subjectId/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -3637,7 +3643,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     };
     query: Record<string, string | undefined>;
     params: {
-        subjectId: string;
+        id: string;
         source: "vndb";
     };
     headers: {
@@ -3658,7 +3664,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<SourceStatistic>, {
     params: import("typebox").TObject<{
-        subjectId: import("typebox").TString;
+        id: import("typebox").TString;
         source: import("typebox").TLiteral<"vndb">;
     }>;
     headers: import("typebox").TObject<{

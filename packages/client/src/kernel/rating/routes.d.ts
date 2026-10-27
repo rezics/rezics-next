@@ -2348,6 +2348,12 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
@@ -2766,12 +2772,12 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 ratings: {
                     get: {
                         body: unknown;
                         params: {
-                            subjectId: string;
+                            id: string;
                         };
                         query: {
                             question: string;
@@ -2899,13 +2905,13 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 ratings: {
                     populations: {
                         get: {
                             body: unknown;
                             params: {
-                                subjectId: string;
+                                id: string;
                             };
                             query: {
                                 question: string;
@@ -3012,7 +3018,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 ratings: {
                     ":questionId": {
                         vote: {
@@ -3021,7 +3027,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                     units: number;
                                 };
                                 params: {
-                                    subjectId: string;
+                                    id: string;
                                     questionId: string;
                                 };
                                 query: unknown;
@@ -3144,14 +3150,14 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 ratings: {
                     ":questionId": {
                         vote: {
                             delete: {
                                 body: unknown;
                                 params: {
-                                    subjectId: string;
+                                    id: string;
                                     questionId: string;
                                 };
                                 query: unknown;
@@ -3270,14 +3276,14 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         subjects: {
-            ":subjectId": {
+            ":id": {
                 ratings: {
                     ":questionId": {
                         vote: {
                             get: {
                                 body: unknown;
                                 params: {
-                                    subjectId: string;
+                                    id: string;
                                     questionId: string;
                                 };
                                 query: unknown;

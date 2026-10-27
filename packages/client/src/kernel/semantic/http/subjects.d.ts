@@ -2488,6 +2488,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 'cache-control': import("typebox").TLiteral<"no-cache">;
             };
         };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
+            };
+        };
     };
     detail: {
         operationId: string;
@@ -2499,7 +2509,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/:id/reactions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, set }: {
+}, {}, "/v1/subjects/:id/reactions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, set, request }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -2575,6 +2585,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 position: string;
             } | null;
         };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
     }>;
     problem: import("elysia").SelectiveProblem<{
         400: {
@@ -2642,6 +2658,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 epoch: number;
                 position: string;
             } | null;
+        };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -2719,6 +2741,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     'cache-control': import("typebox").TLiteral<"no-cache">;
                 };
             };
+            308: import("typebox").TObject<{
+                redirect: import("typebox").TObject<{
+                    from: import("typebox").TString;
+                    to: import("typebox").TString;
+                }>;
+            }> & {
+                headers: {
+                    readonly location: import("typebox").TString;
+                };
+            };
         };
         detail: {
             operationId: string;
@@ -2771,6 +2803,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
+    readonly redirect?: never;
     counts: {
         kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
         count: number;
@@ -2779,6 +2812,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         epoch: number;
         position: string;
     } | null;
+} | {
+    redirect: {
+        from: string;
+        to: string;
+    };
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
@@ -2852,6 +2890,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         }> & {
             headers: {
                 'cache-control': import("typebox").TLiteral<"no-cache">;
+            };
+        };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
             };
         };
     };

@@ -2346,6 +2346,12 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                                     position: string;
                                 } | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
