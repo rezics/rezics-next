@@ -93,7 +93,7 @@ export function CoverCard({
     <article
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className="group relative min-w-0 rounded-sm bg-white text-slate-900 outline outline-1 outline-black/10 shadow-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring dark:bg-white dark:text-slate-900"
+      className="group relative min-w-0 rounded-sm bg-white text-slate-900 outline outline-1 outline-black/10 shadow-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring [--radius-sm:3px] dark:bg-white dark:text-slate-900"
     >
       <Cover
         {...cover}
