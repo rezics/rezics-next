@@ -705,7 +705,7 @@ test(
 
     const mine = await readPage('/en/library/collections', cookie);
     expect(mine.status).toBe(200);
-    const shelves = rows(mine.html);
+    const shelves = articles(mine.html);
     expect(shelves).toHaveLength(1);
     expectPlaceholder(shelves[0]!);
     expect(shelves[0]).toContain('data-ratio="1:1"');
@@ -748,14 +748,14 @@ test(
 
     const followingPage = await readPage('/en/library/following', cookie);
     expect(followingPage.status).toBe(200);
-    const followed = rows(followingPage.html);
+    const followed = articles(followingPage.html);
     expect(followed).toHaveLength(4);
     expectImage(withTitle(followed, 'Zebra story'));
     expectPlaceholder(withTitle(followed, 'Apple story'));
     expectPlaceholder(withTitle(followed, 'Night shelf'));
     expect(withTitle(followed, 'Night shelf')).toContain(`href="/en/collections/${shelfId}"`);
     expectPlaceholder(withTitle(followed, 'Unavailable'));
-    for (const row of followed) expect(text(row)).toContain('Unfollow');
+    for (const card of followed) expect(card).toContain('aria-label="More actions for ');
     expect(main(followingPage.html)).not.toContain(hiddenSubjectId);
   },
   timeout,

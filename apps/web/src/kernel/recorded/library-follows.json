@@ -1,6 +1,18 @@
 {
   "follows": [
     {
+      "targetId": "01a17a3b-70ea-712a-9ff7-81fc6a9381b6",
+      "targetType": "space",
+      "state": "following",
+      "reason": "explicit",
+      "updatedAt": "2026-10-26T18:22:28.427Z",
+      "target": {
+        "id": "01a17a3b-70ea-712a-9ff7-81fc6a9381b6",
+        "type": "space",
+        "label": "A quiet space"
+      }
+    },
+    {
       "targetId": "01a17a3b-70ea-712a-9ff7-81fc6a9381b5",
       "targetType": "collection",
       "state": "following",

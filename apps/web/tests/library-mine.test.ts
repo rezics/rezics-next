@@ -473,10 +473,9 @@ test(
     const cookie = first.cookie!;
     const page = await open('/en/library/following', cookie);
     try {
-      const form = page.getByRole('button', { name: 'Unfollow' }).first();
-      expect(await form.count()).toBeGreaterThan(0);
-      await form.click();
-      await page.getByText('Followed subject').waitFor({ state: 'detached' });
+      await page.getByRole('button', { name: 'More actions for Followed subject' }).click();
+      await page.getByRole('menuitem', { name: 'Unfollow' }).click();
+      await page.getByRole('link', { name: 'Followed subject', exact: true }).waitFor({ state: 'detached' });
       expect(calls.some((call) => call.method === 'DELETE' && call.path === `/v1/follows/${id(2001)}`)).toBe(true);
       const deletion = calls.find((call) => call.method === 'DELETE')!;
       expect(deletion.key).toMatch(/^[0-9a-f-]{36}$/i);

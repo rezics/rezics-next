@@ -27,7 +27,8 @@ export type CoverCardLink = ComponentType<{
 }>;
 
 export interface CoverCardProps {
-  href: string;
+  /** Omit for a card with no destination: its title is then plain text. */
+  href?: string;
   /** The component that draws the title link, an anchor by default; a site passes its client-side router link. */
   link?: CoverCardLink;
   cover: Omit<CoverProps, 'size'>;
@@ -143,6 +144,10 @@ export function CoverCard({
           <span className={small ? 'sr-only' : 'line-clamp-2 text-sm font-semibold wrap-anywhere'} lang={titleLang}>
             {title}
           </span>
+        ) : href === undefined ? (
+          <div lang={titleLang} className={small ? 'sr-only' : 'line-clamp-2 text-sm font-semibold wrap-anywhere'}>
+            {title}
+          </div>
         ) : (
           <Link
             href={href}

@@ -1,4 +1,5 @@
-import { Cover } from '@rezics/ui/cover';
+import { sharedRatio } from '@rezics/ui/cover';
+import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Link, useLocation } from '@tanstack/react-router';
 import { coverSrc } from '../media/cover-src';
@@ -6,7 +7,6 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt } from '../threads/composer';
-import { AccountRef } from './account-ref';
 import type { CollectionVisibility } from './reads';
 import type { MineCollectionsPage } from './mine-collections';
 
@@ -29,37 +29,22 @@ export function MineCollectionsPageView({ page }: { page: MineCollectionsPage })
         </a>
       </header>
       {page.collections.length ? (
-        <ol className="divide-y divide-border/60 border-y border-border/60">
+        <CoverGrid
+          ratio={sharedRatio(
+            page.collections.map((collection) => ({ id: collection.id, title: collection.title, types: [] })),
+          )}
+        >
           {page.collections.map((collection) => (
-            <li key={collection.id} className="flex items-center gap-3 py-3">
-              <Cover
-                subject={{ id: collection.id, title: collection.title, types: [] }}
-                cover={null}
-                size="xs"
-                ratio="1:1"
-                src={coverSrc}
-                decorative
-              />
-              <div className="min-w-0 space-y-0.5">
-                <h2 className="text-lg font-semibold break-words">
-                  <Link
-                    to="/collections/$id"
-                    params={{ id: collection.id }}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    {collection.title}
-                  </Link>
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {visibilityLabel(collection.visibility)} · {m.library_member_count({ count: collection.memberCount })}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {m.library_curator()} <AccountRef account={collection.curator} />
-                </p>
-              </div>
-            </li>
+            <CoverCard
+              key={collection.id}
+              href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}`}
+              title={collection.title}
+              cover={{ subject: { id: collection.id, title: collection.title, types: [] }, cover: null, src: coverSrc }}
+              secondary={m.library_collection_item_count({ count: collection.memberCount })}
+              state={visibilityLabel(collection.visibility)}
+            />
           ))}
-        </ol>
+        </CoverGrid>
       ) : (
         <p className="text-muted-foreground">{m.library_collections_empty()}</p>
       )}
