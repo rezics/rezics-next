@@ -248,7 +248,11 @@ function PostSlot({
   async function deletePost() {
     deleteKey.current ??= crypto.randomUUID();
     const result = await erasePost({
-      data: { postId: post.id, idempotencyKey: deleteKey.current },
+      data: {
+        postId: post.id,
+        idempotencyKey: deleteKey.current,
+        ...(target.kind === 'thread' ? { openingThreadId: target.id } : {}),
+      },
       headers: csrfHeaders(),
     });
     if (!result.ok) throw new Error(postDeleteFailureText(result));

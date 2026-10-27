@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -15,6 +16,7 @@ const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', ki
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const boardId = id(1);
 const threadId = id(2);
+const threadPath = (locale = 'en') => `/${locale}${threadHref({ id: threadId, title: 'A first discussion' })}`;
 const coveredSubject = id(70);
 const bareSubject = id(71);
 const coverMedia = id(72);
@@ -232,7 +234,7 @@ function site(): Promise<string> {
         const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
         if (response.status < 500) {
           // The first visit to a route makes the dev server optimize its dependencies and reload; do that before any test.
-          for (const path of [`/en/threads/${threadId}`, `/en/boards/${boardId}`])
+          for (const path of [threadPath(), `/en/boards/${boardId}`])
             await fetch(`${origin}${path}`, { signal: AbortSignal.timeout(120_000) }).then((page) => page.text());
           return origin;
         }
@@ -270,7 +272,7 @@ test(
       ['en', 'Deleted account'],
       ['ja', '削除されたアカウント'],
     ] as const) {
-      const page = await open(`/${locale}/threads/${threadId}`);
+      const page = await open(threadPath(locale));
       try {
         const slots = page.locator('main ol > li');
         expect(await slots.count()).toBe(4);
@@ -313,7 +315,7 @@ test(
         };
       });
     for (const locale of ['en', 'zh-Hans']) {
-      const thread = await open(`/${locale}/threads/${threadId}`, true);
+      const thread = await open(threadPath(locale), true);
       try {
         const faces = await read(thread);
         const serif = first(faces.serif);
@@ -342,7 +344,7 @@ test(
 test(
   "each post's reactions sit at its top right and reporting lives in its overflow menu, with no visible report button",
   async () => {
-    const page = await open(`/en/threads/${threadId}`, true);
+    const page = await open(threadPath(), true);
     try {
       const slots = page.locator('main ol > li');
       for (let index = 0; index < 2; index++) {
@@ -372,7 +374,7 @@ test(
 test(
   'a subject attached to a thread shows its cover frame and title',
   async () => {
-    const page = await open(`/en/threads/${threadId}`);
+    const page = await open(threadPath());
     try {
       const covers = page.locator('main [data-slot="cover"]');
       expect(await covers.count()).toBe(2);

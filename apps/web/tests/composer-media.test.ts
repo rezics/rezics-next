@@ -7,6 +7,7 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -74,7 +75,7 @@ type PostCreated = Data<ThreadResource['posts']['post']>;
 type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['error']>['value'];
 type Snapshot = NonNullable<Posts['posts'][number]['body']>;
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
+const threadPath = (locale = 'en') => `/${locale}${threadHref({ id: id(2), title: 'A shared reading' })}`;
 const licence = 'LicenseRef-rezics-terms';
 const metadata = {
   route: 0,

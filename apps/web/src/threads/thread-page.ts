@@ -87,22 +87,27 @@ export async function loadThreadPage(
   if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.thread.title))
     return { redirect: { id: thread.thread.id, title: threadTitle(thread.thread) } };
   postsRead ??= readPosts();
-  // The Realm read follows the board read, beside the posts read.
-  const boardRead = thread.thread.boardId
-    ? (authorization
-        ? client.boards({ id: thread.thread.boardId }).get({ headers: { authorization } })
-        : client.boards({ id: thread.thread.boardId }).get()
-      )
-        .catch(() => null)
-        .then(async (result) => {
-          const board = result?.data?.board;
-          if (!board || board.id !== thread.thread.boardId) return {};
-          const realm = await readBoardRealm(client, boardRealmId(board), authorization);
-          return { board, ...(realm ? { realm } : {}) };
-        })
-    : Promise.resolve({});
-  const [context, postsResult] = await Promise.all([boardRead, postsRead]);
-  const posts = checkRead<PostPage>(postsResult, 'thread posts');
+  const readContext = () =>
+    thread.thread.boardId
+      ? (authorization
+          ? client.boards({ id: thread.thread.boardId }).get({ headers: { authorization } })
+          : client.boards({ id: thread.thread.boardId }).get()
+        )
+          .catch(() => null)
+          .then(async (result) => {
+            const board = result?.data?.board;
+            if (!board || board.id !== thread.thread.boardId) return {};
+            const realm = await readBoardRealm(client, boardRealmId(board), authorization);
+            return { board, ...(realm ? { realm } : {}) };
+          })
+      : Promise.resolve({});
+  let context: Awaited<ReturnType<typeof readContext>>;
+  let posts: PostPage;
+  // A mismatched slug returned above before these downstream reads start. After a matching slug is confirmed,
+  // keep the page's established concurrent post and board reads.
+  const [pageContext, postsResult] = await Promise.all([readContext(), postsRead]);
+  context = pageContext;
+  posts = checkRead<PostPage>(postsResult, 'thread posts');
   return {
     thread: thread.thread,
     ...context,

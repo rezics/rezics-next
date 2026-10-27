@@ -24,9 +24,8 @@ export function threadLocation(locale: string, thread: { id: string; title: stri
 }
 
 /**
- * The slug last seen for a thread id. A canonical page starts its thread and post reads together, so it cannot
- * wait to learn the title; a redirect must not start those further reads. Remembering the slug lets a mismatched
- * URL read the thread alone, then redirect.
+ * The latest slug seen in thread or board data. This lets a canonical page start its established
+ * thread and post reads together while URLs known to be outdated can redirect after the thread read.
  */
 function slugs(): Map<string, string> {
   const host = globalThis as typeof globalThis & { [memoryKey]?: Map<string, string> };
@@ -39,6 +38,10 @@ export function rememberedThreadSlug(id: string): string | undefined {
 
 export function rememberThreadSlug(id: string, title: string | null): void {
   slugs().set(id, threadSlug(title));
+}
+
+export function forgetThreadSlug(id: string): void {
+  slugs().delete(id);
 }
 
 export function slugMatches(requested: string, canonical: string): boolean {

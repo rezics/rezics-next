@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -47,6 +48,7 @@ const boardId = id(1);
 const threadId = id(2);
 const subjectId = id(3);
 const offerId = id(4);
+const threadPath = `/en${threadHref({ id: threadId, title: 'A shared reading' })}`;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const metadata = {
   route: 0,
@@ -455,7 +457,7 @@ test(
     for (const path of [
       `/en/subjects/${subjectId}`,
       `/en/boards/${boardId}`,
-      `/en/threads/${threadId}`,
+      threadPath,
       '/en/search?q=stars',
       `/en/offers/${offerId}`,
     ])
@@ -471,7 +473,7 @@ test(
     for (const startThread of [true, false]) {
       reset();
       writeRefusal = 'platform_closed';
-      const path = startThread ? `/en/boards/${boardId}/new` : `/en/threads/${threadId}`;
+      const path = startThread ? `/en/boards/${boardId}/new` : threadPath;
       const page = await open(path);
       try {
         await editor(page).waitFor({ state: 'visible' });
@@ -500,7 +502,7 @@ test(
   async () => {
     reset();
     mediaClosed = true;
-    const mediaPage = await open(`/en/threads/${threadId}`);
+    const mediaPage = await open(threadPath);
     try {
       const png = Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
@@ -548,7 +550,7 @@ test(
   async () => {
     reset();
     writeRefusal = 'forbidden';
-    const page = await open(`/en/threads/${threadId}`);
+    const page = await open(threadPath);
     try {
       await editor(page).fill('Keep this argument');
       await send(page).click();

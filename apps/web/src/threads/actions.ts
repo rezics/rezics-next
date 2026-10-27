@@ -8,6 +8,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
 import { erasePostRequest, revisePostRequest, startThreadRequest } from './post-writes';
+import { forgetThreadSlug, rememberThreadSlug } from './thread-href';
 
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -114,7 +115,9 @@ export const startThread = createServerFn({ method: 'POST' })
   .validator(validateThreadDraft)
   .handler(async ({ data }): Promise<{ ok: true; thread: ThreadCreated['thread'] } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return startThreadRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    const result = await startThreadRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    if (result.ok) rememberThreadSlug(result.thread.id, result.thread.title);
+    return result;
   });
 
 export const replyToThread = createServerFn({ method: 'POST' })
@@ -207,9 +210,22 @@ export const erasePost = createServerFn({ method: 'POST' })
       !uuid.test(input.idempotencyKey)
     )
       throw new Error('Invalid post deletion');
-    return { postId, idempotencyKey: input.idempotencyKey };
+    if (
+      'openingThreadId' in input &&
+      (typeof input.openingThreadId !== 'string' || !input.openingThreadId || input.openingThreadId.length > 128)
+    )
+      throw new Error('Invalid opening thread id');
+    return {
+      postId,
+      idempotencyKey: input.idempotencyKey,
+      ...('openingThreadId' in input && typeof input.openingThreadId === 'string'
+        ? { openingThreadId: input.openingThreadId }
+        : {}),
+    };
   })
   .handler(async ({ data }): Promise<{ ok: true } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    const result = await erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    if (result.ok && data.openingThreadId) forgetThreadSlug(data.openingThreadId);
+    return result;
   });
