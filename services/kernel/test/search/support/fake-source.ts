@@ -1,6 +1,13 @@
-import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../../src/search/source.ts';
+import { PARTITIONS } from '../../../src/route/route.ts';
+import {
+  MAX_RELATION_FACET_PROBES,
+  subjectPartition,
+  type IndexedSubject,
+  type SubjectSource,
+} from '../../../src/search/source.ts';
 
 export function createFakeSource(): SubjectSource & {
+  matchRelationFacets: NonNullable<SubjectSource['matchRelationFacets']>;
   put(subject: IndexedSubject): void;
   remove(id: string): void;
   advance(partition: number): void;
@@ -22,6 +29,30 @@ export function createFakeSource(): SubjectSource & {
       advance(partition);
     },
     advance,
+    async matchRelationFacets(partition, probes) {
+      if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
+        throw new RangeError('Invalid partition');
+      if (probes.length > MAX_RELATION_FACET_PROBES)
+        throw new RangeError(`Relation facet matching accepts at most ${MAX_RELATION_FACET_PROBES} probes`);
+      for (const probe of probes) {
+        if (subjectPartition(probe.subject) !== partition)
+          throw new RangeError('Subject id routes to a different partition');
+      }
+      return probes.map((probe) => {
+        const subject = subjects.get(probe.subject);
+        if (!subject || subject.visibility !== 'visible' || subject.redirect !== null) return false;
+        return subject.statements.some(
+          (statement) =>
+            statement.property === probe.property &&
+            statement.value === probe.value &&
+            (probe.qualifiers ?? []).every((clause) =>
+              statement.qualifiers?.some(
+                (qualifier) => qualifier.property === clause.property && clause.in.includes(qualifier.value),
+              ),
+            ),
+        );
+      });
+    },
     async read(partition, ids) {
       for (const id of ids) {
         if (subjectPartition(id) !== partition) throw new RangeError('Subject id routes to a different partition');
