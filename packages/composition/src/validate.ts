@@ -161,10 +161,12 @@ function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Ad
       walkString(schema, value, pointer, add);
       return;
     case 'Integer':
-      if (typeof value !== 'number' || !Number.isInteger(value) || !inRange(schema, value)) add(pointer, 'invalid');
+      if (typeof value !== 'number' || !Number.isInteger(value)) add(pointer, 'invalid');
+      else if (!inRange(schema, value)) add(pointer, 'limit');
       return;
     case 'Number':
-      if (typeof value !== 'number' || !Number.isFinite(value) || !inRange(schema, value)) add(pointer, 'invalid');
+      if (typeof value !== 'number' || !Number.isFinite(value)) add(pointer, 'invalid');
+      else if (!inRange(schema, value)) add(pointer, 'limit');
       return;
     case 'Boolean':
       if (typeof value !== 'boolean') add(pointer, 'invalid');

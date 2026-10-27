@@ -88,7 +88,7 @@ test('unknown types, unknown props and missing props are refused with pointers',
     { pointer: '/content/0/type', code: 'unknown_type' },
     { pointer: '/content/1/props/onClick', code: 'invalid' },
     { pointer: '/content/2/props/text', code: 'invalid' },
-    { pointer: '/content/3/props/level', code: 'invalid' },
+    { pointer: '/content/3/props/level', code: 'limit' },
   ]);
   expect(validateComposition(registry, { root: { props: { colour: 'red' } }, content: [] })).toEqual([
     { pointer: '/root/props/colour', code: 'invalid' },
@@ -100,6 +100,70 @@ test('unknown types, unknown props and missing props are refused with pointers',
     }),
   ).toEqual([{ pointer: '/content/0/props/id', code: 'invalid' }]);
 });
+
+for (const [kind, numeric] of [
+  ['Integer', Type.Integer],
+  ['Number', Type.Number],
+] as const) {
+  for (const { bounds, accepted, refused } of [
+    { bounds: { minimum: 1, maximum: 24 }, accepted: [1, 24], refused: [0, 25] },
+    { bounds: { exclusiveMinimum: 0, exclusiveMaximum: 2 }, accepted: [1], refused: [-1, 0, 2, 3] },
+    { bounds: { minimum: 0, maximum: 0 }, accepted: [0], refused: [-1, 1] },
+    { bounds: { minimum: -3, maximum: -1 }, accepted: [-3, -1], refused: [-4, 0] },
+    { bounds: { exclusiveMinimum: -3, exclusiveMaximum: -1 }, accepted: [-2], refused: [-4, -3, -1, 0] },
+    ...(kind === 'Number'
+      ? [{ bounds: { minimum: -1.5, maximum: 0.5 }, accepted: [-1.5, 0.25, 0.5], refused: [-1.75, 0.75] }]
+      : []),
+  ]) {
+    test(`${kind} bounds ${JSON.stringify(bounds)} classify ranges at root and nested pointers`, () => {
+      const closed = { additionalProperties: false } as const;
+      const schema = numeric(bounds);
+      const numericRegistry = defineRegistry({
+        root: Type.Object({ value: schema }, closed),
+        components: [
+          { type: 'Stack', props: Type.Object({}, closed), slots: ['children'] },
+          {
+            type: 'Numeric',
+            props: Type.Object({ readings: Type.Array(Type.Object({ value: schema }, closed)) }, closed),
+          },
+        ],
+      });
+      const document = (value: unknown) => ({
+        root: { props: { value } },
+        content: [
+          {
+            type: 'Stack',
+            props: {
+              id: 'stack',
+              children: [{ type: 'Numeric', props: { id: 'number', readings: [{ value }] } }],
+            },
+          },
+        ],
+      });
+      const violations = (code: 'limit' | 'invalid') => [
+        { pointer: '/content/0/props/children/0/props/readings/0/value', code },
+        { pointer: '/root/props/value', code },
+      ];
+      const generated = Compile(compositionSchema(numericRegistry) as never);
+      for (const value of accepted) {
+        expect(validateComposition(numericRegistry, document(value))).toEqual([]);
+        expect(generated.Check(document(value))).toBe(true);
+      }
+      for (const value of refused) {
+        expect(validateComposition(numericRegistry, document(value))).toEqual(violations('limit'));
+        expect(generated.Check(document(value))).toBe(false);
+      }
+      for (const value of ['25', '1', null, true, {}, [], ...(kind === 'Integer' ? [0.5, 25.5] : [])]) {
+        expect(validateComposition(numericRegistry, document(value))).toEqual(violations('invalid'));
+        expect(generated.Check(document(value))).toBe(false);
+      }
+      // Nonfinite values fail the existing canonical JSON check before schema traversal.
+      for (const value of [NaN, Infinity, -Infinity]) {
+        expect(validateComposition(numericRegistry, document(value))).toEqual([{ pointer: '', code: 'invalid' }]);
+      }
+    });
+  }
+}
 
 test('HTML, script and executable links are refused wherever text or links appear', () => {
   const link = (props: Record<string, string>) =>

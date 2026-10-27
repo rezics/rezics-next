@@ -47,8 +47,8 @@ test('data components are part of the platform registry and validate', () => {
     { pointer: '/content/0/props/properties', code: 'invalid' },
     { pointer: '/content/1/props/properties', code: 'invalid' },
     { pointer: '/content/2/props/properties', code: 'invalid' },
-    { pointer: '/content/3/props/limit', code: 'invalid' },
-    { pointer: '/content/4/props/limit', code: 'invalid' },
+    { pointer: '/content/3/props/limit', code: 'limit' },
+    { pointer: '/content/4/props/limit', code: 'limit' },
     { pointer: '/content/4/props/title', code: 'unsafe' },
     { pointer: '/content/5/props/text', code: 'invalid' },
   ]);

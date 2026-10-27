@@ -75,6 +75,10 @@ When no other violation exists, validation plans reads with the placeholder subj
 over 128, returns only `{ pointer: '/content', code: 'limit' }`. The distinct-read count is
 checked first.
 
+Integer and Number values that meet their numeric type requirements but exceed inclusive or exclusive
+bounds produce `limit` at the value's pointer (HTTP `out_of_range`). Wrong types, fractional Integer
+values and nonfinite numbers remain `invalid` (HTTP `invalid_format`); validation never coerces values.
+
 ## Safety
 
 Every string a registry admits is one of:

@@ -26,7 +26,7 @@ test('the subject data components are registered with closed props and validate'
   ).toEqual(['invalid']);
   expect(
     validateComposition(platformRegistry, page(node('Credits', 'credits', { property: 'wdt:P725', limit: 25 }))),
-  ).toEqual([{ pointer: '/content/0/props/limit', code: 'invalid' }]);
+  ).toEqual([{ pointer: '/content/0/props/limit', code: 'limit' }]);
 });
 
 test('subject data components plan the page read kinds and share the subject read', () => {

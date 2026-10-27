@@ -2,16 +2,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
-import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { activeProfile } from '../../src/presentation/profiles.ts';
-import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
-import { accountToken, admittedAccess } from '../support/admitted-access.ts';
+import { createRealAccess } from '../semantic/real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -26,39 +24,18 @@ const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill
 const curatorId = '019a1b2c-3d4e-7f00-8a00-c0a7e0000001';
 const editorId = '019a1b2c-3d4e-7f00-8a00-ed170e000002';
 const presentationScopes = ['presentation:publish', 'presentation:activate', 'presentation:read'] as const;
-const checks: { action: string; route: number; id: string }[] = [];
-const admitted = admittedAccess({
-  actions: new Map([
-    ['presentation:publish', { anonymous: false }],
-    ['presentation:activate', { anonymous: false }],
-    ['presentation:read', { anonymous: true }],
-  ]),
-});
-const access = deriveAccess(admitted, {
-  async authorize(_client, actor, action, resource) {
-    checks.push({ action, route: resource.route, id: resource.id });
-    if (action === 'presentation:read') return true;
-    return actor.kind === 'account' && actor.accountId === curatorId && resource.id === GLOBAL_CONTEXT;
-  },
-});
-let curatorToken = '';
-let editorToken = '';
+const realAccess = await createRealAccess(admin, { curator: curatorId, editor: editorId }, presentationScopes);
+const curatorToken = realAccess.bearer('curator');
+const editorToken = realAccess.bearer('editor');
 beforeAll(async () => {
-  for (const accountId of [curatorId, editorId]) {
-    await admin.query(
-      `INSERT INTO access.account
-         (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch, membership_inverse_complete)
-       VALUES ($1, $2, 'actor', 'active', $2, false, 1, true)`,
-      [routeOf(accountId), accountId],
-    );
+  for (const action of ['presentation:publish', 'presentation:activate']) {
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'curator', action);
   }
-  curatorToken = await accountToken({ accountId: curatorId, clientId: 'web', scopes: presentationScopes });
-  editorToken = await accountToken({ accountId: editorId, clientId: 'web', scopes: presentationScopes });
 });
 const kernel = createKernel({
   pool,
   requestDeadlineMs: 30_000,
-  access,
+  access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(6),
   writeRate: {
@@ -145,19 +122,55 @@ test('an invalid profile is refused with pointers under /profile and stores noth
   expect(refused.body.errors).toEqual([
     { pointer: '/profile/generic/content/0/props/text', code: 'invalid_format' },
     { pointer: '/profile/types/0/document/content/0/type', code: 'unsupported' },
-    { pointer: '/profile/types/0/document/content/2/props/limit', code: 'invalid_format' },
+    { pointer: '/profile/types/0/document/content/2/props/limit', code: 'out_of_range' },
   ]);
   expect((await publish({ profile: 'profile' })).response.status).toBe(400);
   expect((await publish({})).response.status).toBe(400);
   expect(await count('profile')).toBe(before);
 });
 
+test('profile numeric ranges are out_of_range and malformed limits are invalid_format without storing refusals', async () => {
+  const withLimit = (limit: unknown): PresentationProfile => ({
+    ...profile('Limits'),
+    generic: {
+      root: { props: {} },
+      content: [{ type: 'SubjectList', props: { id: 'works', title: 'Works', property: 'schema:author', limit } }],
+    },
+  });
+  for (const [limit, code] of [
+    [25, 'out_of_range'],
+    [0, 'out_of_range'],
+    ['25', 'invalid_format'],
+    ['1', 'invalid_format'],
+    [1.5, 'invalid_format'],
+    [25.5, 'invalid_format'],
+  ] as const) {
+    const before = await count('profile');
+    const refused = await publish({ profile: withLimit(limit) });
+    expect(refused.response.status).toBe(400);
+    expect(refused.body.code).toBe('invalid_request');
+    expect(refused.body.errors).toEqual([{ pointer: '/profile/generic/content/0/props/limit', code }]);
+    expect(await count('profile')).toBe(before);
+  }
+  for (const limit of [1, 24]) {
+    const valid = withLimit(limit);
+    const accepted = await publish({ profile: valid });
+    expect(accepted.response.status).toBe(201);
+    expect(accepted.body).toEqual({ digest: profileDigest(valid) });
+    const stored = await call('GET', `/v1/presentation/profiles/${accepted.body.digest}`);
+    expect(stored.response.status).toBe(200);
+    expect(stored.body).toEqual({ digest: accepted.body.digest, profile: valid });
+  }
+});
+
 test('publishing and activating need their grant on the Global Context', async () => {
   const body = { profile: profile('Two') };
   const digest = profileDigest(body.profile);
-  checks.length = 0;
+  realAccess.checks.length = 0;
   expect((await publish(body, editorToken)).response.status).toBe(403);
-  expect(checks).toEqual([{ action: 'presentation:publish', route: 0, id: GLOBAL_CONTEXT }]);
+  expect(realAccess.checks).toEqual([
+    { persona: 'editor', action: 'presentation:publish', resource: { route: 0, id: GLOBAL_CONTEXT } },
+  ]);
   expect((await call('POST', '/v1/presentation/profiles', { key: key(), body })).response.status).toBe(401);
   expect((await call('GET', `/v1/presentation/profiles/${digest}`)).response.status).toBe(404);
   expect((await publish(body)).response.status).toBe(201);

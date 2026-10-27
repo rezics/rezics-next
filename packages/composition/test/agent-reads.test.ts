@@ -52,10 +52,10 @@ test('account page reads enforce each standalone page limit', () => {
   const errors = (type: string, props: Record<string, unknown>) =>
     validateComposition(platformRegistry, page(node(type, 'n', props)));
   expect(errors('AccountThreads', { threadKind: 'discussion', limit: 21 })).toEqual([
-    { pointer: '/content/0/props/limit', code: 'invalid' },
+    { pointer: '/content/0/props/limit', code: 'limit' },
   ]);
-  expect(errors('AccountPosts', { limit: 0 })).toEqual([{ pointer: '/content/0/props/limit', code: 'invalid' }]);
-  expect(errors('AccountCollections', { limit: 25 })).toEqual([{ pointer: '/content/0/props/limit', code: 'invalid' }]);
+  expect(errors('AccountPosts', { limit: 0 })).toEqual([{ pointer: '/content/0/props/limit', code: 'limit' }]);
+  expect(errors('AccountCollections', { limit: 25 })).toEqual([{ pointer: '/content/0/props/limit', code: 'limit' }]);
 });
 
 test('publish-time page cost counts account lists', () => {
