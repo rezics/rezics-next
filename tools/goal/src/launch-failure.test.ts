@@ -13,18 +13,27 @@ process.exit(1);
 `;
 
 test('a launch failure is rerun once without a gate, then goes to the manager', async () => {
-  const h = harness(brokenCli), inbox: ManagerEvent[] = [], landings: LandingRequest[] = [];
+  const h = harness(brokenCli),
+    inbox: ManagerEvent[] = [],
+    landings: LandingRequest[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
-    await job.start(task.id); await job.drain();
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue: (request) => landings.push(request) },
+      { deliver: (event) => inbox.push(event) },
+    );
+    await job.start(task.id);
+    await job.drain();
     expect(landings).toEqual([]);
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     for (const attempt of [1, 2]) expect(h.store.attempt({ taskId: task.id, attempt }).failureKind).toBe('tool');
     expect(h.store.record({ taskId: task.id, attempt: 2 })!.escalation).toBe('stalled');
-    expect(inbox.map(event => event.kind)).toEqual(['stalled']);
+    expect(inbox.map((event) => event.kind)).toEqual(['stalled']);
     expect(inbox[0]!.summary).toContain('invalid transport');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 const committingCli = `#!/usr/bin/env bun
@@ -38,22 +47,39 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 `;
 
 test('the same environment failure twice in a row goes to the manager instead of a third attempt', async () => {
-  const h = harness(committingCli), inbox: ManagerEvent[] = [];
+  const h = harness(committingCli),
+    inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.start(task.id);
-    const setup = (attempt: number): GateOutcome => ({ taskId: task.id, attempt, passed: false, stage: 'setup', logPath: 'fixture',
-      hostMs: 1, changedFiles: ['result.txt'], diffLines: 1,
-      firstFailure: { fingerprint: 'lockfile', assertion: 'lockfile had changes', excerpt: 'bun install --frozen-lockfile' } });
-    job.onGateOutcome(setup(1)); await job.drain();
+    const setup = (attempt: number): GateOutcome => ({
+      taskId: task.id,
+      attempt,
+      passed: false,
+      stage: 'setup',
+      logPath: 'fixture',
+      hostMs: 1,
+      changedFiles: ['result.txt'],
+      diffLines: 1,
+      firstFailure: {
+        fingerprint: 'lockfile',
+        assertion: 'lockfile had changes',
+        excerpt: 'bun install --frozen-lockfile',
+      },
+    });
+    job.onGateOutcome(setup(1));
+    await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(inbox).toEqual([]);
-    job.onGateOutcome(setup(2)); await job.drain();
+    job.onGateOutcome(setup(2));
+    await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.record({ taskId: task.id, attempt: 2 })!.escalation).toBe('stalled');
-    expect(inbox.map(event => event.kind)).toEqual(['stalled']);
-  } finally { h.dispose(); }
+    expect(inbox.map((event) => event.kind)).toEqual(['stalled']);
+  } finally {
+    h.dispose();
+  }
 });
 
 // Cursor refuses an exhausted model before it opens a session, with the reason on stderr only.
@@ -63,17 +89,21 @@ process.exit(1);
 `;
 
 test('a launch refused for an exhausted allowance marks the pool exhausted instead of stalling', async () => {
-  const h = harness(exhaustedCli), inbox: ManagerEvent[] = [];
+  const h = harness(exhaustedCli),
+    inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     // The harness has one pool, so the rerun that excludes it finds none and rejects.
-    await job.start(task.id).catch(() => {}); await job.drain().catch(() => {});
+    await job.start(task.id).catch(() => {});
+    await job.drain().catch(() => {});
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBe('pool-exhausted');
     const key = h.tasks.settings.pools[0]!.allowanceKey;
     expect(existsSync(join(h.tasks.settings.stateDirectory, 'exhausted', `${key}.json`))).toBe(true);
-    expect(inbox.map(event => event.kind)).not.toContain('stalled');
-  } finally { h.dispose(); }
+    expect(inbox.map((event) => event.kind)).not.toContain('stalled');
+  } finally {
+    h.dispose();
+  }
 });
 
 // A worker that reports success with part of its work committed and the rest left in the worktree.
@@ -89,16 +119,20 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 `;
 
 test('a successful attempt lands its whole worktree, committing what the worker left uncommitted', async () => {
-  const h = harness(halfCommittingCli), landings: LandingRequest[] = [];
+  const h = harness(halfCommittingCli),
+    landings: LandingRequest[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
-    await job.start(task.id); await job.drain();
+    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
+    await job.start(task.id);
+    await job.drain();
     expect(landings).toHaveLength(1);
     const files = git(task.worktree, 'show', '--name-only', '--format=', 'HEAD');
     expect(files).toContain('left.txt');
     expect(git(task.worktree, 'status', '--porcelain')).toBe('');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 // A worker killed mid-work: it opened a session and edited files, but never gave its final answer.
@@ -110,16 +144,20 @@ process.kill(process.pid, 'SIGKILL');
 `;
 
 test('a worker that ends without a success report is not landed and its half-done worktree is not committed', async () => {
-  const h = harness(killedCli), landings: LandingRequest[] = [];
+  const h = harness(killedCli),
+    landings: LandingRequest[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
-    await job.start(task.id); await job.drain();
+    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
+    await job.start(task.id);
+    await job.drain();
     expect(landings).toEqual([]);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBe('tool');
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).result).toContain('without a success report');
     expect(git(task.worktree, 'log', '--format=%s', '-1')).not.toContain('left uncommitted');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 // The provider refuses a busy model before a session starts; it says nothing about the task.
@@ -129,18 +167,21 @@ process.exit(1);
 `;
 
 test('a model capacity refusal continues the task after a short pause, however often it repeats', async () => {
-  const h = harness(capacityCli), inbox: ManagerEvent[] = [];
+  const h = harness(capacityCli),
+    inbox: ManagerEvent[] = [];
   try {
     const job = await import('./job.ts');
     const task = h.tasks.dispatch(h.briefFile);
-    const worker = new job.WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    const worker = new job.WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await worker.start(task.id);
-    await new Promise(resolve => setTimeout(resolve, job.CAPACITY_PAUSE_MS * 2 + 3_000));
+    await new Promise((resolve) => setTimeout(resolve, job.CAPACITY_PAUSE_MS * 2 + 3_000));
     expect(h.store.task(task.id).currentAttempt).toBeGreaterThanOrEqual(3);
     expect(h.store.task(task.id).state).not.toBe('stopped');
-    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
+    expect(inbox.filter((event) => event.kind === 'stalled')).toEqual([]);
     await h.tasks.stop?.(task.id).catch?.(() => {});
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 }, 60_000);
 
 // The CLI hangs before starting a session: it writes nothing and never exits on its own.
@@ -149,16 +190,20 @@ await new Promise(resolve => setTimeout(resolve, 600_000));
 `;
 
 test('a worker that writes nothing within the start window is stopped and retried, then goes to the manager', async () => {
-  const h = harness(hangingCli), inbox: ManagerEvent[] = [];
+  const h = harness(hangingCli),
+    inbox: ManagerEvent[] = [];
   h.settings.startGraceMs = 1000;
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
-    await job.start(task.id); await job.drain();
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
+    await job.start(task.id);
+    await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     for (const attempt of [1, 2]) expect(h.store.attempt({ taskId: task.id, attempt }).failureKind).toBe('tool');
-    expect(inbox.map(event => event.kind)).toEqual(['stalled']);
-  } finally { h.dispose(); }
+    expect(inbox.map((event) => event.kind)).toEqual(['stalled']);
+  } finally {
+    h.dispose();
+  }
 }, 60_000);
 
 const silentAfterCommitCli = `#!/usr/bin/env bun
@@ -181,11 +226,12 @@ if (process.env.GOAL_ATTEMPT === '1') {
 `;
 
 test('a running worker whose log is silent is stopped and retried from its commits', async () => {
-  const h = harness(silentAfterCommitCli), landings: LandingRequest[] = [];
+  const h = harness(silentAfterCommitCli),
+    landings: LandingRequest[] = [];
   h.settings.silenceMs = 1000;
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
     await job.start(task.id);
     await job.drain();
     const first = h.store.attempt({ taskId: task.id, attempt: 1 });
@@ -194,7 +240,9 @@ test('a running worker whose log is silent is stopped and retried from its commi
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(git(task.worktree, 'rev-list', '--count', `${task.base}..HEAD`)).toBe('2');
     expect(landings).toHaveLength(1);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 }, 15_000);
 
 const activeWriterCli = `#!/usr/bin/env bun
@@ -209,18 +257,26 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 `;
 
 test('a worker that keeps writing is never stopped by the silence window', async () => {
-  const h = harness(activeWriterCli), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
+  const h = harness(activeWriterCli),
+    landings: LandingRequest[] = [],
+    inbox: ManagerEvent[] = [];
   h.settings.silenceMs = 300;
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue: (request) => landings.push(request) },
+      { deliver: (event) => inbox.push(event) },
+    );
     await job.start(task.id);
     await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
     expect(landings).toHaveLength(1);
-    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
-  } finally { h.dispose(); }
+    expect(inbox.filter((event) => event.kind === 'stalled')).toEqual([]);
+  } finally {
+    h.dispose();
+  }
 }, 15_000);
 
 const checkWaitCli = `#!/usr/bin/env bun
@@ -236,18 +292,26 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 `;
 
 test('time recorded waiting for a check slot counts as run activity', async () => {
-  const h = harness(checkWaitCli), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
+  const h = harness(checkWaitCli),
+    landings: LandingRequest[] = [],
+    inbox: ManagerEvent[] = [];
   h.settings.silenceMs = 300;
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue: (request) => landings.push(request) },
+      { deliver: (event) => inbox.push(event) },
+    );
     await job.start(task.id);
     await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
     expect(landings).toHaveLength(1);
-    expect(inbox.filter(event => event.kind === 'stalled')).toEqual([]);
-  } finally { h.dispose(); }
+    expect(inbox.filter((event) => event.kind === 'stalled')).toEqual([]);
+  } finally {
+    h.dispose();
+  }
 }, 15_000);
 
 const repeatedlySilentCli = `#!/usr/bin/env bun
@@ -263,23 +327,27 @@ await new Promise(resolve => setTimeout(resolve, 600_000));
 `;
 
 test('a repeated silence failure reports the stalled output window to the manager', async () => {
-  const h = harness(repeatedlySilentCli), inbox: ManagerEvent[] = [];
+  const h = harness(repeatedlySilentCli),
+    inbox: ManagerEvent[] = [];
   h.settings.silenceMs = 800;
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.start(task.id);
     await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.task(task.id).state).toBe('stopped');
-    expect(inbox.filter(event => event.kind === 'stalled').map(event => event.summary)).toEqual([
+    expect(inbox.filter((event) => event.kind === 'stalled').map((event) => event.summary)).toEqual([
       'stalled: no output for 1 minute',
     ]);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 }, 15_000);
 
 test('the host starts a ready task whose dispatching process is gone, once', async () => {
-  const h = harness(), inbox: ManagerEvent[] = [];
+  const h = harness(),
+    inbox: ManagerEvent[] = [];
   // A start window long enough for the fixture worker to write, even on a loaded host.
   h.settings.startGraceMs = 5_000;
   try {
@@ -288,13 +356,17 @@ test('the host starts a ready task whose dispatching process is gone, once', asy
     h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
       current.createdAt = new Date(Date.now() - 60_000).toISOString();
     });
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
-    await job.recoverOrphans({ adoptRunning: true }); await job.drain();
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
+    await job.recoverOrphans({ adoptRunning: true });
+    await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     // A late start from the original dispatch is a no-op, not a second attempt.
-    await job.start(task.id, { expectedAttempt: 0 }); await job.drain();
+    await job.start(task.id, { expectedAttempt: 0 });
+    await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(1);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 }, 60_000);
 
 test('check host transport failures are recognized as capacity, ordinary tool failures are not', async () => {
@@ -305,7 +377,8 @@ test('check host transport failures are recognized as capacity, ordinary tool fa
     'kex_exchange_identification: read: Connection reset by peer',
     'acceptance exited 255 after SSH to check host a timed out',
     'rsync error: unexplained error (code 255)',
-  ]) expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(true);
+  ])
+    expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(true);
   for (const detail of ['Error loading config.toml: invalid transport', 'test failed: expected 3 received 2'])
     expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(false);
 });

@@ -339,10 +339,14 @@ export class WorkerJob implements GateOutcomeSink {
       Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - Date.parse(ref.startedAt))),
     );
     try {
-      watcher = watchOrPoll(ref.logPath, () => {
-        checkSilence();
-        stopIfStalled(false);
-      }, 30_000);
+      watcher = watchOrPoll(
+        ref.logPath,
+        () => {
+          checkSilence();
+          stopIfStalled(false);
+        },
+        30_000,
+      );
       try {
         await settle(this.tasks, worker, this.landing, async () => {
           clearTimeout(timer);
@@ -747,9 +751,11 @@ export class WorkerJob implements GateOutcomeSink {
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
         capacity = kind === 'tool' && (MODEL_AT_CAPACITY.test(detail) || CHECK_HOST_TRANSPORT.test(detail));
         if (kind === 'tool' && previous?.failureKind === 'tool' && !capacity) {
-          const firstLine = (attempt.result.startsWith('stalled: no output for ')
-            ? attempt.result
-            : previous.result || previous.blocker || 'Worker CLI failed before starting a session').split(/\r?\n/, 1)[0]!;
+          const firstLine = (
+            attempt.result.startsWith('stalled: no output for ')
+              ? attempt.result
+              : previous.result || previous.blocker || 'Worker CLI failed before starting a session'
+          ).split(/\r?\n/, 1)[0]!;
           store.updateTask(ref, (t) => {
             t.state = 'stopped';
           });

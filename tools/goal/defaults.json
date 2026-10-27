@@ -12,15 +12,42 @@
   ],
   "integrationChecks": [
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "install"]
     },
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "scripts/typecheck.ts"]
     },
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {
