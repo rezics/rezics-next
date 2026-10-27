@@ -4,6 +4,15 @@ const id = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 /** Closed library events. Private updates identify the changed item without exposing its state. Collection events carry the collection id; a member fact also carries its member and subject ids. */
 export const LIBRARY_EVENTS = {
+  'com.rezics.library.account-facts.purged.v1': Type.Object(
+    {
+      accountId: id,
+      kind: Type.Union([Type.Literal('entry'), Type.Literal('copy'), Type.Literal('follow')]),
+      examined: Type.Integer({ minimum: 0, maximum: 100 }),
+      removed: Type.Integer({ minimum: 0, maximum: 100 }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.subject.listed.v1': Type.Object({ subjectId: id }, { additionalProperties: false }),
   'com.rezics.library.follow.updated.v1': Type.Object({ targetId: id }, { additionalProperties: false }),
   'com.rezics.library.entry.updated.v1': Type.Object({ subjectId: id }, { additionalProperties: false }),
