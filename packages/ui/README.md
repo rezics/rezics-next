@@ -96,6 +96,8 @@ The `alt` text is the subject's title. Decorative repeats of a cover next to its
 
 ## Cover cards
 
+Import `CoverCard`, `CoverGrid` and `CoverRow` from `@rezics/ui/cover-card`.
+
 Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
 mode, relation, edition and character tiles) follows one pattern:
 
@@ -112,6 +114,8 @@ mode, relation, edition and character tiles) follows one pattern:
   cards in both directions.
 
 ## Progress
+
+Import `ProgressRow` from `@rezics/ui/progress-row`.
 
 Reading, watching or playing progress shows as one row: the item's ⋯ menu at the start where the card has one, a
 thin progress bar filling the remaining width, and the percentage after it in tabular figures. The bar and the
