@@ -246,7 +246,7 @@ async function context(page: Page) {
   );
   const heading = await page.locator('main h1').boundingBox();
   const above = (await line.count()) === 0 ? null : (await line.boundingBox())!.y < heading!.y;
-  return { links, above, label: await line.getAttribute('aria-label') };
+  return { links, above, label: above === null ? null : await line.getAttribute('aria-label') };
 }
 
 const count = (path: string) => calls.filter((call) => call.path === path).length;
