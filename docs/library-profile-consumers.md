@@ -1,0 +1,310 @@
+# Library profile consumers
+
+## Scope and authority
+
+This contract specifies how personal library facts consume the agreed library profile ABI. It is not a second
+definitions schema, compiler, catalogue, or profile service. The definitions producer owns source validation,
+inheritance resolution, canonical release bytes, and the immutable `Release.libraryProfiles` registry. Consumers use
+the agreed closed `TypeDefinition.library: { profileId }` reference and one lookup in the release registry selected by
+the operation. The nearest complete declaration is already resolved in the compiled type. A consumer never walks
+`bases`, unions profile fields, or consults a per-account catalogue.
+
+The authority for the exact profile object, bounds, ID/label validation, and pin union is the accepted cross-owner ABI
+agreement. The first inline-profile draft and `packages/definitions/src/library-profile-design.md`'s earlier proposed
+shape are not consumer input. This document records consumer rules only. It specifies the first library-profile
+consumer slice in the order in [Library and Collections](library-and-collections.md): one generic engine configured
+by definitions data.
+
+Personal facts remain separate facts owned by one account and subject: zero or one exclusive entry state, independent
+labels, any number of progress sessions, any number of copies/holdings, and ratings. A state does not create a label,
+session, holding, rating, entitlement, or import. A session does not create an entry or a copy. Repeated sessions and
+multiple holdings of one subject keep distinct identities. Labels may coexist with every exclusive state. Ratings
+remain on the rating capability.
+
+## Current storage inventory
+
+The consumer contract starts from the actual schema and commands in this checkout:
+
+| Current store              | Current persisted shape and constraints                                                                                                                                                                                                                                                                                                                                                                                                              | Consumer consequence                                                                                                                                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library.entry`            | Primary key `(route, account_id, subject_id)`; `state` is checked against `planned`, `in_progress`, `completed`, `paused`, `dropped`; revision and created/updated timestamps are user-visible CAS/history facts. The shelf migration also adds nullable `activity_at`, `finished_at`, current `type_id`, `type_source_id`, source partition/epoch/position, and `incarnation_id`.                                                                   | Keep the five state IDs and the row key. The source observation is not an immutable historical accepting type or release pin. Existing type IDs are not permission to copy the shelf's per-account catalogue into the profile implementation.     |
+| `library.progress_session` | Primary key `(route, session_id)` and owner/subject index; `mode` is the three-value algorithm enum; `unit` is the six-value `page`, `chapter`, `episode`, `volume`, `minute`, `percent` check; scalar/total/position are exact numeric columns, cursor locator is bounded text, session state is `active`, `completed`, or `abandoned`, and completion timestamp agrees with state. `last_changed_at` is separate from user start/completion dates. | Preserve the three algorithms, all 18 mode/unit pairs, each session ID, nullable values, revision, start/completion/activity times, and state. The profile unit ID becomes bounded data after the writer validates it; it is not a new algorithm. |
+| `library.progress_unit`    | Sparse set keyed by `(route, session_id, unit_id)`; a key is one opaque unit ID. The store pages it by exact unit ID.                                                                                                                                                                                                                                                                                                                                | Preserve only IDs actually recorded. `{1,3,7}` stays `{1,3,7}`; never create a range or infer a count from an ordinal.                                                                                                                            |
+| `library.progress_change`  | Append-only `(route, session_id, change_no)` JSONB intent with recorded time and transaction ID. It records exact adds/removes or scalar/cursor intent; it is not a materialized structure.                                                                                                                                                                                                                                                          | Leave rows and their digests untouched during pin migration. Do not search or rewrite all session history to discover the pin. The parent session pin governs its history.                                                                        |
+| `library.copy`             | Primary key `(route, copy_id)`, owner and subject columns, non-unique subject, `status` check `ordered`, `owned`, `lent`, `disposed`, nullable location/source/acquired/disposed/note, revision and timestamps. There is no kind, condition, platform, licence, or access field.                                                                                                                                                                     | Keep copy IDs and distinct same-subject rows. Add the agreed kind as data. Historical rows use `legacy-unspecified`; no existing value proves physical media, digital licence, access, or entitlement.                                            |
+| Shelf projections          | `activity_at`, `finished_at`, `progress_head`, `shelf_count`, shelf keyset indexes, and shelf type observation fields are separate from fact values and user revisions. The per-account shelf type value/root/node/reservation tables contain copied type text, digest roots, trie chunks, and staging state.                                                                                                                                        | Profile pins must not replace user activity, completion dates, counters, or their stable fact keys. The copied type dictionary/trie/staging is not the profile registry and must not be revived or expanded for profiles.                         |
+
+The relevant definitions in this checkout are immutable releases validated and published by the existing definitions
+routes. The current Library row models and SQL do not yet persist a profile pin. This consumer contract does not claim
+that the row migration, profile-aware writers, or migration worker already exist.
+
+## Pinned fact semantics
+
+Every accepted entry state, progress session, and copy has one private, immutable pin identifying the exact profile
+that accepted its value. The pin is the accepted discriminated union:
+
+```ts
+type LibraryProfilePin =
+  | { provenance: 'profile'; releaseDigest: string; acceptingType: string; profileId: string }
+  | {
+      provenance: 'legacy';
+      releaseDigest: string;
+      acceptingType: string | null;
+      profileId: 'legacy-fixed-v1';
+    };
+```
+
+The digest is the release address. There is no `profileRevision` number. `acceptingType` is the actual type accepted
+for that fact at the accepting observation; it is not a base class or a type looked up later. For a legacy migration,
+write `null` when the old row never retained authoritative accepting-type evidence. In the current entry/session/copy
+rows no immutable accepting-type string plus release digest is retained. A current `type_id`, a current semantic
+subject, a source ID, or an observed source position is not enough to label that mutable type as historical. Do not
+read or expose a hidden current type while migrating.
+
+Store the pin on the fact row (`library.entry`, `library.progress_session`, and `library.copy`), not in a side table
+that has to be scanned at read time. A single bounded `library_profile_pin` JSONB column per row can encode exactly
+this small closed union; validate the tag, exact member set, digest, nullable legacy type, and profile ID before use.
+Keep it private and absent from route response schemas, public events, public Collection membership, and published-log
+snapshots. Do not create a numeric revision column, mutable current-profile pointer per owner, per-account definition
+table, or profile index. Read-time profile resolution is one immutable release-cache lookup by digest, one accepting
+type lookup, then one registry lookup by `profileId`.
+
+For `provenance: 'profile'`, verify the pinned release exists and that its exact `types[acceptingType].library.profileId`
+equals the pin's `profileId`; obtain the whole profile from that same release's `libraryProfiles` registry. The type
+reference is a closed compiled pointer. Do not follow bases or consult Global's current head. A missing release or a
+pin/reference mismatch is an explicit unavailable/incompatible result; it never falls back to current metadata or
+legacy defaults. For `provenance: 'legacy'`, look up `legacy-fixed-v1` directly in the pinned release registry,
+independent of `acceptingType` and any type annotation. The `legacy-fixed-v1` entry is unattached: it does not enable
+People, Concepts, or any type that lacks a current profile.
+
+Historic values are returned using the stored pin. Known old IDs keep their exact text and meaning. Unknown historic
+IDs stay readable as stored raw values with their historic provenance; they are not relabelled or coerced. A new write
+must be supported by the active profile at its acceptance point. It cannot add an unknown ID, supply a legacy pin, or
+submit an old pin to bypass a missing capability. API request bodies do not accept pin metadata.
+
+### Profile-aware write validation
+
+For a new mutation, resolve the subject's authoritative current accepting type and the active immutable release at
+the command's authorization/acceptance observation `T`. Validate the operation against the entire selected profile:
+
+- Entry states must be an exact declared state ID. `role` is descriptive semantic mapping; it never renames an ID or
+  maps `in_progress` to a new ID.
+- Progress must use one of `scalar_amount`, `cursor_position`, or `completed_units`, and an allowed exact mode/unit
+  pair. Pair metadata is read as data. The algorithms remain those three kernel algorithms.
+- Numeric minimum/maximum comparison is exact decimal-text comparison. Optional precision is 0–6. If precision is
+  absent, preserve the existing parser's 12 integer digit and 6 fractional digit behavior. Dimension is inert and
+  causes no conversion. Scalar percent amount/total is bounded by 100; a cursor position in percent is not. Totals
+  obey the selected pair's `totalPolicy`.
+- Completed-unit identity is `none` for scalar/cursor and `session_local` for sparse completed sets. Preserve the
+  exact opaque IDs and existing bounds. `structure` is `none` only. No ordinal expansion, provider identity,
+  achievement, structure revision, or invented date is introduced.
+- A copy requires a declared kind/status pair. The old four status IDs remain data; the new kind is not inferred from
+  `source`, `location`, or subject type.
+- Import-source declarations are inert mappings. They do not install a provider adapter or grant access. Credentials,
+  endpoints, executable mappings, and adapter-enable flags do not enter profile data.
+
+Absence of `TypeDefinition.library`, or a new state, mode/unit pair, copy kind, or status absent from the selected
+profile, denies the write with HTTP `422`, code `unsupported_library_profile`, and `effect_status: not_applied`.
+Malformed request shapes, including caller-supplied pin metadata or a missing fresh-copy kind, return HTTP `400` with
+`invalid_request`. Unsupported IDs are profile data membership failures, not rejections by a copied closed kernel enum.
+Absence does not select `legacy-fixed-v1`, default a profile, infer a profile from ancestry at runtime, or grant
+capabilities to People/Concepts. The bundled book and anime type declarations remain ordinary catalogue data and are
+exercised alongside data-only fixture verticals; generated files do not activate themselves.
+
+## Authorization, receipts, and replay
+
+Profile selection is not authorization. An API command uses the real Access decision and signed request identity for
+the current actor. The order is part of the privacy contract:
+
+1. Authenticate and authorize the current actor/action/resource at `T`, before any receipt lookup. A missing,
+   suspended, stale, or revoked actor has no receipt oracle.
+2. Canonicalize the user-supplied command body and evaluate its existing receipt key/digest. Pin metadata is not
+   caller input and does not create a second idempotency namespace.
+3. If an authorized exact receipt exists, return its stored status/body unchanged. A different body under the same
+   key returns the existing idempotency conflict. Do not revalidate current subject membership or current profile
+   capability before an exact authorized receipt: a later release change must not turn a valid own receipt into a
+   new write or alter its response.
+4. Only when no receipt exists, perform current subject membership/existence checks, resolve the active Global head
+   and current accepting type at `T`, look up one profile, and validate capability/value membership. A miss or
+   unsupported pair fails before any fact row, receipt, event, activity, counter, or migration state is written.
+5. Commit the fact row, pin, ordinary receipt and normal effects as one owner command. A successful pin records the
+   exact immutable release digest/type/profile observed at `T`; later activation does not rewrite it.
+
+This means a release change alone leaves an authorized exact replay valid and pinned to its original receipt. A real
+authorization revocation still denies that replay because step 1 remains first. Tests must also prove that a changed
+body conflicts without being reinterpreted against a replacement profile, and that profile preparation or migration
+never changes the public request digest, prior receipt digest, HTTP status, or response body.
+
+Reads, changes, delete, replay, unit-page reads, and log operations must remain owner-scoped under the existing Access
+contract. `other`, anonymous, and suspended personas cannot infer a private fact, value, profile pin, accepting type,
+or migration state. Public Collection membership discloses only the selected subjects. A published log remains its
+existing explicit snapshot and never starts disclosing private amount, cursor, sparse set, copy, or state. Ratings stay
+separate. Subject visibility does not make personal facts public.
+
+## Definition lifecycle and release change
+
+Use the existing Global definitions commands, with their existing real grants and idempotency headers:
+
+```text
+POST /v1/definitions/releases
+POST /v1/definitions/releases/{digest}:activate
+GET  /v1/definitions/releases/{digest}
+GET  /v1/definitions/active
+```
+
+Publication validates and stores immutable bytes once. It does not move the active head. Activation supplies
+`expected_head` for the Global head compare-and-set. A stale head conflicts. Rollback is a new explicit activation of
+an older published digest against the then-current expected head. Neither publish, activate, rollback, nor editing a
+generated bundle migrates rows or changes fact pins. There is no file-autoactivation path and no private per-account
+profile catalogue.
+
+The API acceptance publishes at least two different profile releases, reads both exact digests, activates one, changes
+the Global head, and rolls back. It checks that old facts still resolve from their own stored digests through both
+head changes. A changed or removed ID is not silently renamed: historical values remain readable using the source
+pin, while new writes using the removed ID are refused by the active profile. Values are not converted between
+units, status roles, states, copy kinds, or copy statuses. A future fact-to-fact conversion needs a separate explicit
+versioned mapping contract and user-intent policy; this consumer does not invent one.
+
+The fixture matrix exercises the agreed data-only game, recipe, and record profiles through the same API and store,
+plus valid default book and anime profiles. A fourth vertical adds definitions data only. Inheritance tests prove a
+complete nearest declaration, conflict rejection for incompatible declarations with the same ID, and absence when a
+type has no reference. All vertical fixtures share the same generic commands and tables.
+
+## Legacy pin migration
+
+Migration is an explicit, checkpointed consumer operation. A release activation never starts it. At job creation,
+capture one published destination digest that contains the unattached `legacy-fixed-v1` registry entry; every page
+uses that same digest even if the Global head later changes. The initial migration only pins pre-profile rows. It does
+not convert a fact from one profile revision to another.
+
+For each unpinned legacy row, set `provenance: 'legacy'`, the captured release digest, `profileId: 'legacy-fixed-v1'`,
+and `acceptingType: null` unless that row itself retained authoritative accepting-type evidence. Current entry,
+session, and copy rows do not retain that complete evidence; use null for them. Resolve legacy values without
+guessing a current type. Preserve:
+
+- entry row key, all five old state IDs, user revision, creation/update times, transaction identity, activity and
+  finish times, and any existing receipt digests;
+- session ID, subject/version subject, all 18 old mode/unit pairs, exact total/amount/locator/position, state,
+  revision, start/completion/last-change times, and transaction identity;
+- each sparse unit key as it exists, each exact change intent and change number, and each copy ID/status/location/
+  source/date/note/revision/time/transaction identity;
+- one `legacy-unspecified` kind for every historical copy, with no physical/digital/entitlement inference.
+
+The migration profile preserves the old five state IDs (`planned`, `in_progress`, `completed`, `paused`, `dropped`),
+all 18 combinations of the three modes and six historical units, the existing 12-integer/6-fraction parser behavior
+when precision is absent, scalar-percent max 100 only, and the four copy status IDs (`ordered`, `owned`, `lent`,
+`disposed`). It does not fill sparse ranges, invent sessions or holdings, choose a new completion date, or create
+provider/achievement/structure data. Old facts without a profile pin are readable through the explicitly temporary
+legacy-command adapter while that owner's migration is incomplete. The profile-aware read path is admitted for that
+owner only after every existing fact row is pinned. This temporary adapter uses only the pre-profile fixed contract;
+it never inspects current subject type or profile data. It is retired after owner cutover, not kept as a second steady
+state.
+
+### Bounded work and row fence
+
+Let `P = 100` owner rows. One worker transaction reads and changes at most `P` pending entry/session/copy rows total,
+plus its bounded generic checkpoint/receipt. It keyset-pages each owner relation by its stable fact key and never
+counts an account's rows up front. It does not scan `progress_unit`, `progress_change`, command receipt history,
+collections, unrelated accounts, or the full profile catalogue. Total work is `O(N)` in pending fact rows and page
+memory/work is `O(P)` plus capped pin bytes. At every boundary the migration stores only identifiers, release digest,
+last stable key, and phase—not a fact body or a user receipt body.
+
+Add one nullable pin column to each existing fact table for the online transition. Use the existing entry key for its
+pending-row seek and add only partial owner/key indexes where no current key supports a bounded seek:
+
+```sql
+CREATE INDEX progress_session_profile_pending
+  ON library.progress_session (route, account_id, session_id)
+  WHERE library_profile_pin IS NULL;
+
+CREATE INDEX copy_profile_pending
+  ON library.copy (route, account_id, copy_id)
+  WHERE library_profile_pin IS NULL;
+```
+
+`library.entry` already has `(route, account_id, subject_id)` as its primary key, which is the pending-row key. No
+index on `releaseDigest`, `acceptingType`, `profileId`, or a profile ID map is needed for fact reads or writes. Once
+the online backfill and per-owner writer fence prove no null pins remain, enforce non-null pins for profile-aware
+rows. The migration and writer use a compare-and-set on both the observed fact revision and `library_profile_pin IS
+NULL`; the migration does not increment user revision or edit user timestamps. A concurrent ordinary write wins or
+loses that CAS without losing its body: a fresh write uses its current profile pin, and a migration retry observes
+the committed row. The checkpoint advances in the same transaction as page pins.
+
+The generic durable-work owner supplies checkpointing, retries, deletion fences, and crash recovery. Do not add a
+second private account job engine. A crash before page commit leaves no pins/checkpoint movement. A crash after commit
+but before acknowledgement replays the same stable page; the CAS and same migration identity make it idempotent.
+Account deletion's authoritative `T` fence wins over a paused or resumed worker: later pages cannot recreate rows,
+receipts, or erased payloads. The final owner-ready transition is monotonic and serialized with normal owner writes;
+no old null-pin write can enter behind the final cursor.
+
+### Legacy command compatibility and retirement
+
+During rollout, the existing entry, progress-session, and copy endpoints keep their paths and existing request/response
+fields. A fresh profile-aware copy create also requires the declared `kind` and `status`; it never defaults to
+`legacy-unspecified`. Their handlers become adapters over the same generic command/store path. They never accept
+caller-supplied profile metadata. Old IDs continue to work when the active type's profile declares those exact IDs; a
+missing current capability is an explicit unsupported write. Exact prior receipts, including receipts for older
+kindless copy commands, keep their old digest and response. The temporary legacy adapter exists only to read rows
+awaiting the bounded backfill. After owner-ready cutover, historical reads always use stored pins.
+
+Retire the per-account shelf type identity/trie/reservation preparation and its private dictionary lookup when all
+current consumers have switched to compiled catalogue identities. Do not reimplement it as a profile index. Keep the
+existing owner-scoped fact keys, progress sparse-set store, activity/final-date projections, collection listing and
+generic kernel worker protocols. The shelf HTTP surface remains a compatibility adapter only while its consumers
+move to dynamic Collections; it must not become a second library/profile API. Remove obsolete shelf type lookup and
+preparation routes/helpers/tests only in the same cutover that replaces their remaining callers. This task defines
+that retirement and does not remove an endpoint or alter those production files.
+
+## Privacy and scale acceptance
+
+The native driver records actual database rows, bytes, statements, owner lock/CAS decisions, and fact effects. It must
+use real `createKernel(...).handle`, production Access and signed fixture tokens; provision subjects, publish
+definitions, activate/rollback, mutate facts, and delete accounts through production commands. It must not use a
+policy map, model backend, fake authorization, raw source writes, invented migration counts, normalized results, or
+an in-memory product model. Test-only SQL may inspect stored rows and inject a persistence fault at a named native
+boundary; it may not manufacture facts or migration progress.
+
+For profile writes, keep the target account/fact fixed and measure actual SQL at three unrelated-fact scales `1`,
+`1,000`, and `10,000`; also vary unrelated compiled definition manifests `10` and `100`. Each generated manifest uses
+the existing definitions expansion fixture pattern, adding three types and twelve properties, with a profile attached
+only through data. Include real canonical bytes and verify the existing 4 MiB, 1,024-type, and 4,096-property caps.
+Record rows and bytes as well as statement counts. The profile operation's fact-row/CAS/receipt count stays fixed;
+profile resolution is one bounded immutable lookup and does not copy manifests into owner rows. Do not use a wall-clock
+threshold as a cost proxy.
+
+The driver compiles data fixtures with the production definitions compiler. `profile-v2-changed-ids` replaces the
+`in_progress` state ID with `reading` while retaining `planned`; `profile-v3-removed-ids` removes `planned`. The suite reads old
+facts through their stored releases, rejects fresh writes using those old IDs after each release change, and checks
+that the pin's accepting type and profile ID match the actual semantic subject type and compiled nearest declaration.
+The inheritance fixture gives the child distinct complete profiles at two ancestors. The conflict fixture repeats an
+incompatible profile ID and must fail compilation; the absence fixture carries no consumer capability for People or
+Concepts. The fixtures are source data sent through the real compiler, never prebuilt release objects.
+
+For migration, inspect every actual page's read/write rows and bytes. Assert at most 100 owner facts per transaction,
+constant bounded checkpoint work, exact-row CAS, unchanged user revisions/timestamps/values/history/receipts, restart
+after both sides of commit, concurrent-write behavior, and the deletion fence. No test may use a synchronous account
+count or transaction, or derive fake progress from an expected count.
+
+## Implementation slices after the ABI agreement
+
+This is specification-only. The following production work remains separate, reviewable slices of at most 400 changed
+lines and eight files each:
+
+1. Add the three nullable row pin columns, bounded-shape validation/store projection, partial session/copy pending
+   indexes, and native row-shape tests. Keep existing primary keys and unaffected user fields.
+2. Adapt entry/session/copy commands to current Access-before-receipt ordering, one active-release/current-type lookup
+   for fresh writes, stored-pin reads, and no caller pin input. Update only their existing routes and store paths.
+3. Add the generic checkpointed legacy pin worker over at most 100 owner rows, exact CAS, owner-ready fence,
+   account-deletion barrier, and crash/replay native outcomes.
+4. Remove the private per-account type dictionary/trie/staging callers, schema, indexes, and tests only after every
+   remaining consumer has migrated to compiled catalogue identity; keep its old receipt digests readable through
+   existing command history. Retire shelf-specific lookup/preparation routes in the same cutover; retain the existing
+   dynamic Collection contract and shared kernel work protocol.
+5. Update Web's generated definition recordings only after its recording contract lands; publish and activate only
+   through the existing Global API. Bundle generation is never activation.
+
+The driver interface and outcome suite in `specs/library-profiles-driver.ts` and
+`specs/library-profiles-outcomes.test.ts` are the executable consumer acceptance. The pure checks in
+`specs/library-profiles-contract.test.ts` cover only pin fixture shape and the frozen legacy matrix; they are not a
+substitute for the native API outcomes. The missing-driver verifier proves every named outcome fails for the single
+intended reason. It does not prove the product implementation.
