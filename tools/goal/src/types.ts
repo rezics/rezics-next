@@ -72,6 +72,7 @@ export type Settings = {
     toolOutputTokens: number;
   };
   integration: {
+    batchSize: number;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;

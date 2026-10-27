@@ -22,6 +22,8 @@ export interface AttemptFence {
   assertCurrent(ref: AttemptRef): void;
   /** Hold the shared store write lock through Git advancement and publication of merged task state. */
   commitMerge(ref: AttemptRef, merge: () => string): string;
+  /** Atomically fence every member while one cumulative candidate advances the integration ref. */
+  commitBatchMerge?(members: readonly (AttemptRef & { commit: string })[], merge: () => string): string;
 }
 
 export type LandingRequest = AttemptRef & {

@@ -120,7 +120,12 @@ purchase or reset-card redemption path.
 `gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
-`integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
+`integrationBranch` defaults to `dev`; `integration.batchSize` defaults to `4` and limits how many queued dev landings
+share one integration check. Set it to `1` to keep one-at-a-time integration. A passing batch checks the combined tree
+once and fast-forwards dev through its members in queue order, recording each member's own integrated commit. If the
+combined check fails, the train retries the members individually so a passing member can still land. A member that
+cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
+`promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |
@@ -133,7 +138,7 @@ usage files and executable paths containing a slash resolve against the local fi
 The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
 The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
 `managerDirectory`, `inboxDirectory`, `managerSocket`, `tmuxSocket`, `tmuxCommand`, `termspacesCommand`, `tmuxSession`,
-`managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
+`batchSize`, `managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
 configuration, inbox signals and leases stay outside tracked source files. Unix manager sockets must fit the platform's
 socket-path length limit; use a short local override when needed.
 

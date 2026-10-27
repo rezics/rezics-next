@@ -146,6 +146,37 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  commitBatchMerge(members: readonly (AttemptRef & { commit: string })[], merge: () => string): string {
+    if (!members.length) throw new Error('a landing batch must contain at least one member');
+    return this.db
+      .transaction(() => {
+        const tasks = members.map((member) => {
+          this.assertCurrent(member);
+          const task = this.task(member.taskId);
+          if (task.state === 'integrated' || task.state === 'merged') throw new Error('attempt already integrated');
+          const plan = this.integrationPlan(member);
+          if (plan && plan.commit !== member.commit)
+            throw new Error('batch member does not match its integration plan');
+          return { member, task, plan };
+        });
+        const head = merge();
+        if (!head) return '';
+        if (head !== members[members.length - 1]!.commit)
+          throw new Error('batch head does not match its final member commit');
+        for (const { member, task, plan } of tasks) {
+          task.state = 'integrated';
+          task.integratedCommit = member.commit;
+          if (plan) {
+            task.integratedBase = plan.base;
+            task.integratedCommits = plan.commits;
+          }
+          this.saveTask(task);
+          if (plan) this.clearIntegrationPlan(member);
+        }
+        return head;
+      })
+      .immediate();
+  }
   clearPromotion(): void {
     this.db.query('DELETE FROM worker_promotions WHERE id=1').run();
   }

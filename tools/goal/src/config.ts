@@ -84,6 +84,11 @@ function positive(value: unknown, label: string, zero = false): number {
     throw new Error(`invalid ${label}`);
   return value;
 }
+function positiveInteger(value: unknown, label: string): number {
+  const parsed = positive(value, label);
+  if (!Number.isInteger(parsed)) throw new Error(`invalid ${label}`);
+  return parsed;
+}
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label}.${key}`);
 }
@@ -269,6 +274,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       gateTimeoutMs: positive(integration.gateTimeoutMs, 'gateTimeoutMs'),
       managerDirectory: path(integration.managerDirectory, join(stateDirectory, 'managers')),
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
+      batchSize: positiveInteger(integration.batchSize, 'batchSize'),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
@@ -351,6 +357,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     worktreeRoot: settings.worktreeRoot,
     mainBranch: settings.mainBranch,
     integrationBranch: settings.integrationBranch,
+    integration: settings.integration,
     formatCommand: settings.formatCommand,
     integrationChecks: () => {
       const configured = (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [];

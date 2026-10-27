@@ -458,6 +458,8 @@ export type TrainOptions = {
   formatCommand?: string[];
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
+  /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
+  integration?: { batchSize?: number };
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -481,6 +483,20 @@ export type TrainOptions = {
   beforePromotionAdvance?: () => void;
 };
 
+type PreparedLanding = {
+  entry: LandingEntry;
+  result: GateOutcome;
+  base: string;
+  candidate: string;
+  commits: string[];
+  started: number;
+};
+type BatchLandingResult = {
+  outcomes: { entry: LandingEntry; outcome: GateOutcome }[];
+  deferredIds: number[];
+  skippedIds: number[];
+};
+
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
@@ -502,6 +518,7 @@ export class MergeTrain {
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
     let acquired = false;
+    const retryDeferred = new Set<number>();
     for (;;) {
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
@@ -514,6 +531,8 @@ export class MergeTrain {
         throw error;
       }
       acquired = true;
+      const roundHead = this.integrationHead();
+      const deferred = new Set<number>();
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
           await o.handOff?.();
@@ -524,17 +543,69 @@ export class MergeTrain {
             await o.handOff?.();
             return;
           }
-          const entry = o.queue.next();
+          const entry = o.queue.nextBatch(1, [...deferred])[0];
           if (!entry) break;
           try {
-            const outcome = entry.outcome ?? (await this.integrate(entry));
-            if (!entry.outcome) o.queue.finish(entry.id, outcome);
-            // Sink delivery is at least once; obsolete entries must never block the current attempt.
-            o.sink.onGateOutcome(outcome);
-            o.queue.acknowledge(entry.id);
+            if (entry.outcome) {
+              o.sink.onGateOutcome(entry.outcome);
+              o.queue.acknowledge(entry.id);
+              retryDeferred.delete(entry.id);
+              continue;
+            }
+            o.fence.assertCurrent(entry.request);
+            const batchSize = o.integration?.batchSize ?? 1;
+            const selected = o.queue.nextBatch(batchSize, [...deferred]);
+            const batch: LandingEntry[] = [];
+            for (const candidate of selected) {
+              if (candidate.outcome || !this.canBatch(candidate)) break;
+              try {
+                o.fence.assertCurrent(candidate.request);
+              } catch (error) {
+                if (!(error instanceof StaleAttemptError)) throw error;
+                o.queue.acknowledge(candidate.id);
+                retryDeferred.delete(candidate.id);
+                continue;
+              }
+              batch.push(candidate);
+            }
+            if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
+              const integrated = await this.integrateBatch(batch);
+              for (const id of integrated.skippedIds) {
+                o.queue.acknowledge(id);
+                retryDeferred.delete(id);
+              }
+              for (const id of integrated.deferredIds) {
+                deferred.add(id);
+                retryDeferred.add(id);
+              }
+              for (const { entry: member, outcome } of integrated.outcomes) {
+                try {
+                  o.queue.finish(member.id, outcome);
+                  o.sink.onGateOutcome(outcome);
+                  o.queue.acknowledge(member.id);
+                  retryDeferred.delete(member.id);
+                } catch (error) {
+                  if (!(error instanceof StaleAttemptError)) throw error;
+                  o.queue.acknowledge(member.id);
+                  retryDeferred.delete(member.id);
+                }
+              }
+            } else {
+              const outcome = await this.integrate(entry);
+              if (retryDeferred.has(entry.id) && outcome.stage === 'rebase' && outcome.conflictedFiles?.length) {
+                deferred.add(entry.id);
+                continue;
+              }
+              o.queue.finish(entry.id, outcome);
+              // Sink delivery is at least once; obsolete entries must never block the current attempt.
+              o.sink.onGateOutcome(outcome);
+              o.queue.acknowledge(entry.id);
+              retryDeferred.delete(entry.id);
+            }
           } catch (error) {
             if (!(error instanceof StaleAttemptError)) throw error;
             o.queue.acknowledge(entry.id);
+            retryDeferred.delete(entry.id);
           }
         }
         await o.beforeRelease?.();
@@ -547,7 +618,14 @@ export class MergeTrain {
         return;
       }
       // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
-      if (o.queue.next()) continue;
+      if (o.queue.nextBatch(1, [...deferred]).length) continue;
+      if (o.queue.next()) {
+        if (deferred.size) {
+          if (roundHead !== this.integrationHead()) continue;
+          return;
+        }
+        continue;
+      }
       await o.promote?.();
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
         await o.handOff?.();
@@ -555,6 +633,494 @@ export class MergeTrain {
       }
       if (!o.queue.next()) return;
     }
+  }
+
+  private integrationHead(): string | undefined {
+    const branch = this.options.integrationBranch;
+    if (!branch) return undefined;
+    try {
+      return git(this.options.mainCheckout, 'rev-parse', `refs/heads/${branch}`);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private canBatch(entry: LandingEntry): boolean {
+    const o = this.options;
+    if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
+    if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
+    const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
+    return recorded.target !== 'stabilize' && recorded.goal !== 'control-plane';
+  }
+
+  private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
+    const o = this.options;
+    const outcomes = new Map<number, GateOutcome>();
+    const deferred = new Set<number>();
+    const skipped = new Set<number>();
+    let pending = [...entries];
+    const mainBranch = o.mainBranch ?? 'main';
+    const branch = o.integrationBranch!;
+    const targetRef = `refs/heads/${branch}`;
+    const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
+    const planner = o.fence as AttemptFence & {
+      planIntegration?: (ref: AttemptRef, base: string, commit: string, commits: readonly string[]) => void;
+    };
+
+    const createResult = (entry: LandingEntry, logPath: string): GateOutcome => ({
+      taskId: entry.request.taskId,
+      attempt: entry.request.attempt,
+      passed: false,
+      stage: 'setup',
+      logPath,
+      hostMs: 0,
+      changedFiles: [],
+      diffLines: 0,
+    });
+    const resetTo = (tree: string, commit: string) => {
+      try {
+        git(tree, 'rebase', '--abort');
+      } catch {}
+      git(tree, 'reset', '--hard', commit);
+      git(tree, 'clean', '-fdx');
+    };
+    const orderedOutcomes = () =>
+      entries.flatMap((entry) => {
+        const outcome = outcomes.get(entry.id);
+        return outcome ? [{ entry, outcome }] : [];
+      });
+
+    while (pending.length) {
+      const trainTree = resolve(o.worktreeRoot, `train-batch-${randomUUID()}`);
+      const logPaths = new Map<number, string>();
+      const memberStarted = new Map<number, number>();
+      const prepared: PreparedLanding[] = [];
+      const localOutcomes = new Map<number, GateOutcome>();
+      let base = '';
+      let previous = '';
+      let added = false;
+      let retry = false;
+      let committed = false;
+      let stale: LandingEntry | undefined;
+      try {
+        for (const entry of pending) {
+          const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
+          logPaths.set(entry.id, logPath);
+          memberStarted.set(entry.id, Date.now());
+          writeFileSync(logPath, '');
+        }
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+          throw new Error('The main checkout must already have main checked out');
+        base = target();
+        previous = base;
+        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
+        git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, base);
+        added = true;
+
+        for (const entry of pending) {
+          const request = entry.request;
+          const logPath = logPaths.get(entry.id)!;
+          const result = createResult(entry, logPath);
+          try {
+            o.fence.assertCurrent(request);
+          } catch (error) {
+            if (!(error instanceof StaleAttemptError)) throw error;
+            stale = entry;
+            break;
+          }
+          const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+          const originalBase = git(o.mainCheckout, 'merge-base', tip, base);
+          const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
+          git(trainTree, 'reset', '--hard', tip);
+          git(trainTree, 'clean', '-fdx');
+          const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
+          const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
+          const worked =
+            changedFrozenFiles(trainTree, frozenAtStart).length > 0 ||
+            git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
+              .split('\n')
+              .some((path) => path && !frozenPaths.has(path));
+          if (!worked) {
+            result.stage = 'rebase';
+            result.firstFailure = firstFailure(
+              'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
+            );
+            appendFileSync(logPath, `${result.firstFailure.assertion}\n`);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          try {
+            rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
+          } catch (error) {
+            const conflicts = unmergedFiles(trainTree);
+            if (conflicts.length) {
+              appendFileSync(
+                logPath,
+                `Deferred until a later batch round; rebase conflicts: ${conflicts.join(', ')}\n`,
+              );
+              deferred.add(entry.id);
+            } else {
+              result.stage = 'rebase';
+              result.firstFailure = firstFailure(String(error));
+              appendFileSync(logPath, `${String(error)}\n`);
+              localOutcomes.set(entry.id, result);
+            }
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
+          const changedFrozen = changedFrozenFiles(trainTree, frozen);
+          if (changedFrozen.length) {
+            result.stage = 'rebase';
+            result.conflictedFiles = changedFrozen;
+            result.firstFailure = firstFailure(`Frozen acceptance file changed: ${changedFrozen.join(', ')}`);
+            appendFileSync(logPath, `Frozen acceptance files changed: ${changedFrozen.join(', ')}\n`);
+            const mutable = o.fence as AttemptFence & {
+              updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown;
+            };
+            mutable.updateAttempt?.(request, (attempt) => {
+              attempt.escalation = 'rebase-conflict';
+            });
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          result.stage = 'scope';
+          result.changedFiles = changedFiles(trainTree, previous);
+          result.diffLines = diffLineCount(trainTree, previous);
+          result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+          result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
+          try {
+            this.checkScope(
+              result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+              request,
+              logPath,
+            );
+          } catch (error) {
+            result.firstFailure = firstFailure(String(error));
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          const formatCommand = o.formatCommand ?? [
+            resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
+            ...FORMAT_FLAGS,
+          ];
+          const formatFiles = result.changedFiles.filter((path) => existsSync(join(trainTree, path)));
+          const formatterAvailable =
+            !formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!);
+          if (formatFiles.length && formatterAvailable) {
+            const formatted = spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...formatFiles], {
+              cwd: trainTree,
+              encoding: 'utf8',
+            });
+            const output = `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`;
+            appendFileSync(logPath, `$ ${[...formatCommand, ...formatFiles].join(' ')} (cwd: ${trainTree})\n${output}`);
+            if (formatted.status !== 0) {
+              result.stage = 'setup';
+              result.firstFailure = firstFailure(
+                `Formatter failed: ${output || formatted.error?.message || 'command failed'}`,
+              );
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+            if (spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
+              git(trainTree, 'add', '--', ...formatFiles);
+              git(trainTree, 'commit', '-m', `style: format ${request.taskId}`);
+            }
+            result.changedFiles = changedFiles(trainTree, previous);
+            result.diffLines = diffLineCount(trainTree, previous);
+            result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+            result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
+            try {
+              this.checkScope(
+                result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+                request,
+                logPath,
+              );
+            } catch (error) {
+              result.stage = 'scope';
+              result.firstFailure = firstFailure(String(error));
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+          }
+
+          const candidate = git(trainTree, 'rev-parse', 'HEAD');
+          const commits = git(trainTree, 'rev-list', '--reverse', `${previous}..${candidate}`)
+            .split('\n')
+            .filter(Boolean);
+          prepared.push({ entry, result, base: previous, candidate, commits, started: memberStarted.get(entry.id)! });
+          previous = candidate;
+        }
+
+        if (stale) {
+          skipped.add(stale.id);
+          pending = pending.filter((entry) => entry.id !== stale!.id);
+          retry = true;
+          continue;
+        }
+        if (target() !== base) {
+          retry = true;
+          continue;
+        }
+        if (!prepared.length) {
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          for (const outcome of localOutcomes.values()) {
+            try {
+              o.fence.assertCurrent(outcome);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              const staleEntry = pending.find((entry) => entry.request.taskId === error.ref.taskId);
+              if (staleEntry) {
+                skipped.add(staleEntry.id);
+                pending = pending.filter((entry) => entry.id !== staleEntry.id);
+                retry = true;
+                break;
+              }
+              throw error;
+            }
+          }
+          if (retry) continue;
+          for (const [id, outcome] of localOutcomes) {
+            outcome.hostMs = Date.now() - memberStarted.get(id)!;
+            outcomes.set(id, outcome);
+          }
+          for (const id of deferred) outcomes.delete(id);
+          return {
+            outcomes: orderedOutcomes(),
+            deferredIds: [...deferred],
+            skippedIds: [...skipped],
+          };
+        }
+
+        const configuredChecks =
+          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const changed = [...new Set(prepared.flatMap((member) => member.result.changedFiles))].sort();
+        const integrationChecks = configuredChecks.filter((check) =>
+          changed.some((path) => matchesPath(path, check.paths)),
+        );
+        let failedBatch: { output: string; timedOut: boolean; failedCommand?: readonly string[] } | undefined;
+        let batchBaselineOutput = '';
+        if (integrationChecks.length) {
+          const commands = integrationChecks.map((check) =>
+            check.command.join(' ').includes('scripts/typecheck.ts')
+              ? ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, ...check.command]
+              : check.command,
+          );
+          const candidate = prepared[prepared.length - 1]!.candidate;
+          for (const member of prepared)
+            appendFileSync(member.result.logPath, `\nBatch integration check on ${candidate}, dev ${base}\n`);
+          const batchLog = logPaths.get(prepared[0]!.entry.id)!;
+          const checked = await runIntegrationChecks(commands, trainTree, batchLog);
+          for (const member of prepared)
+            appendFileSync(
+              member.result.logPath,
+              `Batch integration check ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
+            );
+          let staleAfterGate: LandingEntry | undefined;
+          for (const member of pending) {
+            try {
+              o.fence.assertCurrent(member.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleAfterGate = member;
+              break;
+            }
+          }
+          if (staleAfterGate) {
+            skipped.add(staleAfterGate.id);
+            pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (!checked.passed) {
+            const scoped = commands.some((command) => command[0] === 'env');
+            const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed.join('\n')).toString(16)}` : ''}`;
+            let baseline = o.queue.baseline(base, key);
+            o.queue.saveBaseline(candidate, key, checked);
+            if (!baseline) {
+              resetTo(trainTree, base);
+              const baselineLog = logPaths.get(prepared[0]!.entry.id)!;
+              appendFileSync(baselineLog, `\nIntegration check baseline on dev ${base}\n`);
+              baseline = await runIntegrationChecks(commands, trainTree, baselineLog);
+              o.queue.saveBaseline(base, key, baseline);
+              batchBaselineOutput = baseline.output;
+            }
+            for (const member of pending) {
+              try {
+                o.fence.assertCurrent(member.request);
+              } catch (error) {
+                if (!(error instanceof StaleAttemptError)) throw error;
+                staleAfterGate = member;
+                break;
+              }
+            }
+            if (staleAfterGate) {
+              skipped.add(staleAfterGate.id);
+              pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
+              retry = true;
+              continue;
+            }
+            if (target() !== base) {
+              retry = true;
+              continue;
+            }
+            const addedErrors = baseline.passed
+              ? ['candidate failed while dev passed']
+              : newErrorLines(checked.output, baseline.output);
+            if (addedErrors.length) failedBatch = checked;
+            else
+              for (const member of prepared)
+                appendFileSync(
+                  member.result.logPath,
+                  'dev already fails the integration check, with the same errors\n',
+                );
+          }
+        }
+
+        if (failedBatch) {
+          const note = `Batch integration check failed; falling back to single landings.\n${failedBatch.output}\n`;
+          let savedBaseline = false;
+          for (const entry of pending) {
+            if (deferred.has(entry.id)) continue;
+            try {
+              const outcome = await this.integrate(entry);
+              appendFileSync(
+                outcome.logPath,
+                `${note}${!savedBaseline && batchBaselineOutput ? `Batch baseline on dev ${base}:\n${batchBaselineOutput}\n` : ''}`,
+              );
+              savedBaseline ||= Boolean(batchBaselineOutput);
+              if (outcome.stage === 'rebase' && outcome.conflictedFiles?.length) deferred.add(entry.id);
+              else outcomes.set(entry.id, outcome);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              skipped.add(entry.id);
+            }
+          }
+          return {
+            outcomes: orderedOutcomes(),
+            deferredIds: [...deferred],
+            skippedIds: [...skipped],
+          };
+        }
+
+        for (const member of prepared) {
+          planner.planIntegration?.(member.entry.request, member.base, member.candidate, member.commits);
+          o.queue.candidate(member.entry.id, member.candidate);
+        }
+        if (target() !== base) {
+          retry = true;
+          continue;
+        }
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+          throw new Error('Main checkout HEAD changed while integrating');
+        const commitBatchMerge = o.fence.commitBatchMerge;
+        if (!commitBatchMerge) throw new Error('Attempt fence does not support atomic batch landing');
+        const head = prepared[prepared.length - 1]!.candidate;
+        const advanced = commitBatchMerge.call(
+          o.fence,
+          prepared.map((member) => ({ ...member.entry.request, commit: member.candidate })),
+          () => {
+            if (target() !== base) return '';
+            if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+              throw new Error('Main checkout HEAD changed');
+            o.beforeIntegrationAdvance?.();
+            try {
+              git(o.mainCheckout, 'update-ref', targetRef, head, base);
+            } catch (error) {
+              if (target() !== base) return '';
+              throw error;
+            }
+            return head;
+          },
+        );
+        if (!advanced) {
+          retry = true;
+          continue;
+        }
+        committed = true;
+        for (const [id, outcome] of localOutcomes) {
+          outcome.hostMs = Date.now() - memberStarted.get(id)!;
+          outcomes.set(id, outcome);
+        }
+        for (const member of prepared) {
+          member.result.passed = true;
+          member.result.stage = 'merge';
+          member.result.mergedCommit = member.candidate;
+          member.result.hostMs = Date.now() - member.started;
+          this.notifyOwnersOfOutsideChanges(
+            member.entry.request,
+            outsideScope(
+              (member.result.changedFiles ?? []).filter(
+                (path) => !derivedForPath(path, o.derivedFiles ?? defaultDerivedFiles).length,
+              ),
+              member.entry.request.declaredPaths,
+            ),
+            member.candidate,
+            branch,
+            member.result.logPath,
+          );
+          outcomes.set(member.entry.id, member.result);
+        }
+        for (const id of deferred) outcomes.delete(id);
+        return {
+          outcomes: orderedOutcomes(),
+          deferredIds: [...deferred],
+          skippedIds: [...skipped],
+        };
+      } catch (error) {
+        if (committed) throw error;
+        if (error instanceof StaleAttemptError) {
+          const staleEntry = pending.find(
+            (entry) => entry.request.taskId === error.ref.taskId && entry.request.attempt === error.ref.attempt,
+          );
+          if (!staleEntry) throw error;
+          skipped.add(staleEntry.id);
+          pending = pending.filter((entry) => entry.id !== staleEntry.id);
+          retry = true;
+        } else {
+          const message = String(error);
+          for (const entry of pending) {
+            const logPath = logPaths.get(entry.id)!;
+            appendFileSync(logPath, `${message}\n`);
+            const result = createResult(entry, logPath);
+            result.stage = 'setup';
+            result.firstFailure = firstFailure(message);
+            result.hostMs = Date.now() - memberStarted.get(entry.id)!;
+            outcomes.set(entry.id, result);
+          }
+          for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+          return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
+        }
+      } finally {
+        if (added) {
+          try {
+            git(trainTree, 'rebase', '--abort');
+          } catch {}
+          try {
+            git(trainTree, 'merge', '--abort');
+          } catch {}
+          git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+        }
+      }
+      if (retry) continue;
+    }
+    return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
   }
 
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {

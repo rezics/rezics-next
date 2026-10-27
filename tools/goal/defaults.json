@@ -82,6 +82,7 @@
     }
   ],
   "integration": {
+    "batchSize": 4,
     "gateConcurrency": 1,
     "gateTimeoutMs": 1800000,
     "tmuxCommand": "tmux",
