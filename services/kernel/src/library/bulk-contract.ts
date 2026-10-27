@@ -2,8 +2,9 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
-import type { DurableInitiatorReader, DurableInitiatorRecord, InitiatorRestorer } from '../access/durable-initiator.ts';
-import type { Access, AccountActor, Actor } from '../request/access.ts';
+import type { DurableInitiatorReader, DurableInitiatorRecord, DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
+import type { WriteRateContext, WriteRateDecision, WriteRateFamily } from '../access/write-rate.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryState } from './entry-model.ts';
@@ -11,6 +12,9 @@ import type { EntryState } from './entry-model.ts';
 export const BULK_PAGE_LIMIT = 100;
 export const BULK_SEGMENT_PAGES = 100;
 export const BULK_EXECUTION_HOURS = 24;
+export const BULK_RESULTS_HOURS = 24;
+export const BULK_COMMAND_DEADLINE_MS = 5_000;
+export const BULK_ADMISSION_BODY_BYTES = 16_384;
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
   | { kind: 'explicit'; targets: readonly { subjectId: string }[] }
@@ -88,7 +92,7 @@ export type OccurrenceTarget = Readonly<{
 }>;
 export type ImmutableTarget = SubjectTarget | OccurrenceTarget;
 export type ReceiptLocator = Readonly<{
-  partition: number; principalId: string; commandKind: string; key: string; digest: string;
+  partition: number; principalKind: 'account'; principalId: string; commandKind: string; key: string; digest: string;
 }>;
 export type BulkSource = Readonly<{
   id: string; route: number; operationId: string; request: BulkAdmission;
@@ -111,7 +115,8 @@ export type OccurrencePage = Readonly<{
   targets: readonly OccurrenceTarget[]; complete: boolean;
 }>;
 export type TargetCommand = Readonly<{
-  sourceId: string; target: ImmutableTarget; receipt: ReceiptLocator; deadline: number;
+  source: DurableOperationAnchor; sourceDigest: string; target: ImmutableTarget;
+  receipt: ReceiptLocator; chunkIndex: number; deadline: number;
 }>;
 export type TargetEvidence = Readonly<{
   operationId: string; ordinal: DecimalSequence; sourceDigest: string;
@@ -123,21 +128,21 @@ export type AttemptResult =
   | { kind: 'reconciling'; receipt: ReceiptLocator; reason: BulkReason }
   | { kind: 'stop'; reason: 'authority_lost' | 'evidence_missing' | 'execution_expired' };
 
-/** New shared Access port needed before effects can be enabled. Durable replay of
- * the same operation/chunk/digest returns its original reservation, without spend.
- * It confers capacity only; restoration and current command authorization still run.
+/** Inject the accounts-owned WriteRateLimiter.spendChunk unchanged. Call in
+ * CommandAuthorization.prepare after restoration at the same T; context.actor
+ * is exactly the restored actor. This operational window ledger is not an effect
+ * receipt: a new window or UNLOGGED ledger loss can charge the chunk again.
  */
-export type AdmitBulkChunk = (input: Readonly<{
-  actor: AccountActor; operationId: string; chunk: DecimalSequence; digest: string;
-  units: number; deadline: number; expiresAt: string;
-}>) => Promise<
-  | { allowed: true; reservationId: string }
-  | { allowed: false; retryAfter: number }
->;
+export type SpendBulkChunk = (
+  context: WriteRateContext,
+  chunk: Readonly<{ operation: DurableOperationAnchor; index: number }>,
+  family: WriteRateFamily,
+  units: number,
+) => Promise<WriteRateDecision>;
 export type BulkDependencies = Readonly<{
   pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock;
   initiators: InitiatorRestorer; readInitiator: DurableInitiatorReader;
-  admitChunk: AdmitBulkChunk;
+  spendChunk: SpendBulkChunk;
 }>;
 export type BulkOperations = Readonly<{
   admit(actor: Actor, input: BulkAdmission, idempotencyKey: string): Promise<CommandOutcome<OperationResult>>;
@@ -145,6 +150,52 @@ export type BulkOperations = Readonly<{
   outcomes(actor: Actor, operationId: string, query: OutcomeQuery): Promise<OutcomePage>;
   cancel(actor: Actor, operationId: string, idempotencyKey: string): Promise<CommandOutcome<OperationResult>>;
 }>;
+
+/** Native rows, not workflow payloads. Every row is led by its owning route. */
+export type OperationRow = Readonly<{
+  route: number; accountId: string; source: BulkSource; view: OperationView;
+  checkpoint: Checkpoint; admissionKey: string; admissionDigest: string;
+  creationReceipt: ReceiptLocator; cancelReceipt: ReceiptLocator | null;
+}>;
+export type TargetRow = Readonly<{
+  route: number; target: ImmutableTarget; receipt: ReceiptLocator;
+  state: TargetState; evidence: TargetEvidence | null; chunkIndex: number;
+}>;
+export type DiscoveryPage = Readonly<{
+  previous: Checkpoint; next: Checkpoint; scanned: number;
+  selected: readonly SubjectTarget[]; sealed: boolean;
+}>;
+export type Transition = Readonly<{
+  operationId: string; ordinal: DecimalSequence; from: 'pending' | 'reconciling';
+  evidence: TargetEvidence;
+}>;
+export type ExpiryPage = Readonly<{ route: number; after: string | null; removed: number; complete: boolean }>;
+
+/** Store ports perform native transactions; callers cannot submit trusted rows
+ * from HTTP/DBOS. Constructors install readers from actual native storage.
+ */
+export type BulkStore = Readonly<{
+  readOperation(route: number, operationId: string): Promise<OperationRow | null>;
+  readTargets(route: number, checkpoint: Checkpoint, limit: number): Promise<readonly TargetRow[]>;
+  commitDiscovery(tx: CommandTransaction, time: AuthoritativeTime, page: DiscoveryPage): Promise<void>;
+  transition(tx: CommandTransaction, time: AuthoritativeTime, change: Transition): Promise<boolean>;
+}>;
+
+export function createBulkStore(_pool: Pool): BulkStore {
+  throw new Error('Library bulk store is not implemented');
+}
+
+/** Route/action data only; an implementation installs it in the ordinary mounted
+ * catalogue and creates no grants by virtue of adding these action names.
+ */
+export type BulkRouteAction = 'library_operation:create' | 'library_operation:read'
+  | 'library_operation:list_outcomes' | 'library_operation:cancel';
+
+export async function expireBulkPage(
+  _dependencies: BulkDependencies, _route: number, _after: string | null,
+): Promise<ExpiryPage> {
+  throw new Error('Library bulk expiry is not implemented');
+}
 
 export function createBulkOperations(_dependencies: BulkDependencies): BulkOperations {
   throw new Error('Library bulk operations are not implemented');
