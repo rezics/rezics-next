@@ -163,6 +163,18 @@ problem; the work then implements the design for this repository's stack itself 
 passages. A report is evidence: once the manager adopts a recommendation, the
 decision goes into the owning document.
 
+A hard question (an architecture or contract choice, a domain the repository has no evidence on) gets two
+researchers: dispatch the same question twice with different report paths, one brief pinned to the strongest model
+at a deep effort and one to a faster model, and compare the two reports before deciding. Two independent reports
+expose what one missed; where they disagree, the manager checks the sources.
+
+### Pinning a model
+
+A brief normally runs on its class route. Its front matter may instead pin a Codex model and effort, for example
+`model: gpt-6.1-sol` and `effort: max`, which bypasses the class's experiment. Pin only where the route cannot
+express the need, such as the deep researcher above; ordinary work stays on the route so its experiments measure
+it.
+
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
