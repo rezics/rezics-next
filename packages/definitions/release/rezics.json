@@ -47,6 +47,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -126,6 +127,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -206,6 +208,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -293,6 +296,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -380,6 +384,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:author",
         "schema:contributor",
@@ -464,6 +469,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -673,6 +679,50 @@
       "facets": [],
       "coverRatio": "1:1"
     },
+    "wd:Q2620972": {
+      "iri": "http://www.wikidata.org/entity/Q2620972",
+      "labels": {
+        "de": "Handlungsbogen",
+        "en": "story arc",
+        "es": "arco argumental",
+        "fr": "arc narratif",
+        "ja": "ストーリー編",
+        "ko": "이야기 편",
+        "zh-Hans": "故事篇章",
+        "zh-Hant": "故事篇章"
+      },
+      "mappings": [],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "properties": [
+        "rezics:alternativeSetting",
+        "rezics:alternativeVersion",
+        "rezics:artbookCounterpart",
+        "rezics:bangumiLegacyVersion",
+        "rezics:bangumiRelatedTo",
+        "rezics:collaborationWith",
+        "rezics:crossMediaCounterpart",
+        "rezics:editionCounterpart",
+        "rezics:expansionCounterpart",
+        "rezics:sameCharacters",
+        "rezics:sameSetting",
+        "rezics:sideStoryOf",
+        "rezics:spinOffOf",
+        "rezics:storyArc",
+        "rezics:summaryOf",
+        "schema:contributor",
+        "schema:genre",
+        "schema:image",
+        "schema:keywords",
+        "schema:name",
+        "schema:sameAs",
+        "schema:url",
+        "wdt:P155",
+        "wdt:P179",
+        "wdt:P361"
+      ],
+      "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
+      "coverRatio": "2:3"
+    },
     "schema:VideoGame": {
       "iri": "http://schema.org/VideoGame",
       "labels": {
@@ -702,6 +752,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -783,6 +834,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -946,6 +998,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -1013,6 +1066,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -1118,6 +1172,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:alternateName",
         "schema:contributor",
@@ -1176,6 +1231,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:contributor",
         "schema:genre",
@@ -1228,6 +1284,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -1299,6 +1356,7 @@
         "rezics:sameSetting",
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
+        "rezics:storyArc",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:contributor",
@@ -1765,7 +1823,7 @@
       "mappings": ["wd:P123"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831"],
+      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -1774,7 +1832,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:publisherOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Veröffentlichte Werke",
           "en": "Publisher of",
@@ -1803,7 +1861,7 @@
       "mappings": ["wd:P655"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P648"],
+      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P518", "wdt:P648"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -1812,7 +1870,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:translatorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Übersetzte Werke",
           "en": "Translator of",
@@ -2309,6 +2367,33 @@
       },
       "targets": ["schema:CreativeWork"]
     },
+    "wdt:P518": {
+      "iri": "http://www.wikidata.org/prop/direct/P518",
+      "labels": {
+        "de": "Gilt für Teil",
+        "en": "Applies to part",
+        "es": "Se aplica a la parte",
+        "fr": "Concerne la partie",
+        "ja": "対象の編",
+        "ko": "해당 편",
+        "zh-Hans": "适用篇章",
+        "zh-Hant": "適用篇章"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "membership",
+        "order": "name",
+        "inverse": "none"
+      },
+      "targets": ["wd:Q2620972"]
+    },
     "rezics:artbookCounterpart": {
       "iri": "https://rezics.com/vocab/artbookCounterpart",
       "labels": {
@@ -2357,6 +2442,7 @@
         "wdt:P1932",
         "wdt:P3180",
         "wdt:P3831",
+        "wdt:P518",
         "wdt:P6298",
         "wdt:P648"
       ],
@@ -2368,7 +2454,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:authorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Verfasste Werke",
           "en": "Author of",
@@ -2541,7 +2627,7 @@
       "mappings": ["wd:P674"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2550,7 +2636,7 @@
         "group": "appearance",
         "order": "name",
         "inverse": "rezics:appearsIn",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Auftritte in",
           "en": "Appears in",
@@ -2633,7 +2719,7 @@
       "mappings": ["wd:P767"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2642,7 +2728,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:contributorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Mitwirkung an",
           "en": "Contributed to",
@@ -2849,7 +2935,7 @@
       "mappings": ["wd:P178"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2858,7 +2944,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:developerOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Entwickelte Werke",
           "en": "Developer of",
@@ -2887,7 +2973,7 @@
       "mappings": ["wd:P57"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2896,7 +2982,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:directorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Regiearbeiten",
           "en": "Director of",
@@ -2964,6 +3050,28 @@
       },
       "targets": ["schema:CreativeWork"]
     },
+    "rezics:firstPart": {
+      "iri": "https://rezics.com/vocab/firstPart",
+      "labels": {
+        "de": "Erster Teil",
+        "en": "First part",
+        "es": "Primera parte",
+        "fr": "Première partie",
+        "ja": "開始話・章",
+        "ko": "시작 회차",
+        "zh-Hans": "起始话或章",
+        "zh-Hant": "起始話或章"
+      },
+      "mappings": [],
+      "datatype": "string",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500
+      }
+    },
     "schema:illustrator": {
       "iri": "http://schema.org/illustrator",
       "labels": {
@@ -2979,7 +3087,7 @@
       "mappings": ["wd:P110"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2988,7 +3096,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:illustratorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Illustrierte Werke",
           "en": "Illustrator of",
@@ -3044,6 +3152,28 @@
         "minLength": 1,
         "maxLength": 1500,
         "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$"
+      }
+    },
+    "rezics:lastPart": {
+      "iri": "https://rezics.com/vocab/lastPart",
+      "labels": {
+        "de": "Letzter Teil",
+        "en": "Last part",
+        "es": "Última parte",
+        "fr": "Dernière partie",
+        "ja": "終了話・章",
+        "ko": "마지막 회차",
+        "zh-Hans": "结束话或章",
+        "zh-Hant": "結束話或章"
+      },
+      "mappings": [],
+      "datatype": "string",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500
       }
     },
     "rezics:listSection": {
@@ -3131,7 +3261,7 @@
       "mappings": ["wd:P86"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3140,7 +3270,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:musicByOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Kompositionen",
           "en": "Composer of",
@@ -3319,7 +3449,7 @@
       "mappings": ["wd:P162"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3328,7 +3458,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:producerOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Produzierte Werke",
           "en": "Producer of",
@@ -3357,7 +3487,7 @@
       "mappings": ["wd:P272"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3366,7 +3496,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:productionCompanyOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Produktionen",
           "en": "Productions",
@@ -3539,7 +3669,7 @@
       "mappings": ["wd:P58"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3548,7 +3678,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:screenwriterOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Drehbucharbeiten",
           "en": "Screenwriter of",
@@ -3641,6 +3771,44 @@
       "units": ["1"],
       "minimum": 0,
       "maximum": 2
+    },
+    "rezics:storyArc": {
+      "iri": "https://rezics.com/vocab/storyArc",
+      "labels": {
+        "de": "Handlungsbögen",
+        "en": "Story arcs",
+        "es": "Arcos argumentales",
+        "fr": "Arcs narratifs",
+        "ja": "ストーリー編",
+        "ko": "이야기 편",
+        "zh-Hans": "故事篇章",
+        "zh-Hant": "故事篇章"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["rezics:firstPart", "rezics:lastPart", "schema:position"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "membership",
+        "order": "position",
+        "inverse": "rezics:storyArcOf",
+        "acyclic": true,
+        "inverseLabels": {
+          "de": "Handlungsbogen von",
+          "en": "Story arc of",
+          "es": "Arco argumental de",
+          "fr": "Arc narratif de",
+          "ja": "この編を含む作品",
+          "ko": "이 편이 속한 작품",
+          "zh-Hans": "所属作品",
+          "zh-Hant": "所屬作品"
+        }
+      },
+      "targets": ["wd:Q2620972"]
     },
     "rezics:summaryOf": {
       "iri": "https://rezics.com/vocab/summaryOf",
@@ -3762,7 +3930,7 @@
       "mappings": ["wd:P725"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453"],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3771,7 +3939,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:voiceActorOf",
-        "filter": "wdt:P3831",
+        "filter": ["wdt:P3831", "wdt:P518"],
         "slotKey": "wdt:P453",
         "inverseLabels": {
           "de": "Sprechrollen in",

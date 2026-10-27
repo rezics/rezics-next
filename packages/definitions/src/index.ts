@@ -55,7 +55,7 @@ export type RelationDefinition = {
   symmetric?: true;
   acyclic?: true;
   order?: 'position' | 'date' | 'name';
-  filter?: string;
+  filter?: string | string[];
   slotKey?: string;
 };
 export type PropertyDefinition = {
@@ -363,9 +363,12 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       if (relation.order === 'position' && !property.qualifiers.includes('schema:position'))
         add(at(relationPointer, 'order'));
       if (relation.filter !== undefined) {
-        const qualifier = release.properties[relation.filter];
-        if (!property.qualifiers.includes(relation.filter) || qualifier?.datatype !== 'wikibase-item')
-          add(at(relationPointer, 'filter'));
+        const filters = Array.isArray(relation.filter) ? relation.filter : [relation.filter];
+        for (const filter of filters) {
+          const qualifier = release.properties[filter];
+          if (!property.qualifiers.includes(filter) || qualifier?.datatype !== 'wikibase-item')
+            add(at(relationPointer, 'filter'));
+        }
       }
       if (relation.slotKey !== undefined) {
         const qualifier = release.properties[relation.slotKey];

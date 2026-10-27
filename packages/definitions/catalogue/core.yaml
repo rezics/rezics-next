@@ -50,8 +50,17 @@ classes:
       - editionCounterpart
       - bangumiLegacyVersion
       - expansionCounterpart
+      - storyArc
     annotations:
       cover_ratio: 2:3
+  StoryArc:
+    is_a: CreativeWork
+    class_uri: wd:Q2620972
+    description: >-
+      A named, ordered range of a work's episodes or chapters
+      (https://www.wikidata.org/wiki/Q2620972).
+    annotations:
+      facets: contributor genre keywords partOfSeries
   Character:
     abstract: true
     is_a: Thing
@@ -130,6 +139,38 @@ slots:
     description: The section of an ordered list to which an item belongs.
     annotations:
       datatype: monolingualtext
+  storyArc:
+    slot_uri: rezics:storyArc
+    description: A story arc of this work, ordered by position with its first and last part numbers.
+    range: StoryArc
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position firstPart lastPart
+      relation_group: membership
+      inverse: rezics:storyArcOf
+      relation_order: position
+      acyclic: true
+  firstPart:
+    slot_uri: rezics:firstPart
+    description: The first episode or chapter number in this arc, as numbered by the work.
+    annotations:
+      datatype: string
+  lastPart:
+    slot_uri: rezics:lastPart
+    description: The last episode or chapter number in this arc, as numbered by the work.
+    annotations:
+      datatype: string
+  appliesToPart:
+    slot_uri: wdt:P518
+    description: The story arc of the work to which this appearance or credit applies.
+    range: StoryArc
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: membership
+      inverse: none
+      relation_order: name
   crossMediaCounterpart:
     slot_uri: rezics:crossMediaCounterpart
     description: >-
@@ -339,11 +380,11 @@ slots:
       - wd:P50
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs appliesToPart
       relation_group: credit
       inverse: rezics:authorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   position:
     slot_uri: schema:position
     description: The one-based order of an item in a list.
@@ -435,11 +476,11 @@ slots:
       - wd:P110
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:illustratorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   director:
     slot_uri: schema:director
     description: A person or organization credited with direction.
@@ -451,11 +492,11 @@ slots:
       - wd:P57
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:directorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   musicBy:
     slot_uri: schema:musicBy
     description: A person or organization credited with composing the music.
@@ -467,11 +508,11 @@ slots:
       - wd:P86
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:musicByOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   producer:
     slot_uri: schema:producer
     description: A person or organization credited with production.
@@ -483,11 +524,11 @@ slots:
       - wd:P162
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:producerOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   productionCompany:
     slot_uri: schema:productionCompany
     description: A person or organization credited as a production company.
@@ -499,11 +540,11 @@ slots:
       - wd:P272
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:productionCompanyOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   screenwriter:
     slot_uri: wdt:P58
     description: A person or organization credited with writing the screenplay.
@@ -515,11 +556,11 @@ slots:
       - wd:P58
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:screenwriterOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   developer:
     slot_uri: wdt:P178
     description: A person or organization credited with development.
@@ -531,11 +572,11 @@ slots:
       - wd:P178
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:developerOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   voiceActor:
     slot_uri: wdt:P725
     description: A person or organization credited with a voice performance.
@@ -547,11 +588,11 @@ slots:
       - wd:P725
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole characterRole
+      qualifiers: creditedAs position detailedRole characterRole appliesToPart
       relation_group: credit
       inverse: rezics:voiceActorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
       relation_slot_key: wdt:P453
   contributor:
     slot_uri: schema:contributor
@@ -564,11 +605,11 @@ slots:
       - wd:P767
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
       relation_group: credit
       inverse: rezics:contributorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   creditedAs:
     slot_uri: wdt:P1932
     description: The wording naming the object of a statement in its source.
@@ -601,11 +642,11 @@ slots:
       - wd:P674
     annotations:
       datatype: wikibase-item
-      qualifiers: detailedRole creditedAs spoilerLevel
+      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart
       relation_group: appearance
       inverse: rezics:appearsIn
       relation_order: name
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   spoilerLevel:
     slot_uri: rezics:spoilerLevel
     description: Disclosure level from 0 (no spoiler) through 2 (major spoiler).

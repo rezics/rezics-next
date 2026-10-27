@@ -14,6 +14,8 @@ import type { AccountActor } from '../../src/request/access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const role = newId(513 * 16);
+const arc = newId(513 * 16);
 const NIL = '00000000-0000-0000-0000-000000000000';
 const BASE_ROUTE = 513 * 16;
 const tokenRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
@@ -29,7 +31,10 @@ const digest = new Uint8Array(32).fill(31);
 const statement = (target: string) => ({
   property: { id: 'schema:author' },
   value: { type: 'value', content: target },
-  qualifiers: [],
+  qualifiers: [
+    { property: { id: 'wdt:P3831' }, value: { type: 'value', content: role } },
+    { property: { id: 'wdt:P518' }, value: { type: 'value', content: arc } },
+  ],
   references: [],
 });
 const rowsFor = (subject: string, input: unknown, release?: typeof bundledRelease): Fact[] =>
@@ -102,38 +107,36 @@ function createPopulation(): Population {
             release: bundledDigest,
           },
         ],
-        'semantic.outbound_link': [
-          {
-            route: anchorRoute,
-            subject_id: anchor,
-            property: 'schema:author',
-            filter_value: NIL,
-            order_key: key,
-            target_subject_id: target,
-            statement_id: relationFact.statement_id,
-            slot_id: relationFact.slot_id,
-            relation: true,
-            source_type: 'schema:Book',
-            source_order_key: '',
-            outbound_order: 'name',
-            source_revision: ordinal + 2,
-            source_security_revision: 0,
-            target_revision: 0,
-            target_type: 'schema:Person',
-            external: null,
-            value: 'value',
-            present: true,
-            recorded_transaction_id: relationTransaction,
-          },
-        ],
+        'semantic.outbound_link': [NIL, role, arc].map((filter_value) => ({
+          route: anchorRoute,
+          subject_id: anchor,
+          property: 'schema:author',
+          filter_value,
+          order_key: key,
+          target_subject_id: target,
+          statement_id: relationFact.statement_id,
+          slot_id: relationFact.slot_id,
+          relation: true,
+          source_type: 'schema:Book',
+          source_order_key: '',
+          outbound_order: 'name',
+          source_revision: ordinal + 2,
+          source_security_revision: 0,
+          target_revision: 0,
+          target_type: 'schema:Person',
+          external: null,
+          value: 'value',
+          present: true,
+          recorded_transaction_id: relationTransaction,
+        })),
       };
     },
     finish: async (admin, range) => {
       await admin.query(
         `INSERT INTO semantic.outbound_link_count(route,subject_id,property,filter_value,value)
-         VALUES ($1,$2,'schema:author',$3,$4)
+         SELECT $1,$2,'schema:author',filter_value,$4 FROM unnest($3::uuid[]) filter_value
          ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
-        [anchorRoute, anchor, NIL, range.to],
+        [anchorRoute, anchor, [NIL, role, arc], range.to],
       );
       if (range.to > range.from)
         await admin.query('UPDATE semantic.partition_subjects SET visible=visible+$2 WHERE partition_no=$1', [
@@ -162,7 +165,7 @@ function middleCursor(size: number): string {
         subject: anchor,
         property: 'schema:author',
         context: GLOBAL_CONTEXT,
-        filter: null,
+        filter: arc,
         type: null,
         language: null,
       },
@@ -223,6 +226,7 @@ test('A subject read examines the same rows whatever the number of relations it 
         subject: anchor,
         property: 'schema:author',
         context: GLOBAL_CONTEXT,
+        filter: arc,
         limit: 25,
         cursor: pageCursor,
         release: bundledRelease,
@@ -234,7 +238,7 @@ test('A subject read examines the same rows whatever the number of relations it 
         throw new Error(`Expected a 12 statement preview at ${scale}`);
       if (subject.subject.relationCounts['schema:author'] !== scale)
         throw new Error(`Expected ${scale} relation count, got ${subject.subject.relationCounts['schema:author']}`);
-      if (page.relations.length !== 25 || page.count.value !== scale)
+      if (page.relations.length !== 25 || page.count.value !== scale || !page.count.exact)
         throw new Error(`Expected a 25 statement middle page at ${scale}`);
       return { subject: subject.subject, page };
     },

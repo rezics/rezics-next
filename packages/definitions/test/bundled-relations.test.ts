@@ -4,7 +4,7 @@ import { validateRelease } from '../src/index.ts';
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
 const { types, properties } = bundledRelease;
-const creditQualifiers = ['schema:position', 'wdt:P1932', 'wdt:P3831'];
+const creditQualifiers = ['schema:position', 'wdt:P1932', 'wdt:P3831', 'wdt:P518'];
 
 test('every bundled item property declares how it reads in both directions', () => {
   expect(validateRelease(bundledRelease)).toEqual([]);
@@ -20,7 +20,7 @@ test('every bundled item property declares how it reads in both directions', () 
     if (relation.group === 'credit') {
       expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
       expect(relation.order).toBe('position');
-      expect(relation.filter).toBe('wdt:P3831');
+      expect(relation.filter).toEqual(['wdt:P3831', 'wdt:P518']);
     }
   }
   const canonical = {
@@ -53,13 +53,14 @@ test('every bundled item property declares how it reads in both directions', () 
   expect(properties['schema:character']?.relation).toMatchObject({
     group: 'appearance',
     order: 'name',
-    filter: 'wdt:P3831',
+    filter: ['wdt:P3831', 'wdt:P518'],
   });
 });
 
 test('bundled types declare the documented cover frame ratios', () => {
   const ratios: Record<string, string[]> = {
     '2:3': [
+      'wd:Q2620972',
       'schema:Book',
       'bf:Instance',
       'schema:ComicSeries',
@@ -129,4 +130,33 @@ test('credit properties are admitted on episodes and releases', () => {
       if (term === 'wdt:P725') expect(property.qualifiers).toContain('wdt:P453');
     }
   }
+});
+
+test('story arcs are creative-work subjects held as ordered part ranges', () => {
+  expect(types['wd:Q2620972']).toMatchObject({
+    iri: 'http://www.wikidata.org/entity/Q2620972',
+    bases: ['schema:CreativeWork', 'schema:Thing'],
+    coverRatio: '2:3',
+  });
+  expect(properties['rezics:storyArc']).toMatchObject({
+    datatype: 'wikibase-item',
+    targets: ['wd:Q2620972'],
+    multivalued: true,
+    qualifiers: ['rezics:firstPart', 'rezics:lastPart', 'schema:position'],
+    relation: {
+      inverse: 'rezics:storyArcOf',
+      inverseLabels: { en: 'Story arc of' },
+      group: 'membership',
+      order: 'position',
+      acyclic: true,
+    },
+  });
+  for (const type of Object.values(types)) {
+    if (type.bases.includes('schema:CreativeWork')) expect(type.properties).toContain('rezics:storyArc');
+  }
+  for (const term of ['rezics:firstPart', 'rezics:lastPart']) {
+    expect(properties[term]?.datatype).toBe('string');
+    expect(properties[term]?.value).toEqual({ type: 'string', minLength: 1, maxLength: 1500 });
+  }
+  expect(properties['wdt:P518']).toMatchObject({ datatype: 'wikibase-item', targets: ['wd:Q2620972'] });
 });

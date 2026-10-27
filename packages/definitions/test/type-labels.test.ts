@@ -3,6 +3,7 @@ import { bundledRelease } from '../src/bundled.ts';
 
 const labels = {
   'wd:Q2095': ['食物', '食物', '食品'],
+  'wd:Q2620972': ['故事篇章', '故事篇章', 'ストーリー編'],
   'schema:Episode': ['集', '集', 'エピソード'],
   'schema:Movie': ['电影', '電影', '映画'],
   'schema:TVSeason': ['季', '季', 'シーズン'],

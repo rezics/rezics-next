@@ -359,3 +359,30 @@ test('slot keys refuse unknown, unadmitted and non-item qualifiers at compilatio
   malformed.properties['schema:related'].relation.slotKey = 1;
   expect(validateRelease(malformed)).not.toEqual([]);
 });
+
+test('a relation filter admits two qualifiers and refuses oversized or non-item lists', async () => {
+  const source = withAnnotations(directedAnnotations.replace('schema:role', '[schema:role, wdt:P156]')).replace(
+    'qualifiers: position role',
+    'qualifiers: position role reverse related',
+  );
+  const release = await compileCatalogue(input(source, 'related from'));
+  expect(release.properties['schema:related']!.relation!.filter).toEqual(['schema:role', 'wdt:P156']);
+  expect(validateRelease(release)).toEqual([]);
+  for (const filter of [
+    ['schema:role', 'wdt:P156', 'schema:related'],
+    ['schema:role', 'schema:position'],
+    ['schema:role', 'schema:title'],
+    ['schema:role', 'schema:role'],
+    [],
+  ]) {
+    await expectCompilePointer(
+      source.replace('[schema:role, wdt:P156]', JSON.stringify(filter)),
+      'relations.yaml',
+      '/slots/related/annotations/relation_filter',
+      'related from',
+    );
+    const changed = structuredClone(release);
+    changed.properties['schema:related']!.relation!.filter = filter;
+    expect(validateRelease(changed).length).toBeGreaterThan(0);
+  }
+});

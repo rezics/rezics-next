@@ -58,7 +58,7 @@ facets.
 
 An item property may compile a `relation` with a group, exactly one of an inverse
 CURIE, `inverse: "none"`, or `symmetric: true`, optional acyclicity, an order key
-(default `name`), an item-qualifier filter, and an optional `slotKey`.
+(default `name`), a filter naming one or a list of at most two distinct item qualifiers, and an optional `slotKey`.
 The `slotKey` names an admitted item qualifier whose value distinguishes repeated
 relations to the same target. The bundled voice-actor property (`wdt:P725`) uses
 the character voiced (`wdt:P453`), distinguishing actor–character pairs. A standard inverse is export and
@@ -83,8 +83,8 @@ Bundled facts are stored on the later work (`wdt:P155`), derived work
 (`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
 (credits and `schema:character`). Their reverse terms are metadata, never
 additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
-position and detailed role, sort by position, and filter by `wdt:P3831`;
-appearances filter by that role and sort by name. Series members sort by
+position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
+appearances filter by either that role or a story arc and sort by name. Series members sort by
 position; follows and edition-of reads sort by date. Other bundled relations
 sort by name without inventing a source ordinal. Episode, edition and release
 profiles admit the credit properties with the same qualifiers as works.
@@ -818,6 +818,17 @@ video games and visual novels. Identifier labels follow their Wikidata propertie
 [VNDB](https://www.wikidata.org/wiki/Property:P3180)); the summary and cover terms
 follow [schema:abstract](https://schema.org/abstract) and
 [schema:image](https://schema.org/image).
+
+Story arcs are subjects of type `StoryArc` (`wd:Q2620972`, verified against
+[Wikidata](https://www.wikidata.org/wiki/Q2620972)), inheriting CreativeWork's 2:3
+cover ratio. CreativeWork and its series profiles hold `rezics:storyArc`, an
+acyclic membership relation ordered by `schema:position`. Its `rezics:firstPart`
+and `rezics:lastPart` string qualifiers preserve the work's episode or chapter
+numbering. The inverse page names the work. Appearance and credit statements
+admit `wdt:P518` to name the arcs they apply to. A relation page still selects one
+subject id with `filter`; values across both declared qualifiers share the same
+index range and are deduplicated per statement. Changing a declared filter list
+requires rebuilding the relation projections as described in the kernel's semantic README.
 
 ## How-to documents
 

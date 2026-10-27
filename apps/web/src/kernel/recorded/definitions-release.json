@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:677f6a56786b23d3f3dff399b644063c937a35a7a67fe3f52e75c751e27d05e5",
+  "digest": "sha256:3bd4d98802586cb478194f8fd6bf6ed0d5d0f209a57db8743b63d4b9ed599fa3",
   "release": {
     "types": {
       "wd:Q95074": {
@@ -98,6 +98,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
@@ -186,6 +187,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
@@ -260,6 +262,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:author",
           "schema:contributor",
@@ -335,6 +338,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:author",
@@ -392,6 +396,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:contributor",
           "schema:genre",
@@ -461,6 +466,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
@@ -618,7 +624,12 @@
           "wdt:P6298",
           "wdt:P648"
         ],
-        "descriptions": { "de": "Mensch", "es": "ser humano", "fr": "être humain", "zh-Hans": "人类" }
+        "descriptions": {
+          "de": "Mensch",
+          "es": "ser humano",
+          "fr": "être humain",
+          "zh-Hans": "人类"
+        }
       },
       "schema:Recipe": {
         "iri": "http://schema.org/Recipe",
@@ -700,6 +711,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:author",
@@ -779,6 +791,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:author",
@@ -866,6 +879,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
@@ -900,7 +914,11 @@
           "wdt:P7937",
           "wdt:P973"
         ],
-        "descriptions": { "ja": "テレビ番組シリーズ", "zh-Hans": "电视系列节目", "zh-Hant": "電視系列節目" }
+        "descriptions": {
+          "ja": "テレビ番組シリーズ",
+          "zh-Hans": "电视系列节目",
+          "zh-Hant": "電視系列節目"
+        }
       },
       "schema:VideoGame": {
         "iri": "http://schema.org/VideoGame",
@@ -950,6 +968,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
@@ -1021,6 +1040,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:alternateName",
           "schema:contributor",
@@ -1072,6 +1092,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:contributor",
@@ -1132,6 +1153,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:author",
@@ -1240,6 +1262,7 @@
           "rezics:sameSetting",
           "rezics:sideStoryOf",
           "rezics:spinOffOf",
+          "rezics:storyArc",
           "rezics:summaryOf",
           "schema:abstract",
           "schema:author",
@@ -1299,12 +1322,60 @@
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "facets": [],
         "coverRatio": "1:1"
+      },
+      "wd:Q2620972": {
+        "iri": "http://www.wikidata.org/entity/Q2620972",
+        "labels": {
+          "de": "Handlungsbogen",
+          "en": "story arc",
+          "es": "arco argumental",
+          "fr": "arc narratif",
+          "ja": "ストーリー編",
+          "ko": "이야기 편",
+          "zh-Hans": "故事篇章",
+          "zh-Hant": "故事篇章"
+        },
+        "mappings": [],
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "properties": [
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:contributor",
+          "schema:genre",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P361"
+        ],
+        "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
+        "coverRatio": "2:3"
       }
     },
     "format": "https://rezics.com/definitions/release/1",
     "filters": {
       "book/all": {
-        "filter": { "type": { "in": ["schema:Book"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:Book"]
+          }
+        },
         "labels": {
           "de": "Alle Bücher",
           "en": "All books",
@@ -1317,7 +1388,11 @@
         }
       },
       "game/all": {
-        "filter": { "type": { "in": ["schema:VideoGame"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:VideoGame"]
+          }
+        },
         "labels": {
           "de": "Alle Computerspiele",
           "en": "All video games",
@@ -1330,7 +1405,11 @@
         }
       },
       "anime/all": {
-        "filter": { "type": { "in": ["schema:Movie", "schema:TVSeries"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:Movie", "schema:TVSeries"]
+          }
+        },
         "labels": {
           "de": "Alle Anime",
           "en": "All anime",
@@ -1343,7 +1422,11 @@
         }
       },
       "manga/all": {
-        "filter": { "type": { "in": ["schema:ComicSeries"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:ComicSeries"]
+          }
+        },
         "labels": {
           "de": "Alle Manga",
           "en": "All manga",
@@ -1356,7 +1439,11 @@
         }
       },
       "recipe/all": {
-        "filter": { "type": { "in": ["schema:Recipe"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:Recipe"]
+          }
+        },
         "labels": {
           "de": "Alle Rezepte",
           "en": "All recipes",
@@ -1369,7 +1456,11 @@
         }
       },
       "series/all": {
-        "filter": { "type": { "in": ["wd:Q7725310", "schema:BookSeries"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q7725310", "schema:BookSeries"]
+          }
+        },
         "labels": {
           "de": "Alle Serien",
           "en": "All series",
@@ -1382,7 +1473,11 @@
         }
       },
       "anime/films": {
-        "filter": { "type": { "in": ["schema:Movie"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:Movie"]
+          }
+        },
         "labels": {
           "de": "Alle Filme",
           "en": "All films",
@@ -1395,7 +1490,11 @@
         }
       },
       "anime/series": {
-        "filter": { "type": { "in": ["schema:TVSeries"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:TVSeries"]
+          }
+        },
         "labels": {
           "de": "Alle Fernsehserien",
           "en": "All television series",
@@ -1408,7 +1507,11 @@
         }
       },
       "game/add-ons": {
-        "filter": { "type": { "in": ["wd:Q209163"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q209163"]
+          }
+        },
         "labels": {
           "de": "Alle Computerspiel-Erweiterungen",
           "en": "All add-ons",
@@ -1423,11 +1526,18 @@
       "recipe/quick": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:Recipe"] } },
+            {
+              "type": {
+                "in": ["schema:Recipe"]
+              }
+            },
             {
               "statement": {
-                "range": { "lte": 30, "unit": "http://www.wikidata.org/entity/Q7727" },
-                "property": "schema:cookTime"
+                "property": "schema:cookTime",
+                "range": {
+                  "lte": 30,
+                  "unit": "http://www.wikidata.org/entity/Q7727"
+                }
               }
             }
           ]
@@ -1444,7 +1554,11 @@
         }
       },
       "book/editions": {
-        "filter": { "type": { "in": ["bf:Instance"] } },
+        "filter": {
+          "type": {
+            "in": ["bf:Instance"]
+          }
+        },
         "labels": {
           "de": "Alle Ausgaben",
           "en": "All editions",
@@ -1457,7 +1571,11 @@
         }
       },
       "character/all": {
-        "filter": { "type": { "in": ["wd:Q95074"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q95074"]
+          }
+        },
         "labels": {
           "de": "Alle Charaktere",
           "en": "All characters",
@@ -1470,7 +1588,11 @@
         }
       },
       "game/releases": {
-        "filter": { "type": { "in": ["wd:Q20631656"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q20631656"]
+          }
+        },
         "labels": {
           "de": "Alle Computerspiel-Veröffentlichungen",
           "en": "All game releases",
@@ -1483,7 +1605,11 @@
         }
       },
       "manga/volumes": {
-        "filter": { "type": { "in": ["schema:PublicationVolume"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:PublicationVolume"]
+          }
+        },
         "labels": {
           "de": "Alle Mangabände",
           "en": "All manga volumes",
@@ -1498,8 +1624,19 @@
       "book/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:Book"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["schema:Book"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1516,8 +1653,19 @@
       "game/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:VideoGame"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["schema:VideoGame"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1532,7 +1680,11 @@
         }
       },
       "visual-novel/all": {
-        "filter": { "type": { "in": ["wd:Q689445"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q689445"]
+          }
+        },
         "labels": {
           "de": "Alle Visual Novels",
           "en": "All visual novels",
@@ -1547,8 +1699,19 @@
       "anime/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:Movie", "schema:TVSeries"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["schema:Movie", "schema:TVSeries"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1565,8 +1728,19 @@
       "manga/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:ComicSeries"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["schema:ComicSeries"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1583,8 +1757,19 @@
       "recipe/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:Recipe"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["schema:Recipe"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1601,8 +1786,19 @@
       "series/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["schema:BookSeries"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:startDate" } }
+            {
+              "type": {
+                "in": ["schema:BookSeries"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:startDate",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1617,7 +1813,11 @@
         }
       },
       "series/book-series": {
-        "filter": { "type": { "in": ["schema:BookSeries"] } },
+        "filter": {
+          "type": {
+            "in": ["schema:BookSeries"]
+          }
+        },
         "labels": {
           "de": "Alle Buchreihen",
           "en": "All book series",
@@ -1632,8 +1832,19 @@
       "character/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["wd:Q95074"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:birthDate" } }
+            {
+              "type": {
+                "in": ["wd:Q95074"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:birthDate",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1648,7 +1859,11 @@
         }
       },
       "series/creative-works": {
-        "filter": { "type": { "in": ["wd:Q7725310"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q7725310"]
+          }
+        },
         "labels": {
           "de": "Alle Serien von Werken",
           "en": "All series of creative works",
@@ -1661,7 +1876,11 @@
         }
       },
       "visual-novel/releases": {
-        "filter": { "type": { "in": ["wd:Q20631656"] } },
+        "filter": {
+          "type": {
+            "in": ["wd:Q20631656"]
+          }
+        },
         "labels": {
           "de": "Alle Visual-Novel-Veröffentlichungen",
           "en": "All visual novel releases",
@@ -1676,8 +1895,19 @@
       "visual-novel/before-2000": {
         "filter": {
           "and": [
-            { "type": { "in": ["wd:Q20631656"] } },
-            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
+            {
+              "type": {
+                "in": ["wd:Q20631656"]
+              }
+            },
+            {
+              "statement": {
+                "property": "schema:datePublished",
+                "range": {
+                  "lte": 1999
+                }
+              }
+            }
           ]
         },
         "labels": {
@@ -1807,12 +2037,21 @@
       "rezics": "https://rezics.com/vocab/",
       "schema": "http://schema.org/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.0" },
-    "generator": { "name": "@neverblink/linkml", "version": "0.17.1" },
+    "catalogue": {
+      "id": "https://rezics.com/catalogue/rezics",
+      "version": "1.0.0"
+    },
+    "generator": {
+      "name": "@neverblink/linkml",
+      "version": "0.17.1"
+    },
     "properties": {
       "wdt:P31": {
         "iri": "http://www.wikidata.org/prop/direct/P31",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "ist ein(e)",
           "en": "instance of",
@@ -1846,7 +2085,10 @@
       },
       "wdt:P58": {
         "iri": "http://www.wikidata.org/prop/direct/P58",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Drehbuchautor",
           "en": "screenwriter",
@@ -1863,7 +2105,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:screenwriterOf",
           "inverseLabels": {
             "de": "Drehbucharbeiten",
@@ -1876,12 +2118,15 @@
             "zh-Hant": "編劇作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "wdt:P144": {
         "iri": "http://www.wikidata.org/prop/direct/P144",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "basiert auf",
           "en": "based on",
@@ -1916,7 +2161,10 @@
       },
       "wdt:P155": {
         "iri": "http://www.wikidata.org/prop/direct/P155",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Vorgänger",
           "en": "follows",
@@ -1951,7 +2199,10 @@
       },
       "wdt:P178": {
         "iri": "http://www.wikidata.org/prop/direct/P178",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Entwickler",
           "en": "developer",
@@ -1968,7 +2219,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:developerOf",
           "inverseLabels": {
             "de": "Entwickelte Werke",
@@ -1981,12 +2232,15 @@
             "zh-Hant": "開發作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "wdt:P179": {
         "iri": "http://www.wikidata.org/prop/direct/P179",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Teil der Reihe oder Serie",
           "en": "part of the series",
@@ -2021,7 +2275,10 @@
       },
       "wdt:P361": {
         "iri": "http://www.wikidata.org/prop/direct/P361",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "ist Teil von",
           "en": "part of",
@@ -2056,7 +2313,10 @@
       },
       "wdt:P408": {
         "iri": "http://www.wikidata.org/prop/direct/P408",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Engine",
           "en": "software engine",
@@ -2090,7 +2350,10 @@
       },
       "wdt:P437": {
         "iri": "http://www.wikidata.org/prop/direct/P437",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Auslieferungsmedium",
           "en": "distribution format",
@@ -2124,7 +2387,10 @@
       },
       "wdt:P449": {
         "iri": "http://www.wikidata.org/prop/direct/P449",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Sender der Erstausstrahlung",
           "en": "original broadcaster",
@@ -2158,7 +2424,10 @@
       },
       "wdt:P453": {
         "iri": "http://www.wikidata.org/prop/direct/P453",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Rolle",
           "en": "character role",
@@ -2172,13 +2441,22 @@
         "targets": ["wd:Q95074"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "appearance", "order": "name", "inverse": "none" },
+        "relation": {
+          "group": "appearance",
+          "order": "name",
+          "inverse": "none"
+        },
         "qualifiers": [],
         "multivalued": false
       },
       "wdt:P648": {
         "iri": "http://www.wikidata.org/prop/direct/P648",
-        "value": { "type": "string", "pattern": "^OL[1-9][0-9]*[AMW]$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^OL[1-9][0-9]*[AMW]$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Open-Library-Kennung",
           "en": "Open Library ID",
@@ -2196,7 +2474,10 @@
       },
       "wdt:P725": {
         "iri": "http://www.wikidata.org/prop/direct/P725",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Sprecher",
           "en": "voice actor",
@@ -2213,7 +2494,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:voiceActorOf",
           "inverseLabels": {
             "de": "Sprechrollen in",
@@ -2227,12 +2508,16 @@
           },
           "slotKey": "wdt:P453"
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453", "wdt:P518"],
         "multivalued": true
       },
       "wdt:P973": {
         "iri": "http://www.wikidata.org/prop/direct/P973",
-        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "value": {
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$",
+          "maxLength": 1500
+        },
         "labels": {
           "de": "beschrieben in URL",
           "en": "described at URL",
@@ -2250,7 +2535,10 @@
       },
       "wdt:P1433": {
         "iri": "http://www.wikidata.org/prop/direct/P1433",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "veröffentlicht in",
           "en": "published in",
@@ -2285,7 +2573,10 @@
       },
       "wdt:P1853": {
         "iri": "http://www.wikidata.org/prop/direct/P1853",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Blutgruppe",
           "en": "blood type",
@@ -2319,7 +2610,10 @@
       },
       "wdt:P1889": {
         "iri": "http://www.wikidata.org/prop/direct/P1889",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "verschieden von",
           "en": "different from",
@@ -2333,13 +2627,21 @@
         "targets": ["wd:Q689445"],
         "datatype": "wikibase-item",
         "mappings": ["wd:P1889"],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "wdt:P1932": {
         "iri": "http://www.wikidata.org/prop/direct/P1932",
-        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "angegeben als",
           "en": "object of statement named as",
@@ -2362,8 +2664,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -2399,8 +2706,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q577"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q577"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -2431,7 +2743,12 @@
       },
       "wdt:P3180": {
         "iri": "http://www.wikidata.org/prop/direct/P3180",
-        "value": { "type": "string", "pattern": "^[vrpcs][1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^[vrpcs][1-9][0-9]*$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "The-Visual-Novel-Database-ID",
           "en": "Visual Novel Database ID",
@@ -2449,7 +2766,10 @@
       },
       "wdt:P3831": {
         "iri": "http://www.wikidata.org/prop/direct/P3831",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Objekt der Aussage fungiert als",
           "en": "object of statement has role",
@@ -2463,13 +2783,22 @@
         "targets": ["skos:Concept"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "classification", "order": "name", "inverse": "none" },
+        "relation": {
+          "group": "classification",
+          "order": "name",
+          "inverse": "none"
+        },
         "qualifiers": [],
         "multivalued": false
       },
       "wdt:P5732": {
         "iri": "http://www.wikidata.org/prop/direct/P5732",
-        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Bangumi-Werkkennung",
           "en": "Bangumi subject ID",
@@ -2487,7 +2816,12 @@
       },
       "wdt:P6296": {
         "iri": "http://www.wikidata.org/prop/direct/P6296",
-        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Bangumi-Charakterkennung",
           "en": "bgm.tv character ID",
@@ -2505,7 +2839,12 @@
       },
       "wdt:P6298": {
         "iri": "http://www.wikidata.org/prop/direct/P6298",
-        "value": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Bangumi-Personenkennung",
           "en": "bgm.tv person ID",
@@ -2523,7 +2862,10 @@
       },
       "wdt:P7937": {
         "iri": "http://www.wikidata.org/prop/direct/P7937",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "künstlerische Form",
           "en": "form of creative work",
@@ -2557,7 +2899,10 @@
       },
       "wdt:P8646": {
         "iri": "http://www.wikidata.org/prop/direct/P8646",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Erweiterung von",
           "en": "expansion of",
@@ -2591,7 +2936,10 @@
       },
       "foaf:focus": {
         "iri": "http://xmlns.com/foaf/0.1/focus",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Bezugssubjekt",
           "en": "focus",
@@ -2625,7 +2973,11 @@
       },
       "schema:url": {
         "iri": "http://schema.org/url",
-        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "value": {
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$",
+          "maxLength": 1500
+        },
         "labels": {
           "de": "offizielle Website",
           "en": "URL",
@@ -2643,7 +2995,12 @@
       },
       "schema:gtin": {
         "iri": "http://schema.org/gtin",
-        "value": { "type": "string", "pattern": "^(?:[0-9]{8}|[0-9]{12,14})$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^(?:[0-9]{8}|[0-9]{12,14})$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "GTIN",
           "en": "GTIN",
@@ -2661,7 +3018,12 @@
       },
       "schema:isbn": {
         "iri": "http://schema.org/isbn",
-        "value": { "type": "string", "pattern": "^97[89]-?(?:[0-9]-?){9}[0-9]$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^97[89]-?(?:[0-9]-?){9}[0-9]$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "ISBN-13",
           "en": "ISBN-13",
@@ -2683,8 +3045,15 @@
           "type": "object",
           "required": ["text", "language"],
           "properties": {
-            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+            "text": {
+              "type": "string",
+              "maxLength": 1500,
+              "minLength": 1
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
           },
           "additionalProperties": false
         },
@@ -2705,7 +3074,10 @@
       },
       "schema:genre": {
         "iri": "http://schema.org/genre",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Genre",
           "en": "genre",
@@ -2760,7 +3132,10 @@
       },
       "skos:broader": {
         "iri": "http://www.w3.org/2004/02/skos/core#broader",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "hat Oberbegriff",
           "en": "has broader",
@@ -2795,7 +3170,10 @@
       },
       "schema:author": {
         "iri": "http://schema.org/author",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Autor",
           "en": "author",
@@ -2812,7 +3190,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:authorOf",
           "inverseLabels": {
             "de": "Verfasste Werke",
@@ -2831,6 +3209,7 @@
           "wdt:P1932",
           "wdt:P3180",
           "wdt:P3831",
+          "wdt:P518",
           "wdt:P6298",
           "wdt:P648"
         ],
@@ -2838,7 +3217,10 @@
       },
       "schema:gender": {
         "iri": "http://schema.org/gender",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Geschlecht",
           "en": "gender",
@@ -2877,8 +3259,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
@@ -2908,7 +3295,11 @@
       },
       "schema:sameAs": {
         "iri": "http://schema.org/sameAs",
-        "value": { "type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 1500 },
+        "value": {
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$",
+          "maxLength": 1500
+        },
         "labels": {
           "de": "exakte Übereinstimmung",
           "en": "exact match",
@@ -2931,8 +3322,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
@@ -2962,7 +3358,10 @@
       },
       "skos:inScheme": {
         "iri": "http://www.w3.org/2004/02/skos/core#inScheme",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "im Begriffssystem",
           "en": "is in scheme",
@@ -3000,9 +3399,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3023,7 +3429,10 @@
       },
       "schema:musicBy": {
         "iri": "http://schema.org/musicBy",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Komponist",
           "en": "composer",
@@ -3040,7 +3449,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:musicByOf",
           "inverseLabels": {
             "de": "Kompositionen",
@@ -3053,12 +3462,16 @@
             "zh-Hant": "作曲作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:version": {
         "iri": "http://schema.org/version",
-        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Version",
           "en": "version",
@@ -3080,8 +3493,13 @@
           "type": "object",
           "required": ["language", "document"],
           "properties": {
-            "document": { "type": "object" },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+            "document": {
+              "type": "object"
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
           },
           "additionalProperties": false
         },
@@ -3107,8 +3525,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q7727"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q7727"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -3138,7 +3561,10 @@
       },
       "schema:director": {
         "iri": "http://schema.org/director",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Regisseur",
           "en": "director",
@@ -3155,7 +3581,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:directorOf",
           "inverseLabels": {
             "de": "Regiearbeiten",
@@ -3168,7 +3594,7 @@
             "zh-Hant": "執導作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:duration": {
@@ -3178,8 +3604,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["http://www.wikidata.org/entity/Q11574"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["http://www.wikidata.org/entity/Q11574"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -3209,7 +3640,10 @@
       },
       "schema:isPartOf": {
         "iri": "http://schema.org/isPartOf",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "ist Teil von",
           "en": "part of",
@@ -3244,7 +3678,10 @@
       },
       "schema:keywords": {
         "iri": "http://schema.org/keywords",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Schlagwörter",
           "en": "keywords",
@@ -3283,8 +3720,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -3314,7 +3756,12 @@
       },
       "schema:position": {
         "iri": "http://schema.org/position",
-        "value": { "type": "string", "pattern": "^[1-9][0-9]{0,3}$", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,3}$",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Ordnungsnummer",
           "en": "position",
@@ -3332,7 +3779,10 @@
       },
       "schema:producer": {
         "iri": "http://schema.org/producer",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Produzent",
           "en": "producer",
@@ -3349,7 +3799,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:producerOf",
           "inverseLabels": {
             "de": "Produzierte Werke",
@@ -3362,12 +3812,15 @@
             "zh-Hant": "製作作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "rezics:spinOffOf": {
         "iri": "https://rezics.com/vocab/spinOffOf",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Ableger von",
           "en": "Spin-off of",
@@ -3402,7 +3855,10 @@
       },
       "rezics:summaryOf": {
         "iri": "https://rezics.com/vocab/summaryOf",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Zusammenfassung von",
           "en": "Summary of",
@@ -3441,9 +3897,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3464,7 +3927,10 @@
       },
       "schema:character": {
         "iri": "http://schema.org/character",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Figuren",
           "en": "characters",
@@ -3481,7 +3947,7 @@
         "relation": {
           "group": "appearance",
           "order": "name",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:appearsIn",
           "inverseLabels": {
             "de": "Auftritte in",
@@ -3494,7 +3960,7 @@
             "zh-Hant": "登場作品"
           }
         },
-        "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:deathDate": {
@@ -3503,9 +3969,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3526,7 +3999,10 @@
       },
       "schema:publisher": {
         "iri": "http://schema.org/publisher",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Verlag",
           "en": "publisher",
@@ -3543,7 +4019,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:publisherOf",
           "inverseLabels": {
             "de": "Veröffentlichte Werke",
@@ -3556,7 +4032,7 @@
             "zh-Hant": "出版作品"
           }
         },
-        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831"],
+        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:startDate": {
@@ -3565,9 +4041,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3611,7 +4094,10 @@
       },
       "schema:translator": {
         "iri": "http://schema.org/translator",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Übersetzer",
           "en": "translator",
@@ -3628,7 +4114,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:translatorOf",
           "inverseLabels": {
             "de": "Übersetzte Werke",
@@ -3641,12 +4127,15 @@
             "zh-Hant": "翻譯作品"
           }
         },
-        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P648"],
+        "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P518", "wdt:P648"],
         "multivalued": true
       },
       "rezics:sameSetting": {
         "iri": "https://rezics.com/vocab/sameSetting",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Gleiche Welt",
           "en": "Same setting",
@@ -3660,13 +4149,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:sideStoryOf": {
         "iri": "https://rezics.com/vocab/sideStoryOf",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Nebengeschichte zu",
           "en": "Side story of",
@@ -3701,7 +4197,10 @@
       },
       "schema:contributor": {
         "iri": "http://schema.org/contributor",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Mitarbeiter des Kreativwerks",
           "en": "contributor to the creative work or subject",
@@ -3718,7 +4217,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:contributorOf",
           "inverseLabels": {
             "de": "Mitwirkung an",
@@ -3731,12 +4230,15 @@
             "zh-Hant": "參與作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:illustrator": {
         "iri": "http://schema.org/illustrator",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Illustrator",
           "en": "illustrator",
@@ -3753,7 +4255,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:illustratorOf",
           "inverseLabels": {
             "de": "Illustrierte Werke",
@@ -3766,7 +4268,7 @@
             "zh-Hant": "插畫作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "schema:recipeYield": {
@@ -3776,8 +4278,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -3812,8 +4319,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -3848,9 +4360,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3871,7 +4390,10 @@
       },
       "schema:gamePlatform": {
         "iri": "http://schema.org/gamePlatform",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Spielplattform",
           "en": "game platform",
@@ -3909,8 +4431,15 @@
           "type": "object",
           "required": ["text", "language"],
           "properties": {
-            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+            "text": {
+              "type": "string",
+              "maxLength": 1500,
+              "minLength": 1
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
           },
           "additionalProperties": false
         },
@@ -3935,9 +4464,16 @@
           "type": "object",
           "required": ["time", "precision", "calendarmodel"],
           "properties": {
-            "time": { "type": "string", "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$" },
-            "precision": { "enum": [9, 10, 11] },
-            "calendarmodel": { "const": "http://www.wikidata.org/entity/Q1985727" }
+            "time": {
+              "type": "string",
+              "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+            },
+            "precision": {
+              "enum": [9, 10, 11]
+            },
+            "calendarmodel": {
+              "const": "http://www.wikidata.org/entity/Q1985727"
+            }
           },
           "additionalProperties": false
         },
@@ -3958,7 +4494,11 @@
       },
       "schema:episodeNumber": {
         "iri": "http://schema.org/episodeNumber",
-        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Episodennummer",
           "en": "episode number",
@@ -3976,7 +4516,10 @@
       },
       "schema:exampleOfWork": {
         "iri": "http://schema.org/exampleOfWork",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Ausgabe oder Übersetzung von",
           "en": "edition of",
@@ -4016,8 +4559,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -4047,7 +4595,10 @@
       },
       "rezics:sameCharacters": {
         "iri": "https://rezics.com/vocab/sameCharacters",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Gleiche Figuren, unabhängige Geschichte",
           "en": "Same characters, unrelated story",
@@ -4061,13 +4612,21 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "schema:copyrightNotice": {
         "iri": "http://schema.org/copyrightNotice",
-        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "value": {
+          "type": "string",
+          "maxLength": 1500,
+          "minLength": 1
+        },
         "labels": {
           "de": "Urheberrechtshinweis",
           "en": "copyright notice",
@@ -4090,8 +4649,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -4121,7 +4685,10 @@
       },
       "rezics:bangumiRelatedTo": {
         "iri": "https://rezics.com/vocab/bangumiRelatedTo",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Verknüpft (Bangumi)",
           "en": "Related (Bangumi)",
@@ -4160,8 +4727,13 @@
           "type": "object",
           "required": ["amount", "unit"],
           "properties": {
-            "unit": { "enum": ["1"] },
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": {
+              "enum": ["1"]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+            },
             "lowerBound": {
               "type": "string",
               "pattern": "^[+-](?:0|[1-9][0-9]*)$"
@@ -4195,8 +4767,15 @@
           "type": "object",
           "required": ["text", "language"],
           "properties": {
-            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+            "text": {
+              "type": "string",
+              "maxLength": 1500,
+              "minLength": 1
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+            }
           },
           "additionalProperties": false
         },
@@ -4217,7 +4796,10 @@
       },
       "rezics:collaborationWith": {
         "iri": "https://rezics.com/vocab/collaborationWith",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Figuren-Crossover",
           "en": "Character crossover collaboration",
@@ -4231,13 +4813,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "schema:productionCompany": {
         "iri": "http://schema.org/productionCompany",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Produktionsgesellschaft",
           "en": "production company",
@@ -4254,7 +4843,7 @@
         "relation": {
           "group": "credit",
           "order": "position",
-          "filter": "wdt:P3831",
+          "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:productionCompanyOf",
           "inverseLabels": {
             "de": "Produktionen",
@@ -4267,12 +4856,15 @@
             "zh-Hant": "參與製作的作品"
           }
         },
-        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831"],
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
       },
       "rezics:alternativeSetting": {
         "iri": "https://rezics.com/vocab/alternativeSetting",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Andere Welt",
           "en": "Alternative setting",
@@ -4286,13 +4878,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:alternativeVersion": {
         "iri": "https://rezics.com/vocab/alternativeVersion",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Andere Erzählfassung",
           "en": "Alternative telling",
@@ -4306,13 +4905,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "world", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "world",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:artbookCounterpart": {
         "iri": "https://rezics.com/vocab/artbookCounterpart",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Kunstbuch und zugehöriges Werk",
           "en": "Artbook counterpart",
@@ -4326,13 +4932,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "association", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:editionCounterpart": {
         "iri": "https://rezics.com/vocab/editionCounterpart",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Andere Buchfassung",
           "en": "Other book version",
@@ -4346,13 +4959,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "derivation", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "derivation",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:bangumiLegacyVersion": {
         "iri": "https://rezics.com/vocab/bangumiLegacyVersion",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Versionsbezug (alter Bangumi-Code)",
           "en": "Version counterpart (retired Bangumi code)",
@@ -4366,13 +4986,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "derivation", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "derivation",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:expansionCounterpart": {
         "iri": "https://rezics.com/vocab/expansionCounterpart",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Erweiterung oder Grundspiel",
           "en": "Expansion or base game",
@@ -4386,13 +5013,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "derivation", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "derivation",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:crossMediaCounterpart": {
         "iri": "https://rezics.com/vocab/crossMediaCounterpart",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Werk in einem anderen Medium",
           "en": "Cross-media counterpart",
@@ -4406,13 +5040,20 @@
         "targets": ["schema:CreativeWork"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "derivation", "order": "name", "symmetric": true },
+        "relation": {
+          "group": "derivation",
+          "order": "name",
+          "symmetric": true
+        },
         "qualifiers": [],
         "multivalued": true
       },
       "rezics:representativeEdition": {
         "iri": "https://rezics.com/vocab/representativeEdition",
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "labels": {
           "de": "Repräsentative Ausgabe",
           "en": "Representative edition",
@@ -4426,7 +5067,11 @@
         "targets": ["bf:Instance", "wd:Q20631656"],
         "datatype": "wikibase-item",
         "mappings": [],
-        "relation": { "group": "derivation", "order": "name", "inverse": "none" },
+        "relation": {
+          "group": "derivation",
+          "order": "name",
+          "inverse": "none"
+        },
         "qualifiers": ["schema:inLanguage"],
         "multivalued": true
       },
@@ -4611,6 +5256,115 @@
             }
           }
         }
+      },
+      "wdt:P518": {
+        "iri": "http://www.wikidata.org/prop/direct/P518",
+        "labels": {
+          "de": "Gilt für Teil",
+          "en": "Applies to part",
+          "es": "Se aplica a la parte",
+          "fr": "Concerne la partie",
+          "ja": "対象の編",
+          "ko": "해당 편",
+          "zh-Hans": "适用篇章",
+          "zh-Hant": "適用篇章"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "relation": {
+          "group": "membership",
+          "order": "name",
+          "inverse": "none"
+        },
+        "targets": ["wd:Q2620972"]
+      },
+      "rezics:firstPart": {
+        "iri": "https://rezics.com/vocab/firstPart",
+        "labels": {
+          "de": "Erster Teil",
+          "en": "First part",
+          "es": "Primera parte",
+          "fr": "Première partie",
+          "ja": "開始話・章",
+          "ko": "시작 회차",
+          "zh-Hans": "起始话或章",
+          "zh-Hant": "起始話或章"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        }
+      },
+      "rezics:lastPart": {
+        "iri": "https://rezics.com/vocab/lastPart",
+        "labels": {
+          "de": "Letzter Teil",
+          "en": "Last part",
+          "es": "Última parte",
+          "fr": "Dernière partie",
+          "ja": "終了話・章",
+          "ko": "마지막 회차",
+          "zh-Hans": "结束话或章",
+          "zh-Hant": "結束話或章"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        }
+      },
+      "rezics:storyArc": {
+        "iri": "https://rezics.com/vocab/storyArc",
+        "labels": {
+          "de": "Handlungsbögen",
+          "en": "Story arcs",
+          "es": "Arcos argumentales",
+          "fr": "Arcs narratifs",
+          "ja": "ストーリー編",
+          "ko": "이야기 편",
+          "zh-Hans": "故事篇章",
+          "zh-Hant": "故事篇章"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:firstPart", "rezics:lastPart", "schema:position"],
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "relation": {
+          "group": "membership",
+          "order": "position",
+          "inverse": "rezics:storyArcOf",
+          "acyclic": true,
+          "inverseLabels": {
+            "de": "Handlungsbogen von",
+            "en": "Story arc of",
+            "es": "Arco argumental de",
+            "fr": "Arc narratif de",
+            "ja": "この編を含む作品",
+            "ko": "이 편이 속한 작품",
+            "zh-Hans": "所属作品",
+            "zh-Hant": "所屬作品"
+          }
+        },
+        "targets": ["wd:Q2620972"]
       }
     }
   },

@@ -11,6 +11,8 @@ if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 let db: GrowthDatabase;
 const route = 15000;
 const anchor = newId(route);
+const role = newId(route);
+const arc = newId(route);
 const holder = newId(route + 16);
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(84)]]) };
 const actor = {
@@ -52,16 +54,30 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
       bounds: { rows: 'constant' as const, blocks: 'constant' as const, statements: 'constant' as const },
       grow: async (_: GrowthDatabase, scale: number, previous: number) => {
         await db.admin.query(
-          `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key)
-          SELECT $1,$2,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:Book',lpad(n::text,8,'0')
-          FROM generate_series($5::int,$6::int) n`,
-          [route, anchor, middle ? 'schema:translator' : 'schema:author', holder, previous, scale - 1],
+          `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
+          SELECT $1,$2,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:Book',lpad(n::text,8,'0'),filter_value
+          FROM generate_series($5::int,$6::int) n CROSS JOIN unnest($7::uuid[]) filter_value`,
+          [
+            route,
+            anchor,
+            middle ? 'schema:translator' : 'schema:author',
+            holder,
+            previous,
+            scale - 1,
+            ['00000000-0000-0000-0000-000000000000', role, arc],
+          ],
         );
         await db.admin.query(
           `INSERT INTO semantic.inbound_link_count(route,subject_id,property,filter_value,value)
-          VALUES($1,$2,$3,'00000000-0000-0000-0000-000000000000',$4)
+          SELECT $1,$2,$3,filter_value,$4 FROM unnest($5::uuid[]) filter_value
           ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=excluded.value`,
-          [route, anchor, middle ? 'schema:translator' : 'schema:author', scale],
+          [
+            route,
+            anchor,
+            middle ? 'schema:translator' : 'schema:author',
+            scale,
+            ['00000000-0000-0000-0000-000000000000', role, arc],
+          ],
         );
         if (middle) {
           const { encodeCursor } = await import('../../src/tokens/cursor.ts');
@@ -69,7 +85,7 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
             ring,
             {
               operation: 'subject.links',
-              parameters: { subject: anchor, property: 'schema:translator', filter: null, type: null, language: null },
+              parameters: { subject: anchor, property: 'schema:translator', filter: arc, type: null, language: null },
             },
             {
               epoch: 1,
@@ -86,6 +102,7 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
         const result = await listSubjectLinks(db.pool, ring, {
           subject: anchor,
           property: middle ? 'schema:translator' : 'schema:author',
+          filter: arc,
           limit: 25,
           ...(cursor ? { cursor } : {}),
           seen: [],
@@ -142,14 +159,18 @@ test('links projection work grows with changed links and stays flat in in-degree
       },
       operation: async (_: GrowthDatabase, scale: number) => {
         const source = newId(route + 16);
-        const changes = Array.from({ length: growingLinks ? scale : 10 }, () => ({
-          property: 'schema:contributor',
-          statement: newId(route + 16),
-          target: anchor,
-          present: true,
-          source_type: 'schema:Book',
-          order_key: '0name',
-        }));
+        const changes = Array.from({ length: growingLinks ? scale : 10 }, () => {
+          const statement = newId(route + 16);
+          return ['00000000-0000-0000-0000-000000000000', role, arc].map((filter_value) => ({
+            property: 'schema:contributor',
+            statement,
+            filter_value,
+            target: anchor,
+            present: true,
+            source_type: 'schema:Book',
+            order_key: '0name',
+          }));
+        }).flat();
         await runCommand(db.pool, { partition: (route + 16) >>> 4 }, async () => ({
           value: null,
           events: [

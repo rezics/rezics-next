@@ -93,11 +93,11 @@ slots:
       - wd:P123
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole vndbId sameAs
+      qualifiers: creditedAs position detailedRole vndbId sameAs appliesToPart
       relation_group: credit
       inverse: rezics:publisherOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -119,8 +119,8 @@ slots:
       - wd:P655
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole openLibraryId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId sameAs appliesToPart
       relation_group: credit
       inverse: rezics:translatorOf
       relation_order: position
-      relation_filter: wdt:P3831
+      relation_filter: [wdt:P3831, wdt:P518]

@@ -615,8 +615,19 @@ export async function compileCatalogue(input: {
       if (slotKey !== undefined && (typeof slotKey !== 'string' || !property.qualifiers.includes(slotKey)))
         add(annotation('relation_slot_key'), 'invalid', 'Relation slot key must be an admitted item qualifier');
       const filter = annotations.relation_filter;
-      if (filter !== undefined && (typeof filter !== 'string' || !property.qualifiers.includes(filter)))
-        add(annotation('relation_filter'), 'invalid', 'Relation filter must be an admitted item qualifier');
+      const filters = Array.isArray(filter) ? filter : filter === undefined ? [] : [filter];
+      if (
+        filter !== undefined &&
+        (filters.length < 1 ||
+          filters.length > 2 ||
+          new Set(filters).size !== filters.length ||
+          filters.some((key) => typeof key !== 'string' || !property.qualifiers.includes(key)))
+      )
+        add(
+          annotation('relation_filter'),
+          'invalid',
+          'Relation filter must name one or two distinct admitted item qualifiers',
+        );
       if (relationGroups.includes(group as (typeof relationGroups)[number])) {
         property.relation = {
           group: group as RelationGroup,
@@ -625,7 +636,7 @@ export async function compileCatalogue(input: {
             | 'date'
             | 'name',
           ...direction,
-          ...(typeof filter === 'string' ? { filter } : {}),
+          ...(typeof filter === 'string' || Array.isArray(filter) ? { filter: filter as string | string[] } : {}),
           ...(typeof slotKey === 'string' ? { slotKey } : {}),
         };
       }
@@ -693,7 +704,12 @@ export async function compileCatalogue(input: {
           'The inverse property must not also be present in the release',
         );
     }
-    if (relation.filter && release.properties[relation.filter]?.datatype !== 'wikibase-item')
+    if (
+      relation.filter &&
+      (Array.isArray(relation.filter) ? relation.filter : [relation.filter]).some(
+        (key) => release.properties[key]?.datatype !== 'wikibase-item',
+      )
+    )
       add(
         { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_filter') },
         'invalid',

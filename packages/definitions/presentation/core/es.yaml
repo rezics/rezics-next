@@ -1,5 +1,6 @@
 types:
   wd:Q2095: alimento
+  wd:Q2620972: 'arco argumental'
   schema:Person: 'persona'
   schema:Organization: 'organización'
   schema:SoftwareApplication: 'aplicación de software'
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: cantidad
   rezics:note: nota
   rezics:listSection: sección de la lista
+  rezics:storyArc: 'Arcos argumentales'
+  rezics:firstPart: 'Primera parte'
+  rezics:lastPart: 'Última parte'
+  wdt:P518: 'Se aplica a la parte'
   schema:url: 'sitio web oficial'
   schema:name: 'nombre'
   schema:sameAs: 'correspondencia exacta'
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: 'Expansión o juego base'
 inverseProperties:
   wdt:P186: Se usa en
+  rezics:storyArc: 'Arco argumental de'
   schema:author: 'Obras escritas'
   schema:illustrator: 'Obras ilustradas'
   schema:director: 'Obras dirigidas'

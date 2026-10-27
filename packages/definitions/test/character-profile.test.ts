@@ -83,7 +83,7 @@ test('a fictional character is a catalogue profile that works reference by quali
   expect(properties['schema:character']).toMatchObject({
     datatype: 'wikibase-item',
     targets: [character],
-    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3831'],
+    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3831', 'wdt:P518'],
     mappings: ['wd:P674'],
   });
   expect(properties['wdt:P725']!.qualifiers).toEqual(

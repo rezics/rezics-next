@@ -44,6 +44,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'rezics:sameSetting',
       'rezics:sideStoryOf',
       'rezics:spinOffOf',
+      'rezics:storyArc',
       'rezics:summaryOf',
       'schema:abstract',
       'schema:author',
@@ -80,6 +81,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'rezics:sameSetting',
       'rezics:sideStoryOf',
       'rezics:spinOffOf',
+      'rezics:storyArc',
       'rezics:summaryOf',
       'schema:author',
       'schema:contributor',
@@ -129,7 +131,16 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     datatype: 'wikibase-item',
     multivalued: true,
     targets: ['schema:Organization', 'schema:Person'],
-    qualifiers: ['schema:position', 'schema:sameAs', 'wdt:P1932', 'wdt:P3180', 'wdt:P3831', 'wdt:P6298', 'wdt:P648'],
+    qualifiers: [
+      'schema:position',
+      'schema:sameAs',
+      'wdt:P1932',
+      'wdt:P3180',
+      'wdt:P3831',
+      'wdt:P518',
+      'wdt:P6298',
+      'wdt:P648',
+    ],
     mappings: ['wd:P50'],
   });
   expect(properties['schema:exampleOfWork']).toMatchObject({

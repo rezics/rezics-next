@@ -1,5 +1,6 @@
 types:
   wd:Q2095: food
+  wd:Q2620972: 'story arc'
   schema:Person: person
   schema:Organization: organization
   schema:SoftwareApplication: software application
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: quantity
   rezics:note: note
   rezics:listSection: list section
+  rezics:storyArc: 'Story arcs'
+  rezics:firstPart: 'First part'
+  rezics:lastPart: 'Last part'
+  wdt:P518: 'Applies to part'
   schema:url: URL
   schema:name: name
   schema:sameAs: exact match
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: 'Expansion or base game'
 inverseProperties:
   wdt:P186: Used in
+  rezics:storyArc: 'Story arc of'
   schema:author: 'Author of'
   schema:illustrator: 'Illustrator of'
   schema:director: 'Director of'

@@ -120,9 +120,10 @@ function linksOf(
         ? relationSlotForStatement(metadata.subject, link.property, fact.body, relation)
         : statementSlotId(metadata.subject, link.property);
     const values = new Set(['00000000-0000-0000-0000-000000000000']);
+    const filters = Array.isArray(relation?.filter) ? relation.filter : relation?.filter ? [relation.filter] : [];
     for (const qualifier of qualifiers) {
       if (
-        qualifier.property === relation?.filter &&
+        filters.includes(qualifier.property) &&
         qualifier.value.type === 'value' &&
         typeof qualifier.value.content === 'string' &&
         routeOf(qualifier.value.content) !== null

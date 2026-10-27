@@ -1,5 +1,6 @@
 types:
   wd:Q2095: 食物
+  wd:Q2620972: '故事篇章'
   schema:Person: '人物'
   schema:Organization: '组织'
   schema:SoftwareApplication: '软件应用程序'
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: 数量
   rezics:note: 备注
   rezics:listSection: 列表分节
+  rezics:storyArc: '故事篇章'
+  rezics:firstPart: '起始话或章'
+  rezics:lastPart: '结束话或章'
+  wdt:P518: '适用篇章'
   schema:url: '官方网站'
   schema:name: '名称'
   schema:sameAs: '精确匹配'
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: '扩展包或基础游戏'
 inverseProperties:
   wdt:P186: 用于
+  rezics:storyArc: '所属作品'
   schema:author: '著作'
   schema:illustrator: '插画作品'
   schema:director: '执导作品'

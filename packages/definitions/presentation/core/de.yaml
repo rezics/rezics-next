@@ -1,5 +1,6 @@
 types:
   wd:Q2095: Lebensmittel
+  wd:Q2620972: 'Handlungsbogen'
   schema:Person: 'Person'
   schema:Organization: 'Organisation'
   schema:SoftwareApplication: 'Softwareanwendung'
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: Menge
   rezics:note: Anmerkung
   rezics:listSection: Listenabschnitt
+  rezics:storyArc: 'Handlungsbögen'
+  rezics:firstPart: 'Erster Teil'
+  rezics:lastPart: 'Letzter Teil'
+  wdt:P518: 'Gilt für Teil'
   schema:url: 'offizielle Website'
   schema:name: 'Name'
   schema:sameAs: 'exakte Übereinstimmung'
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: 'Erweiterung oder Grundspiel'
 inverseProperties:
   wdt:P186: Verwendet in
+  rezics:storyArc: 'Handlungsbogen von'
   schema:author: 'Verfasste Werke'
   schema:illustrator: 'Illustrierte Werke'
   schema:director: 'Regiearbeiten'

@@ -1,5 +1,6 @@
 types:
   wd:Q2095: aliment
+  wd:Q2620972: 'arc narratif'
   schema:Person: 'personne'
   schema:Organization: 'organisation'
   schema:SoftwareApplication: 'application logicielle'
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: quantité
   rezics:note: note
   rezics:listSection: section de la liste
+  rezics:storyArc: 'Arcs narratifs'
+  rezics:firstPart: 'Première partie'
+  rezics:lastPart: 'Dernière partie'
+  wdt:P518: 'Concerne la partie'
   schema:url: 'site officiel'
   schema:name: 'nom'
   schema:sameAs: 'correspondance exacte'
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: 'Extension ou jeu de base'
 inverseProperties:
   wdt:P186: Utilisé dans
+  rezics:storyArc: 'Arc narratif de'
   schema:author: 'Œuvres écrites'
   schema:illustrator: 'Œuvres illustrées'
   schema:director: 'Œuvres réalisées'

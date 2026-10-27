@@ -1,5 +1,6 @@
 types:
   wd:Q2095: 食品
+  wd:Q2620972: 'ストーリー編'
   schema:Person: 人物
   schema:Organization: 組織
   schema:SoftwareApplication: ソフトウェアアプリケーション
@@ -8,6 +9,10 @@ properties:
   wdt:P1114: 数量
   rezics:note: 注記
   rezics:listSection: リストの区分
+  rezics:storyArc: 'ストーリー編'
+  rezics:firstPart: '開始話・章'
+  rezics:lastPart: '終了話・章'
+  wdt:P518: '対象の編'
   schema:url: URL
   schema:name: 名前
   schema:sameAs: 完全に一致
@@ -57,6 +62,7 @@ properties:
   rezics:expansionCounterpart: '拡張版・本編ゲーム'
 inverseProperties:
   wdt:P186: 使用先
+  rezics:storyArc: 'この編を含む作品'
   schema:author: '著作'
   schema:illustrator: 'イラスト担当作品'
   schema:director: '監督作品'
