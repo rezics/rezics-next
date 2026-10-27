@@ -413,10 +413,13 @@ test.serial('an account page read resolves the account by handle and plans its l
   const reviews = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=review&limit=1`);
   const posts = await getJson(`/v1/accounts/${pageAccount.id}/posts?limit=1`);
   const collections = await getJson(`/v1/accounts/${pageAccount.id}/collections?view=BASIC&limit=1`);
-  expect(answer.body.reads.r1.body).toEqual(discussions);
-  expect(answer.body.reads.r2.body).toEqual(reviews);
-  expect(answer.body.reads.r3.body).toEqual(posts);
-  expect(answer.body.reads.r4.body).toEqual(collections);
+  // The continuations are sealed per request, so compare the entries and require a continuation.
+  const sameEntries = ({ next: _next, ...entries }: Record<string, any>) => entries;
+  expect(sameEntries(answer.body.reads.r1.body)).toEqual(sameEntries(discussions));
+  expect(sameEntries(answer.body.reads.r2.body)).toEqual(sameEntries(reviews));
+  expect(sameEntries(answer.body.reads.r3.body)).toEqual(sameEntries(posts));
+  expect(sameEntries(answer.body.reads.r4.body)).toEqual(sameEntries(collections));
+  for (const key of ['r1', 'r2', 'r3', 'r4']) expect(answer.body.reads[key].body.next).toBeString();
   for (const list of [discussions, reviews, posts, collections]) expect(list.next).toBeString();
   expect(discussions.threads).toHaveLength(1);
   expect(reviews.threads).toHaveLength(1);
@@ -530,9 +533,13 @@ test.serial('account page read stays within its bound at 1, 10 and 100 threads',
   const within = (relation: string, limit: number) =>
     report.samples.every(({ cost }) => (cost.relations[relation]?.rows ?? 0) <= limit);
   expect(within('access.handle_claim', 1)).toBe(true);
-  expect(within('access.account', 2)).toBe(true);
+  // The account probe plus one visibility check for each of the four lists.
+  expect(within('access.account', 5)).toBe(true);
   expect(within('content.author_item', 16)).toBe(true);
   expect(within('content.thread', 24)).toBe(true);
+  expect(within('content.post', 12)).toBe(true);
+  expect(within('content.board', 20)).toBe(true);
+  expect(within('content.revision', 24)).toBe(true);
   expect(within('library.collection', 4)).toBe(true);
 });
 

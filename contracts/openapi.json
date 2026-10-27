@@ -54004,6 +54004,9 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "account": {
+                      "type": "string"
+                    },
                     "document": {},
                     "profile": {
                       "type": "string"

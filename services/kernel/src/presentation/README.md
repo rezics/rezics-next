@@ -44,9 +44,15 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 
 ### Page read
 
-- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject probe is reused. For an account template, the page first executes its `AccountIdentity` read, then re-plans account lists with the returned account id; an unknown handle has no list dispatches. This request releases its admission slot before those sub-reads; each sub-read takes its own.
+- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject or account target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` runs once and is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject and account probes are reused. This request releases its admission slot before those sub-reads; each sub-read takes its own.
 - Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
 - Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
+
+### Account page read
+
+- Touches: one handle claim and one account row (the account probe), one subject probe when the account is verified, then at most 16 distinct reads in one `readPage` call.
+- Bound: two probes plus the planned reads, whose summed `readCost` is at most 128 (checked at publish). Nothing grows with the number of accounts or with the account's activity beyond each list's `limit`.
+- Growth check: `test/presentation/agent-read-kinds.test.ts`, "account page read stays within its bound at 1, 10 and 100 threads", scales [1, 10, 100].
 
 ### Page inverse links read
 

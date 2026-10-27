@@ -18,8 +18,8 @@ import {
 
 export interface PageContext {
   subject: string | null;
-  /** Account resolved by an earlier account read in the same page plan. */
-  accountId?: string | null;
+  /** The account the page is for, resolved before planning. */
+  account?: { id: string; handle: string } | null;
 }
 
 export type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
@@ -39,15 +39,9 @@ export type PageRead =
   | { kind: 'collections'; id: string; limit: number }
   | { kind: 'reactions'; id: string }
   | { kind: 'account'; handle: string }
-  | {
-      kind: 'accountThreads';
-      id: string;
-      threadKind: 'discussion' | 'review';
-      limit: number;
-      cursor?: string;
-    }
-  | { kind: 'accountPosts'; id: string; limit: number; cursor?: string }
-  | { kind: 'accountCollections'; id: string; limit: number; cursor?: string }
+  | { kind: 'accountThreads'; id: string; threadKind: 'discussion' | 'review'; limit: number }
+  | { kind: 'accountPosts'; id: string; limit: number }
+  | { kind: 'accountCollections'; id: string; limit: number }
   | {
       kind: 'search';
       body: {
@@ -395,8 +389,8 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'AccountIdentity',
-      props: Type.Object({ handle: plainText({ maxLength: 64 }) }, closed),
-      read: (props) => ({ kind: 'account', handle: props.handle as string }),
+      props: Type.Object({}, closed),
+      read: (_props, page) => (page.account == null ? null : { kind: 'account', handle: page.account.handle }),
     },
     {
       type: 'AccountThreads',
@@ -404,58 +398,30 @@ export const platformRegistry = defineRegistry({
         {
           threadKind: enumeration(['discussion', 'review']),
           limit: Type.Integer({ minimum: 1, maximum: 20 }),
-          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
         },
         closed,
       ),
       read: (props, page) =>
-        page.accountId == null
+        page.account == null
           ? null
           : {
               kind: 'accountThreads',
-              id: page.accountId,
+              id: page.account.id,
               threadKind: props.threadKind as 'discussion' | 'review',
               limit: props.limit as number,
-              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
             },
     },
     {
       type: 'AccountPosts',
-      props: Type.Object(
-        {
-          limit: Type.Integer({ minimum: 1, maximum: 20 }),
-          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
-        },
-        closed,
-      ),
+      props: Type.Object({ limit: Type.Integer({ minimum: 1, maximum: 20 }) }, closed),
       read: (props, page) =>
-        page.accountId == null
-          ? null
-          : {
-              kind: 'accountPosts',
-              id: page.accountId,
-              limit: props.limit as number,
-              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
-            },
+        page.account == null ? null : { kind: 'accountPosts', id: page.account.id, limit: props.limit as number },
     },
     {
       type: 'AccountCollections',
-      props: Type.Object(
-        {
-          limit: Type.Integer({ minimum: 1, maximum: 24 }),
-          cursor: Type.Optional(plainText({ maxLength: 4_096 })),
-        },
-        closed,
-      ),
+      props: Type.Object({ limit: Type.Integer({ minimum: 1, maximum: 24 }) }, closed),
       read: (props, page) =>
-        page.accountId == null
-          ? null
-          : {
-              kind: 'accountCollections',
-              id: page.accountId,
-              limit: props.limit as number,
-              ...(props.cursor === undefined ? {} : { cursor: props.cursor as string }),
-            },
+        page.account == null ? null : { kind: 'accountCollections', id: page.account.id, limit: props.limit as number },
     },
     {
       type: 'SearchBox',

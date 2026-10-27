@@ -435,7 +435,7 @@ export function validateComposition(registry: CompositionRegistry, value: unknow
     try {
       const plan = planReads(registry, value as CompositionDocument, {
         subject: '00000000-0000-8000-8000-000000000000',
-        accountId: '00000000-0000-8000-8000-000000000000',
+        account: { id: '00000000-0000-8000-8000-000000000000', handle: 'placeholder' },
       });
       let cost = 0;
       for (const read of Object.values(plan.reads)) cost += readCost(read);

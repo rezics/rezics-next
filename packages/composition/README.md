@@ -142,10 +142,10 @@ REZICS visual language.
 | `RelationGroups`     | `property`: `curie()`, optional `filter`: subject UUID, optional `type`: `curie()`, `limit`: integer 1–24           |                |
 | `CollectionList`     | `title` (localized text, 120), `limit`: integer 1–6                                                                 |                |
 | `ReactionSummary`    | none                                                                                                                |                |
-| `AccountIdentity`    | `handle` (plain text, 64)                                                                                           |                |
-| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20, optional `cursor` (plain text, 4,096)                |                |
-| `AccountPosts`       | `limit`: integer 1–20, optional `cursor` (plain text, 4,096)                                                        |                |
-| `AccountCollections` | `limit`: integer 1–24, optional `cursor` (plain text, 4,096)                                                        |                |
+| `AccountIdentity`    | none                                                                                                                |                |
+| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20                                                       |                |
+| `AccountPosts`       | `limit`: integer 1–20                                                                                               |                |
+| `AccountCollections` | `limit`: integer 1–24                                                                                               |                |
 | `SearchBox`          | `placeholder` (localized text, 80)                                                                                  |                |
 | `LinkGrid`           | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
 | `TypeList`           | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
@@ -158,11 +158,16 @@ kernel cannot fill it. Without that content the `personal` slot renders nothing,
 included. `Slot` is the platform's rendering; reviewed first-party Zone code may wrap or
 replace it.
 
-An account template uses one `AccountIdentity` component to read the public profile by handle. The page read then
-uses that identity's account id to plan its `AccountThreads`, `AccountPosts` and `AccountCollections` components. An
-unknown handle has no list reads. Threads and replies return at most 20 entries per page; collections return at most
-24 entries and always use the standalone BASIC view. Each list result carries the standalone route's `next`
-continuation. The configured limit is the component's page-read cost; identity costs one.
+An account is part of the page target, as the subject is. The page context is `{ subject, account }`, where `account`
+is `{ id, handle }` or absent. `AccountIdentity` reads the public profile of the page account; `AccountThreads`,
+`AccountPosts` and `AccountCollections` read its lists. None of them names a handle, an id or a continuation cursor, so
+one template serves every account: an agent page at `/@handle` is a subject page, and a published template is
+immutable. A reader follows a list's `next` through its standalone route. Every account component reads nothing
+when the page has no account. An account whose agent is a graph subject takes that subject's type template, verified or
+not; an account without one takes the `schema:Organization` template for an organization and the `schema:Person`
+template for an actor. Automated actor accounts use the Person template until an agent type of their own exists.
+Threads and replies return at most 20 entries per page; collections return at most 24 entries and always use the
+standalone BASIC view. The configured limit is the component's page-read cost; identity costs one.
 
 `SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
 without the locale; the website renderer adds the locale.
@@ -273,25 +278,22 @@ the registry. It is absent from the generated JSON Schema, and documents cannot 
   id: string;
   threadKind: 'discussion' | 'review';
   limit: number;
-  cursor?: string;
 }
-// GET /v1/accounts/{id}/threads?kind=...&limit=...&cursor=...
+// GET /v1/accounts/{id}/threads?kind=...&limit=...
 
 {
   kind: 'accountPosts';
   id: string;
   limit: number;
-  cursor?: string;
 }
-// GET /v1/accounts/{id}/posts?limit=...&cursor=...
+// GET /v1/accounts/{id}/posts?limit=...
 
 {
   kind: 'accountCollections';
   id: string;
   limit: number;
-  cursor?: string;
 }
-// GET /v1/accounts/{id}/collections?view=BASIC&limit=...&cursor=...
+// GET /v1/accounts/{id}/collections?view=BASIC&limit=...
 
 type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
 ```
@@ -307,13 +309,12 @@ standalone route; data component rendering belongs to the website.
 
 `MAX_PAGE_READS` is 16, and planning throws if more distinct reads are needed. Every page
 subject plans the same number of subject reads, so the publish-time count bounds those reads; a null
-subject has no subject-specific reads. Account list reads are planned after the first account lookup and share the
-same 16-read limit. Planning is one walk over at most 256 nodes with one canonical
+subject has no subject-specific reads. Account reads are planned with the resolved page account in the same single plan
+and share the same 16-read limit. Planning is one walk over at most 256 nodes with one canonical
 serialization per data node (each descriptor is under 1 KiB). It is linear in the document
 and never depends on the catalogue. A page issues at most 16 distinct reads whatever its
-node count or subject, enforced at publish. The first account lookup may be dispatched before the account lists are
-planned; an unknown handle leaves those list components without a read. Publish-time validation plans account lists
-with a placeholder account id so their limits are included. The growth check covers 1, 16 and 200 data nodes planning
+node count or subject, enforced at publish. Publish-time validation plans account lists with a placeholder account
+(`{ id: '00000000-0000-8000-8000-000000000000', handle: 'placeholder' }`) so their limits are included. The growth check covers 1, 16 and 200 data nodes planning
 1, 16 and 1 reads, and refuses 17 distinct reads.
 
 `readCost(read)` is the row bound: 1 for subject, reaction or account identity reads and the `limit` for a search,

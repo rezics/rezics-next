@@ -1,4 +1,5 @@
 import { withHeaders } from '@elysia/openapi';
+import canonicalize from 'canonicalize';
 import {
   planReads,
   platformRegistry,
@@ -27,11 +28,13 @@ const resource = { route: 0, id: GLOBAL_CONTEXT };
 const closed = { additionalProperties: false } as const;
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const profileRoute = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
+const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const readResult = t.Object({ status: t.Integer(), body: t.Any() }, closed);
 const pageResponse = t.Object(
   {
     subject: t.Optional(t.String()),
+    account: t.Optional(t.String()),
     profile: t.String(),
     template: t.Object(
       {
@@ -47,7 +50,7 @@ const pageResponse = t.Object(
 );
 
 type ReadResult = { status: number; body: unknown };
-type PageTarget = { subject: string } | { route: string };
+type PageTarget = { subject: string } | { route: string } | { account: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -64,7 +67,7 @@ function reject(errors: FieldError[]): never {
   throw new ProblemError('invalid_request', { errors: sorted });
 }
 
-/** Closed target: exactly one of a canonical subject id or a profile route key. */
+/** Closed target: exactly one of a canonical subject id, a profile route key or an account handle. */
 function targetOf(body: unknown): PageTarget {
   const errors: FieldError[] = [];
   if (!isRecord(body)) reject([{ pointer: '', code: 'invalid_type' }]);
@@ -81,16 +84,15 @@ function targetOf(body: unknown): PageTarget {
     reject(errors);
   }
   for (const key of Object.keys(target)) {
-    if (key !== 'subject' && key !== 'route')
+    if (key !== 'subject' && key !== 'route' && key !== 'account')
       errors.push({ pointer: `/target/${segment(key)}`, code: 'unknown_field' });
   }
-  const hasSubject = Object.hasOwn(target, 'subject');
-  const hasRoute = Object.hasOwn(target, 'route');
-  if (hasSubject === hasRoute) {
+  const named = ['subject', 'route', 'account'].filter((key) => Object.hasOwn(target, key));
+  if (named.length !== 1) {
     errors.push({ pointer: '/target', code: 'invalid_type' });
     reject(errors);
   }
-  if (hasSubject) {
+  if (named[0] === 'subject') {
     const subject = target.subject;
     if (typeof subject !== 'string' || !subjectIdPattern.test(subject))
       errors.push({
@@ -98,6 +100,14 @@ function targetOf(body: unknown): PageTarget {
         code: typeof subject === 'string' ? 'invalid_format' : 'invalid_type',
       });
     else if (errors.length === 0) return { subject };
+  } else if (named[0] === 'account') {
+    const account = target.account;
+    if (typeof account !== 'string' || !handlePattern.test(account))
+      errors.push({
+        pointer: '/target/account',
+        code: typeof account === 'string' ? 'invalid_format' : 'invalid_type',
+      });
+    else if (errors.length === 0) return { account };
   } else {
     const route = target.route;
     const routeKey = typeof route === 'string' && route.length <= PROFILE_ROUTE_MAX_LENGTH && profileRoute.test(route);
@@ -113,6 +123,22 @@ function survivor(body: unknown): { id: string; type: string } {
   const { id, type } = body.subject;
   if (typeof id !== 'string' || typeof type !== 'string') throw new Error('Subject read did not return a subject');
   return { id, type };
+}
+
+/** The public account the account probe returned, or null when it is unknown, deleted or not visible. */
+function accountOf(body: unknown): { id: string; kind: string; state: string; subject: string | null } | null {
+  if (!isRecord(body) || !Array.isArray(body.accounts)) throw new Error('Account read did not return accounts');
+  if (body.accounts.length === 0) return null;
+  const account = body.accounts[0];
+  if (
+    !isRecord(account) ||
+    typeof account.id !== 'string' ||
+    typeof account.kind !== 'string' ||
+    typeof account.state !== 'string'
+  )
+    throw new Error('Account read did not return an account');
+  const subject = isRecord(account.subject) && typeof account.subject.id === 'string' ? account.subject.id : null;
+  return { id: account.id, kind: account.kind, state: account.state, subject };
 }
 
 function mergedSession(ring: KeyRing, scope: string, first: string | null, second: string | null): string | null {
@@ -184,31 +210,56 @@ export function pageRoutes<App>(
 
       const scope = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
       const session = { ring: tokens, scope };
-      let probe: ReadResult | undefined;
+      const probes = new Map<string, ReadResult>();
       let probeSession: string | null = null;
-      let subjectId: string | null = null;
+      // Run one probe read; its non-200 answer is the page's answer.
+      const probe = async (descriptor: PageRead): Promise<ReadResult> => {
+        const probed = await readPage({ dispatch, incoming: request, reads: { probe: descriptor }, session });
+        probeSession = mergedSession(tokens, scope, probeSession, probed.session);
+        const result = probed.results.probe!;
+        probes.set(canonicalize(descriptor)!, result);
+        return result;
+      };
+      const subjectProbe = async (id: string) => {
+        const result = await probe({ kind: 'subject', id });
+        if (result.status !== 200) return { failed: result } as const;
+        const found = survivor(result.body);
+        // The planned subject read names the survivor of a redirect, so the probe answers that descriptor too.
+        probes.set(canonicalize({ kind: 'subject', id: found.id })!, result);
+        return { subject: found } as const;
+      };
+      let subject: { id: string; type: string } | null = null;
+      let account: { id: string; handle: string } | null = null;
       let resolved: ResolvedTemplate;
-      if ('subject' in target) {
-        const probed = await readPage({
-          dispatch,
-          incoming: request,
-          reads: { subject: { kind: 'subject', id: target.subject } },
-          session,
-        });
-        probe = probed.results.subject;
-        probeSession = probed.session;
-        if (!probe || probe.status !== 200)
-          return respond(probe?.status ?? 500, probe?.body ?? null, probeSession, false);
-        const subject = survivor(probe.body);
-        subjectId = subject.id;
+      if ('route' in target) {
+        resolved = resolveTemplate(active.profile, { route: target.route });
+      } else {
+        let subjectTarget: string | null = null;
+        let kind = 'actor';
+        if ('subject' in target) {
+          subjectTarget = target.subject;
+        } else {
+          const result = await probe({ kind: 'account', handle: target.account });
+          if (result.status !== 200) return respond(result.status, result.body, probeSession, false);
+          const found = accountOf(result.body);
+          if (found === null || found.state !== 'active') throw new ProblemError('not_found');
+          account = { id: found.id, handle: target.account };
+          subjectTarget = found.subject;
+          kind = found.kind;
+        }
+        if (subjectTarget !== null) {
+          const probed = await subjectProbe(subjectTarget);
+          if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, false);
+          subject = probed.subject;
+        }
         const release = await activeRelease(pool);
-        const definition = release?.release.types[subject.type];
+        // An account without a named subject takes the template of its kind's agent type.
+        const type = subject?.type ?? (kind === 'organization' ? 'schema:Organization' : 'schema:Person');
+        const definition = release?.release.types[type];
         resolved = resolveTemplate(active.profile, {
-          type: subject.type,
+          type,
           ...(definition === undefined ? {} : { bases: definition.bases }),
         });
-      } else {
-        resolved = resolveTemplate(active.profile, { route: target.route });
       }
 
       return pageAnswer({
@@ -217,8 +268,9 @@ export function pageRoutes<App>(
         session,
         digest: active.digest,
         resolved,
-        subjectId,
-        probe,
+        subject: subject?.id ?? null,
+        account,
+        probes,
         probeSession,
       });
     },
@@ -232,66 +284,34 @@ async function pageAnswer(input: {
   session: { ring: KeyRing; scope: string };
   digest: string;
   resolved: ResolvedTemplate;
-  subjectId: string | null;
-  probe: ReadResult | undefined;
+  subject: string | null;
+  account: { id: string; handle: string } | null;
+  probes: Map<string, ReadResult>;
   probeSession: string | null;
 }): Promise<Response> {
-  const readKey = (descriptor: PageRead) => JSON.stringify(descriptor);
-  const resultsByRead = new Map<string, ReadResult>();
-  let readSession: string | null = input.probeSession;
-  const run = async (reads: Record<string, PageRead>) => {
-    if (Object.keys(reads).length === 0) return;
+  // The probes already ran; plan once and run what they did not answer in one call.
+  const plan = planReads(platformRegistry, input.resolved.document, { subject: input.subject, account: input.account });
+  const results = new Map(input.probes);
+  const pending: Record<string, PageRead> = {};
+  for (const descriptor of Object.values(plan.reads)) {
+    const key = canonicalize(descriptor)!;
+    if (!results.has(key)) pending[`p${Object.keys(pending).length}`] = descriptor;
+  }
+  let readSession = input.probeSession;
+  if (Object.keys(pending).length > 0) {
     const page = await readPage({
       dispatch: input.dispatch,
       incoming: input.request,
-      reads,
+      reads: pending,
       session: input.session,
     });
-    for (const [key, descriptor] of Object.entries(reads)) resultsByRead.set(readKey(descriptor), page.results[key]!);
+    for (const [key, descriptor] of Object.entries(pending)) results.set(canonicalize(descriptor)!, page.results[key]!);
     readSession = mergedSession(input.session.ring, input.session.scope, readSession, page.session);
-  };
-  const hasProbe = (descriptor: PageRead) =>
-    input.probe !== undefined && descriptor.kind === 'subject' && descriptor.id === input.subjectId;
-
-  // Account lists depend on the public identity's id. Execute all independent reads and identity probes first,
-  // then re-plan once that id is known. Missing identities leave account list components without a read.
-  const initial = planReads(platformRegistry, input.resolved.document, {
-    subject: input.subjectId,
-    accountId: null,
-  });
-  const initialPending: Record<string, PageRead> = {};
-  for (const [key, descriptor] of Object.entries(initial.reads)) {
-    if (hasProbe(descriptor)) resultsByRead.set(readKey(descriptor), input.probe!);
-    else initialPending[key] = descriptor;
   }
-  await run(initialPending);
-
-  const firstAccount = Object.values(initial.reads).find((descriptor) => descriptor.kind === 'account');
-  let accountId: string | null = null;
-  if (firstAccount !== undefined) {
-    const body = resultsByRead.get(readKey(firstAccount))?.body;
-    if (isRecord(body) && Array.isArray(body.accounts) && isRecord(body.accounts[0])) {
-      const candidate = body.accounts[0].id;
-      if (typeof candidate === 'string' && subjectIdPattern.test(candidate)) accountId = candidate;
-    }
-  }
-
-  const plan =
-    accountId === null
-      ? initial
-      : planReads(platformRegistry, input.resolved.document, { subject: input.subjectId, accountId });
-  const followup: Record<string, PageRead> = {};
-  let followupIndex = 0;
-  for (const descriptor of Object.values(plan.reads)) {
-    if (resultsByRead.has(readKey(descriptor))) continue;
-    if (hasProbe(descriptor)) resultsByRead.set(readKey(descriptor), input.probe!);
-    else followup[`r${followupIndex++}`] = descriptor;
-  }
-  await run(followup);
 
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
-    const result = resultsByRead.get(readKey(descriptor));
+    const result = results.get(canonicalize(descriptor)!);
     if (!result) throw new Error('Page read did not return a result');
     reads[key] = result;
   }
@@ -299,7 +319,8 @@ async function pageAnswer(input: {
   return respond(
     200,
     {
-      ...(input.subjectId === null ? {} : { subject: input.subjectId }),
+      ...(input.subject === null ? {} : { subject: input.subject }),
+      ...(input.account === null ? {} : { account: input.account.id }),
       profile: input.digest,
       template: { scope: input.resolved.scope, key: input.resolved.key },
       document: input.resolved.document,
