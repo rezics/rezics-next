@@ -173,6 +173,191 @@ A Context's custom relation types are one term extension: an immutable body addr
 - The release a Context sees is the Global release plus Global's extension plus the Context's own, composed into one release by `applyExtension` and addressed by its own digest (`semantic.release_composite` maps it back to its parent and extension). Candidates and the link relay keep the composed digest; a subject's own revisions keep the published release, so reading a subject in another Context never picks up this Context's terms. Proposals, acceptance, adoption, relation and link pages, previews and counts, and the subject read resolve through it. Bulk writes, merges, search source reads and summaries use the published release or resolve a stored digest.
 - The graph read is the relation and link pages: there is no separate graph endpoint.
 
+## Search
+
+### Current leaf evidence
+
+This additive internal contract is a native implementation handoff, deliberately red until the independent export
+below exists. It preserves public `SubjectSource`, Search admission, deadlines, `checkHits` and its unknown/drop
+policy. `SubjectSource.read` loads unrelated facts/history; `matchRelationFacets` samples a recorded witness and
+32 alternatives without caller accounting or continuation. Neither is this reader. The Search scope admission
+scaffold's callbacks are not implemented identity or evidence ports.
+
+Semantic returns current selected facts, never a Boolean filter verdict. Search owns values, inclusive ranges,
+units and qualifier matching and ONE shared AND/OR/NOT interpreter extracted from `disclosure/check.ts` for both
+`checkHits` and explicit point evaluation. No arbitrary AST, script, predicate, supplied positive evidence, fake
+Hit, public subject DTO, labels, renderer, private overlay or per-actor native allow cache enters this port.
+The proposed Search extraction is `disclosure/check.ts:evaluateCurrentFilter(filter: FilterDocument,
+evidence: readonly LeafEvidence[]): RelationFacetMatch`, with evidence aligned to the deterministic deduplicated
+leaf plan. It maps incomplete/noncurrent evidence to unknown and shares the existing leaf matcher and Boolean
+plan with `checkHits`; tests dynamically resolve it and never supply a handwritten interpreter.
+Only currently admitted shapes are supported; this contract does not admit qualified relations that Search
+currently refuses. Qualifiers on supported material leaves remain normalized item qualifiers on the same statement.
+
+The exact proposed independent export is `scope-leaf-evidence.ts:readScopeLeafEvidence`. Types below are closed;
+`Pool`, `Access`, `Actor`, `AuthoritativeTime`, `FactClause` and `IndexedStatement` retain their existing meanings.
+`FactClause` is imported type-only; no Search interpreter is imported by Semantic. A request contains ONE admitted
+leaf, not a filter tree. The native reader verifies its shape and current release capability; admission is never
+an authority claim. Statement constraints may select a proven complete possible-witness pair range for item
+values; otherwise read the property's bounded selected slot. Range/qualifier predicates are not SQL filters.
+
+```ts
+export type LeafWork = Readonly<{
+  keys: number;
+  points: number;
+  witnesses: number;
+  rows: number;
+  bytes: number;
+  emptySeeks: number;
+}>;
+export type LeafProgress = Readonly<{
+  basis: string;
+  phase: 'compact' | 'selection' | 'witness';
+  valueOrdinal: number;
+  after: string | null;
+}>;
+export type SelectedLeafFact = Readonly<{
+  witness: string;
+  statement: IndexedStatement;
+  release: string;
+  revision: number;
+  rank: 'normal' | 'preferred';
+}>;
+export type LeafCoverage = { kind: 'selection'; basis: string } | { kind: 'empty_pair'; basis: string };
+export type LeafEvidence =
+  | { state: 'basis_changed' | 'not_ready'; usage: LeafWork }
+  | {
+      state: 'current';
+      basis: string;
+      type: string | null;
+      facts: readonly SelectedLeafFact[];
+      coverage: LeafCoverage | null;
+      progress: LeafProgress | null;
+      usage: LeafWork;
+    };
+export function readScopeLeafEvidence(
+  pool: Pool,
+  request: Readonly<{
+    subject: string;
+    leaf: FactClause;
+    after: LeafProgress | null;
+    revalidate: string | null;
+    budget: LeafWork;
+  }>,
+  options: Readonly<{
+    access: Access;
+    actor: Actor;
+    routeKey: Uint8Array;
+    deadline: number;
+    nativeT?: AuthoritativeTime;
+  }>,
+): Promise<LeafEvidence>;
+```
+
+`revalidate` is one opaque native witness identity previously returned by this reader, at most 128 ASCII bytes,
+never an allow token. It restricts work to that exact candidate/recording identity, while rechecking all current
+selection, source, original/terminal, fence and referenced-target authority. It cannot supply or override a body.
+It is mutually exclusive with `after`. Facts contain only public normalized facet data needed by the leaf; no
+references, source tuple, raw body, private candidate content or labels. Type leaves return actual authoritative
+`subject.type`, no facts, a current selection coverage certificate and no progress. Denied/nonvisible sources
+return `not_ready` without revealing type, terminal identity or facts, not definitive leaf false.
+
+`basis` is a lowercase SHA-256 digest of length-delimited, versioned source identity/eligibility observations,
+current write release and admitted leaf meaning, and the selected native slot/driver coverage version. It is
+source/property local, never ordinary `core.partition.position`. For complete bounded selection it includes the
+current relevant foreign fence/target observations. For witness progress it fences source selection/meaning only:
+foreign eligibility is re-read for each witness, and DOES NOT certify previously rejected witnesses still fail.
+A relevant selection, adoption, suppression, retraction, disclosure/consent, source identity or release change
+invalidates unsafe progress with `basis_changed` and no facts. Unrelated positions do not. No digest summarizes
+all foreign targets by an unbounded scan. Missing target/fence/home observations propagate unavailable or unknown.
+
+Selection uses the SAME current compact/expanded machinery as `slots.ts` and `search-source.ts`: latest slot
+operation, compact assertion/retraction, current Global adoption mode and selected candidate rank, exact candidate
+revision/release, moderation, terminal retraction and public consent. Preferred and normal remain eligible;
+deprecated and community-only selection do not. Expanded selected candidates are point reads (at most 32), not a
+history fold. Compact slots use their native at-most-33 operation bound. Relation witnesses use the actual
+`relation_facet_statement` possible-identity pair index and `facet-witness-evidence.sql` checks. Extract private
+`visibleWitnesses` with accounting rather than building a competing resolver; extend its hardcoded normal rank
+and normalization through the same selected-statement helper. Extract `indexedStatement` rather than duplicating
+its year, amount/unit and same-statement item-qualifier conversion. Apply `statement-disclosure.ts` public consent,
+`candidateSources`/`fencedIds` and Content `readFences`; trusted keys and publication hints alone confer no right.
+
+Coverage is stronger than running out of a budget or cursor range. `selection` means the ENTIRE bounded current
+native selected slot has been read in this observation, including all relevant current target/fence checks.
+`empty_pair` means an exact EMPTY full `(route, subject_id, property, value)` prefix of the synchronously maintained
+possible-witness superset, with native/compact writes, expansion, proposal and old-data bootstrap coverage proved
+complete, for EVERY requested pair in the leaf. This is the precise pair-absence extension to the existing witness
+contract. A hint miss, sampled128 values, recorded+32 misses, stale generation, removed hint, unknown target or end
+of a previously rejected stream is NOT coverage. Nonempty historical pairs cannot use `empty_pair`, even after
+repair removed their visible hint. Foreign hide/restore/fence changes cannot invalidate an empty superset proof;
+for selection coverage they require fresh current foreign observations. No local generation alone proves foreign
+absence. If neither proof applies, coverage stays null and the existing coalesced source-home finite durable
+`requestFacetRebuild` is requested. Do not introduce a second absence table or authority.
+
+`current` means evidence was observed now, not that the leaf matches. With null coverage Search may use a matching
+current witness as a positive; otherwise the leaf is unknown, including under NOT. Nonmatching partial facts cannot
+prove false. A nonnull progress is raw unfinished work, never exhausted. An empty raw range may end progress while
+coverage remains null: this requests repair/readiness, not false or EOF. Search re-reads every earlier positive
+before final disclosure, including original and terminal Access and current source authority. Any nonmatching
+final reread removes the old positive; it cannot fall back to its earlier truth value.
+
+Reserve independent keys/points/witnesses/raw rows/bytes/empty seeks BEFORE dispatch. All fields must be finite
+nonnegative safe integers; each field must be positive for a nonempty read, keys <= 101 and witnesses <= 100.
+A zero or malformed reservation fails before SQL, including Access preparation. Account raw duplicates, discarded
+rows, driver keys, candidate/revalidation work and explicitly reserved key-only lookahead (at most one) before
+filtering. No hidden refill loops. `usage` is actual consumption, never the reservation or just returned rows;
+bytes are UTF-8 field payload bytes (binary bytea length, null zero), including discarded native evidence. Refuse
+unbounded payloads using native bounded metadata/length reads before fetching bodies; length/sentinel points and
+rows count too. Empty indexed probes consume points and emptySeeks. If an otherwise valid budget cannot reserve
+the next bounded unit, return unfinished work/not_ready with actual usage; no silent overspend or fabricated false.
+Zone additionally debits every leaf/internal driver key from aggregate256. Each owner step consumes <=100 keys plus
+its explicitly reserved lookahead. Deadline and unavailable errors propagate through existing typed handlers.
+
+The owner calls ACTUAL `readTerminalSubjectIdentity`, `readIdentityBasis`, and `readSubjectAliasGroup`, independently
+of this per-leaf port. It prepares Access before checking out each anchor, evaluates on that anchor's SAME RR client,
+and releases it before other-home preparation. NativeT is passed unchanged. A poolmax1 must suffice. Identity basis
+preparation, each continuation and final use each pay TWO4096-home sweeps: 8192 metadata rows PLUS core observations,
+separately from per-leaf work, once per owner phase rather than free or per candidate. Missing identity exports are
+separate native dependencies, dynamically resolved only after a valid native command/Access baseline.
+
+Progress advances lexicographically through the deterministic admitted value order and actual raw witness UUIDs.
+For compact/selection phases `after` is the canonical decimal native sequence/selected ordinal; for witness phase
+it is the last CONSUMED UUID, never unused lookahead. `valueOrdinal` is 0..63, phase and after have bounded size.
+Unfinished reads with enough allowance strictly advance or explicitly report not_ready/basis_changed. Do not repeat
+the same32/256 sample. After finite quiescence and bounded existing maintenance, surviving witnesses257 and4096 are
+reachable in finite calls. A restored witness behind a keyset needs a FRESH traversal; no snapshot/latency guarantee
+under perpetual writes. Repair can publish a fresh useful hint so the owner can re-read all deterministic leaves
+for final evaluation without retaining historical truth in a token.
+
+The existing encrypted position stays exactly
+`[basisDigest, settledCanonicalId, groupId, sourceOrdinal, aliasAfter, sourceAfter, ownerBasisDigest, formatVersion]`.
+Proposed `sourceAfter` is ONE fixed 28-byte native raw record, base64url encoded (38 ASCII bytes): version u8,
+Search deterministic leaf ordinal u8 (0..31), phase u8, value ordinal u8, decimal sequence as unsigned big-endian
+u64, witness UUID16 (zero for no UUID). Unused sequence/UUID fields must be zero. Null progress uses empty string.
+It is not a nested token, JSON, leaf vector, prior result, witness receipt or allow/deny claim. Native progress.basis
+maps to ownerBasisDigest; that digest also binds current Search source/query/release/profile/generation. Search
+reconstructs the deterministic leaf from the admitted plan and recomputes/checks the composite basis before reuse.
+The original being evaluated is the independent native aliasAfter raw key, groupId is its canonical group,
+sourceOrdinal selects the owner and basisDigest is actual structural identity. While a leaf is pending, retain
+that original in aliasAfter; resume the actual native alias cursor only after settling it. Never overwrite it
+with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
+are request-local, not serialized. This scalar mapping needs manager/Search review before production; if an owner
+also needs independent unresolved prefix state at this boundary, that is a shared-protocol decision, NOT permission
+to append a ninth key or concatenate tokens. The existing scaffold's unresumable `leaves` callback must be replaced
+by this real evidence port in its own implementation, not claimed as covering capability.
+
+Small independent production slices are (1) shared accounted selection/normalization extraction over real source,
+slots, witness evidence, fences and consent; (2) the independent leaf reader and bounded raw continuation over those
+helpers and proven pair coverage; (3) Search's shared evaluator extraction and final owner composition with actual
+identity ports. Existing witness storage/bootstrap/completeness and finite relay repair must land first where
+used; structural identity implementation remains separate. None is production code in this specification.
+
+#### Native current leaf evidence read
+
+- Touches: one admitted source/type/selected property, bounded slot operations/Global selection or one possible-witness pair range, exact candidate/revision/release/public consent/moderation/retraction points and current foreign fences/targets; Access and identity metadata sweeps are independently charged as above.
+- Bound: actual usage <= each independent caller reservation; <=100 raw driver/witness keys plus one explicitly reserved lookahead per call, independent of unrelated properties/history and total relation degree; SQL rows/statements constant and blocks logarithmic at fixed step. Total resumable work may grow with the relevant witness range. No whole-subject snapshot or whole-degree fetch.
+- Growth check: `test/semantic/growth-scope-leaf-evidence.test.ts`, `leaf evidence cost is bounded under unrelated property history and relation growth`, separate legal `[64,512,4096]` axes at fixed caller step, one warmup and three repetitions capturing actual SQL rows/blocks/statements and native usage. Native behavior regressions are in `test/semantic/scope-leaf-evidence.test.ts`; missing exports fail only after real commands, actual selected facts and real Access succeed.
+
 ## Cost
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
