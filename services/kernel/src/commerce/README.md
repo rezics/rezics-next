@@ -6,6 +6,46 @@ Commerce owns offers, checkout orders, payment evidence, buyer entitlements and 
 
 Configure `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` as absolute HTTPS URLs. Either URL may include `{ORDER_ID}`; the kernel replaces every occurrence with the order's ID for both the initial Checkout Session create and reconciliation retries. Stripe's `{CHECKOUT_SESSION_ID}` placeholder is also allowed and passes through unchanged. For example, `https://rezics.com/orders/{ORDER_ID}?checkout=success` returns to the order page. Other brace placeholders are rejected at startup.
 
+## Deletion and account-private minimization (first public)
+
+[Shared deletion policy](../../../../docs/deletion.md) is authoritative. Commerce currently has no record soft-delete,
+restore, early-purge route or account-erasure consumer. Offer delisting, payment settlement, and refund/dispute
+entitlement changes are business state transitions. They do not create deletion tombstones, a 30-day record undo,
+or a physical-erasure guarantee. If a Commerce-owned record deletion is later introduced, its restore window is
+exactly 30 days from kernel-clock `deletedAt`; the exact day-30 boundary rejects undo. The current business-state
+commands are not deletion or restore APIs.
+
+| Record / supported mutation | Current reads, authority and state | First-scope deletion requirement and actual gap |
+| --- | --- | --- |
+| `commerce.offer` / delist or revise | The seller changes offer state through `offer:manage`; delisting stops new checkout. This is not a deleted tombstone or an undo. Public catalogue reads do not expose delisted offers; the seller's Commerce record remains. | Delisting does not minimize account-linked offer fields or erase the record. The account event currently has no Commerce consumer, so offer-linked personal fields are not purged by account erasure; no public-offer retention rule is inferred here. |
+| `commerce.purchase_order` / checkout and settlement | The buyer reads their order; captured buyer, offer, creator, target and price terms are immutable. Pending/paid/failed/unknown settlement and Checkout reconciliation are payment facts, not deletion. No delete or restore route exists. | Withhold private order reads at terminal account deletion T. The buyer/target relation and Checkout payload can themselves identify a private purchase, so minimize or erase them under the shared policy. No Commerce account-erasure consumer or field-minimization path exists. |
+| `commerce.entitlement` / grant or refund/dispute revocation | The buyer reads their entitlement. Stripe settlement grants or revokes it for refund/dispute facts; changing `revokedAt`/reason is a business state transition. Provider reconciliation may reactivate it only when a newer authoritative Stripe snapshot makes the benefit active again. A Library restore or account-deletion undo must never reactivate a revoked benefit or reverse payment truth. | Withhold the buyer's entitlement at T and erase the whole account-to-order/offer/subject fact when that relation is personal. The current Commerce schema has no deletion/restore lifecycle or account consumer. |
+| `commerce.order_transaction` / recorded Stripe facts | These rows record charge, refund, dispute and reversal transactions; they have no user delete or restore API. The `order_transaction_guard` rejects every UPDATE and DELETE. | The trigger is an implementation constraint, not an approved financial-retention exemption. Shared policy still requires personal/private field minimization and whole-row erasure when the remaining transaction skeleton is personal. No minimization path exists, so no erasure guarantee is made. |
+| `commerce.royalty_line` / payout recording | Royalty lines are derived from named order transactions and have no user delete or restore API. The `royalty_line_guard` rejects every UPDATE and DELETE. | Apply the same shared minimal-purge rule; do not infer a financial-retention exemption from the trigger. Account linkage, source IDs and amounts need an owner-agreed minimization/whole-row policy. No account consumer or erasure path exists. |
+| `commerce.payout_statement` / mark paid | A creator reads their statement and lines. Mark-paid is a state change with current `payout_statement:mark_paid` authority; paid statements cannot be updated. It is not a deletion or restore operation. | Withhold account-private statement reads at T and minimize personal fields after the shared policy window. Keep only a safe nonpersonal skeleton where permitted; otherwise erase the row. No account-private consumer or cleanup currently exists. |
+
+Account deletion is terminal at T. Accounts publishes the terminal `account-tombstoned.v1` event and does not wait for
+consumers; account erasure requires no platform action. Commerce has no account restore or account-generation port.
+The current `commerceWorkModule` registers Stripe reconciliation and royalty recording only, not an account-private
+purge consumer. The acceptance coverage for account retention advances to T+30 days to check upper-bound erasure;
+that is not authorization for immediate or otherwise early purge and does not set the earliest eligible time. The
+earliest Commerce account-private purge timing requires the manager/supermanager to reconcile it with the shared
+policy. Do not treat immutable transaction triggers as a policy exemption.
+
+Any future automatic due work must reuse the shared kernel lifecycle, durable checkpoint, cursor and retention
+protocols, not a Commerce-local deletion engine. It must bind the exact terminal account and T, check the shared
+policy due time and current legal hold in each destructive transaction, and persist effect, receipt, checkpoint
+and continuation atomically. Select **1 <= P <= 100 indexed source rows before filtering**, or prove a partial
+due/pending index; advance past held and rejected rows so they cannot starve later work. Bound bytes and effects,
+page from the source before filtering, and avoid OFFSET, broad account/principal/JSON/history scans and default
+cascades. A legal hold suspends purge without restoring disclosure. No early-purge route or parameter is exposed;
+if one is introduced, it requires its own explicit platform permission on the exact target.
+
+The exact missing authority contract is an Accounts-owned binding from the terminal tombstone event to the current
+deleted account and its authoritative T, plus a per-page due-time and legal-hold check supplied by shared kernel
+authority. The event alone does not decide the earliest account-purge time. Commerce has no consumer to make that
+check and no minimization or bounded purge implementation, so these rows remain an explicit first-scope gap.
+
 ## Cost
 
 These are derivations from the commerce adapters and SQL, `src/work/`, `db/commerce/migrations/` and `db/commerce/schema.sql`, not measurements or guaranteed PostgreSQL plans.
