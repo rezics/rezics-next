@@ -1,5 +1,6 @@
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type { Access } from '../request/access.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
@@ -26,6 +27,7 @@ type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' |
 type Ports = Required<
   Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery' | 'confirmBarrier' | 'completeBarrier'>
 >;
+const AUTH_BARRIER_BUDGET_MS = 3_000;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
@@ -215,7 +217,7 @@ export function createCredentialFloorHook(config: {
         : null;
     }
     const digest = createHash('sha256').update(canonicalize(input)!).digest();
-    const deadline = Date.now() + 3000;
+    const deadline = deadlineFor(AUTH_BARRIER_BUDGET_MS);
     const result = await runCommand(
       config.pool,
       {

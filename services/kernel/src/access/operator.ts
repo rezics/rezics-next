@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import { verifiedBearerExpiry } from './approved-identity.ts';
@@ -37,6 +38,7 @@ import { readAccount, type Account } from './account-data.ts';
 import { actingCommandAccount, commandAccessContext } from './command-admission.ts';
 import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
 import { createAccess as createPermissionAccess } from './permission.ts';
+import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import accountRead from './operator-account.sql';
 import reservationRead from './operator-reservation.sql';
@@ -56,7 +58,6 @@ import nativeFence from './lifecycle-fence.sql';
 import { lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 
 export const OPERATOR_RECEIPT_TTL_MS = 60_000;
-const EVIDENCE_TTL_MS = 1000;
 const NAMESPACE = '134e9749-1120-8a0c-97d0-71287a629cef';
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 export class OperatorDeniedError extends Error {
@@ -385,7 +386,10 @@ export function createOperatorCommands(config: OperatorConfig) {
   const management: OpeningManagement = {
     async prepare(attempt, opening) {
       requireAllowed(opening.action === managementAction);
-      const context = { actor: opening.principal, deadline: Date.now() + EVIDENCE_TTL_MS };
+      const context = {
+        actor: opening.principal,
+        deadline: accessEvidenceDeadline(deadlineFor(ACCESS_EVIDENCE_TTL_MS)),
+      };
       const input = {
         operatorAccountId: opening.operatorAccountId,
         subjectAccountId: opening.subjectAccountId,
@@ -593,7 +597,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           input.operatorAccountId !== input.expectedOperatorAccountId,
       );
       if (input.expectedOperatorAccountId !== null) route(input.expectedOperatorAccountId);
-      const deadline = Date.now() + EVIDENCE_TTL_MS;
+      const deadline = accessEvidenceDeadline(deadlineFor(ACCESS_EVIDENCE_TTL_MS));
       const held = await reservation(input);
       const operator = await read(input.operatorAccountId);
       const bound = operator ? databaseDeadline(operator, deadline) : '';

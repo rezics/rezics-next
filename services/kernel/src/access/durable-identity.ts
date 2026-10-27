@@ -1,5 +1,6 @@
 import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
 import { accessEvidence } from './evidence.ts';
+import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
@@ -105,7 +106,7 @@ export async function restoreOperationIdentity(
     typeof readConsent !== 'function'
   )
     throw new Error('Durable identity unavailable');
-  const deadline = context.deadline;
+  const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
   // Copy the allowlisted result before releasing the module's reader. Subsequent
   // callback/JSON mutations can never change the verified receipt binding.
   const record: DurableInitiatorRecord | null = await within(deadline, () =>

@@ -1,4 +1,5 @@
 import { accessClock, installAccessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type {
   AccountWorkflowPorts,
   AccountOperation,
@@ -243,7 +244,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       verifyCredentialEffect: (reference, expected) =>
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
-  const boundary = () => ({ pool, deadline: Date.now() + COMMITTED_CONTINUATION_RESUME_BUDGET_MS });
+  const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
       pool,

@@ -10,10 +10,12 @@ import { createAccess } from './permission.ts';
 import { installStandingParentGrant } from './standing-parent.ts';
 import type { AccountActor } from '../request/access.ts';
 import { PLATFORM_RESOURCE } from './governance-reach.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 export { PLATFORM_RESOURCE } from './governance-reach.ts';
 
 export const PLATFORM_GOVERNANCE_ROLE = 'platform.governance';
+export const BOOTSTRAP_GOVERNANCE_DEADLINE_MS = 10_000;
 
 export class BootstrapGovernanceUnavailableError extends Error {
   constructor() {
@@ -45,7 +47,7 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
     role: PLATFORM_GOVERNANCE_ROLE,
     resource: PLATFORM_RESOURCE,
   };
-  const deadline = Date.now() + 10_000;
+  const deadline = deadlineFor(BOOTSTRAP_GOVERNANCE_DEADLINE_MS);
   const authorization: CommandAuthorization = {
     action: 'access:grant',
     resource: PLATFORM_RESOURCE,

@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -554,7 +555,7 @@ export function createCommittedContinuations(config: {
       const at = clock();
       if (!Number.isFinite(at.getTime())) throw new GrantDeniedError();
       const frozen = () => new Date(at.getTime());
-      const deadline = Date.now() + 10_000;
+      const deadline = deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS);
       const context: AccessContext = { pool: config.pool, deadline };
       let actor: AccountActor;
       try {

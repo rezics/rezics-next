@@ -19,6 +19,7 @@ import {
 import { createAccess as trustedPermissionAccess } from './permission.ts';
 import { createAccess, createWorkflowApprovals } from './index.ts';
 import {
+  MEMBERSHIP_WORK_DEADLINE_MS,
   readMembershipRouteKey,
   readMembershipWorkConfig,
   type MembershipWorkConfig,
@@ -31,6 +32,7 @@ import {
   LIFECYCLE_ACTIONS,
   type LifecycleRequest,
 } from './lifecycle.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 export class MembershipWorkConflictError extends Error {
   readonly code = 'membership_work_conflict';
@@ -141,7 +143,7 @@ function membershipWorkPorts(
           ...(input.reservationId === undefined ? {} : { reservationId: input.reservationId }),
           authorization: reference,
         },
-        { pool: context.pool, deadline: Date.now() + 30_000 },
+        { pool: context.pool, deadline: deadlineFor(MEMBERSHIP_WORK_DEADLINE_MS) },
       );
     },
     actorAccountId: (request) => request.actor.accountId,

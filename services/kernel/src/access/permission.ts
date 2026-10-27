@@ -1,4 +1,5 @@
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
+import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
@@ -266,7 +267,7 @@ export function createAccess(config: PermissionConfig): Access {
     page?: ResourcePage,
   ) {
     const evidence = Object.freeze({});
-    const deadline = context.deadline;
+    const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
     try {
       requireAccessDeadline(deadline);
       const metadata = actions.get(action);

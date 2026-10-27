@@ -1,4 +1,5 @@
 import { accessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type { AuthSessionPort } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
@@ -19,6 +20,7 @@ export type OperatorSessionCapability = {
   consumeAuthAuthorization: NonNullable<AuthBindingCapabilities['consumeAuthAuthorization']>;
 };
 const SCOPE = 'access.operator-session.v1';
+const AUTH_SESSION_BUDGET_MS = 3_000;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
@@ -65,7 +67,7 @@ export function createOperatorSessionCapability(config: {
       if (input.purpose !== 'session') throw new AuthBindingUnavailableError('consumeAuthAuthorization');
       const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
       allowed(reference.subjectAccountId === input.subjectAccountId);
-      const deadline = Date.now() + 3000;
+      const deadline = deadlineFor(AUTH_SESSION_BUDGET_MS);
       // Only Auth's exact native human proof, live inside consumeAuthorization,
       // can mint this ordinary short JWT. It is never retained or persisted here.
       const actor = await access.authenticate(await accessTokenForProof(input.human), { pool, deadline });
