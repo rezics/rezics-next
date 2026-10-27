@@ -62,11 +62,11 @@ Cached repositories were reused, read as untrusted data, and never installed, bu
 are relative to `/home/edge/projects/rezics/rezics-next/.reference/`; sparse files also exist as pinned Git blobs.
 The shared `INDEX.md` records this research's reuse. These sources support patterns, not copied implementation.
 
-| Source and licence | Pinned paths / primary link | Finding |
-| --- | --- | --- |
-| PostgreSQL, PostgreSQL License (`COPYRIGHT`), `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | `library-shelf-maintenance/postgres/src/backend/commands/indexcmds.c`, `CheckPredicate`; [source](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/commands/indexcmds.c) | Index predicates reject subqueries/mutable functions. A falsely declared immutable parent lookup is unsound. |
-| OpenFGA, Apache-2.0 (`LICENSE`), `57b39bc3dcc12f92270602bc01eb933ca4accfbe` | `search-visibility-witnesses/openfga/assets/migrations/postgres/001_initialize_schema.sql`; `pkg/storage/sqlcommon/sqlcommon.go`, `GetDeleteWriteChangelogItems`; [source](https://github.com/openfga/openfga/blob/57b39bc3dcc12f92270602bc01eb933ca4accfbe/pkg/storage/sqlcommon/sqlcommon.go) | Logical tuple PK and generated ULID are different identities. Exact duplicate-ignore skips both write and changelog; changed conditions conflict. Delete/recreate is not everlasting incarnation identity. |
-| SpiceDB, Apache-2.0 (`LICENSE`, `NOTICE`), `7e7420c3f541648971b70642691ef86cac00a6cc` | `search-visibility-witnesses/spicedb/internal/datastore/postgres/readwrite.go`; under the same `postgres/`, `migrations/zz_migration.0001_1eaeba4b8a73_initial.go`, `migrations/zz_migration.0017_add_index_tuple_alive_by_resource_rel_subject.go`; [source](https://github.com/authzed/spicedb/blob/7e7420c3f541648971b70642691ef86cac00a6cc/internal/datastore/postgres/readwrite.go) | Local tuple liveness has an indexed deletion marker; TOUCH can no-op. Namespace deletion also updates tuples: it is not evidence for constant-cost parent invalidation. |
+| Source and licence                                                                       | Pinned paths / primary link                                                                                                                                                                                                                                                                                                                                                              | Finding                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL, PostgreSQL License (`COPYRIGHT`), `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | `library-shelf-maintenance/postgres/src/backend/commands/indexcmds.c`, `CheckPredicate`; [source](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/commands/indexcmds.c)                                                                                                                                                                   | Index predicates reject subqueries/mutable functions. A falsely declared immutable parent lookup is unsound.                                                                                               |
+| OpenFGA, Apache-2.0 (`LICENSE`), `57b39bc3dcc12f92270602bc01eb933ca4accfbe`              | `search-visibility-witnesses/openfga/assets/migrations/postgres/001_initialize_schema.sql`; `pkg/storage/sqlcommon/sqlcommon.go`, `GetDeleteWriteChangelogItems`; [source](https://github.com/openfga/openfga/blob/57b39bc3dcc12f92270602bc01eb933ca4accfbe/pkg/storage/sqlcommon/sqlcommon.go)                                                                                          | Logical tuple PK and generated ULID are different identities. Exact duplicate-ignore skips both write and changelog; changed conditions conflict. Delete/recreate is not everlasting incarnation identity. |
+| SpiceDB, Apache-2.0 (`LICENSE`, `NOTICE`), `7e7420c3f541648971b70642691ef86cac00a6cc`    | `search-visibility-witnesses/spicedb/internal/datastore/postgres/readwrite.go`; under the same `postgres/`, `migrations/zz_migration.0001_1eaeba4b8a73_initial.go`, `migrations/zz_migration.0017_add_index_tuple_alive_by_resource_rel_subject.go`; [source](https://github.com/authzed/spicedb/blob/7e7420c3f541648971b70642691ef86cac00a6cc/internal/datastore/postgres/readwrite.go) | Local tuple liveness has an indexed deletion marker; TOUCH can no-op. Namespace deletion also updates tuples: it is not evidence for constant-cost parent invalidation.                                    |
 
 The shared pattern is native tuple uniqueness, explicit current liveness and transactional mutation, with identity
 separate from change history. Neither project proves this product's parent-dependent cap or undo policy.
@@ -161,17 +161,17 @@ soft-deleting it at command time; individual restore requires same episode, live
 same capacity acquisition. If a deadline-expired row still exists under hold, fresh assignment can reuse its
 identical set fact with a higher revision; this is new assignment, not late undo.
 
-| Interleaving | Required result / proof |
-| --- | --- |
-| Concurrent distinct 32nd/33rd | One guard serializes both; slot uniqueness additionally prohibits a 33rd reservation. |
-| Rename versus assign | Parent lock orders them; same tuple/source identity survives; no label fact is created by rename. |
-| Parent delete versus source read | Every new read snapshot checks parent; no delayed counter/cache can claim current positive. |
-| Parent restore versus reclaim | If restore wins, reservation is live and cannot be reclaimed. If reclaim wins, child is tombstoned before restore, which cannot revive it. |
+| Interleaving                     | Required result / proof                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concurrent distinct 32nd/33rd    | One guard serializes both; slot uniqueness additionally prohibits a 33rd reservation.                                                                   |
+| Rename versus assign             | Parent lock orders them; same tuple/source identity survives; no label fact is created by rename.                                                       |
+| Parent delete versus source read | Every new read snapshot checks parent; no delayed counter/cache can claim current positive.                                                             |
+| Parent restore versus reclaim    | If restore wins, reservation is live and cannot be reclaimed. If reclaim wins, child is tombstoned before restore, which cannot revive it.              |
 | Label restore after slots reused | Only remaining live reservations revive. Reclaimed children stay deleted; their individual undo conflicts at full capacity, never evicts another claim. |
-| Tuple unassign/reassign/reclear | Retained ID is stable; each transition has a greater revision; old CAS/episode cannot clear the newer assignment. |
-| Old purge after newer assignment | Exact ID/revision/deleted-time/parent episode mismatch is a no-op; no broad tuple delete. |
-| Held deleted payload | Retain bytes but no reservation/live contribution; hold never extends undo or grants authority. |
-| Terminal account T | `shareAccount` serializes writes with terminal deletion; later replay/read/write is denied; system cleanup cannot recreate private facts. |
+| Tuple unassign/reassign/reclear  | Retained ID is stable; each transition has a greater revision; old CAS/episode cannot clear the newer assignment.                                       |
+| Old purge after newer assignment | Exact ID/revision/deleted-time/parent episode mismatch is a no-op; no broad tuple delete.                                                               |
+| Held deleted payload             | Retain bytes but no reservation/live contribution; hold never extends undo or grants authority.                                                         |
+| Terminal account T               | `shareAccount` serializes writes with terminal deletion; later replay/read/write is denied; system cleanup cannot recreate private facts.               |
 
 O(1) header restore with complete atomic restoration of all historical children is impossible under these bounds:
 put the only conflicting child at subject N+1, while N prior subjects fit. A bounded header command cannot
@@ -236,12 +236,12 @@ An ordinary read returning empty is not proof of physical erasure.
 Logical bounds below exclude the separately admitted command envelope/Auth/Access/identity work. They are proposed
 budgets, not measurements or product acceptance results. Rows rejected by filters and every reread still count.
 
-| Operation | Raw candidate keys / additional native work | Proposed SQL and byte ceiling |
-| --- | --- | --- |
-| Subject label source | ≤32 reservations + ≤32 exact parent probes; no retained-history candidates | 1 SQL; project ≤128 binary bytes/key plus ≤32 parent bytes/key, ≤512 bytes/key with transport overhead: 16 KiB |
-| Assignment with reclaim | ≤32 reservations; ≤33 parent probes, target tuple + ≤1 reclaimed tuple, allocator/guard points | ≤12 DAO statements, ≤2 assignment writes + fixed guard/head/intent writes; 32 KiB metadata budget |
-| Rename/delete/restore header | 1 exact header, native name-uniqueness probe on rename/restore | ≤2 DAO statements; normalized name ≤400 UTF-8 bytes; 4 KiB metadata budget, independent of child count |
-| Raw list or destructive page | ≤100 total candidate encounters including rereads; select ≤50 keys if each needs one candidate reread, ≤50 effects | ≤12 batched DAO statements; ≤512 serialized metadata bytes/key, 64 KiB page budget |
+| Operation                    | Raw candidate keys / additional native work                                                                        | Proposed SQL and byte ceiling                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Subject label source         | ≤32 reservations + ≤32 exact parent probes; no retained-history candidates                                         | 1 SQL; project ≤128 binary bytes/key plus ≤32 parent bytes/key, ≤512 bytes/key with transport overhead: 16 KiB |
+| Assignment with reclaim      | ≤32 reservations; ≤33 parent probes, target tuple + ≤1 reclaimed tuple, allocator/guard points                     | ≤12 DAO statements, ≤2 assignment writes + fixed guard/head/intent writes; 32 KiB metadata budget              |
+| Rename/delete/restore header | 1 exact header, native name-uniqueness probe on rename/restore                                                     | ≤2 DAO statements; normalized name ≤400 UTF-8 bytes; 4 KiB metadata budget, independent of child count         |
+| Raw list or destructive page | ≤100 total candidate encounters including rereads; select ≤50 keys if each needs one candidate reread, ≤50 effects | ≤12 batched DAO statements; ≤512 serialized metadata bytes/key, 64 KiB page budget                             |
 
 Reserve byte/point/statement allowances before dispatch; do not fetch names or variable payload for source checks.
 Byte values are explicit adapter ceilings to verify, not PostgreSQL heap/WAL sizes. A shorter admitted prefix is
