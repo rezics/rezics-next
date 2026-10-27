@@ -211,25 +211,33 @@ checkpoint. Additional Context settings/extension, account-event replay, passage
 paused-worker tests remain required native acceptance for the respective implementation briefs;
 existing unavailable sitemap behavior is evidence only. No external product research was needed for this audit. The reference index was read; the contract and cited READMEs name no external reference implementation for this lifecycle surface.
 
-Root TC0 (`bun scripts/typecheck.ts`) passed for this reconciliation, including the final executable tests.
-Focused lint, formatting and `git diff --check` passed. The corrected specification was committed before waiting
-for the native check host. The exact focused acceptance command was attempted twice. The first acquired host
-`a` after 3983 seconds, then failed during workspace upload: SSH closed and rsync exited 255. The retry acquired
-host `b` after 166 seconds, then failed at the same pre-execution upload stage: SSH closed and rsync exited 12;
-the runner also reported that it could not remove its remote run directory. No native test results were returned
-on either attempt. No unrelated process, database or container was stopped or removed.
+The corrected specification and independent state/locator tests were committed before native check-host waits.
+Root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks passed in the prior reconciliation
+and continuation. Prior native validation evidence is distinct from the corrected tests' required outcomes:
 
-The prior attempt's two passing account-agent invariants and native inverse-count counterexample are retained;
-its results do not certify the corrected account timing or the independent state/locator acceptance added here.
-Missing lifecycle routes, scoped withholding, the state/retention adapters and the unchanged exact-live count
-assertion remain expected native reds, **not observed outcomes of this reconciliation**. Neither 512/4096 growth
-measurements nor account-at-confirmation cleanup, legal holds or replay results are claimed. Native validation
-is blocked by the check-host workspace-upload transport failures, not by a test-slot wait or a product-code change.
+| Attempt               | Observed evidence                                                                                                                                                                                       | Limit                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Original audit        | Two account-agent invariants passed; the native inverse-count counterexample above failed honestly.                                                                                                     | Does not certify corrected account timing or the later independent state/locator tests. |
+| Reconciliation        | Host `a` acquired after 3983 seconds; workspace-upload SSH closure, rsync exit 255. Retry acquired host `b` after 166 seconds; upload SSH closure, rsync exit 12; remote directory cleanup also failed. | Neither run returned native test results.                                               |
+| Supplied continuation | Host `b` acquired after 276.133 seconds; upload SSH closure, rsync exit 12, `RemoteTransportError` for `workspace upload`.                                                                              | Runner exited 1 before returning native test results.                                   |
 
-Continuation validation preserved all existing acceptance assertions and rechecked the reconciliation against the
-latest deletion policy. Root TC0 completed successfully again across every workspace; focused lint, formatting
-and diff checks also passed. The exact focused acceptance command was retried with the unchanged native tests.
-It waited for a slot for 276.133 seconds on host `b`, then SSH closed during workspace upload and rsync exited 12. The runner raised `RemoteTransportError` for `workspace upload` and exited 1 before returning any native
-test result. This independently reproduces the supplied evidence's transport failure; it supplies no new
-lifecycle, account-erasure or growth outcome. No production files or acceptance tests were changed in this
-continuation, and no file outside the declared specification paths was changed.
+Missing lifecycle routes, scoped withholding, state/retention adapters and the unchanged exact-live count
+assertion remain expected native reds, **not observed outcomes of those corrected-test attempts**. Neither
+512/4096 growth measurements nor account-at-confirmation cleanup, legal holds or replay results are claimed.
+A slot wait is queued work; the prior blockers were workspace-upload transport failures. No unrelated process,
+database or container was stopped or removed. No production file or existing acceptance assertion was changed.
+
+This continuation again passed root TC0 across every workspace and focused lint/format checks. The unchanged
+exact acceptance command acquired host `b` after 1354.640 seconds, uploaded successfully in 69.848 seconds,
+and completed with exit 1: two passes and seventeen failures across nineteen tests. Both account-agent invariants
+passed unchanged. Native missing DELETE/purge routes returned 404; compact and Context state tests reached the
+missing reader assertion after real setup. The account-erasure test committed its native terminal barrier at
+confirmation T and reached the missing retention adapter without advancing the clock. The paused-consumer
+counterexample again returned empty links with exact count 1 and `caught_up:true`.
+
+Three failures stopped earlier than the intended outcomes: proposal-author setup returned 503
+`deadline_exceeded`, locator-growth subject creation returned 503 `overloaded`, and scoped takedown's subject
+read returned 503 `deadline_exceeded`. These are observed validation limits, not proof of ownership ambiguity,
+scoped withholding, or growth bounds. Delete/restore and purge growth reached missing DELETE at their first
+scale; no 512/4096 budget result is claimed. Isolated unchanged-file retries are needed to resolve those three
+load-sensitive outcomes. This attempt changed only this validation documentation within the declared paths.
