@@ -107,7 +107,7 @@ function classOf(tag: string): string {
   return tag.match(/\bclass="([^"]*)"/)?.[1] ?? '';
 }
 
-test('subject tiles have only a rounded cover box, with uncluttered text and one progress row', () => {
+test('cover cards are one light surface with an edge-to-edge cover and padded text below', () => {
   const html = renderToStaticMarkup(
     createElement(CoverCard, {
       href: '/book-1',
@@ -127,31 +127,68 @@ test('subject tiles have only a rounded cover box, with uncluttered text and one
   const secondary = tagWith(html, 'data-slot="cover-card-secondary"');
   const state = tagWith(html, 'data-slot="cover-card-state"');
   const actions = tagWith(html, 'data-slot="cover-card-actions"');
-  for (const classes of [classOf(tile), classOf(text)])
-    expect(classes).not.toMatch(/(?:^|\s)(?:bg-|border(?:-|\s)|shadow(?:-|\s)|p-[^\s]+)/);
-  expect(classOf(frame)).toContain('rounded-lg');
-  expect(classOf(aspect)).toContain('rounded-lg');
-  expect(classOf(aspect)).not.toContain('ring-');
+  expect(classOf(tile)).toContain('bg-card');
+  expect(classOf(tile)).toContain('rounded-md');
+  expect(classOf(tile)).toContain('shadow-sm');
+  expect(classOf(tile)).not.toMatch(/(?:^|\s)p-[^\s]+/);
+  expect(classOf(text)).toMatch(/(?:^|\s)p-2(?:\s|$)/);
+  expect(classOf(frame)).not.toMatch(/(?:^|\s)(?:bg-|border(?:-|\s)|p-[^\s]+)/);
+  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:rounded-none');
+  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:ring-0');
   expect(frame).toContain('data-ratio="3:4"');
+  expect(html.indexOf('data-slot="cover"')).toBeLessThan(html.indexOf('data-slot="cover-card-text"'));
+  expect(classOf(title)).toContain('text-center');
   expect(classOf(title)).toContain('line-clamp-2');
+  expect(classOf(title)).toContain('text-xs');
+  expect(classOf(secondary)).toContain('text-center');
   expect(classOf(secondary)).toContain('line-clamp-1');
-  expect(classOf(state)).toContain('flex');
-  expect(html.indexOf('data-slot="cover-card-state"')).toBeLessThan(html.indexOf('role="progressbar"'));
+  expect(classOf(state)).toContain('items-center');
+  expect(html.indexOf('data-slot="cover-card-actions"')).toBeGreaterThan(
+    html.indexOf('data-slot="cover-card-text"'),
+  );
+  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('role="progressbar"'));
   expect(html.indexOf('role="progressbar"')).toBeLessThan(html.indexOf('>35%</span>'));
-  expect(classOf(actions)).toContain('absolute');
-  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('data-slot="cover-card-text"'));
+  expect(classOf(actions)).not.toContain('absolute');
+  expect(html).toContain('tabular-nums');
+});
+
+test('a card without progress keeps its menu before its status in the state row', () => {
+  const html = renderToStaticMarkup(
+    createElement(CoverCard, {
+      href: '/book-1',
+      title: cover.subject.title,
+      cover,
+      state: 'Planned',
+      menuLabel: 'More actions',
+      menu: createElement('span', null, 'Remove'),
+    }),
+  );
+  const state = tagWith(html, 'data-slot="cover-card-state"');
+  expect(state).toContain('data-slot="cover-card-actions"');
+  expect(state).toContain('Planned');
+  expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(
+    html.indexOf('>Planned</div>'),
+  );
+  expect(html).not.toContain('role="progressbar"');
 });
 
 test('fallback ratios follow the product families and mixed grids tie to 3:4', () => {
   const families: [string[], string][] = [
     [['schema:Book'], '3:4'],
     [['bf:Instance'], '3:4'],
+    [['schema:BookSeries'], '3:4'],
     [['schema:ComicSeries'], '3:4'],
     [['schema:PublicationVolume'], '3:4'],
     [['schema:TVSeries'], '3:4'],
+    [['schema:TVSeason'], '3:4'],
     [['schema:Movie'], '3:4'],
     [['wd:Q689445'], '3:4'],
+    [['wd:Q7889'], '3:4'],
+    [['wd:Q20631656'], '3:4'],
+    [['wd:Q209163'], '3:4'],
     [['schema:VideoGame'], '3:4'],
+    [['schema:CreativeWork'], '3:4'],
+    [['wd:Q7725310'], '3:4'],
     [['schema:Person'], '3:4'],
     [['wd:Q95074'], '3:4'],
     [['schema:MusicAlbum'], '1:1'],
@@ -204,33 +241,48 @@ test('all tile surfaces use CoverCard, and Space uses the localized definition n
   }
 }, timeout);
 
-test('the cover wall density presets resolve to the expected viewport columns and equal gaps', async () => {
-  const columns: Record<string, [number, number]> = {
-    Large: [2, 6],
-    Medium: [3, 8],
-    Small: [4, 10],
-  };
-  for (const [name, expected] of Object.entries(columns)) {
-    const opened = await openStory('cover-wall.stories.tsx', name, 'en', 390);
+test('the cover wall default fits two phone columns and about eight wide columns with 8 px gaps', async () => {
+  const layouts: Record<number, number> = { 390: 2, 1280: 8 };
+  let defaultWideTracks = 0;
+  for (const [widthText, expected] of Object.entries(layouts)) {
+    const width = Number(widthText);
+    const opened = await openStory('cover-wall.stories.tsx', 'Default', 'en', width);
     try {
       const grid = opened.page.locator('[data-slot="cover-grid"]');
       await grid.waitFor();
       expect(await grid.locator(':scope > article').count()).toBe(14);
-      for (const [index, width] of [390, 1280].entries()) {
-        if (index > 0) await opened.page.setViewportSize({ width, height: 900 });
-        const layout = await grid.evaluate((element) => {
-          const style = getComputedStyle(element);
-          return {
-            tracks: style.gridTemplateColumns.trim().split(/\s+/).length,
-            rowGap: style.rowGap,
-            columnGap: style.columnGap,
-          };
-        });
-        expect(layout.rowGap).toBe(layout.columnGap);
-        if (index === 0) expect(layout.tracks).toBe(expected[0]);
-        else expect(layout.tracks).toBeGreaterThanOrEqual(expected[1] - 1);
-        if (index > 0) expect(layout.tracks).toBeLessThanOrEqual(expected[1] + 1);
+      const layout = await grid.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          tracks: style.gridTemplateColumns.trim().split(/\s+/).length,
+          rowGap: style.rowGap,
+          columnGap: style.columnGap,
+        };
+      });
+      expect(layout.rowGap).toBe('8px');
+      expect(layout.columnGap).toBe('8px');
+      if (width === 390) expect(layout.tracks).toBe(expected);
+      else {
+        expect(layout.tracks).toBeGreaterThanOrEqual(expected - 1);
+        expect(layout.tracks).toBeLessThanOrEqual(expected + 1);
+        defaultWideTracks = layout.tracks;
       }
+    } finally {
+      await opened.context.close();
+    }
+  }
+
+  for (const name of ['Small', 'Large']) {
+    const opened = await openStory('cover-wall.stories.tsx', name, 'en', 1280);
+    try {
+      const grid = opened.page.locator('[data-slot="cover-grid"]');
+      await grid.waitFor();
+      expect(await grid.locator(':scope > article').count()).toBe(14);
+      const tracks = await grid.evaluate((element) =>
+        getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length,
+      );
+      if (name === 'Small') expect(tracks).toBeGreaterThan(defaultWideTracks);
+      else expect(tracks).toBeLessThan(defaultWideTracks);
     } finally {
       await opened.context.close();
     }
