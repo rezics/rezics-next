@@ -14,9 +14,9 @@ import {
 } from '../../src/access/approved-identity.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { principalCommandIdentity, runCommand, type CommandAuthorization } from '../../src/command/command.ts';
-import type { Access, AccountActor } from '../../src/request/access.ts';
+import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createContentSystem } from '../content/support/system.ts';
+import { createContentSystem, type ContentCredential } from '../content/support/system.ts';
 
 const databaseUrl = process.env.DATABASE_URL!;
 if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated application template');
@@ -31,9 +31,11 @@ afterAll(async () => {
   await system?.close();
 });
 
-async function runAdmission(access: Access, actor: AccountActor) {
+async function runAdmission(access: Access, credential: ContentCredential, beforeAdmission?: () => Promise<void>) {
   let observation: ReturnType<typeof admittedCommandAccount>;
   const deadline = Date.now() + 10_000;
+  const actor = await system.access.authenticate(credential.bearer, { pool: system.database.pool, deadline });
+  await beforeAdmission?.();
   const complete = new Error('Admission observed');
   const authorization: CommandAuthorization = {
     action: 'account:read',
@@ -72,7 +74,7 @@ test.serial('derived accesses use the root command admission and preserve its ob
   const derived = deriveAccess(system.access, {});
   const twiceDerived = deriveAccess(derived, {});
   for (const access of [derived, twiceDerived]) {
-    expect(await runAdmission(access, system.actors.author.actor)).toMatchObject({
+    expect(await runAdmission(access, system.actors.author)).toMatchObject({
       minimumAuthnEpoch: '1',
       operatorAccountId: null,
     });
@@ -80,12 +82,15 @@ test.serial('derived accesses use the root command admission and preserve its ob
 
   const denied = system.actors.other.actor;
   const route = routeOf(denied.accountId)!;
-  await system.database.pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    route,
-    denied.accountId,
-  ]);
   try {
-    await expect(runAdmission(twiceDerived, denied)).rejects.toThrow('Command admission denied');
+    await expect(
+      runAdmission(twiceDerived, system.actors.other, async () => {
+        await system.database.pool.query(
+          "UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2",
+          [route, denied.accountId],
+        );
+      }),
+    ).rejects.toThrow('Command admission denied');
   } finally {
     await system.database.pool.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
       route,
