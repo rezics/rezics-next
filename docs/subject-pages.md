@@ -98,6 +98,7 @@ other view. Sections a type does not support are left out; the rest keep this or
    sign-in link.
 2. **About.** The summary (spoiler-safe by default), a short set of key facts chosen by the type's template, genres
    and the most-used tags, and content warnings.
+   When a subject has no summary, About shows its short description instead, and the header never shows one.
 3. **Parts.** For types with parts: the next part for this reader, then the ordered list preview.
 4. **Relations.** Related subjects grouped by relation group (order, derivation, world, membership), each with
    cover, title, relation label and date. Series order is shown as order, not as a list of links.

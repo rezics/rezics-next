@@ -423,10 +423,10 @@ test("the subject story renders the platform template's overview in order: heade
   expect(about).toContain(summaryText);
 });
 
-test('the summary text appears once on the page: the header shows the short description only when it differs from the summary', () => {
-  // The recorded description differs from the summary: the header keeps it.
+test('the summary text appears once on the page: the header never shows the short description', () => {
+  // The recorded description paraphrases the summary: only About carries the prose.
   const apart = render(loaded());
-  expect(count(apart, 'A poetic novella')).toBe(1);
+  expect(count(apart, 'A poetic novella')).toBe(0);
   expect(count(apart, summaryText)).toBe(1);
 
   const describe = (text: string) => (data: SubjectPageData) => {
@@ -443,9 +443,9 @@ test('the summary text appears once on the page: the header shows the short desc
     expect(count(html, summaryText)).toBe(1);
     expect(html).not.toContain('A poetic novella');
   }
-  // A description that only starts like the summary's tail, or goes beyond it, is not a prefix of it.
+  // A description that extends the summary is also absent from the header.
   const longer = render(loaded(describe(`${summaryText} It is the most translated book in French.`)));
-  expect(count(longer, 'Sahara')).toBe(2);
+  expect(count(longer, 'Sahara')).toBe(1);
 });
 
 test('an alternate name equal to the original title is not repeated under Also known as', () => {

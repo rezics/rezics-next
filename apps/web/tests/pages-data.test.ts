@@ -92,6 +92,7 @@ const document = {
   root: { props: {} },
   content: [
     node('SubjectHeader', 'header'),
+    node('Summary', 'about'),
     node('Statements', 'facts', { properties: ['schema:author', 'schema:numberOfPages', 'schema:genre'] }),
     node('MoreStatements', 'more'),
     node('SubjectList', 'works', { title: { en: 'Works', fr: 'Œuvres' }, property: 'schema:author', limit: 6 }),

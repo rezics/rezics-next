@@ -632,8 +632,8 @@ export function chosenSummary(subject: Subject, locale: string) {
 }
 
 /**
- * About: the summary in the reader's language, then the key facts and the tags. A summary above the reader's spoiler
- * level waits behind a reveal.
+ * About: the summary, or the description when there is no summary, then the key facts and the tags. A summary above
+ * the reader's spoiler level waits behind a reveal.
  */
 export function Summary(props: Record<string, unknown>) {
   const state = useOverview(props.id);
@@ -645,8 +645,11 @@ export function Summary(props: Record<string, unknown>) {
   const read = subjectRead(section);
   if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
   const chosen = chosenSummary(read.subject, value.locale);
+  const description = chosen
+    ? undefined
+    : pageText(read.subject.descriptions, value.locale, originalLanguage(read.subject));
   const { facts = null, tags = null } = value.about ?? {};
-  if (!chosen && !facts && !tags) return null;
+  if (!chosen && !description?.text && !facts && !tags) return null;
   const body = chosen && (
     <div className="space-y-1">
       <DocumentValue
@@ -668,6 +671,14 @@ export function Summary(props: Record<string, unknown>) {
         ) : (
           body
         ))}
+      {description?.text && (
+        <div className="space-y-1">
+          <p lang={description.lang} className="max-w-prose text-pretty leading-7">
+            {description.text}
+          </p>
+          <LanguageTag lang={description.lang} locale={value.locale} />
+        </div>
+      )}
       {facts}
       {tags}
     </section>

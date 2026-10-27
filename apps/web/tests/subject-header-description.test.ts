@@ -59,6 +59,9 @@ test('in zh-Hans, the recorded subject with English texts shows the English lang
   const page = loaded();
   const subject = subjectOf(page);
   subject.descriptions = { en: description } as typeof subject.descriptions;
+  subject.statements['schema:abstract'] = subject.statements['schema:abstract'].filter(
+    (statement) => statement.value.content.language === 'en',
+  );
   const html = render(page, 'zh-Hans');
   expect(count(html, '>英语<')).toBe(1);
   expect(headerOf(html)).not.toContain('>英语<');

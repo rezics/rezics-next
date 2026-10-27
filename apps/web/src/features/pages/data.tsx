@@ -237,22 +237,6 @@ const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dat
 const MAX_CREATORS = 4;
 const TAG_PROPERTY = 'schema:keywords';
 
-/** The text of a document node and everything under it, with a space between blocks. */
-function documentText(node: unknown): string {
-  if (!isRecord(node)) return '';
-  if (typeof node.text === 'string') return node.text;
-  return Array.isArray(node.content) ? node.content.map(documentText).join(' ') : '';
-}
-
-/** A text compared as words: no case, and one space for any run of whitespace and punctuation. */
-function plainName(text: string): string {
-  return text
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}\s]+/gu, ' ')
-    .trim();
-}
-
 /** A name compared as written: no case, one space for any run of whitespace. */
 function foldName(text: string): string {
   return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -265,18 +249,6 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
   const title = label.text || options.messages.unlabelled;
   const first = originalTitle(subject);
   const quiet = first && label.text && first.text !== label.text ? first : undefined;
-  const described = pageText(subject.descriptions, options.locale, original);
-  // About carries the summary; the header repeats a description only when it says something else.
-  const chosen = overview.chosenSummary(subject, options.locale);
-  const summaryName =
-    chosen && spoilerLevel(chosen.statement) <= options.reader.spoilerLevel
-      ? plainName(documentText(chosen.document.doc))
-      : '';
-  const descriptionName = plainName(described.text);
-  const description =
-    summaryName && descriptionName && summaryName.startsWith(descriptionName)
-      ? { text: '', lang: undefined }
-      : described;
   // The title and the original title are shown already, so an alternate name equal to either is left out.
   const known = new Set([label.text, first?.text].filter((name): name is string => !!name).map(foldName));
   const alternates = Object.fromEntries(
@@ -338,14 +310,6 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
                 </span>
               ))}
             </p>
-          )}
-          {description.text && (
-            <div className="space-y-1">
-              <p lang={description.lang} className="max-w-prose text-pretty leading-7 text-muted-foreground">
-                {description.text}
-              </p>
-              <LanguageTag lang={description.lang} locale={options.locale} />
-            </div>
           )}
           {aliases.length > 0 && (
             <div className="space-y-2">
