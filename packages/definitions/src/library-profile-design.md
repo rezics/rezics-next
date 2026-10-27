@@ -235,7 +235,10 @@ nearest declarations. Runtime touches one type reference and one registry point,
 canonical release retains the existing limits: 4 MiB UTF-8, 1,024 types, 4,096 properties. Reject oversize bytes before
 expensive semantic validation. The superseded per-inline-copy 16 KiB limit is not an additional profile cap: the
 agreed 64/3x32/16x64/32x16 maxima and 80-code-point labels have an executable full-cardinality byte witness under the
-actual release limit. No cardinality or complete-release limit is narrowed.
+actual release limit. The full-cardinality candidate with eight 80-code-point CJK labels at every label home is
+2,435,593 canonical profile bytes (2,436,026 bytes in the minimal candidate release); this is byte accounting of
+the proposed data, not a claim that the missing compiler/schema already accepts it. No cardinality or
+complete-release limit is narrowed.
 
 The expansion fixture uses `services/kernel/test/support/manifests.ts`: each of 10/100 manifests adds three types,
 twelve properties, eight presentation files. Work/edition inherit from a structural abstract base; the agent does
