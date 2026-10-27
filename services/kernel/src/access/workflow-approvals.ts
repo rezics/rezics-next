@@ -1,3 +1,4 @@
+import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
 import { accessClock } from './access-clock.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
@@ -105,7 +106,7 @@ function requireAllowed(value: unknown): asserts value {
   if (!value) throw denied();
 }
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
-const handle = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+const handle = isClaimHandle;
 const id = (value: unknown): value is string => typeof value === 'string' && routeOf(value) !== null;
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
@@ -216,7 +217,8 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       requireAllowed(
         id(operation.accountId) &&
           handle(operation.handle) &&
-          (operation.expectedHandle === null || handle(operation.expectedHandle)),
+          (operation.expectedHandle === null ||
+            (typeof operation.expectedHandle === 'string' && HANDLE_LOOKUP_PATTERN.test(operation.expectedHandle))),
       );
       fields = ['kind', 'accountId', 'handle', 'expectedHandle', 'authorization'];
       descriptor = { action: 'account:update', target: operation.accountId, targetKind: 'either' };

@@ -551,6 +551,15 @@ The returned host exports:
   "Public HTTP contract"); without them both routes answer 503
   `account_operation_denied`.
 
+Sign-up validates the case-folded handle against
+`^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` before staging or calling Access: 3–64 ASCII
+characters, letters or digits at both ends, and letters, digits, `_` or `-` inside.
+Whitespace is refused without trimming. Both the workflow entry point and `/signup`
+use the same Auth constant; a source-parity test keeps it equal to Access without a
+runtime kernel import. Access owns reserved-name refusals and its audited governance
+exception. Protected handle reservations pass the freshly resolved workflow context
+to Access; public sign-up supplies none. Expected old handles retain lookup validation.
+
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth
 `database` pool, the existing service options, persistent Auth-only 32-byte

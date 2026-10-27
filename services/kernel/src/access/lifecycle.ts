@@ -1,3 +1,5 @@
+import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { checkAvatarMedia } from '../content/avatar.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessClock } from './access-clock.ts';
@@ -12,6 +14,7 @@ import {
   authoritativeTimeValue,
   currentCommand,
   type CommandAttempt,
+  type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -84,6 +87,7 @@ export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:update', { anonymous: false }],
   ['account:delete', { anonymous: false, replay: 'self-account-read' }],
   ['account:manage', { anonymous: false }],
+  ['account:assign_reserved_handle', { anonymous: false }],
   ['organization:create', { anonymous: false }],
   ['organization:membership', { anonymous: false }],
 ]);
@@ -100,7 +104,11 @@ function accountRoute(accountId: string): number {
   return route;
 }
 export function normalizeHandle(handle: string): string {
-  requireAllowed(typeof handle === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle));
+  requireAllowed(isClaimHandle(handle));
+  return handle.toLowerCase();
+}
+export function normalizeLookupHandle(handle: string): string {
+  requireAllowed(typeof handle === 'string' && HANDLE_LOOKUP_PATTERN.test(handle));
   return handle.toLowerCase();
 }
 function normalized(handle: string): string {
@@ -168,7 +176,7 @@ function transitionInput(input: HandleTransition): HandleTransition {
   );
   requireAllowed(typeof input.reservationId === 'string');
   const handle = normalized(input.handle);
-  const expectedHandle = input.expectedHandle === null ? null : normalized(input.expectedHandle);
+  const expectedHandle = input.expectedHandle === null ? null : normalizeLookupHandle(input.expectedHandle);
   requireAllowed(handle !== expectedHandle);
   return {
     accountId: input.accountId,
@@ -240,7 +248,12 @@ async function publishHandle(
       }),
     ),
   );
-  return { accountId: input.accountId, handle: input.handle, operationId: input.operationId };
+  return {
+    accountId: input.accountId,
+    handle: input.handle,
+    operationId: input.operationId,
+    ...(isReservedHandle(input.handle) ? { reservedHandleException: true } : {}),
+  };
 }
 /** Exact resulting floor is a decimal string, preserving PostgreSQL bigint.
  * receiptId, accountId and this floor identify the Auth invalidation barrier.
@@ -409,6 +422,7 @@ export type RecoveryEvidence = {
 export function createLifecycleInternals(
   config: Boundary & {
     routeKey: Uint8Array;
+    access?: Access;
     provisioningEvidence: (evidence: unknown) => Promise<ProvisioningEvidence | null>;
     recoveryEvidence: (evidence: unknown) => Promise<RecoveryEvidence | null>;
   },
@@ -658,7 +672,7 @@ export function createLifecycleInternals(
       );
     },
     async expireRegistration(input: LifecycleCommand & { handle: string; reservationId: string }) {
-      input = { ...input, handle: normalized(input.handle) };
+      input = { ...input, handle: normalizeLookupHandle(input.handle) };
       const route = accountRoute(input.accountId);
       return execute(
         { route, id: input.accountId, kind: 'registration-expired', key: input.key, input },
@@ -684,7 +698,7 @@ export function createLifecycleInternals(
       );
     },
     async releaseExpiredRegistrationHandle(input: LifecycleCommand & { handle: string; reservationId: string }) {
-      input = { ...input, handle: normalized(input.handle) };
+      input = { ...input, handle: normalizeLookupHandle(input.handle) };
       const proof = await withConnection(pool, (client) =>
         expiryRead.run(client, {
           route: accountRoute(input.accountId),
@@ -711,13 +725,64 @@ export function createLifecycleInternals(
         },
       );
     },
-    async reserveHandle(input: { handle: string; accountId: string; key: string }) {
+    async reserveHandle(input: { handle: string; accountId: string; key: string }, request?: LifecycleRequest) {
       input = { ...input };
       const handle = normalized(input.handle);
       accountRoute(input.accountId);
       const route = handleRoute(handle);
+      const exception = isReservedHandle(handle);
+      const context = request && snapshotRequest(request);
+      let authorization: CommandAuthorization | undefined;
+      if (exception) {
+        requireAllowed(config.access && context);
+        const access = config.access;
+        const authorities = await Promise.all([
+          accessCommandAuthorization(
+            access,
+            context.actor,
+            'account:assign_reserved_handle',
+            PLATFORM_RESOURCE,
+            { ...context, pool },
+            () => new LifecycleDeniedError(),
+          ),
+          ...(context.actor.accountId === input.accountId
+            ? []
+            : [
+                accessCommandAuthorization(
+                  access,
+                  context.actor,
+                  'account:manage',
+                  { route: accountRoute(input.accountId), id: input.accountId },
+                  { ...context, pool },
+                  () => new LifecycleDeniedError(),
+                ),
+              ]),
+        ]);
+        authorization = {
+          action: 'account:assign_reserved_handle',
+          resource: PLATFORM_RESOURCE,
+          denied: () => new LifecycleDeniedError(),
+          prepare: (attempt) => Promise.all(authorities.map((authority) => authority.prepare!(attempt))),
+          async authorize(tx, attempt, evidence) {
+            for (const [index, authority] of authorities.entries()) {
+              requireAllowed((await authority.authorize(tx, attempt, (evidence as unknown[])[index])) === 'execute');
+            }
+            return 'execute';
+          },
+          async finalize(tx) {
+            for (const authority of authorities) requireAllowed(await authority.check(tx));
+          },
+        };
+      }
       return execute(
-        { route, id: handle, kind: 'handle-reserved', key: input.key, input: { handle, accountId: input.accountId } },
+        {
+          route,
+          id: handle,
+          kind: 'handle-reserved',
+          key: input.key,
+          input: { handle, accountId: input.accountId },
+          ...(exception ? { actor: context!.actor, deadline: context!.deadline, authorization } : {}),
+        },
         async (tx, transactionId) => {
           const at = authoritativeTimeValue(currentCommand(tx).time);
           const expiresAt = new Date(Date.parse(at) + REGISTRATION_TTL_MS).toISOString();
@@ -735,7 +800,13 @@ export function createLifecycleInternals(
               }),
             ),
           );
-          return { handle, accountId: input.accountId, reservationId, expiresAt };
+          return {
+            handle,
+            accountId: input.accountId,
+            reservationId,
+            expiresAt,
+            ...(exception ? { reservedHandleException: true } : {}),
+          };
         },
       );
     },
@@ -877,13 +948,17 @@ export function createLifecycleInternals(
               }),
             ),
           );
-          return { handle, accountId: input.accountId };
+          return {
+            handle,
+            accountId: input.accountId,
+            ...(isReservedHandle(handle) ? { reservedHandleException: true } : {}),
+          };
         },
       );
     },
     async redirectHandle(input: LifecycleCommand & { handle: string }) {
       input = { ...input };
-      const handle = normalized(input.handle);
+      const handle = normalizeLookupHandle(input.handle);
       const route = handleRoute(handle);
       return execute(
         { route, id: handle, kind: 'handle-redirected', key: input.key, input: { handle, accountId: input.accountId } },
@@ -910,7 +985,7 @@ export function createLifecycleInternals(
     },
     async expireHandle(input: { handle: string; key: string }) {
       input = { ...input };
-      const handle = normalized(input.handle);
+      const handle = normalizeLookupHandle(input.handle);
       const route = handleRoute(handle);
       return execute({ route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } }, async (tx) => {
         requireAllowed(
@@ -920,7 +995,7 @@ export function createLifecycleInternals(
       });
     },
     async resolveHandle(value: string) {
-      const handle = normalized(value);
+      const handle = normalizeLookupHandle(value);
       const claim = await withConnection(pool, (client) =>
         handleRead.run(client, { route: handleRoute(handle), handle }),
       );

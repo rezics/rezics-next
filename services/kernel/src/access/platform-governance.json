@@ -5,6 +5,7 @@
     "gate:any",
     "exposure:open",
     "exposure:close",
+    "account:assign_reserved_handle",
     "account:suspend",
     "account:reinstate",
     "account:set_rate_tier",

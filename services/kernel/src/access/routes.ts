@@ -25,7 +25,8 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
-import { normalizeHandle } from './lifecycle.ts';
+import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
+import { normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
   readPublicAccountByHandle,
@@ -312,10 +313,7 @@ const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string }>(
       },
       closed,
     ),
-    t.Object(
-      { handle: t.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' }) },
-      closed,
-    ),
+    t.Object({ handle: t.String({ minLength: 1, maxLength: 64, pattern: HANDLE_LOOKUP_PATTERN.source }) }, closed),
   ]),
 );
 const response = <S extends TSchema>(schema: S) =>
@@ -755,7 +753,8 @@ export function accessRoutes(
       },
       async ({ query, admission, job, set }) => {
         const accounts = await admission.run('normal', job, async () => {
-          if ('handle' in query) return readPublicAccountByHandle(dependencies.pool, normalizeHandle(query.handle));
+          if ('handle' in query)
+            return readPublicAccountByHandle(dependencies.pool, normalizeLookupHandle(query.handle));
           const requested = query.ids.split(',');
           if (
             requested.length < 1 ||

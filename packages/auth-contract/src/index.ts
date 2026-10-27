@@ -353,7 +353,7 @@ export type AccountOperation =
 
 export interface AccountWorkflowPorts<Context = WorkflowContext> {
   registrationTarget(key: string): string;
-  reserveHandle(input: { handle: string; accountId: string; key: string }): Result<Reservation>;
+  reserveHandle(input: { handle: string; accountId: string; key: string }, context?: Context): Result<Reservation>;
   createPending(
     input: Command & { handle: string; reservationId: string },
   ): Result<{ accountId: string; registrationId: string; expiresAt: string }>;

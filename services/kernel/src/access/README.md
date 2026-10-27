@@ -576,10 +576,38 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
   `VACUUM ANALYZE` after growth and with baseline statistics left unchanged after growth; rows and statements stay
   constant and buffers grow logarithmically.
 
+### Handles
+
+New claims and renames case-fold to lowercase, then match
+`^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$`: 3–64 ASCII letters, digits, underscores or hyphens,
+with a letter or digit at both ends. Whitespace is refused, never trimmed.
+`handle-policy.ts` defines claim and lookup validation separately. Lookups keep
+`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, so existing short or punctuation-ending handles
+keep resolving to their owners. A rename's expected old handle uses lookup validation.
+
+The version-controlled reserved registry in `handle-policy.ts` contains:
+
+- `platform`: rezics, official, system, root, api, www, mail.
+- `role`: admin, administrator, support, help, staff, team, moderator, mod, security, abuse, legal, privacy.
+- `mention`: everyone, here, anonymous, deleted, null, undefined.
+
+An addition needs a reason (`platform`, `role` or `mention`) and a reviewed change.
+The one reservation command checks the case-folded name for every account kind and
+workflow, with the same typed refusal as an occupied name. There is no public bypass flag.
+An authenticated account with `account:assign_reserved_handle` on the Global Context
+may use the ordinary workflow to reserve a name for itself or an account it currently
+manages (`account:manage`). Authority and token scopes are checked on every command
+attempt and receipt replay. The reservation and publication receipts record
+`reservedHandleException: true` when this exception is used. Auth supplies the verified
+workflow context only for protected operations; public sign-up cannot use the exception.
+
+The registry check is an in-memory set lookup with fewer than 64 entries: constant
+work and no additional relation or growth check. Existing claim storage bounds remain unchanged.
+
 ### Public identity read
 
 `GET /v1/accounts` accepts exactly one of `ids` (1–100 comma-separated account UUIDs, deduplicated in first-request
-order) or `handle` (one handle, normalized to lowercase using the claim rules). Both return
+order) or `handle` (one handle, normalized to lowercase using the lookup rules). Both return
 `{ accounts: [...], next: null }`. The web builds an account's public page at `/@handle`, outside Realms and Zones.
 
 - Returns per visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state` (`active` or

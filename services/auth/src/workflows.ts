@@ -128,8 +128,17 @@ function required<T>(value: T | null | undefined): T {
   if (value == null) denied();
   return value;
 }
+export const HANDLE_CLAIM_PATTERN = /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/;
+const HANDLE_LOOKUP_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+function isClaimHandle(value: unknown): value is string {
+  return typeof value === 'string' && !/\s/.test(value) && HANDLE_CLAIM_PATTERN.test(value.toLowerCase());
+}
 function normalized(value: string) {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)) denied();
+  if (!isClaimHandle(value)) denied();
+  return value.toLowerCase();
+}
+function normalizedLookup(value: string) {
+  if (typeof value !== 'string' || !HANDLE_LOOKUP_PATTERN.test(value)) denied();
   return value.toLowerCase();
 }
 function requestKey(value: string) {
@@ -332,11 +341,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'reserve-handle',
       async (row: Stage, request?: AccountOperation) =>
         (
-          await access.reserveHandle({
-            handle: row.handle,
-            accountId: row.account_id,
-            key: await authorizedKey(request, 'reserve-handle'),
-          })
+          await access.reserveHandle(
+            {
+              handle: row.handle,
+              accountId: row.account_id,
+              key: await authorizedKey(request, 'reserve-handle'),
+            },
+            request ? await approved(request) : undefined,
+          )
         ).value,
     );
     const reservePublicRegistration = step('reserve-public-registration-handle', async (row: Stage) => {
@@ -1384,7 +1396,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         kind: 'rename',
         accountId: input.accountId,
         handle: normalized(input.handle),
-        expectedHandle: input.expectedHandle === null ? null : normalized(input.expectedHandle),
+        expectedHandle: input.expectedHandle === null ? null : normalizedLookup(input.expectedHandle),
         authorization: input.authorization,
       }),
     createOrganization: (input: { key: string; authorization: string; handle: string }) =>
@@ -1573,7 +1585,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           ['key', 'handle', 'email', 'password', 'turnstile_token'].some((field) => typeof input[field] !== 'string') ||
           !(input.key as string) ||
           (input.key as string).length > 128 ||
-          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(input.handle as string) ||
+          !isClaimHandle(input.handle) ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email as string) ||
           (input.email as string).length > 254 ||
           (input.password as string).length < 8 ||

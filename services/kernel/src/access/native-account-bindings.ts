@@ -188,6 +188,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
+    access,
     clock: accessClock(access),
     provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
     recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
