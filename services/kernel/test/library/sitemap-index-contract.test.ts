@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 let db: GrowthDatabase;
-beforeAll(async () => { db = await openGrowthDatabase(); });
-afterAll(async () => { await db?.close(); });
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+});
+afterAll(async () => {
+  await db?.close();
+});
 test('Collection sitemap discovery has a public immutable-key index', async () => {
   const result = await db.admin.query<{ indexdef: string }>(
     "SELECT indexdef FROM pg_indexes WHERE schemaname='library' AND tablename='collection' AND indexname='collection_sitemap_public_page'",
