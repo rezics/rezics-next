@@ -86,14 +86,34 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     };
   }
 
+  function alignedErrors(
+    previousErrors: readonly (string | null)[] | undefined,
+    previousCount: number,
+    nextErrors: readonly (string | null)[] | undefined,
+    nextCount: number,
+  ): readonly (string | null)[] | undefined {
+    if (previousErrors === undefined && nextErrors === undefined) return undefined;
+    const left = previousErrors ?? Array.from({ length: previousCount }, () => null);
+    const right = nextErrors ?? Array.from({ length: nextCount }, () => null);
+    if (left.length !== previousCount || right.length !== nextCount)
+      throw new Error(
+        `Import capture statementErrors misaligned: ${left.length}/${previousCount} and ${right.length}/${nextCount}`,
+      );
+    return [...left, ...right];
+  }
+
   function merge(captured: Capture, owner: GrowthDatabase) {
     if (!active) return;
     // Shared plan-based accounting bounds catalog freshness probes separately from request work.
     const raw = withoutCatalogStatements('import API', captured);
     const texts = proofTexts.get(owner) ?? new Set<string>();
-    for (const sql of raw.statements) if (!isControlStatement(sql)) texts.add(sql);
-    for (const sql of raw.backgroundStatements ?? []) if (!isControlStatement(sql)) texts.add(sql);
-    for (const document of [...raw.plans, ...(raw.backgroundPlans ?? [])]) {
+    // Failed attempts stay in the statement arrays and have no raw plan. The index proof covers
+    // successful client texts and nested auto_explain query texts, which is the measured plan set.
+    for (const [index, sql] of raw.statements.entries()) {
+      if (isControlStatement(sql) || (raw.statementErrors?.[index] ?? null) !== null) continue;
+      texts.add(sql);
+    }
+    for (const document of raw.plans) {
       const roots = Array.isArray(document) ? document : [document];
       for (const root of roots) {
         if (root && typeof root === 'object' && !Array.isArray(root) && 'Query Text' in root) {
@@ -121,9 +141,23 @@ export function createApiCapture(database: GrowthDatabase, auth: GrowthDatabase)
     for (const plan of raw.plans) visit(plan);
     active.api.partitions = partitions.size;
     const previous = active.api.postgres;
+    const statementErrors = alignedErrors(
+      previous.statementErrors,
+      previous.statements.length,
+      raw.statementErrors,
+      raw.statements.length,
+    );
+    const backgroundStatementErrors = alignedErrors(
+      previous.backgroundStatementErrors,
+      previous.backgroundStatements?.length ?? 0,
+      raw.backgroundStatementErrors,
+      raw.backgroundStatements?.length ?? 0,
+    );
     active.api.postgres = {
       statements: [...previous.statements, ...raw.statements],
       plans: [...previous.plans, ...raw.plans],
+      ...(statementErrors === undefined ? {} : { statementErrors }),
+      ...(backgroundStatementErrors === undefined ? {} : { backgroundStatementErrors }),
       ...(previous.backgroundStatements === undefined && raw.backgroundStatements === undefined
         ? {}
         : { backgroundStatements: [...(previous.backgroundStatements ?? []), ...(raw.backgroundStatements ?? [])] }),

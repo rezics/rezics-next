@@ -158,7 +158,7 @@ export interface PostgresStatement {
   /** Actual write row count, separate from auto_explain examined rows. */
   rowsAppended: number;
   sql: string;
-  /** Raw auto_explain JSON; empty only for captured transaction control. */
+  /** Raw auto_explain JSON; empty only for captured transaction control or a failed attempt marked by the shared SQLSTATE. */
   explain: string;
 }
 export type Statement = SqliteStatement | PostgresStatement;

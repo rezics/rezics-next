@@ -27,7 +27,7 @@ import type {
   Seed,
   StatementBudgetTerm,
 } from '../../../../specs/imports-growth-driver.ts';
-import type { Capture } from '../support/growth.ts';
+import { isControlStatement, type Capture } from '../support/growth.ts';
 
 type RecordValue = Record<string, unknown>;
 type GrowthState = {
@@ -424,19 +424,17 @@ function postgresStatements(capture: Capture): PostgresStatement[] {
     plans.set(key, documents);
   }
   const offsets = new Map<string, number>();
+  const failed = (index: number) => (capture.statementErrors?.[index] ?? null) !== null;
   const statements: PostgresStatement[] = capture.statements.map((sql, index): PostgresStatement => {
+    // A failed attempt has no raw plan. Do not borrow a later execution's plan or invent one.
+    if (failed(index)) return { engine: 'postgres', sql, explain: '', rowsAppended: 0 };
     const backend = capture.statementBackends?.[index];
     const key = `${backend ?? '<unknown>'}\0${normalizedPlanSql(sql)}`;
     const documents = plans.get(key) ?? [];
     const offset = offsets.get(key) ?? 0;
     const explain = documents[offset];
     offsets.set(key, offset + (explain === undefined ? 0 : 1));
-    if (
-      explain === undefined &&
-      !/^(?:BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK|SAVEPOINT|RELEASE|SET\s+LOCAL|SET\s+TRANSACTION)\b/i.test(
-        sql,
-      )
-    ) {
+    if (explain === undefined && !isControlStatement(sql)) {
       const diagnostic = `unplanned SQL: ${sql}`;
       if (!reportedCaptureDiagnostics.has(diagnostic)) {
         reportedCaptureDiagnostics.add(diagnostic);
@@ -451,9 +449,10 @@ function postgresStatements(capture: Capture): PostgresStatement[] {
     };
   });
   // Repeated SQL texts can also produce nested plans. Charge each such raw plan once,
-  // to the last execution of that same SQL, while keeping every plan in the raw capture.
+  // to the last successful execution of that same SQL, while keeping every plan in the raw capture.
   for (const [key, documents] of plans) {
     const indexes = capture.statements.flatMap((statement, index) => {
+      if (failed(index)) return [];
       const backend = capture.statementBackends?.[index];
       return `${backend ?? '<unknown>'}\0${normalizedPlanSql(statement)}` === key ? [index] : [];
     });
@@ -1316,6 +1315,12 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
             background: executionHistogram(postgres.backgroundStatements ?? []),
             nestedPlans: executionHistogram(planTexts(postgres.plans)),
             backgroundPlans: executionHistogram(planTexts(postgres.backgroundPlans ?? [])),
+            failed: executionHistogram(
+              postgres.statements.flatMap((sql, index) => {
+                const code = postgres.statementErrors?.[index] ?? null;
+                return code === null ? [] : [`${code} ${sql}`];
+              }),
+            ),
           },
           httpAttempts: runtime.httpEvents.slice(httpEventStart),
           tokenRenewals: runtime.tokenRenewals.slice(renewalStart),

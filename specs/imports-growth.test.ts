@@ -130,6 +130,10 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
   expect(c.postgres.statements).toEqual(postgresStatements.map((s) => s.sql));
   for (const statement of postgresStatements)
     if (statement.explain) expect(c.postgres.plans).toContainEqual(JSON.parse(statement.explain));
+  const statementErrors = c.postgres.statementErrors ?? postgresStatements.map(() => null);
+  expect(statementErrors.length).toBe(postgresStatements.length);
+  for (const code of statementErrors) if (code !== null) expect(code).toMatch(/^[0-9A-Z]{5}$/);
+  let postgresIndex = 0;
   for (const statement of c.statements) {
     expect(statement.sql.length).toBeGreaterThan(0);
     if (statement.engine === 'sqlite') {
@@ -139,8 +143,10 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
     } else {
       expect(statement.engine).toBe('postgres');
       integer(statement.rowsAppended);
+      const errorCode = statementErrors[postgresIndex++];
+      if (errorCode !== null) expect(statement.rowsAppended).toBe(0);
       if (!statement.explain) {
-        expect(isControlStatement(statement.sql)).toBe(true);
+        expect(isControlStatement(statement.sql) || errorCode !== null).toBe(true);
         continue;
       }
     }
