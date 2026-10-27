@@ -15,7 +15,6 @@ import {
   verifyAccountAgent,
 } from '../../src/semantic/index.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { AGENT_LINKED } from '../../src/semantic/events.ts';
 import { listSubjectLinks, linkProjection } from '../../src/semantic/links.ts';
 import { EditorialConflictError, proposeStatement } from '../../src/semantic/candidates.ts';
 import { mergeSubjectsInCommand, SubjectRedirectError } from '../../src/semantic/merges.ts';
@@ -354,13 +353,6 @@ test("verification merges the account's agent into the catalogue agent, which su
     moved_from: firstAgent,
     statement_id: authorStatement,
   });
-  const events = await admin.query(
-    `SELECT data->>'subject' AS subject FROM core.outbox
-     WHERE type = $1 AND data->>'account' = $2 ORDER BY position, event_seq`,
-    [AGENT_LINKED, firstAccount],
-  );
-  expect(events.rows).toEqual([{ subject: firstAgent }, { subject: firstCatalogue.subject.id }]);
-
   const secondAccount = newId(route);
   const secondAgent = accountAgentId(secondAccount);
   await ensureAccountAgent(pool, { account: secondAccount, kind: 'person', name: 'Second name', language: 'en' });

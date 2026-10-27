@@ -41,6 +41,26 @@ $$;
 
 
 --
+-- Name: prevent_fact_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.prevent_fact_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Only the derived account node's display label is erasable personal data.
+  IF TG_OP = 'DELETE' AND OLD.kind = 'label' AND EXISTS (
+    SELECT 1 FROM semantic.account_agent_subject account
+    WHERE account.agent_id = OLD.subject_id AND account.account_route = OLD.route
+  ) THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'Semantic revisions are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: prevent_moderation_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -793,7 +813,7 @@ CREATE TRIGGER external_claim_immutable_truncate BEFORE TRUNCATE ON semantic.ext
 -- Name: fact fact_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER fact_immutable BEFORE DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER fact_immutable BEFORE DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.prevent_fact_mutation();
 
 
 --

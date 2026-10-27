@@ -5,12 +5,17 @@ WITH input AS NOT MATERIALIZED (
          :source::jsonb AS source
 ), labels AS MATERIALIZED (
   SELECT label.* FROM jsonb_to_recordset(:labels::jsonb) AS label(
-    slot_id uuid, language text, body jsonb, operation text
+    slot_id uuid, language text, body jsonb
   )
+), removed AS (
+  DELETE FROM semantic.fact fact USING input
+  WHERE fact.route = input.route AND fact.subject_id = input.subject_id
+    AND fact.kind = 'label' AND fact.operation = 'assert'
+  RETURNING fact.slot_id
 ), changed AS (
   UPDATE semantic.subject subject
   SET type = input.type, current_release = input.release,
-      current_facts = subject.current_facts + (SELECT count(*) FROM labels)
+      current_facts = subject.current_facts - (SELECT count(*) FROM removed) + (SELECT count(*) FROM labels)
   FROM input
   WHERE subject.route = input.route AND subject.subject_id = input.subject_id
   RETURNING subject.subject_id
@@ -25,12 +30,6 @@ WITH input AS NOT MATERIALIZED (
 INSERT INTO semantic.fact(
   route, subject_id, slot_id, log_seq, operation, kind, language, body, recorded_transaction_id
 )
-SELECT input.route, input.subject_id, label.slot_id,
-       COALESCE((
-         SELECT max(fact.log_seq)
-         FROM semantic.fact fact
-         WHERE fact.route = input.route AND fact.subject_id = input.subject_id
-           AND fact.slot_id = label.slot_id
-       ), 0) + 1,
-       label.operation, 'label', label.language, label.body, input.transaction_id
-FROM input CROSS JOIN labels label;
+SELECT input.route, input.subject_id, label.slot_id, 1,
+       'assert', 'label', label.language, label.body, input.transaction_id
+FROM input CROSS JOIN labels label CROSS JOIN (SELECT count(*) FROM removed) AS erased;
