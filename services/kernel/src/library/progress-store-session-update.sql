@@ -5,6 +5,7 @@ SET amount = :amount::nullable(numeric),
     completed_unit_count = :completed_unit_count,
     state = :state,
     completed_at = :completed_at::nullable(timestamptz),
+    last_changed_at = GREATEST(last_changed_at, :time::timestamptz),
     revision = revision + 1,
     transaction_id = :transaction_id
 WHERE route = :route AND session_id = :session_id AND revision = :revision

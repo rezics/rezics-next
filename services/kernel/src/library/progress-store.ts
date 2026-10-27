@@ -129,6 +129,7 @@ export async function insertSession(
     unit: session.unit,
     total: session.total,
     time: context.time,
+    last_changed_at: context.time,
     transaction_id: context.transactionId,
   });
   return asSession(row);
@@ -159,6 +160,7 @@ export async function updateSession(
     completed_unit_count: changes.completedUnitCount,
     state: changes.state,
     completed_at: changes.completedAt,
+    time: context.time,
     transaction_id: context.transactionId,
   });
   // A missed revision returns no row. `null!` keeps that result while the declared
