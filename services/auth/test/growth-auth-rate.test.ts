@@ -176,6 +176,16 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       SELECT key,1,statement_timestamp(),true FROM unnest($1::text[]) key`,
       [keys],
     );
+    // The operation inserts into these tables. Indexes grown by incremental random inserts hold pages at every fill
+    // level, and an insert that lands on a full page splits it and reads its new sibling and neighbour. That is
+    // amortized maintenance and not the descent being bounded, so measure from a rebuild that leaves each leaf half
+    // empty, which is room for far more inserts than the runs make.
+    await database.admin.query(`DO $$ DECLARE name text; BEGIN
+      FOR name IN SELECT indexname FROM pg_indexes
+        WHERE schemaname='public' AND tablename IN ('auth_recovery','verification')
+      LOOP EXECUTE format('ALTER INDEX public.%I SET (fillfactor=50)', name); END LOOP; END $$`);
+    await database.admin.query('REINDEX TABLE auth_recovery');
+    await database.admin.query('REINDEX TABLE verification');
     for (const table of [
       '"user"',
       'account',
