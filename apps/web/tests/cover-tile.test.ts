@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
@@ -6,8 +6,12 @@ import { chromium, type Browser } from 'playwright';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CoverCard } from '@rezics/ui/cover-card';
-import { coverRatio, sharedRatio } from '@rezics/ui/cover';
+import { Cover, coverRatio, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { ProgressRow } from '@rezics/ui/progress-row';
+
+const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: 'https://definitions-cover-test.invalid' };
+mock.module('cloudflare:workers', () => ({ env: workerEnv }));
+const { typeFrame } = await import('../src/subject/definitions.ts');
 
 const app = join(import.meta.dir, '..');
 const timeout = 900_000;
@@ -135,7 +139,7 @@ test('cover cards are one light surface with an edge-to-edge cover and padded te
   expect(classOf(frame)).not.toMatch(/(?:^|\s)(?:bg-|border(?:-|\s)|p-[^\s]+)/);
   expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:rounded-none');
   expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:ring-0');
-  expect(frame).toContain('data-ratio="3:4"');
+  expect(frame).toContain('data-ratio="5:7"');
   expect(html.indexOf('data-slot="cover"')).toBeLessThan(html.indexOf('data-slot="cover-card-text"'));
   expect(classOf(title)).toContain('text-center');
   expect(classOf(title)).toContain('line-clamp-2');
@@ -172,23 +176,23 @@ test('a card without progress keeps its menu before its status in the state row'
   expect(html).not.toContain('role="progressbar"');
 });
 
-test('fallback ratios follow the product families and mixed grids tie to 3:4', () => {
+test('fallback ratios follow the product families and mixed grids tie to 5:7', () => {
   const families: [string[], string][] = [
-    [['schema:Book'], '3:4'],
-    [['bf:Instance'], '3:4'],
-    [['schema:BookSeries'], '3:4'],
-    [['schema:ComicSeries'], '3:4'],
-    [['schema:PublicationVolume'], '3:4'],
-    [['schema:TVSeries'], '3:4'],
-    [['schema:TVSeason'], '3:4'],
-    [['schema:Movie'], '3:4'],
+    [['schema:Book'], '5:7'],
+    [['bf:Instance'], '5:7'],
+    [['schema:BookSeries'], '5:7'],
+    [['schema:ComicSeries'], '5:7'],
+    [['schema:PublicationVolume'], '5:7'],
+    [['schema:TVSeries'], '5:7'],
+    [['schema:TVSeason'], '5:7'],
+    [['schema:Movie'], '5:7'],
     [['wd:Q689445'], '3:4'],
     [['wd:Q7889'], '3:4'],
     [['wd:Q20631656'], '3:4'],
     [['wd:Q209163'], '3:4'],
-    [['schema:VideoGame'], '3:4'],
-    [['schema:CreativeWork'], '3:4'],
-    [['wd:Q7725310'], '3:4'],
+    [['schema:VideoGame'], '5:7'],
+    [['schema:CreativeWork'], '5:7'],
+    [['wd:Q7725310'], '5:7'],
     [['schema:Person'], '3:4'],
     [['wd:Q95074'], '3:4'],
     [['schema:MusicAlbum'], '1:1'],
@@ -204,7 +208,51 @@ test('fallback ratios follow the product families and mixed grids tie to 3:4', (
       { id: 'book', title: 'Book', types: ['schema:Book'] },
       { id: 'album', title: 'Album', types: ['schema:MusicAlbum'] },
     ]),
-  ).toBe('3:4');
+  ).toBe('5:7');
+});
+
+test('definition ratios reach Cover unchanged and invalid ratios use the subject type default', async () => {
+  const originalFetch = globalThis.fetch;
+  let release: { types: Record<string, { labels?: Record<string, string>; bases?: string[]; coverRatio?: string }> };
+  globalThis.fetch = async (input) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.pathname === '/v1/definitions/active') return Response.json({ digest: 'cover-test-release' });
+    if (url.pathname === '/v1/definitions/releases/cover-test-release')
+      return Response.json({ digest: 'cover-test-release', release });
+    return new Response(null, { status: 404 });
+  };
+
+  const renderFrame = (type: string, ratio?: string) =>
+    renderToStaticMarkup(
+      createElement(Cover, {
+        subject: { id: type, title: type, types: [type] },
+        cover: null,
+        src: () => '',
+        size: 'fill',
+        ...(ratio ? { ratio: ratio as CoverRatio } : {}),
+      }),
+    );
+  const frameRatio = (html: string) => html.match(/data-ratio="([^"]+)"/)?.[1];
+
+  try {
+    for (const [index, ratio] of ['5:7', '9:16'].entries()) {
+      workerEnv.KERNEL_ORIGIN = `https://definitions-cover-${index}.invalid`;
+      release = {
+        types: { 'example:Poster': { labels: { en: 'Poster' }, coverRatio: ratio } },
+      };
+      const frame = await typeFrame('example:Poster', 'en');
+      expect(frame.ratio).toBe(ratio);
+      expect(frameRatio(renderFrame('example:Poster', frame.ratio))).toBe(ratio);
+    }
+
+    workerEnv.KERNEL_ORIGIN = 'https://definitions-cover-invalid.invalid';
+    release = { types: { 'schema:Book': { labels: { en: 'Book' }, coverRatio: '65:1' } } };
+    const invalid = await typeFrame('schema:Book', 'en');
+    expect(invalid.ratio).toBeUndefined();
+    expect(frameRatio(renderFrame('schema:Book', invalid.ratio))).toBe('5:7');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('all tile surfaces use CoverCard, and Space uses the localized definition name', async () => {
