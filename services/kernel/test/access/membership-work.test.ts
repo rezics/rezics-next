@@ -192,9 +192,10 @@ test('accounts compose once before the single kernel launch with exactly the sha
   }
 });
 
-test('durable owner, join, role and leave preserve inverse ordering across process death at every native boundary', async () => {
-  const owner = await person();
-  for (const phase of ['reserve', 'before-publish', 'publish']) {
+test.each(['reserve', 'before-publish', 'publish'] as const)(
+  'durable owner, join, role and leave preserve inverse ordering across process death at the %s boundary',
+  async (phase) => {
+    const owner = await person();
     const organizationId = newId(0x3710);
     await restartAt(owner, { kind: 'organization', organizationId, authorization: 'authenticated-fixture' }, phase);
     expect(await authority(organizationId, owner)).toHaveLength(1);
@@ -214,8 +215,9 @@ test('durable owner, join, role and leave preserve inverse ordering across proce
     await restartAt(owner, { ...input, role: null, reservationId }, boundary);
     expect(await authority(organizationId, member)).toEqual([]);
     expect(await inverseRows(member)).toEqual([]);
-  }
-}, 180000);
+  },
+  90_000,
+);
 
 test('compensation persists an exact terminal barrier before cleanup and cannot delete a successor reservation', async () => {
   const owner = await person();
