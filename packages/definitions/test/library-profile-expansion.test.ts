@@ -41,13 +41,18 @@ test('library profile expansion fits release limits at ten and one hundred manif
       expect(referenceOf(configured, v.agent)).toBeUndefined();
     }
     expect(added.size).toBe(1 + count / 2);
-    expect(Object.keys(registryOf(configured)!)).toHaveLength(Object.keys(registryOf(plain)!).length + added.size);
+    const plainRegistry = registryOf(plain);
+    const existingProfiles = Object.keys(plainRegistry ?? {}).length;
+    expect(Object.keys(registryOf(configured)!)).toHaveLength(existingProfiles + added.size);
     let registryBytes = 0;
     for (const [id, p] of added) {
       expect(registryOf(configured)![id]).toEqual(p);
-      // Existing bundled registry is nonempty: charge a comma, one key, one colon, one object, once.
+      // Charge one key, colon and canonical object per new profile; adjust container/comma overhead below.
       registryBytes += Buffer.byteLength(`,${JSON.stringify(id)}:`) + Buffer.byteLength(canonicalize(p)!);
     }
+    // Empty and absent baselines have no preceding entry comma; an absent member also adds its key and braces.
+    if (existingProfiles === 0) registryBytes -= Buffer.byteLength(',');
+    if (plainRegistry === undefined) registryBytes += Buffer.byteLength(',"libraryProfiles":{}');
     const bytes = Buffer.byteLength(canonicalize(configured)!);
     const baseline = Buffer.byteLength(canonicalize(plain)!);
     expect(bytes).toBeGreaterThan(baseline);
@@ -56,6 +61,7 @@ test('library profile expansion fits release limits at ten and one hundred manif
     // Deleting exactly the charged members recovers every other byte of the data-only baseline.
     const stripped = structuredClone(configured);
     for (const id of added.keys()) delete registryOf(stripped)![id];
+    if (plainRegistry === undefined) delete (stripped as unknown as Record<string, unknown>).libraryProfiles;
     for (let i = 0; i < count; i++) {
       const v = verticalProfile(i);
       for (const type of [v.work, v.edition])
