@@ -212,7 +212,23 @@ export function attemptEnvironment(
     GOAL_ATTEMPT: String(attempt.attempt),
     KERNEL_CHECK_AFFECTED: task.base,
     ...remoteCheckEnvironment(stateDirectory),
+    // Check tools append each wait for a check slot here, in milliseconds per line; the class limit adds it back.
+    ...(stateDirectory
+      ? { GOAL_CHECK_WAIT_FILE: join(stateDirectory, 'runs', task.id, `${attempt.attempt}.check-wait`) }
+      : {}),
   };
+}
+/** Milliseconds an attempt's checks spent waiting for a slot, as its check tools recorded them beside the run log. */
+export function checkWaitMs(logPath: string): number {
+  try {
+    return readFileSync(logPath.replace(/\.jsonl$/, '.check-wait'), 'utf8')
+      .split('\n')
+      .map(Number)
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .reduce((total, value) => total + value, 0);
+  } catch {
+    return 0;
+  }
 }
 export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>; attempt: Attempt };
 /**
