@@ -1771,9 +1771,7 @@ function subjectRoutes(
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
           const links = result.links.flatMap(({ summary, ...link }) =>
-            summary
-              ? [{ ...link, type: summary.type, label: summary.label?.value ?? '', summary }]
-              : [],
+            summary ? [{ ...link, type: summary.type, label: summary.label?.value ?? '', summary }] : [],
           );
           return { ...result, links };
         } catch (error) {
