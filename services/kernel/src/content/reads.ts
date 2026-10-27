@@ -111,6 +111,7 @@ type Row = {
   media_ids: string[];
   body: Buffer | null;
   sha256: Buffer | null;
+  realm_id: string | null;
 };
 type Chain = { thread: Row; posts: Row[]; revision: Row | null };
 type Key = { at: string; id: string };
@@ -212,6 +213,7 @@ const signature = (row: Row) =>
     row.visibility,
     row.security_revision,
     row.availability,
+    row.realm_id,
   ]);
 const fingerprint = (value: Chain | null) =>
   value &&
@@ -298,6 +300,7 @@ export async function readBoard(
       return null;
     return {
       id: current.id,
+      realmId: current.realm_id ?? null,
       route: route(boardId),
       title: current.title,
       purpose: current.board_purpose!,

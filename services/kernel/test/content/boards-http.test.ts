@@ -144,8 +144,19 @@ test('board metadata and listing mount once with the actual read action and plur
   const detail = await get(`/v1/boards/${id}`);
   expect(detail.response.status).toBe(200);
   expect(Object.keys(detail.body.board).sort()).toEqual(
-    ['id', 'route', 'title', 'visibility', 'securityRevision', 'availability', 'createdAt'].sort(),
+    [
+      'id',
+      'route',
+      'title',
+      'purpose',
+      'visibility',
+      'securityRevision',
+      'availability',
+      'createdAt',
+      'realmId',
+    ].sort(),
   );
+  expect(detail.body.board.realmId).toBeNull();
   expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));

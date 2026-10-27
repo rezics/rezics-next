@@ -10239,6 +10239,13 @@
                           ],
                           "type": "string"
                         },
+                        "realmId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "route": {
                           "maximum": 65535,
                           "minimum": 0,
@@ -10270,6 +10277,7 @@
                         "visibility",
                         "securityRevision",
                         "createdAt",
+                        "realmId",
                         "title",
                         "purpose",
                         "availability"
@@ -85885,6 +85893,13 @@
                             ],
                             "type": "string"
                           },
+                          "realmId": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "route": {
                             "maximum": 65535,
                             "minimum": 0,
@@ -85916,6 +85931,7 @@
                           "visibility",
                           "securityRevision",
                           "createdAt",
+                          "realmId",
                           "title",
                           "purpose",
                           "availability"
@@ -86514,6 +86530,13 @@
                           ],
                           "type": "string"
                         },
+                        "realmId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "route": {
                           "maximum": 65535,
                           "minimum": 0,
@@ -86545,6 +86568,7 @@
                         "visibility",
                         "securityRevision",
                         "createdAt",
+                        "realmId",
                         "title",
                         "purpose",
                         "availability"

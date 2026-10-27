@@ -226,6 +226,7 @@ export const BoardViewSchema = t.Unsafe<BoardView>(
   t.Object(
     {
       ...metadata,
+      realmId: nullableId,
       title: t.Union([t.String(), t.Null()]),
       purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
       availability,

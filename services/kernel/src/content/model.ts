@@ -97,6 +97,7 @@ export function isErasedPlaceholder(
 
 export type BoardView = Readonly<{
   id: BoardId;
+  realmId: string | null;
   route: Route;
   title: string | null;
   purpose: 'discussion' | 'reviews';

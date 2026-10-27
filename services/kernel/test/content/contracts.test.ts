@@ -467,6 +467,7 @@ function publishedModels(): void {
       model.BoardView,
       Readonly<{
         id: string;
+        realmId: string | null;
         route: number;
         title: string | null;
         purpose: 'discussion' | 'reviews';

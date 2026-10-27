@@ -28,7 +28,6 @@ import {
   type ContentReadDependencies,
   type ThreadView,
 } from './reads.ts';
-import readBoardRealm from './board-realm-read.sql';
 import pageRealmBoardIds from './board-realm-page.sql';
 
 export type ContentBoardDependencies = ContentReadDependencies & {
@@ -180,15 +179,10 @@ export async function readRealmBoard(
   const readDependencies = { ...dependencies, access };
   const board = await readBoard(readDependencies, boardId, context);
   if (!board.value) return board;
-  const boardRoute = routeOf(boardId);
-  if (boardRoute === null) return { ...board, value: null };
-  const row = await withConnection(dependencies.pool, async (client) => {
-    return readBoardRealm.run(client, { route: boardRoute, id: boardId });
-  });
-  if (!row) return { ...board, value: null };
-  if (row.realm_id === null) return board;
+  const realmId = board.value.realmId;
+  if (realmId === null) return board;
 
-  const check = await prepareRealmRead(readDependencies, context.actor, row.realm_id, context.deadline);
+  const check = await prepareRealmRead(readDependencies, context.actor, realmId, context.deadline);
   if (!check) return { ...board, value: null };
   const visible = await withConnection(dependencies.pool, async (connection) => {
     const client = deadlineClient(connection, context.deadline);

@@ -64,7 +64,7 @@ type Person = { accountId: string; bearer: string };
 type Realm = { realmId: string; headRevisionId: string };
 type CallOptions = { bearer?: string; key?: string; headers?: Record<string, string>; body?: unknown };
 type CallResult = { response: Response; value: Record<string, any> };
-type Board = { id: string; route: number; title: string; visibility: string };
+type Board = { id: string; route: number; title: string; visibility: string; realmId: string | null };
 
 async function issue(email: string, scopes: string[]) {
   const signed = await service.handler(
@@ -382,7 +382,11 @@ test.serial('a Realm moderator creates one scheme Concept board and threads list
     route: routeOf(boardId),
     title: 'Board for ' + conceptId,
     visibility: 'published',
+    realmId: publicRealm.realmId,
   });
+  const read = await call('GET', '/v1/boards/' + boardId);
+  expect(read.response.status).toBe(200);
+  expect(read.value.board).toMatchObject({ id: boardId, realmId: publicRealm.realmId });
   const initialized = await db.admin.query(
     `SELECT 1 FROM access.resource_role_grant
      WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.board.owner' AND upper_inf(valid)`,
@@ -410,7 +414,7 @@ test.serial('a Realm moderator creates one scheme Concept board and threads list
 
   const listed = await call('GET', '/v1/realms/' + publicRealm.realmId + '/boards');
   expect(listed.response.status).toBe(200);
-  expect(listed.value.items.map((item: Board) => item.id)).toContain(boardId);
+  expect(listed.value.items).toContainEqual(expect.objectContaining({ id: boardId, realmId: publicRealm.realmId }));
   expect(listed.value.next).toBeNull();
 
   const beforeOutside = await writeSnapshot();
@@ -445,6 +449,9 @@ test.serial(
       await expectHiddenAsMissing('/v1/realms/' + protectedRealm.realmId + '/boards', missingRealm, token);
       await expectHiddenAsMissing('/v1/boards/' + board.id + '/threads', missingBoard, token);
       await expectHiddenAsMissing('/v1/boards/' + board.id, '/v1/boards/' + newId(board.route), token);
+      const hiddenBoard = await call('GET', '/v1/boards/' + board.id, token === undefined ? {} : { bearer: token });
+      expect(hiddenBoard.response.status).toBe(404);
+      expect(JSON.stringify(hiddenBoard.value)).not.toContain(protectedRealm.realmId);
     }
     const suspended = await person(
       'realm_boards_suspended',
