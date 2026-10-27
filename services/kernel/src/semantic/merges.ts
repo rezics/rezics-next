@@ -69,7 +69,7 @@ export async function mergeSubjects(
     pool,
     {
       partition: partitionOf(route),
-      deadline: options.deadline,
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
       receipt: {
         actorAccountId: options.actor.accountId,
         kind: 'subject.merge',
