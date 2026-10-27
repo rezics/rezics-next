@@ -64,6 +64,7 @@ async function point(read: SealedIdentityReader, original: string) {
       const cost = costOf(measured.capture);
       expect(cost.rows).toBeLessThanOrEqual(16);
       expect(cost.statements).toBeLessThanOrEqual(12);
+      expect(measured.capture.statements.length).toBeLessThanOrEqual(12);
       if (measured.value?.state === 'ready') {
         expect(Object.keys(measured.value).sort()).toEqual(['home', 'state', 'terminal']);
         expect(Object.keys(measured.value.home).sort()).toEqual([

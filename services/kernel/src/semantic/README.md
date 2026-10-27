@@ -424,7 +424,8 @@ completeness and finite relay repair must land first where used; structural iden
 
 ## Identity
 
-This section specifies additive current terminal identity, structural basis and resumable alias-group reads.
+This section specifies additive current terminal identity, structural basis, resumable alias-group reads and
+trusted sealed-subject repair metadata.
 It is an implementation contract: the native tests deliberately fail on absent exports until those exports and
 same-home maintenance hooks land. It does not authorize a graph engine, holder directory, permission engine,
 source SQL implementation in this specification change, or changes to the existing reference resolver.
