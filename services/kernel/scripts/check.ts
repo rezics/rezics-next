@@ -417,8 +417,12 @@ export async function placeKernelCheck(
 ): Promise<number | null> {
   if (plan.files?.length === 0) return null;
   const forwardedEnv: string[] = [];
-  if (env.KERNEL_CHECK_CONCURRENCY) forwardedEnv.push(`KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`);
-  if (env.KERNEL_CHECK_SKIP_STALE_CLEANUP === '1') forwardedEnv.push('KERNEL_CHECK_SKIP_STALE_CLEANUP=1');
+  const skipCleanup = env.KERNEL_CHECK_SKIP_STALE_CLEANUP === '1';
+  if (skipCleanup) forwardedEnv.push('KERNEL_CHECK_SKIP_STALE_CLEANUP=1');
+  if (env.KERNEL_CHECK_CONCURRENCY) {
+    if (skipCleanup) forwardedEnv.push('env');
+    forwardedEnv.push(`KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`);
+  }
   return runOnCheckHost(
     {
       label: 'kernel check',
