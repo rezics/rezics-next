@@ -154,7 +154,8 @@ type FacetResponse = {
   hits: { total: { value: number; relation: 'eq' | 'gte' } };
   aggregations: Record<
     string,
-    { facts: { property: { values: { buckets: { key: string; subjects: { doc_count: number } }[] } } } }
+    | { values: { buckets: { key: string; doc_count: number }[] } }
+    | { facts: { property: { values: { buckets: { key: string; subjects: { doc_count: number } }[] } } } }
   >;
 };
 
@@ -168,26 +169,33 @@ export async function countFacets(
       `facet_${index}`,
       {
         sampler: { shard_size: plan.sample },
-        aggs: {
-          facts: {
-            nested: { path: 'facts' },
-            aggs: {
-              property: {
-                filter: { term: { 'facts.property': property } },
-                aggs: {
-                  values: {
-                    terms: {
-                      field: 'facts.value',
-                      size: 2 * size,
-                      order: [{ subjects: 'desc' }, { _key: 'asc' }],
+        aggs:
+          property === 'type'
+            ? {
+                values: {
+                  terms: { field: 'type', size: 2 * size, order: [{ _count: 'desc' }, { _key: 'asc' }] },
+                },
+              }
+            : {
+                facts: {
+                  nested: { path: 'facts' },
+                  aggs: {
+                    property: {
+                      filter: { term: { 'facts.property': property } },
+                      aggs: {
+                        values: {
+                          terms: {
+                            field: 'facts.value',
+                            size: 2 * size,
+                            order: [{ subjects: 'desc' }, { _key: 'asc' }],
+                          },
+                          aggs: { subjects: { reverse_nested: {} } },
+                        },
+                      },
                     },
-                    aggs: { subjects: { reverse_nested: {} } },
                   },
                 },
               },
-            },
-          },
-        },
       },
     ]),
   );
@@ -206,13 +214,20 @@ export async function countFacets(
     total.relation === 'exact' && total.value <= plan.sample ? 'exact' : 'lower_bound';
   return {
     total,
-    facets: plan.facets.map(({ property }, index) => ({
-      property,
-      relation: relation as SearchResult['total']['relation'],
-      values: body.aggregations[`facet_${index}`]!.facts.property.values.buckets.map(({ key, subjects }) => ({
-        value: key,
-        count: subjects.doc_count,
-      })).sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0)),
-    })),
+    facets: plan.facets.map(({ property }, index) => {
+      const aggregation = body.aggregations[`facet_${index}`]!;
+      const values =
+        'values' in aggregation
+          ? aggregation.values.buckets.map(({ key, doc_count }) => ({ value: key, count: doc_count }))
+          : aggregation.facts.property.values.buckets.map(({ key, subjects }) => ({
+              value: key,
+              count: subjects.doc_count,
+            }));
+      return {
+        property,
+        relation,
+        values: values.sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0)),
+      };
+    }),
   };
 }

@@ -10,6 +10,7 @@ import {
   codeFacet,
   discloseFacetValues,
   validateFacets,
+  typeFacetLabels,
   type FacetRequest,
   type FacetValue,
 } from './facets.ts';
@@ -336,7 +337,9 @@ export function createSearchService({
       );
       const subjects = await discloseFacetValues(
         source,
-        counted.facets.flatMap((facet) => (coded.has(facet.property) ? [] : facet.values.map(({ value }) => value))),
+        counted.facets.flatMap((facet) =>
+          facet.property === 'type' || coded.has(facet.property) ? [] : facet.values.map(({ value }) => value),
+        ),
       );
       return {
         facets: counted.facets.map((facet, index) => ({
@@ -344,6 +347,10 @@ export function createSearchService({
           relation: facet.relation,
           values: facet.values
             .flatMap(({ value, count }): FacetValue[] => {
+              if (facet.property === 'type') {
+                const labels = typeFacetLabels(current, value);
+                return labels ? [{ value, count, labels }] : [];
+              }
               if (coded.has(facet.property)) return [{ value, count, labels: {} }];
               const subject = subjects.get(value);
               return subject ? [{ value, count, labels: project(subject).labels }] : [];

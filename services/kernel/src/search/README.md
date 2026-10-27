@@ -45,3 +45,12 @@ The consumer-leading checkpoint index lets Retire examine the retired consumer's
 Relay discovery, freshness, reconciliation and retirement use cross-partition SQL joins/deletion on a shared pool: their fixed 4,096-partition cardinality does not make them independently executable on separately placed partition databases.
 A prefix holds at most three generations: the previous one during its retirement grace, the active one and the one being built. Rebuild exclusion uses a PostgreSQL session advisory lock keyed by alias; alias switching is delegated to OpenSearch.
 Full replay and reconcile are explicitly invoked whole-index maintenance, while discovery/retirement are periodic and freshness is cached/polled; no reconcile runs per indexed change.
+
+### Type facet
+
+- **Touches:** one `terms` aggregation on the `type` keyword inside the facet request's sampler; label maps from the
+  active release in memory.
+- **Bound:** no database read and no extra engine request. Engine work is bounded by the sample (`facetSample`) and
+  the bucket count by `2 * size` (at most 40).
+- **Growth check:** `test/search/growth-facets.test.ts`, "type facet stays within its bound as subjects grow", with
+  that file's scales.

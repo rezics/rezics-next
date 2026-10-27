@@ -34,6 +34,15 @@ export function codeFacet(release: FilterRelease, property: string): boolean {
   return typeof pattern === 'string' && pattern.length > 0;
 }
 
+/** Type definitions are public; their labels need no subject disclosure. */
+export function typeFacetLabels(release: FilterRelease, type: string): Record<string, string> | undefined {
+  const definition = ownField(release.types, type);
+  if (!isRecord(definition)) return undefined;
+  const labels = ownField(definition, 'labels');
+  // FilterRelease only describes fields used for admission; definition releases also carry label maps.
+  return isRecord(labels) ? (labels as Record<string, string>) : {};
+}
+
 function invalid(pointer: string, code: FieldErrorCode): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code }] });
 }
@@ -75,6 +84,7 @@ export function admitFacets(facets: readonly Facet[], filter: FilterDocument | u
       types = types === undefined ? [...expanded.type.in] : types.filter((type) => expanded.type.in.includes(type));
   }
   for (const [index, facet] of facets.entries()) {
+    if (facet.property === 'type') continue;
     if (types?.length === 0)
       throw new ProblemError('unsupported_query', {
         errors: [{ pointer: `/facets/${index}/property`, code: 'unsupported' }],

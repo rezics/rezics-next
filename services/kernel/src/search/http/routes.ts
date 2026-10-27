@@ -66,7 +66,7 @@ const facetResponse = t.Object(
           values: t.Array(
             t.Object(
               {
-                value: t.String({ format: 'uuid' }),
+                value: t.String(),
                 count: t.Integer(),
                 labels: t.Record(t.String(), t.String()),
               },
