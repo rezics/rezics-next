@@ -15,7 +15,6 @@ export function readRouting(file: string): RoutingTable {
   const profile = (p: Profile) => {
     if (!p || !['codex', 'grok', 'cursor', 'claude'].includes(p.cli) || !p.model || !p.poolClass
       || !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)) throw new Error('invalid routing profile');
-    if (p.model.includes('sol') && !['medium', 'high', 'low'].includes(p.effort)) throw new Error('Sol effort exceeds high');
     if (p.serviceTier !== undefined && !['default', 'fast'].includes(p.serviceTier)) throw new Error('invalid routing profile service tier');
   };
   for (const key of ['implementation', 'interface', 'bulk-text', 'claim', 'specification', 'critical-path', 'research'] as const) {
@@ -56,6 +55,16 @@ export function routeTask(brief: Brief, sequence: number, table: RoutingTable): 
   const taskClass = classifyTask(brief);
   if (taskClass === 'mechanical') throw new Error('mechanical work must run without a model');
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('invalid task sequence');
+  // A brief may pin its Codex model and effort, for example a deep research question on Sol max beside a Terra copy.
+  if (brief.model !== undefined) {
+    if (!/^gpt-[a-z0-9.-]+$/.test(brief.model)) throw new Error(`brief model must be a Codex model: ${brief.model}`);
+    const effort = (brief.effort ?? 'high') as Profile['effort'];
+    if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new Error(`invalid brief effort: ${effort}`);
+    const route = table.classes[taskClass].first;
+    const profile: Profile = { cli: 'codex', model: brief.model, effort, poolClass: route.cli === 'codex' ? route.poolClass : 'codex',
+      ...(route.serviceTier ? { serviceTier: route.serviceTier } : {}) };
+    return { taskClass, profile, tableVersion: table.version, experiment: null };
+  }
   const experiment = table.experiments.find(e => e.open && e.class === taskClass);
   return { taskClass, profile: experiment ? experiment.profiles[(sequence - 1) % experiment.profiles.length]! : table.classes[taskClass].first,
     tableVersion: table.version, experiment: experiment?.name ?? null };
