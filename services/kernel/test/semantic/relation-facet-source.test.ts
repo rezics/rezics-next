@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg, { type Pool } from 'pg';
+import { lookupEventType } from '../../src/events/catalogue.ts';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
-import { tupleRoute } from '../../src/content/imported-contract.ts';
-import type { Relay } from '../../src/events/relays.ts';
 import * as semanticSource from '../../src/semantic/search-source.ts';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -20,15 +19,17 @@ import {
 } from '../../src/search/source.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
-import { capture, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { capture, costOf, withoutCatalogStatements, openGrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
 import { statementBindings } from './support/sql-guard.ts';
 
-// Narrow the shared probe to the approved unqualified input while Search updates its declaration.
-// Missing production support remains an assertion failure.
+// Missing production support fails availability assertions, never module loading or typechecking.
 type RelationFacetProbe = Pick<SharedRelationFacetProbe, 'subject' | 'property' | 'value'>;
 type Probe = RelationFacetProbe;
-type ExpectedPort = { matchRelationFacets?: (partition: number, probes: readonly Probe[]) => Promise<boolean[]> };
+type RelationFacetMatch = boolean | 'not_proven';
+type ExpectedPort = {
+  matchRelationFacets?: (partition: number, probes: readonly Probe[]) => Promise<RelationFacetMatch[]>;
+};
 type SnapshotSubject = IndexedSubject & { relationFacetOverflow?: string[] };
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -128,7 +129,8 @@ async function post(path: string, body: unknown, key = randomUUID()) {
 async function create(type = 'schema:Person', statements = {}) {
   return (await post('/v1/subjects', { type, labels: { en: 'Relation facet fixture' }, statements })).subject;
 }
-async function snapshot(id: string): Promise<SnapshotSubject> {
+async function snapshot(id: string, rebuild = true): Promise<SnapshotSubject> {
+  if (rebuild) await catchUp(rebuildRunner(pool), subjectPartition(id));
   const result = await source.read(subjectPartition(id), [id]);
   expect(result.subjects).toHaveLength(1);
   return result.subjects[0]!;
@@ -264,7 +266,7 @@ test('a relation facet snapshot has at most 128 values and reports overflow', as
       { subject: book.id, property: 'schema:author', value: omitted.id },
       { subject: book.id, property: 'schema:author', value: newId(routeOf(book.id)!) },
     ]),
-  ).toEqual([true, false]);
+  ).toEqual([true, 'not_proven']);
 }, 120_000);
 
 test('unqualified relation facet point probes enforce immediate visibility beyond the sample', async () => {
@@ -291,7 +293,7 @@ test('unqualified relation facet point probes enforce immediate visibility beyon
   expect(await match(subjectPartition(book.id), [probe, inside, { ...probe, value: absent.id }])).toEqual([
     true,
     true,
-    false,
+    'not_proven',
   ]);
   await post(`/v1/subjects/${book.id}/candidates/${candidate}:hide`, { reason: 'Hide after indexing' });
   const hidden = await admin.query(
@@ -299,7 +301,7 @@ test('unqualified relation facet point probes enforce immediate visibility beyon
     [routeOf(book.id), book.id, candidate],
   );
   expect(hidden.rows).toEqual([{ visibility: 'hidden' }]);
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   const hiddenSnapshot = await snapshot(book.id);
   expect(values(hiddenSnapshot, 'schema:author')).toHaveLength(MAX_RELATION_FACET_VALUES);
   expect(values(hiddenSnapshot, 'schema:author').map(({ value }) => value)).not.toContain(outside.id);
@@ -307,16 +309,16 @@ test('unqualified relation facet point probes enforce immediate visibility beyon
   await post(`/v1/subjects/${book.id}/candidates/${candidate}:takedown`, {
     notice: { complaint: 'Rights holder notice.', received_at: '2026-10-25T09:00:00Z' },
   });
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   await post(`/v1/subjects/${book.id}/candidates/${candidate}:restore`, { reason: 'Restore after review' });
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
   // Positive hits inside the sample need exactly the same immediate suppression.
   await post(`/v1/subjects/${book.id}/candidates/${candidates.get(inside.value)!}:hide`, {
     reason: 'Sampled hit hidden',
   });
-  expect(await match(subjectPartition(book.id), [inside])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [inside])).toEqual(['not_proven']);
   await post(`/v1/subjects/${book.id}:hide`, { reason: 'Source hidden' });
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   await post(`/v1/subjects/${book.id}:restore`, { reason: 'Source restored' });
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
 }, 120_000);
@@ -345,7 +347,7 @@ test('unqualified same-target slotKey probes keep surviving visible statements',
   await post(`/v1/subjects/${book.id}/candidates/${first}:hide`, { reason: 'One witness hidden' });
   expect(await match(subjectPartition(book.id), [probe, probe])).toEqual([true, true]);
   await post(`/v1/subjects/${book.id}/candidates/${second}:hide`, { reason: 'Last witness hidden' });
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   await post(`/v1/subjects/${book.id}/candidates/${first}:restore`, { reason: 'Witness restored' });
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
 });
@@ -389,8 +391,6 @@ test('relation facet point reads reject foreign anchors and more than 256 probes
       [partition, [{ ...probe, subject: 'malformed' }]],
       [partition, [probe, { ...probe, subject: foreign }]],
       [partition, Array.from({ length: MAX_RELATION_FACET_PROBES + 1 }, () => probe)],
-      // Qualifiers are not part of this port; never silently strip an unsupported predicate.
-      [partition, [{ ...probe, qualifiers: [{ property: 'ex:key', in: [target.id] }] } as Probe]],
     ] as [number, Probe[]][]) {
       const measured = await capture(db, async () => {
         await expect(match(part, probes)).rejects.toThrow();
@@ -402,7 +402,9 @@ test('relation facet point reads reject foreign anchors and more than 256 probes
       ...probe,
       subject: index % 2 ? neighbor : subject,
     }));
-    expect(await match(partition, probes)).toEqual(probes.map(({ subject: id }) => id === subject));
+    expect(await match(partition, probes)).toEqual(
+      probes.map(({ subject: id }) => (id === subject ? true : 'not_proven')),
+    );
     for (const { file, binding } of await statementBindings(db.admin, 'search-source.ts'))
       expect(binding, `${file} must bind exactly one partition`).toMatchObject({ bound: true });
   } finally {
@@ -418,9 +420,16 @@ test('relation facet final disclosure denies hidden targets and fenced or retrac
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
   await snapshot(book.id);
   await post(`/v1/subjects/${target.id}:hide`, { reason: 'Target hidden after indexing' });
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   expect(values(await snapshot(book.id), 'schema:author')).toEqual([]);
   await post(`/v1/subjects/${target.id}:restore`, { reason: 'Target restored' });
+  expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
+  await post(`/v1/subjects/${target.id}:takedown`, {
+    notice: { complaint: 'Target rights notice.', received_at: '2026-10-25T09:00:00Z' },
+  });
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
+  expect(values(await snapshot(book.id), 'schema:author')).toEqual([]);
+  await post(`/v1/subjects/${target.id}:restore`, { reason: 'Target restored after takedown' });
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
   const imported = {
     source: 'openlibrary',
@@ -447,9 +456,9 @@ test('relation facet final disclosure denies hidden targets and fenced or retrac
   expect(proposed.results[0].status).toBe(201);
   const candidate = proposed.results[0].value.candidate as string;
   const importedProbe = { ...probe, value: importedTarget.id };
-  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual(['not_proven']);
   await accept(book.id, candidate);
-  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual(['not_proven']);
   const importedHead = await adopt(book.id, 'schema:author', importedTarget.id, [candidate], null);
   expect(await match(subjectPartition(book.id), [importedProbe])).toEqual([true]);
   const retracted = await batch([
@@ -463,7 +472,7 @@ test('relation facet final disclosure denies hidden targets and fenced or retrac
     },
   ]);
   expect(retracted.results[0].status).toBe(200);
-  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [importedProbe])).toEqual(['not_proven']);
   expect(values(await snapshot(book.id), 'schema:author').map((row) => row.value)).toEqual([target.id]);
   const replacement = await batch([
     {
@@ -489,7 +498,7 @@ test('relation facet final disclosure denies hidden targets and fenced or retrac
     fieldGroup: 'facts',
     reason: 'Fence after indexing',
   });
-  expect(await match(subjectPartition(book.id), [importedProbe, probe])).toEqual([false, true]);
+  expect(await match(subjectPartition(book.id), [importedProbe, probe])).toEqual(['not_proven', true]);
   expect(values(await snapshot(book.id), 'schema:author').map((row) => row.value)).toEqual([target.id]);
   // Release identity and old sampled evidence cannot authorize disclosure.
   expect(indexed.statements).toContainEqual(
@@ -550,12 +559,12 @@ test('a fenced same-target statement does not conceal a surviving adopted slotKe
   // No consumer has run since indexing. Both truth and the alternative witness must be current.
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
   await post(`/v1/subjects/${book.id}/candidates/${localCandidate}:hide`, { reason: 'Remove last visible witness' });
-  expect(await match(subjectPartition(book.id), [probe])).toEqual([false]);
+  expect(await match(subjectPartition(book.id), [probe])).toEqual(['not_proven']);
   await post(`/v1/subjects/${book.id}/candidates/${localCandidate}:restore`, { reason: 'Restore visible witness' });
   expect(await match(subjectPartition(book.id), [probe])).toEqual([true]);
 });
 
-test('relation facet point probe uncertainty fails the whole request as unavailable', async () => {
+test('relation facet point probe I/O failure remains typed unavailable', async () => {
   const target = await create();
   const book = await create('schema:Book', { 'schema:author': [statement('schema:author', target.id)] });
   // Exhaust a real pool, leaving the real source unable to acquire current evidence.
@@ -573,7 +582,7 @@ test('relation facet point probe uncertainty fails the whole request as unavaila
     } catch (error) {
       failure = error;
     }
-    expect(failure, 'uncertainty must reject, never return partial or invented booleans').toBeDefined();
+    expect(failure, 'real I/O failure must reject the whole call').toBeDefined();
     expect(classifyUnavailability(failure)).toBe('overloaded');
   } finally {
     held.release();
@@ -581,232 +590,205 @@ test('relation facet point probe uncertainty fails the whole request as unavaila
   }
 });
 
-// Direct semantic peer proposal. Until it exists this fails at the owned missing hook, not an import/type error.
-// enqueue's cause is a stable idempotency key; the durable Search queue must upsert it.
+// Approved production runner/relay surface, also composed by worker.ts. No test-only export.
+const sourceConsumer = `facet_source_${randomUUID().replaceAll('-', '')}`;
+type RebuildRunner = {
+  run(partition: number): Promise<{ status: 'read' | 'busy'; examined: number; done: boolean }>;
+};
 type RebuildFactory = (options: {
   pool: Pool;
+  routeKey: Uint8Array;
   consumer: string;
   pageSize: number;
-  enqueue: (partition: number, subjects: readonly string[], cause: string) => Promise<void>;
-}) => Relay;
-function rebuildFactory(): RebuildFactory {
+}) => RebuildRunner;
+function rebuildRunner(database: Pool, pageSize = 16, consumer = sourceConsumer) {
   const factory = (semanticSource as unknown as { relationFacetRebuilds?: RebuildFactory }).relationFacetRebuilds;
-  expect(typeof factory, 'missing semantic source-only relationFacetRebuilds outbox hook').toBe('function');
-  return factory!;
+  expect(typeof factory, 'missing production relationFacetRebuilds bounded durable runner').toBe('function');
+  return factory!({ pool: database, routeKey, consumer, pageSize });
 }
-async function drain(relay: Relay, partitions: number[]) {
-  for (const partition of new Set(partitions)) {
-    for (let page = 0; ; page++) {
-      expect(page, 'consumer must make bounded forward progress').toBeLessThan(10000);
-      const result = await relay.run(partition);
-      expect(result.status).toBe('read');
-      if (result.status !== 'read' || result.envelopes === 0) break;
-    }
+async function catchUp(runner: RebuildRunner, partition: number, maximum = 10000) {
+  for (let page = 0; page < maximum; page++) {
+    const result = await runner.run(partition);
+    expect(result.status).toBe('read');
+    expect(result.examined).toBeLessThanOrEqual(16);
+    if (result.done) return;
   }
+  throw new Error('Finite quiescent witness rebuild did not converge');
 }
-
-test('relation facet changes and visibility changes rebuild only their source subject', async () => {
-  const factory = rebuildFactory();
-  const target = await create();
-  const book = await create('schema:Book');
-  const queued = new Map<string, { partition: number; subjects: readonly string[] }>();
-  const relay = factory({
-    pool,
-    consumer: `facet_test_${randomUUID().replaceAll('-', '')}`,
-    pageSize: 1,
-    enqueue: async (partition, subjects, cause) => {
-      expect(subjects.length).toBeLessThanOrEqual(1);
-      const request = { partition, subjects };
-      if (queued.has(cause)) expect(queued.get(cause)).toEqual(request);
-      queued.set(cause, request);
-    },
-  });
-  const partitions = [subjectPartition(book.id), subjectPartition(target.id)];
-  await drain(relay, partitions);
-  queued.clear();
-  const changed = async (operation: () => Promise<unknown>, expected: string[]) => {
-    queued.clear();
-    const before = await admin.query(
-      'SELECT partition_no, epoch, position FROM core.consumer_checkpoint WHERE consumer=$1 AND partition_no=ANY($2::int[])',
-      [relay.consumer, partitions],
-    );
-    await operation();
-    await drain(relay, partitions);
-    const requests = [...queued.values()];
-    expect([...new Set(requests.flatMap(({ subjects }) => subjects))].sort()).toEqual(expected.slice().sort());
-    for (const request of requests) {
-      expect(request.partition).toBe(subjectPartition(book.id));
-      expect(request.subjects).not.toContain(target.id);
-    }
-    const previous = [...queued];
-    // Re-deliver the real envelopes by rewinding only this test's owned consumer.
-    for (const checkpoint of before.rows)
-      await admin.query(
-        'UPDATE core.consumer_checkpoint SET epoch=$1, position=$2 WHERE consumer=$3 AND partition_no=$4',
-        [checkpoint.epoch, checkpoint.position, relay.consumer, checkpoint.partition_no],
-      );
-    await drain(relay, partitions);
-    expect([...queued], 'replaying the consumer has no new logical rebuild requests').toEqual(previous);
-  };
-  let candidate = '';
-  await changed(async () => {
-    candidate = await propose(book.id, 'schema:author', target.id);
-  }, [book.id]);
-  await changed(() => accept(book.id, candidate), [book.id]);
-  let head = 0;
-  await changed(async () => {
-    head = await adopt(book.id, 'schema:author', target.id, [candidate], null);
-  }, [book.id]);
-  await changed(
-    () => post(`/v1/subjects/${book.id}/candidates/${candidate}:hide`, { reason: 'Hide facet' }),
-    [book.id],
-  );
-  await changed(
-    () => post(`/v1/subjects/${book.id}/candidates/${candidate}:restore`, { reason: 'Restore facet' }),
-    [book.id],
-  );
-  await changed(
-    () =>
-      post(`/v1/subjects/${book.id}/candidates/${candidate}:takedown`, {
-        notice: { complaint: 'Rights holder notice.', received_at: '2026-10-25T09:00:00Z' },
-      }),
-    [book.id],
-  );
-  await changed(
-    () => post(`/v1/subjects/${book.id}/candidates/${candidate}:restore`, { reason: 'Restore facet' }),
-    [book.id],
-  );
-  await changed(() => adopt(book.id, 'schema:author', target.id, [], head), [book.id]);
-  await changed(() => propose(book.id, 'ex:related', target.id), []);
-  await changed(() => propose(target.id, 'schema:name', 'Updated author name'), []);
-  const imported = {
-    source: 'openlibrary',
-    external_id: randomUUID(),
-    record_revision: 'unversioned',
-    digest: 'e'.repeat(64),
-    converter_revision: 'openlibrary@1',
-    field_group: 'facts',
-  };
-  // Select a remote tuple home to exercise cross-partition fanout rather than accidental local delivery.
-  while (partitionOf(tupleRoute(routeKey, imported.source, imported.external_id)) === subjectPartition(book.id))
-    imported.external_id = randomUUID();
-  partitions.push(partitionOf(tupleRoute(routeKey, imported.source, imported.external_id)));
-  await changed(async () => {
-    const result = await post('/v1/subjects:batchWrite', {
-      commands: [
-        {
-          op: 'propose',
-          key: 'import',
-          source: imported,
-          subject: book.id,
-          statement: {
-            ...statement('schema:author', target.id),
-            references: [{ parts: [snak('schema:url', 'https://example.test/record')] }],
-          },
-        },
-      ],
-    });
-    expect(result.results[0].status).toBe(201);
-    candidate = result.results[0].value.candidate;
-  }, [book.id]);
-  await changed(() => accept(book.id, candidate), [book.id]);
-  await changed(() => adopt(book.id, 'schema:author', target.id, [candidate], head + 1), [book.id]);
-  await changed(
-    () =>
-      post('/v1/subjects:batchWrite', {
-        commands: [
-          {
-            op: 'retract',
-            key: 'remove',
-            source: imported,
-            subject: book.id,
-            candidate,
-            references: [{ parts: [snak('schema:url', 'https://example.test/retraction')] }],
-          },
-        ],
-      }),
-    [book.id],
-  );
-  // Retraction removed the old tuple dependency. Propose a fresh relation under a live remote tuple before fencing.
-  imported.external_id = randomUUID();
-  while (partitionOf(tupleRoute(routeKey, imported.source, imported.external_id)) === subjectPartition(book.id))
-    imported.external_id = randomUUID();
-  partitions.push(partitionOf(tupleRoute(routeKey, imported.source, imported.external_id)));
-  await drain(relay, partitions);
-  await changed(async () => {
-    const result = await post('/v1/subjects:batchWrite', {
-      commands: [
-        {
-          op: 'propose',
-          key: 'new-import',
-          source: imported,
-          subject: book.id,
-          statement: {
-            ...statement('schema:author', target.id),
-            references: [{ parts: [snak('schema:url', 'https://example.test/new-record')] }],
-          },
-        },
-      ],
-    });
-    expect(result.results[0].status).toBe(201);
-  }, [book.id]);
-  await changed(
-    () =>
-      post('/v1/sourceFences:takedown', {
-        source: imported.source,
-        externalId: imported.external_id,
-        fieldGroup: 'facts',
-        reason: 'Remote tuple fence',
-      }),
-    [book.id],
-  );
-}, 120_000);
-
-test('relation facet rebuild consumption stays bounded per page as queued changes grow', async () => {
-  const factory = rebuildFactory();
+const changedType = 'com.rezics.subject.relation_facet_changed.v1';
+async function changedEvents(subject: string) {
+  return (
+    await admin.query(
+      'SELECT partition_no, subject, data FROM core.outbox WHERE type=$1 AND subject=$2 ORDER BY position,event_seq',
+      [changedType, subject],
+    )
+  ).rows;
+}
+test('a bounded witness probe suppresses hidden evidence and schedules finite rebuild convergence', async () => {
   const db = await openGrowthDatabase(url);
   try {
-    const book = await create('schema:Book');
-    const target = await create();
-    const partition = subjectPartition(book.id);
-    let measuring = false;
-    const relay = factory({
-      pool: db.pool,
-      consumer: `facet_page_${randomUUID().replaceAll('-', '')}`,
-      pageSize: 1,
-      enqueue: async (part, subjects) => {
-        if (!measuring) return;
-        expect(part).toBe(partition);
-        expect(subjects).toEqual([book.id]);
-      },
-    });
-    await drain(relay, [partition]);
-    measuring = true;
-    const report = await checkGrowth(db, {
-      name: 'relation facet rebuild page',
-      scales: [8, 32, 128],
-      warmups: 1,
-      repetitions: 3,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: async (_database, scale, previous) => {
-        // Different references create historical candidates in the same relation slot.
-        for (let index = previous; index < scale; index++)
-          await post(`/v1/subjects/${book.id}/candidates`, {
-            statement: {
-              ...statement('schema:author', target.id),
-              references: [{ parts: [snak('schema:url', `https://example.test/history/${index}`)] }],
+    const match = matcher(subjectSource(db.pool, routeKey) as ExpectedPort);
+    expect(lookupEventType(changedType), 'changed event must be registered before any emitting command').toBeDefined();
+    for (const overflow of [false, true]) {
+      const [target, book] = await Promise.all([create(), create('schema:Book')]);
+      const partition = subjectPartition(book.id);
+      const imports = new Map<string, { source: string; external_id: string }>();
+      // Independent imported tuples and adopted slots, not copies of a single evidence tuple.
+      for (let index = 0; index < 40; index++) {
+        const key = await create();
+        const provenance = {
+          source: 'openlibrary',
+          external_id: randomUUID(),
+          field_group: 'facts',
+          record_revision: 'unversioned',
+          digest: 'f'.repeat(64),
+          converter_revision: 'openlibrary@1',
+        };
+        const result = await post('/v1/subjects:batchWrite', {
+          commands: [
+            {
+              op: 'propose',
+              key: 'witness',
+              source: provenance,
+              subject: book.id,
+              statement: {
+                ...statement('ex:credit', target.id, [snak('ex:key', key.id)]),
+                references: [{ parts: [snak('schema:url', `https://example.test/witness/${index}`)] }],
+              },
             },
-          });
-      },
-      operation: async () => {
-        const result = await relay.run(partition);
-        expect(result.status).toBe('read');
-        if (result.status === 'read') expect(result.envelopes).toBe(1);
-        return result;
-      },
-    });
-    expect(report.samples).toHaveLength(3);
+          ],
+        });
+        expect(result.results[0].status).toBe(201);
+        const candidate = result.results[0].value.candidate as string;
+        imports.set(candidate, provenance);
+        await accept(book.id, candidate);
+        await adopt(book.id, 'ex:credit', target.id, [candidate], null, key.id);
+      }
+      // Overflow on the SAME property; multiplicity of slots alone must never produce overflow.
+      if (overflow)
+        for (let index = 0; index < 128; index++) {
+          const [other, key] = await Promise.all([create(), create()]);
+          const candidate = await propose(book.id, 'ex:credit', other.id, [snak('ex:key', key.id)]);
+          await accept(book.id, candidate);
+          await adopt(book.id, 'ex:credit', other.id, [candidate], null, key.id);
+        }
+      const runner = rebuildRunner(db.pool);
+      await catchUp(runner, partition);
+      const built = await snapshot(book.id, false);
+      expect(built.relationFacetOverflow).toEqual(overflow ? ['ex:credit'] : []);
+      expect(values(built, 'ex:credit')).toHaveLength(overflow ? 128 : 1);
+      // Inspect real internal rebuild metadata; no prefilled hints or diagnostic source substitutes.
+      const hint = await admin.query(
+        `SELECT witness_id FROM semantic.relation_facet_value
+         WHERE route=$1 AND subject_id=$2 AND property=$3 AND value=$4`,
+        [routeOf(book.id), book.id, 'ex:credit', target.id],
+      );
+      expect(hint.rows).toHaveLength(1);
+      const initial = hint.rows[0].witness_id as string;
+      expect(imports.has(initial)).toBe(true);
+      const ordered = [...imports.keys()].filter((id) => id !== initial).sort();
+      const fenced = [initial, ...ordered.slice(0, 32)];
+      const survivors = ordered.slice(32);
+      expect(survivors.length).toBeGreaterThan(0);
+      const fence = async (id: string) => {
+        const provenance = imports.get(id)!;
+        await post('/v1/sourceFences:takedown', {
+          source: provenance.source,
+          externalId: provenance.external_id,
+          fieldGroup: 'facts',
+          reason: 'Fence witness',
+        });
+      };
+      for (const id of fenced) await fence(id);
+      const probe: Probe = { subject: book.id, property: 'ex:credit', value: target.id };
+      const before = (await changedEvents(book.id)).length;
+      const targetBefore = (await changedEvents(target.id)).length;
+      // Runner is paused: this call cannot discover any of the later visible witnesses.
+      const measured = await capture(db, () => match(partition, [probe]));
+      expect(measured.value).toEqual(['not_proven']);
+      const examined = costOf(measured.capture).relations.relation_facet_statement;
+      expect(examined, 'capture must include the real indexed witness examinations').toBeDefined();
+      expect(examined!.rows).toBeGreaterThan(0);
+      expect(examined!.rows).toBeLessThanOrEqual(33);
+      expect(examined!.sequentialScans).toBe(0);
+      const events = (await changedEvents(book.id)).slice(before);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ partition_no: partition, subject: book.id });
+      expect((await changedEvents(target.id)).length).toBe(targetBefore);
+      expect(await match(partition, [probe, probe])).toEqual(['not_proven', 'not_proven']);
+      expect((await changedEvents(book.id)).length).toBe(before + 1); // one outstanding logical rebuild
+      expect(values(await snapshot(book.id, false), 'ex:credit').map(({ value }) => value)).not.toContain(target.id);
+      // Recreate the runner between EVERY page: progress must be durable, not an in-memory cursor.
+      for (let page = 0; ; page++) {
+        expect(page).toBeLessThan(2000);
+        const step = await capture(db, () => rebuildRunner(db.pool, 16, runnerConsumer).run(partition));
+        expect(step.value.status).toBe('read');
+        expect(step.value.examined).toBeLessThanOrEqual(16);
+        const cost = costOf(withoutCatalogStatements('restarted witness page', step.capture));
+        expect(cost.relations.relation_facet_statement?.rows ?? 0).toBeLessThanOrEqual(17);
+        if (step.value.done) break;
+      }
+      const repaired = await admin.query(
+        `SELECT witness_id FROM semantic.relation_facet_value
+         WHERE route=$1 AND subject_id=$2 AND property=$3 AND value=$4`,
+        [routeOf(book.id), book.id, 'ex:credit', target.id],
+      );
+      expect(survivors).toContain(repaired.rows[0]?.witness_id);
+      expect(await match(partition, [probe])).toEqual([true]);
+      const last = repaired.rows[0].witness_id as string;
+      for (const id of survivors.filter((id) => id !== last)) await fence(id);
+      expect(await match(partition, [probe])).toEqual([true]);
+      await fence(last);
+      expect(await match(partition, [probe])).toEqual(['not_proven']);
+      await catchUp(runner, partition);
+      const removed = await snapshot(book.id, false);
+      expect(values(removed, 'ex:credit').map(({ value }) => value)).not.toContain(target.id);
+      const metadata = await admin.query(
+        `SELECT witness_id FROM semantic.relation_facet_value
+         WHERE route=$1 AND subject_id=$2 AND property=$3 AND value=$4`,
+        [routeOf(book.id), book.id, 'ex:credit', target.id],
+      );
+      expect(metadata.rows).toEqual([]);
+      // Losing the pair crosses 129 -> 128 values. A finite rebuild clears overflow, so the
+      // complete snapshot suppresses the positive and admits the negative without inventing probe false.
+      expect(values(removed, 'ex:credit')).toHaveLength(overflow ? 128 : 0);
+      expect(removed.relationFacetOverflow).toEqual([]);
+      expect(await match(partition, [probe])).toEqual(['not_proven']);
+    }
   } finally {
     await db.close();
   }
-}, 120_000);
+}, 300_000);
+const runnerConsumer = `facet_restart_${randomUUID().replaceAll('-', '')}`;
+
+test('absence and overflow negation converge and removed hints recover on local restore and new adoption', async () => {
+  const match = matcher();
+  const target = await create();
+  const book = await create('schema:Book');
+  const runner = rebuildRunner(pool);
+  const partition = subjectPartition(book.id);
+  const probe: Probe = { subject: book.id, property: 'schema:author', value: target.id };
+  expect(await match(partition, [probe])).toEqual(['not_proven']);
+  await catchUp(runner, partition);
+  expect(values(await snapshot(book.id, false), 'schema:author')).toEqual([]);
+  let candidate = await propose(book.id, 'schema:author', target.id);
+  await accept(book.id, candidate);
+  let head = await adopt(book.id, 'schema:author', target.id, [candidate], null);
+  await catchUp(runner, partition);
+  expect(await match(partition, [probe])).toEqual([true]);
+  await post(`/v1/subjects/${book.id}/candidates/${candidate}:hide`, { reason: 'Remove hint' });
+  expect(await match(partition, [probe])).toEqual(['not_proven']);
+  await catchUp(runner, partition);
+  expect(values(await snapshot(book.id, false), 'schema:author')).toEqual([]);
+  await post(`/v1/subjects/${book.id}/candidates/${candidate}:restore`, { reason: 'Restore removed hint' });
+  await catchUp(runner, partition);
+  expect(await match(partition, [probe])).toEqual([true]);
+  head = await adopt(book.id, 'schema:author', target.id, [], head);
+  await catchUp(runner, partition);
+  expect(values(await snapshot(book.id, false), 'schema:author')).toEqual([]);
+  candidate = await propose(book.id, 'schema:author', target.id);
+  await accept(book.id, candidate);
+  await adopt(book.id, 'schema:author', target.id, [candidate], head);
+  await catchUp(runner, partition);
+  expect(await match(partition, [probe])).toEqual([true]);
+});

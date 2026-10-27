@@ -15,8 +15,18 @@ import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
 import { linkChanges } from '../../src/semantic/link-changes.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
+import * as semanticSource from '../../src/semantic/search-source.ts';
 import { writeFacts } from '../../src/semantic/write-facts.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  capture,
+  costOf,
+  withoutCatalogStatements,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -52,7 +62,35 @@ const missing = newId(route);
 const snak = (property: string, content: string) => ({ property: { id: property }, value: { type: 'value', content } });
 type RelationFacetProbe = Pick<SharedRelationFacetProbe, 'subject' | 'property' | 'value'>;
 type Probe = RelationFacetProbe;
-type Port = { matchRelationFacets?: (partition: number, probes: readonly Probe[]) => Promise<boolean[]> };
+type Port = {
+  matchRelationFacets?: (partition: number, probes: readonly Probe[]) => Promise<(boolean | 'not_proven')[]>;
+};
+
+type RebuildRunner = { run(partition: number): Promise<{ status: 'read' | 'busy'; examined: number; done: boolean }> };
+const rebuildConsumer = `facet_growth_${randomUUID().replaceAll('-', '')}`;
+function runner(consumer = rebuildConsumer): RebuildRunner {
+  const factory = (
+    semanticSource as unknown as {
+      relationFacetRebuilds?: (options: {
+        pool: GrowthDatabase['pool'];
+        routeKey: Uint8Array;
+        consumer: string;
+        pageSize: number;
+      }) => RebuildRunner;
+    }
+  ).relationFacetRebuilds;
+  expect(typeof factory, 'missing production relationFacetRebuilds bounded durable runner').toBe('function');
+  return factory!({ pool: db.pool, routeKey: new Uint8Array(32).fill(81), consumer, pageSize: 16 });
+}
+async function catchUp(rebuild: RebuildRunner) {
+  for (let page = 0; page < 100000; page++) {
+    const result = await rebuild.run(partition);
+    expect(result.status).toBe('read');
+    expect(result.examined).toBeLessThanOrEqual(16);
+    if (result.done) return;
+  }
+  throw new Error('Quiescent rebuild must finish without restart/starvation');
+}
 
 function subjects(ids: string[], type: string): Population {
   return {
@@ -184,6 +222,7 @@ test('relation facet source and point probes stay bounded as relation degree gro
   expect(typeof port.matchRelationFacets, 'semantic source must provide matchRelationFacets').toBe('function');
   const match = port.matchRelationFacets!.bind(port);
   const projection = linkProjection(db.pool);
+  const rebuild = runner();
   const operations = ['snapshot', 'present outside sample', 'absent', 'same-target slotKey membership'] as const;
   // Independent reports prevent one cheap operation from masking a scan in a different operation.
   for (const operation of operations) {
@@ -207,6 +246,7 @@ test('relation facet source and point probes stay bounded as relation degree gro
           if (result.status === 'busy') throw new Error('Owned growth partition unexpectedly busy');
           if (result.envelopes === 0) break;
         }
+        await catchUp(rebuild);
         const snapshot = (await source.read(partition, [subject])).subjects[0] as IndexedSubject & {
           relationFacetOverflow?: string[];
         };
@@ -234,12 +274,50 @@ test('relation facet source and point probes stay bounded as relation degree gro
           probe.value = target;
         }
         const result = await match(partition, [probe]);
-        expect(result).toEqual([
-          operation === 'present outside sample' || operation === 'same-target slotKey membership',
-        ]);
+        expect(result).toEqual([operation === 'absent' ? 'not_proven' : true]);
         return result;
       },
     });
     expect(report.samples).toHaveLength(3);
   }
+}, 300_000);
+
+test('relation facet witness rebuild stays bounded per durable page as degree and history grow', async () => {
+  const rebuild = runner();
+  const subject = newId(route);
+  await seed(db, subjects([subject], 'schema:Book'), { from: 0, to: 1 });
+  const report = await checkGrowth(db, {
+    name: 'relation facet witness rebuild page',
+    scales: [64, 512, 4096],
+    warmups: 1,
+    repetitions: 3,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    grow: async (_database, scale, previous) => {
+      await grow(subject, previous, scale);
+    },
+    operation: async () => {
+      // Exactly one production step, including relay/catalogue/background SQL, is measured.
+      const result = await rebuild.run(partition);
+      expect(result.status).toBe('read');
+      expect(result.examined).toBeGreaterThan(0);
+      expect(result.examined).toBeLessThanOrEqual(16);
+      return result;
+    },
+  });
+  expect(report.samples).toHaveLength(3);
+  // Total remaining work may grow. Capture every remaining page individually; never subtract background work.
+  for (let page = 0; ; page++) {
+    expect(page).toBeLessThan(100000);
+    const measured = await capture(db, () => rebuild.run(partition));
+    expect(measured.value.status).toBe('read');
+    expect(measured.value.examined).toBeLessThanOrEqual(16);
+    const cost = costOf(withoutCatalogStatements('witness catch-up page', measured.capture));
+    expect(cost.relations.relation_facet_statement?.rows ?? 0).toBeLessThanOrEqual(17);
+    if (measured.value.done) break;
+  }
+  const source = subjectSource(db.pool);
+  const snapshot = (await source.read(partition, [subject])).subjects[0]!;
+  expect(snapshot.statements.filter((row) => row.property === 'schema:author')).toHaveLength(128);
+  const match = (source as Port).matchRelationFacets!;
+  expect(await match(partition, [{ subject, property: 'ex:credit', value: target }])).toEqual([true]);
 }, 300_000);
