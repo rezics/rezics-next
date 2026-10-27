@@ -91,8 +91,7 @@ ones purge after the deletion window. No new privacy permission engine or accoun
 The two test files use the migrated database, native HTTP creation/proposal/editorial commands, `createRealAccess`,
 the injected domain clock, existing projection and shared `checkGrowth` capture. They do not prefill lifecycle truth
 with SQL, skip scenarios, import nonexistent files, or substitute a fake job. SQL is used only for evidence reads.
-The existing semantic index is imported; the required adapter is resolved only after a real DELETE succeeds.
-Missing routes therefore fail as API outcomes, rather than module-load errors.
+The existing semantic index is imported; the required adapter is resolved only after a real DELETE or native account tombstone succeeds. Missing routes therefore fail as API outcomes, rather than module-load errors; the account-erasure case reaches the absent native adapter after successfully committing its real account barrier.
 
 | Required route                                                | Action and anchor                                                                                          | Result                                                                                                 |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -142,8 +141,9 @@ link projection, takes down the book, then reads the person's inverse page witho
 The source summary is withheld, but `read-inbound-link-count.sql` obtains only the target-local stored count:
 `COALESCE(inbound_link_count.value,0) + COALESCE(inbound_link_context_count.value,0)` for the fixed target,
 Global Context, property and nil filter key. It has no current source availability predicate. The README explicitly
-states summary filtering leaves counts unchanged. The test demands zero publicly live items; its actual result
-is recorded after the focused check. This is an existing native route counterexample independent of missing DELETE.
+states summary filtering leaves counts unchanged. The test demands zero publicly live items; the focused check returned
+`{"links":[],"count":{"value":1,"exact":true},"freshness":{"consistency":"eventual","target_seconds":10,"caught_up":true},"next":null}`.
+The actual [count query](read-inbound-link-count.sql) probes only target-local aggregates, as described above. This is an existing native route counterexample independent of missing DELETE.
 
 An exact immediate total for arbitrarily many foreign sources cannot be established by checking only the
 returned page, nor by waiting for paused relays. The current fixed-budget read has no shared revocation aggregate.
@@ -161,3 +161,13 @@ capture, with 64/512/4096 history and unrelated population axes. It has no wall-
 checkpoint. Additional Context settings/extension, account-event replay, passage/image and search-index
 paused-worker tests remain required native acceptance for the respective implementation briefs;
 existing unavailable sitemap behavior is evidence only. No external product research was needed for this audit. The reference index was read; the contract and cited READMEs name no external reference implementation for this lifecycle surface.
+
+The committed suite was checked with the contract's exact focused command. It completed with two passing
+account-agent invariants and twelve expected failures: seven missing lifecycle-route outcomes, one least-field
+takedown failure (the candidate list was empty instead of retaining uncovered references), one absent native
+retention adapter after real account tombstoning, and two growth cases stopped at missing DELETE. No 512/4096
+measurement or purge/replay/hold result is claimed: the first 64-key setup reached real deletion and failed there.
+The existing paused-consumer count case is included among the failures: links were empty while the exact count
+remained one. Root `bun scripts/typecheck.ts` passed against the committed tests; focused typechecking, lint and
+format checks also passed before native test execution. The remote runner reported a cleanup-connection failure
+after delivering the complete test results; no unrelated process or database was stopped.
