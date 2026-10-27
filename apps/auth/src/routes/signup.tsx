@@ -1,9 +1,9 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { AuthButton as Button } from '../button';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
+import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
@@ -22,6 +22,7 @@ const passwordErrorId = 'signup-password-error';
 const turnstileErrorId = 'signup-turnstile-error';
 
 export const Route = createFileRoute('/signup')({
+  head: () => ({ meta: [{ title: `${m.auth_signup_heading()} · REZICS` }] }),
   loader: () => readTurnstileConfig(),
   component: SignupPage,
 });
@@ -119,7 +120,7 @@ function SignupPage() {
   return (
     <AuthPage heading={m.auth_signup_heading()}>
       <form className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
-        <Field required invalid={Boolean(handleError)}>
+        <Field data-invalid={Boolean(handleError)}>
           <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
           <Input
             id={handleId}
@@ -136,7 +137,7 @@ function SignupPage() {
           />
           {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
         </Field>
-        <Field invalid={Boolean(emailError)}>
+        <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_signup_email()}</FieldLabel>
           <Input
             ref={emailInput}
@@ -156,36 +157,25 @@ function SignupPage() {
           />
           {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
         </Field>
-        <Field invalid={Boolean(passwordError)}>
+        <Field data-invalid={Boolean(passwordError)}>
           <FieldLabel htmlFor={passwordId}>{m.auth_signup_password()}</FieldLabel>
           <PasswordInput
             name="password"
             autoComplete="new-password"
             required
             readOnly={pending}
-            invalid={Boolean(passwordError)}
-            translations={{
-              visibilityTrigger: (visible) =>
-                visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+            id={passwordId}
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              setPasswordError('');
             }}
-          >
-            <PasswordInputGroup>
-              <PasswordInputInput
-                id={passwordId}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setPasswordError('');
-                }}
-                aria-invalid={passwordError ? true : undefined}
-                aria-describedby={passwordError ? passwordErrorId : undefined}
-              />
-              <PasswordInputTrigger />
-            </PasswordInputGroup>
-          </PasswordInput>
+            aria-invalid={passwordError ? true : undefined}
+            aria-describedby={passwordError ? passwordErrorId : undefined}
+          />
           {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
         </Field>
-        <Field invalid={Boolean(turnstileError)}>
+        <Field data-invalid={Boolean(turnstileError)}>
           <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
             <TurnstileWidget
               ref={turnstile}
@@ -211,7 +201,7 @@ function SignupPage() {
             ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending}>
+        <Button type="submit" disabled={pending} aria-busy={pending}>
           {m.auth_signup_heading()}
         </Button>
       </form>

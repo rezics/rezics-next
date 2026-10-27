@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { AuthButton as Button } from '../button';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -23,6 +23,7 @@ const handleErrorId = 'organization-handle-error';
 const STEP_UP_URL = '/step-up?return_to=%2Forganizations%2Fnew';
 
 export const Route = createFileRoute('/organizations/new')({
+  head: () => ({ meta: [{ title: `${m.auth_organization_heading()} · REZICS` }] }),
   component: NewOrganizationPage,
 });
 
@@ -144,7 +145,7 @@ function NewOrganizationPage() {
   return (
     <AuthPage heading={m.auth_organization_heading()}>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
-        <Field required invalid={Boolean(handleError)}>
+        <Field data-invalid={Boolean(handleError)}>
           <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
           <Input
             ref={handleInput}
@@ -178,7 +179,7 @@ function NewOrganizationPage() {
             ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending} className="w-full">
+        <Button type="submit" disabled={pending} aria-busy={pending} className="w-full">
           {m.auth_organization_create()}
         </Button>
       </form>

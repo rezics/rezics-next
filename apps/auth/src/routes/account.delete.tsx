@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
-import { Checkbox } from '@rezics/ui/checkbox';
-import { Field, FieldError } from '@rezics/ui/field';
+import { AuthButton as Button } from '../button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -19,6 +19,7 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 const STEP_UP_URL = '/step-up?return_to=%2Faccount%2Fdelete';
 
 export const Route = createFileRoute('/account/delete')({
+  head: () => ({ meta: [{ title: `${m.auth_account_delete_heading()} · REZICS` }] }),
   component: DeleteAccountPage,
 });
 
@@ -55,7 +56,7 @@ function DeleteAccountPage() {
   }, []);
 
   useLayoutEffect(() => {
-    if (confirmationError) document.querySelector<HTMLInputElement>('#account-delete-confirmation input')?.focus();
+    if (confirmationError) document.getElementById('account-delete-checkbox')?.focus();
     else if (message) alert.current?.focus();
   }, [confirmationError, message]);
 
@@ -138,17 +139,23 @@ function DeleteAccountPage() {
         </ul>
       </div>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
-        <Field id="account-delete-confirmation" invalid={confirmationError}>
-          <Checkbox
-            checked={confirmed}
-            onCheckedChange={(details) => {
-              setConfirmed(details.checked === true);
-              if (details.checked === true) setConfirmationError(false);
-            }}
-          >
-            {m.auth_account_delete_confirmation()}
-          </Checkbox>
-          {confirmationError ? <FieldError>{m.auth_form_required()}</FieldError> : null}
+        <Field id="account-delete-confirmation" data-invalid={confirmationError}>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="account-delete-checkbox"
+              aria-invalid={confirmationError || undefined}
+              aria-describedby={confirmationError ? 'account-delete-confirmation-error' : undefined}
+              checked={confirmed}
+              onCheckedChange={(checked) => {
+                setConfirmed(checked);
+                if (checked) setConfirmationError(false);
+              }}
+            />
+            <FieldLabel htmlFor="account-delete-checkbox">{m.auth_account_delete_confirmation()}</FieldLabel>
+          </div>
+          {confirmationError ? (
+            <FieldError id="account-delete-confirmation-error">{m.auth_form_required()}</FieldError>
+          ) : null}
         </Field>
         {message ? (
           <ErrorAlert tabIndex={-1} ref={alert}>
@@ -160,7 +167,7 @@ function DeleteAccountPage() {
             ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" variant="destructive" disabled={pending} isLoading={pending} className="w-full">
+        <Button type="submit" variant="destructive" disabled={pending} aria-busy={pending} className="w-full">
           {m.auth_account_delete_submit()}
         </Button>
       </form>

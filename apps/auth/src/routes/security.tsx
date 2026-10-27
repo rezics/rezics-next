@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Badge } from '@rezics/ui/badge';
-import { Button, buttonVariants } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/item';
-import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
+import { Badge } from '@rezics/ui/shadcn/badge';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { AuthButton as Button } from '../button';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/shadcn/item';
+import { PasswordInput } from '../password-input';
 import { Trash2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -24,6 +25,7 @@ import {
 } from '../security';
 
 export const Route = createFileRoute('/security')({
+  head: () => ({ meta: [{ title: `${m.auth_security_heading()} · REZICS` }] }),
   component: SecurityPage,
 });
 
@@ -201,34 +203,23 @@ function SecurityPage() {
                 noValidate
                 onSubmit={submitPassword}
               >
-                <Field required invalid={Boolean(passwordFieldError)}>
+                <Field data-invalid={Boolean(passwordFieldError)}>
                   <FieldLabel htmlFor="security-new-password">{m.auth_security_new_password()}</FieldLabel>
                   <PasswordInput
                     name="password"
                     autoComplete="new-password"
                     required
                     readOnly={passwordPending}
-                    invalid={Boolean(passwordFieldError)}
-                    translations={{
-                      visibilityTrigger: (visible) =>
-                        visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+                    ref={passwordInput}
+                    id="security-new-password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setPasswordFieldError('');
                     }}
-                  >
-                    <PasswordInputGroup>
-                      <PasswordInputInput
-                        ref={passwordInput}
-                        id="security-new-password"
-                        value={password}
-                        onChange={(event) => {
-                          setPassword(event.target.value);
-                          setPasswordFieldError('');
-                        }}
-                        aria-invalid={passwordFieldError ? true : undefined}
-                        aria-describedby={passwordFieldError ? 'security-password-error' : undefined}
-                      />
-                      <PasswordInputTrigger />
-                    </PasswordInputGroup>
-                  </PasswordInput>
+                    aria-invalid={passwordFieldError ? true : undefined}
+                    aria-describedby={passwordFieldError ? 'security-password-error' : undefined}
+                  />
                   {passwordFieldError ? (
                     <FieldError id="security-password-error">{passwordFieldError}</FieldError>
                   ) : null}
@@ -243,7 +234,7 @@ function SecurityPage() {
                     {passwordError}
                   </ErrorAlert>
                 ) : null}
-                <Button type="submit" disabled={passwordPending} isLoading={passwordPending} className="w-full">
+                <Button type="submit" disabled={passwordPending} aria-busy={passwordPending} className="w-full">
                   {m.auth_security_password_submit()}
                 </Button>
               </form>
@@ -266,45 +257,43 @@ function SecurityPage() {
                     {passkeys.length ? (
                       <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
                         {passkeys.map((passkey) => (
-                          <Item key={passkey.id} asChild variant="outline">
-                            <li>
-                              <article className="contents">
-                                <ItemContent>
-                                  <ItemTitle asChild>
-                                    <h3>{passkey.name}</h3>
-                                  </ItemTitle>
-                                  <ItemDescription>
-                                    {m.auth_security_created_at()}{' '}
-                                    <time dateTime={passkey.created_at}>
-                                      {formatSecurityDate(passkey.created_at, locale)}
-                                    </time>
-                                    {' · '}
-                                    {passkey.last_used_at ? (
-                                      <>
-                                        {m.auth_security_passkey_last_used()}{' '}
-                                        <time dateTime={passkey.last_used_at}>
-                                          {formatSecurityDate(passkey.last_used_at, locale)}
-                                        </time>
-                                      </>
-                                    ) : (
-                                      m.auth_security_passkey_never_used()
-                                    )}
-                                  </ItemDescription>
-                                </ItemContent>
-                                <ItemActions>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => void removeOnePasskey(passkey)}
-                                    disabled={passkeyAdding || Boolean(passkeyRemoving)}
-                                    isLoading={passkeyRemoving === passkey.id}
-                                    aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
-                                  >
-                                    {m.auth_security_passkey_remove()}
-                                  </Button>
-                                </ItemActions>
-                              </article>
-                            </li>
+                          <Item key={passkey.id} render={<li />} variant="outline">
+                            <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
+                              <ItemContent className="min-w-0 w-full sm:w-auto">
+                                <ItemTitle className="line-clamp-none wrap-anywhere">
+                                  <h3>{passkey.name}</h3>
+                                </ItemTitle>
+                                <ItemDescription className="line-clamp-none wrap-anywhere">
+                                  {m.auth_security_created_at()}{' '}
+                                  <time dateTime={passkey.created_at}>
+                                    {formatSecurityDate(passkey.created_at, locale)}
+                                  </time>
+                                  {' · '}
+                                  {passkey.last_used_at ? (
+                                    <>
+                                      {m.auth_security_passkey_last_used()}{' '}
+                                      <time dateTime={passkey.last_used_at}>
+                                        {formatSecurityDate(passkey.last_used_at, locale)}
+                                      </time>
+                                    </>
+                                  ) : (
+                                    m.auth_security_passkey_never_used()
+                                  )}
+                                </ItemDescription>
+                              </ItemContent>
+                              <ItemActions>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => void removeOnePasskey(passkey)}
+                                  disabled={passkeyAdding || Boolean(passkeyRemoving)}
+                                  aria-busy={passkeyRemoving === passkey.id}
+                                  aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
+                                >
+                                  {m.auth_security_passkey_remove()}
+                                </Button>
+                              </ItemActions>
+                            </article>
                           </Item>
                         ))}
                       </ItemGroup>
@@ -327,7 +316,7 @@ function SecurityPage() {
                       <Button
                         type="submit"
                         disabled={passkeyAdding || Boolean(passkeyRemoving)}
-                        isLoading={passkeyAdding}
+                        aria-busy={passkeyAdding}
                         className="w-full"
                       >
                         {m.auth_security_passkey_add()}
@@ -360,50 +349,46 @@ function SecurityPage() {
                   const rawClientId =
                     !session.client_display_name?.trim() && !['login', 'rezics-website'].includes(session.client_id);
                   return (
-                    <Item key={session.id} asChild variant="outline">
-                      <li>
-                        <article className="contents">
-                          <ItemContent>
-                            <ItemTitle asChild>
-                              <h3>
-                                {device}
-                                {session.current ? (
-                                  <Badge variant="soft" size="sm">
-                                    {m.auth_security_this_device()}
-                                  </Badge>
-                                ) : null}
-                              </h3>
-                            </ItemTitle>
-                            <ItemDescription>
-                              <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                    <Item key={session.id} render={<li />} variant="outline">
+                      <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
+                        <ItemContent className="min-w-0 w-full sm:w-auto">
+                          <ItemTitle className="line-clamp-none wrap-anywhere">
+                            <h3>
+                              {device}
+                              {session.current ? (
+                                <Badge variant="secondary">{m.auth_security_this_device()}</Badge>
+                              ) : null}
+                            </h3>
+                          </ItemTitle>
+                          <ItemDescription className="line-clamp-none wrap-anywhere">
+                            <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                            {' · '}
+                            <span>
+                              {m.auth_security_created_at()}{' '}
+                              <time dateTime={session.created_at}>
+                                {formatSecurityDate(session.created_at, locale)}
+                              </time>
                               {' · '}
-                              <span>
-                                {m.auth_security_created_at()}{' '}
-                                <time dateTime={session.created_at}>
-                                  {formatSecurityDate(session.created_at, locale)}
-                                </time>
-                                {' · '}
-                                {m.auth_security_expires_at()}{' '}
-                                <time dateTime={session.expires_at}>
-                                  {formatSecurityDate(session.expires_at, locale)}
-                                </time>
-                              </span>
-                            </ItemDescription>
-                          </ItemContent>
-                          <ItemActions>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => void revoke(session)}
-                              disabled={Boolean(sessionPending)}
-                              isLoading={sessionPending === session.id}
-                              aria-label={m.auth_security_sign_out_session({ device })}
-                            >
-                              {m.auth_security_sign_out()}
-                            </Button>
-                          </ItemActions>
-                        </article>
-                      </li>
+                              {m.auth_security_expires_at()}{' '}
+                              <time dateTime={session.expires_at}>
+                                {formatSecurityDate(session.expires_at, locale)}
+                              </time>
+                            </span>
+                          </ItemDescription>
+                        </ItemContent>
+                        <ItemActions>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void revoke(session)}
+                            disabled={Boolean(sessionPending)}
+                            aria-busy={sessionPending === session.id}
+                            aria-label={m.auth_security_sign_out_session({ device })}
+                          >
+                            {m.auth_security_sign_out()}
+                          </Button>
+                        </ItemActions>
+                      </article>
                     </Item>
                   );
                 })}
@@ -412,7 +397,7 @@ function SecurityPage() {
 
             <section aria-labelledby="security-organizations-heading">
               <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>
-              <nav>
+              <nav aria-labelledby="security-organizations-heading">
                 <a className={buttonVariants({ variant: 'outline' })} href="/organizations/new">
                   {m.auth_organization_security_create()}
                 </a>
@@ -422,7 +407,7 @@ function SecurityPage() {
             <section aria-labelledby="security-delete-account-heading">
               <h2 id="security-delete-account-heading">{m.auth_account_delete_submit()}</h2>
               <p>{m.auth_account_delete_security_description()}</p>
-              <nav>
+              <nav aria-labelledby="security-delete-account-heading">
                 <a
                   className={`${buttonVariants({ variant: 'outline' })} border-destructive/50 hover:border-destructive/70`}
                   href="/account/delete"

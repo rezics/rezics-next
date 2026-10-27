@@ -1,3 +1,4 @@
+import { Card } from '@rezics/ui/shadcn/card';
 import type { ReactNode } from 'react';
 
 export function AuthShell({ children }: { children: ReactNode }) {
@@ -21,10 +22,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
 export function AuthPage({ heading, children }: { heading: string; children?: ReactNode }) {
   return (
     <main className="auth-main">
-      <section className="auth-card" aria-labelledby="auth-heading">
+      <Card role="region" className="auth-card" aria-labelledby="auth-heading">
         <h1 id="auth-heading">{heading}</h1>
         {children}
-      </section>
+      </Card>
     </main>
   );
 }

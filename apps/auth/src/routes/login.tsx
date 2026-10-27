@@ -1,11 +1,11 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { AuthButton as Button } from '../button';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { KeyRound } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
+import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
@@ -25,6 +25,7 @@ const passwordId = 'login-password';
 const passwordErrorId = 'login-password-error';
 
 export const Route = createFileRoute('/login')({
+  head: () => ({ meta: [{ title: `${m.auth_login_heading()} · REZICS` }] }),
   component: LoginPage,
 });
 
@@ -145,7 +146,7 @@ function LoginPage() {
   return (
     <AuthPage heading={m.auth_login_heading()}>
       <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
-        <Field required invalid={Boolean(emailError)}>
+        <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
           <Input
             ref={emailInput}
@@ -165,33 +166,22 @@ function LoginPage() {
           />
           {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
         </Field>
-        <Field required invalid={Boolean(passwordError)}>
+        <Field data-invalid={Boolean(passwordError)}>
           <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
           <PasswordInput
             name="password"
             autoComplete="current-password"
             required
             readOnly={pending}
-            invalid={Boolean(passwordError)}
-            translations={{
-              visibilityTrigger: (visible) =>
-                visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+            id={passwordId}
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              setPasswordError('');
             }}
-          >
-            <PasswordInputGroup>
-              <PasswordInputInput
-                id={passwordId}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setPasswordError('');
-                }}
-                aria-invalid={passwordError ? true : undefined}
-                aria-describedby={passwordError ? passwordErrorId : undefined}
-              />
-              <PasswordInputTrigger />
-            </PasswordInputGroup>
-          </PasswordInput>
+            aria-invalid={passwordError ? true : undefined}
+            aria-describedby={passwordError ? passwordErrorId : undefined}
+          />
           {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
         </Field>
         {message ? (
@@ -199,7 +189,7 @@ function LoginPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending && !passkeyPending}>
+        <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
           {m.auth_login_heading()}
         </Button>
         {passkeySupport === 'none' ? null : (
@@ -207,7 +197,7 @@ function LoginPage() {
             type="button"
             variant="outline"
             disabled={pending}
-            isLoading={passkeyPending}
+            aria-busy={passkeyPending}
             onClick={() => void submitPasskey()}
           >
             <KeyRound aria-hidden="true" />

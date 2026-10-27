@@ -239,9 +239,7 @@ test(
         await password.waitFor({ state: 'visible' });
         const show = page.getByRole('button', { name: 'Show password', exact: true });
         expect(await show.count()).toBe(1);
-        expect(await show.evaluate((button) => Boolean(button.closest('[data-slot="password-input-control"]')))).toBe(
-          true,
-        );
+        expect(await show.evaluate((button) => Boolean(button.closest('[data-slot="input-group"]')))).toBe(true);
         await show.click();
         expect(await password.getAttribute('type')).toBe('text');
         expect(await page.getByRole('button', { name: 'Hide password', exact: true }).count()).toBe(1);

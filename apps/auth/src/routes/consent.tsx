@@ -1,5 +1,5 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
+import { AuthButton as Button } from '../button';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -8,6 +8,7 @@ import { approvedScopes, readConsent, type Consent } from '../consent';
 import { ErrorAlert } from '../alert';
 
 export const Route = createFileRoute('/consent')({
+  head: () => ({ meta: [{ title: `${m.auth_consent_heading()} · REZICS` }] }),
   component: ConsentPage,
 });
 
@@ -119,7 +120,7 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
             ) : (
               <p>{m.auth_consent_empty()}</p>
             )}
-            <Button type="button" onClick={approve} disabled={pending} isLoading={pending}>
+            <Button type="button" onClick={approve} disabled={pending} aria-busy={pending}>
               {m.auth_consent_approve()}
             </Button>
             <Button

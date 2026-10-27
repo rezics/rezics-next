@@ -4,6 +4,11 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
+Pages compose the shared shadcn card, field, input, input-group, button, alert and checkbox components. Security
+lists also use shadcn items and badges. Password reveal buttons have localized show/hide names and stay disabled
+until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
+states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
+
 ## Sign-in
 
 The sign-in page has labelled email and password fields with password-manager autocomplete. `src/sign-in.ts` holds the

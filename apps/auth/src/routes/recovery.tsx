@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { AuthButton as Button } from '../button';
+import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
+import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { authPost, failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
@@ -15,6 +15,7 @@ const passwordId = 'recovery-password';
 const passwordErrorId = 'recovery-password-error';
 
 export const Route = createFileRoute('/recovery')({
+  head: () => ({ meta: [{ title: `${m.auth_recovery_heading()} · REZICS` }] }),
   component: RecoveryPage,
 });
 
@@ -120,35 +121,28 @@ function RecoveryPage() {
           noValidate
           onSubmit={submitComplete}
         >
-          <Field required invalid={Boolean(passwordFieldError)}>
+          <Field data-invalid={Boolean(passwordFieldError)}>
             <FieldLabel htmlFor={passwordId}>{m.auth_recovery_password()}</FieldLabel>
             <PasswordInput
               name="new_password"
               autoComplete="new-password"
               required
               readOnly={pending}
-              invalid={Boolean(passwordFieldError)}
-              translations={{
-                visibilityTrigger: (visible) =>
-                  visible ? m.auth_security_hide_password() : m.auth_security_show_password(),
+              id={passwordId}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordFieldError('');
+                setMessage('');
               }}
-            >
-              <PasswordInputGroup>
-                <PasswordInputInput
-                  id={passwordId}
-                  value={password}
-                  onChange={(event) => {
-                    setPassword(event.target.value);
-                    setPasswordFieldError('');
-                    setMessage('');
-                  }}
-                  aria-invalid={passwordFieldError ? true : undefined}
-                  aria-describedby={passwordFieldError ? passwordErrorId : undefined}
-                />
-                <PasswordInputTrigger />
-              </PasswordInputGroup>
-            </PasswordInput>
-            {passwordFieldError ? <FieldError id={passwordErrorId}>{passwordFieldError}</FieldError> : null}
+              aria-invalid={passwordFieldError ? true : undefined}
+              aria-describedby={passwordFieldError ? passwordErrorId : undefined}
+            />
+            {passwordFieldError ? (
+              <FieldError id={passwordErrorId} role={message ? undefined : 'alert'}>
+                {passwordFieldError}
+              </FieldError>
+            ) : null}
           </Field>
           {message ? (
             <ErrorAlert tabIndex={-1} ref={alert}>
@@ -158,7 +152,7 @@ function RecoveryPage() {
           {message === failureMessage(401, 'invalid_recovery', null) ? (
             <a href="/recovery">{m.auth_recovery_new_link()}</a>
           ) : null}
-          <Button type="submit" disabled={pending} isLoading={pending}>
+          <Button type="submit" disabled={pending} aria-busy={pending}>
             {m.auth_recovery_complete_submit()}
           </Button>
         </form>
@@ -169,7 +163,7 @@ function RecoveryPage() {
   return (
     <AuthPage heading={m.auth_recovery_heading()}>
       <form className="auth-login-form" method="post" action="/recovery/start" noValidate onSubmit={submitStart}>
-        <Field required invalid={Boolean(emailError)}>
+        <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_recovery_email()}</FieldLabel>
           <Input
             ref={emailInput}
@@ -199,7 +193,7 @@ function RecoveryPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} isLoading={pending}>
+        <Button type="submit" disabled={pending} aria-busy={pending}>
           {m.auth_recovery_start_submit()}
         </Button>
       </form>

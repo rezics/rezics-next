@@ -18,6 +18,10 @@ body {
 }
 
 .auth-shell {
+  /* Error text uses the same ink blue as other interface text. */
+  --destructive: var(--primary);
+  --destructive-foreground: var(--primary);
+  --destructive-solid: var(--primary);
   min-height: 100vh;
   background: var(--background);
   background-image:
@@ -84,6 +88,8 @@ body {
 }
 
 .auth-card {
+  display: block;
+  overflow: visible;
   width: min(100%, 34rem);
   padding: 3.25rem 2rem;
   border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
