@@ -5,6 +5,7 @@ import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
+import { deletedOrganizationThreadId } from '../kernel/fake';
 import boardRecording from '../kernel/recorded/board.json';
 import boardThreadsRecording from '../kernel/recorded/board-threads.json';
 import searchEmptyRecording from '../kernel/recorded/search-empty.json';
@@ -42,6 +43,7 @@ export const pagePaths = {
   board: `/boards/${boardRecording.board.id}`,
   thread: `/threads/${threadRecording.thread.id}`,
   'thread-owned': `/threads/${threadOwnedRecording.thread.id}`,
+  'thread-deleted-organization': `/threads/${deletedOrganizationThreadId}`,
   'board-new': `/boards/${boardRecording.board.id}/new`,
   offer: `/offers/${offerRecording.offer.id}`,
   'offer-cjk': `/offers/${offerCjkRecording.offer.id}`,

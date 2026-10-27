@@ -67,7 +67,9 @@ function body(n: number) {
     profile: 'blocks',
     doc: {
       type: 'doc',
-      content: [{ type: 'paragraph', attrs: { id: `post-${n}` }, content: [{ type: 'text', text: `Contribution ${n}` }] }],
+      content: [
+        { type: 'paragraph', attrs: { id: `post-${n}` }, content: [{ type: 'text', text: `Contribution ${n}` }] },
+      ],
     },
   };
 }

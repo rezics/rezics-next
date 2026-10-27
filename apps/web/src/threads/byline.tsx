@@ -55,8 +55,9 @@ export function Byline({
   children?: ReactNode;
 }) {
   const locale = getLocale();
+  // A deleted account is known by `state` and `kind` alone; whatever else the read carries is not shown.
   const deleted = author?.state === 'deleted';
-  const unknown = showAuthor && (!author || (!author.displayName && !author.handle));
+  const unknown = showAuthor && !deleted && (!author || (!author.displayName && !author.handle));
   const hasAuthor = showAuthor && (deleted || unknown || Boolean(author?.displayName || author?.handle));
   const person = deleted || !author?.handle ? null : `/${locale}/@${encodeURIComponent(author.handle)}`;
 
@@ -72,7 +73,9 @@ export function Byline({
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
         {showAuthor ? (
           deleted ? (
-            <span>{m.thread_author_deleted()}</span>
+            <span>
+              {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
+            </span>
           ) : unknown ? (
             <span>{m.thread_author_unknown()}</span>
           ) : (
@@ -88,11 +91,14 @@ export function Byline({
               ) : null}
               {author?.handle ? (
                 !author.displayName && person ? (
-                  <a className={cn('font-medium text-foreground', personLink)} href={person}>
+                  <a
+                    className={cn('max-w-full min-w-0 truncate font-medium text-foreground', personLink)}
+                    href={person}
+                  >
                     @{author.handle}
                   </a>
                 ) : (
-                  <span>@{author.handle}</span>
+                  <span className="max-w-full min-w-0 truncate">@{author.handle}</span>
                 )
               ) : null}
             </>

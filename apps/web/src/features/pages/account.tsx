@@ -57,7 +57,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
           {name}
         </h1>
         {profile.handle && (
-          <p data-slot="agent-handle" className="text-sm text-muted-foreground">
+          <p data-slot="agent-handle" className="truncate text-sm text-muted-foreground">
             {`@${profile.handle}`}
           </p>
         )}

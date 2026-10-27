@@ -280,6 +280,8 @@ async function selectRecording(
   const community = communityRecording(request.method, pathname, recordings);
   if (community) return community;
   if (request.method === 'GET') {
+    const withDeleted = pathname === '/v1/accounts' ? withDeletedOrganization(request, recordings.accounts) : undefined;
+    if (withDeleted) return withDeleted;
     if (pathname === '/v1/accounts') return recordings.accounts;
     const reactions = /^\/v1\/subjects\/([^/]+)\/(reactions?)$/.exec(pathname);
     if (reactions?.[1] && decodeURIComponent(reactions[1]) === knownSubjectId(recordings))
@@ -310,6 +312,9 @@ async function selectRecording(
       return recordings.thread;
     if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings['thread-owned'], 'thread'))
       return recordings['thread-owned'];
+    if (pathname === `/v1/threads/${deletedOrganizationThreadId}/posts`)
+      return recordings['thread-deleted-organization-posts'];
+    if (pathname === `/v1/threads/${deletedOrganizationThreadId}`) return recordings['thread-deleted-organization'];
     const offer = /^\/v1\/offers\/([^/]+)$/.exec(pathname);
     if (offer?.[1]) return recordingsWithId(recordings, 'offer', 'offer', decodeURIComponent(offer[1]));
     const order = /^\/v1\/orders\/([^/]+)$/.exec(pathname);
@@ -391,6 +396,34 @@ function ownedThreadRecordings(): Record<string, KernelRecording> {
   return JSON.parse(JSON.stringify(recordings).replaceAll(author, storyViewerId)) as Record<string, KernelRecording>;
 }
 
+/** An organization whose account is deleted: the identity read answers it by id and kind alone. */
+export const deletedOrganizationId = '01a17a79-0af6-71c2-a357-5eefeef70de1';
+export const deletedOrganizationThreadId = '01a17a7a-1071-720c-8100-2345e36e84de';
+
+/** The identity read for a page whose authors include the deleted organization. */
+function withDeletedOrganization(request: Request, recording: KernelRecording | undefined) {
+  const ids = new URL(request.url).searchParams.get('ids')?.split(',') ?? [];
+  if (!recording || !ids.includes(deletedOrganizationId)) return undefined;
+  const accounts = Array.isArray(recording.accounts) ? recording.accounts : [];
+  return {
+    ...recording,
+    accounts: [...accounts, { id: deletedOrganizationId, kind: 'organization', state: 'deleted' }],
+  };
+}
+
+/** The recorded owned thread, written by the deleted organization under an id of its own. */
+function deletedOrganizationThreadRecordings(): Record<string, KernelRecording> {
+  const recordings = {
+    'thread-deleted-organization': threadOwnedRecording,
+    'thread-deleted-organization-posts': threadOwnedPostsRecording,
+  };
+  return JSON.parse(
+    JSON.stringify(recordings)
+      .replaceAll(threadOwnedRecording.thread.authorId, deletedOrganizationId)
+      .replaceAll(threadOwnedRecording.thread.id, deletedOrganizationThreadId),
+  ) as Record<string, KernelRecording>;
+}
+
 /** The browser-only Storybook kernel uses the checked-in responses for the real page routes. */
 export function createStoryRecordedKernelFetch(): typeof fetch {
   return createRecordedKernelFetch({
@@ -417,6 +450,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'definitions-release': definitionsReleaseRecording,
     'settings-preferences': settingsPreferencesRecording,
     ...ownedThreadRecordings(),
+    ...deletedOrganizationThreadRecordings(),
     offer: offerRecording,
     'offer-cjk': offerCjkRecording,
     'offer-delisted': offerDelistedRecording,
