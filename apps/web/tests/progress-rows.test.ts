@@ -15,3 +15,13 @@ test('session completion and abandonment are offered in the progress row menu', 
   expect(text).toMatch(/<ProgressRow[\s\S]*?menu=/);
   expect(text).toContain('DropdownMenuItem');
 });
+
+test('published logs show state and relative time without progress bars', async () => {
+  for (const name of ['log-page.tsx', 'logs-progress.tsx']) {
+    const text = await source(name);
+    expect(text, name).toContain('stateLabel(');
+    expect(text, name).toContain('RelativeTime');
+    expect(text, name).not.toContain('<ProgressRow');
+    expect(text, name).not.toContain('<progress');
+  }
+});
