@@ -153,15 +153,15 @@ test('sealed subject identity requires current registration and inherited larger
   await f.merge(source, root);
   expect(await point(read, source)).toEqual({ state: 'not_ready' });
   await f.finishMove(source, root);
-  expect(await point(read, source)).toMatchObject({ state: 'ready', terminal: root });
+  const sourceSeal = await point(read, source);
+  expect(sourceSeal).toMatchObject({ state: 'ready', terminal: root });
+  expect(homeOf(source)).not.toBe(homeOf(root));
   const larger = await f.create(0x6e00);
   expect(larger > root).toBe(true);
   await f.merge(root, larger);
   expect(await point(read, root)).toEqual({ state: 'not_ready' });
   // A source-local seal alone never certifies current liveness of the target in another home.
-  const local = await point(read, source);
-  if (local?.state === 'ready') expect(local.terminal).toBe(root);
-  else expect(local).toEqual({ state: 'not_ready' });
+  expect(await point(read, source)).toEqual(sourceSeal);
   await f.finishMove(root, larger);
   for (const original of [...originals, source]) await f.finishMove(original, larger);
   for (const original of [...originals, source, root])
