@@ -105,7 +105,7 @@ test('reference identity and Access share one RR client and preserve native acce
       WHERE route=$1 AND resource_id=$2 AND subject_id=$3`,
         [f.resource.route, f.resource.id, f.actorId, authoritativeTimeValue(command.time)],
       );
-      return { value: true, events: [{ type: 'com.rezics.subject.reference-probe.v1', data: {} }] };
+      return { value: true, events: [{ type: 'com.rezics.access.time-probe.v1', data: {} }] };
     },
   );
   expect(time).toBeDefined();
@@ -180,11 +180,10 @@ test('references enforce current explicit denial, suspension and native visibili
     f.actorId,
   ]);
   for (const visibility of ['hidden', 'taken_down']) {
-    await admin.query('UPDATE semantic.subject SET visibility=$3 WHERE route=$1 AND subject_id=$2', [
-      f.resource.route,
-      f.resource.id,
-      visibility,
-    ]);
+    await admin.query(
+      'UPDATE semantic.subject SET visibility=$3, security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2',
+      [f.resource.route, f.resource.id, visibility],
+    );
     expect(await read()).toBeNull();
   }
   const authorize = await check(f);
@@ -272,10 +271,10 @@ test('reference visibility, eligibility and grant data use one repeatable snapsh
   const result = await observed(() =>
     readSubjectReference(pool, f.resource.id, async (client) => {
       clientUsed = client;
-      await admin.query("UPDATE semantic.subject SET visibility='hidden' WHERE route=$1 AND subject_id=$2", [
-        f.resource.route,
-        f.resource.id,
-      ]);
+      await admin.query(
+        "UPDATE semantic.subject SET visibility='hidden', security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+        [f.resource.route, f.resource.id],
+      );
       await admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
         f.resource.route,
         f.resource.id,
