@@ -24,15 +24,21 @@ let target: string;
 let firstHidden: string;
 let lastHidden: string;
 let population: Population;
-const sources = Array.from({ length: 4094 }, (_, ordinal) => newId(27616 + (ordinal % 4) * 16));
-const unrelated = sources.map(() => newId(27800));
-const labels = sources.map((_, ordinal) => `Source ${String(ordinal + 1).padStart(5, '0')}`);
+const sources: string[] = [];
+const unrelated: string[] = [];
+const labels = Array.from({ length: 4094 }, (_, ordinal) => `Source ${String(ordinal + 1).padStart(5, '0')}`);
 const facts: Fact[][] = [];
 
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
   fixture = await aggregateFixture(db);
   target = (await fixture.create('Growth target')).id;
+  const targetPartition = partitionOf(routeOf(target)!);
+  const foreignPartitions = [1726, 1727, 1728, 1729, 1730].filter((value) => value !== targetPartition).slice(0, 4);
+  for (let ordinal = 0; ordinal < labels.length; ordinal++) {
+    sources.push(newId(foreignPartitions[ordinal % 4]! * 16));
+    unrelated.push(newId(27800));
+  }
   // Pair the two command-created foreign sources with unrelated subjects too.
   await fixture.create('Unrelated native first');
   await fixture.create('Unrelated native last');
