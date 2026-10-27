@@ -94,6 +94,32 @@ END;
 $$;
 
 
+--
+-- Name: library_profile_pin_valid(jsonb); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.library_profile_pin_valid(pin jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $_$
+  SELECT CASE
+    WHEN jsonb_typeof(pin) IS DISTINCT FROM 'object' THEN false
+    WHEN (SELECT count(*) FROM jsonb_object_keys(pin)) <> 4 THEN false
+    WHEN NOT (pin ?& ARRAY['provenance', 'releaseDigest', 'acceptingType', 'profileId']) THEN false
+    WHEN jsonb_typeof(pin -> 'provenance') IS DISTINCT FROM 'string' THEN false
+    WHEN jsonb_typeof(pin -> 'releaseDigest') IS DISTINCT FROM 'string' THEN false
+    WHEN pin ->> 'releaseDigest' !~ '^sha256:[0-9a-f]{64}$' THEN false
+    WHEN pin ->> 'provenance' = 'profile' THEN
+      jsonb_typeof(pin -> 'acceptingType') = 'string' AND pin ->> 'acceptingType' <> '' AND
+      jsonb_typeof(pin -> 'profileId') = 'string' AND pin ->> 'profileId' <> ''
+    WHEN pin ->> 'provenance' = 'legacy' THEN
+      jsonb_typeof(pin -> 'profileId') = 'string' AND pin ->> 'profileId' = 'legacy-fixed-v1' AND
+      (jsonb_typeof(pin -> 'acceptingType') = 'null' OR
+        (jsonb_typeof(pin -> 'acceptingType') = 'string' AND pin ->> 'acceptingType' <> ''))
+    ELSE false
+  END
+$_$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -262,8 +288,12 @@ CREATE TABLE library.copy (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    library_profile_pin jsonb,
+    kind text,
     CONSTRAINT copy_check CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
     CONSTRAINT copy_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT copy_library_profile_kind_check CHECK (((library_profile_pin IS NULL) OR ((kind IS NOT NULL) AND (char_length(kind) > 0)))),
+    CONSTRAINT copy_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT copy_location_check CHECK (((location IS NULL) OR (char_length(location) <= 200))),
     CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
     CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
@@ -295,7 +325,9 @@ CREATE TABLE library.entry (
     type_source_epoch integer,
     type_source_position bigint,
     incarnation_id uuid,
+    library_profile_pin jsonb,
     CONSTRAINT entry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT entry_revision_check CHECK ((revision >= 1)),
     CONSTRAINT entry_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))),
@@ -381,6 +413,7 @@ CREATE TABLE library.progress_session (
     completed_at timestamp with time zone,
     transaction_id uuid NOT NULL,
     last_changed_at timestamp with time zone,
+    library_profile_pin jsonb,
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -388,6 +421,7 @@ CREATE TABLE library.progress_session (
     CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
+    CONSTRAINT progress_session_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
     CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
     CONSTRAINT progress_session_position_check CHECK ((("position" IS NULL) OR ("position" >= (0)::numeric))),
@@ -1093,6 +1127,13 @@ CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, ac
 
 
 --
+-- Name: copy_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_profile_pending ON library.copy USING btree (route, account_id, copy_id) WHERE (library_profile_pin IS NULL);
+
+
+--
 -- Name: entry_account_state; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1104,6 +1145,13 @@ CREATE INDEX entry_account_state ON library.entry USING btree (route, account_id
 --
 
 CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_id, updated_at DESC, subject_id);
+
+
+--
+-- Name: entry_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_profile_pending ON library.entry USING btree (route, account_id, subject_id) WHERE (library_profile_pin IS NULL);
 
 
 --
@@ -1223,6 +1271,13 @@ CREATE INDEX progress_session_active ON library.progress_session USING btree (ro
 --
 
 CREATE INDEX progress_session_owner_seek ON library.progress_session USING btree (route, account_id, session_id);
+
+
+--
+-- Name: progress_session_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_profile_pending ON library.progress_session USING btree (route, account_id, session_id) WHERE (library_profile_pin IS NULL);
 
 
 --
