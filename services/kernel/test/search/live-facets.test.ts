@@ -169,7 +169,7 @@ test('type and code buckets count distinct current sources and use stable count/
       property: 'type',
       relation: 'exact',
       values: [
-        { value: 'schema:Book', count: 2, labels: { en: 'Book' } },
+        { value: 'schema:Book', count: 2, labels: { en: 'Book', fr: 'Livre' } },
         { value: 'schema:Person', count: 1, labels: { en: 'Person' } },
       ],
     },
@@ -260,7 +260,7 @@ test('complete Boolean OR and NOT proof counts only current matching candidates'
   );
 
   expect(answer.total).toEqual({ value: 2, relation: 'lower_bound' });
-  expect(answer.facets[0]!.values).toEqual([{ value: id(90), count: 1, labels: {} }]);
+  expect(answer.facets[0]!.values).toEqual([{ value: id(90), count: 1, labels: { en: 'Book 90' } }]);
 });
 
 test('repeated facts and duplicate hits contribute once per source and value', async () => {
