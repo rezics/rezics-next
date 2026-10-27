@@ -194,13 +194,22 @@ test('a file whose only failures are growth evidence errors is rerun alone', asy
     });
     let runs = 0;
     const result = await runLaneSuite({
-      service: 'fixture', directory: module, files: ['test/evidence.test.ts'], partial: false,
+      service: 'fixture',
+      directory: module,
+      files: ['test/evidence.test.ts'],
+      partial: false,
       createDatabase: async (database) => void events.push(`create ${database}`),
       dropDatabase: async (database) => void events.push(`drop ${database}`),
-      environment: () => ({ ...env, ATTEMPT: String(++runs) }), env,
+      environment: () => ({ ...env, ATTEMPT: String(++runs) }),
+      env,
     });
     expect(result).toEqual({ failed: [], concurrency: 1 });
-    expect(events).toEqual(['create fixture_test_1', 'drop fixture_test_1', 'create fixture_growth_1_test_1', 'drop fixture_growth_1_test_1']);
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'drop fixture_test_1',
+      'create fixture_growth_1_test_1',
+      'drop fixture_growth_1_test_1',
+    ]);
   });
 });
 
