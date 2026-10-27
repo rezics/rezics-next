@@ -109,6 +109,7 @@ for (const [kind, numeric] of [
     { bounds: { minimum: 1, maximum: 24 }, accepted: [1, 24], refused: [0, 25] },
     { bounds: { exclusiveMinimum: 0, exclusiveMaximum: 2 }, accepted: [1], refused: [-1, 0, 2, 3] },
     { bounds: { minimum: 0, maximum: 0 }, accepted: [0], refused: [-1, 1] },
+    { bounds: { exclusiveMaximum: 0 }, accepted: [-1], refused: [0, 1] },
     { bounds: { minimum: -3, maximum: -1 }, accepted: [-3, -1], refused: [-4, 0] },
     { bounds: { exclusiveMinimum: -3, exclusiveMaximum: -1 }, accepted: [-2], refused: [-4, -3, -1, 0] },
     ...(kind === 'Number'

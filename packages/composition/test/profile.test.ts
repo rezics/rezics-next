@@ -98,12 +98,42 @@ test('every template is validated with pointers into the profile', () => {
   const only = (entry: { document?: CompositionDocument | undefined }) => entry.document!;
   (value.generic as CompositionDocument).content[0]!.props.text = '<script>alert(1)</script>';
   only(value.types[1]!).content[0]!.type = 'Script';
+  // The platform Heading level is a literal enumeration, rather than an Integer range.
   only(value.routes[0]!).content[0]!.props.level = 9;
   expect(validateProfile(platformRegistry, value)).toEqual([
     { pointer: '/generic/content/0/props/text', code: 'unsafe' },
     { pointer: '/routes/0/document/content/0/props/level', code: 'invalid' },
     { pointer: '/types/1/document/content/0/type', code: 'unknown_type' },
   ]);
+});
+
+test('numeric limits retain their classification and exact pointers through every profile template', () => {
+  const list = (limit: unknown): CompositionDocument => ({
+    root: { props: {} },
+    content: [{ type: 'SubjectList', props: { id: 'works', title: 'Works', property: 'schema:author', limit } }],
+  });
+  const withLimit = (limit: unknown): PresentationProfile => ({
+    format: PROFILE_FORMAT,
+    generic: list(limit),
+    bases: [{ base: 'schema:CreativeWork', document: list(limit) }],
+    types: [{ type: 'schema:Book', views: { overview: list(limit) } }],
+    routes: [{ route: '/', document: list(limit) }],
+  });
+  for (const limit of [1, 24]) expect(validateProfile(platformRegistry, withLimit(limit))).toEqual([]);
+  for (const [limit, code] of [
+    [0, 'limit'],
+    [25, 'limit'],
+    ['25', 'invalid'],
+    [1.5, 'invalid'],
+    [25.5, 'invalid'],
+  ] as const) {
+    expect(validateProfile(platformRegistry, withLimit(limit))).toEqual([
+      { pointer: '/bases/0/document/content/0/props/limit', code },
+      { pointer: '/generic/content/0/props/limit', code },
+      { pointer: '/routes/0/document/content/0/props/limit', code },
+      { pointer: '/types/0/views/overview/content/0/props/limit', code },
+    ]);
+  }
 });
 
 test('a profile past its size or template limit stops validation', () => {

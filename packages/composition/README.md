@@ -105,13 +105,13 @@ the object, and the object uses `propertyNames` for its keys.
 
 `validateComposition` returns `{ pointer, code }[]` with RFC 6901 pointers.
 
-| Code           | Meaning                                                                               |
-| -------------- | ------------------------------------------------------------------------------------- |
-| `invalid`      | Envelope or value shape, an unknown key, a missing required key, or a schema mismatch |
-| `unknown_type` | `type` is not registered; that node's props are not checked                           |
-| `unsafe`       | A string fails a plain-text, link, CURIE or subject UUID pattern                      |
-| `duplicate`    | A repeated `props.id` after its first occurrence                                      |
-| `limit`        | Canonical size, node count, depth, distinct page reads or their total cost            |
+| Code           | Meaning                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `invalid`      | Envelope or value shape, an unknown key, a missing required key, or a schema mismatch      |
+| `unknown_type` | `type` is not registered; that node's props are not checked                                |
+| `unsafe`       | A string fails a plain-text, link, CURIE or subject UUID pattern                           |
+| `duplicate`    | A repeated `props.id` after its first occurrence                                           |
+| `limit`        | Numeric bounds, canonical size, node count, depth, distinct page reads or their total cost |
 
 A document has at most one page heading. A `SubjectHeader` is the page heading of any
 document that contains one, so every level-1 `Heading` in that document is a `duplicate`
