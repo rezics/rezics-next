@@ -276,10 +276,14 @@ measured run, and seeding is never explained. Each report sample carries `seedin
 file, `checkGrowth` appends one JSON line per check with the test file, check name, scales and each scale's `seeding`.
 `seed` skips its own vacuum inside `grow`, since `checkGrowth` vacuums right after.
 
-Seed every relation the operation reads, including receipts, outbox, write basis and the Access rows its authorization
-reads, to thousands of rows at the smallest scale; for example, use 500 x scale bulk rows of the production shape per
-relation. Otherwise, the planner scans small relations and the check fails on rows that production would reach through
-an index.
+Declare the check's growth model: the relations, partitions and keys that grow with N in production (subjects,
+content, history, receipts, outbox, write basis and the Access rows its authorization reads). Seed each of them at
+every scale with the production row shape, key distribution and fan-out, from thousands of rows at the smallest
+scale; 500 x scale bulk rows is the usual choice. A relation whose production size does not grow with N, such as
+definitions, roles or configuration, may stay at fixture size, and a sequential scan of it is acceptable. Assert
+the access each growing relation needs, a named index or a single partition, rather than forbidding sequential
+scans everywhere. Injected planner statistics do not replace seeding: they change only a plan's estimates, while a
+growth check measures executed work (`docs/research/growth-check-plan-stability.md`).
 
 Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
@@ -288,6 +292,12 @@ after each scale's `grow`, so planner statistics never depend on autovacuum; see
 vacuum runs after `grow`; before each measured repetition it also vacuums `dbos.workflow_status`, because DBOS's
 idempotent enqueue updates an existing status row and pruning that tuple chain keeps buffer cost from depending on
 maintenance timing. Do not analyze or vacuum the checked database by hand in `grow`.
+
+Each measured repetition starts from equivalent state. When the operation writes, give every warm-up and
+repetition its own fresh keys, subjects or probes, as production spreads its writes, so that no repetition updates
+rows an earlier one wrote. The harness does not rewrite or compact relations between repetitions: that would hide
+the version chains, index growth and visibility effects a write check should reveal. A check that measures repeated
+writes to the same rows declares that history in its growth model.
 
 ## HTTP contract
 
