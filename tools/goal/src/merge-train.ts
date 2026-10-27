@@ -147,7 +147,10 @@ function taskIntegrationTarget(stateDirectory: string, taskId: string): { target
     const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
     if (!row) return {};
     const brief = (JSON.parse(row.body) as { brief?: { target?: string; manager?: string } }).brief;
-    return { ...(brief?.target ? { target: brief.target } : {}), ...(brief?.manager ? { manager: brief.manager } : {}) };
+    return {
+      ...(brief?.target ? { target: brief.target } : {}),
+      ...(brief?.manager ? { manager: brief.manager } : {}),
+    };
   } finally {
     db.close();
   }
@@ -173,7 +176,11 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
  * Resolve conflicts that have exactly one safe resolution: import-only hunks in code and insert-only hunks in Markdown.
  * Returns false, leaving every file for a person, when any file holds another kind of conflict.
  */
-export function resolveMechanicalConflicts(cwd: string, paths: readonly string[], formatCommand?: readonly string[]): boolean {
+export function resolveMechanicalConflicts(
+  cwd: string,
+  paths: readonly string[],
+  formatCommand?: readonly string[],
+): boolean {
   const resolved = new Map<string, string>();
   for (const file of paths) {
     const path = join(cwd, file);
@@ -859,10 +866,11 @@ export class MergeTrain {
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
       );
       for (const [manager, changed] of byManager) {
-        const summary = `Task ${request.taskId}${own ? ` (${own})` : ''} changed files your tasks declare, outside its own paths, now on ${branch} ${commit}: ${changed.join(', ')}. Its landing ran only its own acceptance: check these against your tests.`.replace(
-          /[\r\n]+/g,
-          ' ',
-        );
+        const summary =
+          `Task ${request.taskId}${own ? ` (${own})` : ''} changed files your tasks declare, outside its own paths, now on ${branch} ${commit}: ${changed.join(', ')}. Its landing ran only its own acceptance: check these against your tests.`.replace(
+            /[\r\n]+/g,
+            ' ',
+          );
         inbox.deliver({ managerId: manager, taskId: request.taskId, kind: 'instruction', summary });
         appendFileSync(logPath, `Told ${manager} of changes to its files: ${changed.join(', ')}\n`);
       }
