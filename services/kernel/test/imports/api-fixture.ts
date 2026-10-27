@@ -164,7 +164,11 @@ export async function openImportApiFixture(options: DriverOptions): Promise<Impo
         };
       },
       seed: population.seed,
-      measure: runtime.measurement.measure,
+      async measure(action) {
+        // Setup warmed the native query objects; a minute of idleness before this measurement expires them.
+        await runtime.warm();
+        return runtime.measurement.measure(action);
+      },
       close: runtime.close,
     };
   } catch (error) {

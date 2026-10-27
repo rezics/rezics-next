@@ -332,19 +332,22 @@ export async function openApiRuntime(options: DriverOptions) {
     // record reads and deferred media work retain their pipeline concurrency.
     let writing = false;
     const writes: (() => void)[] = [];
+    async function bulkBearer() {
+      if ((decodeJwt(bulk.bearer).exp ?? 0) * 1000 - Date.now() < 60_000) {
+        renewingBulk ??= time('importer account-key renewal', async () => {
+          bulk = await identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes);
+        }).finally(() => {
+          renewingBulk = undefined;
+        });
+        await renewingBulk;
+      }
+      return bulk.bearer;
+    }
     const transport = createImportTransport({
       origin,
       async tokenProvider() {
         if (current?.controls.as === 'ordinary') return identity.ordinary.bearer;
-        if ((decodeJwt(bulk.bearer).exp ?? 0) * 1000 - Date.now() < 60_000) {
-          renewingBulk ??= time('importer account-key renewal', async () => {
-            bulk = await identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes);
-          }).finally(() => {
-            renewingBulk = undefined;
-          });
-          await renewingBulk;
-        }
-        return bulk.bearer;
+        return bulkBearer();
       },
       now: Date.now,
       sleep: async (ms) => {
@@ -594,6 +597,25 @@ export async function openApiRuntime(options: DriverOptions) {
       }
       return result;
     }
+    // Reylo checks each query object's schema freshness on first use and again every minute, and every
+    // concurrent cold use probes. The importer's concurrent fence reads share these native query objects, so
+    // complete one real public read of a spare tuple first. A fence check only reads: no ledger, proposal,
+    // receipt or checkpoint of a measured source can come from it.
+    async function warm() {
+      await time('fence query warm-up', async () => {
+        const source = 'warm-spare';
+        const query = new URLSearchParams({ source, externalId: randomUUID(), fieldGroup: 'facts' });
+        const response = await app.handle(
+          new Request(`${origin}/v1/sourceFences:check?${query}`, {
+            headers: { authorization: `Bearer ${await bulkBearer()}` },
+          }),
+        );
+        if (response.status !== 200)
+          throw new Error(`Fence warm-up: HTTP ${response.status}: ${await response.text()}`);
+        await response.body?.cancel();
+      });
+    }
+    await warm();
     recordPhase('runtime setup total', started);
     return {
       identity,
@@ -609,6 +631,7 @@ export async function openApiRuntime(options: DriverOptions) {
       commands,
       receipt,
       run,
+      warm,
       close,
       get importer() {
         return importer!;
