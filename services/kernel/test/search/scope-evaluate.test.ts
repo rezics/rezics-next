@@ -78,6 +78,7 @@ let target: string;
 let other: string;
 let role: string;
 let nativePoints = 0;
+let baseFacetsBuilt = false;
 
 async function write(path: string, body: unknown, persona: 'editor' | 'acceptor' | 'steward' = 'editor') {
   const response = await driver.request(persona, 'POST', path, body, { 'Idempotency-Key': `"${randomUUID()}"` });
@@ -105,6 +106,12 @@ async function factory(): Promise<ScopeFactory> {
 }
 async function scope(pool: Pool = db.pool) {
   const createScope = await factory();
+  // Underfilled snapshots are not negative evidence. Finish actual owner fixture work first;
+  // this flag is never passed to the runtime as an identity readiness claim.
+  if (!baseFacetsBuilt) {
+    await rebuildRelations([lagged, empty]);
+    baseFacetsBuilt = true;
+  }
   const native = semantic.subjectSource(pool, routeKey);
   const match = native.matchRelationFacets?.bind(native);
   if (match)
@@ -273,11 +280,7 @@ test('actual hit lineage is only a work-order hint and shares the complete point
 });
 
 type RebuildRunner = { run(partition: number): Promise<{ status: string; examined: number; done: boolean }> };
-async function overflowFixture() {
-  // These are actual command-written relations. Never replace the native source with sampled result arrays.
-  const values = [target, other];
-  while (values.length < 129) values.push(await create('schema:Person'));
-  const id = await create('schema:Book', { 'schema:author': values.map((value) => statement('schema:author', value)) });
+async function rebuildRelations(ids: string[]) {
   const makeRunner = (
     semantic as unknown as {
       relationFacetRebuilds?: (options: {
@@ -295,14 +298,23 @@ async function overflowFixture() {
     consumer: `scope_${randomUUID().replaceAll('-', '')}`,
     pageSize: 16,
   });
-  let done = false;
-  for (let page = 0; page < 10000 && !done; page++) {
-    const result = await runner.run(subjectPartition(id));
-    expect(result.status).toBe('read');
-    expect(result.examined).toBeLessThanOrEqual(16);
-    done = result.done;
+  for (const partition of new Set(ids.map(subjectPartition))) {
+    let done = false;
+    for (let page = 0; page < 10000 && !done; page++) {
+      const result = await runner.run(partition);
+      expect(result.status).toBe('read');
+      expect(result.examined).toBeLessThanOrEqual(16);
+      done = result.done;
+    }
+    expect(done).toBe(true);
   }
-  expect(done).toBe(true);
+}
+async function overflowFixture() {
+  // These are actual command-written relations. Never replace the native source with sampled result arrays.
+  const values = [target, other];
+  while (values.length < 129) values.push(await create('schema:Person'));
+  const id = await create('schema:Book', { 'schema:author': values.map((value) => statement('schema:author', value)) });
+  await rebuildRelations([id]);
   const current = (await source.read(subjectPartition(id), [id])).subjects[0]!;
   expect(current.relationFacetOverflow).toContain('schema:author');
   const sampled = new Set(current.statements.filter((s) => s.property === 'schema:author').map((s) => s.value));
