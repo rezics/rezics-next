@@ -13,7 +13,8 @@ test('slug keeps native Unicode and follows the shared separator contract', () =
     ['../<script> / \u0000', 'script'],
     [' -- 🍜 --- ', 'subject'],
     ['', 'subject'],
-  ]) expect(slug(label!)).toBe(expected!);
+  ])
+    expect(slug(label!)).toBe(expected!);
 });
 
 test('slug limits code points and cuts at a word boundary', () => {
