@@ -288,9 +288,9 @@ test('reference reads propagate expired deadlines and unavailable authorization'
     ),
   ).rejects.toBe(unavailable);
   const account = await readAccount(pool, routeOf(f.actorId)!, f.actorId);
-  const context = { pool, account, deadline: Date.now() + 100 };
+  const context = { pool, account, deadline: Date.now() + 1000 };
   const expired = await accessCheck(f.permissions(), f.actor, 'subject:read', f.resource, context);
-  await Bun.sleep(110);
+  await Bun.sleep(1010);
   await expect(
     observed(() => readSubjectReference(pool, f.resource.id, (client) => expired(client))),
   ).rejects.toBeInstanceOf(AccessUnavailableError);
