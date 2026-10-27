@@ -241,7 +241,7 @@ test('profile retirement rejects new state values but permits own read and clear
   expect((await json(await native.send('owner', 'GET', path(subjectId)), 200)).libraryEntry.state).toBe('planned');
   expect(await fact(subjectId)).toEqual(stored);
   expect((await native.send('owner', 'DELETE', `${path(subjectId)}?revision=1`)).status).toBe(204);
-  await problem(await native.send('owner', 'GET', path(subjectId)), 404, 'not_found');
+  await problem(await native.send('owner', 'GET', path(subjectId)), 404, 'not_found', 'not_applicable');
   const cleared = await native.inspect();
   await problem(
     await native.send('owner', 'PUT', path(subjectId), { state: 'planned' }),
@@ -353,7 +353,7 @@ test('owner other anonymous and hidden-source requests conceal private values an
   );
   const before = await native.inspect();
   await expect(native.commands.readEntry(native.other.actor, subjectId)).rejects.toBeInstanceOf(LibraryNotFoundError);
-  await problem(await native.send('other', 'GET', path(subjectId)), 404, 'not_found');
+  await problem(await native.send('other', 'GET', path(subjectId)), 404, 'not_found', 'not_applicable');
   const anonymous = await native.send('anonymous', 'GET', path(subjectId));
   expect([401, 404]).toContain(anonymous.status);
   expect(await anonymous.text()).not.toContain('planned');
@@ -365,7 +365,7 @@ test('owner other anonymous and hidden-source requests conceal private values an
     { state: 'planned', profileId: 'fixture.game' },
     { state: 'planned', acceptingType: entryTypes.game },
   ])
-    await problem(await native.send('owner', 'PUT', path(subjectId), forged), 400, 'invalid_request', 'not_applicable');
+    await problem(await native.send('owner', 'PUT', path(subjectId), forged), 400, 'invalid_request');
   expect(await native.inspect()).toEqual(before);
   const publicView = await json(await native.send('owner', 'GET', path(subjectId)), 200);
   privateFree(publicView);
