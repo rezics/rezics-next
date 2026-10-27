@@ -29,10 +29,10 @@ async function json(response: Response, status: number) {
   expect({ status: response.status, body }).toEqual({ status, body: expect.any(Object) });
   return body;
 }
-async function problem(response: Response, status: number, code: string) {
+async function problem(response: Response, status: number, code: string, effect = 'not_applied') {
   const body = await json(response, status);
   expect(body.code).toBe(code);
-  expect(body.effect_status).toBe('not_applied');
+  expect(body.effect_status).toBe(effect);
   expect(body).not.toHaveProperty('libraryEntry');
   privateFree(body);
 }
@@ -365,7 +365,7 @@ test('owner other anonymous and hidden-source requests conceal private values an
     { state: 'planned', profileId: 'fixture.game' },
     { state: 'planned', acceptingType: entryTypes.game },
   ])
-    await problem(await native.send('owner', 'PUT', path(subjectId), forged), 400, 'invalid_request');
+    await problem(await native.send('owner', 'PUT', path(subjectId), forged), 400, 'invalid_request', 'not_applicable');
   expect(await native.inspect()).toEqual(before);
   const publicView = await json(await native.send('owner', 'GET', path(subjectId)), 200);
   privateFree(publicView);
