@@ -2,7 +2,9 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   capture,
+  catalogStatementBound,
   checkGrowth,
+  costOf,
   openGrowthDatabase,
   withoutCatalogStatements,
   type GrowthCheck,
@@ -75,6 +77,105 @@ test('catalog-only statements are counted apart and one refresh per query passes
   expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
   expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
 }, 60_000);
+
+test('Reylo freshness probes are set apart without a bound however often they repeat', async () => {
+  const database = db!;
+  await reset(database);
+  const pool = database.openPool({ max: 2 });
+  const clients = [await pool.connect(), await pool.connect()];
+  const probeQueries = [
+    `SELECT r.relname AS fresh_table, a.attname::text AS fresh_column,
+            pg_catalog.format_type(a.atttypid, a.atttypmod) AS fresh_type
+       FROM pg_catalog.pg_class AS r
+       JOIN pg_catalog.pg_attribute AS a ON a.attrelid = r.oid
+      WHERE a.attnum > 0 AND r.oid = $1::regclass`,
+    `SELECT r.relname AS    FRESH_TABLE, a.attname::text AS fresh_column,
+            pg_catalog.format_type(a.atttypid, a.atttypmod) AS fresh_type
+       FROM pg_catalog.pg_class AS r
+       JOIN pg_catalog.pg_attribute AS a ON a.attrelid = r.oid
+      WHERE a.attnum > 0 AND r.oid = $1::regclass`,
+    `SELECT r.relname AS fresh_table, a.attname::text AS fresh_column,
+            pg_catalog.format_type(a.atttypid, a.atttypmod) AS FRESH_TYPE
+       FROM pg_catalog.pg_class AS r
+       JOIN pg_catalog.pg_attribute AS a ON a.attrelid = r.oid
+      WHERE a.attnum > 0 AND r.oid = $1::regclass`,
+  ];
+  const dataQueries = [
+    `SELECT payload FROM ${table} WHERE id = $1`,
+    `SELECT id FROM ${table} WHERE id = $1`,
+    `SELECT payload FROM ${table} WHERE id > $1 LIMIT 1`,
+  ];
+
+  try {
+    const measured = await capture(
+      database,
+      async () => {
+        await Promise.all([
+          (async () => {
+            await clients[0]!.query(dataQueries[0]!, [1]);
+            for (const query of probeQueries) {
+              await clients[0]!.query(query, [`${schema}.records`]);
+              await clients[0]!.query(query, [`${schema}.records`]);
+            }
+          })(),
+          (async () => {
+            await clients[1]!.query(dataQueries[1]!, [1]);
+            await clients[1]!.query(dataQueries[2]!, [1]);
+            for (const query of probeQueries) await clients[1]!.query(query, [`${schema}.records`]);
+          })(),
+        ]);
+      },
+      { includeBackends: true },
+    );
+
+    const classification = catalogStatementBound(measured.capture);
+    expect(classification).toMatchObject({ catalogStatements: 0, freshnessProbes: 9, allowedStatements: 3 });
+    expect(new Set(measured.capture.statementBackends).size).toBe(2);
+
+    const kept = withoutCatalogStatements('freshness probe capture', measured.capture);
+    expect(kept.statements).toEqual(dataQueries);
+    expect(kept.plans).toHaveLength(3);
+  } finally {
+    for (const client of clients) client.release();
+  }
+}, 60_000);
+
+test('a statement with the probe columns that reads a data relation counts in full', () => {
+  const query = `SELECT id AS fresh_table, payload AS fresh_column, id::text AS fresh_type
+                 FROM public.records`;
+  const captured = {
+    statements: [query],
+    plans: [
+      [
+        {
+          'Query Text': query,
+          Plan: {
+            'Node Type': 'Seq Scan',
+            Schema: 'public',
+            'Relation Name': 'records',
+            'Actual Rows': 1,
+            'Actual Loops': 1,
+            'Shared Hit Blocks': 1,
+            'Shared Read Blocks': 0,
+          },
+        },
+      ],
+    ],
+  };
+
+  expect(catalogStatementBound(captured)).toMatchObject({
+    catalogStatements: 0,
+    freshnessProbes: 0,
+    allowedStatements: 1,
+  });
+  expect(costOf(captured)).toMatchObject({
+    statements: 1,
+    plans: 1,
+    rows: 1,
+    relations: { 'public.records': expect.anything() },
+  });
+  expect(withoutCatalogStatements('mixed relation capture', captured).statements).toEqual([query]);
+});
 
 test('a catalog read per row fails the check', async () => {
   const database = db!;

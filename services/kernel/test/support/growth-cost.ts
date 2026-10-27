@@ -119,9 +119,14 @@ export type CatalogClassification = {
   readonly catalogKeys: ReadonlySet<string>;
   readonly backendAware: boolean;
   readonly catalogStatements: number;
+  readonly freshnessProbes: number;
   readonly allowedStatements: number;
   readonly firstCatalogStatement: string | undefined;
 };
+
+function isFreshnessProbeText(text: string): boolean {
+  return [/\bAS\s+fresh_table\b/i, /\bAS\s+fresh_column\b/i, /\bAS\s+fresh_type\b/i].every((alias) => alias.test(text));
+}
 
 function classifyCatalogStatements(capture: Capture): CatalogClassification {
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
@@ -144,33 +149,42 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
 
   const catalogTexts = new Set<string>();
   const catalogKeys = new Set<string>();
+  const freshnessProbeKeys = new Set<string>();
   const catalogOnlyByText = new Map<string, boolean>();
   for (const [key, plans] of plansByKey) {
     const queryText = plans[0]!.queryText!;
     const catalogOnly = plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
     if (catalogOnly) {
       catalogKeys.add(key);
+      if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
     }
     catalogOnlyByText.set(queryText, (catalogOnlyByText.get(queryText) ?? true) && catalogOnly);
   }
   for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
 
-  const catalogStatements = statementEntries.filter(({ text, backend }) =>
-    catalogKeys.has(catalogKey(backendAware, backend, text)),
+  const catalogStatements = statementEntries.filter(({ text, backend }) => {
+    const key = catalogKey(backendAware, backend, text);
+    return catalogKeys.has(key) && !freshnessProbeKeys.has(key);
+  }).length;
+  const freshnessProbes = statementEntries.filter(({ text, backend }) =>
+    freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
   ).length;
   const nonCatalogTexts = new Set(
     statementEntries
       .filter(({ text, backend }) => !catalogKeys.has(catalogKey(backendAware, backend, text)))
       .map(({ text }) => text),
   );
-  const firstCatalogStatement = statementEntries.find(({ text, backend }) =>
-    catalogKeys.has(catalogKey(backendAware, backend, text)),
+  const firstCatalogStatement = statementEntries.find(
+    ({ text, backend }) =>
+      catalogKeys.has(catalogKey(backendAware, backend, text)) &&
+      !freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
   )?.text;
   return {
     catalogTexts,
     catalogKeys,
     backendAware,
     catalogStatements,
+    freshnessProbes,
     allowedStatements: nonCatalogTexts.size,
     firstCatalogStatement,
   };
@@ -216,6 +230,7 @@ export function withoutCatalogTexts(
           catalogKeys: classification,
           backendAware: false,
           catalogStatements: 0,
+          freshnessProbes: 0,
           allowedStatements: 0,
           firstCatalogStatement: undefined,
         };
