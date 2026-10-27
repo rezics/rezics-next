@@ -522,7 +522,8 @@ renderer refactor is needed. Focused native tests in `identity-contract.test.ts`
 - `concealed groups exhaust with advancing empty windows and current eligibility behind progress requires a fresh traversal`;
 - `alias continuation rejects invalid viewer route query group and structural bases and keeps shared token lifetimes`;
 - `native repoint and verification reversal invalidate in-flight alias groups before any resumed disclosure`;
-- `alias raw keys confer no subject or source authority and malformed allocations do not start a scan`.
+- `alias raw keys confer no subject or source authority and malformed allocations do not start a scan`;
+- `an explicitly larger native survivor repoints inherited alias groups without a lexical-order assumption`.
 
 ### Terminal read and disclosure
 
@@ -575,6 +576,8 @@ coverage and completion must be durable before the originating obligation is ack
 must compare generation/target and cannot clear a newer obligation or decrement twice. Unmerge records/removes its
 own obligation atomically with deletion and proves the restored root and removed membership before acknowledgement.
 No synchronous cross-home transaction or new scheduler is introduced; existing durable events drive the work.
+Requested survivors need not decrease in UUID order. Existing register/repoint retry branches must consult actual
+current native redirects rather than treating lexical target order as a concurrency or convergence proof.
 
 A redirected original is ready only after its current obligation is sealed and its direct terminal is currently
 live. Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and

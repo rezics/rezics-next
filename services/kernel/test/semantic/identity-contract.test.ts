@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { deriveAccess } from '../../src/access/derived-access.ts';
@@ -43,6 +43,8 @@ beforeAll(async () => {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   db = await openGrowthDatabase(url);
+}, 30_000);
+beforeEach(async () => {
   f = await identityFixture(db.pool, db.admin);
 }, 30_000);
 afterAll(async () => {
@@ -541,3 +543,23 @@ test('alias raw keys confer no subject or source authority and malformed allocat
   expect(window.originals).toContain(last);
   expect(await terminal(db.pool, last, { ...readOptions(f), access: privateAccess })).toBeNull();
 });
+
+test('an explicitly larger native survivor repoints inherited alias groups without a lexical-order assumption', async () => {
+  const { root, originals } = await f.aliases(3, { conceal: false });
+  // All baseline native operations above are legal and complete before resolving absent identity exports.
+  const readBasis = await basisReader();
+  const group = await groupReader();
+  const terminal = await terminalReader();
+  const old = await readyBasis(readBasis, db.pool);
+  const larger = await f.create(0x6e00);
+  expect(larger > root).toBe(true);
+  await f.merge(root, larger);
+  await f.finishMove(root, larger);
+  for (const original of originals) await f.finishMove(original, larger);
+  const current = await readyBasis(readBasis, db.pool);
+  expect(current).not.toEqual(old);
+  const window = await groupStep(group, larger, current, null, 100);
+  expect(window.originals).toEqual([...originals, root, larger].sort());
+  for (const original of originals)
+    expect(await terminal(db.pool, original, readOptions(f))).toMatchObject({ state: 'ready', id: larger });
+}, 180_000);

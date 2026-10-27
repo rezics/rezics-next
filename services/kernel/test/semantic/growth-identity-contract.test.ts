@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { accessCheck } from '../../src/request/access.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { checkGrowth, capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -22,6 +22,8 @@ beforeAll(async () => {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   db = await openGrowthDatabase(url);
+}, 30_000);
+beforeEach(async () => {
   f = await identityFixture(db.pool, db.admin);
 }, 30_000);
 afterAll(async () => {
