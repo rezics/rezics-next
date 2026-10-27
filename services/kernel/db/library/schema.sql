@@ -66,6 +66,22 @@ $$;
 
 
 --
+-- Name: guard_collection_membership_kind(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_collection_membership_kind() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.membership_kind IS DISTINCT FROM OLD.membership_kind THEN
+    RAISE EXCEPTION 'Collection membership kind cannot change' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_follow_target_type(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -255,13 +271,32 @@ CREATE TABLE library.collection (
     listing_ever_public boolean DEFAULT false NOT NULL,
     deleted_at timestamp with time zone,
     purge_after timestamp with time zone,
+    membership_kind text DEFAULT 'curated'::text NOT NULL,
+    builtin_kind text,
+    builtin_release_digest text,
+    builtin_profile_id text,
+    builtin_state_set_id text,
+    builtin_state_id text,
     CONSTRAINT collection_active_deletion CHECK (((state <> 'active'::text) OR (deleted_at IS NULL))),
+    CONSTRAINT collection_builtin_identity_check CHECK (
+CASE membership_kind
+    WHEN 'curated'::text THEN ((builtin_kind IS NULL) AND (builtin_release_digest IS NULL) AND (builtin_profile_id IS NULL) AND (builtin_state_set_id IS NULL) AND (builtin_state_id IS NULL))
+    WHEN 'dynamic'::text THEN
+    CASE builtin_kind
+        WHEN 'everything'::text THEN ((builtin_release_digest IS NULL) AND (builtin_profile_id IS NULL) AND (builtin_state_set_id IS NULL) AND (builtin_state_id IS NULL))
+        WHEN 'state'::text THEN ((builtin_release_digest IS NOT NULL) AND (builtin_profile_id IS NOT NULL) AND (builtin_state_set_id IS NOT NULL) AND (builtin_state_id IS NOT NULL) AND (octet_length(builtin_release_digest) = 71) AND ((builtin_release_digest COLLATE "C") ~ '\Asha256:[0-9a-f]{64}\Z'::text) AND ((octet_length(builtin_profile_id) >= 1) AND (octet_length(builtin_profile_id) <= 64)) AND ((builtin_profile_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text) AND ((octet_length(builtin_state_set_id) >= 1) AND (octet_length(builtin_state_set_id) <= 64)) AND ((builtin_state_set_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text) AND ((octet_length(builtin_state_id) >= 1) AND (octet_length(builtin_state_id) <= 64)) AND ((builtin_state_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text))
+        ELSE ((builtin_kind IS NULL) AND (builtin_release_digest IS NULL) AND (builtin_profile_id IS NULL) AND (builtin_state_set_id IS NULL) AND (builtin_state_id IS NULL))
+    END
+    ELSE false
+END),
+    CONSTRAINT collection_builtin_kind_check CHECK ((builtin_kind = ANY (ARRAY['everything'::text, 'state'::text]))),
     CONSTRAINT collection_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_check1 CHECK ((route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11)))),
     CONSTRAINT collection_deletion_pair CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
     CONSTRAINT collection_deletion_window CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
     CONSTRAINT collection_member_count_check CHECK (((member_count >= 0) AND (member_count <= 5000))),
+    CONSTRAINT collection_membership_kind_check CHECK ((membership_kind = ANY (ARRAY['curated'::text, 'dynamic'::text]))),
     CONSTRAINT collection_order_epoch_check CHECK ((order_epoch >= 0)),
     CONSTRAINT collection_revision_check CHECK ((revision >= 1)),
     CONSTRAINT collection_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1294,6 +1329,20 @@ CREATE UNIQUE INDEX bulk_target_subject ON library.bulk_target USING btree (rout
 
 
 --
+-- Name: collection_builtin_everything_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_builtin_everything_identity ON library.collection USING btree (route, curator_account_id) WHERE (builtin_kind = 'everything'::text);
+
+
+--
+-- Name: collection_builtin_state_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_builtin_state_identity ON library.collection USING btree (route, curator_account_id, builtin_profile_id, builtin_state_set_id, builtin_state_id) WHERE (builtin_kind = 'state'::text);
+
+
+--
 -- Name: collection_curator_listing; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1592,6 +1641,13 @@ CREATE INDEX type_preparation_pending ON library.type_preparation_progress USING
 --
 
 CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.collection_listing_public_history_guard();
+
+
+--
+-- Name: collection collection_membership_kind_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_membership_kind_immutable BEFORE UPDATE OF membership_kind ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_membership_kind();
 
 
 --
