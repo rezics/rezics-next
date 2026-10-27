@@ -3,9 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join, resolve } from 'node:path';
 import { runWebTestLanes } from '../apps/web/scripts/check.ts';
 import {
+  classifyLoadInducedFailures,
+  classifyLoadInducedOutput,
   laneConcurrency,
   orderFiles,
   readLatest,
+  rerunLoadFailures,
   runLaneSuite,
   scheduleFiles,
   timingsDirectory,
@@ -71,6 +74,120 @@ test('each check names its clones, timings and variables after its service', () 
     'a',
     'b',
   ]);
+});
+
+function loadFailureFixture(messages: string[]) {
+  const xml = (text: string) => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+  const output = messages.map((message, index) => `${message}\n(fail) failure ${index}\n`).join('');
+  const reports = [
+    undefined,
+    ...['attribute', 'body'].map(
+      (format) =>
+        `<testsuites failures="${messages.length}" errors="0"><testsuite>` +
+        messages
+          .map(
+            (message, index) =>
+              `<testcase name="failure ${index}">` +
+              (format === 'attribute'
+                ? `<failure type="Error" message="${xml(message)}"/>`
+                : `<failure><![CDATA[${message}]]></failure>`) +
+              '</testcase>',
+          )
+          .join('') +
+        '</testsuite></testsuites>',
+    ),
+  ];
+  return { outcome: { file: 'test/load.test.ts', database: 'fixture_test_1', error: new Error(output) }, reports };
+}
+
+async function expectLoadFailureRetry(messages: string[]) {
+  for (const message of messages) {
+    const { outcome, reports } = loadFailureFixture([message]);
+    for (const report of reports) {
+      const reruns: string[] = [];
+      const result = await rerunLoadFailures(
+        [outcome],
+        async (file) => {
+          reruns.push(file);
+          return { file, database: 'fixture_retry_1' };
+        },
+        (failure) => classifyLoadInducedFailures(failure, report),
+        () => undefined,
+      );
+      expect(reruns).toEqual([outcome.file]);
+      expect(result.failed).toEqual([]);
+    }
+  }
+}
+
+test('a file that failed only on database overload is rerun alone', async () => {
+  await expectLoadFailureRetry([
+    'AccessUnavailableError: Access unavailable: overloaded\n reason: "overloaded",',
+    'CommandUnavailableError: Command unavailable for partition 1315: overloaded\n    reason: "overloaded",\n partition: 1315,\n   movedTo: null,',
+  ]);
+});
+
+test('a file that failed only on database storage or connection refusal is rerun alone', async () => {
+  await expectLoadFailureRetry([
+    'error: sorry, too many clients already',
+    'error: too many connections for database "kernel"',
+    'error: remaining connection slots are reserved for non-replication superuser connections',
+    'error: the database system is starting up',
+    'error: the database system is shutting down',
+    'error: could not extend file "base/123/456": No space left on device',
+    'error: No space left on device',
+    ...['53300', '53100', '57P03'].map((code) => `PostgresError: database unavailable\n code: "${code}",`),
+  ]);
+});
+
+test('a passing test whose title names a SQLSTATE does not make a failure load-induced', () => {
+  const passing = [
+    '(pass) eligibility prepare: 53300 closes the request without effects [1.83ms]',
+    '(pass) eligibility prepare: 57P03 closes the request without effects [2.59ms]',
+    '(pass) eligibility prepare: 53100 closes the request without effects',
+    '(pass) handles code: "53300"',
+    '(pass) handles AccessUnavailableError: Access unavailable: overloaded',
+    '(pass) handles this test timed out after 60000ms',
+  ].join('\n');
+  const { outcome, reports } = loadFailureFixture([`${passing}\nError: unexpected result\n${passing}`]);
+  expect(classifyLoadInducedOutput(outcome.error.message)).toBeNull();
+  for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
+});
+
+test('overload does not hide another failure or make bare SQLSTATE numbers retryable', () => {
+  for (const other of [
+    'GrowthBoundError: query count exceeded its bound',
+    'Error: unexpected result',
+    'Error: unexpected SQLSTATE 53300, 53100 or 57P03',
+    'PostgresError: unrelated failure\n code: "533001",',
+    'AccessUnavailableError: Access unavailable: contention',
+    'CommandUnavailableError: Command unavailable for partition 1315: fenced',
+  ]) {
+    for (const messages of [[other], ['AccessUnavailableError: Access unavailable: overloaded', other]]) {
+      const { outcome, reports } = loadFailureFixture(messages);
+      for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
+    }
+  }
+});
+
+test('the verdict of an overload rerun is final even if it is overloaded again', async () => {
+  const { outcome, reports } = loadFailureFixture(['AccessUnavailableError: Access unavailable: overloaded']);
+  for (const report of reports) {
+    for (const message of ['AccessUnavailableError: Access unavailable: overloaded', 'Error: unexpected result']) {
+      let attempts = 0;
+      const result = await rerunLoadFailures(
+        [outcome],
+        async (file) => {
+          attempts++;
+          return { file, database: 'fixture_retry_1', error: new Error(message) };
+        },
+        (failure) => classifyLoadInducedFailures(failure, report),
+        () => undefined,
+      );
+      expect(attempts).toBe(1);
+      expect(result.failed).toEqual([outcome]);
+    }
+  }
 });
 
 test('the lane count is six unless the service names another positive integer', () => {

@@ -175,11 +175,28 @@ const loadFailurePatterns = [
   /\ba (?:beforeEach|afterEach|beforeAll|afterAll) hook timed out\b/i,
   /\bTimeoutError:\s*.+?:\s*Timeout \d+ms exceeded\b/i,
   /\bAccessUnavailableError:\s*Access unavailable: deadline\b/i,
+  /\bAccessUnavailableError:\s*Access unavailable: overloaded\b/i,
+  /\bCommandUnavailableError:\s*Command unavailable for partition \d+: overloaded\b/i,
+  /\bsorry, too many clients already\b/i,
+  /\btoo many connections for database\b/i,
+  /\bremaining connection slots are reserved\b/i,
+  /\bthe database system is (?:starting up|shutting down)\b/i,
+  /\bcould not extend file\b/i,
+  /\bNo space left on device\b/i,
+  /\bcode:\s*["'](?:53300|53100|57P03)["']/i,
   /\bdeadline_exceeded\b/i,
 ];
 
+function withoutPassingTestLines(text: string): string {
+  return text
+    .split(/\r\n?|\n/)
+    .filter((line) => !/^\s*\(pass\)/.test(line))
+    .join('\n');
+}
+
 function isLoadInducedFailure(text: string): boolean {
-  return loadFailurePatterns.some((pattern) => pattern.test(text));
+  const failureText = withoutPassingTestLines(text);
+  return loadFailurePatterns.some((pattern) => pattern.test(failureText));
 }
 
 /** Parse complete JUnit failure details, including implementations that put the error in the element body. */
@@ -209,9 +226,8 @@ function junitLoadFailures(xml: string): GrowthFailure[] | null {
       const detail = (failure[3] ?? '')
         .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
         .replace(/<[^>]*>/g, ' ')
-        .replace(/\s+/g, ' ')
         .trim();
-      const combined = [type, message, detail].filter(Boolean).join(': ');
+      const combined = [type, message, detail].map(withoutPassingTestLines).filter(Boolean).join(': ');
       if (!combined) return null;
       results.push({ title: suite ? `${suite} ${name}` : name, message: combined });
     }
