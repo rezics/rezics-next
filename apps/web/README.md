@@ -675,6 +675,18 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/subject-views.test.ts`: `the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping`; the preview bounds of
   `tests/subject-data-components.test.ts`
 
+### Agent page (`/<locale>/@<handle>` and `/<locale>/@<handle>/<view>`)
+
+- **Touches:** One public K `POST /v1/pages:read` for the account target: the kernel reads the handle once and, chained
+  on the account id, the overview's previews. A view page adds one for the overview, whose previews decide the tab bar,
+  and a `?cursor=` page adds one `GET /v1/accounts/<id>/posts|threads|collections` for the list's next page. Root
+  preferences/D, the subject's definitions (cached) and the rendering are local
+- **Bound:** ≤2 K (+ 1 K for a continuation, + 1 K signed in for the session) and ≤1 D; the kernel behind the page
+  read is the handle probe plus the document's planned reads (at most 16, cost 128), each list bounded by its `limit`
+  (4 in the overview, at most 20 posts, 20 reviews or 24 collections in a view), so the page is O(limit × lists)
+  whatever the account's history; 0 R/A
+- **Growth check:** `tests/agent-pages-cost.test.ts`: `an agent page reads and renders what its limits bound at 1, 10 and 100 threads, posts and collections`
+
 ### Subject library slot
 
 - **Touches:** In parallel with the subject page, read one session credential, the viewer's FULL library entry when

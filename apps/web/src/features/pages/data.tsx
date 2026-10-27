@@ -16,6 +16,8 @@ import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import type { PageDocument } from './render';
+import * as accounts from './account';
+import { accountOf } from './account-read';
 import * as overview from './overview';
 import {
   bestRank,
@@ -121,6 +123,8 @@ const PageContext = createContext<{
   nodes: Map<string, PreparedRead>;
   ratio?: CoverRatio;
   subject: string | null;
+  /** Whether the page shows the account's own presentation as its header. */
+  agentHeader: boolean;
   sources: Sources | null;
   link: PageLink;
 }>({
@@ -136,6 +140,7 @@ const PageContext = createContext<{
   },
   nodes: new Map(),
   subject: null,
+  agentHeader: false,
   sources: null,
   link: PlainLink,
 });
@@ -502,6 +507,8 @@ function nodesOfType(content: readonly unknown[], type: string): { id: string; p
 export function PageData({
   locale,
   subject = null,
+  account,
+  base,
   document,
   reads,
   messages,
@@ -514,6 +521,9 @@ export function PageData({
 }: {
   locale: string;
   subject?: string | null;
+  /** The account of an agent page, and the address of its overview. */
+  account?: { id: string; handle: string };
+  base?: string;
   document: PageDocument;
   reads: Record<string, { status: number; body: unknown }>;
   messages: PageMessages;
@@ -527,7 +537,7 @@ export function PageData({
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
-  const plan = planReads(platformRegistry, composition, { subject });
+  const plan = planReads(platformRegistry, composition, { subject, account: account ?? null });
   const shown = new Set(shownProperties(composition));
   const resolved = { ...subjectMessages, ...messages };
   const labels: ValueLabels = {
@@ -592,9 +602,15 @@ export function PageData({
         : { ok: false },
     );
   }
+  const profile = Object.entries(plan.reads).flatMap(([key, planned]) =>
+    planned.kind === 'account' && reads[key]?.status === 200 ? [accountOf(reads[key].body)] : [],
+  )[0];
   const overviewValue: overview.OverviewValue = {
     locale,
     subject,
+    ...(account ? { account } : {}),
+    ...(base !== undefined ? { agentBase: base } : {}),
+    ...(profile ? { profile } : {}),
     link,
     reader,
     labels,
@@ -619,6 +635,7 @@ export function PageData({
           messages: resolved,
           nodes,
           subject,
+          agentHeader: profile !== undefined,
           sources,
           link,
           ...(zoneRatio ? { ratio: zoneRatio } : {}),
@@ -642,8 +659,10 @@ function useNodeRead(id: unknown) {
   return useContext(PageContext).nodes.get(typeof id === 'string' ? id : '');
 }
 
+/** The subject's header, unless the page is an agent's and shows the account's own presentation instead. */
 function SubjectHeader(props: Record<string, unknown>) {
-  return useNodeRead(props.id)?.header ?? null;
+  const read = useNodeRead(props.id);
+  return useContext(PageContext).agentHeader ? null : (read?.header ?? null);
 }
 
 function Statements(props: Record<string, unknown>) {
@@ -742,6 +761,10 @@ function TypeList(props: Record<string, unknown>) {
 
 export const dataComponents = {
   Cover: overview.Cover,
+  AccountIdentity: accounts.AccountIdentity,
+  AccountPosts: accounts.AccountPosts,
+  AccountThreads: accounts.AccountThreads,
+  AccountCollections: accounts.AccountCollections,
   Summary: overview.Summary,
   RelationGroups: overview.RelationGroups,
   Appearances: overview.Appearances,

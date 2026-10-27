@@ -151,9 +151,9 @@ REZICS visual language.
 | `CollectionList`     | `title` (localized text, 120), `limit`: integer 1–6                                                                                               |                |
 | `ReactionSummary`    | none                                                                                                                                              |                |
 | `AccountIdentity`    | none                                                                                                                                              |                |
-| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20                                                                                     |                |
-| `AccountPosts`       | `limit`: integer 1–20                                                                                                                             |                |
-| `AccountCollections` | `limit`: integer 1–24                                                                                                                             |                |
+| `AccountThreads`     | `threadKind`: `discussion` or `review`, `limit`: integer 1–20, optional `paged`                                                                   |                |
+| `AccountPosts`       | `limit`: integer 1–20, optional `paged`                                                                                                           |                |
+| `AccountCollections` | `limit`: integer 1–24, optional `paged`                                                                                                           |                |
 | `SearchBox`          | `placeholder` (localized text, 80)                                                                                                                |                |
 | `LinkGrid`           | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                                              |                |
 | `TypeList`           | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24                               |                |
@@ -458,7 +458,7 @@ release, nearest first, bounded by its class depth. A page read never scans the 
 ## Subject views
 
 A subject page is a set of views from a closed list (`VIEWS`: overview, editions, contents, characters, appearances,
-credits, works, relations, reviews, discussion, lists, details), which is also the order a page offers them. A template
+credits, works, relations, posts, reviews, discussion, lists, collections, details), which is also the order a page offers them. A template
 entry (`generic`, a base, a type) holds one document per view it supports:
 
 ```json
@@ -480,13 +480,14 @@ document is that view's, and the answer lists `views`, the views the page's temp
 _offers_ are those minus the ones whose data is empty. Every page read is meant to include one view-count read for the
 subject, answered from counts kept with the facts and content they count, so the tab bar never costs a read per view.
 Until that read exists, the host offers a view when its preview in the overview returned at least one item, and
-Reviews, Discussion and Details whenever a template defines them. The tab bar is rendered by the host from that list;
+Reviews, Discussion and Details whenever a template defines them, except that a template whose overview previews an
+account's reviews offers Reviews only with data. The tab bar is rendered by the host from that list;
 documents cannot name or reorder tabs.
 
 Each view document has its own read budget (16 reads, cost 128). A view's reads are planned only when that view is
 requested, so the overview never pays for a full credits list. The data components that preview a list
-(`RelationGroups`, `Appearances`, `Credits`, `SubjectList`, `CollectionList`, `ThreadList`, `ReviewList`) take
-`paged`: a full view sets it to read one page at the component's own `limit` and renders no "See all" link. The page
+(`RelationGroups`, `Appearances`, `Credits`, `SubjectList`, `CollectionList`, `ThreadList`, `ReviewList`,
+`AccountThreads`, `AccountPosts`, `AccountCollections`) take `paged`: a full view sets it to read one page at the component's own `limit` and renders no "See all" link. The page
 read has no continuation yet, so a full view shows its first page; the continuation link arrives with it.
 
 ## Platform profile
@@ -522,7 +523,13 @@ the type's view for those lists is Works (Appearances for a character, Character
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
 limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany` and
 `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
-`schema:character`, limit 24. Route `/` is the site home template: a `SearchBox` whose
+`schema:character`, limit 24. The `schema:Person` and `schema:Organization` templates are the agent templates: their header
+slot adds `AccountIdentity` beside `SubjectHeader` (each renders nothing when it has no read, and an account page shows the
+account's own presentation in place of the subject's header), and their overview previews the account's
+public activity after the relations: `AccountPosts` (limit 4), `AccountThreads` of reviews (limit 4) and
+`AccountCollections` (limit 4). The Person overview plans 15 reads of cost 128, the most the budget allows. Both
+define the `posts`, `reviews` and `collections` views with the same components, `paged` and at their largest limit
+(20, 20 and 24). Route `/` is the site home template: a `SearchBox` whose
 placeholder invites searching books, anime, visual novels and recipes, then the `personal`
 slot, then one `TypeList` per vertical: Books (`schema:Book`), Anime (`schema:TVSeries` and
 `schema:Movie`), Visual novels (`wd:Q689445`) and Recipes (`schema:Recipe`), sorted by

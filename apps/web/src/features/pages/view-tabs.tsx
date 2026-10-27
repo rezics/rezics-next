@@ -21,13 +21,14 @@ export function ViewTabs({
   tabs,
   active,
   locale,
-  subject,
+  base,
   labels,
 }: {
   tabs: readonly ViewTab[];
   active: View;
   locale: string;
-  subject: string;
+  /** The overview's address; a view lives under it. */
+  base: string;
   labels: ViewTabLabels;
 }) {
   const bar = useRef<HTMLDivElement>(null);
@@ -35,7 +36,6 @@ export function ViewTabs({
     const current = bar.current?.querySelector<HTMLElement>('[data-active]');
     current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
   }, [active]);
-  const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}`;
   return (
     <nav aria-label={labels.views} data-slot="view-tabs" className={barClass}>
       <div ref={bar} className="overflow-x-auto overscroll-x-contain">

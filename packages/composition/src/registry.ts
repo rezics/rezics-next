@@ -442,6 +442,7 @@ export const platformRegistry = defineRegistry({
         {
           threadKind: enumeration(['discussion', 'review']),
           limit: Type.Integer({ minimum: 1, maximum: 20 }),
+          paged: Type.Optional(Type.Boolean()),
         },
         closed,
       ),
@@ -457,13 +458,19 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'AccountPosts',
-      props: Type.Object({ limit: Type.Integer({ minimum: 1, maximum: 20 }) }, closed),
+      props: Type.Object(
+        { limit: Type.Integer({ minimum: 1, maximum: 20 }), paged: Type.Optional(Type.Boolean()) },
+        closed,
+      ),
       read: (props, page) =>
         page.account == null ? null : { kind: 'accountPosts', id: page.account.id, limit: props.limit as number },
     },
     {
       type: 'AccountCollections',
-      props: Type.Object({ limit: Type.Integer({ minimum: 1, maximum: 24 }) }, closed),
+      props: Type.Object(
+        { limit: Type.Integer({ minimum: 1, maximum: 24 }), paged: Type.Optional(Type.Boolean()) },
+        closed,
+      ),
       read: (props, page) =>
         page.account == null ? null : { kind: 'accountCollections', id: page.account.id, limit: props.limit as number },
     },

@@ -22,9 +22,11 @@ const viewLabel = {
   credits: () => m.subject_credits(),
   works: () => m.subject_works(),
   relations: () => m.subject_relations(),
+  posts: () => m.subject_posts(),
   reviews: () => m.subject_reviews(),
   discussion: () => m.subject_discussion(),
   lists: () => m.subject_lists(),
+  collections: () => m.subject_collections(),
   details: () => m.subject_details(),
 } satisfies Record<View, () => string>;
 

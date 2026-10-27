@@ -10,6 +10,7 @@ import {
 } from '@rezics/composition';
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { Related, Subject, Summary } from '../subject/types';
+import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
@@ -22,6 +23,8 @@ import boardThreadsRecording from './recorded/board-threads.json';
 import threadRecording from './recorded/thread.json';
 import threadPostsRecording from './recorded/thread-posts.json';
 import accountsRecording from './recorded/accounts.json';
+import agentPageReaderRecording from './recorded/agent-page-reader.json';
+import agentPageRecording from './recorded/agent-page.json';
 import threadOwnedRecording from './recorded/thread-owned.json';
 import threadOwnedPostsRecording from './recorded/thread-owned-posts.json';
 import offerRecording from './recorded/offer.json';
@@ -72,6 +75,26 @@ type Fixtures = {
   types: Record<string, { bases: string[] }>;
   /** The cover summary a subject read returns beside the subject, by subject id; a subject with none has none. */
   summaries?: Record<string, Summary>;
+  /** Accounts by handle; each is an agent, and `subject` names the subject it is verified as. */
+  accounts?: FixtureAccount[];
+};
+
+/** One account as the fake kernel serves it: the public profile, and the activity its lists page through. */
+export type FixtureAccount = {
+  id: string;
+  handle: string;
+  kind: 'actor' | 'organization';
+  state: 'active' | 'deleted';
+  displayName: string | null;
+  bio: string | null;
+  links: { label: string; url: string }[];
+  avatar: unknown;
+  /** The subject the account is verified as; an unverified account is its own agent node. */
+  subject: string | null;
+  publicViews?: { posts: boolean; reviews: boolean; collections: boolean };
+  threads?: Record<string, unknown>[];
+  posts?: Record<string, unknown>[];
+  collections?: Record<string, unknown>[];
 };
 
 export type KernelRecording = { status: number; [key: string]: unknown };
@@ -97,18 +120,24 @@ async function pageRecording(
 ): Promise<KernelRecording | undefined> {
   let subject: unknown;
   let route: unknown;
+  let account: unknown;
   try {
     const body = (await request.json()) as { target?: unknown };
     const target = body.target;
     if (!target || typeof target !== 'object' || Array.isArray(target)) return undefined;
     subject = (target as { subject?: unknown }).subject;
     route = (target as { route?: unknown }).route;
+    account = (target as { account?: unknown }).account;
     // The recordings hold overviews only.
     const view = (target as { view?: unknown }).view;
     if (view !== undefined && view !== 'overview') return undefined;
   } catch {
     return undefined;
   }
+  if (typeof account === 'string')
+    return Object.entries(recordings).find(
+      ([name, recording]) => name.startsWith('agent-page') && recording.handle === account,
+    )?.[1];
   if (typeof route === 'string') return route === '/' ? recordings['home-page'] : undefined;
   if (typeof subject !== 'string') return undefined;
   if (subject === missingSubjectId) return recordings['missing-subject-page'];
@@ -116,7 +145,7 @@ async function pageRecording(
 }
 
 /** Keys of a recording that describe the request it answers; the rest is the response body. */
-const requestKeys = new Set(['status', 'query', 'filterType', 'address']);
+const requestKeys = new Set(['status', 'query', 'filterType', 'address', 'handle']);
 
 function recordedResponse(recording: KernelRecording): Response {
   if (recording.status === 204) return new Response(null, { status: 204 });
@@ -361,6 +390,8 @@ function ownedThreadRecordings(): Record<string, KernelRecording> {
 export function createStoryRecordedKernelFetch(): typeof fetch {
   return createRecordedKernelFetch({
     'home-page': homePageRecording,
+    'agent-page': agentPageRecording,
+    'agent-page-reader': agentPageReaderRecording,
     'missing-subject-page': missingSubjectPageRecording,
     'missing-subject': missingSubjectRecording,
     'subject-page': subjectPageRecording,
@@ -536,6 +567,79 @@ function linksRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'links' }
   };
 }
 
+const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+function problem(status: number, code: string, pointer?: string): Response {
+  return Response.json(
+    {
+      type: `https://rezics.com/problems/${code}`,
+      title: code,
+      status,
+      code,
+      retryable: false,
+      effect_status: 'not_applicable',
+      request_id: crypto.randomUUID(),
+      ...(pointer ? { errors: [{ pointer, code: 'invalid_format' }] } : {}),
+    },
+    { status, headers: { 'content-type': 'application/problem+json' } },
+  );
+}
+
+/** The public profile `GET /v1/accounts?handle=` answers for an active account. */
+function accountProfile(fixtures: Fixtures, account: FixtureAccount) {
+  const subject = account.subject ? fixtures.subjects.find((item) => item.id === account.subject) : undefined;
+  return {
+    id: account.id,
+    kind: account.kind,
+    handle: account.handle,
+    displayName: account.displayName,
+    state: account.state,
+    automated: false,
+    operatorId: null,
+    bio: account.bio,
+    links: account.links,
+    avatar: account.avatar ?? null,
+    publicViews: account.publicViews ?? { posts: true, reviews: true, collections: true },
+    subject: subject ? { id: subject.id, label: subject.labels.en ?? '', type: subject.type } : null,
+    verified: subject !== undefined,
+  };
+}
+
+/** The agent node an unverified account is: a Person or Organization with the account's own name. */
+function agentNode(account: FixtureAccount): Subject {
+  return {
+    id: account.id,
+    type: account.kind === 'organization' ? 'schema:Organization' : 'schema:Person',
+    labels: account.displayName ? { en: account.displayName } : {},
+    descriptions: {},
+    aliases: {},
+    statements: {},
+  } as unknown as Subject;
+}
+
+type AccountList = 'posts' | 'threads' | 'collections';
+
+/** One page of an account's list, `limit` rows from the cursor; a private view answers an empty page. */
+function accountListPage(
+  account: FixtureAccount,
+  list: AccountList,
+  query: { limit: number; cursor?: string | undefined; threadKind?: string | undefined },
+) {
+  const views = account.publicViews ?? { posts: true, reviews: true, collections: true };
+  const shown =
+    list === 'posts'
+      ? views.posts
+      : list === 'collections'
+        ? views.collections
+        : query.threadKind === 'review'
+          ? views.reviews
+          : true;
+  const all = (shown ? (account[list] ?? []) : []).filter((row) => list !== 'threads' || row.kind === query.threadKind);
+  const start = query.cursor ? Number(/^c(\d+)$/.exec(query.cursor)?.[1] ?? 0) : 0;
+  const rows = all.slice(start, start + query.limit);
+  return { [list]: rows, next: start + query.limit < all.length ? `c${start + query.limit}` : null };
+}
+
 async function pageRead(fixtures: Fixtures, request: Request): Promise<Response> {
   let body: unknown;
   try {
@@ -547,8 +651,23 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   const requested = isRecord(target) && typeof target.subject === 'string' ? target.subject : undefined;
   const requestedRoute = isRecord(target) && typeof target.route === 'string' ? target.route : undefined;
   const requestedView = isRecord(target) && isView(target.view) ? target.view : 'overview';
-  if (!requested && requestedRoute === undefined) return notFound();
-  const payload = requested ? subjectPayload(fixtures, requested) : undefined;
+  const handle = isRecord(target) && typeof target.account === 'string' ? target.account : undefined;
+  if (handle !== undefined && !handlePattern.test(handle)) return problem(400, 'invalid_request', '/target/account');
+  // An unknown, reserved or deleted handle is the same 404.
+  const account =
+    handle === undefined
+      ? undefined
+      : fixtures.accounts?.find((item) => item.handle === handle && item.state === 'active');
+  if (handle !== undefined && !account) return notFound();
+  if (!requested && requestedRoute === undefined && !account) return notFound();
+  const payload = account
+    ? (subjectPayload(fixtures, account.subject ?? account.id) ?? {
+        subject: agentNode(account),
+        related: {} as Related,
+      })
+    : requested
+      ? subjectPayload(fixtures, requested)
+      : undefined;
   if (requested && !payload) return notFound();
   const definition = payload ? fixtures.types[payload.subject.type] : undefined;
   const templateTarget =
@@ -560,7 +679,11 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
         };
   const resolved = resolveView(platformProfile, templateTarget, requestedView);
   if (!resolved) return notFound();
-  const plan = planReads(platformRegistry, resolved.document, { subject: payload?.subject.id ?? null });
+  const pageAccount = account ? { id: account.id, handle: account.handle } : null;
+  const plan = planReads(platformRegistry, resolved.document, {
+    subject: payload?.subject.id ?? null,
+    account: pageAccount,
+  });
   const reads: Record<string, { status: number; body: unknown }> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     // The subject read that selected the template is reused.
@@ -573,10 +696,19 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
             ? { status: 200, body: linksRead(fixtures, descriptor) }
             : descriptor.kind === 'collections'
               ? { status: 200, body: { collections: [], count: { value: 0, exact: true } } }
-              : { status: 404, body: { code: 'not_found' } };
+              : account && descriptor.kind === 'account'
+                ? { status: 200, body: { accounts: [accountProfile(fixtures, account)] } }
+                : account && descriptor.kind === 'accountPosts'
+                  ? { status: 200, body: accountListPage(account, 'posts', descriptor) }
+                  : account && descriptor.kind === 'accountThreads'
+                    ? { status: 200, body: accountListPage(account, 'threads', descriptor) }
+                    : account && descriptor.kind === 'accountCollections'
+                      ? { status: 200, body: accountListPage(account, 'collections', descriptor) }
+                      : { status: 404, body: { code: 'not_found' } };
   }
   return Response.json({
     ...(payload ? { subject: payload.subject.id } : {}),
+    ...(account ? { account: account.id } : {}),
     profile: platformDigest,
     template: { scope: resolved.scope, key: resolved.key },
     document: resolved.document,
@@ -585,11 +717,34 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   });
 }
 
-export function createFakeKernelFetch(fixtures: Fixtures): typeof fetch {
+export function createFakeKernelFetch(given: Fixtures): typeof fetch {
+  // Fixtures that name no accounts get the demo cast, so every agent address in the dev site answers.
+  const fixtures: Fixtures = given.accounts
+    ? given
+    : {
+        ...given,
+        subjects: [...given.subjects, ...(demoAgentSubjects as unknown as FixtureSubject[])],
+        accounts: demoAgentAccounts,
+      };
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return pageRead(fixtures, request);
+    const list = /^\/v1\/accounts\/([^/]+)\/(posts|threads|collections)$/.exec(url.pathname);
+    if (request.method === 'GET' && list) {
+      const owner = fixtures.accounts?.find(
+        (item) => item.id === decodeURIComponent(list[1]!) && item.state === 'active',
+      );
+      if (!owner) return notFound();
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      return Response.json(
+        accountListPage(owner, list[2] as AccountList, {
+          limit: Number.isInteger(limit) && limit >= 1 ? limit : 20,
+          cursor: url.searchParams.get('cursor') ?? undefined,
+          threadKind: url.searchParams.get('kind') ?? undefined,
+        }),
+      );
+    }
     const match = /^\/v1\/subjects\/([^/]+)$/.exec(url.pathname);
     if (request.method !== 'GET' || !match) return notFound();
     const payload = subjectPayload(fixtures, decodeURIComponent(match[1]!));

@@ -11,9 +11,11 @@ export const VIEWS = [
   'credits',
   'works',
   'relations',
+  'posts',
   'reviews',
   'discussion',
   'lists',
+  'collections',
   'details',
 ] as const;
 

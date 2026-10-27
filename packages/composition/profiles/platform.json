@@ -1229,6 +1229,12 @@
                     }
                   },
                   {
+                    "type": "AccountIdentity",
+                    "props": {
+                      "id": "account-identity"
+                    }
+                  },
+                  {
                     "type": "Slot",
                     "props": {
                       "id": "actions",
@@ -1369,6 +1375,28 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 4
               }
             },
             {
@@ -1606,6 +1634,52 @@
               }
             }
           ]
+        },
+        "posts": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "collections": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
         }
       }
     },
@@ -1627,6 +1701,12 @@
                     "type": "SubjectHeader",
                     "props": {
                       "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "AccountIdentity",
+                    "props": {
+                      "id": "account-identity"
                     }
                   },
                   {
@@ -1806,6 +1886,28 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 12
+              }
+            },
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 4
               }
             },
             {
@@ -2083,6 +2185,52 @@
                   "es": "Papeles de voz"
                 },
                 "property": "wdt:P725",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "posts": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "collections": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
                 "limit": 24,
                 "paged": true
               }

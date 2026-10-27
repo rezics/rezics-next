@@ -9,6 +9,7 @@ import { originalLanguage } from '../../subject/language';
 import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
+import type { AccountProfile } from './account-read';
 import { listView } from './views';
 import {
   bestRank,
@@ -31,6 +32,11 @@ export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<s
 export type OverviewValue = {
   locale: string;
   subject: string | null;
+  /** The account an agent page is for, and the address of its overview. */
+  account?: { id: string; handle: string };
+  agentBase?: string;
+  /** The account's public profile, when the page's account read succeeded. */
+  profile?: AccountProfile;
   link: PageLink;
   reader: Reader;
   labels: ValueLabels;
@@ -55,9 +61,9 @@ export type OverviewValue = {
 export const OverviewContext = createContext<OverviewValue | null>(null);
 
 const SUMMARY_PROPERTY = 'schema:abstract';
-const headingClass =
+export const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
-const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
+export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
 export type RowValue = Pick<
@@ -80,7 +86,7 @@ export type Item = {
 };
 export type Count = { value: number; exact: boolean };
 
-function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
+export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
   const value = useContext(OverviewContext);
   if (!value) return null;
   return { value, section: value.sections.get(typeof id === 'string' ? id : '') };
@@ -99,7 +105,13 @@ export function countText(count: Count, locale: string): string {
   );
 }
 
-function viewHref(value: OverviewValue, view: string, property?: string): string | null {
+export function viewHref(value: OverviewValue, view: string, property?: string): string | null {
+  if (
+    value.agentBase !== undefined &&
+    property === undefined &&
+    (view === 'posts' || view === 'reviews' || view === 'collections')
+  )
+    return `${value.agentBase}/${view}`;
   return value.subject
     ? `/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(value.subject)}/${view}${
         property === undefined ? '' : `?property=${encodeURIComponent(property)}`
@@ -124,7 +136,7 @@ export function dateText(value: unknown, locale: string): string | null {
 }
 
 /** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
-function Preview({
+export function Preview({
   slot,
   id,
   title,
@@ -175,7 +187,7 @@ function Preview({
 }
 
 /** A section whose read did not succeed says so with a retry; the rest of the page is unaffected. */
-function Failed({ slot, id, title, locale }: { slot: string; id: string; title: string; locale: string }) {
+export function Failed({ slot, id, title, locale }: { slot: string; id: string; title: string; locale: string }) {
   const options = { locale: locale as never };
   return (
     <section data-slot={slot} data-state="failed" aria-labelledby={`${id}-title`} className={sectionClass}>

@@ -1,4 +1,5 @@
 import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
+import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
 import { bestRank, isRecord, type Stmt } from './shared';
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
@@ -40,11 +41,34 @@ export function previewedView(node: Node): View | undefined {
       return node.props.direction === 'forward' ? 'credits' : 'works';
     case 'CollectionList':
       return 'lists';
+    case 'AccountPosts':
+      return 'posts';
+    case 'AccountThreads':
+      return node.props.threadKind === 'review' ? 'reviews' : undefined;
+    case 'AccountCollections':
+      return 'collections';
     case 'SubjectList':
       return listView(node.props.property);
     default:
       return undefined;
   }
+}
+
+/** The account's public profile when the page's account read succeeded. */
+function accountProfile(page: {
+  subject: string | null;
+  account?: { id: string; handle: string } | undefined;
+  document: unknown;
+  reads: Record<string, Read>;
+}): AccountProfile | undefined {
+  if (!page.account) return;
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: page.subject,
+    account: page.account,
+  });
+  const key = Object.entries(plan.reads).find(([, read]) => read.kind === 'account')?.[0];
+  const result = key === undefined ? undefined : page.reads[key];
+  return result?.status === 200 ? accountOf(result.body) : undefined;
 }
 
 /** Views that are always offered when a template defines them. */
@@ -86,6 +110,18 @@ function previewCount(
       },
     };
   }
+  const listed =
+    read.kind === 'accountPosts'
+      ? body.posts
+      : read.kind === 'accountThreads'
+        ? body.threads
+        : read.kind === 'accountCollections'
+          ? body.collections
+          : undefined;
+  if (read.kind.startsWith('account') && Array.isArray(listed)) {
+    // A list has no total, only a continuation: a shown count is exact when nothing follows.
+    return { items: listed.length, count: { value: listed.length, exact: body.next == null } };
+  }
   if (read.kind === 'collections' && Array.isArray(body.collections)) {
     const count = isRecord(body.count) ? body.count : undefined;
     return {
@@ -118,13 +154,21 @@ function previewCount(
  */
 export function subjectTabs(page: {
   subject: string | null;
+  account?: { id: string; handle: string } | undefined;
   document: unknown;
   reads: Record<string, Read>;
   views?: readonly string[] | undefined;
 }): ViewTab[] {
   const defined = new Set((page.views ?? ['overview', 'discussion', 'details']).filter(isView));
   const document = page.document as CompositionDocument;
-  const plan = planReads(platformRegistry, document, { subject: page.subject });
+  const plan = planReads(platformRegistry, document, { subject: page.subject, account: page.account ?? null });
+  const profile = accountProfile(page);
+  // A view the overview previews from an account's data has data only when the preview returned some.
+  const driven = new Set<View>();
+  for (const node of walk(document.content)) {
+    const view = node.type.startsWith('Account') ? previewedView(node) : undefined;
+    if (view) driven.add(view);
+  }
   const sums = new Map<View, { items: number; value: number; exact: boolean }>();
   for (const node of walk(document.content)) {
     const view = previewedView(node);
@@ -141,8 +185,8 @@ export function subjectTabs(page: {
     });
   }
   return VIEWS.flatMap((view): ViewTab[] => {
-    if (!defined.has(view)) return [];
-    if (ALWAYS.has(view)) return [{ view }];
+    if (!defined.has(view) || !viewIsPublic(profile, view)) return [];
+    if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
     return sum && sum.items > 0 ? [{ view, count: { value: sum.value, exact: sum.exact } }] : [];
   });

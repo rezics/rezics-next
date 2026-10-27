@@ -17,7 +17,10 @@ import type { ViewTab } from './views';
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type SubjectPageData = {
-  subject: string;
+  /** The subject the page is for; an agent page always has one, a route page none. */
+  subject: string | null;
+  /** The account an agent page is for, as the page read named it. */
+  account?: { id: string; handle: string };
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: PageDocument;
@@ -53,10 +56,15 @@ function problemError(value: unknown): Error {
   return new Error(code);
 }
 
+/** The context the page's reads are planned in. */
+export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account'>) {
+  return { subject: page.subject, account: page.account ?? null };
+}
+
 /** The subject read planned for this page, when that read succeeded. */
 function subjectBody(page: SubjectPageData): { subject: Subject; related: Related } | undefined {
   const planned = Object.entries(
-    planReads(platformRegistry, page.document as CompositionDocument, { subject: page.subject }).reads,
+    planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
   ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
   const result = planned ? page.reads[planned[0]] : undefined;
   if (
@@ -77,14 +85,14 @@ export async function loadSubjectPage(client: KernelClient, id: string, view?: V
   if (result.status === 200 && result.data) {
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
-    return { kind: 'page', page: result.data as SubjectPageData };
+    return { kind: 'page', page: result.data as unknown as SubjectPageData };
   }
   throw problemError(result.error?.value);
 }
 
 /** The properties the page's inverse reads follow, for the definitions that label them. */
 export function pageRelationProperties(page: SubjectPageData): string[] {
-  const reads = planReads(platformRegistry, page.document as CompositionDocument, { subject: page.subject }).reads;
+  const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
   return [...new Set(Object.values(reads).flatMap((read) => (read.kind === 'links' ? [read.property] : [])))];
 }
 
@@ -155,6 +163,7 @@ export function SubjectPage({
   tabLabels,
   heading,
   invitation,
+  base,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -180,14 +189,22 @@ export function SubjectPage({
   heading?: ViewHeading;
   /** The sentence that invites the first facts of a subject with only a title. */
   invitation?: string;
+  /** The address of the overview when it is not the subject's own: an agent's `/@handle`. */
+  base?: string;
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
-  const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
+  const renderedActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const jsonLd = overview ? subjectPageJsonLd(page, locale) : undefined;
   const bar =
     tabs && tabLabels && tabs.length > 0 ? (
-      <ViewTabs tabs={tabs} active={view} locale={locale} subject={page.subject} labels={tabLabels} />
+      <ViewTabs
+        tabs={tabs}
+        active={view}
+        locale={locale}
+        base={base ?? `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(page.subject ?? '')}`}
+        labels={tabLabels}
+      />
     ) : null;
   const invite =
     overview && invitation && hasOnlyTitle(page) ? (
@@ -211,6 +228,8 @@ export function SubjectPage({
         <PageData
           locale={locale}
           subject={page.subject}
+          {...(page.account ? { account: page.account } : {})}
+          {...(base ? { base } : {})}
           document={page.document}
           reads={page.reads}
           messages={messages}

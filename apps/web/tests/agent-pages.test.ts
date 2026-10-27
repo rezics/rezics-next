@@ -82,7 +82,10 @@ const accounts: FixtureAccount[] = [
     },
     { reviews: 2, posts: 2, collections: 1 },
   ),
-  agentAccount({ id: id(0x7005), handle: 'prolific', displayName: 'Prolific' }, { reviews: 25, posts: 30, collections: 30 }),
+  agentAccount(
+    { id: id(0x7005), handle: 'prolific', displayName: 'Prolific' },
+    { reviews: 25, posts: 30, collections: 30 },
+  ),
   agentAccount({ id: id(0x7006), handle: 'ghost', state: 'deleted', displayName: 'Ghost' }, { posts: 1 }),
 ];
 
@@ -130,7 +133,12 @@ const loaded = async (handle: string, view?: View) => {
   if (result.kind !== 'page') throw new Error(`expected a page for @${handle}, got ${result.kind}`);
   return result.page;
 };
-const render = (page: SubjectPageData, handle: string, view: View = 'overview', tabs?: ReturnType<typeof subjectTabs>) =>
+const render = (
+  page: SubjectPageData,
+  handle: string,
+  view: View = 'overview',
+  tabs?: ReturnType<typeof subjectTabs>,
+) =>
   renderToString(
     createElement(SubjectPage, {
       page,
@@ -140,7 +148,9 @@ const render = (page: SubjectPageData, handle: string, view: View = 'overview', 
       tabLabels: labels,
       base: agentPath('en', handle),
       view,
-      ...(view === 'overview' ? {} : { heading: { title: 'Agent', label: names[view], href: agentPath('en', handle) } }),
+      ...(view === 'overview'
+        ? {}
+        : { heading: { title: 'Agent', label: names[view], href: agentPath('en', handle) } }),
       renderJsonLd: false,
     } as never),
   );
@@ -176,7 +186,9 @@ test("/@handle renders the agent's subject page, with the account's display name
 
   // Without an avatar the frame shows its placeholder.
   const plain = render(await loaded('plain'), 'plain');
-  expect(plain).toMatch(/data-slot="cover"[^>]*data-state="placeholder"|data-state="placeholder"[^>]*data-slot="cover"/);
+  expect(plain).toMatch(
+    /data-slot="cover"[^>]*data-state="placeholder"|data-state="placeholder"[^>]*data-slot="cover"/,
+  );
   expect(plain).toMatch(/<h1[^>]*>Plain Reader<\/h1>/);
 });
 
@@ -222,7 +234,9 @@ test('an agent with an account offers Posts, Reviews and Collections views besid
     const firstHtml = render(first, 'prolific', view, prolificTabs);
     expect(items(firstHtml, slot)).toBe(limit);
     expect(firstHtml).toMatch(new RegExp(`<h1[^>]*>${names[view]}</h1>`));
-    expect(firstHtml).toMatch(/data-slot="continuation"[^>]*href="\?cursor=c\d+"|href="\?cursor=c\d+"[^>]*data-slot="continuation"/);
+    expect(firstHtml).toMatch(
+      /data-slot="continuation"[^>]*href="\?cursor=c\d+"|href="\?cursor=c\d+"[^>]*data-slot="continuation"/,
+    );
     const cursor = /href="\?cursor=([^"]+)"/.exec(firstHtml)![1]!;
     sent.length = 0;
     const next = await continueAgentList(client, first as never, decodeURIComponent(cursor));
@@ -247,7 +261,7 @@ test('an agent with an account offers Posts, Reviews and Collections views besid
   expect(items(render(hidden, 'lanternpress', 'reviews'), 'account-reviews')).toBe(0);
 });
 
-test('an account verified as a catalogue person or organization renders that subject\'s page at /@handle', async () => {
+test("an account verified as a catalogue person or organization renders that subject's page at /@handle", async () => {
   const person = await loaded('haruka');
   expect(person.subject).toBe(novelist);
   expect(person.template).toEqual({ scope: 'type', key: 'schema:Person' });
@@ -268,7 +282,14 @@ test('an account verified as a catalogue person or organization renders that sub
   expect(houseHtml).toContain('Paper Lanterns');
 
   // The page is the same either way: an unverified agent has the same sections from its own node.
-  expect(tabViews(await loaded('mira'))).toEqual(['overview', 'posts', 'reviews', 'discussion', 'collections', 'details']);
+  expect(tabViews(await loaded('mira'))).toEqual([
+    'overview',
+    'posts',
+    'reviews',
+    'discussion',
+    'collections',
+    'details',
+  ]);
 });
 
 test('an unknown handle, a reserved handle and a deleted account answer the same not-found page', async () => {

@@ -1089,6 +1089,9 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 20
+            },
+            "paged": {
+              "type": "boolean"
             }
           }
         }
@@ -1118,6 +1121,9 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 20
+            },
+            "paged": {
+              "type": "boolean"
             }
           }
         }
@@ -1147,6 +1153,9 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 24
+            },
+            "paged": {
+              "type": "boolean"
             }
           }
         }

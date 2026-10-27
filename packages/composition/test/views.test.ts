@@ -95,9 +95,11 @@ test('the views a page defines are those of any template in the order, in the do
     'credits',
     'works',
     'relations',
+    'posts',
     'reviews',
     'discussion',
     'lists',
+    'collections',
     'details',
   ]);
 });
