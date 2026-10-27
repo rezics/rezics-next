@@ -22,7 +22,7 @@ test('a minimal id-only profile compiles without invented capabilities or label 
   const labels = JSON.parse(input.presentation['fixture/en']!);
   labels.libraryProfiles['fixture.reading'].states = {};
   input.presentation['fixture/en'] = JSON.stringify(labels);
-  expect(compileCatalogue(input)).rejects.toBeInstanceOf(CatalogueError);
+  await expect(compileCatalogue(input)).rejects.toBeInstanceOf(CatalogueError);
 });
 
 test('library labels count supplementary Unicode characters as code points', async () => {
@@ -64,7 +64,7 @@ test('valid data identifiers that shadow object prototypes compile as ordinary o
   source.entryStateSet.states[0].id = 'constructor';
   const release = await compileCatalogue(fixture(source));
   expect(Object.hasOwn(release.libraryProfiles!, 'constructor')).toBe(true);
-  expect(release.libraryProfiles!['constructor']).toEqual(compiledProfile(source));
+  expect(compiledProfile(source)).toEqual(release.libraryProfiles!['constructor']!);
   expect(validateRelease(release)).toEqual([]);
   const invalid = releaseWith();
   Object.defineProperty(invalid.libraryProfiles!, '__proto__', { value: { id: '__proto__' }, enumerable: true });
