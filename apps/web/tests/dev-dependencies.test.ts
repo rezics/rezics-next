@@ -37,11 +37,11 @@ function freePort(): Promise<number> {
 
 async function startDevServer(): Promise<string> {
   const port = await freePort();
-  devServer = spawn(
-    'bun',
-    ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort', '--force'],
-    { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  devServer = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort', '--force'], {
+    cwd: app,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   devServer.stdout!.on('data', appendOutput);
   devServer.stderr!.on('data', appendOutput);
   const origin = `http://127.0.0.1:${port}`;
@@ -80,61 +80,54 @@ afterAll(async () => {
   rmSync(storybookOutput, { recursive: true, force: true });
 });
 
-test(
-  'the cold client optimizer serves first page loads without reloads or unresolved dependencies',
-  async () => {
-    const origin = await startDevServer();
-    browser = await chromium.launch();
+test('the cold client optimizer serves first page loads without reloads or unresolved dependencies', async () => {
+  const origin = await startDevServer();
+  browser = await chromium.launch();
 
-    for (const path of paths) {
-      const context = await browser.newContext();
-      const page = await context.newPage();
-      let loadEvents = 0;
-      page.on('load', () => loadEvents++);
-      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-      expect(loadEvents, path).toBe(1);
-      await context.close();
-    }
-
-    expect(devOutput).not.toMatch(/Failed to resolve dependency|Cannot optimize dependency/i);
-    expect(devOutput).not.toMatch(/optimized dependencies changed\. reloading/i);
-  },
-  900_000,
-);
-
-test(
-  'Storybook builds and serves a page story with the development optimizer configuration',
-  async () => {
-    await buildStorybook();
-    staticServer = Bun.serve({
-      hostname: '127.0.0.1',
-      port: 0,
-      async fetch(request) {
-        const pathname = decodeURIComponent(new URL(request.url).pathname);
-        const file = resolve(storybookOutput, `.${pathname}`);
-        if (file !== storybookOutput && !file.startsWith(`${storybookOutput}${sep}`))
-          return new Response('Not found', { status: 404 });
-        const target = Bun.file(file);
-        return (await target.exists()) ? new Response(target) : new Response('Not found', { status: 404 });
-      },
-    });
-    const origin = `http://127.0.0.1:${staticServer.port}`;
-    const response = await fetch(`${origin}/index.json`);
-    expect(response.ok).toBe(true);
-    const index = (await response.json()) as {
-      entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
-    };
-    const home = Object.values(index.entries).find(
-      (entry) => entry.type === 'story' && basename(entry.importPath) === 'home.stories.tsx' && entry.name === 'Signed Out',
-    );
-    expect(home, 'the home page story is included in the built Storybook').toBeDefined();
-
-    const storyBrowser = browser ?? (browser = await chromium.launch());
-    const context = await storyBrowser.newContext();
+  for (const path of paths) {
+    const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto(`${origin}/iframe.html?id=${home!.id}&viewMode=story`, { waitUntil: 'networkidle' });
-    await page.getByRole('main').waitFor();
+    let loadEvents = 0;
+    page.on('load', () => loadEvents++);
+    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    expect(loadEvents, path).toBe(1);
     await context.close();
-  },
-  900_000,
-);
+  }
+
+  expect(devOutput).not.toMatch(/Failed to resolve dependency|Cannot optimize dependency/i);
+  expect(devOutput).not.toMatch(/optimized dependencies changed\. reloading/i);
+}, 900_000);
+
+test('Storybook builds and serves a page story with the development optimizer configuration', async () => {
+  await buildStorybook();
+  staticServer = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const pathname = decodeURIComponent(new URL(request.url).pathname);
+      const file = resolve(storybookOutput, `.${pathname}`);
+      if (file !== storybookOutput && !file.startsWith(`${storybookOutput}${sep}`))
+        return new Response('Not found', { status: 404 });
+      const target = Bun.file(file);
+      return (await target.exists()) ? new Response(target) : new Response('Not found', { status: 404 });
+    },
+  });
+  const origin = `http://127.0.0.1:${staticServer.port}`;
+  const response = await fetch(`${origin}/index.json`);
+  expect(response.ok).toBe(true);
+  const index = (await response.json()) as {
+    entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
+  };
+  const home = Object.values(index.entries).find(
+    (entry) =>
+      entry.type === 'story' && basename(entry.importPath) === 'home.stories.tsx' && entry.name === 'Signed Out',
+  );
+  expect(home, 'the home page story is included in the built Storybook').toBeDefined();
+
+  const storyBrowser = browser ?? (browser = await chromium.launch());
+  const context = await storyBrowser.newContext();
+  const page = await context.newPage();
+  await page.goto(`${origin}/iframe.html?id=${home!.id}&viewMode=story`, { waitUntil: 'networkidle' });
+  await page.getByRole('main').waitFor();
+  await context.close();
+}, 900_000);

@@ -35,11 +35,9 @@ const config: StorybookConfig = {
         : id === 'canonicalize' || id === 'typebox' || id.startsWith('@noble/hashes/')
           ? `@rezics/composition > ${id}`
           : id;
-    // `@rezics/ui/*` entries are source modules, which the optimizer cannot prebundle.
-    const included = (config.optimizeDeps.include ?? []).filter((id) => !id.startsWith('@rezics/ui/'));
     config.optimizeDeps.include = [
       ...new Set([
-        ...included.map(throughWorkspace),
+        ...(config.optimizeDeps.include ?? []).map(throughWorkspace),
         '@rezics/ui > @ark-ui/react/locale',
         '@rezics/ui > @ark-ui/react/fieldset',
         '@rezics/composition > canonicalize',
