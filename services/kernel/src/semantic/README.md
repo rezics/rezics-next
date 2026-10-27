@@ -597,13 +597,14 @@ write metadata or infer readiness from jobs/history. The public independent expo
 `identity-basis.ts:readIdentityHome` delegates the home point to this same metadata owner; its fixed-home sweeps
 remain independently implementable. This is an internal service handoff, never a public Access or holder claim.
 
-The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation and pending; current epoch/home incarnation comes from the exact
-`core.partition(partition_no)` point, not a second placement authority. The authoritative `semantic.identity_obligation` current-row primary key is
+The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation and pending;
+current epoch/home incarnation comes from the exact `core.partition(partition_no)` point, not a second placement
+authority. The authoritative `semantic.identity_obligation` current-row primary key is
 `(partition_no, route, subject_id)`, where subject_id is the original and partition_no is its native home. Its
 `version` is that home's generation assigned by the actual mutation; `target` (nullable for removal),
 `sealed_version` (nullable), and bounded phase/keyset frontier describe ONLY that current mapping obligation.
-Replace the current row on a newer actual change; old acknowledgements compare version/target and their core epoch/home fence and cannot
-seal or decrement the replacement. Retain the sealed current row until superseded; no historical-row lookup is
+Replace the current row on a newer actual change; old acknowledgements compare version/target and their core
+epoch/home fence and cannot seal or decrement the replacement. Retain the sealed current row until superseded; no historical-row lookup is
 needed. `pending` counts unsealed current obligations, so replacement of an unsealed obligation does not double-count.
 A sealed removal remains evidence of restored-root/member-removal coverage. Initial rollout must establish current
 rows for existing redirects before making the home ready.
@@ -635,8 +636,8 @@ export function advanceIdentityObligation(client: PoolClient, options: {
 All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
 `recordIdentityMutation` accompanies the verified actual native redirect change in its command transaction;
 unchanged/replayed mappings return null. It atomically increments the home generation and replaces the obligation.
-`advanceIdentityObligation` compares current version/target, core epoch/home and expected bounded frontier; false means stale
-work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
+`advanceIdentityObligation` compares current version/target, core epoch/home and expected bounded frontier; false
+means stale work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
 `sealed:true` is permitted only after complete inherited coverage, and decrements pending exactly once. These ports
 are for trusted native writers, not caller-supplied positive membership or authorization assertions.
 
@@ -766,8 +767,8 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Identity terminal, basis and alias windows
 
-- Touches: terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus the original mapping recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
-- Bound: terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
+- Touches: terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus current home/core and obligation seal points and the original mapping/generation recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
+- Bound: terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
 - Growth check: `test/semantic/growth-terminal-identity.test.ts` owns `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`. `test/semantic/growth-identity-contract.test.ts` owns `identity alias steps keep fixed candidate and point budgets as the native group grows` and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional continuation, terminal authorization and atomicity coverage is split across `identity-contract.test.ts`, `terminal-identity-contract.test.ts` and `identity-generation.test.ts` as named above.
 
 ### Command and receipt
