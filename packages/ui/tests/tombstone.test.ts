@@ -47,7 +47,7 @@ test("the owner's tombstone of a deleted record offers Restore until its restore
   const html = render(future, () => {});
   expect(html).toContain('Restore');
   expect(html).toContain('<button');
-  expect(html).toContain(`datetime="${future.toISOString()}"`);
+  expect(html).toContain(`dateTime="${future.toISOString()}"`);
   expect(html).toMatch(/in (about )?30 days/);
   for (const deadline of [new Date(Date.now() - 1), new Date(), 'invalid']) {
     const expired = render(deadline, () => {});
