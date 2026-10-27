@@ -103,7 +103,8 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
   const commands = createMembershipInverseCommands({ pool: database.pool });
   const items: { accountId: string; reservationId: string; sourceTransactionId: string; holdTransactionId: string }[] =
     [];
-  // Each invocation changes exactly one membership, including the unmeasured warmup.
+  // Each invocation changes exactly one membership. The call below and the
+  // per-scale warmup hook bootstrap spare memberships so the measured item stays a first apply.
   async function item() {
     const accountId = newId(actorRoute);
     const groupId = newId(groupRoute);
@@ -147,18 +148,38 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
       holdTransactionId,
     };
   }
-  const inputs: Awaited<ReturnType<typeof item>>[] = [];
+  const warmup = await item();
+  await commands.bootstrapStep(warmup);
+  let input = warmup;
   const report = await checkGrowth(database, {
     name: 'membership source-cursor bootstrap',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     async grow(db, scale, previous) {
+      // Ordinals here never overlap the measured scales. The same row shape puts a
+      // few thousand unrelated memberships on the actor route before the first sample.
+      if (previous === 0) await seed(db, population, { from: 1_000_000, to: 1_004_000 });
       await seed(db, population, { from: previous, to: scale });
-      inputs.push(await item(), await item());
+      input = await item();
+      for (const table of [
+        'access.account',
+        'access.organization_member',
+        'access.membership_inverse',
+        'access.lifecycle_membership_slot',
+        'access.lifecycle_coordination',
+        'core.receipt',
+      ])
+        await db.admin.query(`VACUUM (ANALYZE) ${table}`);
+    },
+    async warmup() {
+      const spare = await item();
+      const outcome = await commands.bootstrapStep(spare);
+      expect(outcome.value.reservationId).toBe(spare.reservationId);
+      expect(outcome.value.sourceTransactionId).toBe(spare.sourceTransactionId);
+      expect(outcome.replayed).toBe(false);
     },
     async operation() {
-      const input = inputs.shift()!;
       const outcome = await commands.bootstrapStep(input);
       expect(outcome.value.reservationId).toBe(input.reservationId);
       expect(outcome.value.sourceTransactionId).toBe(input.sourceTransactionId);
