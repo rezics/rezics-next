@@ -8,6 +8,10 @@ import { facetProperties } from '@rezics/filter';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 
+// Names on the command line select the recordings to write; with none, every recording is written.
+const only = Bun.argv.slice(2).filter((argument) => argument !== '--');
+const writes = (...prefixes: string[]) =>
+  only.length === 0 || only.some((name) => prefixes.some((prefix) => name.startsWith(prefix)));
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
 const accountId = Bun.randomUUIDv7();
@@ -49,6 +53,8 @@ const homeSubjects = [
 let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
+let relayPool: Pool | undefined;
+let relays: { stop(): Promise<void> } | undefined;
 let jwks: ReturnType<typeof Bun.serve> | undefined;
 let pool: Pool | undefined;
 
@@ -133,6 +139,10 @@ async function waitForKernel(origin: string, child: ReturnType<typeof spawn>): P
 }
 
 async function stopKernel(): Promise<void> {
+  await relays?.stop();
+  await relayPool?.end();
+  relays = undefined;
+  relayPool = undefined;
   if (!kernel?.pid) return;
   kernel.kill('SIGTERM');
   await Promise.race([new Promise<void>((resolve) => kernel!.once('exit', () => resolve())), Bun.sleep(10_000)]);
@@ -547,6 +557,11 @@ async function recordLibrary(input: {
     subjectId: subject('snow-country'),
   });
   await call('follow collection', tokens.me, 'PUT', `/v1/follows/${neighbour}`, 200);
+  // The listing of the collections that hold a subject is projected by the worker, which the recorder does not run.
+  const { syncSubjectListing } = await import('../../../services/kernel/src/library/listing.ts');
+  await syncSubjectListing({ pool: database }, { subjectId: princeId, collectionId: shelf });
+  // The collections that hold the subject are seeded; the other recordings read the rest of the library.
+  if (!writes('library-', 'settings-')) return new Map();
 
   const recordedLibrary = new Map<string, JsonObject>();
   const read = async (name: string, token: string | null, path: string) => {
@@ -854,38 +869,44 @@ async function main(): Promise<void> {
   });
   const kernelPort = await freePort();
   const origin = `http://127.0.0.1:${kernelPort}`;
+  const kernelEnvironment = {
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_HOSTNAME: '127.0.0.1',
+    KERNEL_PORT: String(kernelPort),
+    KERNEL_ROUTE_KEY: kernelRouteKey,
+    KERNEL_SESSION_KEYS: `1:${sessionKey}`,
+    KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
+    // Seeding a used library writes more than a new account's minute budget; the budget is a startup override.
+    KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify(
+      Object.fromEntries(
+        ['new-account', 'member', 'trusted'].map((rateClass) => [rateClass, { write: { maximum: 6000, seconds: 60 } }]),
+      ),
+    ),
+    AUTH_ISSUER: issuer,
+    AUTH_AUDIENCE: audience,
+    AUTH_JWKS_URL: `${issuer}/jwks`,
+    STRIPE_SECRET_KEY: 'sk_test_recorder',
+    STRIPE_WEBHOOK_SECRETS: 'whsec_recorder',
+    STRIPE_MANAGED_PAYMENTS: 'false',
+    CHECKOUT_SUCCESS_URL: 'https://example.test/success/{ORDER_ID}',
+    CHECKOUT_CANCEL_URL: 'https://example.test/cancel/{ORDER_ID}',
+    NODE_ENV: 'development',
+  };
   kernel = spawn('bun', [id], {
     cwd: resolve(root, 'services/kernel'),
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-      KERNEL_HOSTNAME: '127.0.0.1',
-      KERNEL_PORT: String(kernelPort),
-      KERNEL_ROUTE_KEY: kernelRouteKey,
-      KERNEL_SESSION_KEYS: `1:${sessionKey}`,
-      KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
-      // Seeding a used library writes more than a new account's minute budget; the budget is a startup override.
-      KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify(
-        Object.fromEntries(
-          ['new-account', 'member', 'trusted'].map((rateClass) => [
-            rateClass,
-            { write: { maximum: 6000, seconds: 60 } },
-          ]),
-        ),
-      ),
-      AUTH_ISSUER: issuer,
-      AUTH_AUDIENCE: audience,
-      AUTH_JWKS_URL: `${issuer}/jwks`,
-      STRIPE_SECRET_KEY: 'sk_test_recorder',
-      STRIPE_WEBHOOK_SECRETS: 'whsec_recorder',
-      STRIPE_MANAGED_PAYMENTS: 'false',
-      CHECKOUT_SUCCESS_URL: 'https://example.test/success/{ORDER_ID}',
-      CHECKOUT_CANCEL_URL: 'https://example.test/cancel/{ORDER_ID}',
-      NODE_ENV: 'development',
-    },
+    env: kernelEnvironment,
   });
   await waitForKernel(origin, kernel);
+  // The relation projection normally runs in the worker; without it a page's links reads stay empty. The recorder
+  // runs just that projection over its own pool.
+  const projectionBase = '../../../services/kernel';
+  const { startRelays } = await import(`${projectionBase}/src/events/relays.ts`);
+  const { linkProjection } = await import(`${projectionBase}/src/semantic/links.ts`);
+  relayPool = new Pool({ connectionString: databaseUrl, max: 8 });
+  relayPool.on('error', () => {});
+  relays = startRelays(relayPool, [linkProjection(relayPool)]);
   const token = await new SignJWT({
     client_id: 'web-recorder',
     scope: 'subject:create subject:read',
@@ -1150,8 +1171,29 @@ async function main(): Promise<void> {
     recorded.set(name, { ...body, status: response.status });
     return response.status;
   };
-  if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
-    throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
+  // The subject page has no search read, so the spawned kernel answers it, collections and projections included. The
+  // relation projection catches up in the background, so the page is read again until it lists the editions.
+  const pageDeadline = Date.now() + 90_000;
+  for (;;) {
+    const response = await retryOverloaded(() =>
+      fetch(new URL('/v1/pages:read', origin), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { subject: subjectId } }),
+      }),
+    );
+    const body = objectBody(await response.json(), 'subject-page');
+    recorded.set('subject-page', { ...body, status: response.status });
+    const reads = Object.values(objectBody(body.reads ?? {}, 'subject-page reads'));
+    const listed = reads.some((read) => {
+      const links = objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body').links;
+      return Array.isArray(links) && links.length === editionIds.length;
+    });
+    if (response.status === 200 && listed) break;
+    if (Date.now() > pageDeadline)
+      throw new Error(`subject-page did not list the editions: ${JSON.stringify(recorded.get('subject-page'))}`);
+    await Bun.sleep(1000);
+  }
   const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
   const template = objectBody(subjectPage.template, 'subject-page template');
   if (
@@ -1171,8 +1213,10 @@ async function main(): Promise<void> {
   const pageReads = Object.values(objectBody(subjectPage.reads, 'subject-page reads')).map((read) =>
     objectBody(objectBody(read, 'subject-page read').body, 'subject-page read body'),
   );
-  const editionList = pageReads.find((body) => Array.isArray(body.subjects));
-  if (!Array.isArray(editionList?.subjects) || editionList.subjects.length !== editionIds.length)
+  // The editions list is a links read of the inverse `schema:exampleOfWork` property.
+  const listed = (body: JsonObject): unknown[] =>
+    Array.isArray(body.links) ? body.links : Array.isArray(body.subjects) ? body.subjects : [];
+  if (!pageReads.some((body) => listed(body).length === editionIds.length))
     throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(pageReads)}`);
   if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
     throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
@@ -1393,12 +1437,39 @@ async function main(): Promise<void> {
   for (const [name, body] of await recordLibrary({ origin, pool: database, accountId, subjectId }))
     recorded.set(name, body);
   await expectStatus('accounts', `/v1/accounts?ids=${accountId}`, 200);
-  for (const [name, body] of await recordCommerce({ pool: database, accountId, subjectId })) recorded.set(name, body);
+  if (writes('offer', 'order-'))
+    for (const [name, body] of await recordCommerce({ pool: database, accountId, subjectId })) recorded.set(name, body);
+
+  // The library recording opened the collections gate and put the subject on a shelf; the shelf's listing catches up
+  // in the background, so the page is read again until it names a collection.
+  const finalDeadline = Date.now() + 60_000;
+  for (;;) {
+    const finalPage = await retryOverloaded(() =>
+      fetch(new URL('/v1/pages:read', origin), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { subject: subjectId } }),
+      }),
+    );
+    const finalBody = objectBody(await finalPage.json(), 'subject-page');
+    const finalReads = Object.values(objectBody(finalBody.reads ?? {}, 'subject-page reads')).map((read) =>
+      objectBody(read, 'subject-page read'),
+    );
+    const collected = finalReads.some((read) => {
+      const collections = objectBody(read.body, 'subject-page read body').collections;
+      return Array.isArray(collections) && collections.length > 0;
+    });
+    if (finalPage.status === 200 && collected && finalReads.every((read) => read.status === 200)) {
+      recorded.set('subject-page', { ...finalBody, status: finalPage.status });
+      break;
+    }
+    if (Date.now() > finalDeadline)
+      throw new Error(`subject-page has failed or empty reads: ${JSON.stringify(finalBody)}`);
+    await Bun.sleep(1000);
+  }
 
   const output = join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
-  // Names on the command line select the recordings to write; with none, every recording is written.
-  const only = Bun.argv.slice(2).filter((argument) => argument !== '--');
   const unknown = only.filter((name) => !recorded.has(name));
   if (unknown.length)
     throw new Error(`Unknown recordings: ${unknown.join(', ')}. Recorded: ${[...recorded.keys()].join(', ')}`);

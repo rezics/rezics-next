@@ -98,7 +98,7 @@ export function ThreadReactions({
     <Reactions
       counts={counts}
       disabled={!hydrated}
-      {...(target.kind === 'subject' ? { kinds: subjectReactionKinds } : {})}
+      {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
       labels={reactionLabels(failed)}
       locale={getLocale()}
       onChange={onChange}

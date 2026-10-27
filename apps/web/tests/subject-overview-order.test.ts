@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -13,9 +13,18 @@ import recordedPage from '../src/kernel/recorded/subject-page.json';
 import recordedSubject from '../src/kernel/recorded/subject.json';
 import { platformRegistry, planReads, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
-import { SubjectLibrarySlot } from '../src/library/subject-slot-view.tsx';
 import fixtures from '../src/kernel/fixtures.json';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+
+// The slot's server functions read the Worker environment, which a unit test has none of.
+mock.module('../src/library/subject-slot-actions.ts', () => ({
+  mutateSubjectLibrarySlot: async () => ({ result: 'unavailable' }),
+  readSubjectLibraryCollections: async () => ({ state: 'unavailable', collections: null }),
+}));
+// So do the router links of the references.
+mock.module('../src/library/subject-ref.tsx', () => ({ SubjectRef: () => null }));
+mock.module('../src/library/account-ref.tsx', () => ({ AccountRef: () => null }));
+const { SubjectLibrarySlot } = await import('../src/library/subject-slot-view.tsx');
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -370,7 +379,7 @@ function render(data: SubjectPageData, locale = 'en') {
 }
 const summaryText =
   'A pilot stranded in the Sahara meets a small prince who has left his asteroid, and learns from him what matters.';
-const originalName = 'Le Petit Prince';
+const originalName = '>Le Petit Prince<';
 const count = (html: string, text: string) => html.split(text).length - 1;
 
 // The recorded subject has no relations; one of its editions stands in as a related subject for the relations node.
@@ -452,7 +461,7 @@ test('an alternate name equal to the original title is not repeated under Also k
   // With nothing left the row is dropped.
   const bare = render(
     loaded((data) => {
-      recordedBody(data).subject.aliases = { en: [originalName, 'The Little Prince'], ja: [' le petit prince '] };
+      recordedBody(data).subject.aliases = { en: ['Le Petit Prince', 'The Little Prince'], ja: [' le petit prince '] };
     }),
   );
   expect(bare).not.toContain('Also known as');

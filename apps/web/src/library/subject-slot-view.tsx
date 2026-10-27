@@ -1,3 +1,4 @@
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   Select,
   SelectContent,
@@ -26,8 +27,9 @@ type SubjectSlotProps = {
   data: SubjectLibrarySlotData;
 };
 
-const buttonClass =
-  'inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-sm text-primary hover:bg-muted';
+// The state action is the page's one filled primary button; every other control here is a secondary (outline) button.
+const buttonClass = buttonVariants({ variant: 'outline' });
+const primaryClass = buttonVariants({ variant: 'default' });
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
 const removeValue = 'remove';
 
@@ -57,7 +59,11 @@ function LibraryStateSelect({
       onValueChange={(value) => onChoose(value ?? '')}
       value={selectedState || null}
     >
-      <SelectTrigger aria-busy={busy ? true : undefined} aria-label={m.library_subject_entry()} className="w-fit">
+      <SelectTrigger
+        aria-busy={busy ? true : undefined}
+        aria-label={m.library_subject_entry()}
+        className="w-fit bg-primary text-primary-foreground hover:bg-primary/80 data-placeholder:text-primary-foreground [&_svg]:text-primary-foreground"
+      >
         {busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
         <SelectValue placeholder={m.library_subject_add()} />
       </SelectTrigger>
@@ -301,7 +307,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
           </div>
         </details>
       ) : data.session === 'signed-out' ? (
-        <a data-library-sign-in className={buttonClass} href={`/auth/sign-in?return_to=${encodeURIComponent(action)}`}>
+        <a data-library-sign-in className={primaryClass} href={`/auth/sign-in?return_to=${encodeURIComponent(action)}`}>
           {m.account_sign_in()}
         </a>
       ) : null}

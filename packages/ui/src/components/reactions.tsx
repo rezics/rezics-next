@@ -78,6 +78,11 @@ export interface ReactionsProps {
   signInHref?: string;
   /** The kinds the target admits, in display order. Other kinds are neither shown nor offered. Defaults to all. */
   kinds?: readonly ReactionKind[];
+  /**
+   * Below the `sm` breakpoint the row shows only this many kinds, the most used ones, plus the viewer's own; the
+   * other kinds stay in the picker, which lists the counts there. Wider screens show every kind.
+   */
+  collapse?: number;
   /** Turns the chips and the React trigger off, for example until the page has hydrated. */
   disabled?: boolean;
 }
@@ -162,6 +167,18 @@ export const Reactions = (props: ReactionsProps) => {
   }, [busy, props.value, props.counts]);
 
   const shown = overlay ?? { counts: props.counts, value: props.value };
+  // The kinds that stay in the row on a phone: the most used (ties keep the display order) and the viewer's own.
+  const phoneRow =
+    props.collapse === undefined
+      ? null
+      : new Set<ReactionKind>([
+          ...kinds
+            .filter((kind) => (shown.counts[kind] ?? 0) > 0)
+            .toSorted((a, b) => (shown.counts[b] ?? 0) - (shown.counts[a] ?? 0))
+            .slice(0, props.collapse),
+          ...(shown.value ? [shown.value] : []),
+        ]);
+  const phoneHidden = (kind: ReactionKind) => phoneRow !== null && !phoneRow.has(kind);
 
   const select = (kind: ReactionKind) => {
     if (propsRef.current.signInHref !== undefined || propsRef.current.disabled === true) return;
@@ -205,7 +222,7 @@ export const Reactions = (props: ReactionsProps) => {
     <div
       aria-busy={busy}
       aria-label={labels.reactions}
-      className="flex flex-wrap items-center gap-2"
+      className={cn('flex flex-wrap items-center gap-2', phoneRow && 'max-sm:flex-nowrap')}
       data-slot="reactions"
       role="group"
     >
@@ -220,7 +237,7 @@ export const Reactions = (props: ReactionsProps) => {
           return (
             <span
               aria-label={name}
-              className={cn(chipClass, pressed && pressedClass)}
+              className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
               data-pressed={pressed ? 'true' : 'false'}
               data-slot="reaction-chip"
               key={kind}
@@ -236,7 +253,7 @@ export const Reactions = (props: ReactionsProps) => {
         return (
           <Button
             aria-pressed={pressed}
-            className={cn(chipClass, pressed && pressedClass)}
+            className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
             disabled={disabled}
@@ -274,6 +291,7 @@ export const Reactions = (props: ReactionsProps) => {
               {kinds.map((kind) => {
                 const Icon = reactionIcons[kind];
                 const pressed = shown.value === kind;
+                const count = shown.counts[kind] ?? 0;
                 return (
                   <Button
                     aria-pressed={pressed}
@@ -285,6 +303,9 @@ export const Reactions = (props: ReactionsProps) => {
                   >
                     <Icon aria-hidden className={cn(pressed && 'fill-current')} />
                     {labels[kind]}
+                    {phoneRow !== null && count > 0 && (
+                      <span className="ms-auto tabular-nums sm:hidden">{formatCount(props.locale, count)}</span>
+                    )}
                   </Button>
                 );
               })}

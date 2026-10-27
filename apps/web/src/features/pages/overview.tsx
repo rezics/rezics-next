@@ -52,6 +52,11 @@ export type OverviewValue = {
   source: string;
   sources: string;
   sections: Map<string, Section>;
+  /**
+   * What About holds after the summary, when the page places a `Summary`: the key facts of its first `Statements`
+   * node, which then renders nothing itself, and the subject's tags.
+   */
+  about?: { statements: string; facts: ReactNode; tags: ReactNode };
   /** How each relation property reads on this page, from the definition release; absent properties have no label. */
   relations: Record<string, RelationDefinition>;
   /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */
@@ -640,7 +645,29 @@ export function Cover(props: Record<string, unknown>) {
   );
 }
 
-/** The summary document in the reader's language; one above the reader's spoiler level waits behind a reveal. */
+/** The summary the reader's language chain reaches first, with the statement that holds it. */
+export function chosenSummary(subject: Subject, locale: string) {
+  const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
+  const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
+    const content = statement.value.type === 'value' ? statement.value.content : undefined;
+    const document = isRecord(content) ? readableDocument(content.document) : undefined;
+    return isRecord(content) && document && typeof content.language === 'string'
+      ? [{ statement, document, language: content.language }]
+      : [];
+  });
+  if (documents.length === 0) return undefined;
+  const language = pickLanguage(
+    documents.map((entry) => entry.language),
+    locale,
+    originalLanguage(subject),
+  );
+  return documents.find((entry) => entry.language === language) ?? documents[0]!;
+}
+
+/**
+ * About: the summary in the reader's language, then the key facts and the tags. A summary above the reader's spoiler
+ * level waits behind a reveal.
+ */
 export function Summary(props: Record<string, unknown>) {
   const state = useOverview(props.id);
   if (!state) return null;
@@ -650,24 +677,10 @@ export function Summary(props: Record<string, unknown>) {
   const title = m.subject_about({}, { locale: value.locale as never });
   const read = subjectRead(section);
   if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
-  const held = Object.hasOwn(read.subject.statements, SUMMARY_PROPERTY)
-    ? read.subject.statements[SUMMARY_PROPERTY]
-    : undefined;
-  const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
-    const content = statement.value.type === 'value' ? statement.value.content : undefined;
-    const document = isRecord(content) ? readableDocument(content.document) : undefined;
-    return isRecord(content) && document && typeof content.language === 'string'
-      ? [{ statement, document, language: content.language }]
-      : [];
-  });
-  if (documents.length === 0) return null;
-  const language = pickLanguage(
-    documents.map((entry) => entry.language),
-    value.locale,
-    originalLanguage(read.subject),
-  );
-  const chosen = documents.find((entry) => entry.language === language) ?? documents[0]!;
-  const body = (
+  const chosen = chosenSummary(read.subject, value.locale);
+  const { facts = null, tags = null } = value.about ?? {};
+  if (!chosen && !facts && !tags) return null;
+  const body = chosen && (
     <div className="space-y-1">
       <DocumentValue
         document={chosen.document}
@@ -682,11 +695,14 @@ export function Summary(props: Record<string, unknown>) {
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
-      {spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
-        <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate>
-      ) : (
-        body
-      )}
+      {chosen &&
+        (spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
+          <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate>
+        ) : (
+          body
+        ))}
+      {facts}
+      {tags}
     </section>
   );
 }

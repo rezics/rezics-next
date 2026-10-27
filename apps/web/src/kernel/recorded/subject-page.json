@@ -1,6 +1,6 @@
 {
   "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
-  "profile": "sha256:b9a457a7cd6195a54db485961e8645d47f85e49c58531280f2e8cf00d6ccb184",
+  "profile": "sha256:47976876913edbfa03e4f2641f4c20d3ce57528e1f2d2fe9f23dc67b1665c885",
   "template": { "scope": "base", "key": "schema:CreativeWork" },
   "document": {
     "root": { "props": {} },
@@ -16,6 +16,7 @@
           ]
         }
       },
+      { "type": "Summary", "props": { "id": "summary" } },
       {
         "type": "Statements",
         "props": {
@@ -50,12 +51,110 @@
           "property": "schema:exampleOfWork"
         }
       },
-      { "type": "MoreStatements", "props": { "id": "more-statements" } },
-      { "type": "RelationGroups", "props": { "id": "sequels", "property": "wdt:P155", "limit": 12 } },
-      { "type": "RelationGroups", "props": { "id": "adaptations", "property": "wdt:P144", "limit": 12 } },
-      { "type": "RelationGroups", "props": { "id": "settings", "property": "rezics:sameSetting", "limit": 12 } }
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "side-stories",
+          "limit": 12,
+          "title": {
+            "de": "Nebengeschichten",
+            "en": "Side stories",
+            "es": "Historias paralelas",
+            "fr": "Histoires parallèles",
+            "ja": "外伝",
+            "ko": "외전",
+            "zh-Hans": "外传",
+            "zh-Hant": "外傳"
+          },
+          "property": "rezics:sideStoryOf"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "adaptations",
+          "limit": 12,
+          "title": {
+            "de": "Adaptionen",
+            "en": "Adaptations",
+            "es": "Adaptaciones",
+            "fr": "Adaptations",
+            "ja": "派生作品",
+            "ko": "파생 작품",
+            "zh-Hans": "改编作品",
+            "zh-Hant": "改編作品"
+          },
+          "property": "wdt:P144"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "versions",
+          "limit": 12,
+          "title": {
+            "de": "Alternative Fassungen",
+            "en": "Alternative versions",
+            "es": "Versiones alternativas",
+            "fr": "Versions alternatives",
+            "ja": "別バージョン",
+            "ko": "다른 버전",
+            "zh-Hans": "其他版本",
+            "zh-Hant": "其他版本"
+          },
+          "property": "rezics:alternativeVersion"
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "related",
+          "limit": 12,
+          "title": {
+            "de": "Verwandtes",
+            "en": "Related",
+            "es": "Obras relacionadas",
+            "fr": "Œuvres liées",
+            "ja": "関連作品",
+            "ko": "관련 작품",
+            "zh-Hans": "相关作品",
+            "zh-Hant": "相關作品"
+          },
+          "property": "rezics:bangumiRelatedTo"
+        }
+      },
+      {
+        "type": "Appearances",
+        "props": { "id": "characters", "limit": 12, "property": "schema:character", "direction": "forward" }
+      },
+      {
+        "type": "Credits",
+        "props": { "id": "credits", "limit": 12, "property": "schema:contributor", "direction": "forward" }
+      },
+      { "type": "RatingSummary", "props": { "id": "ratings" } },
+      { "type": "ReviewList", "props": { "id": "reviews" } },
+      { "type": "ThreadList", "props": { "id": "threads" } },
+      {
+        "type": "CollectionList",
+        "props": {
+          "id": "lists",
+          "limit": 6,
+          "title": {
+            "de": "Listen",
+            "en": "Lists",
+            "es": "Listas",
+            "fr": "Listes",
+            "ja": "リスト",
+            "ko": "목록",
+            "zh-Hans": "清单",
+            "zh-Hant": "清單"
+          }
+        }
+      },
+      { "type": "Sources", "props": { "id": "sources" } }
     ]
   },
+  "views": ["overview", "editions", "characters", "credits", "relations", "reviews", "discussion", "lists", "details"],
   "reads": {
     "r0": {
       "status": 200,
@@ -64,36 +163,21 @@
           "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
           "type": "schema:Book",
           "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-          "label": {
-            "value": "The Little Prince",
-            "language": "en"
-          },
+          "label": { "value": "The Little Prince", "language": "en" },
           "creativeWork": true,
           "cover": {
             "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
             "width": 480,
             "height": 720,
-            "placeholder": {
-              "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4",
-              "color": "#7d7a68"
-            },
+            "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
             "variants": [
-              {
-                "format": "webp",
-                "width": 240
-              },
-              {
-                "format": "webp",
-                "width": 480
-              }
+              { "format": "webp", "width": 240 },
+              { "format": "webp", "width": 480 }
             ],
             "focalPoint": null,
             "credit": {
               "rightsHolder": "REZICS fixtures",
-              "via": {
-                "name": "Generated artwork",
-                "url": "https://rezics.com/"
-              },
+              "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
               "license": "CC0 1.0"
             }
           }
@@ -127,10 +211,7 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728201",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:abstract",
-                  "data_type": "document"
-                },
+                "property": { "id": "schema:abstract", "data_type": "document" },
                 "value": {
                   "type": "value",
                   "content": {
@@ -171,10 +252,7 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728202",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:abstract",
-                  "data_type": "document"
-                },
+                "property": { "id": "schema:abstract", "data_type": "document" },
                 "value": {
                   "type": "value",
                   "content": {
@@ -215,10 +293,7 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728203",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:abstract",
-                  "data_type": "document"
-                },
+                "property": { "id": "schema:abstract", "data_type": "document" },
                 "value": {
                   "type": "value",
                   "content": {
@@ -261,14 +336,8 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728204",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:image",
-                  "data_type": "media"
-                },
-                "value": {
-                  "type": "value",
-                  "content": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0"
-                },
+                "property": { "id": "schema:image", "data_type": "media" },
+                "value": { "type": "value", "content": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -281,14 +350,8 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728205",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:keywords",
-                  "data_type": "string"
-                },
-                "value": {
-                  "type": "value",
-                  "content": "a pilot and a prince"
-                },
+                "property": { "id": "schema:keywords", "data_type": "string" },
+                "value": { "type": "value", "content": "a pilot and a prince" },
                 "qualifiers": [],
                 "references": [],
                 "rezics": {
@@ -299,27 +362,12 @@
               {
                 "id": "0494501a-36af-8cc7-95c9-d7ffe4728206",
                 "rank": "normal",
-                "property": {
-                  "id": "schema:keywords",
-                  "data_type": "string"
-                },
-                "value": {
-                  "type": "value",
-                  "content": "the prince returns to his asteroid"
-                },
+                "property": { "id": "schema:keywords", "data_type": "string" },
+                "value": { "type": "value", "content": "the prince returns to his asteroid" },
                 "qualifiers": [
                   {
-                    "property": {
-                      "id": "rezics:spoilerLevel",
-                      "data_type": "quantity"
-                    },
-                    "value": {
-                      "type": "value",
-                      "content": {
-                        "amount": "+2",
-                        "unit": "1"
-                      }
-                    }
+                    "property": { "id": "rezics:spoilerLevel", "data_type": "quantity" },
+                    "value": { "type": "value", "content": { "amount": "+2", "unit": "1" } }
                   }
                 ],
                 "references": [],
@@ -392,8 +440,31 @@
                 }
               }
             ]
+          },
+          "relationCounts": {
+            "rezics:alternativeSetting": 0,
+            "rezics:alternativeVersion": 0,
+            "rezics:artbookCounterpart": 0,
+            "rezics:bangumiLegacyVersion": 0,
+            "rezics:bangumiRelatedTo": 0,
+            "rezics:collaborationWith": 0,
+            "rezics:crossMediaCounterpart": 0,
+            "rezics:editionCounterpart": 0,
+            "rezics:expansionCounterpart": 0,
+            "rezics:representativeEdition": 0,
+            "rezics:sameCharacters": 0,
+            "rezics:sameSetting": 0,
+            "rezics:sideStoryOf": 0,
+            "rezics:spinOffOf": 0,
+            "rezics:summaryOf": 0,
+            "schema:author": 1,
+            "schema:contributor": 0,
+            "wdt:P155": 0,
+            "wdt:P179": 0,
+            "wdt:P361": 0
           }
         },
+        "account": null,
         "related": {
           "schema:abstract": {
             "labels": {
@@ -523,6 +594,21 @@
       "body": {
         "links": [
           {
+            "subject": "01a17a3b-089d-7337-9adc-42d72caaa7c5",
+            "property": "schema:exampleOfWork",
+            "statement": "01a17a3b-089d-7337-9adc-42d72caaa7c6",
+            "type": "bf:Instance",
+            "label": "The Little Prince (Reynal & Hitchcock, 1943)",
+            "summary": {
+              "id": "01a17a3b-089d-7337-9adc-42d72caaa7c5",
+              "type": "bf:Instance",
+              "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "The Little Prince (Reynal & Hitchcock, 1943)", "language": "en" },
+              "creativeWork": true,
+              "cover": null
+            }
+          },
+          {
             "subject": "01a17a3b-08ba-770d-b3f3-2254d514d768",
             "property": "schema:exampleOfWork",
             "statement": "01a17a3b-08ba-770d-b3f3-2254d514d7a0",
@@ -532,33 +618,10 @@
               "id": "01a17a3b-08ba-770d-b3f3-2254d514d768",
               "type": "bf:Instance",
               "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "fr" },
+              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "en" },
               "creativeWork": true,
-              "cover": {
-                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
-                "width": 480,
-                "height": 720,
-                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
-                "variants": [
-                  { "format": "webp", "width": 240 },
-                  { "format": "webp", "width": 480 }
-                ],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "REZICS fixtures",
-                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
-                  "license": "CC0 1.0"
-                }
-              }
+              "cover": null
             }
-          },
-          {
-            "subject": "01a17a3b-089d-7337-9adc-42d72caaa7c5",
-            "property": "schema:exampleOfWork",
-            "statement": "01a17a3b-089d-7337-9adc-42d72caaa7c6",
-            "type": "bf:Instance",
-            "label": "The Little Prince (Reynal & Hitchcock, 1943)",
-            "summary": null
           }
         ],
         "count": { "value": 2, "exact": true },
@@ -569,49 +632,8 @@
     "r2": {
       "status": 200,
       "body": {
-        "links": [
-          {
-            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
-            "property": "wdt:P155",
-            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0110",
-            "type": "schema:Book",
-            "label": "The Pilot Returns",
-            "summary": {
-              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
-              "type": "schema:Book",
-              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "The Pilot Returns", "language": "en" },
-              "creativeWork": true,
-              "cover": {
-                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
-                "width": 480,
-                "height": 720,
-                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
-                "variants": [
-                  { "format": "webp", "width": 240 },
-                  { "format": "webp", "width": 480 }
-                ],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "REZICS fixtures",
-                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
-                  "license": "CC0 1.0"
-                }
-              }
-            },
-            "date": "2012-05"
-          },
-          {
-            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0011",
-            "property": "wdt:P155",
-            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0111",
-            "type": "schema:Book",
-            "label": "Letters to the Rose",
-            "summary": null,
-            "date": "2015"
-          }
-        ],
-        "count": { "value": 2, "exact": true },
+        "links": [],
+        "count": { "value": 0, "exact": true },
         "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
         "next": null
       }
@@ -619,49 +641,8 @@
     "r3": {
       "status": 200,
       "body": {
-        "links": [
-          {
-            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
-            "property": "wdt:P144",
-            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0120",
-            "type": "schema:Book",
-            "label": "The Little Prince on Stage",
-            "summary": {
-              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
-              "type": "schema:Book",
-              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "The Little Prince on Stage", "language": "en" },
-              "creativeWork": true,
-              "cover": {
-                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
-                "width": 480,
-                "height": 720,
-                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
-                "variants": [
-                  { "format": "webp", "width": 240 },
-                  { "format": "webp", "width": 480 }
-                ],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "REZICS fixtures",
-                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
-                  "license": "CC0 1.0"
-                }
-              }
-            },
-            "date": "2019-03"
-          },
-          {
-            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0021",
-            "property": "wdt:P144",
-            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0121",
-            "type": "schema:Book",
-            "label": "Little Prince, an Opera",
-            "summary": null,
-            "date": "2008"
-          }
-        ],
-        "count": { "value": 2, "exact": true },
+        "links": [],
+        "count": { "value": 0, "exact": true },
         "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
         "next": null
       }
@@ -669,41 +650,33 @@
     "r4": {
       "status": 200,
       "body": {
-        "links": [
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r5": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": { "value": 0, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r6": {
+      "status": 200,
+      "body": {
+        "collections": [
           {
-            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
-            "property": "rezics:sameSetting",
-            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0130",
-            "type": "schema:Book",
-            "label": "Stories from Asteroid B-612",
-            "summary": {
-              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
-              "type": "schema:Book",
-              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "Stories from Asteroid B-612", "language": "en" },
-              "creativeWork": true,
-              "cover": {
-                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
-                "width": 480,
-                "height": 720,
-                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
-                "variants": [
-                  { "format": "webp", "width": 240 },
-                  { "format": "webp", "width": 480 }
-                ],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "REZICS fixtures",
-                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
-                  "license": "CC0 1.0"
-                }
-              }
-            },
-            "date": "2021"
+            "id": "01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2",
+            "curatorAccountId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+            "title": "Books I come back to",
+            "multiplicity": 1
           }
         ],
         "count": { "value": 1, "exact": true },
-        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
         "next": null
       }
     }

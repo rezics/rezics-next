@@ -104,6 +104,8 @@ type PreparedRead = {
   header?: ReactNode;
   groups?: Map<string, ReactNode>;
   more?: ReactNode[];
+  /** The subject's tags, as chips; a tag above the reader's spoiler level waits behind a reveal. */
+  tags?: ReactNode;
   /** The hits of a search read with their cover summaries, and the read's total count. */
   hits?: SearchHit[];
   total?: SearchRead['total'];
@@ -232,6 +234,28 @@ type Creator = { id: string; name: string; node: ReactNode };
 const CREATOR_PROPERTIES = ['schema:author', 'schema:creator', 'schema:director', 'schema:musicBy'];
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
 const MAX_CREATORS = 4;
+const TAG_PROPERTY = 'schema:keywords';
+
+/** The text of a document node and everything under it, with a space between blocks. */
+function documentText(node: unknown): string {
+  if (!isRecord(node)) return '';
+  if (typeof node.text === 'string') return node.text;
+  return Array.isArray(node.content) ? node.content.map(documentText).join(' ') : '';
+}
+
+/** A text compared as words: no case, and one space for any run of whitespace and punctuation. */
+function plainName(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}\s]+/gu, ' ')
+    .trim();
+}
+
+/** A name compared as written: no case, one space for any run of whitespace. */
+function foldName(text: string): string {
+  return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
 
 function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {
   const { subject, summary } = read;
@@ -240,14 +264,30 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
   const title = label.text || options.messages.unlabelled;
   const first = originalTitle(subject);
   const quiet = first && label.text && first.text !== label.text ? first : undefined;
-  const description = pageText(subject.descriptions, options.locale, original);
+  const described = pageText(subject.descriptions, options.locale, original);
+  // About carries the summary; the header repeats a description only when it says something else.
+  const chosen = overview.chosenSummary(subject, options.locale);
+  const summaryName =
+    chosen && spoilerLevel(chosen.statement) <= options.reader.spoilerLevel
+      ? plainName(documentText(chosen.document.doc))
+      : '';
+  const descriptionName = plainName(described.text);
+  const description =
+    summaryName && descriptionName && summaryName.startsWith(descriptionName)
+      ? { text: '', lang: undefined }
+      : described;
+  // The title and the original title are shown already, so an alternate name equal to either is left out.
+  const known = new Set([label.text, first?.text].filter((name): name is string => !!name).map(foldName));
+  const alternates = Object.fromEntries(
+    Object.entries(subject.aliases).map(([lang, names]) => [lang, names.filter((name) => !known.has(foldName(name)))]),
+  );
   // Select a language for the alias list with the same policy as scalar text.
   const aliasLanguage = pickLanguage(
-    Object.keys(subject.aliases).filter((lang) => subject.aliases[lang]?.length),
+    Object.keys(alternates).filter((lang) => alternates[lang]?.length),
     options.locale,
     original,
   );
-  const aliases = aliasLanguage ? (subject.aliases[aliasLanguage] ?? []) : [];
+  const aliases = aliasLanguage ? (alternates[aliasLanguage] ?? []) : [];
   const coverFor = {
     ...coverSubject(subject.id, title, summary, subject.type),
     ...(creators[0] ? { byline: creators[0].name } : {}),
@@ -266,7 +306,7 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
   );
   const facts = [options.frame.typeLabel, date].filter((fact): fact is string => !!fact);
   return (
-    <div className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
+    <div data-slot="subject-header" className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
       <div className="flex min-w-0 gap-4 sm:gap-6">
         <div className="shrink-0">
           <div className="sm:hidden">{cover('sm')}</div>
@@ -475,6 +515,35 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       </div>,
     );
   }
+  const keywords = bestRank(
+    (Object.hasOwn(read.subject.statements, TAG_PROPERTY)
+      ? read.subject.statements[TAG_PROPERTY]
+      : []) as unknown as Stmt[],
+  ).flatMap((statement) =>
+    statement.value.type === 'value' && typeof statement.value.content === 'string' && statement.value.content
+      ? [{ statement, text: statement.value.content }]
+      : [],
+  );
+  const tags = keywords.length ? (
+    <ul
+      data-slot="subject-tags"
+      aria-label={m.subject_tags({}, { locale: options.locale as never })}
+      className="flex flex-wrap gap-2"
+    >
+      {keywords.map(({ statement, text }) => {
+        const chip = <span className="rounded-full border border-border px-2.5 py-0.5 text-sm">{text}</span>;
+        return (
+          <li key={statement.id}>
+            {spoilerLevel(statement) > reader.spoilerLevel ? (
+              <SpoilerGate label={options.messages.spoilerShow}>{chip}</SpoilerGate>
+            ) : (
+              chip
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  ) : null;
   const creators = (named[CREATOR_PROPERTIES.find((property) => named[property]?.length) ?? ''] ?? []).slice(
     0,
     MAX_CREATORS,
@@ -483,6 +552,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   return {
     header: subjectHeader(read, creators, date, options),
     groups,
+    tags,
     more: [...groups].filter(([property]) => !shown.has(property)).map(([, group]) => group),
     sources: {
       credit: read.summary?.cover?.credit ?? null,
@@ -605,6 +675,17 @@ export function PageData({
   const profile = Object.entries(plan.reads).flatMap(([key, planned]) =>
     planned.kind === 'account' && reads[key]?.status === 200 ? [accountOf(reads[key].body)] : [],
   )[0];
+  // About gathers the first Statements node's facts and the tags after the summary, when the page places a Summary.
+  const firstStatements = nodesOfType(composition.content, 'Statements')[0];
+  const aboutRead = firstStatements ? nodes.get(firstStatements.id) : undefined;
+  const about =
+    firstStatements && nodesOfType(composition.content, 'Summary').length > 0
+      ? {
+          statements: firstStatements.id,
+          facts: statementList(aboutRead, firstStatements.props.properties, 'subject-facts'),
+          tags: aboutRead?.tags ?? null,
+        }
+      : undefined;
   const overviewValue: overview.OverviewValue = {
     locale,
     subject,
@@ -622,6 +703,7 @@ export function PageData({
     source: resolved.source,
     sources: resolved.sources,
     sections,
+    ...(about ? { about } : {}),
     relations,
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
@@ -665,13 +747,24 @@ function SubjectHeader(props: Record<string, unknown>) {
   return useContext(PageContext).agentHeader ? null : (read?.header ?? null);
 }
 
-function Statements(props: Record<string, unknown>) {
-  const read = useNodeRead(props.id);
-  const properties = Array.isArray(props.properties) ? props.properties : [];
-  const groups = properties.flatMap((property) =>
+/** The rows of the named properties the subject holds, in the order the template names them. */
+function statementList(read: PreparedRead | undefined, properties: unknown, slot: string): ReactNode {
+  const named = Array.isArray(properties) ? properties : [];
+  const groups = named.flatMap((property) =>
     typeof property === 'string' && read?.groups?.has(property) ? [read.groups.get(property)] : [],
   );
-  return groups.length ? <dl className={listClass}>{groups}</dl> : null;
+  return groups.length ? (
+    <dl data-slot={slot} className={listClass}>
+      {groups}
+    </dl>
+  ) : null;
+}
+
+function Statements(props: Record<string, unknown>) {
+  const read = useNodeRead(props.id);
+  // About shows the facts of the first Statements node when the page has a summary.
+  if (useContext(overview.OverviewContext)?.about?.statements === props.id) return null;
+  return statementList(read, props.properties, 'subject-facts');
 }
 
 function MoreStatements(props: Record<string, unknown>) {

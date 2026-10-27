@@ -634,6 +634,24 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   the number of reactions; 0 D/R/A
 - **Growth check:** `tests/subject-reactions.test.ts`: `reading a subject costs one counts read, plus one own-reaction read when signed in, at 1, 10 and 100 reactions`
 
+### Subject overview presentation
+
+- **Touches:** The same page read and reaction reads as above; rendering only.
+- **Bound:** Unchanged. The header compares its description with the chosen summary once, in linear time in the two
+  texts' lengths; the alternate names are filtered against two titles.
+- **Order:** header, About (summary, key facts, tags), editions, relations, ratings, reviews, discussion, lists,
+  sources. About is the `Summary` node's section: it also draws the first `Statements` node's facts and the subject's
+  `schema:keywords` as tags, and that `Statements` node then draws nothing. The header leaves out a description that
+  is the summary or starts it (compared as words, ignoring case, spaces and punctuation), and leaves out alternate
+  names equal to the title or the original title.
+- **Phones:** Below `sm` the reaction row keeps the two most used kinds and the reader's own, on one line; the picker
+  lists every kind with its count. `sm` and above show every kind as before. The Library state select is the page's
+  one filled primary button; Add to collection is an outline button.
+- **Recording:** `bun run record subject-page` rewrites only `src/kernel/recorded/subject-page.json`. It reads the page
+  from the spawned kernel after the collections gate is open and the relation and listing projections ran. The
+  subject's own statements stay those of `subject.json`.
+- **Growth check:** the subject page cost tests above stay as they are.
+
 ### Subject page header and reading settings
 
 - **Touches:** One definitions read for the type's name and cover frame, served from the cache when warm (the active

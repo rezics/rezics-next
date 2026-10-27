@@ -370,13 +370,21 @@ test(
       const { page } = await open(subjectPath, { width });
       try {
         const group = cluster(page);
+        // On a phone the row keeps the two most used kinds; the others wait in the picker.
+        const row =
+          width >= 640 ? ['Like 6', 'Love 3', 'Laugh 2', 'Insightful 4', 'Sad 1'] : ['Like 6', 'Insightful 4'];
         for (const name of ['Like 6', 'Love 3', 'Laugh 2', 'Insightful 4', 'Sad 1'])
-          expect(await group.getByRole('button', { name, exact: true }).count()).toBe(1);
+          expect(await group.getByRole('button', { name, exact: true }).count()).toBe(row.includes(name) ? 1 : 0);
         expect(await group.getByRole('button', { name: /^(Upvote|Downvote)/ }).count()).toBe(0);
         await group.getByRole('button', { name: 'React', exact: true }).click();
         const choices = page.getByRole('dialog', { name: 'Choose a reaction' });
         const offered = await choices.getByRole('button').allInnerTexts();
-        expect(offered.map((text) => text.trim())).toEqual(['Like', 'Love', 'Laugh', 'Insightful', 'Sad']);
+        const names = offered.map((text) => text.replace(/\s+/g, ' ').trim());
+        expect(names).toEqual(
+          width >= 640
+            ? ['Like', 'Love', 'Laugh', 'Insightful', 'Sad']
+            : ['Like 6', 'Love 3', 'Laugh 2', 'Insightful 4', 'Sad 1'],
+        );
         expect(await page.getByText(/Upvote|Downvote/).count()).toBe(0);
         await page.keyboard.press('Escape');
 
