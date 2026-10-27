@@ -10,11 +10,16 @@ import {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const schema = 'growth_rule_test';
+const table = `${schema}.records`;
 let db: GrowthDatabase;
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  await db.admin.query(`CREATE SCHEMA ${schema}`);
+  await db.admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY)`);
 });
 afterAll(async () => {
+  await db?.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
   await db?.close();
 });
 
@@ -28,11 +33,24 @@ function check(
     ...(options.repetitions === undefined ? {} : { repetitions: options.repetitions }),
     bounds: { rows: 'constant', blocks: 'linear', statements: 'linear' },
     slack: { rows: { absolute: 0, relative: 0 } },
-    grow: async () => {},
-    operation: async (_database, scale, repetition) => {
-      const count = options.variable ? (repetition % 2 === 0 ? 1 : 12) : options.fixed ? 3 : scale;
-      await withConnection(db.pool, (client) => client.query('SELECT generate_series(1, $1::integer)', [count]));
+    grow: async (database, scale, previous) => {
+      await database.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);
     },
+    operation: async (database, _scale, repetition) =>
+      withConnection(database.pool, async (client) => {
+        if (options.variable) {
+          const count = repetition % 2 === 0 ? 1 : 12;
+          const first = 100_000 + repetition * 100;
+          await client.query('BEGIN');
+          await client.query(`INSERT INTO ${table} SELECT generate_series($1, $1 + $2 - 1)`, [first, count]);
+          await client.query(`SELECT id FROM ${table} WHERE id >= $1`, [first]);
+          await client.query('ROLLBACK');
+        } else if (options.fixed) {
+          await client.query(`SELECT id FROM ${table} WHERE id = 1`);
+        } else {
+          await client.query(`SELECT id FROM ${table}`);
+        }
+      }),
   });
 }
 
