@@ -1,10 +1,13 @@
 export { AccessUnavailableError } from './unavailable.ts';
+import { type KernelClock } from '../clock.ts';
 import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
 export type AccessConfig = KernelAccessConfig & {
     auth?: AuthenticationConfig;
 };
+/** Internal Access composition only; derived adapters share their root's clock. */
+export declare function accessClock(access: Access): KernelClock;
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
  * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),

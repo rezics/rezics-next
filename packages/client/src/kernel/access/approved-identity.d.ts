@@ -1,6 +1,7 @@
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import approvalRead from './workflow-approvals-read.sql';
+import { type KernelClock } from '../clock.ts';
 export declare class ApprovalIdentityDeniedError extends Error {
     readonly status = 403;
     constructor();
@@ -24,9 +25,13 @@ type Claims = {
 };
 type Bridge = {
     scope: object;
+    clock?: KernelClock;
     expiry(actor: AccountActor, context: AccessContext): number | undefined;
     restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
+/** The factory supplies its root clock with the identity bridge. Keeping this
+ * lookup here avoids importing the factory and its standalone Access during setup. */
+export declare function approvalClock(access: Access): KernelClock;
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export declare function installApprovalIdentityBridge(access: Access, bridge: Bridge): void;
 export declare function approvedIdentityClaims(proof: ApprovedIdentity, scope: object, pool: AccessContext['pool']): Claims | undefined;

@@ -1,6 +1,6 @@
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
-import { verifiedBearerExpiry } from './approved-identity.ts';
+import { approvalClock, verifiedBearerExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
 import credentialConsume from './operator-opening-credential-consume.sql';
 import { createHash } from 'node:crypto';
@@ -118,7 +118,7 @@ type Mutation = {
   deadline?: number;
   authorization?: CommandAuthorization;
 };
-function executor(pool: Pool) {
+function executor(pool: Pool, access: Access) {
   return async function execute<T>(
     options: Mutation,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
@@ -138,6 +138,7 @@ function executor(pool: Pool) {
       pool,
       {
         partition: partitionOf(anchorRoute),
+        clock: approvalClock(access),
         basis,
         authorization: options.authorization,
         ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
@@ -213,7 +214,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     /^(account|access):[a-z][a-z0-9_-]*$/.test(managementAction) &&
       config.actions.get(managementAction)?.anonymous === false,
   );
-  const execute = executor(pool);
+  const execute = executor(pool, access);
   const read = (id: string) => withConnection(pool, (client) => account(client, id));
   async function reservation(input: OperatorResponsibility) {
     return withConnection(pool, (client) =>
