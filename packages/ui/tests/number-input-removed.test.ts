@@ -20,21 +20,17 @@ test('the legacy number input and its existence test are removed', () => {
 });
 
 test('workspace sources do not import the legacy number input', () => {
-  const result = Bun.spawnSync(
-    [
-      'git',
-      'grep',
-      '-n',
-      '-E',
-      '(from[[:space:]]*|import[[:space:]]*\\(|require[[:space:]]*\\()[[:space:]]*[\'"][^\'"]*number-input',
-      '--',
-      ':(glob)**/src/**/*.ts',
-      ':(glob)**/src/**/*.tsx',
-      ':(glob)**/src/**/*.js',
-      ':(glob)**/src/**/*.jsx',
-    ],
-    { cwd: root, stdout: 'pipe', stderr: 'pipe' },
-  );
-  expect(result.exitCode, result.stderr.toString()).toBe(1);
-  expect(result.stdout.toString()).toBe('');
-});
+  const excluded = new Set(['node_modules', '.temp', '.git', '.next', '.turbo', 'dist', 'build', 'coverage']);
+  const pattern = /(?:from\s*|import\s*\(|require\s*\()\s*['"][^'"]*number-input/;
+  const matches: string[] = [];
+
+  for (const path of new Bun.Glob('**/src/**/*.{ts,tsx,js,jsx}').scanSync({ cwd: root })) {
+    if (path.split('/').some((part) => excluded.has(part))) continue;
+    const lines = readFileSync(join(root, path), 'utf8').split('\n');
+    for (const [index, line] of lines.entries()) {
+      if (pattern.test(line)) matches.push(`${path}:${index + 1}:${line}`);
+    }
+  }
+
+  expect(matches, matches.join('\n')).toEqual([]);
+}, 120_000);
