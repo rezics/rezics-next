@@ -462,7 +462,6 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
 }, 900_000);
 
 test('graph and summary covering reads use unforced indexed access as their populations grow', () => {
-  expect(coveringCaptures.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   const failures: unknown[] = [];
   for (const { scale, raw } of coveringCaptures) {
     try {
@@ -477,5 +476,6 @@ test('graph and summary covering reads use unforced indexed access as their popu
       failures.push(error);
     }
   }
+  expect(coveringCaptures.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   expect(failures).toEqual([]);
 });
