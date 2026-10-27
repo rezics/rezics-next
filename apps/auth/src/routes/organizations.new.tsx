@@ -73,7 +73,7 @@ function NewOrganizationPage() {
     if (!normalizedHandle) {
       setMessage('');
       setShowRetry(false);
-      setHandleError(handle ? m.auth_signup_handle_invalid() : m.auth_form_required());
+      setHandleError(handle ? m.auth_organization_handle_invalid() : m.auth_form_required());
       return;
     }
     setHandleError('');
@@ -101,7 +101,7 @@ function NewOrganizationPage() {
       setMessage(m.auth_organization_not_open());
     } else if (result.reason === 'denied') {
       setMessage(m.auth_organization_conflict());
-      setHandleError(m.auth_organization_conflict());
+      setHandleError(m.auth_signup_handle_unavailable());
     } else {
       setMessage(m.auth_account_operation_failure());
       setShowRetry(true);

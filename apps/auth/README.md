@@ -60,6 +60,12 @@ email and password. Email uses `autocomplete="email"`. Password uses `autocomple
 in-field show and hide control. Submission validates the handle, email and password. Field errors are tied to their
 inputs with `aria-describedby`, and focus moves to the first invalid field.
 
+Sign-up and organization creation share `normalizeSignupHandle`: case-fold first, then accept 3–64 ASCII letters a–z,
+digits, underscores or hyphens, with a letter or digit at both ends. Whitespace is refused without trimming. An
+acceptance test compares the browser pattern's source with the kernel's claim pattern; the pages have no runtime
+dependency on kernel or Auth modules. Reserved handles are checked by the server and get the same taken-or-reserved
+field message as taken handles.
+
 The page creates one random key for the form and reuses it when a submit is retried after a network failure. It loads
 the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`, `action: "signup"`
 and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The submit button is enabled
@@ -151,8 +157,8 @@ organizations or operated accounts.
 
 ## Create organization
 
-`/organizations/new` reads the current session once and asks for one handle. It applies the same 1–64 character
-letter/number/underscore/hyphen rule and lowercase normalization as sign-up. Creation uses one operation key for the
+`/organizations/new` reads the current session once and asks for one handle. It applies the same claim rule and
+lowercase normalization as sign-up. Creation uses one operation key for the
 approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
 localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
 it. Success names `@<handle>` and links back to Security. The page uses at most three Auth requests regardless of the
