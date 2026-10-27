@@ -5,3 +5,5 @@ node_modules/
 .env.*
 !.env.example
 services/kernel/dist/
+# Reference projects cloned by research tasks; see tools/goal/README.md, Research.
+.reference/
