@@ -9,7 +9,7 @@
 // host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, lstatSync, readFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type Host = {
@@ -97,6 +97,21 @@ function quote(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
 }
 
+export function controlSocketDirectoryPath(runtimeDirectory: string | undefined, uid: number): string {
+  return runtimeDirectory ? join(runtimeDirectory, 'rezics-ssh') : `/tmp/rezics-ssh-${uid}`;
+}
+
+function controlSocketDirectory(): string {
+  const directory = controlSocketDirectoryPath(process.env.XDG_RUNTIME_DIR, process.getuid());
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const info = lstatSync(directory);
+  if (!info.isDirectory() || info.uid !== process.getuid()) {
+    throw new Error(`remote-check: SSH control directory is not a user-owned directory: ${directory}`);
+  }
+  if ((info.mode & 0o777) !== 0o700) chmodSync(directory, 0o700);
+  return directory;
+}
+
 const sshOptions = (host: Host): string[] => [
   '-i',
   host.identity,
@@ -110,6 +125,12 @@ const sshOptions = (host: Host): string[] => [
   'ServerAliveInterval=15',
   '-o',
   'ServerAliveCountMax=4',
+  '-o',
+  'ControlMaster=auto',
+  '-o',
+  'ControlPersist=10m',
+  '-o',
+  `ControlPath=${join(controlSocketDirectory(), '%C')}`,
 ];
 
 /** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */

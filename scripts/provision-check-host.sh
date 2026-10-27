@@ -88,6 +88,35 @@ if [ "$(cat "$slice" 2>/dev/null || true)" != "$wanted" ]; then
 fi
 systemctl start rezics-check.slice
 
+sshd_config_dir=/etc/ssh/sshd_config.d
+sshd_dropin=$sshd_config_dir/90-rezics-checks.conf
+sshd_wanted=$(printf 'MaxStartups 100:30:300\nMaxSessions 64')
+sshd_changed=0
+sshd_had_previous=0
+sshd_backup=$work/90-rezics-checks.conf
+if [ "$(cat "$sshd_dropin" 2>/dev/null || true)" != "$sshd_wanted" ]; then
+  install -d -m 0755 "$sshd_config_dir"
+  if [ -e "$sshd_dropin" ]; then
+    cp -p "$sshd_dropin" "$sshd_backup"
+    sshd_had_previous=1
+  fi
+  sshd_candidate=$(mktemp "$sshd_config_dir/.90-rezics-checks.XXXXXX")
+  printf '%s\n' "$sshd_wanted" > "$sshd_candidate"
+  chmod 0644 "$sshd_candidate"
+  mv -f "$sshd_candidate" "$sshd_dropin"
+  sshd_changed=1
+fi
+
+if sshd -t; then
+  if [ "$sshd_changed" -eq 1 ]; then systemctl reload ssh; fi
+else
+  if [ "$sshd_changed" -eq 1 ]; then
+    if [ "$sshd_had_previous" -eq 1 ]; then cp -p "$sshd_backup" "$sshd_dropin"; else rm -f "$sshd_dropin"; fi
+  fi
+  echo "sshd configuration validation failed; sshd was not reloaded" >&2
+  exit 1
+fi
+
 echo "chromium for playwright $playwright_version, git $(git --version | cut -d" " -f3), rsync $(rsync --version | head -1 | cut -d" " -f4), node $(/usr/local/bin/node --version), bun $(/usr/local/bin/bun --version)"
 systemctl show rezics-check.slice -p MemoryMax -p CPUQuotaPerSecUSec
 REMOTE

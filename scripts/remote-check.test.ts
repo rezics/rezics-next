@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
-import { CHECK_SLOT_MEMORY_BYTES, CHECK_SLOT_PROCESSORS } from './remote-check.ts';
+import { CHECK_SLOT_MEMORY_BYTES, CHECK_SLOT_PROCESSORS, controlSocketDirectoryPath } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const kernel = join(repository, 'services/kernel');
@@ -19,16 +19,17 @@ const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const script = args.at(-1)!;
 const address = args.at(-2)!;
+const options = args.slice(0, -2);
 const hostConfigs = JSON.parse(readFileSync(dir + '/config.json', 'utf8'));
 const knownHost = Object.hasOwn(hostConfigs, address);
 const config = hostConfigs[address] ?? {};
+const controlPath = options.find((option) => option.startsWith('ControlPath='));
 const updateConfig = (updates: Record<string, unknown>) => {
   const file = dir + '/config.json';
   const all = JSON.parse(readFileSync(file, 'utf8'));
   all[address] = { ...all[address], ...updates };
   writeFileSync(file, JSON.stringify(all));
 };
-const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, ...event }) + '\\n');
 const hostKey = address.replace(/[^a-z0-9]/gi, '_');
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
@@ -36,6 +37,15 @@ const count = (name: string) => {
   writeFileSync(file, String(seen + 1));
   return seen;
 };
+const connectionNumber = count('connection');
+const refusedControlSession = Boolean(config.refuseControlSession && controlPath && connectionNumber > 0);
+// OpenSSH 10.2 retries a refused multiplexed session over a new connection in the same ssh process.
+const transport = refusedControlSession ? 'standalone-fallback' : controlPath ? 'control-master' : 'standalone';
+const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, options, transport, ...event }) + '\\n');
+if (refusedControlSession) {
+  log({ kind: 'master-session-refused' });
+  log({ kind: 'standalone-fallback' });
+}
 if (script.includes('/proc/loadavg')) {
   if (!knownHost || config.down) process.exit(255);
   const configuredMaximum = config.memoryMax ?? Math.max(16 * 2 ** 30, config.available ?? 16 * 2 ** 30);
@@ -173,10 +183,12 @@ const input = await Bun.stdin.text();
 const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
 const address = remote?.slice(0, remote.indexOf(':'));
 const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config.json', 'utf8'))[address] ?? {} : {};
+const rshIndex = args.indexOf('-e');
 const code = config.rsyncExit ?? 0;
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   destination: args.at(-1),
+  rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
   files: input.split('\\0').filter(Boolean),
   code,
 }) + '\\n');
@@ -263,6 +275,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     ...(process.env as Record<string, string>),
     PATH: `${join(root, 'bin')}:${process.env.PATH}`,
     FAKE_DIR: dir,
+    XDG_RUNTIME_DIR: join(dir, 'runtime'),
     KERNEL_CHECK_REMOTE: join(dir, 'hosts.json'),
     REMOTE_CHECK_POLL_MS: '20',
   };
@@ -650,6 +663,91 @@ test('a host that cannot be reached is skipped', async () => {
   const result = await remote(env, workspace());
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+});
+
+test('all ssh and rsync connections to a host share one control master', async () => {
+  const { env, events } = scenario({ a: { available: 4e9, exit: 255, present: ['result.txt'] } });
+  expect(controlSocketDirectoryPath(undefined, 124)).toBe('/tmp/rezics-ssh-124');
+  expect(controlSocketDirectoryPath(env.XDG_RUNTIME_DIR, 124)).toBe(join(env.XDG_RUNTIME_DIR!, 'rezics-ssh'));
+  const result = await remote(env, workspace(), ['true'], ['--returns', 'result.txt']);
+  expect(result.code).toBe(255);
+
+  const sshEvents = events().filter((event) => event.kind !== 'rsync');
+  const expectedControlPath = `ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/%C`;
+  expect(sshEvents.map((event) => event.kind)).toEqual(['probe', 'slot', 'run', 'status', 'returns', 'cleanup', 'release']);
+  for (const event of sshEvents) {
+    const options = event.options as string[];
+    expect(options).toContain('ControlMaster=auto');
+    expect(options).toContain('ControlPersist=10m');
+    expect(options.filter((option) => option.startsWith('ControlPath='))).toEqual([expectedControlPath]);
+  }
+
+  const rsyncEvents = events().filter((event) => event.kind === 'rsync');
+  expect(rsyncEvents).toHaveLength(2);
+  for (const event of rsyncEvents) {
+    expect(event.rsh as string).toContain('ControlMaster=auto');
+    expect(event.rsh as string).toContain('ControlPersist=10m');
+    expect(event.rsh as string).toContain(expectedControlPath);
+  }
+
+  const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
+  expect(statSync(controlDirectory).mode & 0o777).toBe(0o700);
+  await remote(env, workspace(), ['true']);
+  const repeated = events().filter((event) => event.kind === 'probe').at(-1)!;
+  expect((repeated.options as string[]).filter((option) => option.startsWith('ControlPath='))).toEqual([
+    expectedControlPath,
+  ]);
+});
+
+test('a control master session refusal falls back to its own connection', async () => {
+  const { env, events } = scenario({ a: { available: 4e9, refuseControlSession: true } });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  const seen = events();
+  const probe = seen.find((event) => event.kind === 'probe')!;
+  const refusedAt = seen.findIndex((event) => event.kind === 'master-session-refused');
+  const fallbackAt = seen.findIndex((event) => event.kind === 'standalone-fallback');
+  expect(probe.transport).toBe('control-master');
+  expect(refusedAt).toBeGreaterThan(seen.indexOf(probe));
+  expect(fallbackAt).toBeGreaterThan(refusedAt);
+  expect(seen.find((event) => event.kind === 'run')!.transport).toBe('standalone-fallback');
+  expect(seen.find((event) => event.kind === 'cleanup')!.transport).toBe('standalone-fallback');
+});
+
+test('provision-check-host installs and validates the sshd limits before reloading sshd', () => {
+  const identity = join(root, 'provision-identity');
+  const bin = join(root, 'provision-bin');
+  const received = join(root, 'provision-remote-script');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(identity, 'fake identity');
+  const ssh = join(bin, 'ssh');
+  writeFileSync(
+    ssh,
+    `#!/usr/bin/env bun\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(process.env.PROVISION_SCRIPT_FILE!, await Bun.stdin.text());\n`,
+  );
+  chmodSync(ssh, 0o755);
+  const result = spawnSync('bash', [join(repository, 'scripts/provision-check-host.sh'), 'root@check.test', identity, '16', '800'], {
+    cwd: repository,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PROVISION_SCRIPT_FILE: received },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+
+  expect(result.status).toBe(0);
+  const sent = readFileSync(received, 'utf8');
+  expect(sent).toContain('sshd_dropin=$sshd_config_dir/90-rezics-checks.conf');
+  expect(sent).toContain("sshd_wanted=$(printf 'MaxStartups 100:30:300\\nMaxSessions 64')");
+  expect(sent).toContain('sshd_candidate=$(mktemp "$sshd_config_dir/.90-rezics-checks.XXXXXX")');
+  expect(sent).toContain('if sshd -t; then');
+  const validationStart = sent.indexOf('if sshd -t; then');
+  const validationElse = sent.indexOf('\nelse\n', validationStart);
+  const validationEnd = sent.indexOf('\nfi\n', validationElse);
+  expect(validationElse).toBeGreaterThan(validationStart);
+  expect(validationEnd).toBeGreaterThan(validationElse);
+  expect(sent.slice(validationStart, validationElse)).toContain('systemctl reload ssh');
+  expect(sent.slice(validationElse, validationEnd)).not.toContain('systemctl reload ssh');
+  expect(sent).toContain('sshd configuration validation failed; sshd was not reloaded');
 });
 
 test('SIGTERM stops the run, removes its directory and releases the slot', async () => {
