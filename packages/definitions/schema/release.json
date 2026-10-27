@@ -144,9 +144,7 @@
           "maxLength": 80
         }
       },
-      "required": [
-        "en"
-      ]
+      "required": ["en"]
     },
     "libraryDecimal": {
       "type": "string",
@@ -163,19 +161,10 @@
           "$ref": "#/$defs/libraryLabels"
         },
         "role": {
-          "enum": [
-            "planned",
-            "active",
-            "completed",
-            "paused",
-            "dropped"
-          ]
+          "enum": ["planned", "active", "completed", "paused", "dropped"]
         }
       },
-      "required": [
-        "id",
-        "labels"
-      ]
+      "required": ["id", "labels"]
     },
     "libraryUnit": {
       "type": "object",
@@ -202,26 +191,17 @@
           "maximum": 6
         },
         "totalPolicy": {
-          "enum": [
-            "optional",
-            "required",
-            "forbidden"
-          ]
+          "enum": ["optional", "required", "forbidden"]
         },
         "identity": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "enum": [
-                "none",
-                "session_local"
-              ]
+              "enum": ["none", "session_local"]
             }
           },
-          "required": [
-            "kind"
-          ]
+          "required": ["kind"]
         },
         "structure": {
           "type": "object",
@@ -231,17 +211,10 @@
               "const": "none"
             }
           },
-          "required": [
-            "kind"
-          ]
+          "required": ["kind"]
         }
       },
-      "required": [
-        "id",
-        "labels",
-        "identity",
-        "structure"
-      ]
+      "required": ["id", "labels", "identity", "structure"]
     },
     "libraryStatus": {
       "type": "object",
@@ -254,10 +227,7 @@
           "$ref": "#/$defs/libraryLabels"
         }
       },
-      "required": [
-        "id",
-        "labels"
-      ]
+      "required": ["id", "labels"]
     },
     "libraryCopyKind": {
       "type": "object",
@@ -278,11 +248,7 @@
           "maxItems": 64
         }
       },
-      "required": [
-        "id",
-        "labels",
-        "statuses"
-      ]
+      "required": ["id", "labels", "statuses"]
     },
     "libraryProfile": {
       "type": "object",
@@ -307,10 +273,7 @@
               "maxItems": 64
             }
           },
-          "required": [
-            "id",
-            "states"
-          ]
+          "required": ["id", "states"]
         },
         "progress": {
           "type": "object",
@@ -323,11 +286,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "mode": {
-                    "enum": [
-                      "scalar_amount",
-                      "cursor_position",
-                      "completed_units"
-                    ]
+                    "enum": ["scalar_amount", "cursor_position", "completed_units"]
                   },
                   "units": {
                     "type": "array",
@@ -338,10 +297,7 @@
                     "maxItems": 32
                   }
                 },
-                "required": [
-                  "mode",
-                  "units"
-                ],
+                "required": ["mode", "units"],
                 "allOf": [
                   {
                     "if": {
@@ -433,9 +389,7 @@
               "maxItems": 3
             }
           },
-          "required": [
-            "allowed"
-          ]
+          "required": ["allowed"]
         },
         "copies": {
           "type": "object",
@@ -450,9 +404,7 @@
               "maxItems": 16
             }
           },
-          "required": [
-            "kinds"
-          ]
+          "required": ["kinds"]
         },
         "importSources": {
           "type": "array",
@@ -476,19 +428,13 @@
                 "uniqueItems": true
               }
             },
-            "required": [
-              "id",
-              "mappingVersion",
-              "recordKinds"
-            ]
+            "required": ["id", "mappingVersion", "recordKinds"]
           },
           "minItems": 0,
           "maxItems": 32
         }
       },
-      "required": [
-        "id"
-      ]
+      "required": ["id"]
     },
     "iri": {
       "type": "string",
@@ -591,9 +537,7 @@
               "$ref": "#/$defs/libraryId"
             }
           },
-          "required": [
-            "profileId"
-          ]
+          "required": ["profileId"]
         },
         "schemaOrgType": {
           "type": "string",

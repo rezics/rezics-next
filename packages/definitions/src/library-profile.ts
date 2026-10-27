@@ -91,8 +91,7 @@ export function validateLibraryProfileSource(
 
 /** Report dependent descriptor errors even when a different required member is missing. */
 export function libraryProgressSemantics(value: unknown, add: (pointer: string) => void): void {
-  const record = (v: unknown): v is Record<string, unknown> =>
-    typeof v === 'object' && v !== null && !Array.isArray(v);
+  const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
   if (!record(value) || !record(value.progress) || !Array.isArray(value.progress.allowed)) return;
   value.progress.allowed.forEach((mode: unknown, i: number) => {
     if (!record(mode) || !Array.isArray(mode.units)) return;
@@ -110,10 +109,7 @@ export function libraryProgressSemantics(value: unknown, add: (pointer: string) 
 }
 
 /** Linear validation shared by source and release; callers first establish structural validity. */
-export function libraryProfileSemantics(
-  profile: LibraryProfileSource,
-  add: (pointer: string) => void,
-): void {
+export function libraryProfileSemantics(profile: LibraryProfileSource, add: (pointer: string) => void): void {
   libraryProgressSemantics(profile, add);
   const duplicates = <T>(values: readonly T[], key: (value: T) => string, pointer: string) => {
     const seen = new Set<string>();
@@ -123,8 +119,7 @@ export function libraryProfileSemantics(
       seen.add(id);
     });
   };
-  if (profile.entryStateSet)
-    duplicates(profile.entryStateSet.states, (s) => s.id, '/entryStateSet/states');
+  if (profile.entryStateSet) duplicates(profile.entryStateSet.states, (s) => s.id, '/entryStateSet/states');
   if (profile.progress) {
     duplicates(profile.progress.allowed, (m) => m.mode, '/progress/allowed');
     profile.progress.allowed.forEach((mode, i) => {
@@ -145,9 +140,7 @@ export function libraryProfileSemantics(
   }
   if (profile.copies) {
     duplicates(profile.copies.kinds, (k) => k.id, '/copies/kinds');
-    profile.copies.kinds.forEach((kind, i) =>
-      duplicates(kind.statuses, (s) => s.id, `/copies/kinds/${i}/statuses`),
-    );
+    profile.copies.kinds.forEach((kind, i) => duplicates(kind.statuses, (s) => s.id, `/copies/kinds/${i}/statuses`));
   }
   if (profile.importSources) {
     duplicates(profile.importSources, (s) => s.id, '/importSources');

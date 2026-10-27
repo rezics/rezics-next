@@ -795,7 +795,10 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions libraryProfiles', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions libraryProfiles', {
+      file,
+      pointer: '',
+    });
     if (Object.hasOwn(labels, 'libraryProfiles'))
       library.presentation(parts.length === 2 ? parts[0] : undefined, tag, labels.libraryProfiles, file);
     for (const collection of ['types', 'properties'] as const) {

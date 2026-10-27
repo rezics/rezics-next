@@ -94,9 +94,12 @@ export function compileLibraryProfiles(schemas: Record<string, Node>, report: Re
       if (!record(definition.annotations) || !Object.hasOwn(definition.annotations, 'library')) continue;
       const declarationLocation = { ...location, pointer: `${location.pointer}/annotations/library` };
       const value = definition.annotations.library;
-      if (!validateLibraryProfileSource(value, (pointer) =>
-        report({ ...location, pointer: declarationLocation.pointer + pointer }, 'invalid', 'Invalid library profile'),
-      )) continue;
+      if (
+        !validateLibraryProfileSource(value, (pointer) =>
+          report({ ...location, pointer: declarationLocation.pointer + pointer }, 'invalid', 'Invalid library profile'),
+        )
+      )
+        continue;
       if (
         value.id === 'legacy-fixed-v1' &&
         (definition.abstract !== true || Object.hasOwn(definition, 'class_uri') || children.has(name))
