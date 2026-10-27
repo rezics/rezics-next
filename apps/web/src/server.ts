@@ -79,6 +79,10 @@ export default {
     }
     const isRead = request.method === 'GET' || request.method === 'HEAD';
     const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
+    if (isRead && !isMedia && !url.pathname.startsWith('/auth/') && url.pathname !== '/api/search/suggestions') {
+      const redirect = await pageRedirect(request, url);
+      if (redirect) return redirect;
+    }
     let clearSessionCookie = false;
     let mediaSessionError: unknown;
 
@@ -161,23 +165,23 @@ export default {
   },
 };
 
-async function siteRequest(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  if (request.method === 'GET' || request.method === 'HEAD') {
-    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-      url.pathname = url.pathname.replace(/\/+$/, '');
-      return new Response(null, { status: 301, headers: { Location: url.href } });
-    }
-    const first = url.pathname.split('/')[1];
-    if (!locales.some((locale) => locale === first)) {
-      const locale = await extractLocaleFromRequestAsync(request);
-      const location = localizeUrl(url, { locale });
-      return new Response(null, {
-        status: 302,
-        headers: { Location: location.href, Vary: 'Cookie, Accept-Language', 'Cache-Control': 'private, no-store' },
-      });
-    }
+async function pageRedirect(request: Request, url: URL): Promise<Response | undefined> {
+  if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    return new Response(null, { status: 301, headers: { Location: url.href } });
   }
+  const first = url.pathname.split('/')[1];
+  if (!locales.some((locale) => locale === first)) {
+    const locale = await extractLocaleFromRequestAsync(request);
+    const location = localizeUrl(url, { locale });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: location.href, Vary: 'Cookie, Accept-Language', 'Cache-Control': 'private, no-store' },
+    });
+  }
+}
+
+async function siteRequest(request: Request): Promise<Response> {
   return paraglideMiddleware(request, () => fetchHandler(request)).then((response: Response) => {
     const headers = new Headers(response.headers);
     headers.set('Cache-Control', 'private, no-store');
