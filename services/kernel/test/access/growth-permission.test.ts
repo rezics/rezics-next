@@ -7,6 +7,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { AccountActor, Resource } from '../../src/request/access.ts';
 import {
+  capture,
   checkGrowth,
   openGrowthDatabase,
   seed,
@@ -46,6 +47,23 @@ const seededOrganizationIds: string[] = [];
 const seededResourceIds: string[] = [];
 const seededTestResourceIds: string[] = [];
 const assignmentGrowthPrincipalIds: string[] = [];
+
+function expectIndex(plans: readonly unknown[], expected: string): void {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (typeof node !== 'object' || node === null) return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const plan = node as Record<string, unknown>;
+    if (typeof plan['Index Name'] === 'string' && plan['Index Name'].startsWith(expected)) found = true;
+    if (typeof plan.Plan === 'object' && plan.Plan !== null) visit(plan.Plan);
+    if (Array.isArray(plan.Plans)) for (const child of plan.Plans) visit(child);
+  };
+  for (const plan of plans) visit(plan);
+  expect(found, `plan should use ${expected}`).toBe(true);
+}
 
 // This population mirrors Access account, organization membership, grant, role-grant and denial rows, fence.sql records, and the resource creation port's route/id insert.
 const population: Population = {
@@ -452,6 +470,17 @@ test('Final permission check stays within its bound as G grows', async () => {
       }
     }),
   );
+  const finalPlan = await capture(db!, async () => {
+    const evidence = await prepare(db!.pool);
+    const client = await db!.pool.connect();
+    try {
+      if (!(await permissions.authorize(client, actor, action, target, evidence)))
+        throw new Error('The bounded resource grant did not authorize its actor');
+    } finally {
+      client.release();
+    }
+  });
+  expectIndex(finalPlan.capture.plans, 'resource_grant_pkey');
 }, 85_000);
 
 test('Assignment permission check stays within its bound as assignments and grants grow', async () => {
@@ -462,8 +491,8 @@ test('Assignment permission check stays within its bound as assignments and gran
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, assignmentGrowthPopulation, {
-        from: previous,
-        to: scale,
+        from: previous * ordinalsPerScaleUnit,
+        to: scale * ordinalsPerScaleUnit,
       });
     },
     operation: async (growthDb) => {
@@ -478,7 +507,19 @@ test('Assignment permission check stays within its bound as assignments and gran
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
-}, 85_000);
+  const assignmentPlan = await capture(db!, async () => {
+    const evidence = await prepare(db!.admin, target, assignmentActor);
+    const client = await db!.pool.connect();
+    try {
+      if (!(await permissions.authorize(client, assignmentActor, action, target, evidence)))
+        throw new Error('The current assignment and resource grants did not authorize the actor');
+    } finally {
+      client.release();
+    }
+  });
+  expectIndex(assignmentPlan.capture.plans, 'principal_assignment_pkey');
+  expectIndex(assignmentPlan.capture.plans, 'resource_grant_pkey');
+}, 300_000);
 
 test('Parent creation authorization stays within its bound as G grows', async () => {
   await resetSeededRows();

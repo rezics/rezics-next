@@ -289,7 +289,6 @@ export function createAccess(config: AccessConfig): Access {
       const bounded = deadlineClient(client, context.deadline);
       await bounded.query('BEGIN READ ONLY');
       try {
-        await bounded.query('SET LOCAL enable_seqscan = off');
         const pinned = atTimeClient(bounded, at);
         for (const check of checks) {
           requireAccessDeadline(context.deadline);

@@ -353,9 +353,6 @@ export async function recordCompletion(
   receipt: LifecycleReceipt,
 ): Promise<{ continuationId: string; receiptId: string }> {
   refused(presented.digest === continuationEntryDigest(presented));
-  // Exact root/entry and native receipt probes must stay indexed even while
-  // these append-only tables are small; unrelated roots are never their scope.
-  await tx.query('SET LOCAL enable_seqscan = off');
   const row = await oneRow(() =>
     loadContinuation.run(tx, { route: located.route, continuation_id: located.continuationId }),
   );
@@ -540,7 +537,6 @@ export function createCommittedContinuations(config: {
       const row = await withConnection(config.pool, async (client) => {
         await client.query('BEGIN READ ONLY');
         try {
-          await client.query('SET LOCAL enable_seqscan = off');
           const result = await oneRow(() => readContinuation.run(client, { route, operation_key: operationKey }));
           await client.query('COMMIT');
           return result;

@@ -90,10 +90,6 @@ async function transaction<T>(
   const client = await database.connect();
   try {
     await client.query('BEGIN');
-    // Even a small cold archive must use its unique kid index: a planner-chosen
-    // sequential scan would examine unrelated history during injection/restart.
-    // This transaction-local preference never changes the caller's pool session.
-    await client.query('SET LOCAL enable_seqscan=off');
     // Acquire the lock before taking the slot snapshot. After waiting for a
     // concurrent controller, READ COMMITTED must see its committed key rows too.
     await client.query('SELECT singleton FROM auth_signing_generation WHERE singleton=true FOR UPDATE');

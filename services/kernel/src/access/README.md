@@ -803,7 +803,7 @@ no hold and fences nothing by TTL; current governance can renew its stored live 
 
 - Touches: one continuation insert in the barrier's transaction; per cleanup step a primary-key root read, an exact derived-entry probe when needed, and one completion insert. Each fan-out page inserts its bounded derived entries in the page transaction. Renewal adds one governance check on the Global Context and one update.
 - Bound: O(log R) per point statement, independent of other accounts and continuations. The allowlist read touches only this root's initial and derived entries, proportional to its own effects. A fencing page adds at most 100 child completions and one next-page entry.
-- Growth check: `growth-committed-continuation.test.ts` checks root lookup at [1, 8, 64] and one actual fan-out page's completion at [256, 1024, 4096] as unrelated continuations and operated accounts grow; constant rows and statements, logarithmic buffers.
+- Growth check: `test/access/growth-committed-continuation.test.ts`: "continuation lookup stays bounded as unrelated accounts and continuations grow" and "one fanout page completion stays bounded as unrelated continuations and operated accounts grow"; constant rows and statements, logarithmic buffers.
 - Behaviour: `committed-continuation-runner.test.ts` runs real deletion and fencing continuations through the runner, including expiry, replay and the immutable completion store.
 
 Permission preparation and the final formula use capped account inverses and exact temporal probes; integrated checks measure constant rows/statements and logarithmic blocks in ACL/history size at fixed admitted membership, and at most linear work through the 1000-per-account cap.

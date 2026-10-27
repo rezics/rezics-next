@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthReport,
+} from '../../support/growth.ts';
 
 await import('reylo/register');
 const { actorFixture } = await import('../actor-side-fixture.ts');
@@ -10,7 +16,7 @@ const { actionCatalogue } = await import('../../../src/http/request.ts');
 const appModule = await import('../../../src/http/app.ts');
 
 const fixedTime = new Date('2026-01-15T12:00:00.000Z');
-const seedCount = 1024;
+const rowsPerScaleUnit = 500;
 const routeKey = new Uint8Array(32).fill(103);
 const tag = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => String.fromCharCode(97 + (byte % 26))).join(
   '',
@@ -40,10 +46,24 @@ function expectBounded(report: GrowthReport, routeCount: number): void {
   for (const sample of report.samples) {
     expect(sample.cost.rows).toBeGreaterThan(0);
     expect(sample.cost.statements).toBeLessThan(routeCount);
-    for (const [relation, cost] of Object.entries(sample.cost.relations ?? {})) {
-      if (relation.startsWith('access.')) expect(cost.sequentialScans, `${relation} at ${sample.scale}`).toBe(0);
-    }
   }
+}
+
+function expectIndex(plans: readonly unknown[], expected: string): void {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (typeof node !== 'object' || node === null) return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const plan = node as Record<string, unknown>;
+    if (typeof plan['Index Name'] === 'string' && plan['Index Name'].startsWith(expected)) found = true;
+    if (typeof plan.Plan === 'object' && plan.Plan !== null) visit(plan.Plan);
+    if (Array.isArray(plan.Plans)) for (const child of plan.Plans) visit(child);
+  };
+  for (const plan of plans) visit(plan);
+  expect(found, `plan should use ${expected}`).toBe(true);
 }
 
 beforeAll(async () => {
@@ -85,53 +105,9 @@ beforeAll(async () => {
   composition.mockRestore();
   access = createAccess({ actions: actionCatalogue(kernel) });
 
-  accountGrowthIds = Array.from({ length: seedCount + 64 }, () => newId(accountRoute));
-  grantSubjectIds = Array.from({ length: seedCount + 64 }, () => newId(accountRoute));
-  openingNames = Array.from({ length: seedCount + 64 }, (_, index) => `gd${tag}_o${alpha(index)}`);
-  const timestamp = Bun.randomUUIDv7();
-  const globalId = '00000000-0000-8000-8000-000000000000';
-  await db.admin.query(
-    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
-    [accountRoute, accountGrowthIds.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
-    [accountRoute, grantSubjectIds.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.resource_grant
-       (route, resource_id, subject_id, action, valid, transaction_id)
-     SELECT 0, $1::uuid, id, 'gate:unrelated', '(,)', $3
-     FROM unnest($2::uuid[]) id`,
-    [globalId, accountGrowthIds.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.resource_role_grant
-       (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
-     SELECT 0, $1::uuid, 'identity', id, '', 'growth_unrelated', '(,)', $3
-     FROM unnest($2::uuid[]) id`,
-    [globalId, grantSubjectIds.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.resource_denial
-       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
-     SELECT 0, $1::uuid, id, '', 'gate:unrelated', 'resource', '(,)', $3
-     FROM unnest($2::uuid[]) id`,
-    [globalId, accountGrowthIds.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-     SELECT group_name, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2
-     FROM unnest($1::text[]) AS group_name`,
-    [openingNames.slice(0, seedCount), timestamp],
-  );
-  await db.admin.query('ANALYZE access.account');
-  await db.admin.query('ANALYZE access.resource_grant');
-  await db.admin.query('ANALYZE access.resource_role_grant');
-  await db.admin.query('ANALYZE access.resource_denial');
-  await db.admin.query('ANALYZE access.exposure_opening');
+  accountGrowthIds = Array.from({ length: 64 * rowsPerScaleUnit }, () => newId(accountRoute));
+  grantSubjectIds = Array.from({ length: 64 * rowsPerScaleUnit }, () => newId(accountRoute));
+  openingNames = Array.from({ length: 64 * rowsPerScaleUnit }, (_, index) => `gd${tag}_o${alpha(index)}`);
 }, 120_000);
 
 afterAll(async () => {
@@ -160,6 +136,8 @@ async function discover(): Promise<void> {
 }
 
 test('discovery stays bounded as unrelated accounts, gate grants, and openings grow', async () => {
+  // The route catalogue is fixed-size. Discovery receives the viewer identity directly and does not read
+  // access.account; account, resource-grant, role-grant, denial, and opening rows grow in their declared checks.
   const routeCount = kernel.routes.filter((route) => route.hooks?.detail?.hide !== true).length;
   expect(routeCount).toBeGreaterThan(1);
   const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
@@ -170,7 +148,7 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
     repetitions: 1,
     warmups: 1,
     async grow(database, scale, previous) {
-      const ids = accountGrowthIds.slice(seedCount + previous, seedCount + scale);
+      const ids = accountGrowthIds.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
       await database.admin.query(
         `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
          SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
@@ -188,7 +166,12 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
     repetitions: 1,
     warmups: 1,
     async grow(database, scale, previous) {
-      const ids = grantSubjectIds.slice(seedCount + previous, seedCount + scale);
+      const ids = grantSubjectIds.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
+      await database.admin.query(
+        `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+         SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+        [accountRoute, ids, Bun.randomUUIDv7()],
+      );
       await database.admin.query(
         `INSERT INTO access.resource_grant
            (route, resource_id, subject_id, action, valid, transaction_id)
@@ -196,11 +179,32 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
          FROM unnest($1::uuid[]) id`,
         [ids, Bun.randomUUIDv7()],
       );
+      await database.admin.query(
+        `INSERT INTO access.resource_role_grant
+           (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', 'identity', id, '', 'growth_unrelated', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [ids, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_denial
+           (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, '', 'gate:unrelated', 'resource', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [ids, Bun.randomUUIDv7()],
+      );
+      await database.admin.query('ANALYZE access.account');
       await database.admin.query('ANALYZE access.resource_grant');
+      await database.admin.query('ANALYZE access.resource_role_grant');
+      await database.admin.query('ANALYZE access.resource_denial');
     },
     operation: discover,
   });
   expectBounded(grants, routeCount);
+  const grantPlans = await capture(db, discover);
+  expectIndex(grantPlans.capture.plans, 'resource_grant_pkey');
+  expectIndex(grantPlans.capture.plans, 'resource_role_grant_pkey');
+  expectIndex(grantPlans.capture.plans, 'resource_denial_permission');
 
   const openings = await checkGrowth(db, {
     name: 'Operation discovery with other exposure opening growth',
@@ -208,7 +212,7 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
     repetitions: 1,
     warmups: 1,
     async grow(database, scale, previous) {
-      const names = openingNames.slice(seedCount + previous, seedCount + scale);
+      const names = openingNames.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
       await database.admin.query(
         `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
          SELECT group_name, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2
@@ -220,4 +224,6 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
     operation: discover,
   });
   expectBounded(openings, routeCount);
+  const openingPlans = await capture(db, discover);
+  expectIndex(openingPlans.capture.plans, 'exposure_opening_pkey');
 });

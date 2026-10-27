@@ -40,7 +40,6 @@ export async function readExposure(pool: Pool, group: string, at: Date, deadline
       const bounded = deadlineClient(client, deadline);
       await bounded.query('BEGIN READ ONLY');
       try {
-        await bounded.query('SET LOCAL enable_seqscan = off');
         const row = await openingRead.run(bounded, { group, at: at.toISOString() });
         if (!row || typeof row.open !== 'boolean' || typeof row.at !== 'string')
           throw new Error('Exposure catalogue read failed');
@@ -110,7 +109,6 @@ export function createExposureCommands(config: { pool: Pool; clock: () => Date }
       },
       async (tx, { time, transactionId }) => {
         const at = authoritativeTimeValue(time);
-        await tx.query('SET LOCAL enable_seqscan = off');
         const row =
           operation === 'open'
             ? await openingOpen.run(tx, { group, at, transaction_id: transactionId })

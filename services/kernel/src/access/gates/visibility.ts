@@ -105,7 +105,6 @@ export async function visibleOperations(input: {
         const bounded = deadlineClient(client, input.deadline);
         await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
-          await bounded.query('SET LOCAL enable_seqscan = off');
           for (const row of await openGroups.run(bounded, { groups, at: instant })) {
             if (typeof row.group !== 'string') throw new Error('Open group read failed');
             open.add(row.group);

@@ -12,6 +12,24 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 
 let db: GrowthDatabase;
 const reads: { text: string; values?: unknown[] }[] = [];
+const rowsPerScaleUnit = 500;
+
+function expectIndex(plan: unknown, expected: string): void {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (typeof node !== 'object' || node === null) return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const details = node as Record<string, unknown>;
+    if (typeof details['Index Name'] === 'string' && details['Index Name'].startsWith(expected)) found = true;
+    if (typeof details.Plan === 'object' && details.Plan !== null) visit(details.Plan);
+    if (Array.isArray(details.Plans)) for (const child of details.Plans) visit(child);
+  };
+  visit(plan);
+  expect(found, `plan should use ${expected}`).toBe(true);
+}
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
@@ -103,34 +121,48 @@ for (const mode of ['generic', 'multi-action'] as const) {
       repetitions: 3,
       warmups: 1,
       async grow(database, scale, previous) {
-        const from = previous * 256,
-          to = scale * 256;
+        const from = previous * rowsPerScaleUnit,
+          to = scale * rowsPerScaleUnit;
         const ids = Array.from({ length: to - from }, () => newId(routeOf(f.actorId)!));
         await database.admin.query(
           `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
           SELECT $1,id,'actor','active',$3 FROM unnest($2::uuid[]) id`,
           [routeOf(f.actorId), ids, f.transactionId],
         );
-        // Both unrelated rows and the same actor's durable receipt/assignment
-        // history grow. The actor's membership inverse K remains fixed at two.
+        // Other accounts, receipts, assignments and memberships grow with the
+        // measured anchor's durable receipt history. Its inverse K stays at two.
         await database.admin.query(
           `INSERT INTO core.receipt
           (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-          SELECT $1,'account',$2,'admission-history',id::text,$3,1,1,$4,'{}'::jsonb FROM unnest($5::uuid[]) id`,
-          [partitionOf(f.resource.route), f.actorId, Buffer.alloc(32), f.transactionId, ids],
+          SELECT $1::integer,'account',$2::uuid,'admission-history',id::text,$4::bytea,1,1,$5::uuid,'{}'::jsonb
+          FROM unnest($3::uuid[]) id
+          UNION ALL
+          SELECT $1::integer,'account',id,'admission-history',id::text,$4::bytea,1,1,$5::uuid,'{}'::jsonb
+          FROM unnest($3::uuid[]) id`,
+          [partitionOf(f.resource.route), f.actorId, ids, Buffer.alloc(32), f.transactionId],
         );
         await database.admin.query(
-          `INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-          SELECT $1,$2,id,$3,'(,)',$4 FROM unnest($5::uuid[]) id`,
-          [routeOf(f.principalId), f.principalId, f.actorId, f.transactionId, ids],
+          `INSERT INTO access.principal_assignment
+            (route,principal_id,request_id,assigned_actor_id,valid,transaction_id,creator_principal_id,issued_valid)
+          SELECT $1,id,id,$2,'(,)',$3,id,'(,)' FROM unnest($4::uuid[]) id`,
+          [routeOf(f.actorId), f.actorId, f.transactionId, ids],
+        );
+        await database.admin.query(
+          `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+          SELECT $1,id,'organization',$2,id,$3 FROM unnest($4::uuid[]) id`,
+          [routeOf(f.actorId), f.organizationId, f.transactionId, ids],
         );
         await database.admin.query(
           `INSERT INTO access.organization_member(route,organization_id,member_account_id,role,valid,transaction_id)
-          SELECT $1,$2,$3,'owner',tstzrange('1900-01-01'::timestamptz+n*interval '1 minute',
-          '1900-01-01'::timestamptz+(n+1)*interval '1 minute','[)'),$4 FROM generate_series($5::integer,$6::integer-1) n`,
-          [routeOf(f.organizationId), f.organizationId, f.actorId, f.transactionId, from, to],
+          SELECT $1,$2,id,'member',tstzrange('1900-01-01'::timestamptz,NULL,'[)'),$3
+          FROM unnest($4::uuid[]) id`,
+          [routeOf(f.organizationId), f.organizationId, f.transactionId, ids],
         );
-        await database.admin.query('VACUUM (ANALYZE)');
+        await database.admin.query('ANALYZE access.account');
+        await database.admin.query('ANALYZE core.receipt');
+        await database.admin.query('ANALYZE access.principal_assignment');
+        await database.admin.query('ANALYZE access.membership_inverse');
+        await database.admin.query('ANALYZE access.organization_member');
       },
       async operation(_database, scale, repetition) {
         const key = `${scale}-${repetition}`;
@@ -179,6 +211,12 @@ for (const mode of ['generic', 'multi-action'] as const) {
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
     expect(report.samples.every(({ cost }) => cost.statements === report.samples[0]!.cost.statements)).toBe(true);
+    const observed = reads[0]!;
+    const explained = await db.admin.query<{ 'QUERY PLAN': unknown }>(
+      `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT JSON) ${observed.text}`,
+      observed.values,
+    );
+    expectIndex(explained.rows[0]!['QUERY PLAN'], 'account_pkey');
     expect(
       (
         await db.admin.query(
