@@ -468,7 +468,7 @@ test('graph and summary covering reads use unforced indexed access as their popu
     try {
       assertUnforcedIndexes('bounded graph expansion and node summaries', scale, raw, {
         'semantic.subject': 'subject_pkey',
-        'semantic.fact': 'fact_label',
+        'semantic.fact': ['fact_label', 'fact_terms'],
         'semantic.outbound_link': 'outbound_link_maintenance',
         'semantic.inbound_link': 'inbound_link_present',
         'semantic.outbound_link_count': 'outbound_link_count_pkey',
