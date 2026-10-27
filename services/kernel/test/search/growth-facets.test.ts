@@ -562,7 +562,7 @@ test('type facet stays within its bound as subjects grow', async () => {
             relation: 'exact',
             values: [
               { value: 'schema:Book', count: 4, labels: {} },
-              { value: 'schema:Person', count: 2, labels: {} },
+              { value: 'skos:Concept', count: 2, labels: {} },
             ],
           },
         ]);
