@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { aggregateFixture, property, statement, type AggregateFixture } from './support/aggregate-disclosure.ts';
 
@@ -59,29 +60,48 @@ test('paused consumers cannot retain exact public totals after source revocation
   // Revocation of imported tuple authority is a real native command, not a fake Access decision.
   const target = await fixture.create('Tuple target');
   const externalId = `aggregate-${randomUUID()}`;
+  const provenance = {
+    source: 'openlibrary',
+    external_id: externalId,
+    record_revision: 'unversioned',
+    digest: 'c'.repeat(64),
+    converter_revision: 'openlibrary@1',
+    field_group: 'facts',
+  };
   const batch = await fixture.call('POST', '/v1/subjects:batchWrite', {
     commands: [
       {
         op: 'create',
         key: randomUUID(),
-        source: {
-          source: 'openlibrary',
-          external_id: externalId,
-          record_revision: 'unversioned',
-          digest: 'c'.repeat(64),
-          converter_revision: 'openlibrary@1',
-          field_group: 'facts',
-        },
+        source: provenance,
         subject: {
           type: 'schema:Book',
           labels: { en: 'Imported source' },
-          statements: { [property]: [statement(target.id)] },
         },
       },
     ],
   });
-  expect(batch.results[0].status).toBe(201);
+  expect(batch.results[0].status, JSON.stringify(batch)).toBe(201);
   const source = batch.results[0].value.id as string;
+  // Batch create admits only subject terms; imported relations are proposed, accepted and adopted.
+  const proposed = await fixture.call('POST', '/v1/subjects:batchWrite', {
+    commands: [
+      { op: 'propose', key: randomUUID(), source: provenance, subject: source, statement: statement(target.id) },
+    ],
+  });
+  expect(proposed.results[0].status, JSON.stringify(proposed)).toBe(201);
+  const candidate = proposed.results[0].value.candidate as string;
+  await fixture.call('POST', `/v1/subjects/${source}/candidates/${candidate}:accept`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: null,
+  });
+  await fixture.call('POST', `/v1/subjects/${source}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property,
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    expected_head: null,
+  });
   fixture.partitions.add(routeOf(source)! >> 4);
   await fixture.drain();
   expect((await fixture.inverse(target.id)).links).toHaveLength(1);

@@ -26,6 +26,8 @@ export async function aggregateFixture(db: GrowthDatabase) {
     'subject:read',
     'subject:batch_write',
     'statement:propose',
+    'context:accept',
+    'context:adopt',
     'moderation:hide',
     'moderation:takedown',
     'source_fence:takedown',
