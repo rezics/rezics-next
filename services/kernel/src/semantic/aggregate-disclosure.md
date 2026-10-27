@@ -39,7 +39,7 @@ Do not hand-edit generated declarations or silently rename `relationCounts` to a
 | --- | --- | --- |
 | `GET /v1/subjects/:id/links?property=…` | Optional `count:{value,exact}`; `listSubjectLinks` reads `read-inbound-link-count.sql`, adds private total, or samples `count-inbound-link-types.sql` | Keep optional `count`; omit absent complete current proof, including typed samples. Cross-property pages already omit it. |
 | `GET /v1/subjects/:id/relations?property=…` | Required `count:{value,exact}` in `SubjectRelationsPage` and response; outbound counter plus private total / type sample | Make `count?:{value:number;exact:boolean}` and `t.Optional(t.Object({value:t.Integer({minimum:0}),exact:t.Boolean()}))`. Existing proved values keep their shape. |
-| Subject read/create/edit response `subject.relationCounts` | Required `Record<string,number>` in `Item`, `resolveItem`, `SubjectSchema`; read previews use 13 candidates and emit 12 | Keep required map with individual property keys optional: omit unproved keys, retain proved integer entries. Public TypeScript type becomes `Partial<Record<string,number>>`; code-first record remains sparse, with no undefined JSON values. Command replies need the same disclosure policy. |
+| Subject read/create/edit response `subject.relationCounts` | Required `Record<string,number>` in `Item`, `resolveItem`, `SubjectSchema`; read previews use 13 candidates and emit 12 | Keep required map with individual property keys optional: omit unproved keys, retain proved integer entries. Keep the sparse `Record<string,number>` and `t.Record(t.String(),t.Integer({minimum:0}))`; `noUncheckedIndexedAccess` already makes indexed lookups optional. Never serialize undefined values. Command replies need the same disclosure policy. |
 | `GET /v1/subjects/:id/graph` | `SubjectGraph.truncated[]` requires numeric `count`; `read-graph-expansions.sql` reads internal inbound/outbound counters before traversal | Make each `count?:number`, `t.Optional(t.Integer({minimum:0}))`; keep node/property/direction/cursor and existing traversal limits. Derive continuations from bounded candidate progress; do not require a public total to issue a cursor. |
 | Subject summaries and related items | `SubjectSummary` contains ID/type/types/label/creativeWork/cover, no count | No new aggregate field. Current summary authorization still applies; its success alone does not prove an entire relation set. |
 
@@ -86,7 +86,7 @@ its owner supplies the route; this contract does not invent lifecycle authority 
 substitute for the existing regression.
 
 Growth uses the unchanged shared `seed` and capture helpers, degree and unrelated population at 64/512/4096,
-one warmup and five repetitions, first and deep pages, fixed input and proof budgets. Sources are distinct
+one warmup and five repetitions, first and deep pages both with and without a type filter, fixed input and proof budgets. Sources are distinct
 foreign IDs with native-shaped revision/fact/link storage; authority mutations use commands, never SQL truth
 or fabricated proof stamps. All current proof and Access queries run through the same instrumented owner pool;
 any future extra owner pool must use `GrowthDatabase.openPool` so it is charged too. Actual rows and statements
@@ -110,7 +110,7 @@ settings or timeouts to obtain green measurements.
    with `bun run --cwd services/kernel derived`, using `scripts/openapi.ts` and `scripts/client.ts`. This depends
    on the final optional fields in step 2. The generated tree `packages/client/src/kernel/**/*.d.ts` includes
    imported route declarations transitively, not just `semantic/http/subjects.d.ts`; OpenAPI lives in
-   `services/kernel/openapi.json`. Never rename schema fields without the typed client and consuming pages.
+   `contracts/openapi.json`. Never rename schema fields without the typed client and consuming pages.
 4. Run native acceptance and existing caller tests, root typecheck (`bun scripts/typecheck.ts`) and generated
    drift checks. The tests delivered here are intentionally red on current production behavior.
 
@@ -120,21 +120,29 @@ Direct production declarations/callers: `semantic/item.ts` (`Item`, `resolveItem
 `readSubject`), `links.ts` (`SubjectLinksPage`, `SubjectRelationsPage`, `listSubjectLinks`, `listSubjectRelations`),
 `graph.ts` (`SubjectGraph`, `listSubjectGraph`), `http/subjects.ts` (`SubjectSchema`, graph and list responses),
 `http/definitions.ts` and `http/contexts.ts` (transitively typed route chains), `http/summaries.ts` and
-`summaries.ts` (preserve the count-free shared projection). `subject-pages.ts` and `expansion.ts` are direct
-list consumers; recipe/composition results must propagate missing totals rather than synthesize zero.
+`summaries.ts` (preserve the count-free shared projection). There are no other direct calls to the three list functions on this base. Recipe/composition consumers of HTTP
+list responses must propagate missing totals rather than synthesize zero.
 
 Web consumers needing coordinated review are `apps/web/src/features/pages/views.ts`, `overview.tsx`,
 `relations-view.tsx`, `subject-frame.tsx` and `data.tsx`; `countText`, tab counts and list recipes must handle
-absence without turning it into zero. Client fixture coverage includes `packages/client/tests/client.test.ts`.
+absence without synthesizing a total from the returned rows. `holderItems` currently turns absent `count` into
+an exact page length, and `previewCount` does the same for tabs; both fallbacks must change. Review the generic
+page read descriptors in `packages/composition/src/registry.ts` and their execution through the web client.
+`apps/web/src/kernel/fake.ts` and its `fixtures.json` plus `recorded/subject-links.json`, `subject.json`,
+`subject-uncovered.json`, `subject-page.json`, `realm-subjects.json`, `agent-page.json` and
+`agent-page-reader.json` need matching optional-field fixtures; production acceptance must stay native. Client fixture coverage includes `packages/client/tests/client.test.ts`.
 Web acceptance includes `apps/web/tests/view-tabs-fit.test.ts` and page/list fixtures in
 `home-search-rebuild.test.ts`. Generated OpenAPI and all Eden declaration outputs must be regenerated together.
 
 Existing native tests that assert list counts, relation maps, graph totals or their derived responses:
 `links.test.ts`, `inverse-pages.test.ts`, `relations-uncapped.test.ts`, `relation-page-summaries.test.ts`,
-`link-filters` (where present), `links-projection.test.ts`, `graph-read.test.ts`, `graph-context.test.ts`,
+`links-projection.test.ts`, `graph-read.test.ts`, `graph-context.test.ts`,
 `graph-summaries.test.ts`, `subject.test.ts`, `subjects-http.test.ts`, `subjects.test.ts`, `item.test.ts`,
 `subject-summaries.test.ts`, `context-relations.test.ts`, `custom-relation-types.test.ts`, `pen-names.test.ts`,
 `pen-name-editing.test.ts`, `recipe-structure.test.ts`, `growth-relations.test.ts`, `growth-inverse-pages.test.ts`,
-`growth-private-statements.test.ts`, plus `specs/semantic-outcomes.test.ts` and its shared driver. Existing tests
+`growth-private-statements.test.ts`, `growth-key-reemit.test.ts`, `statement-visibility.test.ts`,
+`visibility.test.ts`, `merge-projection.test.ts`, `merges.test.ts`, `expansion.test.ts`,
+`agent-verification-reversal.test.ts`, `account-agent-erasure.test.ts`, `authored-documents.test.ts`,
+`bulk.test.ts`, `subject-pages.test.ts`, plus `specs/semantic-outcomes.test.ts` and its shared driver. Existing tests
 remain unchanged in this specification task; production work must reconcile only explicitly authorized
 expectations. The separate deletion-audit exact-zero assertion is the one known obsolete requirement.
