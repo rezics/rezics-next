@@ -142,3 +142,21 @@ test('a model capacity refusal continues the task after a short pause, however o
     await h.tasks.stop?.(task.id).catch?.(() => {});
   } finally { h.dispose(); }
 }, 60_000);
+
+// The CLI hangs before starting a session: it writes nothing and never exits on its own.
+const hangingCli = `#!/usr/bin/env bun
+await new Promise(resolve => setTimeout(resolve, 600_000));
+`;
+
+test('a worker that writes nothing within the start window is stopped and retried, then goes to the manager', async () => {
+  const h = harness(hangingCli), inbox: ManagerEvent[] = [];
+  h.settings.startGraceMs = 1000;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) });
+    await job.start(task.id); await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    for (const attempt of [1, 2]) expect(h.store.attempt({ taskId: task.id, attempt }).failureKind).toBe('tool');
+    expect(inbox.map(event => event.kind)).toEqual(['stalled']);
+  } finally { h.dispose(); }
+}, 60_000);

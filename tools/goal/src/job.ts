@@ -1,4 +1,4 @@
-import { watch, type FSWatcher } from 'node:fs';
+import { statSync, watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import {
@@ -45,6 +45,8 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 
 /** How long a capacity refusal waits before the attempt continues. */
 export const CAPACITY_PAUSE_MS = 10_000;
+/** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
+export const START_GRACE_MS = 10 * 60_000;
 
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
@@ -256,6 +258,21 @@ export class WorkerJob implements GateOutcomeSink {
       () => stopIfStalled(true),
       Math.max(0, limits.maxMs - (Date.now() - Date.parse(ref.startedAt))),
     );
+    // One worker held a slot for two hours with an empty log until the class limit ended it.
+    const startCheck = setTimeout(
+      () => {
+        try {
+          store.assertCurrent(ref);
+          const attempt = store.attempt(ref);
+          if (attempt.state !== 'running' || (statSync(ref.logPath, { throwIfNoEntry: false })?.size ?? 0) > 0) return;
+          console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
+          void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs).catch(() => {});
+        } catch {
+          /* A superseded attempt needs no check. */
+        }
+      },
+      Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - Date.parse(ref.startedAt))),
+    );
     try {
       watcher = watch(ref.logPath, () => stopIfStalled(false));
       try {
@@ -270,6 +287,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (stopping) await stopping;
     } finally {
       clearTimeout(timer);
+      clearTimeout(startCheck);
       watcher?.close();
     }
     if (!stopping) {
