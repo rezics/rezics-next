@@ -221,8 +221,13 @@ CREATE TABLE library.collection (
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
     listing_ever_public boolean DEFAULT false NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_after timestamp with time zone,
+    CONSTRAINT collection_active_deletion CHECK (((state <> 'active'::text) OR (deleted_at IS NULL))),
     CONSTRAINT collection_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_check1 CHECK ((route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11)))),
+    CONSTRAINT collection_deletion_pair CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
+    CONSTRAINT collection_deletion_window CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
     CONSTRAINT collection_member_count_check CHECK (((member_count >= 0) AND (member_count <= 5000))),
     CONSTRAINT collection_order_epoch_check CHECK ((order_epoch >= 0)),
@@ -1159,6 +1164,20 @@ CREATE INDEX collection_curator_page ON library.collection USING btree (route, c
 --
 
 CREATE INDEX collection_curator_public_page ON library.collection USING btree (route, curator_account_id, updated_at DESC, collection_id DESC) WHERE ((state = 'active'::text) AND (visibility = 'public'::text));
+
+
+--
+-- Name: collection_deletion_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_deletion_due ON library.collection USING btree (route, purge_after, collection_id) WHERE ((state = 'deleted'::text) AND (purge_after IS NOT NULL));
+
+
+--
+-- Name: collection_deletion_pending_legacy; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btree (route, collection_id) WHERE ((state = 'deleted'::text) AND (deleted_at IS NULL));
 
 
 --

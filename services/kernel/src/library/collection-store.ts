@@ -15,6 +15,8 @@ import collectionInsert from './collection-store-collection-insert.sql';
 import collectionRead from './collection-store-collection-read.sql';
 import collectionUpdate from './collection-store-collection-update.sql';
 import collectionTombstone from './collection-store-collection-tombstone.sql';
+import collectionDeletionRead from './collection-store-collection-deletion-read.sql';
+import collectionRestore from './collection-store-collection-restore.sql';
 import collectionListCurator from './collection-store-collection-list-curator.sql';
 import memberInsert from './collection-store-collection-member-insert.sql';
 import memberRead from './collection-store-collection-member-read.sql';
@@ -126,8 +128,40 @@ export async function tombstoneCollection(
   id: string,
   context: WriteContext,
 ): Promise<Collection | null> {
-  const row = await collectionTombstone.run(queryClient(client), { route, id, ...write(context) });
-  return row ? asCollection(row as CollectionResult) : null;
+  const [row] = await collectionTombstone.run(queryClient(client), { route, id, ...write(context) });
+  return row ? asCollection(row) : null;
+}
+
+// Private source metadata; purge must serialize and recheck state, revision and stamp before destructive work.
+export async function readCollectionDeletion(
+  client: Client,
+  route: number,
+  id: string,
+): Promise<{ revision: number; deletedAt: string | null; purgeAfter: string | null } | null> {
+  const row = await collectionDeletionRead.run(queryClient(client), { route, id });
+  return row
+    ? {
+        revision: row.revision,
+        deletedAt: row.deletedAt === null ? null : iso(row.deletedAt),
+        purgeAfter: row.purgeAfter === null ? null : iso(row.purgeAfter),
+      }
+    : null;
+}
+
+export async function restoreCollection(
+  client: Client,
+  route: number,
+  id: string,
+  expectedRevision: number,
+  context: WriteContext,
+): Promise<Collection | null> {
+  const [row] = await collectionRestore.run(queryClient(client), {
+    route,
+    id,
+    revision: expectedRevision,
+    ...write(context),
+  });
+  return row ? asCollection(row) : null;
 }
 
 export async function listCuratorCollections(
