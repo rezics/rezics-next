@@ -8,6 +8,8 @@ const PEER = '203.0.113.9';
 const GATEWAY = '192.168.0.1';
 const DEVICE = 'enp67s0';
 const HOSTS = 'hosts.json';
+const IDENTITY_A = '/home/test/.ssh/a';
+const IDENTITY_B = '/home/test/.ssh/b';
 const DEFAULT = { dst: 'default', gateway: GATEWAY, dev: DEVICE, protocol: 'dhcp', metric: 100 };
 const managed = (ip = A, changes = {}) => ({
   dst: `${ip}/32`,
@@ -33,14 +35,15 @@ function fixture() {
       HOSTS,
       JSON.stringify({
         hosts: [
-          { name: 'a', address: `root@${A}`, identity: '/must/not/read' },
-          { name: 'b', address: `root@${B}`, identity: '/must/not/read/either' },
+          { name: 'a', address: `root@${A}`, identity: IDENTITY_A },
+          { name: 'b', address: `root@${B}`, identity: IDENTITY_B },
         ],
       }),
     ],
   ]);
   const writes: { path: string; data: string; mode: number }[] = [];
   const reads: string[] = [];
+  const stats: string[] = [];
   const secured: string[] = [];
   const calls: string[][] = [];
   const output: string[] = [];
@@ -48,6 +51,7 @@ function fixture() {
     files,
     writes,
     reads,
+    stats,
     secured,
     calls,
     output,
@@ -69,6 +73,11 @@ function fixture() {
         return files.get(path)!;
       },
       exists: (path) => (path === `/sys/class/net/${DEVICE}/device` ? f.physical : files.has(path)),
+      lstat: (path) => {
+        stats.push(path);
+        if (path === IDENTITY_A || path === IDENTITY_B) return { isFile: () => true, uid: 1000 };
+        throw new Error(`Unexpected stat ${path}`);
+      },
       secure: (path) => {
         secured.push(path);
       },
@@ -220,20 +229,26 @@ test('apply writes the root-owned dispatcher hook and host state and reconciles 
   expect(denied.logs.join()).toContain('Conflicting');
 });
 
-test('verify passes only when the TCP/22 route lookup uses the physical device and sshd sees the expected home address', async () => {
+test("verify passes each host's identity path to ssh and only when the TCP/22 route lookup uses the physical device and sshd sees the expected home address", async () => {
   const f = fixture();
   await execute(['verify', '--hosts', HOSTS, '--expected-peer', PEER], f.d);
   expect(f.output).toContain(`a: PASS sshd peer ${PEER}`);
   expect(f.output).toContain(`b: PASS sshd peer ${PEER}`);
-  for (const args of f.calls.filter((args) => args[0] === 'ssh')) {
+  const sshCalls = f.calls.filter((args) => args[0] === 'ssh');
+  expect(sshCalls).toHaveLength(2);
+  for (const [index, args] of sshCalls.entries()) {
+    expect(args).toContain('-i');
+    expect(args[args.indexOf('-i') + 1]).toBe(index === 0 ? IDENTITY_A : IDENTITY_B);
+    expect(args).toContain('IdentitiesOnly=yes');
     expect(args).toContain('ProxyCommand=none');
     expect(args).toContain('ProxyJump=none');
     expect(args).toContain('BatchMode=yes');
     expect(args).toContain('ControlPath=none');
     expect(args.at(-1)).toContain('$SSH_CONNECTION');
     expect(args.at(-1)).toContain('journalctl');
-    expect(args).not.toContain('-i');
   }
+  expect(f.stats).toEqual([IDENTITY_A, IDENTITY_B]);
+  expect(f.reads).toEqual([HOSTS]);
   for (const route of [
     `${A} via 198.18.0.2 dev FlClash table 2022`,
     `${A} via 192.168.0.2 dev ${DEVICE}`,
@@ -256,7 +271,7 @@ test('verify passes only when the TCP/22 route lookup uses the physical device a
 });
 
 describe('input and ownership boundaries', () => {
-  test('never accesses identity properties and rejects nonliteral or unsafe destinations', async () => {
+  test('reads identity properties only for verify and rejects nonliteral or unsafe destinations', async () => {
     const host = {
       name: 'a',
       address: `root@${A}`,
@@ -288,6 +303,55 @@ describe('input and ownership boundaries', () => {
       'Invalid IPv4',
     );
     expect(f.calls).toEqual([]);
+  });
+
+  test('verify requires absolute regular identity files owned by the current user without reading them', async () => {
+    for (const identity of [undefined, 'relative/key', '/missing', '/not-a-file', '/owned-by-someone-else']) {
+      const f = fixture();
+      f.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity }] }));
+      f.d.files.lstat = (path) => {
+        f.stats.push(path);
+        if (path === '/not-a-file') return { isFile: () => false, uid: 1000 };
+        if (path === '/owned-by-someone-else') return { isFile: () => true, uid: 2000 };
+        throw new Error(`Unexpected stat ${path}`);
+      };
+      await expect(execute(['verify', '--hosts', HOSTS, '--expected-peer', PEER], f.d)).rejects.toThrow('Identity');
+      expect(f.reads).toEqual([HOSTS]);
+      expect(f.calls).toEqual([]);
+    }
+
+    const f = fixture();
+    f.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: IDENTITY_A }] }));
+    await execute(['verify', '--hosts', HOSTS, '--expected-peer', PEER], f.d);
+    expect(f.stats).toEqual([IDENTITY_A]);
+    expect(f.reads).toEqual([HOSTS]);
+  });
+
+  test('plan, apply and remove ignore identity fields', async () => {
+    const host = {
+      name: 'a',
+      address: `root@${A}`,
+      get identity(): never {
+        throw new Error('Identity accessed');
+      },
+    };
+    expect(readHosts({ hosts: [host] })).toEqual([{ name: 'a', address: `root@${A}`, ip: A }]);
+    const planned = fixture();
+    planned.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    await execute(['plan', '--hosts', HOSTS], planned.d);
+    expect(planned.stats).toEqual([]);
+
+    const applied = fixture();
+    applied.uid = 0;
+    applied.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    await execute(['apply', '--hosts', HOSTS], applied.d);
+    expect(applied.stats).toEqual([]);
+
+    const removed = fixture();
+    removed.uid = 0;
+    removed.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    await execute(['remove', '--hosts', HOSTS], removed.d);
+    expect(removed.stats).toEqual([]);
   });
 
   test('only apply and remove require root and unsafe state is rejected', async () => {

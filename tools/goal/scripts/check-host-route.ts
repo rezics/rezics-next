@@ -2,12 +2,13 @@
 import * as fs from 'node:fs';
 import { isIPv4 } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { isAbsolute } from 'node:path';
 
 export const STATE = '/etc/rezics-check-host-route.json';
 export const HOOK = '/etc/NetworkManager/dispatcher.d/90-rezics-check-host-route';
 export const METRIC = 42722;
 const DEVICE = /^[a-zA-Z0-9_.:-]{1,15}$/;
-type Host = { name: string; address: string; ip: string };
+type Host = { name: string; address: string; ip: string; identity?: string };
 type State = { device: string; addresses: string[] };
 type Route = {
   dst?: string;
@@ -23,6 +24,7 @@ export type Result = { code: number; stdout: string; stderr: string };
 export interface FileSystem {
   read(path: string): string;
   exists(path: string): boolean;
+  lstat(path: string): { isFile(): boolean; uid: number };
   secure(path: string): void;
   writeRoot(path: string, data: string, mode: number): void;
   remove(path: string): void;
@@ -39,18 +41,37 @@ function ipv4(value: unknown): string {
   return value;
 }
 
-export function readHosts(value: unknown): Host[] {
+export function readHosts(value: unknown, identityPath?: (identity: unknown) => string): Host[] {
   const hosts = (value as { hosts?: unknown })?.hosts;
   if (!Array.isArray(hosts) || !hosts.length) throw new Error('hosts must be a nonempty array');
   return hosts.map((host) => {
-    // Deliberately select only these two properties; identities never enter this tool.
+    // Identity data is selected only by verify, which treats it as a file path.
     const { name, address } = host;
     if (typeof name !== 'string' || !name.trim() || /[\r\n\x00]/.test(name)) throw new Error('Invalid host name');
     if (typeof address !== 'string' || !/^(?:[a-zA-Z0-9_][a-zA-Z0-9_.-]*@)?[^@\s]+$/.test(address)) {
       throw new Error(`Invalid address for ${name}`);
     }
-    return { name, address, ip: ipv4(address.split('@').at(-1)) };
+    return {
+      name,
+      address,
+      ip: ipv4(address.split('@').at(-1)),
+      ...(identityPath ? { identity: identityPath(host.identity) } : {}),
+    };
   });
+}
+
+function checkedIdentityPath(value: unknown, d: Dependencies): string {
+  if (typeof value !== 'string' || !isAbsolute(value)) throw new Error('Identity must be an absolute file path');
+  let info: ReturnType<FileSystem['lstat']>;
+  try {
+    info = d.files.lstat(value);
+  } catch {
+    throw new Error(`Identity path is not an accessible regular file: ${value}`);
+  }
+  if (!info.isFile() || info.uid !== d.uid()) {
+    throw new Error(`Identity path must be a regular file owned by the current user: ${value}`);
+  }
+  return value;
 }
 
 function readState(d: Dependencies): State | undefined {
@@ -268,7 +289,13 @@ export async function execute(argv: string[], d: Dependencies): Promise<void> {
     action === 'verify' || values.has('--expected-peer') ? ipv4(values.get('--expected-peer')) : undefined;
   const hostsPath = values.get('--hosts');
   if (action !== 'remove' && !hostsPath) throw new Error('--hosts is required');
-  const hosts = action === 'remove' ? [] : readHosts(JSON.parse(d.files.read(hostsPath!)));
+  const hosts =
+    action === 'remove'
+      ? []
+      : readHosts(
+          JSON.parse(d.files.read(hostsPath!)),
+          action === 'verify' ? (identity) => checkedIdentityPath(identity, d) : undefined,
+        );
   const previous = readState(d);
   if ((action === 'apply' || action === 'remove') && d.files.exists(HOOK)) {
     d.files.secure(HOOK);
@@ -324,6 +351,10 @@ export async function execute(argv: string[], d: Dependencies): Promise<void> {
           throw new Error('TCP/22 route does not use the physical device and current gateway');
         const output = await command(d, [
           'ssh',
+          '-i',
+          host.identity!,
+          '-o',
+          'IdentitiesOnly=yes',
           '-o',
           'ProxyCommand=none',
           '-o',
@@ -362,6 +393,7 @@ const realFiles: FileSystem = {
       throw error;
     }
   },
+  lstat: (path) => fs.lstatSync(path),
   secure: (path) => {
     const info = fs.lstatSync(path);
     if (!info.isFile() || info.uid !== 0 || info.mode & 0o022) throw new Error(`Unsafe root-owned file: ${path}`);
