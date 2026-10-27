@@ -22,16 +22,22 @@ export function SubjectCover({
   subject,
   ratio,
   size = 'xs',
+  className = '',
+  priority = false,
 }: {
   subject: LibrarySubject | null;
   ratio: CoverRatio;
   size?: CoverSize;
+  className?: string;
+  priority?: boolean;
 }) {
   return (
     <Cover
       subject={coverSubject(subject)}
       cover={subject?.cover ?? null}
       size={size}
+      className={className}
+      priority={priority}
       ratio={ratio}
       src={coverSrc}
       decorative

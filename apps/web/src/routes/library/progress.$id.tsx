@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { progressSubjects } from '../../library/progress-subjects';
 import { ProgressSessionPage } from '../../library/progress-session';
 import { ProgressLogs } from '../../library/logs-progress';
 import { readMyPublishedLogs } from '../../library/logs-server';
@@ -36,12 +37,12 @@ export const Route = createFileRoute('/library/progress/$id')({
   staleTime: 60_000,
   head: () => ({ meta: [{ title: m.library_progress_heading() }] }),
   component: function ProgressSessionRoute() {
-    const page = Route.useLoaderData();
+    const loaded = Route.useLoaderData();
+    const page = { ...loaded, ...progressSubjects(loaded.progress, loaded.logs) };
     return (
-      <>
-        <ProgressSessionPage page={page.progress} />
+      <ProgressSessionPage page={page.progress}>
         <ProgressLogs progress={page.progress} logs={page.logs} search={page.search} />
-      </>
+      </ProgressSessionPage>
     );
   },
 });

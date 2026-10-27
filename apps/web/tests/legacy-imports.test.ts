@@ -11,6 +11,8 @@ const siteComponents = new Set([
   'styles.css',
   'cover',
   'cover-card',
+  'entity-picker',
+  'progress-row',
   'reactions',
   'content-actions',
   'document-body',

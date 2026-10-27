@@ -618,6 +618,16 @@ language through the client's `accept-language`.
   1 D and 1 K carrying at most 100 unit ids. No per-unit or per-change reads.
 - **Growth check:** `tests/library-progress-cost.test.ts`: `reading progress stays within its bound as its pages and unit batches grow`
 
+### Progress subject picker
+
+- **Touches:** One `GET /v1/subjects:suggest` per settled keystroke (250 ms pause; a newer keystroke aborts the older
+  read). The page's own reads are unchanged.
+- **Bound:** At most one suggestion read in flight per picker, each answering a fixed number of suggestions,
+  independent of the catalogue's size and the reader's sessions.
+- **Growth check:** The acceptance test counts kernel requests with the fake kernel for the index and a session page
+  with 10, 1,000 and 10,000 sessions and expects the same reads as base at every size, and one suggestion read for
+  a typed word.
+
 ### Published logs
 
 - **Touches:** A public log page reads one `GET /v1/publishedLogs/<id>?view=FULL`. The owner's progress page reads one

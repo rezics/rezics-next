@@ -662,8 +662,21 @@ const writesFor = (suffix: string) => calls.filter((call) => call.method === 'PO
 
 async function chooseMode(page: Page, mode: string, unit: string, total?: string) {
   await page.getByRole('radio', { name: mode, exact: true }).check();
-  await page.getByRole('combobox', { name: 'Unit', exact: true }).selectOption(unit);
-  if (total !== undefined) await page.getByRole('textbox', { name: 'Total', exact: true }).fill(total);
+  await page.getByRole('combobox', { name: 'Unit', exact: true }).click();
+  await page
+    .getByRole('option', {
+      name: {
+        page: 'Page',
+        chapter: 'Chapter',
+        episode: 'Episode',
+        minute: 'Minute',
+        volume: 'Volume',
+        percent: 'Percent',
+      }[unit],
+      exact: true,
+    })
+    .click();
+  if (total !== undefined) await page.getByRole('spinbutton', { name: 'Total', exact: true }).fill(total);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
 }
 function expectReads(sessionId: string, access: string) {
@@ -691,7 +704,8 @@ test(
       expect(await page.getByRole('heading', { level: 1, name: 'Reading progress', exact: true }).innerText()).toBe(
         'Reading progress',
       );
-      expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
+      expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
+      expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       const listed = calls.filter((call) => call.method === 'GET' && call.path === '/v1/progressSessions');
       expect(listed.length).toBeGreaterThan(0);
       expect(
@@ -884,7 +898,8 @@ test(
       await page.waitForURL(/\/en\/library\/progress\?/);
       await hydrated(page);
       expect(await page.locator('main').innerText()).toContain('Completed');
-      expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
+      expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
+      expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       await page.getByRole('button', { name: 'Start', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
       const restarted = new URL(page.url()).pathname.split('/').at(-1)!;

@@ -7,12 +7,12 @@ import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
 import type { PublishedLog, PublishedLogPage } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
-import { AccountRef } from './account-ref';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { Button } from '@rezics/ui/shadcn/button';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
 
 function stateLabel(state: PublishedLog['sessionState']): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -87,8 +87,7 @@ function PublishLog({ page }: { page: Extract<ProgressSessionPage, { signedIn: t
       <form className="space-y-3" onSubmit={(event) => void submit(event)}>
         <label className="block space-y-1">
           <span className="text-sm font-medium">{m.library_logs_publish_note()}</span>
-          <textarea
-            className={fieldClass}
+          <Textarea
             aria-label={m.library_logs_publish_note()}
             maxLength={1000}
             value={note}
@@ -100,9 +99,9 @@ function PublishLog({ page }: { page: Extract<ProgressSessionPage, { signedIn: t
             {error}
           </p>
         ) : null}
-        <button type="submit" className={buttonClass} disabled={pending}>
+        <Button type="submit" disabled={pending}>
           {m.library_logs_publish()}
-        </button>
+        </Button>
       </form>
     </section>
   );
@@ -131,7 +130,14 @@ function PublishedLogs({
           {page.logs.map((log) => (
             <li key={log.id} className="space-y-2 py-4">
               <p className="flex flex-wrap items-baseline gap-2">
-                <AccountRef account={log.account} />
+                {log.account ? (
+                  <>
+                    {log.account.displayName ? <span>{log.account.displayName}</span> : null}
+                    {log.account.handle ? <span className="text-muted-foreground">@{log.account.handle}</span> : null}
+                  </>
+                ) : (
+                  <span>{m.library_account_deleted()}</span>
+                )}
               </p>
               <div className="flex items-center gap-3">
                 <SubjectIdentity subject={log.subject} ratio={ratio} />
@@ -185,7 +191,7 @@ export function ProgressLogs({
 }) {
   if (!progress.signedIn) return null;
   return (
-    <div className="max-w-4xl space-y-8 text-foreground">
+    <>
       <PublishLog page={progress} />
       <PublishedLogs
         page={logs}
@@ -195,6 +201,6 @@ export function ProgressLogs({
           ...(search.units ? { units: search.units } : {}),
         }}
       />
-    </div>
+    </>
   );
 }

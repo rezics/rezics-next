@@ -313,6 +313,10 @@ async function selectRecording(
   if (community) return community;
   const boardRealm = boardRealmRead(request.method, pathname, recordings);
   if (boardRealm) return boardRealm;
+  if (request.method === 'GET' && pathname === '/v1/subjects:suggest') {
+    const subjects = Array.isArray(recordings.search?.subjects) ? recordings.search.subjects : [];
+    return suggestionRead(subjects, request);
+  }
   if (request.method === 'GET') {
     const withDeleted = pathname === '/v1/accounts' ? withDeletedOrganization(request, recordings.accounts) : undefined;
     if (withDeleted) return withDeleted;
@@ -822,6 +826,13 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/v1/subjects:suggest')
+      return recordedResponse(
+        suggestionRead(
+          fixtures.subjects.map((subject) => searchHit(fixtures, subject)),
+          request,
+        ),
+      );
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return pageRead(fixtures, request);
     const list = /^\/v1\/accounts\/([^/]+)\/(posts|threads|collections)$/.exec(url.pathname);
     if (request.method === 'GET' && list) {
@@ -843,4 +854,19 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
     const payload = subjectPayload(fixtures, decodeURIComponent(match[1]!));
     return payload ? Response.json(payload) : notFound();
   }) as typeof fetch;
+}
+
+/** The bounded suggestion read, using the same summaries as the fake kernel's search results. */
+function suggestionRead(subjects: readonly unknown[], request: Request): KernelRecording {
+  const query = new URL(request.url).searchParams.get('q')?.trim().toLocaleLowerCase() ?? '';
+  const matches = subjects.filter(
+    (subject) =>
+      query &&
+      isRecord(subject) &&
+      isRecord(subject.labels) &&
+      Object.values(subject.labels).some(
+        (label) => typeof label === 'string' && label.toLocaleLowerCase().includes(query),
+      ),
+  );
+  return { status: 200, subjects: matches.slice(0, 8), as_of: new Date().toISOString() };
 }

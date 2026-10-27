@@ -1,3 +1,7 @@
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import type { ReactNode } from 'react';
+import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -22,12 +26,11 @@ import {
   type ProgressUnit,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
-import { rowRatio, SubjectIdentity } from './subject-row';
+import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { progressValue } from './progress-page';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
 
 function modeLabel(mode: ProgressMode): string {
   if (mode === 'cursor_position') return m.library_progress_mode_cursor();
@@ -50,26 +53,26 @@ function stateLabel(state: ProgressState): string {
   return m.library_progress_state_active();
 }
 
-function changeText(change: ProgressChange): string {
-  if (change.action === 'complete') return stateLabel('completed');
-  if (change.action === 'abandon') return stateLabel('abandoned');
-  return [change.amount, change.locator, change.position, ...change.add, ...change.remove].filter(Boolean).join(' ');
-}
-
-export function ProgressSessionPage({ page }: { page: ProgressSessionPage }) {
+export function ProgressSessionPage({ page, children }: { page: ProgressSessionPage; children?: ReactNode }) {
   const location = useLocation();
   if (!page.signedIn) {
     return (
-      <article className="max-w-4xl space-y-8 text-foreground">
+      <article className="max-w-4xl space-y-10 text-foreground">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
       </article>
     );
   }
-  return <SessionEditor page={page} />;
+  return <SessionEditor page={page}>{children}</SessionEditor>;
 }
 
-function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn: true }> }) {
+function SessionEditor({
+  page,
+  children,
+}: {
+  page: Extract<ProgressSessionPage, { signedIn: true }>;
+  children?: ReactNode;
+}) {
   const [session, setSession] = useState(page.session);
   const [seenId, setSeenId] = useState(page.session.id);
   const [key, setKey] = useState(page.idempotencyKey);
@@ -258,44 +261,69 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
+    <article className="max-w-4xl space-y-10 text-foreground">
+      <header className="space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
-        <div className="flex items-center gap-3">
-          <SubjectIdentity subject={session.subject} ratio={ratio} />
-        </div>
-        {session.versionSubjectId ? (
-          <div className="flex items-center gap-3">
-            <SubjectIdentity subject={session.versionSubject} ratio={ratio} />
+        <div className="flex items-start gap-5 sm:gap-7">
+          <SubjectCover subject={session.subject} ratio={ratio} size="md" className="!w-24 sm:!w-40" priority />
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="space-y-1">
+              <p className="work-title text-2xl font-medium sm:text-3xl">
+                {session.subject ? (
+                  <Link
+                    to="/subjects/$id"
+                    params={{ id: session.subject.id }}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {session.subject.label}
+                  </Link>
+                ) : (
+                  m.library_subject_unavailable()
+                )}
+              </p>
+              {session.subject?.typeLabel ? (
+                <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span data-progress-state={session.state}>{stateLabel(session.state)}</span> · {modeLabel(session.mode)} ·{' '}
+              {unitLabel(session.unit)}
+            </p>
+            <ProgressRow
+              {...progressValue(session)}
+              menu={
+                session.state === 'active' ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
+                    >
+                      <EllipsisIcon aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => setConfirming('complete')}>
+                        {m.library_progress_complete()}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setConfirming('abandon')}>
+                        {m.library_progress_abandon()}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : undefined
+              }
+            />
+            {session.total && !progressValue(session).label ? (
+              <p className="text-sm text-muted-foreground">
+                {m.library_progress_total()}: {session.total}
+              </p>
+            ) : null}
+            {session.mode === 'cursor_position' && session.locator ? (
+              <p className="text-sm text-muted-foreground">
+                {m.library_progress_locator()}: {session.locator}
+              </p>
+            ) : null}
           </div>
-        ) : null}
-        <p>{modeLabel(session.mode)}</p>
-        <p>{unitLabel(session.unit)}</p>
-        {session.total ? <p>{session.total}</p> : null}
-        <p data-progress-state={session.state}>{stateLabel(session.state)}</p>
-        <ProgressRow
-          {...progressValue(session)}
-          menu={
-            session.state === 'active' ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
-                >
-                  <EllipsisIcon aria-hidden="true" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setConfirming('complete')}>
-                    {m.library_progress_complete()}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setConfirming('abandon')}>
-                    {m.library_progress_abandon()}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : undefined
-          }
-        />
-        {session.mode === 'cursor_position' && session.locator ? <p>{session.locator}</p> : null}
+        </div>
+        {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
       <input type="hidden" name="idempotencyKey" value={key} />
       {alert ? (
@@ -303,103 +331,111 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
           {alert}
         </p>
       ) : null}
-      {session.state === 'active' && session.mode !== 'completed_units' ? (
-        <div className="space-y-4">
-          {session.mode === 'scalar_amount' ? (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-              <input className={fieldClass} value={amount} onChange={(event) => setAmount(event.target.value)} />
-            </label>
-          ) : (
-            <>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                <input className={fieldClass} value={locator} onChange={(event) => setLocator(event.target.value)} />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_position()}</span>
-                <input className={fieldClass} value={position} onChange={(event) => setPosition(event.target.value)} />
-              </label>
-            </>
-          )}
-          <button type="button" className={buttonClass} onClick={() => void onRecord()}>
-            {m.library_progress_record()}
-          </button>
-        </div>
-      ) : null}
-      {session.state === 'active' && session.mode === 'completed_units' ? (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor={addId} className="text-sm font-medium">
-              {m.library_progress_add_units()}
-            </label>
-            <textarea
-              id={addId}
-              className={fieldClass}
-              aria-describedby={addHint}
-              value={addText}
-              onChange={(event) => setAddText(event.target.value)}
-            />
-            <p id={addHint} className="text-sm text-muted-foreground">
-              {m.library_progress_batch_limit()}
-            </p>
-            <button type="button" className={buttonClass} onClick={() => void onUnits('add')}>
-              {m.library_progress_add_units()}
-            </button>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor={removeId} className="text-sm font-medium">
-              {m.library_progress_remove_units()}
-            </label>
-            <textarea
-              id={removeId}
-              className={fieldClass}
-              aria-describedby={removeHint}
-              value={removeText}
-              onChange={(event) => setRemoveText(event.target.value)}
-            />
-            <p id={removeHint} className="text-sm text-muted-foreground">
-              {m.library_progress_batch_limit()}
-            </p>
-            <button type="button" className={buttonClass} onClick={() => void onUnits('remove')}>
-              {m.library_progress_remove_units()}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {session.state === 'active' ? (
-        <div className="flex flex-wrap gap-3">
-          {confirming === 'complete' ? (
-            <>
-              <button type="button" className={buttonClass} onClick={() => void onFinish('complete')}>
-                {m.library_progress_confirm_complete()}
-              </button>
-              <button type="button" className={buttonClass} onClick={() => setConfirming(null)}>
-                {m.library_progress_cancel()}
-              </button>
-            </>
-          ) : null}
-          {confirming === 'abandon' ? (
-            <>
-              <button type="button" className={buttonClass} onClick={() => void onFinish('abandon')}>
-                {m.library_progress_confirm_abandon()}
-              </button>
-              <button type="button" className={buttonClass} onClick={() => setConfirming(null)}>
-                {m.library_progress_cancel()}
-              </button>
-            </>
-          ) : null}
-        </div>
-      ) : (
-        <p>
-          <a
-            href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
-            className="text-primary underline-offset-4 hover:underline"
+      <section aria-labelledby="record-progress-heading" className="space-y-4">
+        <h2 id="record-progress-heading" className="text-xl font-semibold">
+          {m.library_progress_record_heading()}
+        </h2>
+        {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
+        {session.state === 'active' && session.mode !== 'completed_units' ? (
+          <form
+            className="max-w-xl space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onRecord();
+            }}
           >
-            {m.library_progress_restart()}
-          </a>
-        </p>
-      )}
+            {session.mode === 'scalar_amount' ? (
+              <label className="block space-y-1">
+                <span className="text-sm font-medium">{m.library_progress_amount()}</span>
+                <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
+              </label>
+            ) : (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium">{m.library_progress_locator()}</span>
+                  <Input value={locator} onChange={(event) => setLocator(event.target.value)} />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium">{m.library_progress_position()}</span>
+                  <Input value={position} onChange={(event) => setPosition(event.target.value)} />
+                </label>
+              </>
+            )}
+            <Button type="submit">{m.library_progress_record()}</Button>
+          </form>
+        ) : null}
+        {session.state === 'active' && session.mode === 'completed_units' ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor={addId} className="text-sm font-medium">
+                {m.library_progress_add_units()}
+              </label>
+              <Textarea
+                id={addId}
+                aria-describedby={addHint}
+                value={addText}
+                onChange={(event) => setAddText(event.target.value)}
+              />
+              <p id={addHint} className="text-sm text-muted-foreground">
+                {m.library_progress_batch_limit()}
+              </p>
+              <Button variant="outline" onClick={() => void onUnits('add')}>
+                {m.library_progress_add_units()}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor={removeId} className="text-sm font-medium">
+                {m.library_progress_remove_units()}
+              </label>
+              <Textarea
+                id={removeId}
+                aria-describedby={removeHint}
+                value={removeText}
+                onChange={(event) => setRemoveText(event.target.value)}
+              />
+              <p id={removeHint} className="text-sm text-muted-foreground">
+                {m.library_progress_batch_limit()}
+              </p>
+              <Button variant="outline" onClick={() => void onUnits('remove')}>
+                {m.library_progress_remove_units()}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {session.state === 'active' && confirming ? (
+          <div className="flex flex-wrap gap-3">
+            {confirming === 'complete' ? (
+              <>
+                <Button variant="outline" onClick={() => void onFinish('complete')}>
+                  {m.library_progress_confirm_complete()}
+                </Button>
+                <Button variant="outline" onClick={() => setConfirming(null)}>
+                  {m.library_progress_cancel()}
+                </Button>
+              </>
+            ) : null}
+            {confirming === 'abandon' ? (
+              <>
+                <Button variant="outline" onClick={() => void onFinish('abandon')}>
+                  {m.library_progress_confirm_abandon()}
+                </Button>
+                <Button variant="outline" onClick={() => setConfirming(null)}>
+                  {m.library_progress_cancel()}
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : session.state !== 'active' ? (
+          <p>
+            <a
+              href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              {m.library_progress_restart()}
+            </a>
+          </p>
+        ) : null}
+      </section>
       <section role="region" aria-labelledby={changesHeading} className="space-y-3">
         <h2 id={changesHeading} className="text-xl font-semibold">
           {m.library_progress_changes()}
@@ -408,7 +444,29 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
           <ol className="divide-y divide-border/60 border-y border-border/60">
             {session.changes.map((change) => (
               <li key={change.id} className="py-3">
-                <span>{changeText(change)}</span>
+                <div className="mb-2 text-sm text-muted-foreground">
+                  <RelativeTime value={change.createdAt} />
+                </div>
+                {change.action ? (
+                  <p>{stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')}</p>
+                ) : (
+                  <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                    {[
+                      [m.library_progress_amount(), change.amount],
+                      [m.library_progress_locator(), change.locator],
+                      [m.library_progress_position(), change.position],
+                      [m.library_progress_add_units(), change.add.join(', ')],
+                      [m.library_progress_remove_units(), change.remove.join(', ')],
+                    ]
+                      .filter(([, value]) => value != null && value !== '')
+                      .map(([label, value]) => (
+                        <div key={label} className="space-y-1">
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd className="break-words">{value}</dd>
+                        </div>
+                      ))}
+                  </dl>
+                )}
               </li>
             ))}
           </ol>
@@ -458,6 +516,7 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
           </Link>
         ) : null}
       </section>
+      {children}
     </article>
   );
 }
