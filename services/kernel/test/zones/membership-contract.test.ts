@@ -497,3 +497,79 @@ test('a deleted mounted Collection can be restored within policy without retaini
   await f.json(await f.request('POST', `/v1/collections/${source.id}:restore`, {}));
   expect(await f.all(z.id)).toEqual([id]);
 });
+
+test('Zone pages use canonical subject-ID order across source and occurrence orders', async () => {
+  // Require the native route before expensive setup or any missing owner-adapter assertion.
+  const left = await f.collection();
+  const right = await f.collection();
+  const z = await f.zone([right.id, left.id]);
+  const ids: string[] = [];
+  for (let n = 0; n < 25; n++) ids.push(await f.subject(`Canonical order ${n}`));
+  ids.sort();
+  // Both source order and ordinary curated occurrence order disagree with the common order.
+  for (const id of [...ids].reverse()) await f.add(left.id, id);
+  for (const id of [...ids.slice(12), ...ids.slice(0, 12)]) {
+    await f.add(right.id, id);
+    await f.add(right.id, id);
+  }
+  const emitted: string[] = [];
+  const tokens = new Set<string>();
+  let cursor: string | null = null;
+  let exhausted = false;
+  for (let step = 0; step < 1024; step++) {
+    const page = await f.page(z.id, cursor, 3);
+    for (const { id } of page.subjects) {
+      const previous = emitted.at(-1);
+      if (previous !== undefined) expect(id > previous).toBe(true);
+      emitted.push(id);
+    }
+    if (page.next === null) {
+      exhausted = true;
+      break;
+    }
+    expect(page.next).not.toBe(cursor);
+    expect(tokens.has(page.next)).toBe(false);
+    tokens.add(page.next);
+    cursor = page.next;
+  }
+  expect(exhausted).toBe(true);
+  expect(emitted).toEqual(ids);
+  // The Zone must not normalize stored occurrences, notes or order as a deduplication shortcut.
+  const stored = await f.json<{ members: { subjectId: string; note: string }[] }>(
+    await f.request('GET', `/v1/collections/${left.id}/members?limit=100`),
+  );
+  expect(stored.members.map((row) => row.subjectId)).toEqual([...ids].reverse());
+  expect(stored.members.every((row) => row.note === 'PRIVATE-OCCURRENCE-NOTE')).toBe(true);
+});
+
+test('definitively filtered Zone prefixes advance without skipping a later eligible canonical group', async () => {
+  const source = await f.collection();
+  const z = await f.zone([source.id]);
+  const ids: string[] = [];
+  for (let n = 0; n < 300; n++) ids.push(await f.subject(`Settled denied prefix ${n}`));
+  ids.sort();
+  // Append the greatest canonical ID first: occurrence order cannot drive the union watermark.
+  for (const id of [...ids].reverse()) await f.add(source.id, id);
+  const tail = ids.at(-1)!;
+  for (const id of ids.slice(0, -1)) await f.suppress(id);
+  const emitted: string[] = [];
+  let cursor: string | null = null;
+  const tokens = new Set<string>();
+  let exhausted = false;
+  for (let step = 0; step < 1024; step++) {
+    const page = await f.page(z.id, cursor, 1);
+    emitted.push(...page.subjects.map((row) => row.id));
+    if (page.next === null) {
+      exhausted = true;
+      break;
+    }
+    // Even an empty successful response must represent actual prefix/phase progress.
+    expect(page.next).not.toBe(cursor);
+    expect(tokens.has(page.next)).toBe(false);
+    tokens.add(page.next);
+    cursor = page.next;
+  }
+  expect(exhausted).toBe(true);
+  expect(emitted).toEqual([tail]);
+  await f.json(await f.request('POST', `/v1/zones/${z.id}:readPage`, { target: { subject: tail } }, true));
+}, 180_000);

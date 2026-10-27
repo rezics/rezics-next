@@ -92,3 +92,40 @@ test('Zone union continued filtered windows retain a fixed cost budget', async (
     expect(sample.cost.statements).toBeLessThanOrEqual(MAX_STATEMENTS);
   }
 }, 600_000);
+
+test('Zone duplicate occurrence drivers retain bounded native page and target cost', async () => {
+  const f = currentMembershipFixture();
+  const sources = [await f.collection(), await f.collection()];
+  const z = await f.zone(sources.map((source) => source.id));
+  const anchor = await f.subject('Duplicate driver anchor');
+  for (const source of sources) await f.add(source.id, anchor);
+  const report = await checkGrowth(f.db, {
+    name: 'Zone overlapping duplicate occurrence degree',
+    scales: [64, 512, 4096],
+    warmups: 1,
+    repetitions: 3,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(_db, scale, previous) {
+      for (let n = previous; n < scale; n++) await f.add(sources[n % sources.length]!.id, anchor);
+      // Outside capture: establish finite complete traversal before accepting a cheap page sample.
+      // A permanently unresolved duplicate group cannot masquerade as bounded work.
+      expect(await f.all(z.id, null, 1)).toEqual([anchor]);
+    },
+    async operation() {
+      const first = await f.page(z.id, null, 1);
+      expect(first.subjects.every((row) => row.id === anchor)).toBe(true);
+      if (first.next !== null) {
+        const continued = await f.page(z.id, first.next, 1);
+        expect(continued.next).not.toBe(first.next);
+        expect(continued.subjects.every((row) => row.id === anchor)).toBe(true);
+        expect([...first.subjects, ...continued.subjects].length).toBeLessThanOrEqual(1);
+      }
+      await f.json(await f.request('POST', `/v1/zones/${z.id}:readPage`, { target: { subject: anchor } }, true));
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+  for (const sample of report.samples) {
+    expect(sample.cost.rows).toBeLessThanOrEqual(MAX_SQL_ROWS);
+    expect(sample.cost.statements).toBeLessThanOrEqual(MAX_STATEMENTS);
+  }
+}, 600_000);
