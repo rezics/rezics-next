@@ -1,8 +1,10 @@
 import {
+  definedViews,
+  isView,
   planReads,
   platformRegistry,
   profileDigest,
-  resolveTemplate,
+  resolveView,
   type PageRead,
   type PresentationProfile,
 } from '@rezics/composition';
@@ -101,6 +103,9 @@ async function pageRecording(
     if (!target || typeof target !== 'object' || Array.isArray(target)) return undefined;
     subject = (target as { subject?: unknown }).subject;
     route = (target as { route?: unknown }).route;
+    // The recordings hold overviews only.
+    const view = (target as { view?: unknown }).view;
+    if (view !== undefined && view !== 'overview') return undefined;
   } catch {
     return undefined;
   }
@@ -511,6 +516,26 @@ function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search'
   };
 }
 
+/** Subjects holding a statement of the property that names the subject, as the kernel's `links` read returns them. */
+function linksRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'links' }>) {
+  const matched = fixtures.subjects
+    .filter(
+      (subject) =>
+        (read.type === undefined || subject.type === read.type) &&
+        subject.statements[read.property]?.some(
+          (statement) => statement.value.type === 'value' && statement.value.content === read.id,
+        ),
+    )
+    .sort(byEnglishLabel);
+  return {
+    links: matched.slice(0, read.limit).map((subject) => {
+      const hit = searchHit(fixtures, subject);
+      return { subject: subject.id, label: subject.labels.en ?? '', type: subject.type, summary: hit.summary };
+    }),
+    count: { value: matched.length, exact: true },
+  };
+}
+
 async function pageRead(fixtures: Fixtures, request: Request): Promise<Response> {
   let body: unknown;
   try {
@@ -521,19 +546,20 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   const target = isRecord(body) ? body.target : undefined;
   const requested = isRecord(target) && typeof target.subject === 'string' ? target.subject : undefined;
   const requestedRoute = isRecord(target) && typeof target.route === 'string' ? target.route : undefined;
+  const requestedView = isRecord(target) && isView(target.view) ? target.view : 'overview';
   if (!requested && requestedRoute === undefined) return notFound();
   const payload = requested ? subjectPayload(fixtures, requested) : undefined;
   if (requested && !payload) return notFound();
   const definition = payload ? fixtures.types[payload.subject.type] : undefined;
-  const resolved = resolveTemplate(
-    platformProfile,
+  const templateTarget =
     requestedRoute !== undefined
       ? { route: requestedRoute }
       : {
           type: payload!.subject.type,
           ...(definition ? { bases: definition.bases } : {}),
-        },
-  );
+        };
+  const resolved = resolveView(platformProfile, templateTarget, requestedView);
+  if (!resolved) return notFound();
   const plan = planReads(platformRegistry, resolved.document, { subject: payload?.subject.id ?? null });
   const reads: Record<string, { status: number; body: unknown }> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
@@ -543,13 +569,18 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
         ? { status: 200, body: payload }
         : descriptor.kind === 'search'
           ? { status: 200, body: searchRead(fixtures, descriptor) }
-          : { status: 404, body: { code: 'not_found' } };
+          : descriptor.kind === 'links'
+            ? { status: 200, body: linksRead(fixtures, descriptor) }
+            : descriptor.kind === 'collections'
+              ? { status: 200, body: { collections: [], count: { value: 0, exact: true } } }
+              : { status: 404, body: { code: 'not_found' } };
   }
   return Response.json({
     ...(payload ? { subject: payload.subject.id } : {}),
     profile: platformDigest,
     template: { scope: resolved.scope, key: resolved.key },
     document: resolved.document,
+    ...(payload ? { views: definedViews(platformProfile, templateTarget) } : {}),
     reads,
   });
 }

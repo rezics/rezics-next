@@ -399,9 +399,9 @@ its own.
 ```
 
 The profile has exactly `format`, `generic`, `bases`, `types` and `routes`. `format` is
-`https://rezics.com/presentation/profile/1`. A base entry has exactly `base` and `document`.
-A type entry has exactly `type` and `document`. A route entry has exactly `route` and
-`document`. `generic` and every `document` are composition documents.
+`https://rezics.com/presentation/profile/1`. A base entry has its `base` and a template body, a type entry its `type`
+and a route entry its `route`. A template body is `document`, a composition document that is the overview, or `views`,
+one document per view (see [Subject views](#subject-views)). `generic` is a composition document or `{ views }`.
 
 `base` and `type` pass the `curie()` rule: its pattern and at most 128 characters. `route`
 matches `^/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*)?$` and has at most 256
@@ -451,29 +451,43 @@ The result is `{ scope, key, document }`. `scope` is `route`, `type`, `base` or 
 `key` is the matched route, type or base. The generic page uses `null`.
 
 Lookups are binary searches over the sorted lists. Resolution is O(log T) for T ≤ 128
-templates, plus at most one lookup for each structural base. Bases come from the definition
+templates, plus at most one lookup for each structural base. A view takes the same lookups and then one property
+read for each template of the order. Bases come from the definition
 release, nearest first, bounded by its class depth. A page read never scans the profile.
 
 ## Subject views
 
-A subject page is a set of views from a closed list (overview, editions, contents, characters,
-appearances, credits, works, relations, reviews, discussion, lists, details). A template entry
-(`generic`, a base, a type) holds one document per view it supports:
+A subject page is a set of views from a closed list (`VIEWS`: overview, editions, contents, characters, appearances,
+credits, works, relations, reviews, discussion, lists, details), which is also the order a page offers them. A template
+entry (`generic`, a base, a type) holds one document per view it supports:
 
 ```json
 { "type": "wd:Q95074", "views": { "overview": { "root": { "props": {} }, "content": [] }, "relations": { "…": "…" } } }
 ```
 
-`overview` is required; the other keys come from the closed view list. Resolution picks the
-template as before and then the requested view; a template that lacks the view falls back to
-the same view of the next template in the resolution order, then to the generic view. The views
-a page offers are the views its resolved templates define, minus those whose data is empty.
-Every page read includes one view-count read for the subject, answered from counts kept with
-the facts and content they count, so the tab bar never costs a read per view. The tab bar is
-rendered by the host from that list; documents cannot name or reorder tabs.
+`overview` is required; the other keys come from the closed view list. `generic` is `{ "views": { … } }` in the same
+way. An entry that has only an overview may write it as `document` instead of `views`; the two forms are exclusive
+and `templateViews(entry)` returns the documents either way. A route entry has only its overview.
 
-Each view document has its own read budget (16 reads, cost 128). A view's reads are planned
-only when that view is requested, so the overview never pays for a full credits list.
+`resolveView(profile, target, view)` picks the template and then the view: a template that lacks the view yields to the
+next in the resolution order, then to the generic view, and a view no template defines resolves to `null`.
+`resolveTemplate` is the overview. `definedViews(profile, target)` lists the views any template of the order defines,
+in the closed order. Each view document is validated on its own, at `/…/views/<view>`; an unknown view key or a missing
+`overview` is `invalid`.
+
+The page read answers one view: its target may name `view` beside a subject or account (never beside a route), the
+document is that view's, and the answer lists `views`, the views the page's templates define. The views a page
+_offers_ are those minus the ones whose data is empty. Every page read is meant to include one view-count read for the
+subject, answered from counts kept with the facts and content they count, so the tab bar never costs a read per view.
+Until that read exists, the host offers a view when its preview in the overview returned at least one item, and
+Reviews, Discussion and Details whenever a template defines them. The tab bar is rendered by the host from that list;
+documents cannot name or reorder tabs.
+
+Each view document has its own read budget (16 reads, cost 128). A view's reads are planned only when that view is
+requested, so the overview never pays for a full credits list. The data components that preview a list
+(`RelationGroups`, `Appearances`, `Credits`, `SubjectList`, `CollectionList`, `ThreadList`, `ReviewList`) take
+`paged`: a full view sets it to read one page at the component's own `limit` and renders no "See all" link. The page
+read has no continuation yet, so a full view shows its first page; the continuation link arrives with it.
 
 ## Platform profile
 
@@ -481,19 +495,30 @@ only when that view is requested, so the overview never pays for a full credits 
 page of its own. The package exports it as `@rezics/composition/profiles/platform.json`, so
 the website's fake kernel and stories serve the same templates.
 
-`generic` is a `header` slot holding `SubjectHeader` and the `actions` slot. Every subject
-template uses that header, and every subject's Details view holds `MoreStatements`.
+Every subject template's overview follows the documented order, and the sections a type does not support are left out:
+the `header` slot holding `SubjectHeader` and the `actions` slot, `Summary`, a `Statements` node of key facts, the
+parts (editions, or the parts of a series), `RelationGroups`, `Appearances`, `Credits`, `RatingSummary`, `ReviewList`,
+`ThreadList`, `CollectionList`, and `Sources`, which ends the page and links to Details. `MoreStatements` is never in an
+overview: every template's `details` view holds the key-fact `Statements` and then `MoreStatements`, so the facts the
+overview leaves out are there, followed by `Sources`. The full views use the same components with `paged: true` and the
+largest `limit` each accepts.
 
-`bases` has `schema:CreativeWork` and `schema:CreativeWorkSeries`. The work template is that
-header, then a `Statements` node, then a `SubjectList` of editions (`schema:exampleOfWork`,
-limit 12). The `Statements` properties are the work facts the bundled
+`generic` defines overview, relations, discussion, lists and details, with the same `RelationGroups` (side stories
+`rezics:sideStoryOf`, adaptations `wdt:P144`, alternative versions `rezics:alternativeVersion` and related works
+`rezics:bangumiRelatedTo`, limit 12 in the overview), `ThreadList`, `CollectionList` and `Sources`. A view a type
+template does not define falls back to those.
+
+`bases` has `schema:CreativeWork` and `schema:CreativeWorkSeries`. The work template adds editions
+(`SubjectList` of `schema:exampleOfWork`), characters (a forward `Appearances` of `schema:character`), credits (a forward
+`Credits` of `schema:contributor`) and reviews. Its `Statements` properties are the work facts the bundled
 release defines, in this order: `schema:author`, `schema:illustrator`, `schema:translator`,
 `schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre`,
-`schema:isPartOf`. The series template uses that header and those statements, then
-`SubjectList`s for works in the series (`wdt:P179`) and parts (`schema:isPartOf`), limit 24
-each.
+`schema:isPartOf`. The series template has the same sections with contents instead of editions: `SubjectList`s for
+works in the series (`wdt:P179`) and parts (`schema:isPartOf`).
 
-`types` has four templates. Each list is a `SubjectList` after the header, with its title in the eight UI locales. `schema:Person` lists
+`types` has four templates. Each list is a `SubjectList` after the header, with its title in the eight UI locales, and
+the type's view for those lists is Works (Appearances for a character, Characters for the voice roles of a person).
+`schema:Person` lists
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
 limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany` and
 `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists

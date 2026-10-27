@@ -663,6 +663,18 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   count; 0 R/A
 - **Growth check:** `tests/subject-relations-view-cost.test.ts`: `the relations view renders one page of the continuation however large the relation count grows`
 
+### Subject views (`/<locale>/subjects/<id>/<view>`)
+
+- **Touches:** One public K `POST /v1/pages:read` for the view's document and its planned reads, and one for the
+  overview, whose previews decide the tab bar (an interim until the per-subject view-count read exists). Root
+  preferences/D, the type's definitions (cached) and the tab bar's rendering are local. The overview route computes the
+  tab bar from its own read and spends no extra K
+- **Bound:** ≤2 K (`pages:read`) and ≤1 D for a view page, plus 1 K more for the reader session when signed in; the
+  kernel behind each read is one subject read plus the document's planned reads (at most 16, cost 128); 0 R/A. A full
+  view reads one page at the component's `limit` (at most 24), so rendering stays O(limit × sections) plus O(s)
+- **Growth check:** `tests/subject-views.test.ts`: `the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping`; the preview bounds of
+  `tests/subject-data-components.test.ts`
+
 ### Subject library slot
 
 - **Touches:** In parallel with the subject page, read one session credential, the viewer's FULL library entry when

@@ -44,7 +44,11 @@ const headerSlotClass = [
 ].join(' ');
 const actionsSlotClass = 'flex flex-wrap items-center gap-2';
 
-const PageHostContext = createContext<{ actions: ReactNode; personal: ReactNode }>({ actions: null, personal: null });
+const PageHostContext = createContext<{ actions: ReactNode; personal: ReactNode; afterHeader: ReactNode }>({
+  actions: null,
+  personal: null,
+  afterHeader: null,
+});
 
 const headingClass = {
   1: 'font-serif text-4xl in-data-[heading-scale=lg]:text-5xl',
@@ -109,18 +113,25 @@ function hasContent(value: ReactNode): boolean {
   return true;
 }
 
-/** Provide content owned by the page host to its template's actions and personal slots. */
+/**
+ * Provide content owned by the page host to its template's actions and personal slots, and the content the host
+ * places right after the template's header: the view tabs.
+ */
 export function PageHost({
   actions,
   personal,
+  afterHeader,
   children,
 }: {
   actions?: ReactNode;
   personal?: ReactNode;
+  afterHeader?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <PageHostContext.Provider value={{ actions: actions ?? null, personal: personal ?? null }}>
+    <PageHostContext.Provider
+      value={{ actions: actions ?? null, personal: personal ?? null, afterHeader: afterHeader ?? null }}
+    >
       {children}
     </PageHostContext.Provider>
   );
@@ -246,11 +257,16 @@ function LinkGrid(props: Record<string, unknown>) {
 }
 
 function Slot(props: Record<string, unknown>) {
-  const { actions, personal } = useContext(PageHostContext);
+  const { actions, personal, afterHeader } = useContext(PageHostContext);
   const children = content(props.children);
   switch (props.name) {
     case 'header':
-      return <header className={headerSlotClass}>{children}</header>;
+      return (
+        <>
+          <header className={headerSlotClass}>{children}</header>
+          {afterHeader}
+        </>
+      );
     case 'actions': {
       if (!hasContent(actions) && !hasContent(children)) return null;
       return (

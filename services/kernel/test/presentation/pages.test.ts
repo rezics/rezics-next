@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
+import { PROFILE_FORMAT, profileDigest, templateViews, type PresentationProfile } from '@rezics/composition';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -74,18 +74,26 @@ test('a page read answers presentation_not_ready until a profile is active', asy
   base = { type, base: definition.bases[0]! };
   profile = {
     format: PROFILE_FORMAT,
-    generic: page(node('SubjectHeader', 'header'), node('MoreStatements', 'more')),
+    generic: {
+      views: {
+        overview: page(node('SubjectHeader', 'header'), node('MoreStatements', 'more')),
+        details: page(node('MoreStatements', 'details')),
+      },
+    },
     bases: [
       { base: base.base, document: page(node('SubjectHeader', 'header'), node('Text', 'base', { text: 'Base' })) },
     ],
     types: [
       {
         type: 'schema:Book',
-        document: page(
-          node('SubjectHeader', 'header'),
-          node('Statements', 'facts', { properties: ['schema:author'] }),
-          works,
-        ),
+        views: {
+          overview: page(
+            node('SubjectHeader', 'header'),
+            node('Statements', 'facts', { properties: ['schema:author'] }),
+            works,
+          ),
+          credits: page(node('Text', 'credits', { text: 'Credits' })),
+        },
       },
     ],
     routes: [{ route: '/', document: page(node('Heading', 'home', { text: 'Home', level: 2 })) }],
@@ -101,7 +109,7 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(answer.body.subject).toBe(id);
   expect(answer.body.profile).toBe(profileDigest(profile));
   expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Book' });
-  expect(answer.body.document).toEqual(profile.types[0]!.document);
+  expect(answer.body.document).toEqual(templateViews(profile.types[0]!).overview);
   expect(Object.keys(answer.body.reads).sort()).toEqual(['r0', 'r1']);
   const standalone = await call('GET', `/v1/subjects/${id}`);
   expect(answer.body.reads.r0).toEqual({ status: 200, body: standalone.body });
@@ -121,6 +129,30 @@ test('a subject without a type template falls back through its structural bases'
   expect(answer.body.template).toEqual({ scope: 'base', key: base.base });
   expect(answer.body.document).toEqual(profile.bases[0]!.document);
   expect(answer.body.reads).toEqual({ r0: { status: 200, body: (await call('GET', `/v1/subjects/${id}`)).body } });
+});
+
+test('a view target answers that view, falling back to the generic view, and lists the views a page defines', async () => {
+  const id = await create('schema:Book', 'Viewed');
+  const overview = await read({ subject: id });
+  expect(overview.body.views).toEqual(['overview', 'credits', 'details']);
+  const same = await read({ subject: id, view: 'overview' });
+  expect(same.body.document).toEqual(overview.body.document);
+  const credits = await read({ subject: id, view: 'credits' });
+  expect(credits.response.status).toBe(200);
+  expect(credits.body.template).toEqual({ scope: 'type', key: 'schema:Book' });
+  expect(credits.body.document).toEqual(templateViews(profile.types[0]!).credits);
+  expect(credits.body.views).toEqual(['overview', 'credits', 'details']);
+  expect(Object.keys(credits.body.reads)).toEqual([]);
+  const details = await read({ subject: id, view: 'details' });
+  expect(details.body.template).toEqual({ scope: 'generic', key: null });
+  expect(details.body.document).toEqual(templateViews(profile.generic).details);
+  const undefinedView = await read({ subject: id, view: 'works' });
+  expect(undefinedView.response.status).toBe(404);
+  const unknownView = await read({ subject: id, view: 'tabs' });
+  expect(unknownView.response.status).toBe(400);
+  expect(unknownView.body.errors).toEqual([{ pointer: '/target/view', code: 'invalid_format' }]);
+  const routeView = await read({ route: '/', view: 'details' });
+  expect(routeView.body.errors).toEqual([{ pointer: '/target/view', code: 'unknown_field' }]);
 });
 
 test('an unknown subject answers exactly what the subject read answers', async () => {
@@ -144,7 +176,7 @@ test('route targets resolve route templates and malformed targets are field erro
   });
   const other = await read({ route: '/unknown' });
   expect(other.body.template).toEqual({ scope: 'generic', key: null });
-  expect(other.body.document).toEqual(profile.generic);
+  expect(other.body.document).toEqual(templateViews(profile.generic).overview);
   expect(other.body.reads).toEqual({});
   const route = await read({ route: '//x' });
   expect(route.response.status).toBe(400);

@@ -4,7 +4,7 @@ import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 're
 import { getLocale } from '../../paraglide/runtime';
 import { ErrorPage } from '../../shell/shell';
 import { csrfHeaders, SignInPrompt } from '../../threads/composer';
-import { profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
+import { overviewOf, profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
@@ -93,15 +93,7 @@ export function CurationView({ initial }: { initial: CurationRead }) {
 
   const { profile, head } = current;
   const templates = profileTemplates(profile);
-  const document = !selected
-    ? null
-    : selected.scope === 'generic'
-      ? profile.generic
-      : selected.scope === 'base'
-        ? profile.bases.find((item) => item.base === selected.key)!.document
-        : selected.scope === 'type'
-          ? profile.types.find((item) => item.type === selected.key)!.document
-          : profile.routes.find((item) => item.route === selected.key)!.document;
+  const document = !selected ? null : (overviewOf(profile, selected) ?? null);
 
   function addTemplate(event: FormEvent) {
     event.preventDefault();
@@ -115,7 +107,11 @@ export function CurationView({ initial }: { initial: CurationRead }) {
       });
       return;
     }
-    const next = withTemplate(profile, template, structuredClone(profile.generic));
+    const next = withTemplate(
+      profile,
+      template,
+      structuredClone(overviewOf(profile, { scope: 'generic', key: null })!),
+    );
     const errors = validateProfile(platformRegistry, next);
     if (errors.length > 0) {
       setFailure({ ok: false, reason: 'invalid', errors });

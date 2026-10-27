@@ -1,5 +1,10 @@
 import type { KernelClient } from '@rezics/client';
-import type { CompositionDocument, PresentationProfile } from '@rezics/composition';
+import {
+  templateViews,
+  type CompositionDocument,
+  type PresentationProfile,
+  type TemplateBody,
+} from '@rezics/composition';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
 export type CurationFailure =
@@ -29,6 +34,31 @@ function replace<T>(list: T[], keyOf: (entry: T) => string, key: string, entry: 
   return next;
 }
 
+/** The body of a template whose overview is `document`; the other views of an existing template stay. */
+function bodyWith(existing: TemplateBody | undefined, document: CompositionDocument): TemplateBody {
+  return existing?.views ? { views: { ...existing.views, overview: document } } : { document };
+}
+
+/** The overview document of a template: the one the editor edits. */
+export function overviewOf(profile: PresentationProfile, template: Template): CompositionDocument | undefined {
+  switch (template.scope) {
+    case 'generic':
+      return templateViews(profile.generic).overview;
+    case 'base': {
+      const entry = profile.bases.find((item) => item.base === template.key);
+      return entry && templateViews(entry).overview;
+    }
+    case 'type': {
+      const entry = profile.types.find((item) => item.type === template.key);
+      return entry && templateViews(entry).overview;
+    }
+    case 'route': {
+      const entry = profile.routes.find((item) => item.route === template.key);
+      return entry && templateViews(entry).overview;
+    }
+  }
+}
+
 export function withTemplate(
   profile: PresentationProfile,
   template: Template,
@@ -36,21 +66,42 @@ export function withTemplate(
 ): PresentationProfile {
   switch (template.scope) {
     case 'generic':
-      return { ...profile, generic: document };
+      return {
+        ...profile,
+        generic: 'views' in profile.generic ? { views: { ...profile.generic.views, overview: document } } : document,
+      };
     case 'base':
       return {
         ...profile,
-        bases: replace(profile.bases, (entry) => entry.base, template.key, { base: template.key, document }),
+        bases: replace(profile.bases, (entry) => entry.base, template.key, {
+          base: template.key,
+          ...bodyWith(
+            profile.bases.find((entry) => entry.base === template.key),
+            document,
+          ),
+        }),
       };
     case 'type':
       return {
         ...profile,
-        types: replace(profile.types, (entry) => entry.type, template.key, { type: template.key, document }),
+        types: replace(profile.types, (entry) => entry.type, template.key, {
+          type: template.key,
+          ...bodyWith(
+            profile.types.find((entry) => entry.type === template.key),
+            document,
+          ),
+        }),
       };
     case 'route':
       return {
         ...profile,
-        routes: replace(profile.routes, (entry) => entry.route, template.key, { route: template.key, document }),
+        routes: replace(profile.routes, (entry) => entry.route, template.key, {
+          route: template.key,
+          ...bodyWith(
+            profile.routes.find((entry) => entry.route === template.key),
+            document,
+          ),
+        }),
       };
   }
 }

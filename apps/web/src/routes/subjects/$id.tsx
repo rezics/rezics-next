@@ -1,7 +1,6 @@
-import { createFileRoute, Link, notFound, redirect, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import type { ReactNode } from 'react';
 import {
   loadSubjectPage,
   SubjectPage,
@@ -10,6 +9,8 @@ import {
   subjectPageTitle,
   subjectPageType,
 } from '../../features/pages/subject';
+import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
+import { subjectTabs } from '../../features/pages/views';
 import { kernelClient } from '../../kernel/client';
 import { loadSubjectLibrarySlot } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
@@ -67,7 +68,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       type ? typeFrame(type, data.locale) : Promise.resolve<Awaited<ReturnType<typeof typeFrame>>>({}),
       relationLabels(pageRelationProperties(result.page), data.locale),
     ]);
-    return { page: result.page, library, reader, frame, relations };
+    return { page: result.page, library, reader, frame, relations, tabs: subjectTabs(result.page) };
   });
 
 export const Route = createFileRoute('/subjects/$id')({
@@ -96,50 +97,22 @@ export const Route = createFileRoute('/subjects/$id')({
   component: SubjectRoute,
 });
 
-function SubjectLink({ href, lang, children }: { href: string; lang?: string; children: ReactNode }) {
-  const id = /^\/[^/]+\/subjects\/([^/?#]+)$/.exec(href)?.[1];
-  if (!id)
-    return (
-      <a href={href} lang={lang}>
-        {children}
-      </a>
-    );
-  return (
-    <Link to="/subjects/$id" params={{ id: decodeURIComponent(id) }} lang={lang}>
-      {children}
-    </Link>
-  );
-}
-
 function SubjectRoute() {
-  const { page, library, reader, frame, relations } = Route.useLoaderData();
+  const { page, library, reader, frame, relations, tabs } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   return (
     <SubjectPage
       page={page}
       locale={getLocale()}
-      messages={{
-        unknown: m.subject_value_unknown(),
-        none: m.subject_value_none(),
-        unlabelled: m.subject_value_unlabelled(),
-        sources: m.subject_sources(),
-        aliases: m.subject_aliases(),
-        search: m.search_submit(),
-        cover: m.subject_cover(),
-        coverCredit: m.subject_cover_credit(),
-        coverReveal: m.subject_cover_reveal(),
-        coverWithheld: m.subject_cover_withheld(),
-        coverVia: m.subject_cover_via(),
-        details: m.subject_details(),
-        documentSpoiler: m.thread_reveal_spoiler(),
-        source: m.subject_source(),
-        spoilerShow: m.subject_spoiler_show(),
-      }}
+      messages={subjectPageMessages()}
       reader={reader}
       {...(frame.label ? { typeLabel: frame.label } : {})}
       {...(frame.ratio ? { ratio: frame.ratio } : {})}
       relations={relations}
       link={SubjectLink}
+      tabs={tabs}
+      tabLabels={viewTabLabels()}
+      invitation={m.subject_empty()}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
       actions={(subject) => (

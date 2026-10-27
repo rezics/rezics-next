@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { SLOT_NAMES, platformRegistry, validateProfile, type PresentationProfile } from '../src/index.ts';
+import {
+  SLOT_NAMES,
+  platformRegistry,
+  templateViews,
+  validateProfile,
+  type PresentationProfile,
+} from '../src/index.ts';
 
 type Node = { type: string; props: Record<string, unknown> };
 const isNodes = (value: unknown): value is Node[] =>
@@ -19,8 +25,8 @@ test('the site fills one actions slot in every subject page header', async () =>
     new URL('../profiles/platform.json', import.meta.url),
   ).json()) as PresentationProfile;
   expect(validateProfile(platformRegistry, platform)).toEqual([]);
-  const subjectPages = [platform.generic, ...platform.bases, ...platform.types].map((entry) =>
-    'document' in entry ? entry.document : entry,
+  const subjectPages = [platform.generic, ...platform.bases, ...platform.types].map(
+    (entry) => templateViews(entry).overview!,
   );
   expect(subjectPages.length).toBeGreaterThanOrEqual(2);
   for (const document of subjectPages) {
@@ -31,5 +37,6 @@ test('the site fills one actions slot in every subject page header', async () =>
     expect(inHeader[0]?.type).toBe('SubjectHeader');
     expect(inHeader).toContainEqual({ type: 'Slot', props: { id: 'actions', name: 'actions', children: [] } });
   }
-  for (const { document } of platform.routes) expect(slots(document.content as Node[], 'actions')).toEqual([]);
+  for (const entry of platform.routes)
+    expect(slots(templateViews(entry).overview!.content as Node[], 'actions')).toEqual([]);
 });

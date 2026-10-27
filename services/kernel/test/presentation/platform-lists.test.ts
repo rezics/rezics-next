@@ -7,6 +7,7 @@ import {
   platformRegistry,
   readCost,
   resolveTemplate,
+  templateViews,
 } from '@rezics/composition';
 import { platformProfile } from '../../src/presentation/setup.ts';
 
@@ -37,16 +38,14 @@ test('people, organisations, concepts, characters and series list their works', 
 });
 
 test('every default page stays within the page read budget', () => {
-  const documents = [
-    platformProfile.generic,
-    ...platformProfile.bases.map(({ document }) => document),
-    ...platformProfile.types.map(({ document }) => document),
-  ];
+  const documents = [platformProfile.generic, ...platformProfile.bases, ...platformProfile.types].flatMap((template) =>
+    Object.values(templateViews(template)),
+  );
   for (const document of documents) {
     const { reads } = planReads(platformRegistry, document, { subject });
     const all = Object.values(reads);
     expect(all.length).toBeLessThanOrEqual(MAX_PAGE_READS);
     expect(all.reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(MAX_PAGE_COST);
-    expect(all.filter((read) => read.kind === 'subject')).toHaveLength(1);
+    expect(all.filter((read) => read.kind === 'subject').length).toBeLessThanOrEqual(1);
   }
 });

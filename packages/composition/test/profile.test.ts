@@ -5,6 +5,7 @@ import {
   MAX_PROFILE_BYTES,
   MAX_PROFILE_TEMPLATES,
   PROFILE_FORMAT,
+  type CompositionDocument,
   type PresentationProfile,
   platformRegistry,
   profileDigest,
@@ -94,9 +95,10 @@ test('profile keys are checked, sorted and unique', () => {
 
 test('every template is validated with pointers into the profile', () => {
   const value = profile();
-  value.generic.content[0]!.props.text = '<script>alert(1)</script>';
-  value.types[1]!.document.content[0]!.type = 'Script';
-  value.routes[0]!.document.content[0]!.props.level = 9;
+  const only = (entry: { document?: CompositionDocument | undefined }) => entry.document!;
+  (value.generic as CompositionDocument).content[0]!.props.text = '<script>alert(1)</script>';
+  only(value.types[1]!).content[0]!.type = 'Script';
+  only(value.routes[0]!).content[0]!.props.level = 9;
   expect(validateProfile(platformRegistry, value)).toEqual([
     { pointer: '/generic/content/0/props/text', code: 'unsafe' },
     { pointer: '/routes/0/document/content/0/props/level', code: 'invalid' },
@@ -125,7 +127,7 @@ test('a profile past its size or template limit stops validation', () => {
       },
     },
   ];
-  large.generic.content[0]!.props.text = '<b>never reached</b>';
+  (large.generic as CompositionDocument).content[0]!.props.text = '<b>never reached</b>';
   expect(canonicalize(large)!.length).toBeGreaterThan(MAX_PROFILE_BYTES);
   expect(validateProfile(platformRegistry, large)).toEqual([{ pointer: '', code: 'limit' }]);
 });

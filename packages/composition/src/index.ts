@@ -26,20 +26,26 @@ export { validateComposition } from './validate.ts';
 export { MAX_ZONE_PAGES, MAX_ZONE_SCOPE, UI_LOCALES, validateZoneStarter, type ZoneStarter } from './zone.ts';
 export { MAX_PAGE_COST, MAX_PAGE_READS, planReads, readCost, shownProperties, type PageReadPlan } from './reads.ts';
 export type {
+  GenericTemplate,
   PresentationProfile,
   ProfileBaseTemplate,
   ProfileRouteTemplate,
   ProfileTypeTemplate,
   ResolvedTemplate,
+  TemplateBody,
   TemplateTarget,
 } from './profile.ts';
+export { isView, VIEWS, type View, type ViewDocuments } from './views.ts';
 export {
   MAX_PROFILE_BYTES,
   MAX_PROFILE_TEMPLATES,
   PROFILE_FORMAT,
   PROFILE_ROUTE_MAX_LENGTH,
   PROFILE_ROUTE_PATTERN,
+  definedViews,
   profileDigest,
   resolveTemplate,
+  resolveView,
+  templateViews,
   validateProfile,
 } from './profile.ts';

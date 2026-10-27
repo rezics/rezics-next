@@ -82,10 +82,24 @@ function subject(statements: ReturnType<typeof statement>[], extra: Record<strin
   };
 }
 
+// The work overview with the facts of its Details view before Sources, so one render shows every property.
+const work = (
+  platform.bases.find(({ base }) => base === 'schema:CreativeWork') as unknown as {
+    views: { overview: CompositionDocument };
+  }
+).views.overview;
+const workWithFacts: CompositionDocument = {
+  ...work,
+  content: [
+    ...work.content.slice(0, -1),
+    { type: 'MoreStatements', props: { id: 'more-statements' } },
+    ...work.content.slice(-1),
+  ],
+};
+
 function pageOf(
   read: { subject: ReturnType<typeof subject>; summary?: unknown },
-  template: CompositionDocument = platform.bases.find(({ base }) => base === 'schema:CreativeWork')!
-    .document as unknown as CompositionDocument,
+  template: CompositionDocument = workWithFacts,
 ): SubjectPageData {
   const reads: SubjectPageData['reads'] = {};
   for (const [key, planned] of Object.entries(planReads(platformRegistry, template, { subject: subjectId }).reads))
@@ -99,7 +113,11 @@ function pageOf(
               ...read,
             },
           }
-        : { status: 200, body: { subjects: [], total: { value: 0, relation: 'exact' }, next: null, as_of: '' } };
+        : planned.kind === 'links'
+          ? { status: 200, body: { links: [], count: { value: 0, exact: true }, next: null } }
+          : planned.kind === 'collections'
+            ? { status: 200, body: { collections: [], count: { value: 0, exact: true }, next: null } }
+            : { status: 200, body: { subjects: [], total: { value: 0, relation: 'exact' }, next: null, as_of: '' } };
   return {
     subject: subjectId,
     profile: 'sha256:0',

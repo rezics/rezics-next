@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ComponentProps, ReactNode } from 'react';
 import { originalLanguage } from '../../subject/language';
 import type { Reader } from '../../subject/reader';
@@ -9,6 +10,9 @@ import { dataComponents, PageData, pageText, SubjectSources, type PageMessages }
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
+import { linkClass, linkColor } from './shared';
+import { ViewTabs, type ViewTabLabels } from './view-tabs';
+import type { ViewTab } from './views';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -17,6 +21,8 @@ export type SubjectPageData = {
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: PageDocument;
+  /** The views the subject's templates define; absent when the kernel did not say. */
+  views?: string[];
   reads: Record<string, { status: number; body: unknown }>;
 };
 
@@ -63,10 +69,10 @@ function subjectBody(page: SubjectPageData): { subject: Subject; related: Relate
   return { subject: result.body.subject as Subject, related: result.body.related as Related };
 }
 
-/** One `pages.read`. A merged subject names its survivor; an unknown subject is missing. */
-export async function loadSubjectPage(client: KernelClient, id: string): Promise<SubjectPageLoad> {
+/** One `pages.read` of the overview, or of the named view. A merged subject names its survivor; an unknown one is missing. */
+export async function loadSubjectPage(client: KernelClient, id: string, view?: View): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
-  const result = await client.pages.$read.post({ target: { subject: id } });
+  const result = await client.pages.$read.post({ target: { subject: id, ...(view ? { view } : {}) } });
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 200 && result.data) {
     const survivor = result.data.subject;
@@ -107,7 +113,31 @@ export function subjectPageJsonLd(page: SubjectPageData, locale: string): string
     : undefined;
 }
 
-/** The template document, then schema.org JSON-LD when the subject read succeeded. */
+/** Whether the template places a slot of this name anywhere in the document. */
+function placesSlot(content: readonly unknown[], name: string): boolean {
+  return content.some(
+    (node) =>
+      isRecord(node) &&
+      isRecord(node.props) &&
+      ((node.type === 'Slot' && node.props.name === name) ||
+        Object.values(node.props).some((value) => Array.isArray(value) && placesSlot(value, name))),
+  );
+}
+
+/** A subject with nothing but its title: the read succeeded and holds no statement. */
+function hasOnlyTitle(page: SubjectPageData): boolean {
+  const read = subjectBody(page);
+  return !!read && Object.values(read.subject.statements).every((statements) => !statements?.length);
+}
+
+/** The view's name and a way back to the subject, above the tabs of every view but the overview. */
+export type ViewHeading = { title: string; label: string; href: string };
+
+/**
+ * The template document for one view of a subject, then schema.org JSON-LD for the overview. The host places the
+ * view tabs right after the overview's header, or under the view's own heading, and invites the first facts when the
+ * subject has only a title.
+ */
 export function SubjectPage({
   page,
   locale,
@@ -120,6 +150,11 @@ export function SubjectPage({
   typeLabel,
   ratio,
   relations,
+  view = 'overview',
+  tabs,
+  tabLabels,
+  heading,
+  invitation,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -136,13 +171,43 @@ export function SubjectPage({
   ratio?: ComponentProps<typeof PageData>['ratio'];
   /** How each relation property reads on this page, from the definitions release. */
   relations?: Record<string, RelationDefinition>;
+  /** The view this document is. */
+  view?: View;
+  /** The views to offer, from `subjectTabs` of the subject's overview. */
+  tabs?: readonly ViewTab[];
+  tabLabels?: ViewTabLabels;
+  /** Required for a view other than the overview. */
+  heading?: ViewHeading;
+  /** The sentence that invites the first facts of a subject with only a title. */
+  invitation?: string;
 }) {
+  const overview = view === 'overview';
   const read = subjectBody(page);
   const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
-  const jsonLd = subjectPageJsonLd(page, locale);
+  const jsonLd = overview ? subjectPageJsonLd(page, locale) : undefined;
+  const bar =
+    tabs && tabLabels && tabs.length > 0 ? (
+      <ViewTabs tabs={tabs} active={view} locale={locale} subject={page.subject} labels={tabLabels} />
+    ) : null;
+  const invite =
+    overview && invitation && hasOnlyTitle(page) ? (
+      <Empty data-slot="invitation" className="border p-6">
+        <EmptyHeader>
+          <EmptyTitle className="sr-only">{invitation}</EmptyTitle>
+          <EmptyDescription>{invitation}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : null;
+  const header = placesSlot(page.document.content, 'header');
+  const afterHeader = overview ? (
+    <>
+      {bar}
+      {invite}
+    </>
+  ) : null;
   return (
     <>
-      <PageHost actions={renderedActions}>
+      <PageHost actions={renderedActions} afterHeader={header ? afterHeader : null}>
         <PageData
           locale={locale}
           subject={page.subject}
@@ -156,13 +221,27 @@ export function SubjectPage({
           {...(relations ? { relations } : {})}
         >
           <div className="flex w-full flex-col gap-8">
+            {!overview && heading && (
+              <header className="min-w-0 space-y-1" data-slot="view-heading">
+                <p className="text-sm break-words">
+                  <a className={`${linkClass} ${linkColor}`} href={heading.href}>
+                    {heading.title}
+                  </a>
+                </p>
+                <h1 className="font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                  {heading.label}
+                </h1>
+              </header>
+            )}
+            {!overview && bar}
+            {overview && !header && afterHeader}
             <CompositionRender
               document={page.document}
               definitions={pageDefinitions}
               components={{ ...layoutComponents, ...dataComponents }}
               root={PageRoot}
             />
-            {!placesType(page.document.content, 'Sources') && <SubjectSources />}
+            {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
           </div>
         </PageData>
       </PageHost>

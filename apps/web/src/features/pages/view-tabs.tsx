@@ -1,0 +1,66 @@
+import type { View } from '@rezics/composition';
+import { Tabs, TabsList, TabsTrigger } from '@rezics/ui/shadcn/tabs';
+import { useEffect, useRef } from 'react';
+import type { ViewTab } from './views';
+
+export type ViewTabLabels = { views: string; names: Record<View, string> };
+
+const barClass = 'sticky top-16 z-30 -mx-6 border-b border-border/60 bg-background/90 px-6 backdrop-blur';
+// The inactive color is the muted foreground: the 60% foreground the component defaults to does not clear 4.5:1.
+const triggerClass = 'h-11 flex-none px-3 text-muted-foreground data-active:text-foreground';
+
+function countText(count: NonNullable<ViewTab['count']>, locale: string): string {
+  return `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`;
+}
+
+/**
+ * The views a subject page offers, as links styled as tabs. The bar stays in view under the top bar, scrolls
+ * sideways on a narrow screen instead of wrapping, and brings the active view into sight once the page hydrates.
+ */
+export function ViewTabs({
+  tabs,
+  active,
+  locale,
+  subject,
+  labels,
+}: {
+  tabs: readonly ViewTab[];
+  active: View;
+  locale: string;
+  subject: string;
+  labels: ViewTabLabels;
+}) {
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const current = bar.current?.querySelector<HTMLElement>('[data-active]');
+    current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  }, [active]);
+  const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}`;
+  return (
+    <nav aria-label={labels.views} data-slot="view-tabs" className={barClass}>
+      <div ref={bar} className="overflow-x-auto overscroll-x-contain">
+        <Tabs value={active} className="w-max min-w-full">
+          <TabsList variant="line" className="h-11 w-max flex-nowrap justify-start">
+            {tabs.map(({ view, count }) => (
+              <TabsTrigger
+                key={view}
+                value={view}
+                nativeButton={false}
+                className={triggerClass}
+                data-view={view}
+                render={<a href={view === 'overview' ? base : `${base}/${view}`} />}
+              >
+                {labels.names[view]}
+                {count && (
+                  <span data-slot="count" className="text-xs tabular-nums">
+                    {countText(count, locale)}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+    </nav>
+  );
+}

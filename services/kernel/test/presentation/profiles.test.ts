@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
+import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { createPool } from '../../src/database/pool.ts';
 import {
   activateProfile,
@@ -74,7 +74,7 @@ test('a profile is published once and read back by digest, immutably', async () 
   const read = await readProfile(pool, secondDigest);
   expect(read).toEqual(second);
   expect(Object.isFrozen(read)).toBe(true);
-  expect(Object.isFrozen(read!.generic.content[0]!.props)).toBe(true);
+  expect(Object.isFrozen((read!.generic as CompositionDocument).content[0]!.props)).toBe(true);
   expect(await readProfile(pool, `sha256:${'0'.repeat(64)}`)).toBeNull();
   expect(await readProfile(pool, 'sha256:not-a-digest')).toBeNull();
 });

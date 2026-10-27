@@ -61,12 +61,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     response: {
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
+            account: import("typebox").TOptional<import("typebox").TString>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
                 key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
             document: import("typebox").TAny;
+            views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;
@@ -155,12 +157,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     status: import("elysia").SelectiveStatus<{
         200: {
             subject?: string;
+            account?: string;
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
                 key: string | null;
             };
             document: any;
+            views?: string[];
             reads: Record<string, {
                 status: number;
                 body: any;
@@ -226,12 +230,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     problem: import("elysia").SelectiveProblem<{
         200: {
             subject?: string;
+            account?: string;
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
                 key: string | null;
             };
             document: any;
+            views?: string[];
             reads: Record<string, {
                 status: number;
                 body: any;
@@ -299,12 +305,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         response: {
             200: import("typebox").TObject<{
                 subject: import("typebox").TOptional<import("typebox").TString>;
+                account: import("typebox").TOptional<import("typebox").TString>;
                 profile: import("typebox").TString;
                 template: import("typebox").TObject<{
                     scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
                     key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 }>;
                 document: import("typebox").TAny;
+                views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
                 reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                     status: import("typebox").TInteger;
                     body: import("typebox").TAny;
@@ -424,12 +432,14 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     response: {
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
+            account: import("typebox").TOptional<import("typebox").TString>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
                 key: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
             document: import("typebox").TAny;
+            views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;

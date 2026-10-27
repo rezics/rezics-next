@@ -54057,6 +54057,12 @@
                         "key"
                       ],
                       "type": "object"
+                    },
+                    "views": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [

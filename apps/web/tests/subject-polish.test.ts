@@ -96,7 +96,7 @@ test(
       // Every term names something; an empty term is announced as a blank entry.
       expect(terms.filter((term) => term.text === '' || term.hidden)).toEqual([]);
       const properties = terms.filter((term) => !term.nested).map((term) => term.text);
-      expect(properties).toEqual(['author', 'genre', 'ISBN']);
+      expect(properties).toEqual(['author', 'genre']);
       const genre = page.getByRole('term').filter({ hasText: /^genre$/ });
       const values = await genre.evaluate((term) => {
         const values: string[] = [];

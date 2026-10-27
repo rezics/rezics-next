@@ -296,6 +296,7 @@ const linkProps = {
   filter: Type.Optional(subjectId()),
   type: Type.Optional(curie()),
   limit: Type.Integer({ minimum: 1, maximum: 24 }),
+  paged: Type.Optional(Type.Boolean()),
 } as const;
 
 const readLinks: ComponentRead = (props, page) =>
@@ -361,6 +362,7 @@ export const platformRegistry = defineRegistry({
           title: localizedText({ maxLength: 120 }),
           property: curie(),
           limit: Type.Integer({ minimum: 1, maximum: 24 }),
+          paged: Type.Optional(Type.Boolean()),
         },
         closed,
       ),
@@ -400,11 +402,11 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'ThreadList',
-      props: Type.Object({}, closed),
+      props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
     },
     {
       type: 'ReviewList',
-      props: Type.Object({}, closed),
+      props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
     },
     {
       type: 'Sources',
@@ -414,7 +416,11 @@ export const platformRegistry = defineRegistry({
     {
       type: 'CollectionList',
       props: Type.Object(
-        { title: localizedText({ maxLength: 120 }), limit: Type.Integer({ minimum: 1, maximum: 6 }) },
+        {
+          title: localizedText({ maxLength: 120 }),
+          limit: Type.Integer({ minimum: 1, maximum: 6 }),
+          paged: Type.Optional(Type.Boolean()),
+        },
         closed,
       ),
       read: (_props, page) =>

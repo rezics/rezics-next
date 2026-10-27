@@ -150,7 +150,7 @@ test("data components render the subject read in the reader's locale", () => {
   expect(text(english)).toContain('The end');
 });
 
-test('failed and empty reads leave their components out', () => {
+test('a failed read says so under its heading and an empty one leaves its component out', () => {
   const failed = render('fr', {
     r0: { status: 404, body: { code: 'not_found' } },
     r1: { status: 503, body: { code: 'index_not_ready' } },
@@ -158,6 +158,9 @@ test('failed and empty reads leave their components out', () => {
   expect(failed).not.toMatch(/<h1/);
   // A list whose read failed says so with a retry instead of silently vanishing.
   expect(failed).toMatch(/data-slot="subject-list" data-state="failed"/);
+  // The list names its failed section with a retry; the header and the facts, whose read also failed, are left out.
+  expect(failed).toContain('data-state="failed"');
+  expect(failed).toContain('Œuvres');
   expect(failed).not.toContain('Auteur');
   expect(failed).toContain('Fin');
   const empty = render('fr', {

@@ -184,8 +184,9 @@ test(
     expect(await page.title()).toContain(kokoro.labels.en);
     const text = await page.locator('main').innerText();
     expect(text).toContain(kokoro.descriptions.en!);
-    for (const id of ['schema:author', 'schema:genre', 'schema:isbn', 'schema:numberOfPages'])
-      expect(text).toContain(property(id).labels.en);
+    // The overview shows the key facts; the remaining facts are in Details.
+    for (const id of ['schema:author', 'schema:genre']) expect(text).toContain(property(id).labels.en);
+    expect(text).not.toContain(property('schema:numberOfPages').labels.en);
     // The author is linked from the header and from the fact row; both go to the same page.
     const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
     expect(await author.getAttribute('href')).toBe(`/en/subjects/${soseki.id}`);
@@ -193,11 +194,18 @@ test(
     expect(text).toContain(novel.labels.en!);
     expect(text).not.toContain(shortStory.labels.en!);
     expect(text).toContain('978-4-10-101013-7');
-    expect(text).toMatch(/\b384\b/);
-    expect(text).not.toContain('+384');
     // The source of the ISBN is listed once, as a link.
     expect(await page.locator(`a[href="${aozora}"]`).count()).toBe(1);
     await page.context().close();
+
+    // Details holds every fact, with the page count as a number.
+    const details = await open(`/en/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
+    const facts = await details.locator('main').innerText();
+    for (const id of ['schema:author', 'schema:genre', 'schema:isbn', 'schema:numberOfPages'])
+      expect(facts).toContain(property(id).labels.en);
+    expect(facts).toMatch(/\b384\b/);
+    expect(facts).not.toContain('+384');
+    await details.context().close();
   },
   timeout,
 );
@@ -223,10 +231,14 @@ test(
     const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
     expect(await author.getAttribute('href')).toBe(`/ko/subjects/${soseki.id}`);
     expect(await author.evaluate((element) => element.closest('[lang]')?.getAttribute('lang'))).toBe('en');
+    await page.context().close();
+
+    // The page count is a remaining fact, so it is in Details.
+    page = await open(`/ko/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
     expect(await languageOf(page, `main :text-is("${property('schema:numberOfPages').labels.en}")`)).toBe('en');
     await page.context().close();
 
-    page = await open(`/ja/subjects/${kokoro.id}`, { javaScriptEnabled: false });
+    page = await open(`/ja/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
     expect(await page.locator('main').innerText()).toContain(property('schema:numberOfPages').labels.ja);
     await page.context().close();
   },
@@ -249,12 +261,15 @@ test(
       let page = await open(`/${locale}/subjects/${taketori.id}`, { javaScriptEnabled: false });
       const text = await page.locator('main').innerText();
       expect(text).toContain(own.subject_value_unknown!);
-      expect(text).toContain(own.subject_value_none!);
       const unlabelled = page.getByRole('link', { name: own.subject_value_unlabelled!, exact: true });
       expect(await unlabelled.getAttribute('href')).toBe(`/${locale}/subjects/${dangling}`);
       await page.context().close();
+      // A value that is known to be absent is stated in Details, where the remaining facts are.
+      page = await open(`/${locale}/subjects/${taketori.id}/details`, { javaScriptEnabled: false });
+      expect(await page.locator('main').innerText()).toContain(own.subject_value_none!);
+      await page.context().close();
       // A qualifier with no value is stated too.
-      page = await open(`/${locale}/subjects/${kokoro.id}`, { javaScriptEnabled: false });
+      page = await open(`/${locale}/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
       expect(await page.locator('main').innerText()).toContain(own.subject_value_none!);
       await page.context().close();
     }

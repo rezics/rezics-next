@@ -44,6 +44,10 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 
 ### Page read
 
+A subject or account target may name a `view`; the page is then that view's document, planned and read the same way, and
+`views` lists the views the page's templates define. A view no template defines, and a `view` on a route target, are
+refused (`404` and `400`).
+
 - Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject or account target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` runs once and is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject and account probes are reused. This request releases its admission slot before those sub-reads; each sub-read takes its own.
 - Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
 - Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`

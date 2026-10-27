@@ -9,6 +9,7 @@ import { originalLanguage } from '../../subject/language';
 import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
+import { listView } from './views';
 import {
   bestRank,
   ExternalValue,
@@ -355,7 +356,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       title={text.text || title}
       titleLang={text.text ? text.lang : undefined}
       count={listed.count}
-      more={!listed.count.exact || listed.count.value > listed.items.length}
+      more={props.paged !== true && (!listed.count.exact || listed.count.value > listed.items.length)}
       href={viewHref(value, view)}
       locale={value.locale}
     >
@@ -561,7 +562,7 @@ export function CollectionList(props: Record<string, unknown>) {
       title={title.text}
       titleLang={title.lang}
       count={{ value: total, exact: true }}
-      more={total > collections.length}
+      more={props.paged !== true && total > collections.length}
       href={viewHref(value, 'lists')}
       locale={value.locale}
     >

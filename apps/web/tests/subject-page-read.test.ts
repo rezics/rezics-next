@@ -44,7 +44,10 @@ test('a subject page is one page read rendered from its template', async () => {
   expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro } })}`]);
   expect(page.subject).toBe(kokoro);
   expect(page.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
-  expect(page.document).toEqual(platform.bases.find(({ base }) => base === 'schema:CreativeWork')!.document);
+  expect(page.document).toEqual(
+    (platform.bases.find(({ base }) => base === 'schema:CreativeWork') as { views: { overview: unknown } }).views
+      .overview,
+  );
   expect(subjectPageTitle(page, 'ja')).toBe('こころ');
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   expect(html).toMatch(/<h1[^>]*>Kokoro<\/h1>/);

@@ -5,9 +5,14 @@ import {
   platformRegistry,
   PROFILE_ROUTE_MAX_LENGTH,
   PROFILE_ROUTE_PATTERN,
+  definedViews,
+  isView,
   resolveTemplate,
+  resolveView,
   type PageRead,
   type ResolvedTemplate,
+  type TemplateTarget,
+  type View,
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -44,13 +49,14 @@ const pageResponse = t.Object(
       closed,
     ),
     document: t.Any(),
+    views: t.Optional(t.Array(t.String())),
     reads: t.Record(t.String(), readResult),
   },
   closed,
 );
 
 type ReadResult = { status: number; body: unknown };
-type PageTarget = { subject: string } | { route: string } | { account: string };
+type PageTarget = ({ subject: string } | { route: string } | { account: string }) & { view?: View };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -67,7 +73,10 @@ function reject(errors: FieldError[]): never {
   throw new ProblemError('invalid_request', { errors: sorted });
 }
 
-/** Closed target: exactly one of a canonical subject id, a profile route key or an account handle. */
+/**
+ * Closed target: exactly one of a canonical subject id, a profile route key or an account handle. A subject or account
+ * target may name one view; without it the page is the overview.
+ */
 function targetOf(body: unknown): PageTarget {
   const errors: FieldError[] = [];
   if (!isRecord(body)) reject([{ pointer: '', code: 'invalid_type' }]);
@@ -84,10 +93,20 @@ function targetOf(body: unknown): PageTarget {
     reject(errors);
   }
   for (const key of Object.keys(target)) {
-    if (key !== 'subject' && key !== 'route' && key !== 'account')
+    if (key !== 'subject' && key !== 'route' && key !== 'account' && key !== 'view')
       errors.push({ pointer: `/target/${segment(key)}`, code: 'unknown_field' });
   }
   const named = ['subject', 'route', 'account'].filter((key) => Object.hasOwn(target, key));
+  let view: View | undefined;
+  if (Object.hasOwn(target, 'view')) {
+    if (!isView(target.view))
+      errors.push({
+        pointer: '/target/view',
+        code: typeof target.view === 'string' ? 'invalid_format' : 'invalid_type',
+      });
+    else if (named[0] === 'route') errors.push({ pointer: '/target/view', code: 'unknown_field' });
+    else view = target.view;
+  }
   if (named.length !== 1) {
     errors.push({ pointer: '/target', code: 'invalid_type' });
     reject(errors);
@@ -99,7 +118,7 @@ function targetOf(body: unknown): PageTarget {
         pointer: '/target/subject',
         code: typeof subject === 'string' ? 'invalid_format' : 'invalid_type',
       });
-    else if (errors.length === 0) return { subject };
+    else if (errors.length === 0) return { subject, ...(view ? { view } : {}) };
   } else if (named[0] === 'account') {
     const account = target.account;
     if (typeof account !== 'string' || !handlePattern.test(account))
@@ -107,7 +126,7 @@ function targetOf(body: unknown): PageTarget {
         pointer: '/target/account',
         code: typeof account === 'string' ? 'invalid_format' : 'invalid_type',
       });
-    else if (errors.length === 0) return { account };
+    else if (errors.length === 0) return { account, ...(view ? { view } : {}) };
   } else {
     const route = target.route;
     const routeKey = typeof route === 'string' && route.length <= PROFILE_ROUTE_MAX_LENGTH && profileRoute.test(route);
@@ -231,6 +250,7 @@ export function pageRoutes<App>(
       let subject: { id: string; type: string } | null = null;
       let account: { id: string; handle: string } | null = null;
       let resolved: ResolvedTemplate;
+      let views: View[] | null = null;
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
@@ -256,10 +276,15 @@ export function pageRoutes<App>(
         // An account without a named subject takes the template of its kind's agent type.
         const type = subject?.type ?? (kind === 'organization' ? 'schema:Organization' : 'schema:Person');
         const definition = release?.release.types[type];
-        resolved = resolveTemplate(active.profile, {
+        const template: TemplateTarget = {
           type,
           ...(definition === undefined ? {} : { bases: definition.bases }),
-        });
+        };
+        // A view no template of the order defines does not exist for this page.
+        const found = resolveView(active.profile, template, target.view ?? 'overview');
+        if (found === null) throw new ProblemError('not_found');
+        resolved = found;
+        views = definedViews(active.profile, template);
       }
 
       return pageAnswer({
@@ -268,6 +293,7 @@ export function pageRoutes<App>(
         session,
         digest: active.digest,
         resolved,
+        views,
         subject: subject?.id ?? null,
         account,
         probes,
@@ -284,6 +310,7 @@ async function pageAnswer(input: {
   session: { ring: KeyRing; scope: string };
   digest: string;
   resolved: ResolvedTemplate;
+  views: View[] | null;
   subject: string | null;
   account: { id: string; handle: string } | null;
   probes: Map<string, ReadResult>;
@@ -324,6 +351,7 @@ async function pageAnswer(input: {
       profile: input.digest,
       template: { scope: input.resolved.scope, key: input.resolved.key },
       document: input.resolved.document,
+      ...(input.views === null ? {} : { views: input.views }),
       reads,
     },
     readSession,

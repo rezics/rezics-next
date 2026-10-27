@@ -133,9 +133,9 @@ test('a curator publishes a profile once and anyone reads it by digest, immutabl
 test('an invalid profile is refused with pointers under /profile and stores nothing', async () => {
   const before = await count('profile');
   const broken = profile('<script>alert(1)</script>');
-  broken.types[0]!.document.content[0]!.type = 'Script';
-  broken.types[0]!.document.content.push({ type: 'Statements', props: { id: 's', properties: ['schema:author'] } });
-  broken.types[0]!.document.content.push({
+  broken.types[0]!.document!.content[0]!.type = 'Script';
+  broken.types[0]!.document!.content.push({ type: 'Statements', props: { id: 's', properties: ['schema:author'] } });
+  broken.types[0]!.document!.content.push({
     type: 'SubjectList',
     props: { id: 'l', title: 'Works', property: 'schema:author', limit: 99 },
   });

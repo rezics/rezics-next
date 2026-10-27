@@ -5,6 +5,7 @@ import {
   platformRegistry,
   resolveTemplate,
   SLOT_NAMES,
+  templateViews,
   UI_LOCALES,
   validateComposition,
   validateProfile,
@@ -100,8 +101,8 @@ test('the platform home opens with its heading and keeps a personal slot for sig
   ]);
   expect(content[0]).toEqual({ type: 'Heading', props: { id: 'heading', level: 1, text: homeHeadings } });
   expect(content[2]).toEqual({ type: 'Slot', props: { id: 'personal', name: 'personal', children: [] } });
-  const subjectPages = [platform.generic, ...platform.bases, ...platform.types].map((entry) =>
-    'document' in entry ? entry.document : entry,
+  const subjectPages = [platform.generic, ...platform.bases, ...platform.types].flatMap((entry) =>
+    Object.values(templateViews(entry)),
   );
   for (const document of subjectPages)
     expect(
