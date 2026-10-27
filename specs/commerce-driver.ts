@@ -1,3 +1,9 @@
+import type { Kernel } from '@rezics/client';
+
+type SubjectSummary = NonNullable<
+  Kernel['~Routes']['v1']['offers'][':offerId']['get']['response'][200]['offer']['subject']
+>;
+
 /**
  * COMMERCE_DRIVER is an absolute path or file URL exporting
  * createCommerceDriver(): Promise<CommerceDriver>. Each factory call owns an isolated,
@@ -22,21 +28,25 @@
  */
 export type Persona = 'buyer' | 'other' | 'refunded' | 'anonymous' | 'suspended';
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
-export interface OfferView {
+export interface OfferView extends Pick<OfferFixture, 'id' | 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'state'> {
+  subject: SubjectSummary | null;
+}
+export interface OfferFixture {
   id: string; targetSubjectId: string; title: string; currency: string;
   unitAmountMinor: number; state: 'active' | 'delisted';
+  creatorAccountId: string; taxCode: string; royaltyBasisPoints: number; revision: number;
 }
 export interface OrderView {
   id: string; offerId: string; settlement: Settlement; checkoutUrl: string | null;
   checkoutExpiresAt: string | null; entitlementId: string | null; createdAt: string;
 }
+export interface OrderReadView extends OrderView {
+  title: string; targetSubjectId: string; subject: SubjectSummary | null;
+}
 export interface EntitlementView {
   id: string; offerId: string; orderId: string; targetSubjectId: string;
   grantedAt: string; revokedAt: string | null; revokeReason: 'refund' | 'dispute' | null;
-  active: boolean;
-}
-export interface OfferFixture extends OfferView {
-  creatorAccountId: string; taxCode: string; royaltyBasisPoints: number; revision: number;
+  active: boolean; summary: SubjectSummary | null;
 }
 export interface OrderRow {
   id: string; buyerAccountId: string; route: number; partition: number; offerId: string;
@@ -46,7 +56,7 @@ export interface OrderRow {
 }
 export interface Inspection {
   orders: OrderRow[];
-  entitlements: (EntitlementView & { accountId: string; route: number; partition: number })[];
+  entitlements: (Omit<EntitlementView, 'summary'> & { accountId: string; route: number; partition: number })[];
   events: { id: string; type: string; data: Record<string, string> }[];
   workflows: { id: string; name: string; status: string }[];
   transactions: { id: string; orderId: string; kind: string; amountMinor: number }[];
