@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/shadcn/badge';
-import { Cover, placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
+import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
+import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -69,20 +70,17 @@ function Published({ subjects }: { subjects: PublishedSubject[] }) {
         {m.realm_published_heading()}
       </h2>
       {titled.length ? (
-        <ul className="flex snap-x gap-5 overflow-x-auto pb-3">
+        <CoverRow ratio={ratio} label={m.realm_published_heading()}>
           {titled.map(({ subject, cover }) => (
-            <li key={subject.id} className="relative w-40 shrink-0 snap-start space-y-2">
-              <Cover subject={cover} cover={subject.cover} size="md" ratio={ratio} src={coverSrc} decorative />
-              <Link
-                to="/subjects/$id"
-                params={{ id: subject.id }}
-                className="line-clamp-2 text-sm font-medium text-foreground after:absolute after:inset-0 hover:underline"
-              >
-                {cover.title}
-              </Link>
-            </li>
+            <CoverCard
+              key={subject.id}
+              href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject.id)}`}
+              cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
+              title={cover.title}
+              secondary={subject.types[0]?.split(':').at(-1)}
+            />
           ))}
-        </ul>
+        </CoverRow>
       ) : (
         <p className="text-muted-foreground">{m.realm_published_empty()}</p>
       )}
