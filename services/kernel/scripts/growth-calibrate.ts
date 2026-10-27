@@ -103,11 +103,7 @@ function ownerModule(file: string): string {
   const testIndex = normalized.lastIndexOf('/test/');
   const testPath = testIndex >= 0 ? normalized.slice(testIndex + '/test/'.length) : normalized.replace(/^test\//, '');
   const directory = posix.dirname(testPath);
-  if (directory !== '.') return directory;
-  const stem = basename(testPath, extname(testPath))
-    .replace(/\.test$/, '')
-    .replace(/^growth-/, '');
-  return stem || 'kernel';
+  return directory === '.' ? 'kernel' : directory;
 }
 
 function checkLabel(check: string, occurrence: number): string {
@@ -115,12 +111,11 @@ function checkLabel(check: string, occurrence: number): string {
 }
 
 function reclassifiedChecks(
-  read: GrowthProfileRead,
+  entries: readonly GrowthProfileEntry[],
   calibrations: ReadonlyMap<GrowthProfileMetric, CalibrationByCoverage>,
 ): ReclassifiedCheck[] {
   const issues: ReclassifiedCheck[] = [];
   for (const metric of GROWTH_PROFILE_METRICS) {
-    const entries = eligibleEntries(read, metric);
     for (const coverage of COVERAGES) {
       const uncertainty = calibrationFor(calibrations, metric, coverage);
       for (const entry of entries) {
@@ -273,10 +268,10 @@ function detectableSlopeTable(
 }
 
 function reclassifiedTable(
-  read: GrowthProfileRead,
+  entries: readonly GrowthProfileEntry[],
   calibrations: ReadonlyMap<GrowthProfileMetric, CalibrationByCoverage>,
 ): string[] {
-  const issues = reclassifiedChecks(read, calibrations);
+  const issues = reclassifiedChecks(entries, calibrations);
   const grouped = new Map<string, ReclassifiedCheck[]>();
   for (const issue of issues) {
     const key = JSON.stringify([issue.coverage, issue.metric, issue.file, issue.check, issue.owner, issue.outcome]);
@@ -300,19 +295,19 @@ function reclassifiedTable(
   return rows;
 }
 
-function relationTable(read: GrowthProfileRead): string[] {
+function relationTable(relations: GrowthProfileRead['nonGrowingRelations']): string[] {
   const grouped = new Map<
     string,
     { file: string; check: string; run: string; relation: string; first: number; last: number }[]
   >();
-  for (const relation of read.nonGrowingRelations) {
+  for (const relation of relations) {
     const key = JSON.stringify([relation.file, relation.check, relation.occurrence, relation.relation]);
     const group = grouped.get(key) ?? [];
     group.push(relation);
     grouped.set(key, group);
   }
   const rows = ['| File | Check | Relation | Run sizes (first → last reltuples) |', '| --- | --- | --- | --- |'];
-  if (read.nonGrowingRelations.length === 0) rows.push('| — | — | None | — |');
+  if (relations.length === 0) rows.push('| — | — | None | — |');
   else {
     for (const group of grouped.values()) {
       const relation = group[0]!;
@@ -324,9 +319,9 @@ function relationTable(read: GrowthProfileRead): string[] {
   return rows;
 }
 
-function shadowTable(read: GrowthProfileRead): string[] {
+function shadowTable(shadowOutcomes: GrowthProfileRead['shadowOutcomes']): string[] {
   const grouped = new Map<string, GrowthProfileRead['shadowOutcomes'][number][]>();
-  for (const item of read.shadowOutcomes) {
+  for (const item of shadowOutcomes) {
     const key = JSON.stringify([item.file, item.check, item.occurrence]);
     const group = grouped.get(key) ?? [];
     group.push(item);
@@ -371,12 +366,46 @@ function omittedTable(read: GrowthProfileRead): string[] {
   return rows;
 }
 
-export function growthCalibrationReport(sources: readonly GrowthProfileRunSource[]): string {
-  const read = readGrowthProfiles(sources);
-  if (read.entries.length === 0) throw new Error('No profile lines were found in the input files');
-  const calibrations = mapCalibrations(read);
+function methodTable(
+  calibrationSources: readonly GrowthProfileRunSource[],
+  calibration: GrowthProfileRead,
+  coverageSource: GrowthProfileRunSource,
+  coverage: GrowthProfileRead,
+): string[] {
+  const profileFileCount = (read: GrowthProfileRead): number => new Set(read.entries.map(({ file }) => file)).size;
+  return [
+    '| Input | Runs | Files with profiles | Check profile lines |',
+    '| --- | --- | ---: | ---: |',
+    `| Calibration | ${calibrationSources.map(({ name }) => markdownCell(name)).join(', ')} | ${profileFileCount(calibration)} | ${calibration.entries.length} |`,
+    `| Coverage | ${markdownCell(coverageSource.name)} | ${profileFileCount(coverage)} | ${coverage.entries.length} |`,
+    '',
+    '| Step | Rule |',
+    '| --- | --- |',
+    '| Reference | Per check and scale, median of the run medians. |',
+    '| Noise need | max(absolute run-median deviation, half the within-run range). |',
+    '| Fit | Search relative E from 0% to 100% in 1% steps; choose the least average max(absolute E, relative E × reference) covering the requested share of calibration points. |',
+    '| Held-out | Leave out each check run, refit E, and measure covered points. |',
+    '| Coverage run | Classify each coverage profile separately under both calibrated E values. |',
+  ];
+}
+
+export function growthCalibrationReport(
+  calibrationSources: readonly GrowthProfileRunSource[],
+  coverageSource: GrowthProfileRunSource,
+): string {
+  const calibration = readGrowthProfiles(calibrationSources);
+  const coverage = readGrowthProfiles([coverageSource]);
+  if (calibration.entries.length === 0) throw new Error('No calibration profile lines were found in the input files');
+  if (coverage.entries.length === 0) throw new Error(`No coverage profile lines were found in ${coverageSource.name}`);
+  const calibrations = mapCalibrations(calibration);
+  const relations = [...calibration.nonGrowingRelations, ...coverage.nonGrowingRelations];
+  const shadowOutcomes = [...calibration.shadowOutcomes, ...coverage.shadowOutcomes];
   return [
     '# Growth uncertainty calibration',
+    '',
+    '## Method',
+    '',
+    ...methodTable(calibrationSources, calibration, coverageSource, coverage),
     '',
     '## Held-out coverage',
     '',
@@ -384,42 +413,53 @@ export function growthCalibrationReport(sources: readonly GrowthProfileRunSource
     '',
     '## Detectable slope',
     '',
-    ...detectableSlopeTable(read, calibrations),
+    ...detectableSlopeTable(calibration, calibrations),
     '',
     '## Checks rejected or inconclusive under calibrated E',
     '',
-    ...reclassifiedTable(read, calibrations),
+    ...reclassifiedTable(coverage.entries, calibrations),
     '',
     '## Checks omitted from calibration',
     '',
-    ...omittedTable(read),
+    ...omittedTable(calibration),
     '',
     '## Relations whose size did not grow',
     '',
-    ...relationTable(read),
+    ...relationTable(relations),
     '',
     '## Shadow outcomes by run',
     '',
-    ...shadowTable(read),
+    ...shadowTable(shadowOutcomes),
     '',
     '## Five worst calibration points',
     '',
-    ...worstPointsTable(read, calibrations),
+    ...worstPointsTable(calibration, calibrations),
     '',
-    'Need is the larger of a run-median deviation from the across-run reference and half its within-run spread. The suggestion compares those two components; count profiles alone cannot separate database-state changes from plan changes.',
+    '| Diagnostic | Interpretation |',
+    '| --- | --- |',
+    '| Need | Larger of run-median deviation from the across-run reference and half the within-run spread. |',
+    '| Suggestion | Compares between-run and within-run variation; count profiles alone cannot separate database-state changes from plan changes. |',
     '',
   ].join('\n');
 }
 
 async function main(paths: readonly string[]): Promise<void> {
-  if (paths.length === 0) throw new Error('Usage: bun scripts/growth-calibrate.ts <profile.jsonl>...');
+  if (paths.length < 3)
+    throw new Error(
+      'Usage: bun scripts/growth-calibrate.ts <calibration-run.jsonl> <calibration-run.jsonl>... <coverage-run.jsonl>',
+    );
   const sources: GrowthProfileRunSource[] = await Promise.all(
     paths.map(async (path) => ({
       name: basename(path, extname(path)),
       text: await readFile(path, 'utf8'),
     })),
   );
-  process.stdout.write(growthCalibrationReport(sources));
+  const names = new Set<string>();
+  for (const source of sources) {
+    if (names.has(source.name)) throw new Error(`Profile input basenames must be unique: ${source.name}`);
+    names.add(source.name);
+  }
+  process.stdout.write(growthCalibrationReport(sources.slice(0, -1), sources.at(-1)!));
 }
 
 if (import.meta.main) {

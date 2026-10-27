@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
 import { growthProfileCheckId, readGrowthProfiles } from './growth-profile-read.ts';
 
 type LineOptions = Readonly<{
@@ -189,4 +190,28 @@ test('repeated same-named checks get separate calibration occurrences', () => {
 
 test('invalid profile lines identify the run and line', () => {
   expect(() => readGrowthProfiles([{ name: 'bad-run', text: '{not json}\n' }])).toThrow('bad-run:1 is not valid JSON');
+});
+
+test("the calibration report states each metric's uncertainty, its held-out coverage and the detectable slope", () => {
+  const report = growthCalibrationReport(
+    [
+      { name: 'calibration-1', text: profileLine({ check: 'calibration check', offset: 0 }) },
+      { name: 'calibration-2', text: profileLine({ check: 'calibration check', offset: 2 }) },
+    ],
+    { name: 'coverage', text: profileLine({ check: 'coverage check', offset: 1 }) },
+  );
+
+  for (const metric of ['rows', 'blocks', 'statements']) {
+    expect(report).toContain(`| ${metric} | 100% |`);
+    expect(report).toContain(`| ${metric} | 99% |`);
+    expect(report).toContain(`| ${metric} | 100% | constant | 1, 8, 64 |`);
+    expect(report).toContain(`| ${metric} | 99% | logarithmic | 1, 4, 16, 64, 256 |`);
+  }
+  expect(report).toContain('| Metric | Requested coverage | Absolute E | Relative E | Exact | Held-out coverage |');
+  expect(report).toContain(
+    '| Metric | Coverage | Bound | Scales | Base | Detectable slope | Smallest extra work or scan detectable |',
+  );
+  expect(report).toContain('extra rows visited per input row');
+  expect(report).toContain('extra buffer blocks touched per input row');
+  expect(report).toContain('extra SQL statements per input row');
 });
