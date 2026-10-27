@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -107,12 +107,46 @@ async function openStory(name: string, visitor: string, locale: string) {
     reducedMotion: 'reduce',
   });
   const page = await context.newPage();
+  await watchStoryReports(page);
   await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
     waitUntil: 'networkidle',
   });
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByRole('main').waitFor();
   return { context, page };
+}
+
+async function watchStoryReports(page: Page) {
+  await page.addInitScript(() => {
+    const finished: { storyId?: string; reporters?: { type?: string }[] }[] = [];
+    let channel:
+      | { on?: (event: string, listener: (payload: { storyId?: string; reporters?: { type?: string }[] }) => void) => void }
+      | undefined;
+    Object.defineProperty(window, '__rezicsStoryFinishes', { configurable: true, value: finished });
+    Object.defineProperty(window, '__STORYBOOK_ADDONS_CHANNEL__', {
+      configurable: true,
+      get: () => channel,
+      set: (next: typeof channel) => {
+        channel = next;
+        channel?.on?.('storyFinished', (payload) => finished.push(payload));
+      },
+    });
+  });
+}
+
+async function finishedStory(page: Page, storyId: string) {
+  await page.waitForFunction(
+    (id) =>
+      (window as Window & { __rezicsStoryFinishes?: { storyId?: string }[] }).__rezicsStoryFinishes?.some(
+        (finish) => finish.storyId === id,
+      ),
+    storyId,
+  );
+  return page.evaluate((id) => {
+    const finished = (window as Window & { __rezicsStoryFinishes?: { storyId?: string; reporters?: { type?: string }[] }[] })
+      .__rezicsStoryFinishes;
+    return finished?.find((finish) => finish.storyId === id);
+  }, storyId);
 }
 
 // Follow local imports, so shared replay helpers may own the recordings instead of each story importing JSON directly.
@@ -274,6 +308,26 @@ test(
       } finally {
         await signedOut.context.close();
       }
+    }
+  },
+  timeout,
+);
+
+test(
+  'page story iframes disable Storybook accessibility reports before the browser axe check',
+  async () => {
+    const { context, page } = await openStory('home', 'Signed In', 'en');
+    try {
+      const storyUrl = new URL(page.url());
+      expect(storyUrl.searchParams.get('globals')).toBe('locale:en;a11y.manual:!true');
+      const finished = await finishedStory(page, storyUrl.searchParams.get('id')!);
+      expect(finished?.reporters?.filter((report) => report.type === 'a11y')).toEqual([]);
+      const a11y = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+        .analyze();
+      expect(a11y.violations.map((violation) => violation.id)).toEqual([]);
+    } finally {
+      await context.close();
     }
   },
   timeout,
