@@ -232,7 +232,7 @@ test('the real rebuild command uses the configured route key for current importe
     expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1, 2], active: 2 });
     const replacement = await document();
     expect(replacement?._index).toBe(subjectIndexName(prefix, 2));
-    expect(replacement?._source).toMatchObject({ id, names: [name], name_sort: name });
+    expect(structuredClone(replacement?._source)).toMatchObject({ id, names: [name], name_sort: name });
     expect(replacement?._source.statements).toEqual(['schema:inLanguage=en']);
     expect(replacement?._source.facts).toEqual([{ property: 'schema:inLanguage', value: 'en', qualifiers: [] }]);
     const count = await search.request<{ count: number }>('GET', `/${subjectAlias(prefix)}/_count`);
