@@ -124,6 +124,7 @@ let activeHook: { before: Step; boundary?: 'step' | 'attempt-T'; run(): Promise<
 let restoreEvidenceReader: (() => void) | undefined;
 let evidenceUnavailable = false;
 const pendingWorkflows = new Map<string, PendingWorkflow>();
+const completedCrashSteps = new Set<string>();
 const originalRegisterStep = DBOS.registerStep.bind(DBOS);
 DBOS.registerStep = (<This, Args extends unknown[], Return>(
   func: (this: This, ...args: Args) => Promise<Return>,
@@ -452,18 +453,8 @@ async function continuationAllowlist(f: Fixture, fallback: ContinuationEntry[]):
   return [...row.allowlist, ...pages.rows.flatMap((page) => page.allowlist)];
 }
 
-async function continuationStepRecorded(f: Fixture, step: string, target: string): Promise<boolean> {
-  const result = await facts.query<{ recorded: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM access.committed_continuation_completion AS completion
-       JOIN access.committed_continuation AS continuation USING (route, continuation_id)
-       WHERE continuation.route=$1 AND continuation.operation_key=$2
-         AND completion.step=$3 AND completion.target=$4
-     ) AS recorded`,
-    [route(continuationAccount(f)), f.work.operationKey, step, target],
-  );
-  return result.rows[0]?.recorded ?? false;
+function crashStepKey(f: Fixture, step: string, target: string): string {
+  return `${f.work.operationKey}\0${step}\0${target}`;
 }
 
 function continuationAccount(f: Fixture): string {
@@ -491,6 +482,7 @@ async function connect() {
   operationFixtures.clear();
   registrations.clear();
   observedStepNames.clear();
+  completedCrashSteps.clear();
   clientsRegistered = false;
   governor = undefined;
   await admin.query(`CREATE DATABASE "${authDatabase}"`);
@@ -727,6 +719,7 @@ async function makeFixture(
           : family === 'operator-delete'
             ? await person('operator-delete-caller')
             : await person(`${family}-caller`);
+  const operatorManager = family === 'operator-delete' ? await person('operator-delete-manager') : undefined;
   let staleCaller: string | undefined;
   if (family === 'opening') {
     staleCaller = callerPerson.bearer;
@@ -758,7 +751,7 @@ async function makeFixture(
     family === 'opening'
       ? null
       : family === 'operator-delete'
-        ? await delegate(owner, callerPerson)
+        ? await delegate(required(operatorManager, 'Operator manager fixture is missing'), callerPerson)
         : await selfDelegate(callerPerson);
   const requestedBy = principalAssignment?.requestedBy ?? null;
   const caller = principalAssignment?.bearer ?? callerPerson.bearer;
@@ -811,6 +804,16 @@ async function makeFixture(
     relation = await createOperatorLink(owner.accountId, subjectPerson.accountId);
   }
   if (family === 'operator-delete') {
+    const manager = required(operatorManager, 'Operator manager fixture is missing');
+    for (const grantee of [manager, callerPerson]) {
+      await grantActions(
+        owner.accountId,
+        grantee.accountId,
+        ['access:grant', 'account:delete', 'account:manage'],
+        owner.bearer,
+        reference('operator-manager-grant'),
+      );
+    }
     const count = options.heldResponsibilities ? Math.max(1, options.subjects ?? 1) : 0;
     for (let i = 0; i < count; i++) {
       const child = await person(`delete-child-${i}`);
@@ -1090,7 +1093,8 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         }
         if (work.operation.kind === 'delete' && name === 'erase-auth-owner') {
           const view = await native().continuations.read(work.operationKey, work.operation.accountId);
-          if (view && !(await continuationStepRecorded(fixture, name, work.operation.accountId))) {
+          const target = stepTargetFromArgs(fixture, name, args);
+          if (view && !completedCrashSteps.has(crashStepKey(fixture, name, target))) {
             continuationPausedAtStep = true;
             continuationPaused?.();
             await new Promise<void>((resolve) => {
@@ -1483,6 +1487,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       afterStep = async (name, args) => {
         await previous?.(name, args);
         if (name !== step.name || stepTargetFromArgs(f, name, args) !== step.target) return;
+        completedCrashSteps.add(crashStepKey(f, name, step.target));
         reached();
         // Keep the committed step from returning its DBOS acknowledgement. The
         // real executor and its database transport are shut down below.
@@ -2057,8 +2062,7 @@ async function observe(f: Fixture): Promise<Snapshot> {
        FROM access.committed_continuation_completion AS item
        JOIN access.committed_continuation AS continuation USING (route, continuation_id)
        WHERE continuation.route=$3 AND continuation.operation_key=$4
-         AND item.receipt_key=core.receipt.idempotency_key
-         AND item.receipt_digest=encode(core.receipt.request_digest,'hex')
+         AND item.receipt_id=core.receipt.transaction_id
        LIMIT 1
      ) AS completion ON true
      WHERE (actor_account_id=ANY($1::uuid[]) OR principal_id=ANY($1::uuid[]) OR response::text LIKE ANY($2::text[])
