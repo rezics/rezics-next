@@ -28,6 +28,7 @@ export type FilterRelease = {
     string,
     {
       datatype: string;
+      relation?: { group: string };
       qualifiers?: readonly string[];
       units?: readonly string[];
       value?: { pattern?: string };
@@ -293,6 +294,24 @@ function ownRecordValue(input: unknown, key: string): unknown {
   return field.found ? field.value : undefined;
 }
 
+export function relationFacetProperty(release: FilterRelease, property: string): boolean {
+  const properties = dataField(release, 'properties');
+  const definition = ownRecordValue(properties, property);
+  const relation = dataField(definition, 'relation');
+  switch (dataField(relation, 'group')) {
+    case 'order':
+    case 'derivation':
+    case 'world':
+    case 'membership':
+    case 'association':
+    case 'credit':
+    case 'appearance':
+      return true;
+    default:
+      return false;
+  }
+}
+
 function ownStringList(input: unknown, key: string): string[] {
   const value = dataField(input, key);
   if (!Array.isArray(value)) return [];
@@ -508,6 +527,13 @@ export function admitFilter(
     const properties = dataField(release, 'properties');
     const definition = propertyDefinition(properties, statement.property);
     if (!definition) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
+    if (statement.qualifiers !== undefined && relationFacetProperty(release, statement.property))
+      reject(
+        appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'),
+        source,
+        'unsupported',
+        'invalid_request',
+      );
     const datatype = dataField(definition, 'datatype');
 
     if ('in' in statement) {
