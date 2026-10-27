@@ -77,7 +77,7 @@ function Published({ subjects }: { subjects: PublishedSubject[] }) {
               href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject.id)}`}
               cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
               title={cover.title}
-              secondary={subject.types[0]?.split(':').at(-1)}
+              secondary={subject.typeName}
             />
           ))}
         </CoverRow>

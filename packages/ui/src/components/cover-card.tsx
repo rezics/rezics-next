@@ -28,6 +28,7 @@ export type CoverCardLink = ComponentType<{
   title?: string | undefined;
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   className?: string | undefined;
+  'data-slot'?: string | undefined;
   children: ReactNode;
 }>;
 
@@ -44,6 +45,8 @@ export interface CoverCardProps {
   secondary?: ReactNode;
   state?: ReactNode;
   menu?: ReactNode;
+  /** A caller-managed trigger placed at the start of the state row. */
+  menuTrigger?: ReactNode;
   menuLabel?: string;
   density?: CoverDensity;
   status?: ReactNode;
@@ -68,6 +71,7 @@ export function CoverCard({
   secondary,
   state,
   menu,
+  menuTrigger,
   menuLabel,
   density: densityProp,
   status,
@@ -88,7 +92,8 @@ export function CoverCard({
   return (
     <article
       onPointerDown={onPointerDown}
-      className="group relative min-w-0 overflow-hidden rounded-lg bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-ring"
+      data-slot="cover-card"
+      className="group relative min-w-0 rounded-sm bg-white text-slate-900 outline outline-1 outline-black/10 shadow-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring dark:bg-white dark:text-slate-900"
     >
       <Cover
         {...cover}
@@ -96,7 +101,7 @@ export function CoverCard({
         {...(ratio ? { ratio } : {})}
         decorative
         caption={false}
-        className="[&_[data-slot=aspect-ratio]]:rounded-none [&_[data-slot=aspect-ratio]]:ring-0 [&_button:not(.absolute)]:relative [&_button]:z-10"
+        className="w-full [&_[data-slot=aspect-ratio]]:rounded-none [&_[data-slot=aspect-ratio]]:rounded-t-sm [&_[data-slot=aspect-ratio]]:border-0 [&_[data-slot=aspect-ratio]]:bg-transparent [&_[data-slot=aspect-ratio]]:ring-0 [&_button:not(.absolute)]:relative [&_button]:z-10"
       />
       {selectable ? (
         <button
@@ -137,23 +142,22 @@ export function CoverCard({
           )}
         </>
       )}
-      {small && (
-        <div
-          role="tooltip"
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-1 bottom-1 z-30 rounded bg-popover p-1 text-xs text-popover-foreground opacity-0 shadow group-hover:opacity-100 group-focus-within:opacity-100"
-        >
-          {title}
-        </div>
-      )}
       {badge != null && <div className="pointer-events-none absolute top-2 right-2 z-10">{badge}</div>}
-      <div className={small ? (state != null ? 'space-y-1 p-2 [&_.tabular-nums]:sr-only' : '') : 'space-y-1 p-3'}>
+      <div data-slot="cover-card-text" className="flex min-w-0 flex-col gap-1 p-2">
         {selectable ? (
-          <span className={small ? 'sr-only' : 'line-clamp-2 text-sm font-semibold wrap-anywhere'} lang={titleLang}>
+          <span
+            data-slot="cover-card-title"
+            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere"
+            lang={titleLang}
+          >
             {title}
           </span>
         ) : href === undefined ? (
-          <div lang={titleLang} className={small ? 'sr-only' : 'line-clamp-2 text-sm font-semibold wrap-anywhere'}>
+          <div
+            data-slot="cover-card-title"
+            lang={titleLang}
+            className="line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere"
+          >
             {title}
           </div>
         ) : (
@@ -163,37 +167,46 @@ export function CoverCard({
             aria-label={linkLabel}
             title={small ? title : undefined}
             onClick={onClick}
-            className={
-              small
-                ? 'absolute inset-0 z-[1] outline-none'
-                : "line-clamp-2 text-sm font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:content-['']"
-            }
+            data-slot="cover-card-title"
+            className="relative z-[1] line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere outline-none after:absolute after:inset-0 after:content-['']"
           >
-            {small ? <span className="sr-only">{title}</span> : title}
+            {title}
           </Link>
         )}
-        {!small && (meta ?? secondary) != null && (
-          <div className="line-clamp-1 text-xs text-muted-foreground">{meta ?? secondary}</div>
+        {(meta ?? secondary) != null && (
+          <div
+            data-slot="cover-card-secondary"
+            className="line-clamp-1 text-center text-[11px] leading-4 text-slate-600 dark:text-slate-600"
+          >
+            {meta ?? secondary}
+          </div>
         )}
-        {(state != null || menu != null) && (
-          <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-            {menu != null && !small && !selectable && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="relative z-10 shrink-0"
-                      aria-label={menuLabel ?? `More actions for ${title}`}
-                    />
-                  }
-                >
-                  <EllipsisIcon aria-hidden />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>{menu}</DropdownMenuContent>
-              </DropdownMenu>
+        {(state != null || menu != null || menuTrigger != null) && (
+          <div
+            data-slot="cover-card-state"
+            className="flex min-w-0 items-center gap-1 pt-0.5 text-xs text-slate-600 dark:text-slate-600"
+          >
+            {(menu != null || menuTrigger != null) && (
+              <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
+                {menuTrigger ?? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="shrink-0"
+                          aria-label={menuLabel ?? `More actions for ${title}`}
+                        />
+                      }
+                    >
+                      <EllipsisIcon aria-hidden />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>{menu}</DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </span>
             )}
             {state != null && <div className="min-w-0 flex-1">{state}</div>}
           </div>
@@ -205,12 +218,9 @@ export function CoverCard({
 
 /** A responsive subject grid; shadcn does not provide this layout. */
 const densityClasses: Record<CoverDensity, string> = {
-  small:
-    'grid-cols-4 @min-[640px]:grid-cols-6 @min-[1024px]:grid-cols-8 @min-[1280px]:grid-cols-10 @min-[1536px]:grid-cols-12',
-  medium:
-    'grid-cols-3 @min-[640px]:grid-cols-4 @min-[1024px]:grid-cols-6 @min-[1280px]:grid-cols-7 @min-[1536px]:grid-cols-8',
-  large:
-    'grid-cols-2 @min-[640px]:grid-cols-3 @min-[1024px]:grid-cols-4 @min-[1280px]:grid-cols-5 @min-[1536px]:grid-cols-6',
+  small: 'grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]',
+  medium: 'grid-cols-[repeat(auto-fill,minmax(8.75rem,1fr))]',
+  large: 'grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]',
 };
 
 export function CoverGrid({
@@ -226,9 +236,7 @@ export function CoverGrid({
     <RatioContext.Provider value={ratio}>
       <DensityContext.Provider value={density}>
         <div className="@container">
-          <div
-            className={`grid gap-4 ${density ? densityClasses[density] : 'grid-cols-2 @min-[30rem]:grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]'}`}
-          >
+          <div data-slot="cover-grid" className={`grid gap-2 ${densityClasses[density ?? 'medium']}`}>
             {children}
           </div>
         </div>
@@ -245,7 +253,8 @@ export function CoverRow({ ratio, label, children }: { ratio: CoverRatio; label:
         role="region"
         aria-label={label}
         tabIndex={0}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-ring [&>*]:w-[7.5rem] [&>*]:shrink-0 [&>*]:snap-start"
+        data-slot="cover-row"
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-ring [&>*]:w-[7.5rem] [&>*]:shrink-0 [&>*]:snap-start"
       >
         {children}
       </div>

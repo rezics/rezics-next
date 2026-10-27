@@ -169,9 +169,12 @@ const text = (html: string) =>
 /** The phone rows and the grids of one section: each row comes first and is hidden from sm up. */
 function layouts(html: string) {
   const found = { row: '', grid: '' };
-  for (const part of html.split('data-slot="cover-').slice(1)) {
-    if (part.startsWith('row"')) found.row += part;
-    else if (part.startsWith('grid"')) found.grid += part;
+  const starts = [...html.matchAll(/data-slot="cover-(row|grid)"/g)];
+  for (const [index, match] of starts.entries()) {
+    if (match.index === undefined) continue;
+    const start = html.lastIndexOf('<', match.index);
+    const end = starts[index + 1]?.index ?? html.length;
+    found[match[1] as 'row' | 'grid'] += html.slice(start, end);
   }
   return found;
 }
@@ -181,7 +184,8 @@ const cards = (html: string) =>
     .slice(1)
     .map((card) => `<article${card.split('</article>')[0]!}</article>`);
 const titleOf = (card: string) => text(/<a\b[^>]*>([\s\S]*?)<\/a>/.exec(card)?.[1] ?? '');
-const secondaryOf = (card: string) => text(/<div class="line-clamp-1[^"]*">([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '');
+const secondaryOf = (card: string) =>
+  text(/<div\b[^>]*data-slot="cover-card-secondary"[^>]*>([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '');
 const hrefsOf = (html: string) => [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map((match) => match[1]!);
 
 const previewSlots = ['subject-list', 'relation-groups', 'appearances', 'credits'] as const;
@@ -241,10 +245,10 @@ test('below sm a preview is one snapping row of at least two and a half cards at
     const { row, grid } = layouts(body);
     // The row is shown on a phone only and the grid from sm up.
     expect(body).toMatch(
-      /class="[^"]*\bsm:hidden\b[^"]*"[^>]*data-slot="cover-row"|data-slot="cover-row"[^>]*class="[^"]*\bsm:hidden\b/,
+      /class="[^"]*\bsm:hidden\b[^"]*"[^>]*data-layout="cover-row"|data-layout="cover-row"[^>]*class="[^"]*\bsm:hidden\b/,
     );
     expect(body).toMatch(
-      /class="[^"]*\bhidden sm:block\b[^"]*"[^>]*data-slot="cover-grid"|data-slot="cover-grid"[^>]*class="[^"]*\bhidden sm:block\b/,
+      /class="[^"]*\bhidden sm:block\b[^"]*"[^>]*data-layout="cover-grid"|data-layout="cover-grid"[^>]*class="[^"]*\bhidden sm:block\b/,
     );
     expect(row).toMatch(/role="region"/);
     expect(row).toMatch(/\boverflow-x-auto\b/);
@@ -262,8 +266,7 @@ test('below sm a preview is one snapping row of at least two and a half cards at
     if (cards(row).length >= 5) expect(cards(row).length * (width + gap)).toBeGreaterThan(390);
 
     // The grid is the shared one: two columns on a phone-width container, auto-fill from a wider one.
-    expect(grid).toMatch(/\bgrid-cols-2\b/);
-    expect(grid).toMatch(/auto-fill/);
+    expect(grid).toMatch(/repeat\(auto-fill,minmax\(8\.75rem,1fr\)\)/);
   }
 });
 
@@ -297,7 +300,7 @@ test('a spoiler-hidden item keeps its reveal control on the card', () => {
     expect(part.match(/<button\b[^>]*data-slot="collapsible-trigger"[^>]*>Show spoiler<\/button>/g)).toHaveLength(1);
 });
 
-test('the full relations view is a grid of two cards per row at 390 wide and keeps its continuation link', () => {
+test('the full relations view uses the responsive cover grid and keeps its continuation link', () => {
   const body = {
     links: [
       ...[1, 2, 3, 4].map((n) => holder(n, 'wdt:P155', { date: '2015' })),
@@ -332,10 +335,8 @@ test('the full relations view is a grid of two cards per row at 390 wide and kee
   expect(html.match(/<article/g)).toHaveLength(7);
   expect(html).not.toMatch(/<(?:ul|ol|li)\b/);
   const grid = html.slice(html.indexOf('data-slot="cover-grid"'));
-  expect(grid).toMatch(/\bgrid-cols-2\b/);
-  // The container query that adds columns starts well above a phone's content width.
-  const threshold = Number(/@min-\[([\d.]+)rem\]:grid-cols/.exec(grid)?.[1]);
-  expect(threshold * 16).toBeGreaterThan(390 - 32);
+  expect(grid).toMatch(/repeat\(auto-fill,minmax\(8\.75rem,1fr\)\)/);
+  expect(grid).toContain('gap-2');
   for (const card of cards(html)) expect([...card.matchAll(/<a\b/g)]).toHaveLength(1);
   expect(titleOf(cards(html)[0]!)).toBe('Holder 1');
   expect(secondaryOf(cards(html)[0]!)).toBe('Sequel · 2015');

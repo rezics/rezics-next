@@ -13,7 +13,8 @@ export type CoverSummary = {
   withheld?: 'suitability';
 };
 export type CoverSubject = { id: string; title: string; types: readonly string[]; byline?: string };
-export type CoverRatio = '2:3' | '3:4' | '1:1' | '4:3';
+/** A compiled cover ratio; runtime values are validated against the definitions compiler's 1–64 bounds. */
+export type CoverRatio = `${number}:${number}`;
 export type CoverSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'fill';
 export type CoverFormat = 'avif' | 'webp';
 export type CoverFit = 'cover' | 'contain';
@@ -26,25 +27,41 @@ export const fillReferenceWidth = 320;
 type Family = 'work' | 'game' | 'music' | 'recipe' | 'person' | 'other';
 
 const familyRatios: Record<Family, CoverRatio> = {
-  work: '2:3',
-  game: '3:4',
+  work: '5:7',
+  game: '5:7',
   music: '1:1',
   recipe: '4:3',
   person: '3:4',
   other: '1:1',
 };
 
+const validCoverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
+
+/** Returns a ratio the definitions compiler accepts, preserving its exact `W:H` form. */
+export function parseCoverRatio(value: string): CoverRatio | undefined {
+  return validCoverRatio.test(value) ? (value as CoverRatio) : undefined;
+}
+
 // The default table of the Cover README, by type CURIE. A definition release that carries a `coverRatio` annotation
 // replaces it: the site resolves that and passes `ratio`, so this map is the fallback.
 const familyOf: Record<string, Family> = {
   'schema:Book': 'work',
+  'wd:Q47461344': 'work',
   'bf:Instance': 'work',
+  'wd:Q3331189': 'work',
   'schema:BookSeries': 'work',
+  'wd:Q277759': 'work',
   'schema:ComicSeries': 'work',
+  'wd:Q21198342': 'work',
   'schema:PublicationVolume': 'work',
+  'wd:Q1238720': 'work',
   'schema:TVSeries': 'work',
+  'wd:Q5398426': 'work',
   'schema:TVSeason': 'work',
+  'wd:Q3464665': 'work',
   'schema:Movie': 'work',
+  'wd:Q11424': 'work',
+  'wd:Q1983062': 'work',
   'wd:Q689445': 'game',
   'wd:Q7889': 'game',
   'wd:Q20631656': 'game',
@@ -55,8 +72,12 @@ const familyOf: Record<string, Family> = {
   'schema:Place': 'recipe',
   'schema:Event': 'recipe',
   'schema:Person': 'person',
+  'wd:Q5': 'person',
   'wd:Q95074': 'person',
   'schema:Organization': 'other',
+  'wd:Q43229': 'other',
+  'wd:Q219239': 'recipe',
+  'wd:Q482994': 'music',
 };
 
 // Creative-work types with no more specific entry above: they still use the work ratio.
@@ -83,7 +104,7 @@ export function coverRatio(types: readonly string[]): CoverRatio {
   return familyRatios[coverFamily(types)];
 }
 
-/** One ratio for a row, grid or list that mixes types: the most common one, 2:3 when tied. */
+/** One ratio for a row, grid or list that mixes types: the most common one, 5:7 when tied. */
 export function sharedRatio(subjects: readonly CoverSubject[]): CoverRatio {
   const counts = new Map<CoverRatio, number>();
   for (const subject of subjects) {
@@ -96,7 +117,7 @@ export function sharedRatio(subjects: readonly CoverSubject[]): CoverRatio {
     if (count > best) [best, winners] = [count, [ratio]];
     else if (count === best) winners.push(ratio);
   }
-  return winners.length === 1 ? winners[0]! : '2:3';
+  return winners.length === 1 ? winners[0]! : '5:7';
 }
 
 export function ratioValue(ratio: CoverRatio): number {

@@ -40,7 +40,7 @@ test('list row renders its cover, one title link, state, actions and mobile layo
     'Increase',
     'aria-checked="true"',
     'w-12',
-    'h-[72px]',
+    'style="aspect-ratio:5 / 7"',
     'sm:line-clamp-1',
     'line-clamp-2',
     'sm:hidden',

@@ -1,5 +1,5 @@
 import { checkDocument, type DocumentSnapshot } from '@rezics/document';
-import { Cover, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
+import { Cover, type CoverRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -48,7 +48,7 @@ export function MediaValue({
 }: {
   subject: CoverSubject;
   cover: CoverSummary | null;
-  ratio?: '2:3' | '3:4' | '1:1' | '4:3';
+  ratio?: CoverRatio;
   suitability: 'blur' | 'show';
   labels: ValueLabels['cover'];
 }) {

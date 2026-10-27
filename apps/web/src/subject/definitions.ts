@@ -1,5 +1,6 @@
 import { pickText } from '@rezics/composition';
 import type { FilterRelease } from '@rezics/filter';
+import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { env } from 'cloudflare:workers';
 import { requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
@@ -149,16 +150,11 @@ export async function typeNames(types: Iterable<string>, locale: string): Promis
   return names;
 }
 
-const coverRatios = new Set<string>(['2:3', '3:4', '1:1', '4:3']);
-
 /**
  * The type's name in the reader's language and the cover frame its definition declares, taken from the nearest type
  * of its own bases that declares one. A type the release does not know has neither.
  */
-export async function typeFrame(
-  type: string,
-  locale: string,
-): Promise<{ label?: string; ratio?: '2:3' | '3:4' | '1:1' | '4:3' }> {
+export async function typeFrame(type: string, locale: string): Promise<{ label?: string; ratio?: CoverRatio }> {
   let release: Release;
   try {
     release = await readRelease();
@@ -170,8 +166,8 @@ export async function typeFrame(
   const label = definition.labels ? pickText(definition.labels, locale).text : '';
   for (const name of [type, ...(definition.bases ?? [])]) {
     const ratio = Object.hasOwn(release.types, name) ? release.types[name]?.coverRatio : undefined;
-    if (ratio !== undefined && coverRatios.has(ratio))
-      return { ...(label ? { label } : {}), ratio: ratio as '2:3' | '3:4' | '1:1' | '4:3' };
+    const parsed = ratio === undefined ? undefined : parseCoverRatio(ratio);
+    if (parsed !== undefined) return { ...(label ? { label } : {}), ratio: parsed };
   }
   return label ? { label } : {};
 }

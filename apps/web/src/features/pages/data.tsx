@@ -79,7 +79,7 @@ const subjectMessages: SubjectMessages = {
 };
 
 export { pageText };
-type Frame = { typeLabel?: string; ratio?: '2:3' | '3:4' | '1:1' | '4:3' };
+type Frame = { typeLabel?: string; ratio?: CoverRatio };
 type Options = {
   locale: string;
   messages: CoreMessages & SubjectMessages;
@@ -115,7 +115,7 @@ type PreparedRead = {
 
 /** A Zone's `cover` appearance token chooses the frame shared by its rows. */
 const tokenRatios: Record<string, CoverRatio> = {
-  portrait: '2:3',
+  portrait: '5:7',
   square: '1:1',
   landscape: '4:3',
 };

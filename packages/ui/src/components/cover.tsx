@@ -24,7 +24,7 @@ import {
   type CoverSummary,
 } from './cover-model.ts';
 
-export { coverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
+export { coverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
 
 export const coverLabels = {

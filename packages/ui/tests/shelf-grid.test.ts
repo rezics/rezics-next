@@ -9,23 +9,18 @@ const cover = { subject: { id: 'book', title: 'A book', types: ['schema:Book'] }
 const card = (props: Record<string, unknown> = {}) =>
   createElement(CoverCard, { href: '/book', title: 'A book', cover, ...props });
 
-test('density presets use the container width and preserve the original default', () => {
-  for (const [density, columns] of Object.entries({
-    small: [4, 6, 8, 10, 12],
-    medium: [3, 4, 6, 7, 8],
-    large: [2, 3, 4, 5, 6],
-  })) {
+test('each density fills its container from a minimum card width with an 8 px gap', () => {
+  for (const [density, minimum] of Object.entries({ small: '8rem', medium: '8.75rem', large: '10.5rem' })) {
     const html = renderToStaticMarkup(createElement(CoverGrid, { ratio: '2:3', density, children: card() }));
-    expect(html).toContain(`grid-cols-${columns[0]}`);
-    for (const [index, width] of [640, 1024, 1280, 1536].entries())
-      expect(html).toContain(`@min-[${width}px]:grid-cols-${columns[index + 1]}`);
+    expect(html).toContain(`repeat(auto-fill,minmax(${minimum},1fr))`);
+    expect(html).toContain('gap-2');
+    expect(html).toContain('data-slot="cover-grid"');
   }
-  expect(renderToStaticMarkup(createElement(CoverGrid, { ratio: '2:3', children: card() }))).toContain(
-    'repeat(auto-fill,minmax(9rem,1fr))',
-  );
+  const defaultGrid = renderToStaticMarkup(createElement(CoverGrid, { ratio: '2:3', children: card() }));
+  expect(defaultGrid).toContain('repeat(auto-fill,minmax(8.75rem,1fr))');
 });
 
-test('small cards retain an accessible title and progress without visible value', () => {
+test('small cards retain an accessible title and visible progress label', () => {
   const html = renderToStaticMarkup(
     createElement(CoverGrid, {
       ratio: '2:3',
@@ -39,13 +34,14 @@ test('small cards retain an accessible title and progress without visible value'
     }),
   );
   expect(html).toContain('title="A book"');
-  expect(html).toContain('A book</span></a>');
+  expect(html).toMatch(/<a[^>]*data-slot="cover-card-title"[^>]*>A book<\/a>/);
   expect(html).toContain('role="progressbar"');
   expect(html).toContain('aria-valuenow="50"');
   expect(html).toContain('Reading');
   expect(html).toContain('2 new');
-  expect(html).not.toContain('Author');
-  expect(html).toContain('[&amp;_.tabular-nums]:sr-only');
+  expect(html).toContain('Author');
+  expect(html).toContain('tabular-nums');
+  expect(html).toContain('50%');
 });
 
 test('selection controls replace status and announce checked state', () => {

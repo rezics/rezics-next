@@ -162,7 +162,7 @@ test("the subject header shows the cover at the type's ratio, the title in the r
   const html = render(pageOf(read), 'en', { typeLabel: 'book' });
   // The cover is the page's own: large, eager, at the book frame.
   const frame = tag(html, /<div[^>]*data-slot="cover"[^>]*data-size="lg"[^>]*>/);
-  expect(frame).toContain('data-ratio="2:3"');
+  expect(frame).toContain('data-ratio="5:7"');
   expect(html).toMatch(/<img[^>]*fetchpriority="high"[^>]*>/i);
   expect(html).toContain(`/media/${mediaId}/webp-480 480w`);
   // A phone gets a thumbnail beside the title instead.
@@ -189,7 +189,7 @@ test("the subject header shows the cover at the type's ratio, the title in the r
     }),
   );
   expect(character).toMatch(/data-ratio="3:4"[^>]*/);
-  expect(character).not.toContain('data-ratio="2:3"');
+  expect(character).not.toContain('data-ratio="5:7"');
   // The definition release's own ratio wins over the table.
   expect(render(pageOf(read), 'en', { ratio: '1:1' })).toContain('data-ratio="1:1"');
   // A subject with no cover summary still draws the frame with its placeholder.

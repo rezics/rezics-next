@@ -22,6 +22,7 @@ export type RealmBoard = {
 export type PublishedSubject = {
   id: string;
   types: string[];
+  typeName?: string;
   labels: Record<string, string>;
   /** The kernel's preferred label, used when no label matches the viewer's language. */
   label: string | null;
@@ -42,6 +43,26 @@ export type SpacePageData = {
   /** Null when the Space carries no Realm, or the viewer may not read the one it carries. */
   realm: RealmHome | null;
 };
+
+/** Attach localized names for the first semantic type shown beneath each published subject. */
+export async function namePublishedTypes(page: SpacePageData, locale: string): Promise<SpacePageData> {
+  if (!page.realm) return page;
+  const { typeNames } = await import('../subject/definitions.ts');
+  const types = [
+    ...new Set(page.realm.published.map((subject) => subject.types[0]).filter((type): type is string => Boolean(type))),
+  ];
+  const names = await typeNames(types, locale);
+  return {
+    ...page,
+    realm: {
+      ...page.realm,
+      published: page.realm.published.map((subject) => {
+        const typeName = names.get(subject.types[0] ?? '');
+        return { ...subject, ...(typeName ? { typeName } : {}) };
+      }),
+    },
+  };
+}
 
 export type RealmLink = { realmId: string; name: string };
 export type MyRealmsPage = { signedIn: boolean; realms: RealmLink[]; next: string | null };

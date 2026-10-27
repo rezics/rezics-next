@@ -1,7 +1,7 @@
 import { useRef, type MouseEvent, type ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shadcn/table.tsx';
-import { Cover, type CoverProps } from './cover.tsx';
+import { Cover, coverRatio, type CoverProps } from './cover.tsx';
 import type { ShelfSelectionProps } from './shelf-list.tsx';
 
 export type ShelfColumnId =
@@ -143,8 +143,17 @@ export function ShelfTable({
               {visible.map(({ id }) => (
                 <TableCell key={id}>
                   {id === 'cover' ? (
-                    <div className="w-10 overflow-hidden rounded">
-                      <Cover {...row.cover} size="fill" ratio="2:3" decorative caption={false} />
+                    <div
+                      className="w-10 overflow-hidden rounded"
+                      style={{ aspectRatio: coverRatio(row.cover.subject.types).replace(':', ' / ') }}
+                    >
+                      <Cover
+                        {...row.cover}
+                        size="fill"
+                        ratio={coverRatio(row.cover.subject.types)}
+                        decorative
+                        caption={false}
+                      />
                     </div>
                   ) : id === 'title' ? (
                     <a

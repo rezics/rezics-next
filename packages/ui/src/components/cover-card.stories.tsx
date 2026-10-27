@@ -162,9 +162,9 @@ export const DensityWidths: Story = {
   async play({ canvasElement }) {
     const widths = [390, 800, 1100, 1400, 1600];
     const counts = [
-      [4, 6, 8, 10, 12],
-      [3, 4, 6, 7, 8],
-      [2, 3, 4, 5, 6],
+      [2, 5, 8, 10, 11],
+      [2, 5, 7, 9, 10],
+      [2, 4, 6, 8, 9],
     ];
     const containers = canvasElement.querySelectorAll<HTMLElement>('.\\@container');
     for (let density = 0; density < containers.length; density++) {

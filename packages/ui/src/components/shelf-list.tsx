@@ -2,7 +2,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import { EllipsisIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
-import { Cover, type CoverProps } from './cover.tsx';
+import { Cover, coverRatio, type CoverProps } from './cover.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 export interface ShelfSelectionProps {
@@ -48,6 +48,7 @@ export function ShelfListRow({
   onSelectedChange,
   onSelect,
 }: ShelfListRowProps) {
+  const ratio = coverRatio(cover.subject.types);
   const select = (event: MouseEvent) => {
     onSelectedChange?.(!selected);
     onSelect?.(event);
@@ -83,8 +84,8 @@ export function ShelfListRow({
           onClick={(event) => onSelect?.(event)}
         />
       )}
-      <div className="h-[72px] w-12 shrink-0 overflow-hidden rounded">
-        <Cover {...cover} size="fill" ratio="2:3" decorative caption={false} />
+      <div className="w-12 shrink-0 overflow-hidden rounded" style={{ aspectRatio: ratio.replace(':', ' / ') }}>
+        <Cover {...cover} size="fill" ratio={ratio} decorative caption={false} />
       </div>
       <div className="min-w-0 flex-1">
         <a

@@ -49,13 +49,13 @@ export function CoverList({
   return (
     <>
       {preview && (
-        <div data-slot="cover-row" className="sm:hidden">
+        <div data-layout="cover-row" className="sm:hidden">
           <CoverRow ratio={ratio} label={label}>
             {cards}
           </CoverRow>
         </div>
       )}
-      <div data-slot="cover-grid" className={preview ? 'hidden sm:block' : undefined}>
+      <div data-layout="cover-grid" className={preview ? 'hidden sm:block' : undefined}>
         <CoverGrid ratio={ratio}>{cards}</CoverGrid>
       </div>
     </>

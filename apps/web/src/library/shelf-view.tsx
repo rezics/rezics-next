@@ -1,5 +1,5 @@
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
-import { ItemMenu, type ItemMenuEntry } from '@rezics/ui/item-menu';
+import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
 import { ShelfTable, type ShelfColumn, type ShelfTableRow } from '@rezics/ui/shelf-table';
@@ -78,11 +78,13 @@ function EntryMenu({
   row,
   controls,
   trigger,
+  triggerSlot,
   children,
 }: {
   row: ShelfRow;
   controls: Controls;
   trigger: { className?: string; variant: 'secondary' | 'ghost' };
+  triggerSlot?: boolean;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
@@ -135,10 +137,11 @@ function EntryMenu({
       entries={entries}
       title={title}
       backLabel={m.library_menu_back()}
+      {...(triggerSlot !== undefined ? { triggerSlot } : {})}
       trigger={
         <Button
           variant={trigger.variant}
-          size="icon-sm"
+          size={triggerSlot ? 'icon-xs' : 'icon-sm'}
           disabled={!controls.hydrated || controls.pending}
           aria-label={m.library_entry_actions({ title })}
           {...(trigger.className ? { className: trigger.className } : {})}
@@ -186,25 +189,20 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
             </div>
           ) : undefined;
         return (
-          <div key={entry.subjectId} className="relative min-w-0">
-            <EntryMenu
-              row={row}
-              controls={controls}
-              trigger={{ variant: 'secondary', className: 'absolute top-2 right-2 z-20 shadow-sm' }}
-            >
-              <CoverCard
-                href={hrefOf(entry, locale)}
-                title={titleOf(entry)}
-                cover={coverOf(entry)}
-                secondary={
-                  <>
-                    {m.library_updated()} <Updated entry={entry} locale={locale} />
-                  </>
-                }
-                {...(notes ? { state: notes } : {})}
-              />
-            </EntryMenu>
-          </div>
+          <EntryMenu key={entry.subjectId} row={row} controls={controls} triggerSlot trigger={{ variant: 'ghost' }}>
+            <CoverCard
+              href={hrefOf(entry, locale)}
+              title={titleOf(entry)}
+              cover={coverOf(entry)}
+              secondary={
+                <>
+                  {m.library_updated()} <Updated entry={entry} locale={locale} />
+                </>
+              }
+              menuTrigger={<ItemMenuTriggerSlot />}
+              {...(notes ? { state: notes } : {})}
+            />
+          </EntryMenu>
         );
       })}
     </CoverGrid>

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useState, type ReactElement, type ReactNode } from 'react';
 import * as D from '../shadcn/dropdown-menu.tsx';
 import * as C from '../shadcn/context-menu.tsx';
 import { Drawer, DrawerContent, DrawerTitle } from '../shadcn/drawer.tsx';
@@ -21,6 +21,15 @@ export interface ItemMenuProps {
   children: ReactNode;
   title: string;
   backLabel: string;
+  /** Render the trigger at a caller-provided slot within the menu's child. */
+  triggerSlot?: boolean;
+}
+
+const ItemMenuTriggerContext = createContext<ReactElement | null>(null);
+
+/** Place the enclosing ItemMenu trigger inside a card's state row. */
+export function ItemMenuTriggerSlot() {
+  return useContext(ItemMenuTriggerContext);
 }
 
 function DropdownEntries({ entries }: { entries: ItemMenuEntry[] }) {
@@ -99,7 +108,7 @@ function ContextEntries({ entries }: { entries: ItemMenuEntry[] }) {
     }
   });
 }
-export function ItemMenu({ entries, trigger, children, title, backLabel }: ItemMenuProps) {
+export function ItemMenu({ entries, trigger, children, title, backLabel, triggerSlot = false }: ItemMenuProps) {
   const radioName = useId();
   const [small, setSmall] = useState(false);
   const [fine, setFine] = useState(false);
@@ -126,8 +135,9 @@ export function ItemMenu({ entries, trigger, children, title, backLabel }: ItemM
   };
   if (small) {
     const page = stack.at(-1);
+    const triggerNode = <span onClick={() => changeOpen(true)}>{trigger}</span>;
     return (
-      <>
+      <ItemMenuTriggerContext.Provider value={triggerSlot ? triggerNode : null}>
         <span
           onContextMenu={(event) => {
             if (fine) {
@@ -138,8 +148,8 @@ export function ItemMenu({ entries, trigger, children, title, backLabel }: ItemM
         >
           {children}
         </span>
+        {!triggerSlot && triggerNode}
         <Drawer open={open} onOpenChange={changeOpen}>
-          <span onClick={() => changeOpen(true)}>{trigger}</span>
           <DrawerContent>
             <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <DrawerTitle>{page?.label ?? title}</DrawerTitle>
@@ -203,7 +213,7 @@ export function ItemMenu({ entries, trigger, children, title, backLabel }: ItemM
             </div>
           </DrawerContent>
         </Drawer>
-      </>
+      </ItemMenuTriggerContext.Provider>
     );
   }
   const area = fine ? (
@@ -216,15 +226,18 @@ export function ItemMenu({ entries, trigger, children, title, backLabel }: ItemM
   ) : (
     children
   );
+  const triggerNode = (
+    <D.DropdownMenu>
+      <D.DropdownMenuTrigger render={trigger} />
+      <D.DropdownMenuContent>
+        <DropdownEntries entries={entries} />
+      </D.DropdownMenuContent>
+    </D.DropdownMenu>
+  );
   return (
-    <>
+    <ItemMenuTriggerContext.Provider value={triggerSlot ? triggerNode : null}>
       {area}
-      <D.DropdownMenu>
-        <D.DropdownMenuTrigger render={trigger} />
-        <D.DropdownMenuContent>
-          <DropdownEntries entries={entries} />
-        </D.DropdownMenuContent>
-      </D.DropdownMenu>
-    </>
+      {!triggerSlot && triggerNode}
+    </ItemMenuTriggerContext.Provider>
   );
 }

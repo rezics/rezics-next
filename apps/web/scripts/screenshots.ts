@@ -274,7 +274,6 @@ function workspaceRelative(path: string): string | undefined {
 /** Keeps every flag, and rewrites `--out` to the workspace-relative directory a host can copy back. */
 function screenshotCommand(argv: readonly string[], relativeOut: string | undefined): string[] {
   if (relativeOut === undefined) return ['bun', 'scripts/screenshots.ts', ...argv];
-  const appRelativeOut = relative(app, resolve(root, relativeOut)).split(sep).join('/');
   const command = ['bun', 'scripts/screenshots.ts'];
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -285,7 +284,7 @@ function screenshotCommand(argv: readonly string[], relativeOut: string | undefi
     }
     command.push(argument);
   }
-  command.push('--out', appRelativeOut);
+  command.push('--out', relativeOut);
   return command;
 }
 

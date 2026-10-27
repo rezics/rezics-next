@@ -793,7 +793,7 @@ test(
           expect(await cover.count()).toBe(1);
           expect(await cover.getAttribute('data-size')).toBe('sm');
           // One frame ratio for the list, so a recipe among books does not break the alignment.
-          expect(await cover.getAttribute('data-ratio')).toBe('2:3');
+          expect(await cover.getAttribute('data-ratio')).toBe('5:7');
           const title = row.getByRole('link', { name: hit.labels[locale]!, exact: true });
           expect(await title.count()).toBe(1);
           const typeName = displayTypeLabels[hit.type]![locale];

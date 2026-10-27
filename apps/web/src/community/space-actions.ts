@@ -2,13 +2,14 @@ import { notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
+import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   changeMembership,
   loadMyRealms,
   loadSpacePage,
   locateRealm,
+  namePublishedTypes,
   type Located,
   type MembershipOutcome,
   type MyRealmsPage,
@@ -77,14 +78,20 @@ export const readSpacePage = createServerFn({ method: 'GET' })
   .validator(validateAddress)
   .handler(async ({ data }): Promise<SpacePageData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadSpacePage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const request = getRequest();
+    const page = await loadSpacePage(kernelClient(), request, env as Partial<SessionEnv>, data);
+    return namePublishedTypes(page, requestLocale(request) ?? 'en');
   });
 
 export const locateRealmPage = createServerFn({ method: 'GET' })
   .validator(validateRealm)
   .handler(async ({ data }): Promise<Located> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return locateRealm(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    const request = getRequest();
+    const located = await locateRealm(kernelClient(), request, env as Partial<SessionEnv>, data);
+    return located.kind === 'page'
+      ? { ...located, page: await namePublishedTypes(located.page, requestLocale(request) ?? 'en') }
+      : located;
   });
 
 export const readMyRealmsPage = createServerFn({ method: 'GET' })

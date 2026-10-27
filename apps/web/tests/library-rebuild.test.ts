@@ -596,7 +596,7 @@ test(
     const cards = articles(gridPage.html);
     expect(cards).toHaveLength(3);
     expectImage(withTitle(cards, 'Zebra story'));
-    expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="2:3"');
+    expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="5:7"');
     expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}"`);
     expectPlaceholder(withTitle(cards, 'Apple story'));
     expectPlaceholder(withTitle(cards, 'Unavailable'));
@@ -609,7 +609,7 @@ test(
     expect(list).toHaveLength(3);
     const first = withTitle(list, 'Zebra story');
     expectImage(first);
-    expect(first).toContain('data-ratio="2:3"');
+    expect(first).toContain('data-ratio="5:7"');
     expect(first).toContain(`href="/en/subjects/${zebra.id}"`);
     expect(text(first)).toContain('Book');
     expect(text(first)).toContain('Completed');

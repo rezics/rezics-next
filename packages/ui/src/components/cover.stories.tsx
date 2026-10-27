@@ -149,9 +149,9 @@ function Grid({ className }: { className?: string }) {
           <Cover key={size} subject={album} cover={null} size={size} src={artSrc} />
         ))}
       </Row>
-      <Row kind="ratios" label="Frame ratios: 2:3, 3:4, 1:1, 4:3">
+      <Row kind="ratios" label="Frame ratios: 5:7, 3:4, 1:1, 4:3">
         <Cover subject={book} cover={summary(1200, 1800)} size="md" src={artSrc} />
-        <Cover subject={game} cover={summary(900, 1200)} size="md" src={artSrc} />
+        <Cover subject={person} cover={summary(900, 1200)} size="md" src={artSrc} />
         <Cover subject={album} cover={summary(1000, 1000)} size="md" src={artSrc} />
         <Cover subject={recipe} cover={summary(1600, 1200)} size="md" src={artSrc} />
       </Row>
@@ -183,7 +183,7 @@ export const States: Story = {
     const [portrait, three, square, landscape] = [
       ...canvasElement.querySelectorAll('[data-row="ratios"] [data-slot="cover"]'),
     ].map((element) => element.getBoundingClientRect());
-    expect(portrait!.height / portrait!.width).toBeCloseTo(3 / 2, 1);
+    expect(portrait!.height / portrait!.width).toBeCloseTo(7 / 5, 1);
     expect(three!.height / three!.width).toBeCloseTo(4 / 3, 1);
     expect(square!.height / square!.width).toBeCloseTo(1, 1);
     expect(landscape!.height / landscape!.width).toBeCloseTo(3 / 4, 1);
@@ -261,7 +261,7 @@ function Measured({
 }
 
 const measures: [string, CoverSubject, number][] = [
-  ['book', book, 2 / 3],
+  ['book', book, 5 / 7],
   ['character', person, 3 / 4],
   ['album', album, 1],
   ['recipe', recipe, 4 / 3],
@@ -387,14 +387,14 @@ export const MixedRow: Story = {
   },
   play: async ({ canvasElement }) => {
     const row = canvasElement.querySelector<HTMLElement>('[data-row="mixed"]')!;
-    expect(row).toHaveAttribute('data-ratio', '2:3');
+    expect(row).toHaveAttribute('data-ratio', '5:7');
     const frames = [...row.querySelectorAll<HTMLElement>('[data-slot="cover"]')];
     await waitFor(() => {
       for (const frame of frames) expect(frame).not.toHaveAttribute('data-state', 'loading');
     });
     for (const frame of frames) {
-      expect(frame).toHaveAttribute('data-ratio', '2:3');
-      expect(Math.round(frame.getBoundingClientRect().height)).toBe(240);
+      expect(frame).toHaveAttribute('data-ratio', '5:7');
+      expect(Math.round(frame.getBoundingClientRect().height)).toBe(224);
     }
     // Landscape package art is shown whole; a portrait image fills its frame.
     expect(frames[1]).toHaveAttribute('data-fit', 'contain');
