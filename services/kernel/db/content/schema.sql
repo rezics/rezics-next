@@ -401,12 +401,26 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'Source fence identity must survive erasure' USING ERRCODE = '23514';
   END IF;
-  IF ROW(NEW.route, NEW.source, NEW.external_id, NEW.field_group)
-      IS DISTINCT FROM ROW(OLD.route, OLD.source, OLD.external_id, OLD.field_group)
-    OR NEW.security_revision < OLD.security_revision
-    OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down AND NEW.security_revision <= OLD.security_revision) THEN
-    RAISE EXCEPTION 'Source fence identity is immutable and changes require an increasing security revision'
+  IF (NEW.taken_down_at IS NULL) <> (NEW.takedown_id IS NULL)
+    OR (NOT NEW.taken_down AND NEW.taken_down_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'Source fence takedown time and id must be set together on takedown'
       USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    IF ROW(NEW.route, NEW.source, NEW.external_id, NEW.field_group)
+        IS DISTINCT FROM ROW(OLD.route, OLD.source, OLD.external_id, OLD.field_group)
+      OR NEW.security_revision < OLD.security_revision
+      OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down AND NEW.security_revision <= OLD.security_revision) THEN
+      RAISE EXCEPTION 'Source fence identity is immutable and takedown requires an increasing security revision'
+        USING ERRCODE = '23514';
+    END IF;
+    IF (OLD.taken_down AND NEW.taken_down)
+        AND ROW(NEW.taken_down_at, NEW.takedown_id)
+          IS DISTINCT FROM ROW(OLD.taken_down_at, OLD.takedown_id)
+      OR (NOT OLD.taken_down AND NEW.taken_down AND NEW.taken_down_at IS NULL) THEN
+      RAISE EXCEPTION 'Source fence takedown provenance is immutable and required on transition'
+        USING ERRCODE = '23514';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -975,6 +989,8 @@ CREATE TABLE content.source_fences (
     field_group text NOT NULL COLLATE pg_catalog."C",
     taken_down boolean NOT NULL,
     security_revision bigint NOT NULL,
+    taken_down_at timestamp with time zone,
+    takedown_id uuid,
     CONSTRAINT source_fences_external_id_check CHECK ((((octet_length(external_id) >= 1) AND (octet_length(external_id) <= 1024)) AND (external_id !~ '[\u0001-\u001f\u007f-\u009f]'::text))),
     CONSTRAINT source_fences_field_group_check CHECK ((field_group = ANY (ARRAY['facts'::text, 'summary'::text, 'cover'::text]))),
     CONSTRAINT source_fences_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1512,7 +1528,7 @@ CREATE TRIGGER revision_review_contract BEFORE INSERT ON content.revision FOR EA
 -- Name: source_fences source_fence_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER source_fence_identity BEFORE DELETE OR UPDATE ON content.source_fences FOR EACH ROW EXECUTE FUNCTION content.guard_source_fence();
+CREATE TRIGGER source_fence_identity BEFORE INSERT OR DELETE OR UPDATE ON content.source_fences FOR EACH ROW EXECUTE FUNCTION content.guard_source_fence();
 
 
 --

@@ -820,6 +820,7 @@ test('a host that cannot be reached is skipped', async () => {
 test('all ssh and rsync connections to a host share one control master', async () => {
   const { env, events } = scenario({ a: { available: 4e9, exit: 255, present: ['result.txt'] } });
   expect(controlSocketDirectoryPath(undefined, 124)).toBe('/tmp/rezics-ssh-124');
+  expect(controlSocketDirectoryPath(undefined, undefined, 124)).toBe('/tmp/rezics-ssh-124');
   expect(controlSocketDirectoryPath(env.XDG_RUNTIME_DIR, 124)).toBe(join(env.XDG_RUNTIME_DIR!, 'rezics-ssh'));
   const result = await remote(env, workspace(), ['true'], ['--returns', 'result.txt']);
   expect(result.code).toBe(255);

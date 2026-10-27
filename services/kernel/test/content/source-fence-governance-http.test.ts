@@ -329,7 +329,18 @@ test('actual protected source-fence governance route writes one tuple partition 
     ])
   ).rows;
   expect(events).toHaveLength(1);
-  expect(events[0].data).toEqual({ ...target, securityRevision: result.body.securityRevision });
+  const storedProvenance = (
+    await db.admin.query(
+      `SELECT taken_down_at::text AS "takenDownAt", takedown_id AS "takedownId"
+      FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+      Object.values(target),
+    )
+  ).rows[0];
+  expect(events[0].data).toEqual({
+    ...target,
+    securityRevision: result.body.securityRevision,
+    ...storedProvenance,
+  });
   expect(checks.slice(checked)).toEqual([{ resource: platform, action, at: checks[checked]!.at, allowed: true }]);
   const trace = observer.records.slice(start);
   expect(JSON.stringify(trace, (_, value) => (typeof value === 'bigint' ? value.toString() : value))).toContain(
@@ -342,7 +353,9 @@ test('actual protected source-fence governance route writes one tuple partition 
   expect(trace[anchor]!.parameters).toEqual([0, platform.id]);
   expect(trace.slice(begin).some((r) => /(?:FROM|JOIN) (?:access\.|semantic\.)/.test(r.statement))).toBe(false);
   const writes = trace.filter((r) => /INSERT INTO content.source_fences/.test(r.statement));
-  expect(writes.map((r) => r.parameters)).toEqual([Object.values(target)]);
+  expect(writes.map((r) => r.parameters)).toEqual([
+    [...Object.values(target), storedProvenance.takenDownAt, storedProvenance.takedownId],
+  ]);
   expect(await readPartition(db.admin, 0)).toEqual(root);
   const session = decodeSession(tokens, `account:${actor.accountId}`, result.response.headers.get(SESSION_HEADER)!);
   expect(session).toContainEqual({ partition, epoch: before!.epoch, position: before!.position + 1n });

@@ -1,6 +1,6 @@
 import { Type, type Static } from 'typebox';
 
-/** Source tuple identity and revision only; governance evidence stays private. */
+/** Source tuple identity, revision and original removal provenance; governance evidence stays private. */
 export const SOURCE_FENCE_EVENTS = {
   'com.rezics.content.source_fence.taken_down.v1': Type.Object(
     {
@@ -9,6 +9,10 @@ export const SOURCE_FENCE_EVENTS = {
       external_id: Type.String({ minLength: 1, maxLength: 1024 }),
       field_group: Type.Union([Type.Literal('facts'), Type.Literal('summary'), Type.Literal('cover')]),
       securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+      takenDownAt: Type.Optional(Type.String()),
+      takedownId: Type.Optional(
+        Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }),
+      ),
     },
     { additionalProperties: false },
   ),

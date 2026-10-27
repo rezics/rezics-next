@@ -112,8 +112,12 @@ function quote(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
 }
 
-export function controlSocketDirectoryPath(runtimeDirectory: string | undefined, uid: number): string {
-  return runtimeDirectory ? join(runtimeDirectory, 'rezics-ssh') : `/tmp/rezics-ssh-${uid}`;
+export function controlSocketDirectoryPath(
+  runtimeDirectory: string | undefined,
+  uid: number | undefined,
+  fallbackId = process.pid,
+): string {
+  return runtimeDirectory ? join(runtimeDirectory, 'rezics-ssh') : `/tmp/rezics-ssh-${uid ?? fallbackId}`;
 }
 
 function controlSocketDirectory(): string {
