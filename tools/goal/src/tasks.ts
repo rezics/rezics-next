@@ -343,10 +343,22 @@ export class WorkerTasks {
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
   }
+  /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
+  private retryWillHold(taskId: string, options: RetryOptions): boolean {
+    try {
+      const task = this.store.task(taskId);
+      const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+      if (!reshaped && task.state !== 'held') return false;
+      return !this.dependenciesMet({ brief: reshaped?.brief ?? task.brief });
+    } catch {
+      // The retry itself reports the error under the task's lease.
+      return false;
+    }
+  }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
-    if (!leased)
+    if (!leased && !this.retryWillHold(taskId, options))
       await awaitHostCapacity(this.store, this.settings.stateDirectory, startsFirst(this.store.task(taskId)));
     const lease = leased
       ? undefined
