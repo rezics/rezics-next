@@ -94,6 +94,9 @@ beforeAll(async () => {
     referenceKeys: keys,
   });
   approvalReference = (await approvals.approve(bearer, workflow, context())).reference;
+  // Complete the first exact approval read before per-fault console spies begin;
+  // Reylo's first-use SQL trace can otherwise arrive during a later fault case.
+  await approvals.resolve(approvalReference, workflow.operation, { pool, deadline: Date.now() + 5000 });
   durable = await nativeModule();
   operation = await durable.fixture();
 }, 60_000);
@@ -393,13 +396,15 @@ test('real board HTTP read classifies resource evidence failures and hides their
     VALUES ($1,$2,$3,'Evidence board','published',1,$4)`,
     [0x6789, boardId, newId(0x6789), newId(0x6789)],
   );
+  let reads = 0;
+  let cause: unknown;
+  const seam = intercept(pool, (sql) => {
+    if (sql.includes('JOIN content.board b') && ++reads === 3) throw cause;
+  });
+  const app = createKernel({ pool: seam, routeKey: new Uint8Array(32).fill(80), tokens: keys });
   for (const [, makeError, reason] of faults) {
-    let reads = 0;
-    const cause = makeError();
-    const seam = intercept(pool, (sql) => {
-      if (sql.includes('JOIN content.board b') && ++reads === 3) throw cause;
-    });
-    const app = createKernel({ pool: seam, routeKey: new Uint8Array(32).fill(80), tokens: keys });
+    reads = 0;
+    cause = makeError();
     const before = await effects();
     const log = spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -412,6 +417,7 @@ test('real board HTTP read classifies resource evidence failures and hides their
       expect(await effects()).toEqual(before);
     } finally {
       log.mockRestore();
+      cause = undefined;
     }
   }
 });
