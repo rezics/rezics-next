@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
 import { ACCESS_EVENTS } from './events.ts';
+import { synchronizeAccountAgent } from './account-agent-effect.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { AccountAgentVerificationError } from '../semantic/agents.ts';
 import {
@@ -46,11 +47,16 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     (decision: AgentVerificationReversal) => finishAgentVerificationReversal(context.pool, decision, context.clock),
     { name: `${reversalWorkflow}.finish`, retriesAllowed: true, maxAttempts: 10 },
   );
+  const synchronizeAgent = DBOS.registerStep(
+    (decision: AgentVerificationReversal) => synchronizeAccountAgent(context.pool, decision.accountId),
+    { name: `${reversalWorkflow}.synchronize-agent`, retriesAllowed: true, maxAttempts: 10 },
+  );
   DBOS.registerWorkflow(
     async (decision: AgentVerificationReversal) => {
       await unmerge(decision);
       await removePage(decision);
       await finishReversal(decision);
+      await synchronizeAgent(decision);
     },
     { name: reversalWorkflow },
   );

@@ -65,12 +65,26 @@ permission failure coverage.
 The accounts WorkModule registers one shared effects worker for account-agent synchronization. Account activation and
 automated-account activation use `com.rezics.access.actor-activated.v1`; organization creation uses
 `com.rezics.access.organization-created.v1`; a committed display-name change emits
-`com.rezics.access.account-display-name-changed.v1`. These events contain only the account ID. The effect reads the
-current account row by its `(route, account_id)` anchor, skips missing, non-active, fenced and deleted accounts, then
+`com.rezics.access.account-display-name-changed.v1`. The effect also consumes account tombstones, authentication
+fences, floor advances and establishment, suspension and reinstatement, operator subject fencing and unfencing,
+and verification reversal completion. It reads the current account row by its `(route, account_id)` anchor and
 calls Semantic's `ensureAccountAgent` as platform work. An actor without an operator is a `person`, an organization is
 an `organization`, and an actor with an operator is `software`. The label uses the current display name or handle and
 language `und`. When no global definition release is active, the effect completes without creating an agent;
 there is no agent work yet. Every other failure propagates so delivery retries from current account state.
+
+An account's display name is personal data. Deletion or fencing erases its existing agent node's label with
+`name: null`, including all label history, revisions and event or receipt copies. The node's stored type preserves
+its kind after deletion clears the operator. Missing nodes are left absent. Clearing a fence restores the current
+display name, falling back to the handle. Other non-active accounts do not acquire labels. A merged account node
+ignores label synchronization, preserving the independently maintained catalogue agent's labels.
+
+Deleting a verified account first queues the durable verification reversal. Its final step synchronizes the
+restored account node from the current account row, erasing the label after unmerge, page removal and Access cleanup
+complete. Replayed events and reversal steps converge on the current state.
+
+Cost: one anchored account point read and one Semantic ensure command in the node's partition, after any reversal;
+rows and statements stay constant per event. `test/access/growth-account-agent-effect.test.ts` covers this bound.
 
 Run `bun services/kernel/scripts/ensure-account-agents.ts` during deployment after activating the global definition
 release to backfill active, unfenced accounts, including those skipped before a release was active.
@@ -186,7 +200,9 @@ The pending marker prevents a new application until cleanup finishes.
 The outbox effect queues durable `accounts.agent-verification-reversal` work, bound to the decision receipt.
 It calls Semantic's `unverifyAccountAgent` as mechanical platform work, deletes the exact original receipt's
 `access.agent_page` pointer in the subject's partition, then clears the pending marker and emits the registered
-`agent-verification.reversed.v1` event atomically in the account's partition. Both events and the decision receipt
+`agent-verification.reversed.v1` event atomically in the account's partition. Its final durable step synchronizes the
+restored account node from current Access state, erasing the label for a deleted or fenced account. Erasure waits
+until reversal completes because ensure ignores a merged node. Both events and the decision receipt
 retain the reversal kind and reason. Commands, Semantic's reversal and pointer deletion are idempotent across
 replay and process loss. Old deliveries check the pending reversal receipt before unmerging, so they cannot undo a
 newer verification. The account may submit a new reviewed application after completion.
@@ -1403,7 +1419,6 @@ commands is covered by the shared receipt, write-basis and outbox rows above.
 - Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
 - `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
 - The deleted handle projection in [account-data.ts](account-data.ts) still returns extra null/false fields, including `automated`; convergence to the policy's exact three-field identity is separate implementation work.
-- Semantic can clear an account-agent label, but [the Access synchronization effect](account-agent-effect.ts) skips deleted accounts and has no deletion event binding; cross-owner label erasure is not demonstrated here.
 - `access.account_preferences` has no account-deletion erasure trigger or deadline.
 - Handle claims can physically outlive their 30-day redirect expiry; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline. Handle retirement is separate work.
 - Membership history, terminal slots/proofs and principal assignments have no erasure schedule; live inverse/coordination cleanup depends on workflow completion without a deadline.

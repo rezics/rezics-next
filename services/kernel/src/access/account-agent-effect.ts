@@ -8,14 +8,24 @@ import type { CloudEvent } from '../events/log.ts';
 import { ACCESS_EVENTS } from './events.ts';
 import { reverseDeletedAccountAgent } from './agent-verification.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readAccount, type Account } from './account-data.ts';
+import type { Account } from './account-data.ts';
+import { accountAgentId } from '../semantic/agents.ts';
+import accountAgentRead from './account-agent-effect-read.sql';
 
-export const ACCOUNT_AGENT_EVENT_TYPES = [
+export const ACCOUNT_AGENT_EVENT_TYPES: readonly string[] = [
   'com.rezics.access.account-tombstoned.v1',
   'com.rezics.access.actor-activated.v1',
   'com.rezics.access.organization-created.v1',
   'com.rezics.access.account-display-name-changed.v1',
-] as const;
+  'com.rezics.access.authentication-fenced.v1',
+  'com.rezics.access.authentication-floor-advanced.v1',
+  'com.rezics.access.authentication-established.v1',
+  'com.rezics.access.account.suspended.v1',
+  'com.rezics.access.account.reinstated.v1',
+  'com.rezics.access.operator.subject-fenced.v1',
+  'com.rezics.access.operator.subject-unfenced.v1',
+  'com.rezics.access.agent-verification.reversed.v1',
+];
 
 export type AccountAgentSource = Pick<
   Account,
@@ -42,11 +52,7 @@ export function accountAgentOptions(account: AccountAgentSource) {
 
 function validateEvent(event: CloudEvent): string {
   const schema = (ACCESS_EVENTS as unknown as Record<string, TSchema>)[event.type];
-  if (
-    !ACCOUNT_AGENT_EVENT_TYPES.includes(event.type as (typeof ACCOUNT_AGENT_EVENT_TYPES)[number]) ||
-    !schema ||
-    !Value.Check(schema, event.data)
-  )
+  if (!ACCOUNT_AGENT_EVENT_TYPES.includes(event.type) || !schema || !Value.Check(schema, event.data))
     throw new TypeError('Invalid account agent event');
   const accountId = (event.data as { accountId: string }).accountId;
   const route = routeOf(accountId);
@@ -76,14 +82,37 @@ export function createAccountAgentEffect(pool: Pool): Effect {
   };
 }
 
-/** Events carry only an account reference; each delivery converges from its anchored current row. */
+/** Each delivery uses its account reference to converge from the anchored current row. */
 export async function applyAccountAgentEffect(pool: Pool, event: CloudEvent): Promise<void> {
   const accountId = validateEvent(event);
+  await synchronizeAccountAgent(pool, accountId);
+}
+
+/** Also the last reversal step: re-read current state only after the account node is restored. */
+export async function synchronizeAccountAgent(pool: Pool, accountId: string): Promise<void> {
   const route = routeOf(accountId)!;
-  const account = await withConnection(pool, (client) => readAccount(client, route, accountId));
+  const account = await withConnection(pool, (client) =>
+    accountAgentRead.run(client, { route, account_id: accountId, agent_id: accountAgentId(accountId) }),
+  );
   if (!account) return;
-  if (account.state === 'deleted') {
+  if (account.state === 'deleted' && (account.agentVerified || account.pendingAgentReceiptId !== null)) {
     await reverseDeletedAccountAgent(pool, accountId);
+    // Starting reversal only queues its durable workflow; ensure must wait for its final step.
+    return;
+  }
+  if (account.state === 'deleted' || account.fenced) {
+    // Do not create nodes for accounts that never had one. The persisted type survives operator erasure.
+    if (account.agentType === null) return;
+    const kind =
+      account.agentType === 'schema:Person'
+        ? 'person'
+        : account.agentType === 'schema:Organization'
+          ? 'organization'
+          : account.agentType === 'schema:SoftwareApplication'
+            ? 'software'
+            : null;
+    if (kind === null) throw new TypeError('Account agent has an unsupported type');
+    await ensureAccountAgent(pool, { account: accountId, kind, name: null, language: 'und' });
     return;
   }
   const options = accountAgentOptions(account);
