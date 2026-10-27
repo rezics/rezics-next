@@ -1,6 +1,5 @@
 import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import {
   createAuthHost,
   createBarrierProofVerifier,
@@ -13,7 +12,6 @@ import {
 import { DBOS, type FunctionName, type StepConfig } from '@dbos-inc/dbos-sdk';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
-import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
@@ -35,6 +33,7 @@ import { accessCheck } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { registerTestClient, testKernel, testRouteKey, type TestKernel } from '../support/test-kernel.ts';
 import type {
   AccountAuthorizationDriver,
@@ -82,19 +81,6 @@ DBOS.registerStep = (<This, Args extends unknown[], Return>(
     return func.apply(this, args);
   }, config)) as typeof DBOS.registerStep;
 
-// The process clock the production code reads is the real clock plus one controllable skew, the same skew the
-// kernel clock carries. Only an explicit advance moves it; nothing waits and no timestamp is rewritten.
-const RealDate = Date;
-let skewMs = 0;
-class SkewedDate extends RealDate {
-  constructor(...args: unknown[]) {
-    super(...((args.length === 0 ? [RealDate.now() + skewMs] : args) as [number]));
-  }
-  static override now() {
-    return RealDate.now() + skewMs;
-  }
-}
-const clock = () => new Date();
 const permitted = (receiptId?: string) => ({
   outcome: 'permitted' as const,
   ...(receiptId === undefined ? {} : { receiptId }),
@@ -221,6 +207,11 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
   const websitePair = await generateKeyPair('ES256', { extractable: true });
   const redirectUri = `${issuer}/website/callback`;
 
+  // The kernel clock is the real clock plus one controllable offset. Only an explicit advance moves it; nothing waits,
+  // no timestamp is rewritten, and the process clock that Auth and the JWT libraries read is never touched.
+  let advancedMs = 0;
+  const clock = () => new Date(Date.now() + advancedMs);
+
   const created: string[] = [];
   const admin = new Pool({ connectionString: connection('postgres') });
   let kernelPool: ReturnType<typeof createPool>;
@@ -248,7 +239,6 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
   const held: { release(): void; done: Promise<unknown> }[] = [];
   const expiredPendings = new Set<string>();
   const partitions = new Set<number>();
-  globalThis.Date = SkewedDate as unknown as DateConstructor;
 
   const delegations = () => createDelegationCommands({ pool: kernelPool, access, action: 'account:manage' });
   const context = () => ({ pool: kernelPool, deadline: Date.now() + 30_000 });
@@ -294,12 +284,12 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
         let receipt: Fence;
         if (wrap.fault === 'stale-proof') {
           // The proof outlives its own validity: the clock moves past its expiry before Access sees it.
-          const before = skewMs;
-          skewMs += 400 * 24 * 3600_000;
+          const before = advancedMs;
+          advancedMs += 400 * 24 * 3600_000;
           try {
             receipt = await send(sent);
           } finally {
-            skewMs = before;
+            advancedMs = before;
           }
         } else receipt = await send(sent);
         wrap.observed = { receiptId: receipt.receiptId, floor: String(receipt.minimumAuthnEpoch) };
@@ -631,8 +621,8 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     await authPool.query('DELETE FROM auth_attempt_counter');
     const started = await hostRequest('/recovery/start', { email });
     if (started.status !== 200) throw new Error(`Recovery start: HTTP ${started.status}`);
-    const until = RealDate.now() + patience;
-    while (!recoveryToken && RealDate.now() < until) await Bun.sleep(10);
+    const until = Date.now() + patience;
+    while (!recoveryToken && Date.now() < until) await Bun.sleep(10);
     return recoveryToken || undefined;
   }
   /** Completes with a fresh password; the record keeps the password Auth now holds. */
@@ -846,7 +836,11 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     async execute(referenceValue, operation, checkpoint) {
       const record = recordOf(operation);
       const resolved = await refused(() =>
-        approvals.resolve(referenceValue as string, nativeOperation(operation), context()),
+        approvals.resolve(
+          referenceValue as string,
+          { ...nativeOperation(operation), operationKey: operation.key },
+          context(),
+        ),
       );
       if ('outcome' in resolved) return resolved;
       if (operation.kind !== 'rename')
@@ -889,7 +883,12 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     async resolveAs(caller, referenceValue, operation) {
       const token = await tokenOf(caller);
       const result = await refused(() =>
-        approvals.resolveForCaller(token, referenceValue, nativeOperation(operation), context()),
+        approvals.resolveForCaller(
+          token,
+          referenceValue,
+          { ...nativeOperation(operation), operationKey: operation.key },
+          context(),
+        ),
       );
       return 'outcome' in result ? result : { outcome: 'permitted' };
     },
@@ -1057,7 +1056,7 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     },
     async awaitExpiry(referenceValue) {
       const expiresAt = required(await expiryOf(referenceValue), 'Cannot locate the native expiry of this reference');
-      skewMs += Math.max(0, Date.parse(expiresAt) - Date.now()) + 1000;
+      advancedMs += Math.max(0, Date.parse(expiresAt) - clock().getTime()) + 1000;
     },
     async signInAutomated(f, credential) {
       const record = recordById(f);
@@ -1216,8 +1215,8 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     },
     async provision(_f, referenceValue) {
       // The pending registration lasts thirty minutes; its expiry is reached by moving the clock, then restored.
-      const before = skewMs;
-      if (expiredPendings.has(referenceValue)) skewMs += 31 * 60_000;
+      const before = advancedMs;
+      if (expiredPendings.has(referenceValue)) advancedMs += 31 * 60_000;
       try {
         const result = await refused(() =>
           service.internal.provisionPassword({
@@ -1228,7 +1227,7 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
         );
         return 'outcome' in result ? result : { outcome: 'permitted' };
       } finally {
-        skewMs = before;
+        advancedMs = before;
       }
     },
     async barrier(f, kind, fault, beforeAuth) {
@@ -1378,23 +1377,17 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
         await Promise.allSettled(held.map((pending) => pending.done));
         await stop();
       } finally {
-        globalThis.Date = RealDate;
-        skewMs = 0;
+        advancedMs = 0;
         await facts?.end().catch(() => {});
         await kernelPool?.end().catch(() => {});
         for (const name of created.reverse()) {
-          const deadline = RealDate.now() + 5000;
+          const deadline = Date.now() + 5000;
           for (;;) {
             try {
               await admin.query(`DROP DATABASE "${name}"`);
               break;
             } catch (error) {
-              if (
-                !(error instanceof Error) ||
-                !('code' in error) ||
-                error.code !== '55006' ||
-                RealDate.now() >= deadline
-              )
+              if (!(error instanceof Error) || !('code' in error) || error.code !== '55006' || Date.now() >= deadline)
                 throw error;
               await Bun.sleep(25);
             }
@@ -1509,9 +1502,8 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
   try {
     await admin.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     created.push(kernelName);
-    await admin.query(`CREATE DATABASE "${authName}"`);
+    await createAuthDatabase(source.href, authName);
     created.push(authName);
-    migrateAuth(connection(authName), fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url)));
     kernelPool = createPool(connection(kernelName));
     facts = new Pool({ connectionString: connection(kernelName) });
     await build();
