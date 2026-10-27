@@ -1,23 +1,75 @@
 #!/usr/bin/env bash
 # Prepares a Debian development host to run checks for scripts/remote-check.ts. Idempotent: it installs only what
-# is missing and rewrites the slice only when its limits change. It adds a directory, a slice and a few packages; it
-# touches no service that already runs there.
+# is missing and rewrites the slice and sshd drop-in only when their settings change. It validates sshd before reloading
+# it, and preserves existing penalty exemptions unless a replacement CIDR list is supplied.
+# The optional penaltyExemptCIDRs argument is a comma-separated list of IPv4 or IPv6 addresses with prefix lengths.
 #
-#   scripts/provision-check-host.sh <user@address> <ssh identity> <memoryMaxGiB> <cpuQuotaPercent>
+#   scripts/provision-check-host.sh <user@address> <ssh identity> <memoryMaxGiB> <cpuQuotaPercent> [penaltyExemptCIDRs]
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-  echo "usage: $0 <user@address> <identity> <memoryMaxGiB> <cpuQuotaPercent>" >&2
+if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
+  echo "usage: $0 <user@address> <identity> <memoryMaxGiB> <cpuQuotaPercent> [penaltyExemptCIDRs]" >&2
   exit 2
 fi
 address=$1
 identity=$2
 memory=$3
 cpu=$4
+penalty_exemptions=${5-}
 [[ $address =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.:-]+$ ]] || { echo "bad address: $address" >&2; exit 2; }
 [[ $memory =~ ^[1-9][0-9]*$ ]] || { echo "memoryMaxGiB must be a positive integer" >&2; exit 2; }
 [[ $cpu =~ ^[1-9][0-9]*$ ]] || { echo "cpuQuotaPercent must be a positive integer" >&2; exit 2; }
 [ -r "$identity" ] || { echo "identity is not readable: $identity" >&2; exit 2; }
+
+valid_ipv4() {
+  local octet
+  local -a octets
+  [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  IFS=. read -r -a octets <<< "$1"
+  for octet in "${octets[@]}"; do
+    [[ $octet =~ ^(0|[1-9][0-9]{0,2})$ ]] && (( 10#$octet <= 255 )) || return 1
+  done
+}
+
+valid_cidr() {
+  local ip=${1%/*} prefix=${1##*/} groups group head maximum=32 compressed=0
+  local -a parts
+  [[ $1 == */* && $prefix =~ ^[0-9]{1,3}$ ]] || return 1
+  if [[ $ip == *:* ]]; then
+    maximum=128
+    if [[ $ip == *.* ]]; then
+      valid_ipv4 "${ip##*:}" || return 1
+      ip=${ip%:*}:0:0
+    fi
+    if [[ $ip == *::* ]]; then
+      groups=${ip#*::}
+      [[ $groups != *::* ]] || return 1
+      head=${ip%%::*}
+      groups=$head${head:+${groups:+:}}$groups
+      compressed=1
+    else
+      groups=$ip
+    fi
+    [[ $groups != :* && $groups != *: && $groups != *::* ]] || return 1
+    IFS=: read -r -a parts <<< "$groups"
+    for group in "${parts[@]}"; do [[ $group =~ ^[0-9a-fA-F]{1,4}$ ]] || return 1; done
+    if (( compressed )); then (( ${#parts[@]} < 8 )) || return 1
+    else (( ${#parts[@]} == 8 )) || return 1; fi
+  else
+    valid_ipv4 "$ip" || return 1
+  fi
+  (( 10#$prefix <= maximum ))
+}
+
+if [ "$#" -eq 5 ]; then
+  remaining=$penalty_exemptions
+  while :; do
+    entry=${remaining%%,*}
+    valid_cidr "$entry" || { echo "bad penalty exemption CIDR: $entry" >&2; exit 2; }
+    [[ $remaining == *,* ]] || break
+    remaining=${remaining#*,}
+  done
+fi
 
 bun_version=1.4.3
 # The kernel check runs npm-packaged tools (dbmate) whose launcher scripts start with `env node`, and tooling that
@@ -28,13 +80,14 @@ node_version=26.8.2
 playwright_version=1.64.1
 
 ssh -i "$identity" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$address" \
-  bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" <<'REMOTE'
+  bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" "$penalty_exemptions" <<'REMOTE'
 set -euo pipefail
 bun_version=$1
 node_version=$2
 memory=$3
 cpu=$4
 playwright_version=$5
+penalty_exemptions=${6-}
 export DEBIAN_FRONTEND=noninteractive
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -91,6 +144,15 @@ systemctl start rezics-check.slice
 sshd_config_dir=/etc/ssh/sshd_config.d
 sshd_dropin=$sshd_config_dir/90-rezics-checks.conf
 sshd_wanted=$(printf 'MaxStartups 100:30:300\nMaxSessions 64')
+if [ -n "$penalty_exemptions" ]; then
+  sshd_exemptions="PerSourcePenaltyExemptList $penalty_exemptions"
+elif [ -e "$sshd_dropin" ]; then
+  # Reading errors must abort provisioning rather than silently discard an exemption.
+  sshd_exemptions=$(awk 'tolower($1) == "persourcepenaltyexemptlist" { print }' "$sshd_dropin")
+else
+  sshd_exemptions=
+fi
+if [ -n "$sshd_exemptions" ]; then sshd_wanted=$(printf '%s\n%s' "$sshd_wanted" "$sshd_exemptions"); fi
 sshd_changed=0
 sshd_had_previous=0
 sshd_backup=$work/90-rezics-checks.conf

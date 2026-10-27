@@ -725,6 +725,87 @@ test('a control master session refusal falls back to its own connection', async 
   expect(seen.find((event) => event.kind === 'cleanup')!.transport).toBe('standalone-fallback');
 });
 
+function provisionScenario(existing?: string) {
+  const directory = mkdtempSync(join(root, 'provision-'));
+  const bin = join(directory, 'bin');
+  const config = join(directory, '90-rezics-checks.conf');
+  const log = join(directory, 'events.jsonl');
+  mkdirSync(bin);
+  mkdirSync(join(directory, 'work'));
+  const identity = join(directory, 'identity');
+  writeFileSync(identity, 'fake identity');
+  if (existing !== undefined) writeFileSync(config, existing);
+  const commands = {
+    ssh: `#!/usr/bin/env bun
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const source = await Bun.stdin.text();
+writeFileSync(process.env.PROVISION_RECEIVED!, source);
+const header = source.slice(0, source.indexOf('export DEBIAN_FRONTEND'));
+const start = source.indexOf('sshd_config_dir=');
+const end = source.indexOf('\\necho "chromium', start);
+const block = source.slice(start, end).replace('sshd_config_dir=/etc/ssh/sshd_config.d', 'sshd_config_dir=$PROVISION_DIRECTORY');
+const args = process.argv.slice(process.argv.indexOf('--') + 1);
+const result = spawnSync('bash', ['-c', header + block, 'provision-test', ...args], { env: process.env, encoding: 'utf8' });
+process.stdout.write(result.stdout);
+process.stderr.write(result.stderr);
+process.exit(result.status ?? 1);
+`,
+    sshd: `#!/usr/bin/env bun
+import { appendFileSync, readFileSync } from 'node:fs';
+appendFileSync(process.env.PROVISION_LOG!, JSON.stringify({ command: 'sshd', args: process.argv.slice(2), config: readFileSync(process.env.PROVISION_CONFIG!, 'utf8') }) + '\\n');
+process.exit(Number(process.env.PROVISION_VALIDATION_EXIT ?? 0));
+`,
+    systemctl: `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.PROVISION_LOG!, JSON.stringify({ command: 'systemctl', args: process.argv.slice(2) }) + '\\n');
+`,
+  };
+  for (const [name, source] of Object.entries(commands)) {
+    writeFileSync(join(bin, name), source);
+    chmodSync(join(bin, name), 0o755);
+  }
+  const received = join(directory, 'received');
+  return {
+    config,
+    received,
+    events: () =>
+      existsSync(log)
+        ? readFileSync(log, 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line))
+        : [],
+    run: (exemptions?: string, validationExit = 0) =>
+      spawnSync(
+        'bash',
+        [
+          join(repository, 'scripts/provision-check-host.sh'),
+          'root@check.test',
+          identity,
+          '16',
+          '800',
+          ...(exemptions === undefined ? [] : [exemptions]),
+        ],
+        {
+          cwd: repository,
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            PROVISION_DIRECTORY: directory,
+            PROVISION_CONFIG: config,
+            PROVISION_LOG: log,
+            PROVISION_RECEIVED: received,
+            PROVISION_VALIDATION_EXIT: String(validationExit),
+            work: join(directory, 'work'),
+          },
+          encoding: 'utf8',
+          timeout: 20_000,
+        },
+      ),
+  };
+}
+
 test('provision-check-host installs and validates the sshd limits before reloading sshd', () => {
   const identity = join(root, 'provision-identity');
   const bin = join(root, 'provision-bin');
@@ -762,6 +843,94 @@ test('provision-check-host installs and validates the sshd limits before reloadi
   expect(sent.slice(validationStart, validationElse)).toContain('systemctl reload ssh');
   expect(sent.slice(validationElse, validationEnd)).not.toContain('systemctl reload ssh');
   expect(sent).toContain('sshd configuration validation failed; sshd was not reloaded');
+});
+
+test('provision-check-host writes the whole sshd drop-in with the penalty exemptions it is given', () => {
+  const previous = 'MaxStartups 10:30:100\nPerSourcePenaltyExemptList 192.0.2.0/24\n# obsolete\n';
+  const fixture = provisionScenario(previous);
+  const exemptions = '192.0.2.1/32,2001:db8::/32';
+  const wanted = `MaxStartups 100:30:300\nMaxSessions 64\nPerSourcePenaltyExemptList ${exemptions}\n`;
+  expect(fixture.run(exemptions).status).toBe(0);
+  expect(readFileSync(fixture.config, 'utf8')).toBe(wanted);
+  expect(statSync(fixture.config).mode & 0o777).toBe(0o644);
+  expect(fixture.events()).toEqual([
+    { command: 'sshd', args: ['-t'], config: wanted },
+    { command: 'systemctl', args: ['reload', 'ssh'] },
+  ]);
+  expect(fixture.run(exemptions).status).toBe(0);
+  expect(fixture.events().filter((event) => event.command === 'systemctl')).toHaveLength(1);
+
+  writeFileSync(fixture.config, previous);
+  expect(fixture.run(exemptions, 1).status).toBe(1);
+  expect(readFileSync(fixture.config, 'utf8')).toBe(previous);
+  expect(fixture.events().filter((event) => event.command === 'systemctl')).toHaveLength(1);
+  const absent = provisionScenario();
+  expect(absent.run(exemptions, 1).status).toBe(1);
+  expect(existsSync(absent.config)).toBe(false);
+});
+
+test('provision-check-host keeps an existing penalty exemption list when it is given none', () => {
+  const exemptionLine = '\tPeRsOuRcEpEnAlTyExEmPtLiSt  192.0.2.0/24,2001:db8::/32 # access\t';
+  const fixture = provisionScenario(`MaxStartups 10:30:100\n${exemptionLine}\n# obsolete\n`);
+  const wanted = `MaxStartups 100:30:300\nMaxSessions 64\n${exemptionLine}\n`;
+  expect(fixture.run().status).toBe(0);
+  expect(readFileSync(fixture.config, 'utf8')).toBe(wanted);
+  expect(fixture.events()).toEqual([
+    { command: 'sshd', args: ['-t'], config: wanted },
+    { command: 'systemctl', args: ['reload', 'ssh'] },
+  ]);
+  expect(fixture.run().status).toBe(0);
+  expect(fixture.events().filter((event) => event.command === 'systemctl')).toHaveLength(1);
+
+  const absent = provisionScenario();
+  expect(absent.run().status).toBe(0);
+  expect(readFileSync(absent.config, 'utf8')).toBe('MaxStartups 100:30:300\nMaxSessions 64\n');
+});
+
+test('provision-check-host validates every penalty exemption CIDR before connecting', () => {
+  for (const exemptions of [
+    '',
+    '192.0.2.0',
+    '192.0.2.256/24',
+    '192.0.02.0/24',
+    '192.0.2.0/33',
+    '192.0.2.0/-1',
+    '2001:db8::/129',
+    '2001:db8::/x',
+    '2001:db8:::1/32',
+    '2001::db8::1/32',
+    '2001:db8/32',
+    '2001:db8:0:0:0:0:0:0:1/32',
+    '2001:db8::g/32',
+    '::ffff:192.0.2.256/128',
+    '192.0.2.0/24,',
+    ',192.0.2.0/24',
+    '192.0.2.0/24,,2001:db8::/32',
+    '192.0.2.0/24,2001:db8::/129',
+    '192.0.2.0/24\nMaxSessions 1',
+    '192.0.2.0/24/1',
+  ]) {
+    const fixture = provisionScenario();
+    const result = fixture.run(exemptions);
+    expect(result.status, exemptions).toBe(2);
+    expect(result.stderr).toContain('bad penalty exemption CIDR:');
+    expect(existsSync(fixture.received)).toBe(false);
+  }
+  for (const exemptions of [
+    '192.0.2.0/0',
+    '192.0.2.1/32',
+    '2001:db8::/0',
+    '2001:db8::1/128',
+    '2001:DB8:0:0:0:0:0:1/128',
+    '::/128',
+    '::ffff:192.0.2.1/128',
+    '2001:db8:0:0:0:0:192.0.2.1/128',
+  ]) {
+    const fixture = provisionScenario();
+    const result = fixture.run(exemptions);
+    expect(result.status, `${exemptions}: ${result.stderr}`).toBe(0);
+    expect(readFileSync(fixture.config, 'utf8')).toContain(`PerSourcePenaltyExemptList ${exemptions}\n`);
+  }
 });
 
 test('SIGTERM stops the run, removes its directory and releases the slot', async () => {
