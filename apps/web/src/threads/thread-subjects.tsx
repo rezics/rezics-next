@@ -21,18 +21,18 @@ export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[
     via: m.thread_cover_via(),
   };
   return (
-    <ul aria-label={m.thread_subjects_heading()} className="flex flex-wrap gap-3">
+    <ul aria-label={m.thread_subjects_heading()} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
       {titled.map((subject) => (
         <li
           key={subject.id}
-          className="flex min-w-0 max-w-full items-center gap-3 rounded-2xl border border-border/70 bg-card p-2 pe-4"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-card p-1 pe-2 text-sm"
         >
           <Cover
             cover={subject.cover}
             decorative
             labels={labels}
             ratio={ratio}
-            size="sm"
+            size="xs"
             src={coverSrc}
             subject={subject}
           />

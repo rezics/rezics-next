@@ -502,6 +502,8 @@
   "thread_posts_empty": "此讨论串目前没有帖子。",
   "thread_posts_heading": "帖子",
   "thread_reply_body_label": "回复正文",
+  "thread_reply_label": "回复",
+  "thread_reply_placeholder": "写下回复",
   "thread_reveal_spoiler": "显示剧透",
   "thread_subjects_heading": "此讨论串关联的条目",
   "thread_title_label": "标题",

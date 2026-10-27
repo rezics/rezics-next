@@ -5,6 +5,8 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
+type BoardResource = ReturnType<KernelClient['boards']>;
+type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type ThreadPost = PostPage['posts'][number];
@@ -27,6 +29,7 @@ export async function loadThreadPage(
   verification: VerificationConfig,
 ): Promise<{
   thread: Thread['thread'];
+  board?: Board;
   posts: PostPage;
   viewerId?: string;
   verification: VerificationConfig;
@@ -45,6 +48,15 @@ export async function loadThreadPage(
   const threadRead = authorization
     ? client.threads({ id: data.id }).get({ headers: { authorization } })
     : client.threads({ id: data.id }).get();
+  const threadResult = await threadRead;
+  const thread = checkRead<Thread>(threadResult, 'thread');
+  if (thread.thread.id !== data.id) throw notFound();
+  const boardRead = thread.thread.boardId
+    ? client
+        .boards({ id: thread.thread.boardId })
+        .get()
+        .catch(() => null)
+    : Promise.resolve(null);
   const postsRead = authorization
     ? client
         .threads({ id: data.id })
@@ -52,12 +64,13 @@ export async function loadThreadPage(
           data.cursor ? { query: { cursor: data.cursor }, headers: { authorization } } : { headers: { authorization } },
         )
     : client.threads({ id: data.id }).posts.get(data.cursor ? { query: { cursor: data.cursor } } : {});
-  const [threadResult, postsResult] = await Promise.all([threadRead, postsRead]);
-  const thread = checkRead<Thread>(threadResult, 'thread');
+  const [boardResult, postsResult] = await Promise.all([boardRead, postsRead]);
   const posts = checkRead<PostPage>(postsResult, 'thread posts');
-  if (thread.thread.id !== data.id) throw notFound();
   return {
     thread: thread.thread,
+    ...(boardResult?.data?.board && boardResult.data.board.id === thread.thread.boardId
+      ? { board: boardResult.data.board }
+      : {}),
     posts,
     ...(viewerId ? { viewerId } : {}),
     verification,

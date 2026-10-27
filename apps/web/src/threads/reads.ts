@@ -81,6 +81,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       data,
     }): Promise<{
       thread: Thread['thread'];
+      board?: Board['board'];
       posts: PostPage;
       idempotencyKey: string;
       viewerId?: string;

@@ -502,6 +502,8 @@
   "thread_posts_empty": "このスレッドにはまだ投稿がありません。",
   "thread_posts_heading": "投稿",
   "thread_reply_body_label": "返信本文",
+  "thread_reply_label": "返信",
+  "thread_reply_placeholder": "返信を書く",
   "thread_reveal_spoiler": "ネタバレを表示",
   "thread_subjects_heading": "このスレッドの対象",
   "thread_title_label": "タイトル",

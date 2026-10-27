@@ -502,6 +502,8 @@
   "thread_posts_empty": "이 스레드에는 아직 게시물이 없습니다.",
   "thread_posts_heading": "게시물",
   "thread_reply_body_label": "답글 본문",
+  "thread_reply_label": "답글",
+  "thread_reply_placeholder": "답글 쓰기",
   "thread_reveal_spoiler": "스포일러 보기",
   "thread_subjects_heading": "이 스레드의 대상 항목",
   "thread_title_label": "제목",

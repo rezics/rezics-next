@@ -36,6 +36,7 @@ export const Route = createFileRoute('/threads/$id')({
 function ThreadPage() {
   const {
     thread,
+    board,
     posts: loadedPosts,
     idempotencyKey,
     viewerId,
@@ -52,6 +53,12 @@ function ThreadPage() {
 
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
 
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash.startsWith('post-')) document.getElementById(hash)?.scrollIntoView();
+    else if (!hash) window.scrollTo(0, 0);
+  }, [id, location.hash, loadedPosts]);
+
   function updatePost(post: ThreadPost) {
     setPosts((current) => ({
       ...current,
@@ -60,23 +67,37 @@ function ThreadPage() {
   }
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
+    <article className="max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
+        {board ? (
+          <Link to="/boards/$id" params={{ id: board.id }} className="text-sm text-muted-foreground hover:underline">
+            {board.title}
+          </Link>
+        ) : null}
         <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
-        <ThreadSubjects subjects={subjects} />
+        <div className="flex min-w-0 items-center gap-2">
+          <Byline
+            author={authors?.[thread.authorId]}
+            createdAt={thread.createdAt}
+            now={now}
+            size="sm"
+            className="shrink-0"
+          />
+          <ThreadSubjects subjects={subjects} />
+        </div>
       </header>
       <section className="space-y-6" aria-labelledby="thread-posts-heading">
         <h2 id="thread-posts-heading" className="text-xl font-semibold">
           {m.thread_posts_heading()}
         </h2>
         {posts.posts.length ? (
-          <ol className="divide-y divide-border/60 border-y border-border/60">
+          <ol id={`thread-${thread.id}`} className="scroll-mt-24 divide-y divide-border/60 border-y border-border/60">
             {posts.posts.map((post) => {
               const firstPost = post.id === thread.firstPost.id;
               return (
                 <PostSlot
                   key={post.id}
-                  anchorId={firstPost ? `thread-${thread.id}` : `post-${post.id}`}
+                  anchorId={`post-${post.id}`}
                   onChange={updatePost}
                   post={post}
                   authors={authors}
@@ -217,7 +238,7 @@ function PostSlot({
 
   if (('removed' in post && post.removed) || post.availability === 'erased') {
     return (
-      <li id={anchorId} className="py-6">
+      <li id={anchorId} className="scroll-mt-24 py-6 target:bg-muted/50">
         <p className="text-muted-foreground" role="note">
           {m.thread_post_erased()}
         </p>
@@ -226,7 +247,7 @@ function PostSlot({
   }
 
   return (
-    <li id={anchorId} className="py-5">
+    <li id={anchorId} className="scroll-mt-24 py-5 target:bg-muted/50">
       <div className="mb-3 flex items-start justify-between gap-3">
         <Byline
           author={authors?.[post.authorId]}

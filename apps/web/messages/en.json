@@ -502,6 +502,8 @@
   "thread_posts_empty": "There are no posts in this thread yet.",
   "thread_posts_heading": "Posts",
   "thread_reply_body_label": "Reply body",
+  "thread_reply_label": "Reply",
+  "thread_reply_placeholder": "Write a reply",
   "thread_reveal_spoiler": "Reveal spoiler",
   "thread_subjects_heading": "Subjects in this thread",
   "thread_title_label": "Title",

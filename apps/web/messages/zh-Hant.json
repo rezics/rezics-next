@@ -502,6 +502,8 @@
   "thread_posts_empty": "此討論串目前沒有文章。",
   "thread_posts_heading": "文章",
   "thread_reply_body_label": "回覆內文",
+  "thread_reply_label": "回覆",
+  "thread_reply_placeholder": "寫下回覆",
   "thread_reveal_spoiler": "顯示劇透",
   "thread_subjects_heading": "此討論串關聯的條目",
   "thread_title_label": "標題",

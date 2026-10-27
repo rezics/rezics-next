@@ -502,6 +502,8 @@
   "thread_posts_empty": "Il n’y a pas encore de publication dans ce fil.",
   "thread_posts_heading": "Publications",
   "thread_reply_body_label": "Texte de la réponse",
+  "thread_reply_label": "Réponse",
+  "thread_reply_placeholder": "Écrire une réponse",
   "thread_reveal_spoiler": "Afficher le spoiler",
   "thread_subjects_heading": "Fiches liées à cette discussion",
   "thread_title_label": "Titre",

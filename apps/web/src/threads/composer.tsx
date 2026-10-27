@@ -276,7 +276,7 @@ export function PostComposer<T>({
     }
   }
 
-  const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_body_label();
+  const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_label();
   const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
   const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
   return (
@@ -297,13 +297,15 @@ export function PostComposer<T>({
         <input type="hidden" name="idempotency_key" value={idempotencyKey} />
       </form>
       <div className="space-y-2" onInputCapture={captureEditorInput}>
-        <p className="text-sm font-medium">{bodyLabel}</p>
+        <p className={titleRequired ? 'text-sm font-medium' : 'sr-only'}>{bodyLabel}</p>
         <div ref={editorHost}>
           {plainEditorVisible ? (
             <div
               aria-label={bodyLabel}
               aria-multiline="true"
-              className={`${fallbackSize} rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6`}
+              aria-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
+              data-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
+              className={`${fallbackSize} rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] sm:px-6`}
               contentEditable
               role="textbox"
               suppressContentEditableWarning
@@ -313,6 +315,7 @@ export function PostComposer<T>({
             value={body}
             onChange={updateBody}
             label={bodyLabel}
+            {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}
             labels={labels}
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={

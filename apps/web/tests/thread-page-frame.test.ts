@@ -12,13 +12,15 @@ test('reads the thread board once regardless of post count and tolerates a missi
   for (const count of [1, posts.posts.length]) {
     for (const missing of [false, true]) {
       const calls: string[] = [];
-      const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-        const path = new URL(new Request(input, init).url).pathname;
-        calls.push(path);
-        if (path.endsWith('/posts')) return Response.json({ ...posts, posts: posts.posts.slice(0, count) });
-        if (path.includes('/boards/')) return missing ? new Response(null, { status: 404 }) : Response.json(board);
-        return Response.json(thread);
-      } });
+      const client = createKernelClient('https://kernel.test', {
+        fetch: async (input, init) => {
+          const path = new URL(new Request(input, init).url).pathname;
+          calls.push(path);
+          if (path.endsWith('/posts')) return Response.json({ ...posts, posts: posts.posts.slice(0, count) });
+          if (path.includes('/boards/')) return missing ? new Response(null, { status: 404 }) : Response.json(board);
+          return Response.json(thread);
+        },
+      });
       const page = await loadThreadPage(client, request, {}, { id: thread.thread.id }, verification);
       expect(calls).toHaveLength(3);
       expect(calls.filter((path) => path.endsWith(`/boards/${thread.thread.boardId}`))).toHaveLength(1);

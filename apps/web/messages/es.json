@@ -502,6 +502,8 @@
   "thread_posts_empty": "Todavía no hay publicaciones en este debate.",
   "thread_posts_heading": "Publicaciones",
   "thread_reply_body_label": "Texto de la respuesta",
+  "thread_reply_label": "Respuesta",
+  "thread_reply_placeholder": "Escribe una respuesta",
   "thread_reveal_spoiler": "Mostrar el spoiler",
   "thread_subjects_heading": "Fichas de este hilo",
   "thread_title_label": "Título",

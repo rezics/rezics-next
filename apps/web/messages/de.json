@@ -502,6 +502,8 @@
   "thread_posts_empty": "In diesem Thread gibt es noch keine Beiträge.",
   "thread_posts_heading": "Beiträge",
   "thread_reply_body_label": "Antworttext",
+  "thread_reply_label": "Antwort",
+  "thread_reply_placeholder": "Antwort schreiben",
   "thread_reveal_spoiler": "Spoiler anzeigen",
   "thread_subjects_heading": "Einträge in diesem Thread",
   "thread_title_label": "Titel",
