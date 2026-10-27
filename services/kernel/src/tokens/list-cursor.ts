@@ -47,7 +47,10 @@ function hkdfKey(key: Uint8Array): Promise<CryptoKey> {
   return imported;
 }
 
-async function perTokenKey(key: Uint8Array, salt: Uint8Array): Promise<{ aes: CryptoKey; iv: Uint8Array }> {
+async function perTokenKey(
+  key: Uint8Array,
+  salt: Uint8Array,
+): Promise<{ aes: CryptoKey; iv: Uint8Array<ArrayBuffer> }> {
   const bits = new Uint8Array(
     await crypto.subtle.deriveBits(
       { name: 'HKDF', hash: 'SHA-256', salt: salt.slice(), info: HKDF_INFO },
@@ -60,7 +63,7 @@ async function perTokenKey(key: Uint8Array, salt: Uint8Array): Promise<{ aes: Cr
 }
 
 /** Throws `TypeError` for a binding outside the contract. */
-function associatedData(kid: number, binding: ListCursorBinding): Uint8Array {
+function associatedData(kid: number, binding: ListCursorBinding): Uint8Array<ArrayBuffer> {
   if (binding === null || typeof binding !== 'object' || typeof binding.route !== 'string' || binding.route === '')
     throw new TypeError('Invalid list cursor binding');
   if (byteLength(binding.route) > MAX_ROUTE_BYTES) throw new TypeError('The list cursor route is too long');
