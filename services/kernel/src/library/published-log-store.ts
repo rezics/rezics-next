@@ -14,11 +14,11 @@ const STATES = new Set<ProgressState>(['active', 'completed', 'abandoned']);
 const MAX_NOTE_LENGTH = 1000;
 const MAX_PAGE_LIMIT = 101;
 
-/** One published snapshot, including the session it copied. Callers omit the storage columns they do not show. */
+/** One published snapshot, with a nullable source pointer for retained snapshots after source erasure. */
 export type PublishedLogRecord = {
   id: string;
   accountId: string;
-  sessionId: string;
+  sessionId: string | null;
   subjectId: string;
   sessionState: ProgressState;
   startedAt: string;
@@ -27,6 +27,9 @@ export type PublishedLogRecord = {
   publishedAt: string;
   transactionId: string;
 };
+
+/** New publications always copy a source session, even though retained snapshots may be detached later. */
+export type PublishedLogDraft = Omit<PublishedLogRecord, 'sessionId'> & { sessionId: string };
 
 export type PublishedLogPage = {
   after: { publishedAt: string; logId: string } | null;
@@ -75,8 +78,10 @@ function assertLimit(limit: number): void {
 export async function insertPublishedLog(
   client: Client,
   route: number,
-  log: PublishedLogRecord,
+  log: PublishedLogDraft,
 ): Promise<PublishedLogRecord> {
+  if (typeof log.sessionId !== 'string' || log.sessionId.length === 0)
+    throw new TypeError('A published log requires a source session');
   assertState(log.sessionState);
   assertNote(log.note);
   const row = await insertLog.run(queryClient(client), {

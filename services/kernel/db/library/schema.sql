@@ -352,7 +352,7 @@ CREATE TABLE library.published_log (
     route integer NOT NULL,
     log_id uuid NOT NULL,
     account_id uuid NOT NULL,
-    session_id uuid NOT NULL,
+    session_id uuid,
     subject_id uuid NOT NULL,
     session_state text NOT NULL,
     started_at timestamp with time zone NOT NULL,
