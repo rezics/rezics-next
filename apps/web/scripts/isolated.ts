@@ -28,7 +28,7 @@ if (command.length === 0) {
       label: 'web isolated',
       root,
       cwd: app,
-      command: ['bun', 'scripts/isolated.ts', ...appCommand],
+      command: ['bun', 'scripts/isolated.ts', ...command],
       // A state directory or a report the caller names is read back from this machine.
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },

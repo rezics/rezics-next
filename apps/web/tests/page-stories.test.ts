@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
+import { documentText } from '@rezics/document';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -534,7 +535,8 @@ test(
     const opened = await openStory('subject', 'Signed Out', 'en');
     try {
       const main = opened.page.getByRole('main');
-      await main.getByText(description!, { exact: true }).first().waitFor({ state: 'visible' });
+      const summary = statements['schema:abstract'][0].value.content.document;
+      await main.getByText(documentText(summary), { exact: true }).first().waitFor({ state: 'visible' });
       await main.getByRole('link', { name: author!, exact: true }).first().waitFor({ state: 'visible' });
       await main.getByText(date, { exact: true }).first().waitFor({ state: 'visible' });
       await main.getByRole('link', { name: edition!, exact: true }).first().waitFor({ state: 'visible' });
