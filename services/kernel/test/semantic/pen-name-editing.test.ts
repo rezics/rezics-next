@@ -176,3 +176,38 @@ test('private consent preserves public facts and a sourced replacement publishes
   expect((await page(relations(pen.id))).count).toEqual({ value: 1, exact: true });
   expect((await page(inverse())).links.map((row: any) => row.statement)).toContain(replacement.body.candidate);
 });
+
+test('disclosure and retraction preserve a Context suppression in relation pages and counts', async () => {
+  const pen = await created('schema:Person', { [property]: [statement(false)] }, 'person');
+  const candidate = pen.statements[property][0].id;
+  const context = await call('POST', '/v1/contexts', 'editor', { labels: { en: 'Private names omitted' } });
+  expect(context.status, JSON.stringify(context.body)).toBe(201);
+  const contextId = context.body.context.id;
+  const suppression = await call('POST', `/v1/subjects/${pen.id}:adopt`, 'editor', {
+    context: contextId,
+    property,
+    target,
+    mode: 'suppress',
+    selection: [],
+    expected_head: null,
+  });
+  expect(suppression.status, JSON.stringify(suppression.body)).toBe(200);
+  expect((await call('POST', `/v1/statements/${candidate}/disclose`, 'person')).status).toBe(200);
+  await catchUp(pen.id);
+  expect(subjectIds(await read(pen.id))).toEqual([candidate]);
+  expect(subjectIds(await read(pen.id, undefined, contextId))).toEqual([]);
+  expect((await read(pen.id, undefined, contextId)).relationCounts[property]).toBe(0);
+  const forward = await page(`${relations(pen.id)}&context=${contextId}`);
+  expect(forward.relations).toEqual([]);
+  expect(forward.count).toEqual({ value: 0, exact: true });
+  expect((await page(`${inverse()}&context=${contextId}`)).links.map((row: any) => row.statement)).not.toContain(
+    candidate,
+  );
+  expect((await call('POST', `/v1/statements/${candidate}/retract`, 'person')).status).toBe(200);
+  await catchUp(pen.id);
+  expect((await page(relations(pen.id))).count).toEqual({ value: 0, exact: true });
+  expect((await page(`${relations(pen.id)}&context=${contextId}`)).count).toEqual({ value: 0, exact: true });
+  expect((await page(`${inverse()}&context=${contextId}`)).links.map((row: any) => row.statement)).not.toContain(
+    candidate,
+  );
+});

@@ -7,9 +7,10 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentsForSubjects } from './agents.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
-import { factDataTypes, SubjectInputError } from './item.ts';
+import { factDataTypes, SubjectInputError, type FactRow } from './item.ts';
 import { holderFacts, holderKeys, labelOrderKey } from './link-keys.ts';
-import { linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import listRelationContexts from './relation-context-list.sql';
 import { readLabels } from './subject.ts';
 import readRetraction from './statement-disclosure-retraction.sql';
 import insertRetraction from './bulk-insert-retraction.sql';
@@ -173,6 +174,50 @@ export async function privateLinks(
   return { entries: (row?.entries ?? []) as PrivateLink[], total: Number(row?.total ?? 0) };
 }
 
+type DisclosureSlot = { subject_id: string; property: string; slot_id: string };
+async function disclosureViews(tx: CommandTransaction, slot: DisclosureSlot) {
+  const global = (await slotView(tx, slot.subject_id, slot.property, GLOBAL_CONTEXT, {}, slot.slot_id)).facts;
+  const contexts = new Map<string, FactRow[]>();
+  for (const row of await listRelationContexts.run(tx, {
+    route: routeOf(slot.subject_id)!,
+    subject_id: slot.subject_id,
+    slot_id: slot.slot_id,
+  }))
+    contexts.set(
+      row.context_id,
+      (await slotView(tx, slot.subject_id, slot.property, row.context_id, {}, slot.slot_id)).facts,
+    );
+  return { global, contexts };
+}
+
+/** A disclosure changes Global membership and each registered Context's sparse layer together. */
+async function disclosureChanges(
+  tx: CommandTransaction,
+  slot: DisclosureSlot,
+  release: Release,
+  before: Awaited<ReturnType<typeof disclosureViews>>,
+) {
+  const after = (await slotView(tx, slot.subject_id, slot.property, GLOBAL_CONTEXT, {}, slot.slot_id)).facts;
+  const holder = await holderFacts(tx, slot.subject_id, release);
+  const metadata = { subject: slot.subject_id, release, type: holder.type, identityFacts: holder.facts };
+  const changes = linkChanges(before.global, after, factDataTypes(release, [...before.global, ...after]), metadata);
+  for (const [context, previous] of before.contexts) {
+    const selected = (await slotView(tx, slot.subject_id, slot.property, context, {}, slot.slot_id)).facts;
+    changes.push(
+      ...contextLinkChanges(
+        before.global,
+        previous,
+        selected,
+        factDataTypes(release, [...before.global, ...after, ...previous, ...selected]),
+        metadata,
+        context,
+        after,
+      ),
+    );
+  }
+  return changes;
+}
+
 export class StatementDisclosureDeniedError extends Error {}
 export class StatementDisclosureNotFoundError extends Error {}
 export class StatementDisclosureConflictError extends Error {}
@@ -235,9 +280,7 @@ export async function changeStatementDisclosure(
         if (priorRetraction) return { value: { candidate: options.candidate, disclosed: row.disclosed }, events };
         const release = await readRelease(tx, row.release);
         if (!release) throw new Error('Disclosure release is missing');
-        const before = (await slotView(tx, row.subject_id, row.property, GLOBAL_CONTEXT, {}, row.slot_id)).facts.filter(
-          (fact) => fact.statement_id === options.candidate,
-        );
+        const before = await disclosureViews(tx, row);
         await insertRetractRevision.run(tx, {
           route,
           subject_id: row.subject_id,
@@ -265,13 +308,7 @@ export async function changeStatementDisclosure(
           subject: row.subject_id,
           data: { id: row.subject_id, revision, kind: 'retract' },
         });
-        const holder = await holderFacts(tx, row.subject_id, release);
-        const changes = linkChanges(before, [], factDataTypes(release, before), {
-          subject: row.subject_id,
-          release,
-          type: holder.type,
-          identityFacts: holder.facts,
-        });
+        const changes = await disclosureChanges(tx, row, release, before);
         if (changes.length)
           events.push({
             type: LINKS_CHANGED,
@@ -280,6 +317,7 @@ export async function changeStatementDisclosure(
           });
         return { value: { candidate: options.candidate, disclosed: row.disclosed }, events };
       }
+      const before = row.disclosed ? null : await disclosureViews(tx, row);
       const updated = await updateDisclosure.run(tx, { route, candidate_id: options.candidate });
       // Already disclosed is a successful one-way operation, including retries with another receipt.
       const subject = row.subject_id;
@@ -300,19 +338,8 @@ export async function changeStatementDisclosure(
       });
       const release = await readRelease(tx, row.release);
       if (!security || !release) throw new Error('Disclosure state is missing');
-      const facts = (await slotView(tx, subject, row.property, GLOBAL_CONTEXT, {}, row.slot_id)).facts.filter(
-        (fact) => fact.statement_id === options.candidate,
-      );
-      const holder = await holderFacts(tx, subject, release);
       const changes =
-        visibility.visibility === 'visible'
-          ? linkChanges([], facts, factDataTypes(release, facts), {
-              subject,
-              release,
-              type: holder.type,
-              identityFacts: holder.facts,
-            })
-          : [];
+        visibility.visibility === 'visible' && before ? await disclosureChanges(tx, row, release, before) : [];
       return {
         value: { candidate: options.candidate, disclosed: true },
         events: changes.length
@@ -323,7 +350,7 @@ export async function changeStatementDisclosure(
                 subject,
                 data: {
                   subject,
-                  revision: row.revision,
+                  revision: row.latest_revision,
                   security_revision: Number(security.security_revision),
                   changes,
                 },

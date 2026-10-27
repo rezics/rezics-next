@@ -904,4 +904,3 @@ A property may declare `disclosure: sourceOrConsent` in a release. Catalogue slo
 - Touches: one optional enum on each property and optional localized descriptions; validation and compilation traverse the existing bounded property and presentation collections.
 - Bound: disclosure adds no lookup or data-dependent traversal to definitions reads. Definitions tests cover valid and invalid release values, compiler annotations, localized descriptions and unsourced input validation in `test/disclosure.test.ts`.
 - Growth check: semantic's public-read check is `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
-

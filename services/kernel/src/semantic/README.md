@@ -167,7 +167,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 ### Private statements
 
 - Touches: one disclosure row per protected candidate, the existing hidden-candidate batch probes, and indexed audience ranges for private page overlays. A private inverse range spans holder partitions, indexed by target and account; its SQL declares that exception. Public background reads always exclude private candidates.
-- Bound: no per-statement read is added. Anonymous pages add no statements or rows; authenticated public pages have a fixed audience-range query returning one aggregate row and no private entries. Disclosure updates one statement and performs its ordinary projection, O(1) plus that projection.
+- Bound: no per-statement read is added. Anonymous pages add no statements or rows; authenticated public pages have a fixed audience-range query returning one aggregate row and no private entries. Disclosure updates one statement and performs its ordinary projection, including registered Context layers, O(1) plus that projection. Existing Context suppressions and replacements retain their pages and counts after disclosure or retraction.
 - Growth check: `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
 
 ### Anchored subject read
