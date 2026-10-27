@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
@@ -74,7 +75,7 @@ test('native entry commands accept active data profiles pin fresh values and rep
   const first = await native.commands.putEntry(writer.actor, subjectId, { state: entryStates.game }, key);
   expect(first.replayed).toBe(false);
   expect(first.value.created).toBe(true);
-  expect(first.value.entry.state).toBe('playing');
+  expect(String(first.value.entry.state)).toBe('playing');
   // Child has structural bases; the pin names only its actual primary type.
   expect(native.original.types['ex:Child']!.bases).toContain('ex:Parent');
   const stored = await fact(subjectId, writer.actor.accountId);
@@ -107,7 +108,7 @@ test('native entry commands accept active data profiles pin fresh values and rep
   expect((await fact(subjectId, writer.actor.accountId)).library_profile_pin).toEqual(stored.library_profile_pin);
   await expect(
     native.commands.putEntry(writer.actor, subjectId, { state: 'unknown_state' }, key),
-  ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
   expect(await native.inspect(writer.actor.accountId)).toEqual(unchanged);
   await native.revokeIdentity(writer.actor.accountId);
   const revoked = await native.inspect(writer.actor.accountId);
@@ -314,6 +315,29 @@ test('native signed scope suspension and credential revocation deny prior receip
     expect(text).not.toContain('planned');
     expect(text).not.toContain(native.originalDigest);
     expect(await native.inspect(actor.accountId)).toEqual(before);
+  }
+});
+
+test('revoking a real native gate grant denies an authorized HTTP receipt before its private body is read', async () => {
+  const who = await native.identity(['subject:read', 'library_entry:update', 'library_entry:read']);
+  const subjectId = await native.createSubject('game');
+  const key = entryKey();
+  const first = await json(await native.send(who.bearer, 'PUT', path(subjectId), { state: 'planned' }, key), 201);
+  await native.grantLibraryGate(who.actor.accountId);
+  await native.setLibraryOpen(false);
+  try {
+    const before = await native.inspect(who.actor.accountId);
+    expect(await json(await native.send(who.bearer, 'PUT', path(subjectId), { state: 'planned' }, key), 201)).toEqual(
+      first,
+    );
+    expect(await native.inspect(who.actor.accountId)).toEqual(before);
+    await native.revokeLibraryGate(who.actor.accountId);
+    const revoked = await native.inspect(who.actor.accountId);
+    const denied = await native.send(who.bearer, 'PUT', path(subjectId), { state: 'planned' }, key);
+    await problem(denied, 403, 'platform_closed');
+    expect(await native.inspect(who.actor.accountId)).toEqual(revoked);
+  } finally {
+    await native.setLibraryOpen(true);
   }
 });
 

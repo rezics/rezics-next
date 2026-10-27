@@ -142,6 +142,9 @@ export async function createProfileEntryFixture() {
       'account:suspend',
       'moderation:hide',
       'subject:read',
+      'exposure:open',
+      'exposure:close',
+      'gate:any',
     ]);
     const owner = await identity(entryScopes);
     const other = await identity(entryScopes);
@@ -214,6 +217,14 @@ export async function createProfileEntryFixture() {
       if (response.status === 404) return null;
       expect(response.status).toBe(200);
       return response.json();
+    }
+    async function setLibraryOpen(open: boolean) {
+      const response = await send(
+        'steward',
+        'POST',
+        `/v1/platform/exposure/personal_library:${open ? 'open' : 'close'}`,
+      );
+      expect(response.status).toBe(200);
     }
     async function publish(release: Release) {
       const before = await readHead();
@@ -292,11 +303,13 @@ export async function createProfileEntryFixture() {
     const originalDigest = await publish(original);
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);
+    await setLibraryOpen(true);
     // A native, authorized baseline must finish before any expected missing profile behavior.
     const baseline = await createSubject('game');
     const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
     expect(accepted.value.entry.subjectId).toBe(baseline);
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
+    expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
     return {
       pool,
@@ -317,6 +330,19 @@ export async function createProfileEntryFixture() {
       activate,
       readHead,
       inspect,
+      setLibraryOpen,
+      async grantLibraryGate(accountId: string) {
+        await grant(global, accountId, ['gate:personal_library']);
+      },
+      async revokeLibraryGate(accountId: string) {
+        await grants.revoke(context(steward.actor), {
+          resource: global,
+          subject: { kind: 'account', id: accountId },
+          actions: ['gate:personal_library'],
+          valid: '(,)',
+          key: entryKey(),
+        });
+      },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
         await createSuspensionCommands({ pool, access, clock: () => new Date() }).suspend(context(steward.actor), {
