@@ -32,6 +32,7 @@ type StatementRecord = {
   readonly background: boolean;
   readonly backend: number | undefined;
   failed: boolean;
+  errorCode: string | null;
   planCount: number;
 };
 type Attribution = {
@@ -195,6 +196,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         background: attribution.background,
         backend: capture.includeBackends ? backendPid(client) : undefined,
         failed: false,
+        errorCode: null,
         planCount: 0,
       };
       capture.statementRecords.push(record);
@@ -216,10 +218,16 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     refreshAttribution();
 
     let completed = false;
-    const done = (failed: boolean, result?: unknown): void => {
+    const done = (failed: boolean, result?: unknown, error?: unknown): void => {
       if (completed) return;
       completed = true;
-      if (record) record.failed = failed;
+      if (record) {
+        record.failed = failed;
+        if (failed) {
+          const code = (error as { code?: unknown } | null)?.code;
+          record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
+        }
+      }
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
       pending.shift();
@@ -238,7 +246,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       let finishCapture: (() => void) | undefined;
       if (attribution) track(new Promise<void>((resolve) => (finishCapture = resolve)));
       const wrapped = (error: unknown, result?: unknown, ...rest: unknown[]): unknown => {
-        done(Boolean(error), result);
+        done(Boolean(error), result, error);
         try {
           return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
         } finally {
@@ -248,7 +256,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       try {
         return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
       } catch (error) {
-        done(true);
+        done(true, undefined, error);
         finishCapture?.();
         throw error;
       }
@@ -257,14 +265,14 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     try {
       outcome = (query as (...values: unknown[]) => unknown)(...args);
     } catch (error) {
-      done(true);
+      done(true, undefined, error);
       throw error;
     }
     if (outcome instanceof Promise) {
       track(
         Promise.resolve(outcome).then(
           (result) => done(false, result),
-          () => done(true),
+          (error: unknown) => done(true, undefined, error),
         ),
       );
     } else if (typeof outcome === 'object' && outcome !== null && 'once' in outcome) {
@@ -276,8 +284,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
               done(false);
               resolve();
             });
-            stream.once!('error', () => {
-              done(true);
+            stream.once!('error', (error: unknown) => {
+              done(true, undefined, error);
               resolve();
             });
           }),
@@ -439,22 +447,20 @@ export async function capture<T>(
     if (operationFailed) throw operationError;
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
-    const foreground = active.statementRecords.filter(
-      ({ background, failed, planCount }) => !background && (!failed || planCount > 0),
-    );
-    const background = active.statementRecords.filter(
-      ({ background, failed, planCount }) => background && (!failed || planCount > 0),
-    );
+    const foreground = active.statementRecords.filter(({ background }) => !background);
+    const background = active.statementRecords.filter(({ background }) => background);
     return {
       value,
       capture: {
         statements: foreground.map(({ text }) => text),
         plans: active.plans,
+        statementErrors: foreground.map(({ errorCode }) => errorCode),
         ...(active.includeBackends
           ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
           : {}),
         backgroundStatements: background.map(({ text }) => text),
         backgroundPlans: active.backgroundPlans,
+        backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
         ...(active.includeBackends
           ? {
               backgroundStatementBackends: background.map(({ backend }) => backend),

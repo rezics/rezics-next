@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import { checkGrowth } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -59,6 +60,88 @@ test('captures each application statement and its executed plan from the product
         'Actual Rows': expect.any(Number),
       },
     });
+});
+
+async function duplicateThenRetry(client: PoolClient): Promise<void> {
+  await client.query('BEGIN');
+  await client.query('SAVEPOINT retry');
+  await expect(client.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)')).rejects.toMatchObject({
+    code: '23505',
+  });
+  await client.query('ROLLBACK TO SAVEPOINT retry');
+  await client.query('DELETE FROM growth_capture_test.lookup WHERE id = 1');
+  await client.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)');
+  await client.query('RELEASE SAVEPOINT retry');
+  await client.query('COMMIT');
+}
+
+test('a failed statement counts as executed work and carries its SQLSTATE', async () => {
+  const database = db!;
+  const result = await capture(database, () => withConnection(database.pool, duplicateThenRetry));
+  const inserts = result.capture.statements.flatMap((text, index) =>
+    text.startsWith('INSERT INTO growth_capture_test.lookup')
+      ? [{ text, error: result.capture.statementErrors?.[index] }]
+      : [],
+  );
+  expect(inserts).toEqual([
+    { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: '23505' },
+    { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: null },
+  ]);
+});
+
+test('a failed background statement counts in the background statements and carries its SQLSTATE', async () => {
+  const database = db!;
+  const pool = database.openPool({ max: 1 });
+  let run!: () => void;
+  let stop!: () => void;
+  const started = new Promise<void>((resolve) => (run = resolve));
+  const finished = new Promise<void>((resolve) => (stop = resolve));
+  const worker = (async () => {
+    await started;
+    await withConnection(pool, duplicateThenRetry);
+    stop();
+  })();
+  const result = await capture(database, async () => {
+    run();
+    await finished;
+  });
+  await worker;
+  const inserts = result.capture.backgroundStatements!.flatMap((text, index) =>
+    text.startsWith('INSERT INTO growth_capture_test.lookup')
+      ? [{ text, error: result.capture.backgroundStatementErrors?.[index] }]
+      : [],
+  );
+  expect(inserts).toEqual([
+    { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: '23505' },
+    { text: 'INSERT INTO growth_capture_test.lookup (id) VALUES (1)', error: null },
+  ]);
+});
+
+test('a growth report lists failed attempts by SQLSTATE at each scale', async () => {
+  const database = db!;
+  const reportCheck = {
+    name: 'duplicate insert retry',
+    scales: [1, 8, 64] as const,
+    repetitions: 1,
+    bounds: { rows: 'constant' as const, blocks: 'constant' as const, statements: 'constant' as const },
+    grow: async () => {},
+    operation: async (_database: GrowthDatabase, scale: number) =>
+      withConnection(database.pool, async (client) => {
+        await client.query('BEGIN');
+        await client.query('SAVEPOINT retry');
+        await expect(client.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)')).rejects.toMatchObject({
+          code: '23505',
+        });
+        await client.query('ROLLBACK TO SAVEPOINT retry');
+        for (let index = 0; index < scale; index++) await client.query('SELECT 1');
+        await client.query('COMMIT');
+      }),
+  };
+  await expect(checkGrowth(database, reportCheck)).rejects.toMatchObject({
+    message: expect.stringContaining(
+      'failed attempts by SQLSTATE at scale: 1 {"23505":1}, 8 {"23505":1}, 64 {"23505":1}',
+    ),
+  });
 });
 
 test('a measuring session pins the planner settings a capture depends on', async () => {

@@ -122,7 +122,12 @@ function appendProfile(report: GrowthReport): void {
       seeding: samples.map(({ seeding }) => seeding),
       bounds,
       repetitions: samples.map(({ repetitions }) =>
-        repetitions.map(({ rows, blocks, statements }) => ({ rows, blocks, statements })),
+        repetitions.map(({ rows, blocks, statements, failedStatements }) => ({
+          rows,
+          blocks,
+          statements,
+          ...(failedStatements === undefined ? {} : { failedStatements }),
+        })),
       ),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
       shadow: Object.fromEntries(
@@ -327,6 +332,10 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   } catch (error) {
     if (error instanceof Error && error.name === 'GrowthBoundError') {
       error.message = `${check.name}: ${error.message}`;
+      const attempts = samples.flatMap(({ scale, cost }) =>
+        cost.failedStatements === undefined ? [] : [`${scale} ${JSON.stringify(cost.failedStatements)}`],
+      );
+      if (attempts.length > 0) error.message += `\nfailed attempts by SQLSTATE at scale: ${attempts.join(', ')}`;
     }
     throw error;
   }

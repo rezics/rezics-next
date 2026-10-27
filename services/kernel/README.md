@@ -268,6 +268,8 @@ are set apart without a bound: Reylo repeats them by time and concurrency, never
 statements are counted apart, with one allowed per distinct non-catalog query text across the measured run; a
 statement that also reads data counts in full.
 
+A statement that fails still counts as a statement, in the operation's or the background count, and its SQLSTATE is recorded in `statementErrors` or `backgroundStatementErrors`; reports list failed attempts by SQLSTATE. PostgreSQL produces no plan for it, so its rows and blocks are not measured; a path that fails statements as part of normal work (a conflict it retries) should use a form that completes, such as `ON CONFLICT`, where its cost must be measured.
+
 Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
 capture runs; workflows started by a schedule and their children, and loops started outside both, are reported as
 background work. Background statement counts follow measured

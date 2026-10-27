@@ -1,11 +1,13 @@
 export type Capture = {
   readonly statements: readonly string[];
   readonly plans: readonly unknown[];
+  readonly statementErrors?: readonly (string | null)[];
   /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
   readonly statementBackends?: readonly (number | undefined)[];
   readonly planBackends?: readonly (number | undefined)[];
   readonly backgroundStatements?: readonly string[];
   readonly backgroundPlans?: readonly unknown[];
+  readonly backgroundStatementErrors?: readonly (string | null)[];
   /** Backend process ID parallel to each background statement and plan, when backends are included. */
   readonly backgroundStatementBackends?: readonly (number | undefined)[];
   readonly backgroundPlanBackends?: readonly (number | undefined)[];
@@ -20,6 +22,7 @@ export type RelationCost = {
 
 export type Cost = {
   readonly statements: number;
+  readonly failedStatements?: Readonly<Record<string, number>>;
   readonly controlStatements: number;
   readonly catalogStatements: number;
   readonly plans: number;
@@ -250,12 +253,18 @@ export function withoutCatalogTexts(
   return {
     statements: statements.map((index) => capture.statements[index]!),
     plans: plans.map((index) => capture.plans[index]!),
+    ...(capture.statementErrors === undefined
+      ? {}
+      : { statementErrors: statements.map((index) => capture.statementErrors![index]!) }),
     ...(capture.statementBackends === undefined
       ? {}
       : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
     ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
     ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
     ...(capture.backgroundPlans === undefined ? {} : { backgroundPlans: capture.backgroundPlans }),
+    ...(capture.backgroundStatementErrors === undefined
+      ? {}
+      : { backgroundStatementErrors: capture.backgroundStatementErrors }),
     ...(capture.backgroundStatementBackends === undefined
       ? {}
       : { backgroundStatementBackends: capture.backgroundStatementBackends }),
@@ -431,8 +440,12 @@ export function costOf(capture: Capture): Cost {
     sharedRead,
     relations: Object.fromEntries(relations),
   };
+  const failedStatements = new Map<string, number>();
+  for (const error of capture.statementErrors ?? [])
+    if (error !== null) failedStatements.set(error, (failedStatements.get(error) ?? 0) + 1);
   return {
     ...cost,
+    ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
     ...(capture.backgroundStatements !== undefined || capture.backgroundPlans !== undefined
       ? {
           backgroundStatements: (capture.backgroundStatements ?? []).length,
@@ -464,8 +477,12 @@ export function medianCost(costs: readonly Cost[]): Cost {
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
     relations: representative.relations,
   };
+  const failedStatements = new Map<string, number>();
+  for (const code of new Set(costs.flatMap((cost) => Object.keys(cost.failedStatements ?? {}))))
+    failedStatements.set(code, lowerMedian(costs.map((cost) => cost.failedStatements?.[code] ?? 0)));
   return {
     ...median,
+    ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
     ...(costs.some((cost) => cost.backgroundStatements !== undefined)
       ? {
           backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements ?? 0)),
