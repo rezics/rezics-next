@@ -49,7 +49,8 @@ export function pageHead(options: PageHeadOptions, context?: HeadContext) {
     typeof options.image === 'string'
       ? { url: options.image, width: 1200, height: 630, alt: title }
       : (options.image ?? { url: '/cards/default.png', width: 1200, height: 630, alt: 'REZICS' });
-  const imageUrl = new URL(image.url, `${origin}/`).href;
+  const imageUrl = new URL(image.url, `${origin}/`);
+  if (imageUrl.origin !== origin) throw new Error('Page head image must use PUBLIC_ORIGIN');
   const meta = [
     { title },
     ...(description === undefined
@@ -63,7 +64,7 @@ export function pageHead(options: PageHeadOptions, context?: HeadContext) {
     { property: 'og:type', content: options.type ?? 'website' },
     { property: 'og:site_name', content: 'REZICS' },
     { property: 'og:locale', content: locale },
-    { property: 'og:image', content: imageUrl },
+    { property: 'og:image', content: imageUrl.href },
     { property: 'og:image:width', content: String(image.width) },
     { property: 'og:image:height', content: String(image.height) },
     { property: 'og:image:alt', content: image.alt },
