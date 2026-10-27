@@ -16,7 +16,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
-import { authoritativeTimeValue } from '../../src/command/command.ts';
+import { authoritativeTimeValue, mintReadTime, runCommand } from '../../src/command/command.ts';
 import { accessCommandAttempt, commandAccessContext } from '../../src/access/command-admission.ts';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -41,17 +41,16 @@ import { workerTestEnv } from '../support/worker-env.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { banAccount } from '../../src/community/ban.ts';
+import { grantGroupRole } from '../../src/access/resource-group-grant.ts';
 import { readErasureInitiator } from '../../src/content/erasure-initiator.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
 import { communityWorkModule } from '../../src/community/work.ts';
 import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
-import { mintReadTime } from '../../src/command/command.ts';
 import { readPost } from '../../src/content/reads.ts';
 import { readMembershipWorkConfig } from '../../src/access/membership-work-config.ts';
 import { readOperation } from '../../src/content/operations.ts';
 import { withConnection } from '../../src/database/pool.ts';
-import type { AccountActor, Resource } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type AccountActor, type Resource } from '../../src/request/access.ts';
 import type { PublicGrantSubject } from '../../src/access/grant-subject.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
 import {
@@ -454,6 +453,60 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         });
         const grants = createGrantCommands({ pool, access: native.system.access, managementAction: 'access:grant' });
         const authorContext = () => ({ pool, actor: authorActor, deadline: Date.now() + 120_000 });
+        const addRealmRole = async (resource: Resource, realmId: string) => {
+          const context = authorContext();
+          const authorization = await accessCommandAuthorization(
+            native.system.access,
+            authorActor,
+            'access:grant',
+            resource,
+            context,
+            () => new Error('Native resource grant denied'),
+          );
+          await runCommand(
+            pool,
+            {
+              partition: partitionOf(resource.route),
+              deadline: context.deadline,
+              basis: {
+                actorAccountId: authorActor.accountId,
+                clientId: authorActor.clientId,
+                requestedBy: authorActor.requestedBy,
+              },
+              authorization,
+            },
+            async (tx) => {
+              await grantGroupRole(tx, {
+                resource,
+                principal: { kind: 'realm', id: realmId },
+                role: 'member',
+                resourceRole: 'content.post.owner',
+              });
+              return {
+                value: {
+                  resource,
+                  principal: { kind: 'realm', id: realmId },
+                  role: 'member',
+                  resourceRole: 'content.post.owner',
+                },
+                events: [
+                  {
+                    type: 'com.rezics.fixture.created.v1',
+                    subject: resource.id,
+                    data: {
+                      realmGroupRole: {
+                        resource,
+                        realmId,
+                        role: 'member',
+                        resourceRole: 'content.post.owner',
+                      },
+                    },
+                  },
+                ],
+              };
+            },
+          );
+        };
         const governanceActor = await freshGovernanceActor(Date.now() + 120_000);
         const governanceContext = () => ({ pool, actor: governanceActor, deadline: Date.now() + 120_000 });
         let organizationOwner = await lifecycleAccess.authenticate(native.system.actors.other.bearer, {
@@ -559,20 +612,14 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           const joined = await request(native, 'author', 'POST', `/v1/realms/${realmId}/membership`, {});
           if (joined.status !== 202) throw new Error(`Native Realm join returned ${joined.status}`);
           await until(async () => {
-            const membership = await pool.query(
+            const row = await pool.query(
               'SELECT 1 FROM community.realm_member WHERE realm_id=$1 AND account_id=$2 AND upper_inf(valid)',
               [realmId, actorId],
             );
-            return membership.rowCount ? true : undefined;
+            return row.rowCount ? true : undefined;
           });
           await inNativeGrantBatches(posts, async (id) => {
-            await grants.createRole(authorContext(), {
-              resource: { route: board.route, id },
-              subject: { kind: 'realm', id: realmId, role: 'member' } as never,
-              role: 'content.post.owner',
-              valid: '(,)',
-              key: randomUUID(),
-            });
+            await addRealmRole({ route: board.route, id }, realmId);
           });
         }
         // Group membership fixtures must not inherit the creator's direct role;
@@ -1284,20 +1331,15 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             clientId: native.system.auth.ordinaryClient.id,
             scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
           });
-          const owner = await native.system.access.authenticate(ownerCredential.bearer, { pool, deadline });
-          const outcome = await banAccount(
-            {
-              pool,
-              access: native.system.access,
-              routeKey: native.system.routeKey,
-              clock: () => new Date(),
-              tokens: native.system.tokenKeys,
-              workClient: async () => client!,
-            },
-            owner,
-            { realmId, accountId: fixture.tuple.actor, reason: 'Durable initiator test ban' },
-            { idempotencyKey: randomUUID(), deadline },
+          native.updateBearer('unrelated', ownerCredential.bearer);
+          const response = await request(
+            native,
+            'unrelated',
+            'PUT',
+            `/v1/realms/${realmId}/bans/${fixture.tuple.actor}`,
+            { reason: 'Durable initiator test ban' },
           );
+          if (response.status !== 200) throw new Error(`Native Realm ban returned ${response.status}`);
           await until(async () => {
             const current = await pool.query(
               'SELECT 1 FROM community.realm_member WHERE realm_id=$1 AND account_id=$2 AND upper_inf(valid)',
@@ -1305,7 +1347,13 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             );
             return current.rowCount ? undefined : true;
           });
-          return changedAt(outcome.transactionId);
+          const ban = await pool.query<{ transaction_id: string }>(
+            `SELECT transaction_id FROM community.realm_ban
+             WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND upper_inf(valid)`,
+            [routeOf(realmId), realmId, fixture.tuple.actor],
+          );
+          if (!ban.rows[0]) throw new Error('Native Realm ban has no committed transition');
+          return changedAt(ban.rows[0].transaction_id);
         }
 
         if (mutation.startsWith('consent-')) {
