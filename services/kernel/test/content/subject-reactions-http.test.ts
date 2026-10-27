@@ -16,7 +16,7 @@ import { observeSql } from './support/sql-observer.ts';
 
 const routeKey = new Uint8Array(32).fill(71);
 const subjectKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
-const accountRoute = 0x7731;
+const accountRoute = 0x7131;
 const batchRoutes = [0x4200, 0x4220, 0x4240, 0x4260] as const;
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
@@ -148,13 +148,16 @@ async function merge(source: string, survivor: string): Promise<void> {
 
 test('subject reaction HTTP routes are mounted with the thread write contract', () => {
   const writes = kernel.routes.filter((route) => route.path === '/v1/subjects/:id/reaction');
-  expect(writes.map(({ method }) => method.toUpperCase()).sort()).toEqual(['DELETE', 'PUT']);
+  expect(writes.map(({ method }) => method.toUpperCase()).sort()).toEqual(['DELETE', 'GET', 'PUT']);
   const document = openApiDocument(kernel);
   const subjectOperations = document.paths['/v1/subjects/{id}/reaction'];
   const subjectRead = document.paths['/v1/subjects/{id}/reactions'];
   const threadOperations = document.paths['/v1/threads/{id}/reaction'];
   expect(subjectOperations?.put?.operationId).toBe('subject.set_reaction');
   expect(subjectOperations?.delete?.operationId).toBe('subject.clear_reaction');
+  expect(subjectOperations?.get?.operationId).toBe('subject.get_own_reaction');
+  expect(subjectOperations?.get?.responses).toHaveProperty('308');
+  expect(subjectOperations?.get?.['x-exposure']).toBe('public');
   expect(subjectRead?.get?.operationId).toBe('subject.reactions');
   expect(subjectRead?.get?.responses).toHaveProperty('200');
   expect(subjectRead?.get?.responses).toHaveProperty('308');
@@ -180,9 +183,13 @@ test('an account sets, changes and clears one subject reaction using strict JSON
   expect(replay.value).toEqual({ kind: 'like' });
   expect(await fixture.effects()).toEqual(afterFirst);
 
+  expect((await call('GET', path, { bearer })).value).toEqual({ kind: 'like' });
+  expect((await call('GET', path)).response.status).toBe(401);
+
   const changed = await call('PUT', path, { bearer, body: { kind: 'love' }, key: 'subject-love' });
   expect(changed.response.status).toBe(200);
   expect(changed.value).toEqual({ kind: 'love' });
+  expect((await call('GET', path, { bearer })).value).toEqual({ kind: 'love' });
   const slot = await fixture.db.admin.query<{ kind: string }>(
     `SELECT kind FROM content.reaction WHERE route=$1 AND actor_account_id=$2 AND target_id=$3`,
     [fixture.home, fixture.accountId, id],
@@ -212,10 +219,11 @@ test('an account sets, changes and clears one subject reaction using strict JSON
     [fixture.home, fixture.accountId, id],
   );
   expect(empty.rows).toHaveLength(0);
+  expect((await call('GET', path, { bearer })).value).toEqual({ kind: null });
   expect(cleared.response.headers.get(SESSION_HEADER)).toBeTruthy();
 });
 
-test('subject reaction reads return all five relayed counts and the caller slot, while concealing unreadable ids', async () => {
+test('subject reaction reads return relayed counts and the own slot separately, while concealing unreadable ids', async () => {
   const id = await subject('Subject reaction reads');
   await setTotals([id], 0);
   await fixture.db.admin.query(
@@ -233,27 +241,32 @@ test('subject reaction reads return all five relayed counts and the caller slot,
   const anonymous = await call('GET', reactionsPath(id));
   await anonymousTrace.close();
   expect(anonymous.response.status).toBe(200);
-  expect(anonymous.value).toEqual({
-    counts: { like: 3, love: 2, laugh: 0, insightful: 0, sad: 0 },
-    viewer: null,
-  });
-  expect(anonymous.response.headers.get(SESSION_HEADER)).toBeTruthy();
+  expect(anonymous.value?.counts).toEqual([
+    { kind: 'like', count: 3 },
+    { kind: 'love', count: 2 },
+  ]);
+  expect(anonymous.value).not.toHaveProperty('viewer');
+  expect(anonymous.value).toHaveProperty('watermark');
+
+  const countsTrace = observeSql(fixture.db.pool);
+  const ownCounts = await call('GET', reactionsPath(id), { bearer: fixture.bearer() });
+  await countsTrace.close();
+  expect(ownCounts.response.status).toBe(200);
+  expect(ownCounts.value?.counts).toEqual(anonymous.value?.counts);
+  expect(ownCounts.value).not.toHaveProperty('viewer');
+  expect(countsTrace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(1);
+  expect(countsTrace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(0);
+  expect(
+    countsTrace.records.find((record) => /\bcontent\.reaction_total\b/.test(record.statement))?.parameters.includes(id),
+  ).toBe(true);
 
   const ownTrace = observeSql(fixture.db.pool);
-  const own = await call('GET', reactionsPath(id), { bearer: fixture.bearer() });
+  const own = await call('GET', reactionPath(id), { bearer: fixture.bearer() });
   await ownTrace.close();
   expect(own.response.status).toBe(200);
-  expect(own.value).toEqual({
-    counts: { like: 3, love: 2, laugh: 0, insightful: 0, sad: 0 },
-    viewer: 'insightful',
-  });
-  expect(ownTrace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(1);
+  expect(own.value).toEqual({ kind: 'insightful' });
+  expect(ownTrace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(0);
   expect(ownTrace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(1);
-  expect(
-    ownTrace.records
-      .find((record) => /\bcontent\.reaction_total\b/.test(record.statement))
-      ?.parameters.some((parameter) => Array.isArray(parameter) && parameter.includes(id)),
-  ).toBe(true);
   expect(
     ownTrace.records
       .find((record) => /\bcontent\.reaction\b/.test(record.statement))
@@ -262,6 +275,9 @@ test('subject reaction reads return all five relayed counts and the caller slot,
 
   const unknown = await call('GET', reactionsPath(newId(fixture.targetRoute)));
   expect(unknown.response.status).toBe(404);
+  expect(
+    (await call('GET', reactionPath(newId(fixture.targetRoute)), { bearer: fixture.bearer() })).response.status,
+  ).toBe(404);
   const hidden = await subject('Unreadable subject', false);
   await fixture.db.admin.query(
     `UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2`,
@@ -269,9 +285,10 @@ test('subject reaction reads return all five relayed counts and the caller slot,
   );
   const unreadable = await call('GET', reactionsPath(hidden));
   expect(unreadable.response.status).toBe(404);
+  expect((await call('GET', reactionPath(hidden), { bearer: fixture.bearer() })).response.status).toBe(404);
 });
 
-test('a merged subject reaction read redirects to the surviving subject', async () => {
+test('both subject reaction reads redirect a merged id to the surviving subject', async () => {
   const first = await subject('Merged subject one', false);
   const second = await subject('Merged subject two', false);
   await merge(first, second);
@@ -282,6 +299,11 @@ test('a merged subject reaction read redirects to the surviving subject', async 
   expect(result.response.status).toBe(308);
   expect(result.response.headers.get('location')).toBe(reactionsPath(survivor));
   expect(result.value).toEqual({ redirect: { from: redirected, to: survivor } });
+
+  const own = await call('GET', reactionPath(redirected), { bearer: fixture.bearer() });
+  expect(own.response.status).toBe(308);
+  expect(own.response.headers.get('location')).toBe(reactionPath(survivor));
+  expect(own.value).toEqual({ redirect: { from: redirected, to: survivor } });
 });
 
 test('subject reaction read', async () => {
@@ -307,7 +329,7 @@ test('subject reaction read', async () => {
     async operation(_database, scale) {
       const result = await call('GET', reactionsPath(target), { bearer: fixture.bearer() });
       expect(result.response.status).toBe(200);
-      expect(result.value?.counts.like).toBe(scale);
+      expect(result.value?.counts).toContainEqual({ kind: 'like', count: scale });
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
@@ -322,6 +344,60 @@ test('subject reaction read', async () => {
     report.samples[0]!.cost.statements,
   ]);
   expect(report.samples[2]!.cost.relations['content.reaction_total']?.rows).toBeLessThanOrEqual(5);
+});
+
+test('subject own reaction read', async () => {
+  const target = await subject('Subject own reaction read growth');
+  const spare = await subject('Subject own reaction read warmup', false);
+  const actors = Array.from({ length: 4096 }, () => newId(accountRoute));
+  await fixture.db.admin.query(
+    `INSERT INTO content.reaction(route,actor_account_id,target_kind,target_route,target_id,kind,updated_at)
+     VALUES ($1,$2,'subject',$3,$4,'sad',now())`,
+    [fixture.home, fixture.accountId, routeOf(target), target],
+  );
+
+  const report = await checkGrowth(fixture.db, {
+    name: 'subject own reaction read',
+    scales: [64, 512, 4096],
+    repetitions: 1,
+    warmups: 1,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(_database, scale, previous) {
+      await seedReactors([target], actors, previous, scale);
+      await fixture.db.admin.query(
+        `INSERT INTO content.reaction(route,actor_account_id,target_kind,target_route,target_id,kind,updated_at)
+         SELECT $1,actor_id,'subject',$2,$3,'like',now()
+         FROM unnest($4::uuid[]) AS reactors(actor_id)
+         ON CONFLICT (route,actor_account_id,target_id) DO UPDATE SET kind=EXCLUDED.kind`,
+        [accountRoute, routeOf(target), target, actors.slice(previous, scale)],
+      );
+    },
+    async warmup() {
+      const result = await call('GET', reactionPath(spare), { bearer: fixture.bearer() });
+      expect(result.response.status).toBe(200);
+    },
+    async operation(_database, scale) {
+      const trace = observeSql(fixture.db.pool);
+      const result = await call('GET', reactionPath(target), { bearer: fixture.bearer() });
+      await trace.close();
+      expect(result.response.status).toBe(200);
+      expect(result.value).toEqual({ kind: 'sad' });
+      expect(trace.records.filter((record) => /\bcontent\.reaction\b/.test(record.statement))).toHaveLength(1);
+      expect(trace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(0);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+    report.samples[0]!.cost.rows,
+  ]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+    report.samples[0]!.cost.statements,
+  ]);
+  expect(report.samples[2]!.cost.relations['content.reaction']?.rows).toBeLessThanOrEqual(1);
 });
 
 test('batched subject reaction counts', async () => {
@@ -350,8 +426,7 @@ test('batched subject reaction counts', async () => {
       const counts = await readSubjectReactionCounts({ pool: fixture.db.pool }, ids);
       await trace.close();
       expect(counts.size).toBe(100);
-      for (const count of counts.values())
-        expect(count).toEqual({ like: scale, love: 0, laugh: 0, insightful: 0, sad: 0 });
+      for (const count of counts.values()) expect(count).toEqual([{ kind: 'like', count: scale }]);
       expect(trace.records.filter((record) => /\bcontent\.reaction_total\b/.test(record.statement))).toHaveLength(4);
     },
   });
