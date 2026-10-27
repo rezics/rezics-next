@@ -163,9 +163,9 @@ means witness-start null, distinct from a nil UUID in phase2. Empty sourceAfter 
 `aliasAfter` retains the actual original under evaluation: resume that original FIRST with current identity/source
 checks, then resume the alias group strictly after it only once settled. No ninth position field or nested token.
 
-Fixed-home identity basis work is separately charged once per preparation, continuation and final phase: each
-pays two4096-home sweeps (8192 metadata rows plus core observations), never a per-subject free sweep or hidden leaf
-usage. Physical captures must identify actual operation phases when measuring these separately; no statement
+Fixed-home identity basis work is separately charged at preparation, continuation and final phases: each
+basis read pays two4096-home sweeps (8192 metadata rows plus core observations), never a per-subject free sweep or
+hidden leaf usage. The canonical coverage reader below additionally charges its bracketing reads and home comparisons. Physical captures must identify actual operation phases when measuring these separately; no statement
 exclusion or slack change may disguise the work. Actual producer/composition positives remain separate red
 acceptance until native exports, shared leaf matching/Boolean extraction and identity composition land.
 
@@ -711,3 +711,178 @@ Search hits, item facts, facet values and suggestions use the same label choice.
 - Touches: the labels, descriptions and `schema:inLanguage` fact of subjects the final check already holds.
 - Bound: no read, statement or engine request added; per returned subject, work linear in R ranges (at most 8) times its labels and descriptions.
 - Growth check: none; no read changes. `test/search/facet-counts.test.ts`: "facet value labels follow the reader's language chain" and `test/search/service.test.ts`: "typeahead labels follow the reader's language chain" prove the choice.
+
+## Canonical index coverage producer
+
+Status: adopted specification with unavailable stubs in `coverage.ts` and staged native acceptance in
+`test/search/canonical-coverage.test.ts`. Formatting acceptance does not establish native runtime delivery.
+The existing source, indexer, lifecycle and default worker have not acquired this protocol through these types.
+The original raw-prefix and scope admission tests remain unchanged. Search owns derived per-home coverage,
+apply attempts and physical lineage; Semantic's current generation/pending/obligations remain the sole identity
+owner. No identity SQL, permission engine, query engine or new native public signature is introduced.
+
+A certificate means this physical index's stored original IDs are canonical under a real native structural
+basis. It does not promise current visibility, complete ordinary recall or current matching facts. A legally
+indexed B can remain a raw hit after an ordinary hide; current disclosure rejects it. Ordinary partition
+positions witness catch-up only and never enter structural equality or the identity digest. A newer source
+snapshot does not prove that the consumer visited all earlier structural anchor events.
+
+### API and current schema
+
+The independent Search exports are `initializeSubjectIncarnation(options, generation)`,
+`createSubjectProjectionCoordinator(options)`, `readSubjectCoverage(options, { deadline })` and
+`activateSubjectIncarnation(options, incarnation)` and `retireSubjectIncarnation(options, incarnation)`. Coordinator methods are `run(incarnation, partition)`,
+`populate(incarnation)` and `certify(incarnation, { deadline })`. They accept actual pool/engine/source/listing
+composition, never ready callbacks, supplied certificates, source bodies or invented checkpoint outcomes.
+The stub throws `index_not_ready`; implementations may return `not_ready` only after actual observations.
+The reader performs no population, replay, worker drain or raw search.
+
+The storage slice implements two current-row tables and one bounded prefix allocator, without identity-table writes:
+
+- `search.index_prefix_control`: primary key `(prefix)`; monotonic `revision` and `issued_generation`, matching
+  `CoveragePrefixControl`. Allocate only strictly increasing safe-integer generation numbers; retain this one
+  fence when retired generation rows are reclaimed. No per-retired-name history is needed.
+- `search.index_incarnation`: primary key `(consumer, index_uuid)`, unique live `(prefix, generation)`;
+  `index_name`, `protocol`, monotonic `revision`, `state`, `origin`, `population_partition`,
+  `population_after`, `population_complete`. These are the fields of `IndexIncarnation` and
+  `PopulationLineage`. The partition/keyset frontier is singular, bounded and durable.
+- `search.index_home_coverage`: primary key `(partition_no, consumer, index_uuid)`; monotonic `revision`,
+  nullable `current`, `fence`, `verified`, `covered_through`, `attempt`, with fixed shapes matching
+  `HomeCoverage`. Add consumer/incarnation-leading retirement access. Tuple fields use bounded JSON objects;
+  bigint fields encode canonical nonnegative decimal strings, with validated shapes and no arrays/history.
+  Physical UUID/protocol are joined from the lifecycle row, never guessed from names or engine hits.
+
+One current attempt occupies the home row. Competing writers return busy or wait without enrolling another
+attempt; there is no persistent queue/history of attempts. Attempt identity is a UUID. Store its original
+checkpoint range, actual observed source tuple, visible/ambiguous/completed outcome and checkpoint
+pending/advanced/lost/stopped result. Native pending is checked live and is never cached as permission to publish.
+Missing epoch/home/tuple/fence/provenance is unavailable, never zero or self. At most 4096 rows per live physical
+generation and three live generations are admitted per prefix: 12,288 home rows plus bounded lifecycle control.
+No actor, record, subject, filter or historical basis rows are retained. A single monotonic allocation fence per
+prefix prevents generation/name reuse after retired rows are reclaimed; it is bounded control, not a tombstone
+per historical generation.
+
+### Event fence and producer state machine
+
+Semantic owns `SUBJECT_IDENTITY_CHANGED` in `semantic/events.ts`, with type
+`com.rezics.subject.identity.changed.v1`. Its subject is the actual changed original in its own home;
+closed data is ONLY `{ generation: string }`, matching `^(0|[1-9][0-9]*)$`. The generation is the actual
+`recordIdentityMutation` obligation version. Redirect insertion/removal/repoint, generation/pending and this
+event commit in the same command transaction. Envelope epoch/position is the committed structural fence.
+Merge, verify, unverify, removal and inherited repoint emit on actual mutations; no-op, receipt replay and
+rollback emit none. Existing events remain. Schema registration is part of that native producer's delivery.
+Search selects the original by this event's actual route/type, not by a survivor or `data.subjects` in link events.
+No Number conversion or new native position API is needed.
+
+1. Initialization creates a genuinely new physical name, reads its actual engine UUID, binds protocol and fresh
+   consumer lineage, and establishes controlled writers before any source snapshot/HTTP. An already-existing
+   index is not known empty, even with zero documents. Unknown old instances stay unavailable until complete
+   retained replay or bounded source/index audit establishes missing AND extra key coverage. Equal counts are
+   diagnostic only. Population completeness records its actual creation-log/retention boundary and advancing
+   frontier; a gap stops progress. Imported anchors without complete creation provenance require audit.
+2. `run` enrolls a durable home attempt conditionally on the live incarnation/revision BEFORE obtaining source
+   snapshots or sending HTTP. A shared database guard serializes all participating processes, helpers and workers.
+   Transactions are short; no database client, transaction or lock-holding connection spans external I/O.
+   Native source home/epoch/generation are observed around the actual snapshot; changes require retry/unavailability,
+   never stamping the newer tuple on an earlier batch. Every selected original is still checked natively.
+3. Use the existing event runtime and document producer. Deduplicate actual event anchors; split source reads into
+   at most 256 IDs, respecting the source's unchanged cap. All chunk actions must become refresh-visible before
+   checkpoint completion. Preserve the 64-envelope cap and core `projectBatch` protocol. Enrollment and checkpoint
+   outcome must be integrated around that existing runtime; no second worker or hand-written forced checkpoint.
+   A 409 alone is insufficient: verify visibility of the superseding winner by a checked physical refresh before
+   completing the attempt. Validate refresh shard completion and all bulk item outcomes, including missing deletes.
+4. On confirmed visible work, record actual checkpoint CAS outcome, including CAS loss. CAS loss cannot erase an
+   external effect. An ambiguous request keeps its attempt unresolved. No elapsed timeout, lease, dead process or
+   checkpoint successor certifies completion. Same-tuple ordinary work may preserve an existing verified tuple;
+   older/unknown-source work blocks new certification until genuinely resolved. A verified tuple cannot coexist
+   with an unresolved write that may restore an older structural original beyond delete retention.
+5. Certification obtains a real ready `readIdentityBasis` before and after capturing all native home tuples through
+   existing `readIdentityHome`, each on a released same-client RR snapshot with the exact core position observation.
+   These frozen catch-up barriers include committed structural events; known event generations must agree with
+   their committed fences, not just a recent snapshot head. Catch up through every required fence/barrier using
+   complete population/event provenance. Then independently revalidate the full basis, live UUID/protocol, all
+   native pending/home/epoch checks and absence of dangerous attempts before conditional promotion. Reuse matching
+   home evidence despite ordinary lag. This conservative three-basis-read capture uses unchanged native ports;
+   no duplicate digest implementation or unreviewed native vector-returning handoff.
+6. Activation independently checks certified coverage, exact UUID/protocol and live lifecycle revision before
+   switching the actual alias. It cannot activate an incomplete population or a quarantined/retired target.
+   Readers bracket all 4096 coverage-row observations with two actual full native basis reads. Between them,
+   read each actual native home tuple through the unchanged home port and compare it with the verified row,
+   including native pending/epoch/home. Equal ready bracketing bases and the physical incarnation are required.
+   Preparation, continuation, engine-result bracketing and final use perform the required independent rechecks,
+   including zero hits. Structural or alias/UUID change restarts a prepared traversal; pending/unavailable evidence
+   fails readiness. No post-fetch canonical rewrite, reorder, drop-to-repair or per-candidate global sweep.
+7. Quarantine ambiguous old targets; recovery creates a fresh controlled generation and completes real population.
+   Retirement conditionally fences enrollment/publication before draining confirmed writes and deleting the engine
+   index plus bounded coverage/checkpoint rows. Late completion cannot recreate retired control. Names of unresolved
+   targets are never reused; automatic index creation must be disabled for those write targets and verified in
+   deployment acceptance. Physical UUID checking alone does not prevent a late name-targeted write. This protocol
+   introduces neither permanent public tombstone documents nor a silent change to external-version deletes.
+
+### Helper setup and implementation slices
+
+The existing raw-prefix setup's direct `client.bulk(documentActions(...))` has no coverage provenance. The concrete
+replacement setup, for the later fixture-composition slice, is: create A/B/C with real commands; call
+`initializeSubjectIncarnation`; repeatedly call the shared coordinator's bounded `populate`; obtain real `certify`
+ready; call `activateSubjectIncarnation` and install the existing templates; capture genuine raw hits; pause this
+producer; THEN hide B. All original assertions, lookahead/reservations, sort and matched data remain. The empty
+fixture also uses real initialization and population before pinning. Arbitrary bulk writes never acquire lineage
+retroactively. Prepare does not replay or drain B. This task leaves those existing tests untouched.
+
+Implementation is split into bounded subsequent slices:
+
+- Coverage storage: the current tables and prefix allocation fence, typed point SQL, CAS enrollment/promotion/retirement and bounded cleanup.
+- Actual producer: shared coordinator around indexer source/bulk/checkpoint phases; integrate `runner.ts`,
+  `work.ts` and actual helper population, with no second event consumer implementation.
+- Lifecycle: `indices.ts`, `generations.ts` and retirement establish UUID/protocol, explicit replay/audit completion,
+  activation, restart and fresh-target recovery. Counts do not certify.
+- Scope composition: certificate reader, charged actual native basis checks and shared pinned engine dispatch.
+  Existing native identity/alias/terminal/sealed-original signatures stay unchanged. A genuinely new internal/native
+  handoff must first be proposed to the manager; none is required by this unchanged-port capture.
+
+The staged native tests use migrated DB, real commands/Access/source/engine before checking any missing capability.
+They require helper AND actual default-worker certificates, ordinary hidden raw B, structural lag, larger-survivor
+merge/repoint, reversal events/replay, unknown UUID, source cap, concurrent writes, ambiguous timeout/recovery and
+retirement/restart. They are red specifications, not evidence those prerequisites have landed. This base lacks
+native identity-basis/maintenance modules and the agreed event export/schema; Search must not patch them by hand.
+
+Focused additional executable acceptance belongs at `test/search/coverage-writers.test.ts` (409 before winner
+refresh, all >256-ID chunks, old live write after real tombstone pruning, two actual worker processes and ambiguous
+process exit), `test/search/coverage-lifecycle.test.ts` (known-empty DB, equal-count wrong-key audit, log gaps,
+UUID/name reuse, late publication/retirement, home/epoch move), `test/search/growth-coverage.test.ts` (measured
+native and storage work), and `test/semantic/identity-invalidation.test.ts` (atomic generation/route/schema,
+rollback/no-op/replay and every actual writer). These slices exceed the four-file specification scope. The staged
+short-retention schedule is a guard regression; final acceptance must force real engine tombstone pruning rather
+than treat a short sleep as proof. Default-worker A/B/C certification is independently required even after helper
+composition passes. Original frozen assertions and the existing thirteen plus six cases remain untouched.
+
+### Cost: canonical coverage observation
+
+- Touches: at each required prepare, continuation, engine-result bracket and final observation, one actual native
+  basis read costs **8192 metadata observations plus core epoch/home observations**; charge rows, points, statements,
+  transaction controls, empty/unavailable seeks, blocks and bytes. Separately charge 4096 coverage points, physical
+  UUID/alias/protocol/control reads and response bytes. The reader brackets with two full basis reads
+  (16,384 metadata observations plus core), and its unchanged-port comparison adds 4096 native home/core
+  observations. No free vector hidden behind a digest.
+- Bound: fixed-home O(4096) per independent observation plus indexed lookup depth, independent of candidates or
+  unrelated subject history. Conservative cold certification reads three full bases (24,576 metadata observations
+  plus core), an additional 4096 home/core-position capture, and up to 4096 checkpoint/coverage points per poll.
+  Publication is separately bounded home work. Polling may repeat indefinitely under perpetual structural change.
+- Growth check: `test/search/growth-coverage.test.ts` must measure all these axes at prepare, continuation and final,
+  including zero-hit/error/empty seeks, while growing unrelated subjects/history and ordinary lag independently.
+  Constant returned candidates are not evidence of constant native I/O.
+
+### Cost: coverage writes and lifecycle
+
+- Touches: each real attempt performs enrollment, native source observations, bounded source chunks, actual bulk
+  and refresh, checkpoint CAS outcome and conditional completion/promotion. Charge checkpoint, incarnation and
+  attempt reads/writes separately, including failed/CAS-lost/ambiguous attempts. Source payload/history and physical
+  engine work retain their existing costs.
+- Bound: O(event anchors + payload + engine writes) per apply, source chunks at most 256 and batches at most 64
+  envelopes; current storage O(4096 × live generations), at most 12,288 rows plus bounded lifecycle control.
+  Replay/audit is O(retained log + source/index population) total in bounded steps. Retirement removes at most
+  4096 home and checkpoint rows per generation; physical deletion/refresh is not constant work. A raw window's
+  quota plus one bounds fetched keys only, not postings, sort work, latency or source history.
+- Growth check: `test/search/coverage-writers.test.ts`, `test/search/coverage-lifecycle.test.ts` and
+  `test/search/growth-coverage.test.ts` must independently grow actual changed anchors, source history, extra-index
+  population, ordinary backlog and one through three generations, with fixed source chunk and candidate allowance.
