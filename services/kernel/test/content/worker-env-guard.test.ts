@@ -20,7 +20,7 @@ const workerSpawners = ['content', 'community'].flatMap((area) => {
     .filter((file) => spawnsKernelWorker(readFileSync(file, 'utf8')));
 });
 
-test('content and community child workers use the shared worker environment', () => {
+test('every content and community test that spawns src/worker.ts builds the child env with workerTestEnv', () => {
   const missing = workerSpawners
     .filter((file) => !readFileSync(file, 'utf8').includes('workerTestEnv('))
     .map((file) => relative(testRoot, file).split('\\').join('/'))
