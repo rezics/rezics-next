@@ -409,6 +409,8 @@ test('author pages conceal protected Realms, drafts, takedowns and erasure with 
         );
     }
     const visible = await fixture(author, '2026-10-20T00:00:00Z', 'discussion', reply);
+    // Grow what accumulates in production while keeping this author's four-limit page fixed.
+    await seed(db, otherAuthorItems(reply, randomUUID().slice(0, 6)), { from: 0, to: 500 * 64 });
     for (const token of [undefined, bearer]) {
       const measured = await capture(db, () => get(path(author, list, { limit: '1' }), token));
       expect(measured.value.status).toBe(200);
