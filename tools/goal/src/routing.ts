@@ -43,8 +43,10 @@ export function retryFallbacks(table: RoutingTable, taskClass: TaskClass): Profi
 }
 export function classifyTask(brief: Brief): TaskClass {
   if (brief.kind === 'mechanical') return 'mechanical';
+  // Research cites sources by nature; it keeps its own route (web search, the research model) instead of becoming a claim.
+  if (brief.kind === 'research') return 'research';
   if (brief.riskAreas.length || brief.citesSources || brief.hostileInput || brief.kind === 'claim') return 'claim';
-  if (brief.kind === 'specification' || brief.kind === 'research') return brief.kind;
+  if (brief.kind === 'specification') return brief.kind;
   if (brief.criticalPath && brief.waiting.length && brief.inseparable) return 'critical-path';
   if (brief.kind === 'interface' || brief.kind === 'bulk-text') return brief.kind;
   if (!brief.acceptance.failing || brief.estimate.lines > 400 || brief.estimate.files > 8)
