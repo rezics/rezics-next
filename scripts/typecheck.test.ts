@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
 import { prepareCompilerDatabase } from './compiler-database.ts';
-import { typecheck, type StartedDatabase } from './typecheck.ts';
+import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'rezics-typecheck-'));
@@ -168,8 +168,10 @@ const url = process.env.DATABASE_URL ?? '';
 if (!url) process.exit(1);
 await Bun.write('database-url', url);
 `;
-    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', { 'record.ts': recordDatabase });
-    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', { 'record.ts': recordDatabase });
+    // Kernel and Auth type .sql imports through content mappers, which read the compiler database.
+    const mapped = '{ "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }] }\n';
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', { 'record.ts': recordDatabase, 'tsconfig.json': mapped });
+    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', { 'record.ts': recordDatabase, 'tsconfig.json': mapped });
     writeWorkspace(root, 'packages/client', '@fixture/client', undefined, { 'tsconfig.json': '{ "files": [] }\n' });
     const output = collector();
 
@@ -286,4 +288,21 @@ test('a workspace without a check script fails the run, because the root gate re
   } finally {
     remove();
   }
+});
+
+test('a change checks the workspaces containing it and their dependents; a root file checks all', () => {
+  const root = '/repo';
+  const workspaces = [
+    { name: '@x/client', directory: '/repo/packages/client', dependencies: [] },
+    { name: '@x/ui', directory: '/repo/packages/ui', dependencies: [] },
+    { name: '@x/web', directory: '/repo/apps/web', dependencies: ['@x/client', '@x/ui'] },
+    { name: '@x/kernel', directory: '/repo/services/kernel', dependencies: [] },
+  ];
+  const names = (changed: string[] | undefined) => affectedWorkspaces(root, workspaces, changed).map((w) => w.name);
+  expect(names(['apps/web/src/a.ts'])).toEqual(['@x/web']);
+  expect(names(['packages/ui/src/b.tsx', 'docs/x.md'])).toEqual(['@x/ui', '@x/web']);
+  expect(names(['services/kernel/src/c.ts'])).toEqual(['@x/kernel']);
+  expect(names(['apps/web/README.md'])).toEqual([]);
+  expect(names(['bun.lock'])).toHaveLength(4);
+  expect(names(undefined)).toHaveLength(4);
 });
