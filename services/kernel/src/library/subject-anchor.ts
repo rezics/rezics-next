@@ -6,7 +6,8 @@ import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubject } from '../semantic/subject.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import readSubject from '../semantic/read-subject.sql';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 const MAX_SUBJECT_IDS = 100;
@@ -35,7 +36,14 @@ export async function resolveSubject(
       pool: deps.pool,
       deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });
-    return readSubject(deps.pool, id, (client) => check(client, at));
+    // Anchoring needs current identity, not a rendered subject's link projection.
+    return withReadTransaction(deps.pool, async (client) => {
+      const rows = await readSubject.run(client, { route, subject_id: id });
+      const subject = (Array.isArray(rows) ? rows[0] : rows) as { redirect: string | null } | null;
+      if (!subject || !(await check(client, at))) return null;
+      if (subject.redirect) throw new SubjectRedirectError(id, subject.redirect);
+      return subject;
+    });
   }
 
   const visited = new Set<string>();

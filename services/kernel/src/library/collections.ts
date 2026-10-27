@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
 import { readAccount } from '../access/account-data.ts';
+import { shareAccount } from '../access/account-share.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
@@ -348,16 +350,31 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
     const identity = principalCommandIdentity(owner);
-    const authorization = resourceAuthorization({
+    const normalAccess = resourceAuthorization({
       access,
       actor: owner,
       action,
       anchor: {
         resource: { route, id: collectionId },
-        validate: (client, time) => visibleCollection(client, owner, route, collectionId, time),
+        validate: async (client, time) => !!(await visibleCollection(client, owner, route, collectionId, time)),
       },
       context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
     });
+    const authorization: typeof normalAccess = {
+      ...normalAccess,
+      async authorize(tx, attempt, proof) {
+        const mode = await normalAccess.authorize(tx, attempt, proof);
+        const collection = await visibleCollection(tx, owner, route, collectionId, attempt.time);
+        try {
+          // Keep the immutable curator live through commit, including receipt replay.
+          await shareAccount(tx, collection.curatorAccountId);
+        } catch (error) {
+          if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+          throw error;
+        }
+        return mode;
+      },
+    };
     return runCommand(
       pool,
       {
@@ -598,12 +615,12 @@ async function visibleCollection(
   route: number,
   collectionId: string,
   time: Parameters<typeof authoritativeTimeValue>[0],
-): Promise<boolean> {
+): Promise<Collection> {
   authoritativeTimeValue(time);
   const current = await readCollection(client, route, collectionId);
   if (!current || current.state === 'deleted') throw notFound();
   if (current.visibility === 'private' && actor.accountId !== current.curatorAccountId) throw notFound();
-  return true;
+  return current;
 }
 
 async function readMemberOn(
