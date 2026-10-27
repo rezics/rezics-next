@@ -101,9 +101,11 @@ Import `CoverCard`, `CoverGrid` and `CoverRow` from `@rezics/ui/cover-card`.
 Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
 mode, relation, edition and character tiles) follows one pattern:
 
-- The cover is the only box: rounded corners, no padding, border, background, shadow or card surface around it or
-  below it. Title, secondary text and state sit directly on the page background under the cover, as in mature shelf
-  apps (Readest's library `BookItem`, Koodo Reader's `bookCoverItem`).
+- The cover fills the card's top edge to edge: no padding, inset, border or background frame around the cover. The
+  card is a light surface (hairline border or the faintest shadow, small radius) whose padding belongs only to the
+  text area below the cover. The reference is a mature reading app's shelf: at 1280 px about eight cards per row
+  with an 8 px gap, the cover across the full card width, then the title centered on at most two lines with an
+  ellipsis, then one progress row of the ⋯ menu on the left, a thin bar, and the percent right-aligned.
 - Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
   relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
   the subject page.
