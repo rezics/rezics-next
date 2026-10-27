@@ -138,12 +138,12 @@ and erased-Collection terminal fencing must be bound separately by that owner.
 Each implementation is at most 400 lines / eight files; split further rather than growing a combined rewrite.
 Dependencies here are code prerequisites, not unrelated product policy:
 
-| Owner | Scope | Code prerequisites | Required native acceptance |
-| --- | --- | --- | --- |
-| Schema | Provenance, pair/version/source-fence schema, reverse indexes, DB guards | Existing library/core schema | Required stamps, old prepared INSERT/UPDATE/DELETE rejection, paged legacy bootstrap |
-| Source producer/observer | Collection command hooks, same-client RR observation, ownership retry | Schema | Atomic position/provenance, snapshot consistency, first-public withdrawal, move/unavailable, bigint |
-| Monotonic apply | Version/fence locking, zero retention, pair/count/outbox native transaction | Schema, observer | Old first apply, equal mismatch rollback, duplicate/cycles, unknown pair zero, reverse arrival |
-| Native fixtures/races/growth | Bind future driver, real command fixtures and SQL instrumentation | Source and apply | Every outcome below, obsolete/current pair growth, bounded reverse pages, rollout guards |
+| Owner                        | Scope                                                                       | Code prerequisites           | Required native acceptance                                                                          |
+| ---------------------------- | --------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| Schema                       | Provenance, pair/version/source-fence schema, reverse indexes, DB guards    | Existing library/core schema | Required stamps, old prepared INSERT/UPDATE/DELETE rejection, paged legacy bootstrap                |
+| Source producer/observer     | Collection command hooks, same-client RR observation, ownership retry       | Schema                       | Atomic position/provenance, snapshot consistency, first-public withdrawal, move/unavailable, bigint |
+| Monotonic apply              | Version/fence locking, zero retention, pair/count/outbox native transaction | Schema, observer             | Old first apply, equal mismatch rollback, duplicate/cycles, unknown pair zero, reverse arrival      |
+| Native fixtures/races/growth | Bind future driver, real command fixtures and SQL instrumentation           | Source and apply             | Every outcome below, obsolete/current pair growth, bounded reverse pages, rollout guards            |
 
 `specs/library-listing-freshness-driver.ts` defines a real-driver binding, not an adapter implementation. The suite
 loads `LIBRARY_LISTING_FRESHNESS_DRIVER`; missing it fails every scenario with exactly
