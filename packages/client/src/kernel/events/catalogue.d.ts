@@ -973,6 +973,20 @@ declare const productEventTypes: {
     readonly 'com.rezics.rating.aggregate.applied.v1': Type.TObject<{
         applied: Type.TInteger;
     }>;
+    readonly 'com.rezics.rating.public_figure.changed.v1': Type.TObject<{
+        questionId: Type.TString;
+        populationId: Type.TString;
+        subjectId: Type.TString;
+        count: Type.TInteger;
+        mean: Type.TUnion<[Type.TNumber, Type.TNull]>;
+        score: Type.TUnion<[Type.TNumber, Type.TNull]>;
+        m: Type.TUnion<[Type.TNumber, Type.TNull]>;
+        C: Type.TUnion<[Type.TInteger, Type.TNull]>;
+        priorEpoch: Type.TUnion<[Type.TInteger, Type.TNull]>;
+        revision: Type.TString;
+        asOf: Type.TUnion<[Type.TString, Type.TNull]>;
+        position: Type.TString;
+    }>;
     readonly 'com.rezics.rating.segment.page.v1': Type.TUnion<[Type.TObject<{
         voterId: Type.TString;
         direction: Type.TLiteral<"rekey">;

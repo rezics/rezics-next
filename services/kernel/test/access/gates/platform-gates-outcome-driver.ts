@@ -687,6 +687,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     let token = '';
     let actorId = '';
     const unrelatedAccountIds: string[] = [];
+    const rowsPerScaleUnit = 2_000;
     const growthTime = nextFixtureTime();
     const growthRouteKey = new Uint8Array(32).fill(121);
     const growthIssuer = `https://gate-growth-${growthTag}.auth.test`;
@@ -728,7 +729,50 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
           };
         },
       };
-      await seedGrowthData({ pool: database.pool, admin: database.admin }, population, { from: 0, to: 64 });
+      await seedGrowthData({ pool: database.pool, admin: database.admin }, population, {
+        from: 0,
+        to: 64 * rowsPerScaleUnit,
+      });
+      const grants: Population = {
+        name: `platform gate unrelated grants ${growthTag}`,
+        hotPartition: 0,
+        rows({ ordinal }) {
+          const id = unrelatedAccountIds[ordinal];
+          if (!id) throw new Error('Growth account seed is incomplete');
+          return {
+            'access.resource_grant': [
+              {
+                route: 0,
+                resource_id: GLOBAL_CONTEXT_ID,
+                subject_id: id,
+                action: 'gate:unrelated',
+                valid: '(,)',
+                transaction_id: Bun.randomUUIDv7(),
+              },
+            ],
+          };
+        },
+      };
+      const openings: Population = {
+        name: `platform gate unrelated openings ${growthTag}`,
+        hotPartition: 0,
+        rows({ ordinal }) {
+          return {
+            'access.exposure_opening': [
+              {
+                group: `other_${growthTag}_${alpha(ordinal)}`,
+                valid: ordinal % 2 === 0 ? '[2000-01-01,2001-01-01)' : '[2000-01-01,)',
+                transaction_id: Bun.randomUUIDv7(),
+              },
+            ],
+          };
+        },
+      };
+      // Keep the non-growing relation large enough for selective probes at the first scale too.
+      await seedGrowthData(database, axis === 'unrelated-grants' ? openings : grants, {
+        from: 0,
+        to: rowsPerScaleUnit,
+      });
 
       await database.admin.query(
         `INSERT INTO access.resource_grant
@@ -827,30 +871,10 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
       return {
         database,
         async grow(scale, previous) {
-          if (axis === 'unrelated-grants') {
-            const ids = unrelatedAccountIds.slice(previous, scale);
-            if (ids.length !== scale - previous) throw new Error('Growth account seed is incomplete');
-            await database.admin.query(
-              `INSERT INTO access.resource_grant
-                 (route, resource_id, subject_id, action, valid, transaction_id)
-               SELECT 0, $1::uuid, id, 'gate:unrelated', '(,)', $3::uuid
-               FROM unnest($2::uuid[]) AS id`,
-              [GLOBAL_CONTEXT_ID, ids, Bun.randomUUIDv7()],
-            );
-            await database.admin.query('ANALYZE access.resource_grant');
-          } else {
-            const groups = Array.from(
-              { length: scale - previous },
-              (_, index) => `other_${growthTag}_${alpha(previous + index)}`,
-            );
-            await database.admin.query(
-              `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-               SELECT group_name, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2::uuid
-               FROM unnest($1::text[]) AS group_name`,
-              [groups, Bun.randomUUIDv7()],
-            );
-            await database.admin.query('ANALYZE access.exposure_opening');
-          }
+          await seedGrowthData(database, axis === 'unrelated-grants' ? grants : openings, {
+            from: previous * rowsPerScaleUnit,
+            to: scale * rowsPerScaleUnit,
+          });
         },
         async request(_repetition) {
           return growthKernel!.handle(

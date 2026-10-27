@@ -250,7 +250,7 @@ const subject = t.Union([
   t.Object({ kind: t.Literal('account'), id }, closed),
   t.Object({ kind: t.Literal('organization'), id, role: t.Union([t.Literal('owner'), t.Literal('member')]) }, closed),
 ]);
-const actions = t.Array(t.String({ pattern: '^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$' }), {
+const actions = t.Array(t.String({ pattern: '^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$' }), {
   minItems: 1,
   maxItems: 1000,
 });
@@ -445,7 +445,7 @@ export function accessRoutes(
         detail: {
           ...detail('account.request_verification'),
           'x-action': 'account:update',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, body, headers, actor, admission, job, session, status }) => {
@@ -472,7 +472,7 @@ export function accessRoutes(
         detail: {
           operationId: 'account.read_verification_request',
           'x-action': 'account:read',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -510,7 +510,7 @@ export function accessRoutes(
         detail: {
           ...detail('account.withdraw_verification'),
           'x-action': 'account:update',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, headers, actor, admission, job, session }) => {
@@ -551,7 +551,7 @@ export function accessRoutes(
         detail: {
           operationId: 'verification_request.list_pending',
           'x-action': 'account:verify_agent',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -594,7 +594,7 @@ export function accessRoutes(
         detail: {
           ...detail('verification_request.approve'),
           'x-action': 'account:verify_agent',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
@@ -629,7 +629,7 @@ export function accessRoutes(
         detail: {
           ...detail('verification_request.reject'),
           'x-action': 'account:verify_agent',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
@@ -662,7 +662,7 @@ export function accessRoutes(
         detail: {
           ...detail('account.revoke_verification'),
           'x-action': 'account:verify_agent',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
@@ -694,7 +694,7 @@ export function accessRoutes(
         detail: {
           ...detail('account.release_verification'),
           'x-action': 'account:update',
-          'x-exposure': 'gate:agent-verification',
+          'x-exposure': 'gate:agent_verification',
         },
       },
       async ({ params, headers, actor, admission, job, session }) => {

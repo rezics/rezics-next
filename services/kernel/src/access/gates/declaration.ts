@@ -1,6 +1,6 @@
 export type Exposure = { kind: 'public' } | { kind: 'gate'; group: string };
 
-const GROUP_PATTERN = /^[a-z][a-z_-]{0,62}$/;
+const GROUP_PATTERN = /^[a-z][a-z_]{0,62}$/;
 const RESERVED_GROUPS = new Set(['any', 'open', 'close']);
 
 /** Parse trusted route metadata once, when the production kernel is composed. */

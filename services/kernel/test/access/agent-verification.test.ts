@@ -268,12 +268,12 @@ afterAll(async () => {
 
 test('all six verification routes are gated while the public handle identity read remains open', async () => {
   const routes = new Map<string, string>([
-    ['account.request_verification', 'gate:agent-verification'],
-    ['account.read_verification_request', 'gate:agent-verification'],
-    ['account.withdraw_verification', 'gate:agent-verification'],
-    ['verification_request.list_pending', 'gate:agent-verification'],
-    ['verification_request.approve', 'gate:agent-verification'],
-    ['verification_request.reject', 'gate:agent-verification'],
+    ['account.request_verification', 'gate:agent_verification'],
+    ['account.read_verification_request', 'gate:agent_verification'],
+    ['account.withdraw_verification', 'gate:agent_verification'],
+    ['verification_request.list_pending', 'gate:agent_verification'],
+    ['verification_request.approve', 'gate:agent_verification'],
+    ['verification_request.reject', 'gate:agent_verification'],
   ]);
   const mounted = kernel.routes.filter((route) => routes.has(String(route.hooks.detail?.operationId)));
   expect(mounted).toHaveLength(6);
@@ -307,9 +307,9 @@ test('all six verification routes are gated while the public handle identity rea
   expect(handle.response.status).toBe(200);
   expect(handle.body.accounts[0]).toMatchObject({ id: person.id, verified: false });
 
-  const opened = await post('/v1/platform/exposure/agent-verification:open', await bearer(staff), undefined);
+  const opened = await post('/v1/platform/exposure/agent_verification:open', await bearer(staff), undefined);
   expect(opened.response.status).toBe(200);
-  expect(opened.body).toMatchObject({ exposure: { group: 'agent-verification', open: true, changed: true } });
+  expect(opened.body).toMatchObject({ exposure: { group: 'agent_verification', open: true, changed: true } });
 });
 
 test('person and organization manager requests, withdrawal, pending page, rejection and approval replay', async () => {

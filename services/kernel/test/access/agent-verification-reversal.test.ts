@@ -188,7 +188,7 @@ beforeAll(async () => {
   staff = await seedAccount('reversal_staff');
   manager = await seedAccount('reversal_manager');
   await bootstrapGovernance(pool, staff.id);
-  const opened = await post('/v1/platform/exposure/agent-verification:open', await bearer(staff));
+  const opened = await post('/v1/platform/exposure/agent_verification:open', await bearer(staff));
   expect(opened.response.status).toBe(200);
 }, 60_000);
 
@@ -413,10 +413,10 @@ test('deleting a verified account commits the same reversal through the account 
   expect(mapping.rows[0].verified).toBe(false);
 });
 
-test('both reversal routes declare x-exposure gate:agent-verification and client declarations are regenerated', async () => {
+test('both reversal routes declare x-exposure gate:agent_verification and client declarations are regenerated', async () => {
   for (const operation of ['account.revoke_verification', 'account.release_verification']) {
     const route = kernel.routes.find((r) => r.hooks.detail?.operationId === operation);
-    expect(route?.hooks.detail?.['x-exposure']).toBe('gate:agent-verification');
+    expect(route?.hooks.detail?.['x-exposure']).toBe('gate:agent_verification');
   }
   const declarations = await Bun.file(
     new URL('../../../../packages/client/src/kernel/access/routes.d.ts', import.meta.url),

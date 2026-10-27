@@ -2556,6 +2556,22 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "notifications": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "mention": {
+                          "type": "boolean"
+                        },
+                        "reply": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "reply",
+                        "mention"
+                      ],
+                      "type": "object"
+                    },
                     "shelf": {
                       "additionalProperties": false,
                       "properties": {
@@ -2812,6 +2828,7 @@
                     "spoilerLevel",
                     "suitability",
                     "shelf",
+                    "notifications",
                     "version"
                   ],
                   "type": "object"
@@ -3407,6 +3424,28 @@
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "notifications": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mention": {
+                        "type": [
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "reply": {
+                        "type": [
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "shelf": {
                     "additionalProperties": false,
                     "properties": {
@@ -3724,6 +3763,22 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "notifications": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "mention": {
+                          "type": "boolean"
+                        },
+                        "reply": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "reply",
+                        "mention"
+                      ],
+                      "type": "object"
+                    },
                     "shelf": {
                       "additionalProperties": false,
                       "properties": {
@@ -3980,6 +4035,7 @@
                     "spoilerLevel",
                     "suitability",
                     "shelf",
+                    "notifications",
                     "version"
                   ],
                   "type": "object"
@@ -7775,7 +7831,7 @@
           }
         ],
         "x-action": "account:read",
-        "x-exposure": "gate:agent-verification"
+        "x-exposure": "gate:agent_verification"
       }
     },
     "/v1/accounts/{accountId}:reinstate": {
@@ -9249,7 +9305,7 @@
           }
         ],
         "x-action": "account:update",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -10125,7 +10181,7 @@
           }
         ],
         "x-action": "account:update",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -10883,7 +10939,7 @@
           }
         ],
         "x-action": "account:verify_agent",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -13122,7 +13178,7 @@
           }
         ],
         "x-action": "account:update",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -40720,7 +40776,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -40824,7 +40880,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -40895,7 +40951,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -40999,7 +41055,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -41652,7 +41708,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -41664,7 +41720,7 @@
                         "properties": {
                           "actions": {
                             "items": {
-                              "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                              "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                               "type": "string"
                             },
                             "maxItems": 1000,
@@ -41779,7 +41835,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -41791,7 +41847,7 @@
                         "properties": {
                           "actions": {
                             "items": {
-                              "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                              "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                               "type": "string"
                             },
                             "maxItems": 1000,
@@ -41873,7 +41929,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -41977,7 +42033,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -42630,7 +42686,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -42734,7 +42790,7 @@
                     "properties": {
                       "actions": {
                         "items": {
-                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                          "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                           "type": "string"
                         },
                         "maxItems": 1000,
@@ -42805,7 +42861,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -42909,7 +42965,7 @@
                           "properties": {
                             "actions": {
                               "items": {
-                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_-]{0,62})$",
+                                "pattern": "^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$",
                                 "type": "string"
                               },
                               "maxItems": 1000,
@@ -154460,7 +154516,7 @@
           }
         ],
         "x-action": "account:verify_agent",
-        "x-exposure": "gate:agent-verification"
+        "x-exposure": "gate:agent_verification"
       }
     },
     "/v1/verification-requests/{requestId}:approve": {
@@ -155299,7 +155355,7 @@
           }
         ],
         "x-action": "account:verify_agent",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -156142,7 +156198,7 @@
           }
         ],
         "x-action": "account:verify_agent",
-        "x-exposure": "gate:agent-verification",
+        "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
           "units": 1

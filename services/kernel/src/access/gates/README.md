@@ -1,7 +1,7 @@
 # Platform gates
 
 Every mounted route declares `x-exposure` as `public` or `gate:<group>`. Group names match
-`^[a-z][a-z_-]{0,62}$`; `any`, `open`, and `close` are reserved. The kernel validates declarations when it is composed.
+`^[a-z][a-z_]{0,62}$`; `any`, `open`, and `close` are reserved. The kernel validates declarations when it is composed.
 
 A gate is closed when `access.exposure_opening` has no row for its group containing the request's T. A closed route
 first checks the actor's authentication, then checks `gate:<group>` or `gate:any` on the Global Context for both the

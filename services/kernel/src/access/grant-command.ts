@@ -36,7 +36,7 @@ export function validActions(actions: readonly string[]): boolean {
 }
 
 /** `<group>` in `gate:<group>`. `gate:any` is the covering action, not a group. */
-const GATE_GROUP = /^gate:[a-z][a-z_-]{0,62}$/;
+const GATE_GROUP = /^gate:[a-z][a-z_]{0,62}$/;
 
 function isGlobalContext(resource: Resource): boolean {
   return resource.route === PLATFORM_RESOURCE.route && resource.id === PLATFORM_RESOURCE.id;

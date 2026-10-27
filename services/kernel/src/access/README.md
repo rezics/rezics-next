@@ -18,7 +18,7 @@ Each use is one WeakMap read plus the derivation walk to the root.
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
 
-`gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_-]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
+`gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
 ### Platform governance reach
 
@@ -159,7 +159,7 @@ Platform governance reviews `GET /v1/verification-requests?state=pending`, which
 pending state, ordering and page size, and a limit from 1 to 100. The approval and rejection routes,
 `POST /v1/verification-requests/{requestId}:approve` and `:reject`, accept an optional reason of at most 500 characters.
 Both require `account:verify_agent` on the Global Context, held by `platform.governance`. All verification routes
-stay closed behind `gate:agent-verification` until governance opens that exposure group. The public handle identity
+stay closed behind `gate:agent_verification` until governance opens that exposure group. The public handle identity
 read remains public.
 
 Approval first records its decision receipt and queues the durable `accounts.agent-verification` workflow. The workflow
@@ -240,7 +240,7 @@ The account may release verification; governance may revoke it. A dispute is res
 new reviewed application, never by automatic transfer to the next applicant. There is no fixed expiry. A re-check
 follows an event such as a compromise, a change of domain control or a complaint.
 
-`gate:agent-verification` remains closed until governance explicitly opens it under this evidence and review policy. The
+`gate:agent_verification` remains closed until governance explicitly opens it under this evidence and review policy. The
 [verification research](../../../../docs/research/agent-verification.md) supplies the evidence behind these decisions.
 
 ## Operator responsibility pages
