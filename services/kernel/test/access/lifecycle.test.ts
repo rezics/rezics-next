@@ -540,6 +540,51 @@ test('a human who manages an operator can delete an automated account that opera
   expect(after.rows[0].n).toBe(grants.rows[0].n);
 });
 
+test('a human who manages the prior operator can replay an automated account tombstone with its original receipt', async () => {
+  const operator = await person('replay_operator');
+  const manager = await person('replay_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'replay_automated');
+  const request = { accountId: subject, key: key() };
+
+  const deleted = await commands.tombstone(await context(manager), request);
+  const replay = await commands.tombstone(await context(manager), request);
+
+  expect(replay).toEqual({ ...deleted, replayed: true });
+  expect(replay.value).toEqual(deleted.value);
+});
+
+test('a tombstone replay stays denied after its caller loses management of the recorded prior operator', async () => {
+  const operator = await person('revoked_replay_operator');
+  const manager = await person('revoked_replay_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'revoked_replay_automated');
+  const request = { accountId: subject, key: key() };
+
+  await commands.tombstone(await context(manager), request);
+  await reader.query(
+    `DELETE FROM access.resource_grant
+    WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='account:manage'`,
+    [routeOf(operator), operator, manager],
+  );
+
+  await expect(commands.tombstone(await context(manager), request)).rejects.toBeInstanceOf(LifecycleDeniedError);
+});
+
+test('a deleted automated account cannot receive a new tombstone command from its former operator manager', async () => {
+  const operator = await person('new_key_operator');
+  const manager = await person('new_key_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'new_key_automated');
+  await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  const before = await row(subject);
+
+  await expect(commands.tombstone(await context(manager), { accountId: subject, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(subject)).toEqual(before);
+});
+
 test("after a transfer the old operator's managers can no longer delete it and the new operator's can", async () => {
   const oldOperator = await person('transfer_old');
   const newOperator = await person('transfer_new');

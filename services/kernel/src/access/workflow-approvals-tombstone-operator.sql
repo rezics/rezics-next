@@ -1,9 +1,13 @@
 -- Prefer the approval's recorded consumer. Ordinary delete workflows bind consumption
 -- to their stable tombstone command receipt, which supplies the same transaction identity.
-WITH approval AS MATERIALIZED (
-  SELECT consumed_transaction_id
-  FROM access.workflow_approval
-  WHERE route = :approval_route AND approval_id = :approval_id
+-- A direct lifecycle replay supplies no approval id and resolves only its exact command receipt.
+WITH approval_input AS NOT MATERIALIZED (
+  SELECT :approval_route::integer AS route, :approval_id::nullable(uuid) AS approval_id
+), approval AS MATERIALIZED (
+  SELECT workflow.consumed_transaction_id
+  FROM access.workflow_approval workflow CROSS JOIN approval_input
+  WHERE approval_input.approval_id IS NOT NULL
+    AND workflow.route = approval_input.route AND workflow.approval_id = approval_input.approval_id
 ), consumed AS MATERIALIZED (
   SELECT consumed_transaction_id AS transaction_id
   FROM approval

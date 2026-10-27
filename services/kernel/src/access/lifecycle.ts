@@ -2,6 +2,7 @@ import { checkAvatarMedia } from '../content/avatar.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
+import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
@@ -1566,7 +1567,24 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         context.actor.kind === 'account' && context.actor.accountId !== input.accountId
           ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
           : null;
-      const operatorId = subject?.kind === 'actor' && subject.state === 'active' ? subject.operatorAccountId : null;
+      const replayOperator =
+        subject?.kind === 'actor' && subject.state === 'deleted'
+          ? await withConnection(pool, (client) =>
+              tombstoneOperator.run(client, {
+                route,
+                account_id: input.accountId,
+                approval_route: route,
+                approval_id: null,
+                partition_no: partitionOf(route),
+                actor_id: context.actor.accountId,
+                idempotency_key: `${route}:${input.key}`,
+              }),
+            )
+          : null;
+      const operatorId =
+        subject?.kind === 'actor' && subject.state === 'active'
+          ? subject.operatorAccountId
+          : (replayOperator?.priorOperatorAccountId ?? null);
       const authorization = operatorId
         ? await authorize(context, 'account:manage', operatorId)
         : await authorize(context, 'account:delete', input.accountId);
