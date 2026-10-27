@@ -19,7 +19,6 @@ test('each durable accounts tick admits one local batch, yields backlog and fenc
       ($2,repeat('b',64),'write',1,'2020-01-01')\`,[route,route+1]);
     const work=await composeWork([accountsWorkModule],{databaseUrl:process.env.DATABASE_URL,pool,client,
       env:{KERNEL_WRITE_RATE_EXPIRY_PARTITION:String(partition),KERNEL_WRITE_RATE_EXPIRY_NODE:'b'}});
-    await work.launch();
     let sequence=0;
     async function tick(context={partition}) {
       const handle=await client.enqueue({workflowName:'accounts.write-rate-expiry',
@@ -33,6 +32,9 @@ test('each durable accounts tick admits one local batch, yields backlog and fenc
     try {
       const schedule=await client.getSchedule('accounts.write-rate-expiry.'+partition);
       assert.equal(schedule.queueName,'maintenance'); assert.equal(schedule.automaticBackfill,false);
+      // Pause before launch: SDK polling cannot cancel an already-planned firing immediately.
+      await client.pauseSchedule(schedule.scheduleName);
+      await work.launch();
       await tick(); assert.equal(await remaining(),1002);
       // A different durable attempt makes progress. The first attempt did not drain the backlog.
       await tick(); assert.equal(await remaining(),2);
