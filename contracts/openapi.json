@@ -2526,6 +2526,238 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "shelf": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "gridSize": {
+                          "enum": [
+                            "small",
+                            "medium",
+                            "large"
+                          ],
+                          "type": "string"
+                        },
+                        "layouts": {
+                          "maxProperties": 32,
+                          "patternProperties": {
+                            "^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\\S+)$": {
+                              "enum": [
+                                "grid",
+                                "list",
+                                "table"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "sorts": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "all": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "completed": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "dropped": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "in_progress": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "paused": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "planned": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
+                        },
+                        "tableColumns": {
+                          "items": {
+                            "enum": [
+                              "cover",
+                              "title",
+                              "creator",
+                              "type",
+                              "status",
+                              "progress",
+                              "rating",
+                              "added",
+                              "started",
+                              "finished",
+                              "last_activity"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 11,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      },
+                      "required": [],
+                      "type": "object"
+                    },
                     "spoilerLevel": {
                       "enum": [
                         0,
@@ -2549,6 +2781,7 @@
                   "required": [
                     "spoilerLevel",
                     "suitability",
+                    "shelf",
                     "version"
                   ],
                   "type": "object"
@@ -3144,6 +3377,291 @@
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "shelf": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "gridSize": {
+                        "enum": [
+                          "small",
+                          "medium",
+                          "large"
+                        ],
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "layouts": {
+                        "patternProperties": {
+                          "^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\\S+)$": {
+                            "enum": [
+                              "grid",
+                              "list",
+                              "table"
+                            ],
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "sorts": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "all": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "completed": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "dropped": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "in_progress": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "paused": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "planned": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "asc",
+                                  "desc"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "field": {
+                                "enum": [
+                                  "last_activity",
+                                  "added",
+                                  "finished",
+                                  "title",
+                                  "rating",
+                                  "release_date",
+                                  "progress"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "tableColumns": {
+                        "items": {
+                          "enum": [
+                            "cover",
+                            "title",
+                            "creator",
+                            "type",
+                            "status",
+                            "progress",
+                            "rating",
+                            "added",
+                            "started",
+                            "finished",
+                            "last_activity"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 11,
+                        "minItems": 1,
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "spoilerLevel": {
                     "enum": [
                       0,
@@ -3176,6 +3694,238 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "shelf": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "gridSize": {
+                          "enum": [
+                            "small",
+                            "medium",
+                            "large"
+                          ],
+                          "type": "string"
+                        },
+                        "layouts": {
+                          "maxProperties": 32,
+                          "patternProperties": {
+                            "^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\\S+)$": {
+                              "enum": [
+                                "grid",
+                                "list",
+                                "table"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "sorts": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "all": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "completed": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "dropped": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "in_progress": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "paused": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            },
+                            "planned": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "asc",
+                                    "desc"
+                                  ],
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "enum": [
+                                    "last_activity",
+                                    "added",
+                                    "finished",
+                                    "title",
+                                    "rating",
+                                    "release_date",
+                                    "progress"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "direction"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
+                        },
+                        "tableColumns": {
+                          "items": {
+                            "enum": [
+                              "cover",
+                              "title",
+                              "creator",
+                              "type",
+                              "status",
+                              "progress",
+                              "rating",
+                              "added",
+                              "started",
+                              "finished",
+                              "last_activity"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 11,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      },
+                      "required": [],
+                      "type": "object"
+                    },
                     "spoilerLevel": {
                       "enum": [
                         0,
@@ -3199,6 +3949,7 @@
                   "required": [
                     "spoilerLevel",
                     "suitability",
+                    "shelf",
                     "version"
                   ],
                   "type": "object"

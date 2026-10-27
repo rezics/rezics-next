@@ -7,7 +7,19 @@ import { Compile } from 'typebox/compile';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { createPreferenceCommands, readAccountPreferences } from './preferences.ts';
+import {
+  createPreferenceCommands,
+  readAccountPreferences,
+  SHELF_GRID_SIZES,
+  SHELF_LAYOUTS,
+  SHELF_MAX_LAYOUTS,
+  SHELF_SCOPE_MAX_LENGTH,
+  SHELF_SCOPE_PATTERN,
+  SHELF_SORT_DIRECTIONS,
+  SHELF_SORT_FIELDS,
+  SHELF_TABLE_COLUMNS,
+  SHELF_TABS,
+} from './preferences.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -150,7 +162,53 @@ const preferenceValues = {
   spoilerLevel: t.Union([t.Literal(0), t.Literal(1), t.Literal(2)]),
   suitability: t.Union([t.Literal('blur'), t.Literal('show')]),
 };
-const preferences = t.Object({ ...preferenceValues, version: t.Integer({ minimum: 0 }) }, closed);
+const literals = <const V extends readonly string[]>(values: V) =>
+  t.Unsafe<V[number]>(t.Union(values.map((value) => t.Literal(value))));
+const shelfScope = t.String({ pattern: SHELF_SCOPE_PATTERN, maxLength: SHELF_SCOPE_MAX_LENGTH });
+const shelfTabs = <S extends TSchema>(entry: S) =>
+  t.Object(Object.fromEntries(SHELF_TABS.map((tab) => [tab, t.Optional(entry)])), closed);
+const shelfColumns = t.Array(literals(SHELF_TABLE_COLUMNS), {
+  minItems: 1,
+  maxItems: SHELF_TABLE_COLUMNS.length,
+  uniqueItems: true,
+});
+const shelf = t.Object(
+  {
+    layouts: t.Optional(t.Record(shelfScope, literals(SHELF_LAYOUTS), { maxProperties: SHELF_MAX_LAYOUTS })),
+    sorts: t.Optional(
+      shelfTabs(t.Object({ field: literals(SHELF_SORT_FIELDS), direction: literals(SHELF_SORT_DIRECTIONS) }, closed)),
+    ),
+    gridSize: t.Optional(literals(SHELF_GRID_SIZES)),
+    tableColumns: t.Optional(shelfColumns),
+  },
+  closed,
+);
+const nullable = <S extends TSchema>(schema: S) => t.Union([schema, t.Null()]);
+// A JSON Merge Patch over the shelf: null removes a part or an entry, an array replaces.
+const shelfPatch = t.Object(
+  {
+    layouts: t.Optional(nullable(t.Record(shelfScope, nullable(literals(SHELF_LAYOUTS))))),
+    sorts: t.Optional(
+      nullable(
+        shelfTabs(
+          nullable(
+            t.Object(
+              {
+                field: t.Optional(nullable(literals(SHELF_SORT_FIELDS))),
+                direction: t.Optional(nullable(literals(SHELF_SORT_DIRECTIONS))),
+              },
+              closed,
+            ),
+          ),
+        ),
+      ),
+    ),
+    gridSize: t.Optional(nullable(literals(SHELF_GRID_SIZES))),
+    tableColumns: t.Optional(nullable(shelfColumns)),
+  },
+  closed,
+);
+const preferences = t.Object({ ...preferenceValues, shelf, version: t.Integer({ minimum: 0 }) }, closed);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -588,6 +646,7 @@ export function accessRoutes(
               expectedVersion: t.Integer({ minimum: 0, maximum: 2147483646 }),
               spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
               suitability: t.Optional(preferenceValues.suitability),
+              shelf: t.Optional(nullable(shelfPatch)),
             },
             closed,
           ),

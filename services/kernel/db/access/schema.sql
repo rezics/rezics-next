@@ -444,8 +444,10 @@ CREATE TABLE access.account_preferences (
     spoiler_level integer NOT NULL,
     suitability text NOT NULL,
     version integer NOT NULL,
+    shelf jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT account_preferences_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_preferences_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_preferences_shelf_check CHECK (((jsonb_typeof(shelf) = 'object'::text) AND (octet_length((shelf)::text) <= 16384))),
     CONSTRAINT account_preferences_spoiler_level_check CHECK (((spoiler_level >= 0) AND (spoiler_level <= 2))),
     CONSTRAINT account_preferences_suitability_check CHECK ((suitability = ANY (ARRAY['blur'::text, 'show'::text]))),
     CONSTRAINT account_preferences_version_check CHECK ((version > 0))

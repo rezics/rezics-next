@@ -1,11 +1,41 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { readAccountPreferences } from '../../src/access/preferences.ts';
-import { newId } from '../../src/route/route.ts';
+import { createPreferenceCommands, readAccountPreferences, type Shelf } from '../../src/access/preferences.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 
 const route = 0x4567;
 const accountId = newId(route);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+const maximalShelf = (): Shelf =>
+  ({
+    layouts: Object.fromEntries(
+      Array.from({ length: 32 }, (_, index) => [
+        `https://rezics.com/vocab/${String(index).padStart(3, '0')}${'a'.repeat(220)}`,
+        'grid',
+      ]),
+    ),
+    sorts: Object.fromEntries(
+      ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'].map((tab) => [
+        tab,
+        { field: 'last_activity', direction: 'desc' },
+      ]),
+    ),
+    gridSize: 'large',
+    tableColumns: [
+      'cover',
+      'title',
+      'creator',
+      'type',
+      'status',
+      'progress',
+      'rating',
+      'added',
+      'started',
+      'finished',
+      'last_activity',
+    ],
+  }) as Shelf;
 beforeAll(async () => {
   db = await openGrowthDatabase();
 });
@@ -24,9 +54,9 @@ test('preferences read stays constant as accounts with stored preferences grow',
           [route, accountId],
         );
         await database.admin.query(
-          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,version)
-           VALUES ($1,$2,1,'show',1)`,
-          [route, accountId],
+          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
+           VALUES ($1,$2,1,'show',$3::jsonb,1)`,
+          [route, accountId, JSON.stringify(maximalShelf())],
         );
       }
       // Keep the smallest sample beyond the planner's tiny-table scan threshold.
@@ -37,15 +67,16 @@ test('preferences read stays constant as accounts with stored preferences grow',
         [route, ids],
       );
       await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,version)
-        SELECT $1,id,2,'blur',1 FROM unnest($2::uuid[]) id`,
-        [route, ids],
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
+        SELECT $1,id,2,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [route, ids, JSON.stringify(maximalShelf())],
       );
     },
     async operation() {
       expect(await readAccountPreferences(db.pool, accountId)).toEqual({
         spoilerLevel: 1,
         suitability: 'show',
+        shelf: maximalShelf(),
         version: 1,
       });
     },
@@ -56,3 +87,83 @@ test('preferences read stays constant as accounts with stored preferences grow',
     expect(cost.statements).toBe(1);
   }
 }, 60000);
+
+test('setting a maximal shelf stays constant as accounts with stored preferences grow', async () => {
+  const access = admittedAccess({ actions: new Map([['account:update', { anonymous: false }]]) });
+  const commands = createPreferenceCommands({ pool: db.pool, access, clock: () => new Date() });
+  const setRoute = 0x4568;
+  const accounts = Array.from({ length: 24 }, () => newId(setRoute));
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+    [setRoute, accounts],
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT $1, id, id, 'account:update', '(,)', id FROM unnest($2::uuid[]) id`,
+    [setRoute, accounts],
+  );
+  const contexts: Array<{
+    pool: typeof db.pool;
+    deadline: number;
+    actor: Awaited<ReturnType<typeof authenticateAccount>>;
+  }> = [];
+  for (const id of accounts)
+    contexts.push({
+      pool: db.pool,
+      deadline: Date.now() + 60_000,
+      actor: await authenticateAccount(
+        access,
+        { pool: db.pool, deadline: Date.now() + 10_000 },
+        { accountId: id, clientId: 'growth-preferences', scopes: ['account:update'] },
+      ),
+    });
+  let next = 0;
+  const report = await checkGrowth(db, {
+    name: 'account preferences set',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(setRoute));
+      await database.admin.query(
+        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+        SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+        [setRoute, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,version)
+        SELECT $1,id,2,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [setRoute, ids, JSON.stringify(maximalShelf())],
+      );
+      // The command reads its authorization grant and its receipt key: seed both past the planner's tiny-table scans.
+      await database.admin.query(
+        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+        SELECT $1, id, id, 'account:update', '(,)', id FROM unnest($2::uuid[]) id`,
+        [setRoute, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO core.receipt
+          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+        SELECT $1,'account',id,'access.account.preferences',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+        FROM unnest($2::uuid[]) id`,
+        [partitionOf(setRoute), ids],
+      );
+    },
+    async operation() {
+      const context = contexts[next++];
+      if (!context) throw new Error('Growth check exhausted its accounts');
+      const result = await commands.setPreferences(context, {
+        accountId: context.actor.accountId,
+        key: Bun.randomUUIDv7(),
+        expectedVersion: 0,
+        shelf: maximalShelf(),
+      });
+      expect(result.value.shelf).toEqual(maximalShelf());
+      expect(result.value.version).toBe(1);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  for (const { cost } of report.samples) {
+    expect(cost.relations?.['access.account_preferences']?.rows).toBe(1);
+  }
+}, 120000);

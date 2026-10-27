@@ -736,7 +736,7 @@ does not subtract elapsed time twice.
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
-`{ "spoilerLevel": 0, "suitability": "blur", "version": 0 }`. Anonymous viewers use these defaults locally.
+`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "version": 0 }`. Anonymous viewers use these defaults locally.
 
 - `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
   2 (major). Summaries remain spoiler-safe regardless of this setting.
@@ -744,9 +744,34 @@ Access stores one optional `account_preferences` row on the account's route and 
   behind a label and reveal control. `show` opts into displaying them. Content and semantic own classification;
   the web owns applying these values to Cover, relations and character displays.
 
-`GET /v1/accounts/{accountId}/preferences` returns both settings and `version`. `PATCH` accepts `expectedVersion`
-(required, a nonnegative integer) and either or both settings. Omitted settings keep their current values. Both routes
-require the acting account to equal the path account, with `account:read` and `account:update` respectively. Grants to
+- `shelf` holds the reader's shelf view choices so every device shows the same shelf. Access stores only what the
+  account saved and never a default; web applies its own defaults for any absent part, and a URL value wins over the
+  stored one. Every part is optional:
+  - `layouts`: map from a type scope to `grid`, `list` or `table`. A key is `all` or an absolute IRI (a scheme, `:` and
+    no whitespace) of at most 256 characters, such as `https://rezics.com/vocab/Book`. Keys are not checked against the
+    catalogue, since types are configuration; web ignores an entry for a type it no longer shows. At most 32 entries.
+  - `sorts`: map from a tab (`in_progress`, `planned`, `completed`, `paused`, `dropped`, `all`) to
+    `{ "field", "direction" }`. `field` is one of `last_activity`, `added`, `finished`, `title`, `rating`,
+    `release_date`, `progress`; `direction` is `asc` or `desc`. A stored entry always has both.
+  - `gridSize`: `small`, `medium` or `large`.
+  - `tableColumns`: an ordered list of 1 to 11 distinct keys from `cover`, `title`, `creator`, `type`, `status`,
+    `progress`, `rating`, `added`, `started`, `finished`, `last_activity`.
+
+  The column is `jsonb NOT NULL DEFAULT '{}'` with a check that it is an object of at most 16,384 bytes.
+
+`GET /v1/accounts/{accountId}/preferences` returns both settings, `shelf` (`{}` when nothing was saved, including
+when the account has no row) and `version`. `PATCH` accepts `expectedVersion` (required, a nonnegative integer) and
+any of the settings and `shelf`. Omitted settings keep their current values.
+
+`shelf` in a PATCH is a JSON Merge Patch (RFC 7396) applied to the stored shelf: an object merges key by key, `null`
+removes that key (a part such as `gridSize`, or one `layouts` or `sorts` entry), and an array (`tableColumns`) replaces
+the stored one. A sort entry may be patched by one of its fields when the stored entry exists. `shelf: null` clears the
+whole shelf. Access checks the patch shape and the merged result against the rules above; a break (more than 32
+layouts, a sort entry missing `field` or `direction`, an unknown key at any level, a value outside the allowed sets)
+answers 400 and changes nothing. A patch whose merged shelf equals the stored one, with the other settings unchanged,
+keeps the version and writes no row.
+
+Both routes require the acting account to equal the path account, with `account:read` and `account:update` respectively. Grants to
 another account do not bypass this equality check. An operator-opened session acts as its automated account and changes
 that account's settings; the operator's own bearer cannot change them directly. Responses are private and not cached.
 
@@ -755,16 +780,18 @@ A changed value increments the version once. Unchanged values preserve the versi
 setting the initial defaults therefore leaves storage absent. Returning to the defaults after a change keeps the row
 and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
 Replaying a successful key returns its original values/version after current authorization, even if later commands
-changed the preferences. Every successful response includes both settings and the version, and PATCH carries the
+changed the preferences. Every successful response includes both settings, the shelf and the version, and PATCH carries the
 session token for its command receipt. Each successful command emits the existing `account-updated` event with only
 the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
 
 Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, with logarithmic
-blocks in accounts.
-Set cost: one preference row and the command envelope's receipt, with constant rows and statements. Authentication and
+blocks in accounts plus a constant number of TOAST blocks, since the stored shelf is capped at 16,384 bytes.
+Set cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
+memory over at most 32 + 6 + 2 entries. Authentication and
 native authorization retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored
-preferences at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
-harness and default warmups.
+preferences, each holding a maximal shelf (32 layouts with 256-character keys, all six sorts, `gridSize` and 11
+columns), at scales 256, 1024 and 4096 (16 accounts per scale unit, to avoid tiny-table scans) using the shared
+harness and default warmups, for both the read and setting a maximal shelf.
 
 ## Rating counting key
 

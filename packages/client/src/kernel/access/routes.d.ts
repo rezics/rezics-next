@@ -3937,6 +3937,21 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             200: {
                                 spoilerLevel: 0 | 1 | 2;
                                 suitability: "blur" | "show";
+                                shelf: {
+                                    layouts?: Record<string, "grid" | "list" | "table">;
+                                    sorts?: {
+                                        [x: string]: {
+                                            field: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title";
+                                            direction: "asc" | "desc";
+                                        } | undefined;
+                                        [x: number]: {
+                                            field: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title";
+                                            direction: "asc" | "desc";
+                                        };
+                                    };
+                                    gridSize?: "large" | "medium" | "small";
+                                    tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
+                                };
                                 version: number;
                             };
                             400: {
@@ -4040,6 +4055,21 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             expectedVersion: number;
                             spoilerLevel?: 0 | 1 | 2;
                             suitability?: "blur" | "show";
+                            shelf?: {
+                                layouts?: Record<string, "grid" | "list" | "table" | null> | null;
+                                sorts?: {
+                                    [x: string]: {
+                                        field?: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title" | null;
+                                        direction?: "asc" | "desc" | null;
+                                    } | null | undefined;
+                                    [x: number]: {
+                                        field?: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title" | null;
+                                        direction?: "asc" | "desc" | null;
+                                    } | null;
+                                } | null;
+                                gridSize?: "large" | "medium" | "small" | null;
+                                tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[] | null;
+                            } | null;
                         };
                         params: {
                             accountId: string;
@@ -4052,6 +4082,21 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                             200: {
                                 spoilerLevel: 0 | 1 | 2;
                                 suitability: "blur" | "show";
+                                shelf: {
+                                    layouts?: Record<string, "grid" | "list" | "table">;
+                                    sorts?: {
+                                        [x: string]: {
+                                            field: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title";
+                                            direction: "asc" | "desc";
+                                        } | undefined;
+                                        [x: number]: {
+                                            field: "added" | "finished" | "last_activity" | "progress" | "rating" | "release_date" | "title";
+                                            direction: "asc" | "desc";
+                                        };
+                                    };
+                                    gridSize?: "large" | "medium" | "small";
+                                    tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[];
+                                };
                                 version: number;
                             };
                             400: {
