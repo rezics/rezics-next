@@ -69,6 +69,30 @@ interface Hit {
   id: string;
   type: string;
   labels: Labels;
+  summary: {
+    id: string;
+    type: string;
+    types: string[];
+    label: { language: 'en'; value: string };
+    creativeWork: boolean;
+    cover: null;
+  };
+}
+function fixtureSummary(subject: Pick<Hit, 'id' | 'type' | 'labels'>): Hit['summary'] {
+  if (typeof subject.labels.en !== 'string') throw new Error(`Search fixture ${subject.id} lacks an English label`);
+  if (subject.type !== 'schema:Book' && subject.type !== 'schema:Person')
+    throw new Error(`Unexpected search fixture type: ${subject.type}`);
+  return {
+    id: subject.id,
+    type: subject.type,
+    types:
+      subject.type === 'schema:Book'
+        ? ['schema:Book', 'schema:CreativeWork', 'schema:Thing']
+        : ['schema:Person', 'schema:Thing'],
+    label: { language: 'en', value: subject.labels.en },
+    creativeWork: subject.type === 'schema:Book',
+    cover: null,
+  };
 }
 interface Page {
   subjects: Hit[];
@@ -85,7 +109,12 @@ function hits(response: HttpResponse, limit: number) {
   expect(subjects.length).toBeLessThanOrEqual(limit);
   expect(new Set(subjects.map((hit) => hit.id)).size).toBe(subjects.length);
   for (const hit of subjects) {
-    expect(hit).toEqual({ id: expect.any(String), type: expect.any(String), labels: expect.any(Object) });
+    expect(hit).toEqual({
+      id: expect.any(String),
+      type: expect.any(String),
+      labels: expect.any(Object),
+      summary: fixtureSummary(hit),
+    });
     for (const label of Object.values(hit.labels)) expect(typeof label).toBe('string');
   }
   expect(response.body.as_of).toEqual(
@@ -107,7 +136,12 @@ function page(response: HttpResponse, limit = 20): Page {
   return response.body as unknown as Page;
 }
 const ids = (result: { subjects: Hit[] }) => result.subjects.map((hit) => hit.id);
-const hit = (subject: Subject): Hit => ({ id: subject.id, type: subject.type, labels: subject.labels });
+const hit = (subject: Subject): Hit => ({
+  id: subject.id,
+  type: subject.type,
+  labels: subject.labels,
+  summary: fixtureSummary(subject),
+});
 async function create(
   label: string | Labels,
   options: {
@@ -263,6 +297,7 @@ test('Statement filters use adopted Global values and positive roots admit bound
   const adopted = await write('acceptor', `${subjectPath(book.id)}:adopt`, {
     context: driver.globalContext,
     property: 'schema:author',
+    target: author.id,
     mode: 'replace',
     selection: [{ candidate, rank: 'normal' }],
     expected_head: null,
