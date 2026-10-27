@@ -111,16 +111,33 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
  * client's own queue and never counted. A rolled-back transaction or a failed statement can undo it, so the next
  * statement sends it again; a statement that ends a transaction sends none, since a failed transaction refuses it.
  */
-function intercept(client: PoolClient, state: CaptureState, explain: boolean): void {
+function intercept(client: PoolClient, state: CaptureState, explain: boolean): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
-  const pending: Attribution[] = [];
-  let inFlight: Attribution | undefined;
+  const pending: Array<Attribution | undefined> = [];
+  let suppressAttribution = false;
   // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
   let explaining: boolean | undefined = false;
 
+  const refreshAttribution = (): void => {
+    const attribution = pending[0];
+    if (attribution) clientAttribution.set(client, attribution);
+    else clientAttribution.delete(client);
+  };
+
+  const queryWithoutAttribution = (statement: string): unknown => {
+    suppressAttribution = true;
+    try {
+      return client.query(statement);
+    } finally {
+      suppressAttribution = false;
+    }
+  };
+
   const switchTo = (wanted: boolean): void => {
     explaining = wanted;
-    const task = Promise.resolve(query(`SET auto_explain.log_min_duration = ${wanted ? 0 : -1}`)).then(
+    const task = Promise.resolve(
+      queryWithoutAttribution(`SET auto_explain.log_min_duration = ${wanted ? 0 : -1}`),
+    ).then(
       () => {},
       (error: unknown) => {
         explaining = undefined;
@@ -133,34 +150,30 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
     const text = statementText(args[0]);
-    let attribution = currentAttribution(state);
-    if (!attribution && state.active) attribution = { capture: state.active, background: true };
-    if (explain && text !== undefined && attribution) {
+    let attribution = suppressAttribution ? undefined : currentAttribution(state);
+    if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
+    if (explain && !suppressAttribution && text !== undefined && attribution) {
       (attribution.background ? attribution.capture.backgroundStatements : attribution.capture.statements).push(text);
     }
-    if (attribution) {
-      pending.push(attribution);
-      inFlight ??= attribution;
-      clientAttribution.set(client, inFlight);
-    }
-    if (state.seeding) state.seeding.statements++;
-    if (explain) {
+    if (state.seeding && !suppressAttribution) state.seeding.statements++;
+    if (explain && !suppressAttribution) {
       if (text === undefined || !ENDS_TRANSACTION.test(text)) {
         const wanted = state.active !== undefined;
         if (explaining !== wanted) switchTo(wanted);
       }
       if (text !== undefined && UNDOES_SETTINGS.test(text)) explaining = undefined;
     }
+    pending.push(attribution);
+    refreshAttribution();
 
+    let completed = false;
     const done = (failed: boolean, result?: unknown): void => {
+      if (completed) return;
+      completed = true;
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
-      if (attribution) {
-        pending.shift();
-        inFlight = pending[0];
-        if (inFlight) clientAttribution.set(client, inFlight);
-        else clientAttribution.delete(client);
-      }
+      pending.shift();
+      refreshAttribution();
     };
     const callback = args.at(-1);
     if (typeof callback === 'function') {
@@ -175,9 +188,21 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
         finishBackground?.();
         return (callback as (...values: unknown[]) => unknown)(error, result, ...rest);
       };
-      return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
+      try {
+        return (query as (...values: unknown[]) => unknown)(...args.slice(0, -1), wrapped);
+      } catch (error) {
+        done(true);
+        finishBackground?.();
+        throw error;
+      }
     }
-    const outcome = (query as (...values: unknown[]) => unknown)(...args);
+    let outcome: unknown;
+    try {
+      outcome = (query as (...values: unknown[]) => unknown)(...args);
+    } catch (error) {
+      done(true);
+      throw error;
+    }
     if (outcome instanceof Promise) {
       if (attribution?.background) {
         const task = Promise.resolve(outcome).then(
@@ -191,9 +216,19 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): v
         (result) => done(false, result),
         () => done(true),
       );
+    } else if (typeof outcome === 'object' && outcome !== null && 'once' in outcome) {
+      const stream = outcome as { once?: (event: string, listener: () => void) => unknown };
+      if (typeof stream.once === 'function') {
+        stream.once('end', () => done(false));
+        stream.once('error', () => done(true));
+      } else done(false);
+    } else {
+      done(false);
     }
     return outcome;
   }) as PoolClient['query'];
+
+  return queryWithoutAttribution;
 }
 
 function instrument(client: PoolClient, state: CaptureState): void {
@@ -213,16 +248,14 @@ function instrument(client: PoolClient, state: CaptureState): void {
     }
   });
 
-  const query = client.query.bind(client) as PoolClient['query'];
-  const setupQueries = setupStatements.map((statement) => query(statement));
+  const queryWithoutAttribution = intercept(client, state, true);
+  const setupQueries = setupStatements.map((statement) => queryWithoutAttribution(statement));
   const setupTask = Promise.allSettled(setupQueries).then((results) => {
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') state.setupError ??= asError(failed.reason);
   });
   state.setupTasks.add(setupTask);
   void setupTask.then(() => state.setupTasks.delete(setupTask));
-
-  intercept(client, state, true);
 }
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
