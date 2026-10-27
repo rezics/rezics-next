@@ -22,6 +22,7 @@ type Stored = SitemapObject & { body: Uint8Array };
 class MemoryStore implements SitemapStore {
   readonly objects = new Map<string, Stored>();
   readonly counts = { head: 0, get: 0, put: 0, list: 0, delete: 0 };
+  readonly putKeys: string[] = [];
   time = startTime;
 
   async head(key: string): Promise<SitemapObject | null> {
@@ -36,12 +37,9 @@ class MemoryStore implements SitemapStore {
     return object ? new Uint8Array(object.body) : null;
   }
 
-  async put(
-    key: string,
-    value: string | Uint8Array,
-    condition?: SitemapWriteCondition,
-  ): Promise<SitemapObject | null> {
+  async put(key: string, value: string | Uint8Array, condition?: SitemapWriteCondition): Promise<SitemapObject | null> {
     this.counts.put += 1;
+    this.putKeys.push(key);
     const previous = this.objects.get(key);
     if (condition?.ifMatch !== undefined && previous?.etag !== condition.ifMatch) return null;
     if (condition?.ifNoneMatch && previous) return null;
@@ -104,11 +102,19 @@ function family(id: string, lastmod = '2026-10-19T00:00:00.000Z'): SitemapFamily
   };
 }
 
-function pagesFeed(type: string, pages: readonly { items: string[]; next: string | null }[]): SitemapExportFeed<string> & {
+function pagesFeed(
+  type: string,
+  pages: readonly { items: string[]; next: string | null }[],
+): SitemapExportFeed<string> & {
   cursors: (string | null)[];
 } {
   const cursors: (string | null)[] = [];
-  const byCursor = new Map<string | null, number>(pages.map((_, index) => [index === 0 ? null : String(index), index]));
+  const byCursor = new Map<string | null, number>();
+  let input: string | null = null;
+  for (const [index, page] of pages.entries()) {
+    byCursor.set(input, index);
+    input = page.next;
+  }
   return {
     type,
     cursors,
@@ -122,7 +128,7 @@ function pagesFeed(type: string, pages: readonly { items: string[]; next: string
   };
 }
 
-function options(store: MemoryStore, runner: MemorySteps, feeds: readonly SitemapExportFeed<unknown>[], extra = {}) {
+function options<Item>(store: MemoryStore, runner: MemorySteps, feeds: readonly SitemapExportFeed<Item>[], extra = {}) {
   return {
     runId: 'sitemaps-2026-10-20',
     origin,
@@ -199,11 +205,9 @@ test('unchanged files keep their upload time, and changing one feed rewrites onl
   ];
   await exportSitemaps(options(store, new MemorySteps(), firstFeeds));
   const before = new Map(
-    [...store.objects]
-      .filter(([key]) => key.startsWith('shards/'))
-      .map(([key, object]) => [key, object.uploaded]),
+    [...store.objects].filter(([key]) => key.startsWith('shards/')).map(([key, object]) => [key, object.uploaded]),
   );
-  const shardPuts = store.counts.put;
+  const shardPuts = store.putKeys.filter((key) => key.startsWith('shards/')).length;
 
   store.time += 24 * 60 * 60 * 1000;
   await exportSitemaps(
@@ -212,21 +216,23 @@ test('unchanged files keep their upload time, and changing one feed rewrites onl
       pagesFeed('agents', [{ items: ['agent-a'], next: null }]),
     ]),
   );
-  expect(store.counts.put - shardPuts).toBe(0);
+  expect(store.putKeys.filter((key) => key.startsWith('shards/')).length - shardPuts).toBe(0);
   for (const [key, uploaded] of before) expect(store.objects.get(key)?.uploaded).toBe(uploaded);
 
-  const putsBeforeChange = store.counts.put;
+  const putsBeforeChange = store.putKeys.filter((key) => key.startsWith('shards/')).length;
   store.time += 24 * 60 * 60 * 1000;
   const changed = pagesFeed('agents', [{ items: ['agent-a'], next: null }]);
   changed.family = () => family('agent-a', '2026-10-22T00:00:00.000Z');
   await exportSitemaps(
     options(store, new MemorySteps(), [pagesFeed('subjects', [{ items: ['subject-a'], next: null }]), changed]),
   );
-  const changedShardPuts = store.counts.put - putsBeforeChange;
-  expect(changedShardPuts).toBe(2); // one changed shard and the new run's list; the index is also conditional.
+  const changedShardPuts = store.putKeys.filter((key) => key.startsWith('shards/')).length - putsBeforeChange;
+  expect(changedShardPuts).toBe(1);
   const current = listedPaths(store.text('index.xml')).map((path) => new URL(path).pathname);
   expect(current.filter((path) => path.startsWith('/sitemap-subjects-'))).toEqual(
-    [...before.keys()].filter((key) => key.startsWith('shards/subjects-')).map((key) => `/sitemap-${key.slice('shards/'.length)}`),
+    [...before.keys()]
+      .filter((key) => key.startsWith('shards/subjects-'))
+      .map((key) => `/sitemap-${key.slice('shards/'.length)}`),
   );
   expect(current.filter((path) => path.startsWith('/sitemap-agents-'))).toHaveLength(1);
 });
@@ -239,7 +245,10 @@ test('a feed that fails after retries leaves the previous index and every file i
     .filter(([key]) => key.startsWith('shards/'))
     .map(([key, object]) => [key, new Uint8Array(object.body)] as const);
 
-  const pages = Array.from({ length: 20 }, (_, index) => ({ items: index === 0 ? ['new'] : [], next: `p${index + 1}` }));
+  const pages = Array.from({ length: 20 }, (_, index) => ({
+    items: index === 0 ? ['new'] : [],
+    next: `p${index + 1}`,
+  }));
   const cursors: (string | null)[] = [];
   const failing: SitemapExportFeed<string> = {
     type: 'subjects',
@@ -284,9 +293,9 @@ test('a rejected cursor restarts that feed once, while a repeated cursor and a s
     { items: ['once'], next: 'repeat' },
     { items: ['twice'], next: 'repeat' },
   ]);
-  await expect(
-    exportSitemaps(options(new MemoryStore(), new MemorySteps(), [repeated])),
-  ).rejects.toThrow(/repeated cursor/i);
+  await expect(exportSitemaps(options(new MemoryStore(), new MemorySteps(), [repeated]))).rejects.toThrow(
+    /repeated cursor/i,
+  );
 
   let rejections = 0;
   const twice: SitemapExportFeed<string> = {
@@ -298,9 +307,9 @@ test('a rejected cursor restarts that feed once, while a repeated cursor and a s
     },
     family: (id) => family(id),
   };
-  await expect(
-    exportSitemaps(options(new MemoryStore(), new MemorySteps(), [twice])),
-  ).rejects.toThrow(/rejected.*twice|twice.*rejected/i);
+  await expect(exportSitemaps(options(new MemoryStore(), new MemorySteps(), [twice]))).rejects.toThrow(
+    /rejected.*twice|twice.*rejected/i,
+  );
   expect(rejections).toBe(2);
 });
 
@@ -317,7 +326,9 @@ test('daily starts use one UTC id, and an export with an older index ETag cannot
   expect(created).toEqual(['sitemaps-2026-10-20']);
 
   const store = new MemoryStore();
-  await exportSitemaps(options(store, new MemorySteps(), [pagesFeed('subjects', [{ items: ['initial'], next: null }])]));
+  await exportSitemaps(
+    options(store, new MemorySteps(), [pagesFeed('subjects', [{ items: ['initial'], next: null }])]),
+  );
   const blocked = new MemorySteps();
   let entered!: () => void;
   let release!: () => void;
@@ -328,9 +339,7 @@ test('daily starts use one UTC id, and an export with an older index ETag cannot
     await gate;
   };
   store.time += 60_000;
-  const stale = exportSitemaps(
-    options(store, blocked, [pagesFeed('subjects', [{ items: ['stale'], next: null }])]),
-  );
+  const stale = exportSitemaps(options(store, blocked, [pagesFeed('subjects', [{ items: ['stale'], next: null }])]));
   await isEntered;
   await exportSitemaps(
     options(store, new MemorySteps(), [pagesFeed('subjects', [{ items: ['newer'], next: null }])], {
@@ -348,12 +357,7 @@ test('unlisted shard files are kept until seven days after their last published 
   const store = new MemoryStore();
   const run = async (runId: string, ids: string[]) => {
     await exportSitemaps(
-      options(
-        store,
-        new MemorySteps(),
-        [pagesFeed('subjects', [{ items: ids, next: null }])],
-        { runId },
-      ),
+      options(store, new MemorySteps(), [pagesFeed('subjects', [{ items: ids, next: null }])], { runId }),
     );
   };
   await run('day-zero', ['old', 'kept']);
@@ -379,7 +383,10 @@ test('feed reads, R2 operations and bounded step batches grow linearly through 3
         reads += 1;
         const start = cursor === null ? 0 : Number(cursor);
         const end = Math.min(start + 1_000, size);
-        return { items: Array.from({ length: end - start }, (_, offset) => start + offset), next: end < size ? String(end) : null };
+        return {
+          items: Array.from({ length: end - start }, (_, offset) => start + offset),
+          next: end < size ? String(end) : null,
+        };
       },
       family: (id) => family(String(id)),
     };
@@ -390,7 +397,15 @@ test('feed reads, R2 operations and bounded step batches grow linearly through 3
           runner.maxFamilies = Math.max(runner.maxFamilies, families.length);
           packed += 1;
           const digestValue = String(packed).padStart(24, '0');
-          return [{ digest: digestValue, families: families.length, urls: families.length * 8, bytes: families.length, gzip: new Uint8Array([packed & 255]) }];
+          return [
+            {
+              digest: digestValue,
+              families: families.length,
+              urls: families.length * 8,
+              bytes: families.length,
+              gzip: new Uint8Array([packed & 255]),
+            },
+          ];
         },
       }),
     );
