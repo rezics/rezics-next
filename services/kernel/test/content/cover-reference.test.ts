@@ -357,16 +357,22 @@ test('cover claim rejects every unavailable state and wrong purpose inside a nat
   }
 });
 
-test('intentional cover claim batch growth is linear in changed rows and input bytes', async () => {
-  const ids: string[] = [];
+async function coverClaimGrowth(beforeClaim?: (ids: string[], scale: number, repetition: number) => Promise<void>) {
+  let ids: string[] = [];
   const inputBytes: number[] = [];
   const batchSize = (scale: number) => scale / 256;
+  const repetitions = 5;
+  const runsPerScale = 1 + repetitions;
   const report = await checkGrowth(db, {
     name: 'explicit cover claim batch',
+    repetitions,
+    warmups: 1,
     scales: [256, 1024, 4096],
     bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
     async grow(database, scale, previous) {
-      const added = Array.from({ length: scale - previous }, () => newId(route));
+      const added = Array.from({ length: Math.max(scale - previous, runsPerScale * batchSize(scale)) }, () =>
+        newId(route),
+      );
       await database.admin.query(
         `INSERT INTO content.media
            (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
@@ -376,13 +382,17 @@ test('intentional cover claim batch growth is linear in changed rows and input b
          FROM unnest($1::uuid[]) AS ids(id)`,
         [added, route, containerId, uploaderId, digest, request.sourceUrl, request.credit, request.provenance],
       );
-      ids.push(...added);
+      // Every scale supplies one fresh batch for the warm-up and each measured run.
+      ids = added;
       const mediaIds = ids.slice(0, batchSize(scale));
       inputBytes.push(Buffer.byteLength(JSON.stringify({ ...claimInput(mediaIds[0]!), mediaIds })));
       await database.admin.query('ANALYZE content.media');
     },
-    async operation(database, scale) {
-      const mediaIds = ids.slice(0, batchSize(scale));
+    async operation(database, scale, repetition) {
+      // repetition spans scales; select this scale's disjoint batch among its new rows.
+      const start = (repetition % runsPerScale) * batchSize(scale);
+      const mediaIds = ids.slice(start, start + batchSize(scale));
+      await beforeClaim?.(mediaIds, scale, repetition);
       await runCommand(database.pool, commandOptions, async (tx) => {
         // Keep the named claim statement on the generic-plan path, independent of
         // which pooled connection receives a measured run.
@@ -392,6 +402,37 @@ test('intentional cover claim batch growth is linear in changed rows and input b
       });
     },
   });
+  return { report, inputBytes, batchSize, runsPerScale };
+}
+
+test('every measured cover claim run claims only rows that no earlier run claimed', async () => {
+  const runs: { ids: string[]; scale: number; repetition: number; claimedAt: (Date | null)[] }[] = [];
+  const { runsPerScale } = await coverClaimGrowth(async (ids, scale, repetition) => {
+    const result = await db.admin.query<{ claimed_at: Date | null }>(
+      'SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=ANY($2::uuid[])',
+      [route, ids],
+    );
+    expect(result.rows).toHaveLength(scale / 256);
+    runs.push({ ids, scale, repetition, claimedAt: result.rows.map((row) => row.claimed_at) });
+  });
+  expect(runs.map((run) => run.repetition)).toEqual(Array.from({ length: 3 * runsPerScale }, (_, i) => i));
+  const seen = new Set<string>();
+  for (const run of runs) {
+    expect(run.ids).toHaveLength(run.scale / 256);
+    expect(run.claimedAt).toEqual(run.ids.map(() => null));
+    for (const id of run.ids) {
+      expect(seen.has(id)).toBe(false);
+      seen.add(id);
+    }
+  }
+}, 60000);
+
+test('intentional cover claim batch growth is linear in changed rows and input bytes', async () => {
+  const { report, inputBytes, batchSize } = await coverClaimGrowth();
+  console.info(
+    'cover claim media blocks:',
+    JSON.stringify(report.samples.map(({ scale, cost }) => [scale, cost.relations['content.media']?.blocks])),
+  );
   expect(inputBytes[2]! - inputBytes[1]!).toBe(4 * (inputBytes[1]! - inputBytes[0]!));
   for (const sample of report.samples) {
     const media = sample.cost.relations?.['content.media'];
@@ -399,6 +440,14 @@ test('intentional cover claim batch growth is linear in changed rows and input b
     expect(mediaRows).toBeGreaterThanOrEqual(batchSize(sample.scale));
     expect(mediaRows).toBeLessThanOrEqual(2 * batchSize(sample.scale));
     expect(media?.sequentialScans).toBe(0);
+    // Per claimed row: 4 blocks for the index seek + heap fetch, 4 for the heap update
+    // (old/new pages, visibility map and free-space map), and 4 per inserted index path
+    // (root/branch/leaf + insertion at these scales). Changing claimed_at prevents HOT
+    // via media_collection_eligible_idx. The new row writes media_pkey, media_route_key_key,
+    // media_route_uploader_id_reservation_request_id_key (20261025104720_content_media.sql),
+    // and media_cover_reference_idx (20261025110915_content_cover_media.sql).
+    // The eligible and pending partial indexes receive no new entry. Thus 4 + 4 + 4*4 = 24
+    // per row, plus 16 fixed blocks allowing a 4-block split for each written index.
     expect(media?.blocks).toBeLessThanOrEqual(16 + 24 * batchSize(sample.scale));
     expect(sample.cost.blocks).toBeGreaterThan(0);
   }
