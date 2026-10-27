@@ -49,6 +49,19 @@ Semantic writes use the route action and authority below. When the authority and
 | Extension activation               | `definitions:activate` | Selected Global or community Context       |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
+## Identity references
+
+`readSubjectReference(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>): Promise<{ id: string; component: SubjectComponent } | null>`
+returns only a visible, authorized source identity and its partition anchor. The mandatory callback runs on the same
+repeatable-read, read-only client as the identity and partition reads. Callers close over their actual Access check
+and native command acceptance time when present. Missing, invalid, hidden, taken-down and denied sources return null;
+deadline and unavailable failures propagate. An authorized visible redirect throws `SubjectRedirectError` without
+following its target. Each survivor needs a separately anchored current authorization check, including after revocation.
+The component is an observation of source identity, not authorization evidence or a display-freshness promise.
+
+This boundary does not prepare types or read display metadata. Fresh profile writers use `readItemTypes` independently.
+Full subject display readers retain their existing projection freshness and deadline behavior.
+
 ## Agents
 
 ### Account agents
@@ -161,6 +174,12 @@ A Context's custom relation types are one term extension: an immutable body addr
 - The graph read is the relation and link pages: there is no separate graph endpoint.
 
 ## Cost
+
+### Subject identity reference
+
+- Touches: one `core.partition` primary-key probe, one route-leading `semantic.subject` primary-key probe filtered by native visibility, and one descending `semantic.redirect` primary-key range limited to the latest row. The mandatory caller's Access check runs on that same snapshot and retains its own evidence cost. No projection, checkpoint, pending-member, definition, fact, relation, label, media or summary reads.
+- Bound: two data statements and three transaction-control statements; at most three examined relation rows, O(log N) blocks, and constant result bytes independent of type/label size, unrelated subjects, redirect/editorial history and relation degree. Invalid ids perform no SQL; missing and nonvisible identities skip Access, and denied sources disclose neither identity nor redirect.
+- Growth check: `test/semantic/growth-subject-reference.test.ts`: `reference resolution stays bounded as unrelated history and relation degree grow`.
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
 Let N be total subjects, P subjects in the anchor partition, F stored fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
