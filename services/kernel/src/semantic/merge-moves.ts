@@ -13,9 +13,13 @@ import readMember from './merge-moves-read-member.sql';
 import updateMember from './merge-moves-update-member.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
 import recordMovedAgentLinks from './account-agent-record-moved-links.sql';
+import upsertOutboundLinks from './upsert-outbound-links.sql';
+import pageOutbound from './list-outbound-merge.sql';
+import readLatestRevision from './merges-read-latest-revision.sql';
+import clearProjectionPending from './merge-clear-projection-pending.sql';
 
-type Move = { phase: 'links' | 'members' | 'done'; cursor: string[] };
 type Verification = { account: string; receipt: string };
+type Move = { phase: 'links' | 'outbound' | 'members' | 'done'; cursor: string[] };
 type Link = {
   property: string;
   source_subject_id: string;
@@ -26,6 +30,24 @@ type Link = {
   source_type: string;
   order_key: string;
   filter_value: string;
+};
+type Outbound = {
+  property: string;
+  statement: string;
+  slot: string;
+  target: string | null;
+  filter_value: string;
+  order_key: string;
+  relation: boolean;
+  source_type: string;
+  source_order_key: string;
+  outbound_order: 'position' | 'date' | 'name' | null;
+  source_revision: number;
+  source_security_revision: number;
+  target_revision: number;
+  target_type: string;
+  external: string | null;
+  value: 'value' | 'somevalue' | 'novalue';
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -116,6 +138,7 @@ export async function moveMergePage(
   const sourceRoute = routeOf(id)!;
   const page = await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
     let links: Link[] = [];
+    let outbound: Outbound[] = [];
     let members: ({ member_id: string } & Move)[] = [];
     let next: Move;
     if (state.phase === 'links') {
@@ -136,6 +159,38 @@ export async function moveMergePage(
           cursor: [last.property, last.source_subject_id, last.statement_id, last.filter_value],
         };
       else {
+        next = { phase: 'outbound', cursor: [] };
+      }
+    } else if (state.phase === 'outbound') {
+      const latest = await readLatestRevision.run(tx, { route: sourceRoute, subject_id: id });
+      outbound = (
+        await pageOutbound.run(tx, {
+          route: sourceRoute,
+          subject_id: id,
+          after_property: state.cursor[0] ?? '',
+          after_target: state.cursor[1] ?? NIL,
+          after_statement: state.cursor[2] ?? NIL,
+          after_filter: state.cursor[3] ?? NIL,
+        })
+      ).map((row) => ({
+        ...row,
+        source_revision: Number(latest?.revision ?? row.source_revision),
+        source_security_revision: Number(latest?.security_revision ?? row.source_security_revision),
+        target_revision: Number(row.target_revision),
+        target_type: String(row.target_type),
+        relation: row.relation === true,
+        target: typeof row.target === 'string' ? row.target : null,
+        external: typeof row.external === 'string' ? row.external : null,
+        value: row.value === 'novalue' || row.value === 'somevalue' ? row.value : 'value',
+        outbound_order:
+          row.outbound_order === 'position' || row.outbound_order === 'date' || row.outbound_order === 'name'
+            ? row.outbound_order
+            : null,
+      })) as Outbound[];
+      const last = outbound.at(-1);
+      if (outbound.length === 100 && last)
+        next = { phase: 'outbound', cursor: [last.property, last.target ?? NIL, last.statement, last.filter_value] };
+      else {
         const member = await firstMember.run(tx, { route: sourceRoute, subject_id: id });
         next = { phase: member ? 'members' : 'done', cursor: [] };
       }
@@ -150,12 +205,88 @@ export async function moveMergePage(
           ? { phase: 'members', cursor: [members.at(-1)!.member_id] }
           : { phase: 'done', cursor: [] };
     }
-    return { value: { links, members, next }, events: [projected(survivor)] };
+    return { value: { links, outbound, members, next }, events: [projected(survivor)] };
   });
   // Repoint at most this page of members. Their pending link moves get separate continuations.
   for (const member of page.value.members)
     await register(pool, member.member_id, survivor, { phase: member.phase, cursor: member.cursor });
   const route = routeOf(survivor)!;
+  if (page.value.outbound.length) {
+    const sourceRoute = routeOf(id)!;
+    const revision = page.value.outbound[0]!.source_revision;
+    const securityRevision = page.value.outbound[0]!.source_security_revision;
+    await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx, { transactionId }) => {
+      await upsertOutboundLinks.run(tx, {
+        route: sourceRoute,
+        transaction_id: transactionId,
+        changes: page.value.outbound.map((link) => ({
+          subject_id: id,
+          property: link.property,
+          filter_value: link.filter_value,
+          order_key: link.order_key,
+          target_subject_id: link.target ?? NIL,
+          statement_id: link.statement,
+          slot_id: link.slot,
+          relation: link.relation,
+          source_type: link.source_type,
+          source_order_key: link.source_order_key,
+          outbound_order: link.outbound_order,
+          source_revision: revision,
+          source_security_revision: securityRevision,
+          target_revision: link.target_revision,
+          target_type: link.target_type,
+          external: link.external,
+          value: link.value,
+          present: false,
+        })),
+      });
+      return { value: null, events: [projected(id)] };
+    });
+    const targets = new Map<number, Outbound[]>();
+    for (const link of page.value.outbound) {
+      if (!link.target) continue;
+      const targetRoute = routeOf(link.target)!;
+      const partition = partitionOf(targetRoute);
+      const group = targets.get(partition) ?? [];
+      group.push(link);
+      targets.set(partition, group);
+    }
+    for (const [partition, links] of targets) {
+      const byRoute = new Map<number, Outbound[]>();
+      for (const link of links) {
+        const targetRoute = routeOf(link.target!)!;
+        const group = byRoute.get(targetRoute) ?? [];
+        group.push(link);
+        byRoute.set(targetRoute, group);
+      }
+      await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+        for (const [targetRoute, routeLinks] of byRoute)
+          await upsertInboundLinks.run(tx, {
+            route: targetRoute,
+            transaction_id: transactionId,
+            changes: routeLinks.map((link) => ({
+              subject_id: link.target,
+              property: link.property,
+              source_subject_id: id,
+              statement_id: link.statement,
+              source_revision: revision,
+              source_security_revision: securityRevision,
+              present: false,
+              source_type: link.source_type,
+              order_key: link.source_order_key,
+              filter_value: link.filter_value,
+            })),
+          });
+        return { value: null, events: [projected(id)] };
+      });
+    }
+  }
+  if (state.phase === 'outbound' && page.value.next.phase !== 'outbound') {
+    await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
+      await clearProjectionPending.run(tx, { route: sourceRoute, subject_id: id });
+      return { value: null, events: [projected(id)] };
+    });
+  }
   const applied = await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
     const redirect = await redirectOf(tx, survivor);
     if (redirect) return { value: redirect, events: [projected(survivor)] };

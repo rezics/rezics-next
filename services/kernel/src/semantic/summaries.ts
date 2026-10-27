@@ -9,6 +9,8 @@ import { relatedReadEligibility } from './eligibility.ts';
 import type { Statement } from './item.ts';
 import { slotId } from './slots.ts';
 import readSummaries from './summaries-read.sql';
+import readRepresentativeEditions from './summaries-representative-editions.sql';
+import { withReadTransaction } from './read.ts';
 
 export type CoverSummary = {
   media: string;
@@ -29,6 +31,7 @@ export type SubjectSummary = {
 };
 export type SummaryDependencies = {
   client: Pick<PoolClient, 'query'>;
+  pool?: Pool;
   /** The active release, resolved once by the caller for the whole page. */
   release: Release;
   authorize: (client: Pick<PoolClient, 'query'>, id: string, batch: readonly string[]) => Promise<boolean>;
@@ -81,7 +84,7 @@ export async function readSubjectSummaries(
   if (ids.length > 256) throw new RangeError('Subject summaries accept at most 256 ids');
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
   if (!ids.length) return results;
-  if ('pool' in deps) {
+  if ('access' in deps) {
     const reader = deps;
     const active = await activeRelease(reader.pool);
     if (!active) return results;
@@ -90,6 +93,7 @@ export async function readSubjectSummaries(
     return readSubjectSummaries(
       {
         client,
+        pool: reader.pool,
         release: active.release,
         ...(reader.maySeeCover ? { maySeeCover: reader.maySeeCover } : {}),
         async authorize(connection, id, batch) {
@@ -126,16 +130,29 @@ export async function readSubjectSummaries(
     }
     const rows = new Map<string, Row>();
     for (const [partition, group] of groups) {
-      const found = (await readSummaries.run(storage.client, {
+      const parameters = {
         partition_no: partition,
         context_id: GLOBAL_CONTEXT,
         subjects: group.map((id) => ({
           route: routeOf(id)!,
           id,
           image: slotId(id, 'schema:image'),
-          representative: slotId(id, 'rezics:representativeEdition'),
         })),
-      })) as Row[];
+      };
+      const subjects = group.map((id) => ({ route: routeOf(id)!, id }));
+      const representatives = storage.pool
+        ? await withReadTransaction(storage.pool, async (client) => {
+            await client.query('SET LOCAL enable_seqscan = off');
+            const found = await readRepresentativeEditions.run(client, { partition_no: partition, subjects });
+            return found.map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
+          })
+        : (await readRepresentativeEditions.run(storage.client, { partition_no: partition, subjects })).map((row) => ({
+            id: row.id,
+            slot_id: row.slot_id,
+            ordinal: Number(row.ordinal),
+          }));
+      const summaryParameters = { ...parameters, representatives };
+      const found = (await readSummaries.run(storage.client, summaryParameters)) as Row[];
       for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
     }
     return rows;

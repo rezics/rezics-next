@@ -5,7 +5,7 @@ WITH input AS NOT MATERIALIZED (
 SELECT s.subject_id::text AS id, s.type,
        COALESCE(labels.body, '{}'::jsonb) AS labels,
        COALESCE(choices.body, '[]'::jsonb) AS choices
-FROM jsonb_to_recordset(:subjects::jsonb) AS requested(route integer, id uuid, image uuid, representative uuid)
+FROM jsonb_to_recordset(:subjects::jsonb) AS requested(route integer, id uuid, image uuid)
 CROSS JOIN input
 JOIN LATERAL (
   SELECT subject_id, type FROM semantic.subject
@@ -25,8 +25,13 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
   SELECT jsonb_agg(jsonb_build_object('property', slots.property, 'statement', live.body)
                    ORDER BY slots.property, live.ordinal, live.id) AS body
-  FROM (VALUES ('schema:image', requested.image),
-               ('rezics:representativeEdition', requested.representative)) AS slots(property, slot)
+  FROM (
+    SELECT 'schema:image'::text AS property, requested.image AS slot, 0 AS ordinal
+    UNION ALL
+    SELECT 'rezics:representativeEdition', representatives.slot_id, representatives.ordinal
+    FROM jsonb_to_recordset(:representatives::jsonb) AS representatives(id uuid, slot_id uuid, ordinal integer)
+    WHERE representatives.id = requested.id
+  ) AS slots(property, slot, ordinal)
   CROSS JOIN LATERAL (
     SELECT operation FROM semantic.fact
     WHERE route = requested.route AND subject_id = requested.id AND slot_id = slots.slot

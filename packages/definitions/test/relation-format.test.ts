@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { bundledRelease } from '../src/bundled.ts';
 import { CatalogueError, compileCatalogue } from '../src/compile.ts';
 import { validateRelease, valueSchema, type Release } from '../src/index.ts';
 
@@ -317,4 +318,44 @@ test("a type's cover ratio is its own annotation or its nearest base's", async (
   const invalid = structuredClone(release) as Release & { types: Record<string, any> };
   invalid.types['schema:Deep']!.coverRatio = '65:1';
   expect(validateRelease(invalid).map(({ pointer }) => pointer)).toContain('/types/schema:Deep/coverRatio');
+});
+
+test('a relation slot key compiles as an admitted item qualifier and is bundled for voice credits', async () => {
+  const release = await compileCatalogue(
+    input(withAnnotations(`${directedAnnotations}\n      relation_slot_key: schema:role`), 'related from'),
+  );
+  expect(release.properties['schema:related']!.relation).toEqual({
+    group: 'order',
+    inverse: 'wdt:P157',
+    inverseLabels: { en: 'related from', ja: '関連される' },
+    acyclic: true,
+    order: 'position',
+    filter: 'schema:role',
+    slotKey: 'schema:role',
+  });
+  expect(validateRelease(release)).toEqual([]);
+  expect(bundledRelease.properties['wdt:P725']!.relation!.slotKey).toBe('wdt:P453');
+});
+
+test('slot keys refuse unknown, unadmitted and non-item qualifiers at compilation and release validation', async () => {
+  for (const key of ['wdt:P999', 'wdt:P156', 'schema:position']) {
+    await expectCompilePointer(
+      withAnnotations(`${directedAnnotations}\n      relation_slot_key: ${key}`),
+      'relations.yaml',
+      '/slots/related/annotations/relation_slot_key',
+      'related from',
+    );
+  }
+  const release = await compileCatalogue(input(withAnnotations(directedAnnotations), 'related from'));
+  for (const slotKey of ['wdt:P999', 'wdt:P156', 'schema:position']) {
+    const changed = structuredClone(release);
+    changed.properties['schema:related']!.relation!.slotKey = slotKey;
+    expect(validateRelease(changed)).toContainEqual({
+      pointer: '/properties/schema:related/relation/slotKey',
+      code: 'invalid',
+    });
+  }
+  const malformed = structuredClone(release) as any;
+  malformed.properties['schema:related'].relation.slotKey = 1;
+  expect(validateRelease(malformed)).not.toEqual([]);
 });

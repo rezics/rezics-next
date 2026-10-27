@@ -216,6 +216,9 @@
         "order": {
           "enum": ["position", "date", "name"]
         },
+        "slotKey": {
+          "$ref": "#/$defs/curie"
+        },
         "filter": {
           "$ref": "#/$defs/curie"
         }

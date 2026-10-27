@@ -6,19 +6,26 @@ import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  DEFAULT_REQUEST_DEADLINE_MS,
+  runCommand,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { fencedIds } from './fences.ts';
-import { factDataTypes, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
+import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectBulkContent, rejectContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { holderFacts } from './link-keys.ts';
 import readIdentityVisibility from './read-visibility.sql';
 import updateIdentity from './update-subject-identity.sql';
@@ -42,6 +49,11 @@ import {
   accountAgentId,
   accountAgentsForSubjects,
 } from './agents.ts';
+import listOutboundLinks from './list-outbound-links-by-property.sql';
+import readOutboundLinkCount from './read-outbound-link-count.sql';
+import { waitForSubjectLinks } from './link-freshness.ts';
+
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export { writeFacts } from './write-facts.ts';
 
@@ -148,7 +160,12 @@ export async function writeSubject(
     authored,
   );
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
-  const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
+  const facts = itemFacts(
+    subjectId,
+    options.item,
+    typeof input?.type === 'string' ? input.type : undefined,
+    options.release.release,
+  );
   const dataTypes = factDataTypes(options.release.release, facts);
   const statementSubjects = [subjectId, ...checked.targets.map((item) => item.id)];
   const itemDetails = await readItemDetails(tx, statementSubjects);
@@ -165,7 +182,9 @@ export async function writeSubject(
     subject_id: subjectId,
     type: String(input.type),
     transaction_id: transactionId,
-    current_facts: facts.length,
+    current_facts: facts.filter(
+      (fact) => fact.kind !== 'statement' || !isRelationProperty(options.release.release, fact.property!),
+    ).length,
     current_release: options.release.digest,
   });
   await createRevision.run(tx, {
@@ -198,10 +217,18 @@ export async function writeSubject(
     route,
     subject_id: subjectId,
     transaction_id: transactionId,
-    facts: facts.map((fact) => ({ ...fact, release: fact.kind === 'statement' ? options.release.digest : null })),
+    facts: facts.map((fact) => ({
+      ...fact,
+      release: fact.kind === 'statement' ? options.release.digest : null,
+      relation: fact.kind === 'statement' && isRelationProperty(options.release.release, fact.property!),
+    })),
   });
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
-  const changes = linkChanges([], facts, dataTypes, { release: options.release.release, type: String(input.type) });
+  const changes = linkChanges([], facts, dataTypes, {
+    subject: subjectId,
+    release: options.release.release,
+    type: String(input.type),
+  });
   if (changes.length > 0) {
     events.push({
       type: LINKS_CHANGED,
@@ -214,6 +241,16 @@ export async function writeSubject(
       revision: 1,
       release: options.release.digest,
       context: CONTEXT,
+      relationCounts: Object.fromEntries(
+        (options.release.release.types[String(input.type)]?.properties ?? [])
+          .filter((property) => isRelationProperty(options.release.release, property))
+          .map((property) => [
+            property,
+            facts.filter(
+              (fact) => fact.kind === 'statement' && fact.property === property && fact.operation === 'assert',
+            ).length,
+          ]),
+      ),
     }),
     events,
   };
@@ -302,7 +339,12 @@ export async function readSubject(
   authorize: (client: PoolClient) => Promise<boolean>,
   context = GLOBAL_CONTEXT,
   routeKey?: Uint8Array,
-  summaries: { languages?: readonly string[]; authorize?: SummaryDependencies['authorize'] } = {},
+  summaries: {
+    languages?: readonly string[];
+    authorize?: SummaryDependencies['authorize'];
+    seen?: readonly { partition: number; epoch: number; position: bigint }[];
+    deadline?: number;
+  } = {},
 ): Promise<{
   subject: Item;
   account: { id: string } | null;
@@ -315,6 +357,17 @@ export async function readSubject(
   if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
   const active = await activeRelease(pool);
+  const observed = await withConnection(pool, (client) => readPartition(client, partitionOf(route)));
+  if (observed && observed.position > 0n)
+    await waitForSubjectLinks(
+      pool,
+      [
+        ...(summaries.seen ?? []),
+        { partition: observed.partitionNo, epoch: observed.epoch, position: observed.position },
+      ],
+      id,
+      summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
+    );
   const snapshot = await withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition) {
@@ -332,11 +385,40 @@ export async function readSubject(
     if (!release) throw new Error('Subject revision release is missing');
     let statementFacts: FactRow[] = [];
     const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
+    const relationCounts: Record<string, number> = {};
     if (allowed) {
-      for (const property of release.types[rows[0]!.type]!.properties) {
-        const view = await slotView(client, id, property, context, defaults);
-        statementFacts.push(...view.facts);
-        if (view.resolution) resolution[property] = view.resolution;
+      const properties = release.types[rows[0]!.type]!.properties;
+      if (properties.some((property) => isRelationProperty(release, property)))
+        await client.query('SET LOCAL enable_seqscan = off');
+      for (const property of properties) {
+        if (!isRelationProperty(release, property)) {
+          const view = await slotView(client, id, property, context, defaults);
+          statementFacts.push(...view.facts);
+          if (view.resolution) resolution[property] = view.resolution;
+          continue;
+        }
+        const preview = (await listOutboundLinks.run(client, {
+          route,
+          subject_id: id,
+          property,
+          filter_value: NIL_UUID,
+          after_order: '',
+          after_target: NIL_UUID,
+          after_statement: NIL_UUID,
+          page_limit: 13,
+        })) as { slot: string; statement: string; target: string | null; order_key: string }[];
+        const count = await readOutboundLinkCount.run(client, {
+          route,
+          subject_id: id,
+          property,
+          filter_value: NIL_UUID,
+        });
+        relationCounts[property] = Number(count?.value ?? 0);
+        for (const entry of preview.slice(0, 12)) {
+          const view = await slotView(client, id, property, context, defaults, entry.slot);
+          statementFacts.push(...view.facts);
+          if (view.resolution) resolution[property] = view.resolution;
+        }
       }
       if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
     }
@@ -347,10 +429,11 @@ export async function readSubject(
       release,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       resolution,
+      relationCounts,
     };
   });
   if (!snapshot) return null;
-  const { rows, component, release, statementFacts, resolution } = snapshot;
+  const { rows, component, release, statementFacts, resolution, relationCounts } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
   return {
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
@@ -359,6 +442,7 @@ export async function readSubject(
           await readSubjectSummaries(
             {
               client: { query: pool.query.bind(pool) },
+              pool,
               release: active.release,
               authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
             },
@@ -372,6 +456,7 @@ export async function readSubject(
       release: rows[0]!.release,
       context,
       resolution,
+      relationCounts,
     }),
     component,
   };
@@ -622,13 +707,7 @@ export async function updateSubjectIdentity(
         source: null,
         labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
       });
-      const after = await holderFacts(tx, options.subject, options.release.release);
-      const changes = linkChanges(
-        before.facts,
-        after.facts,
-        factDataTypes(options.release.release, [...before.facts, ...after.facts]),
-        { release: options.release.release, beforeType: before.type, type },
-      );
+      const keysChanged = options.labels !== undefined || type !== before.type;
       return {
         value: { revision },
         events: [
@@ -637,19 +716,18 @@ export async function updateSubjectIdentity(
             subject: options.subject,
             data: { id: options.subject, revision, kind: 'identity' },
           },
-          ...(changes.length
-            ? [
-                {
-                  type: LINKS_CHANGED,
+          ...(keysChanged
+            ? (['holder', 'target'] as const).map((direction) => ({
+                type: LINK_KEYS_CHANGED,
+                subject: options.subject,
+                data: {
                   subject: options.subject,
-                  data: {
-                    subject: options.subject,
-                    revision,
-                    security_revision: Number(visibility.securityRevision),
-                    changes,
-                  },
+                  direction,
+                  revision,
+                  security_revision: Number(visibility.securityRevision),
+                  cursor: [],
                 },
-              ]
+              }))
             : []),
         ],
       };

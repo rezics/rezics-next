@@ -31,6 +31,7 @@ LEFT JOIN LATERAL (
   CROSS JOIN input
   WHERE entry.source = 'expanded'
     AND route = entry.route AND subject_id = entry.subject_id AND candidate_id = entry.candidate_id
+    AND NOT relation
     AND route >= input.partition_no * 16
     AND route < (input.partition_no + 1) * 16
   LIMIT 1

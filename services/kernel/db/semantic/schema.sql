@@ -195,6 +195,7 @@ CREATE TABLE semantic.candidate (
     revision integer NOT NULL,
     origin text NOT NULL,
     view_order integer DEFAULT 0 NOT NULL,
+    relation boolean DEFAULT false NOT NULL,
     CONSTRAINT candidate_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT candidate_check1 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
     CONSTRAINT candidate_origin_check CHECK ((origin = ANY (ARRAY['compact'::text, 'proposal'::text]))),
@@ -289,6 +290,7 @@ CREATE TABLE semantic.fact (
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     release text,
+    relation boolean DEFAULT false NOT NULL,
     CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
     CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
     CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
@@ -367,7 +369,7 @@ CREATE TABLE semantic.merge_member (
     member_id uuid NOT NULL,
     phase text DEFAULT 'links'::text NOT NULL,
     cursor jsonb DEFAULT '[]'::jsonb NOT NULL,
-    CONSTRAINT merge_member_phase_check CHECK ((phase = ANY (ARRAY['links'::text, 'members'::text, 'done'::text])))
+    CONSTRAINT merge_member_phase_check CHECK ((phase = ANY (ARRAY['links'::text, 'outbound'::text, 'members'::text, 'done'::text])))
 );
 
 
@@ -391,6 +393,57 @@ CREATE TABLE semantic.moderation (
     CONSTRAINT moderation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT moderation_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: outbound_link; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.outbound_link (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    property text NOT NULL,
+    filter_value uuid NOT NULL,
+    order_key text NOT NULL COLLATE pg_catalog."C",
+    target_subject_id uuid NOT NULL,
+    statement_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    relation boolean NOT NULL,
+    source_type text DEFAULT ''::text NOT NULL,
+    source_order_key text DEFAULT ''::text NOT NULL COLLATE pg_catalog."C",
+    outbound_order text,
+    source_revision integer NOT NULL,
+    source_security_revision bigint DEFAULT 0 NOT NULL,
+    target_revision integer DEFAULT 0 NOT NULL,
+    target_type text DEFAULT ''::text NOT NULL,
+    external text,
+    value text NOT NULL,
+    present boolean NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT outbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT outbound_link_property_check CHECK ((char_length(property) >= 1)),
+    CONSTRAINT outbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT outbound_link_source_revision_check CHECK ((source_revision >= 1)),
+    CONSTRAINT outbound_link_source_security_revision_check CHECK ((source_security_revision >= 0)),
+    CONSTRAINT outbound_link_target_revision_check CHECK ((target_revision >= 0)),
+    CONSTRAINT outbound_link_value_check CHECK ((value = ANY (ARRAY['value'::text, 'somevalue'::text, 'novalue'::text])))
+);
+
+
+--
+-- Name: outbound_link_count; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.outbound_link_count (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    property text NOT NULL,
+    filter_value uuid NOT NULL,
+    value bigint NOT NULL,
+    CONSTRAINT outbound_link_count_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT outbound_link_count_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT outbound_link_count_value_check CHECK ((value >= 0))
 );
 
 
@@ -483,6 +536,7 @@ CREATE TABLE semantic.subject (
     security_revision bigint DEFAULT 0 NOT NULL,
     current_facts integer DEFAULT 0 NOT NULL,
     current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
+    projection_pending boolean DEFAULT false NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
@@ -636,6 +690,22 @@ ALTER TABLE ONLY semantic.moderation
 
 
 --
+-- Name: outbound_link_count outbound_link_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.outbound_link_count
+    ADD CONSTRAINT outbound_link_count_pkey PRIMARY KEY (route, subject_id, property, filter_value);
+
+
+--
+-- Name: outbound_link outbound_link_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.outbound_link
+    ADD CONSTRAINT outbound_link_pkey PRIMARY KEY (route, subject_id, property, filter_value, order_key, target_subject_id, statement_id);
+
+
+--
 -- Name: partition_subjects partition_subjects_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -737,6 +807,13 @@ CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, s
 --
 
 CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, subject_id, member_id) WHERE (phase <> 'done'::text);
+
+
+--
+-- Name: outbound_link_present; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_present ON semantic.outbound_link USING btree (route, subject_id, property, filter_value, order_key, target_subject_id, statement_id) INCLUDE (slot_id) WHERE present;
 
 
 --

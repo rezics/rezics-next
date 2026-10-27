@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route
 )
-SELECT latest.revision, latest.release, c.candidate_id::text, c.property, c.slot_id::text
+SELECT latest.revision, latest.release, c.candidate_id::text, c.property, c.slot_id::text, c.relation
 FROM semantic.subject s
 CROSS JOIN input
 JOIN LATERAL (

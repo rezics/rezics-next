@@ -91,6 +91,7 @@ const relationAnnotationKeys = [
   'acyclic',
   'relation_order',
   'relation_filter',
+  'relation_slot_key',
 ] as const;
 const coverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
 
@@ -610,6 +611,9 @@ export async function compileCatalogue(input: {
         add(annotation('relation_order'), 'invalid', 'Relation order must be position, date or name');
       if (order === 'position' && !property.qualifiers.includes('schema:position'))
         add(annotation('relation_order'), 'invalid', 'Position order requires the schema:position qualifier');
+      const slotKey = annotations.relation_slot_key;
+      if (slotKey !== undefined && (typeof slotKey !== 'string' || !property.qualifiers.includes(slotKey)))
+        add(annotation('relation_slot_key'), 'invalid', 'Relation slot key must be an admitted item qualifier');
       const filter = annotations.relation_filter;
       if (filter !== undefined && (typeof filter !== 'string' || !property.qualifiers.includes(filter)))
         add(annotation('relation_filter'), 'invalid', 'Relation filter must be an admitted item qualifier');
@@ -622,6 +626,7 @@ export async function compileCatalogue(input: {
             | 'name',
           ...direction,
           ...(typeof filter === 'string' ? { filter } : {}),
+          ...(typeof slotKey === 'string' ? { slotKey } : {}),
         };
       }
     }
@@ -691,6 +696,12 @@ export async function compileCatalogue(input: {
         { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_filter') },
         'invalid',
         'Relation filters must name an admitted item qualifier',
+      );
+    if (relation.slotKey && release.properties[relation.slotKey]?.datatype !== 'wikibase-item')
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_slot_key') },
+        'invalid',
+        'Relation slot keys must name an admitted item qualifier',
       );
   }
   for (const [key, type] of Object.entries(release.types))

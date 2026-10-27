@@ -54,7 +54,11 @@ Every item property in a definition release declares how it reads in both direct
 
 A fact is stored once, on the side the release names as canonical. The other side is a read of the inverse, never a second statement, so the two directions cannot disagree. The inverse is served from inbound-edge rows in the target's partition, maintained from the forward statement and rebuildable from it.
 
-The per-subject fact cap bounds a subject's descriptive facts. It never bounds how many relations a subject can take part in: a long-running series has hundreds of characters, each with a voice credit, and a prolific performer has thousands of credits. Relations are therefore read in pages in both directions, and the anchored subject read returns only a bounded preview of each relation group with its count.
+The per-subject cap of 512 applies to descriptive facts, including labels, descriptions, aliases, classifications and every other non-relation statement. A statement is a relation when its property in the release used to write it declares a group of `order`, `derivation`, `world`, `membership`, `association`, `credit` or `appearance`. Relation statements do not count toward that cap. The per-command limit remains 512 facts, so large casts are written across commands.
+
+Relations remain statements and keep the same candidates, slots, Contexts, adoption, revisions, moderation and history as other statements. Each relation slot is keyed by `(subject, property, target)`. A property's optional `relation.slotKey` adds the value of an admitted item qualifier to that identity, for example `wdt:P725` uses `wdt:P453` to give each actor–character pair its own slot. A relation with a resolved target and no slot-key qualifier uses the target slot with an empty key. A `somevalue` with a `schema:sameAs` IRI has its own external-IRI slot; `somevalue` without that qualifier and `novalue` use the property-level slot. A later resolved statement is proposed in its target slot and does not automatically move the unresolved candidate.
+
+Relation slots are projected into `semantic.outbound_link` in the holder's partition, with a mirror in `semantic.inbound_link` in the target's partition. Unresolved relation slots have outbound rows, count toward property totals and have no inbound row. The subject read returns the first 12 selected slots per relation property and its exact count. A relation candidate that exists only in a Context is not in either projection, the preview or relation pages until a later change layers Context candidates into both projections.
 
 A source relation is mapped to a release property only after its direction has been checked against the source's documentation and at least one known record. A source relation that no existing standard term expresses gets a `rezics:` term with its own inverse, labels and group; it is never dropped because no Wikidata property matches, and it is never mapped to a looser term that changes its meaning.
 
@@ -80,6 +84,10 @@ The projection stores a base row with the nil UUID and a row per distinct declar
 
 Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
 
+`GET /v1/subjects/:id/relations?property=P` reads the holder's forward projection. It accepts the same `filter`, `type`, `limit` (1–100, default 25) and opaque `cursor` parameters. The page is ordered by the property's declared key, includes each selected slot's Context view and the target's type and label, and returns an exact or at-least count. Its type-filtered scan examines at most `4 × limit + 1` rows; the separate type-count sample is capped at 1,000 rows. Unresolved values follow resolved targets and sort by their declared key, then external IRI and statement id. Target labels are filled in one batched read per target partition. Freshness, authorization and deadline handling match `/links`.
+
+Both projections are maintained by the links relay and can be rebuilt from forward statements. Holder type, default label or date changes page through that holder's outbound links and re-emit their inbound rows. A target type, default label or date change pages through its inbound rows and re-emits the holders' outbound rows. Each relay step handles a bounded page; no request performs the full re-emission. Merges page both projections. A merge redirects reads from the source to the survivor without rewriting the source's statements; a later statement on the survivor creates another slot until an editor folds the statements. Revision history already pages revisions, bulk candidate reads probe candidates by slot, moderation reads one slot at a time and pages visibility projection work, and search source reads exclude relation facts from descriptive enumeration.
+
 A hub (a long-running franchise, a prolific voice actor, a genre concept) has an unbounded number of relations, so every view over them is paged and no read enumerates them all. Credits that belong to one episode or one release are stated on that episode or release subject, not on the work.
 
 ### Custom relation types
@@ -100,7 +108,7 @@ The number of custom relation types is limited per Context; statements that use 
 
 ## Cost
 
-These bounds follow `subject.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
+These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
 Let N be total subjects, P subjects in the anchor partition, F stored fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
 For several subjects, F denotes their maximum; logarithms mean `log(2 + size)`.
 Rows means rows examined, including filtered rows, not just returned rows; blocks means shared blocks accessed, including index, heap, and payload blocks, rather than cache misses or elapsed time.
@@ -109,12 +117,12 @@ The table gives the supported indexed access shape, not a promise that PostgreSQ
 Fact indexes have size up to N times F, so write `L = log(N(1 + F))`; with bounded F this is O(log N).
 Command history can grow without new subjects: let H count receipts/outbox/write-basis rows and `C = log(2 + H)`; it cannot honestly be bounded by N alone.
 For variable-size subject payloads add B shared blocks, where B is the total payload blocks read or written (including the receipt); growth checks hold B fixed. Structural validation caps decimal strings at 127 characters and time years at 16 digits, so every value has a fixed maximum size. Bounds assume fixed payload sizes; definition validation enforces a 4 MiB release limit before publishing, with 1,024 types, 4,096 properties and 64 properties per type, and validates cold reads too. A cold read is linear in the release's canonical bytes and happens once per digest per process. A warm cache, keyed by digest, serves later requests from the validated body. Those requests touch the subject's type and the properties on its facts; they do not iterate the release. Their rows, blocks and statements are constant in M.
-`writeFacts` refuses more than 512 facts for one subject before SQL. Creation and slot expansion both use that path. Each slot's `log_seq` stops at 33, and only an expand row may use 33.
+Each write command refuses more than 512 submitted facts before SQL. The subject's `current_facts` cap counts descriptive facts only. Each slot's `log_seq` stops at 33, and only an expand row may use 33.
 `pageSubjects` enforces 1 <= s <= 100 at read entry (default 25) and fetches s + 1 subjects by primary key. A batched read refuses more than 256 ids before SQL.
 For batches, g is the number of nonempty partitions, at most min(i, 4096), and P is the largest touched partition; for authorization, G is resource permission rows, U membership-history rows examined, q candidate organizations, and A total Access rows.
 A sourced batch has at most 100 commands. T is the number of distinct source tuples among the candidates a read would show, bounded by the statements on that page. Source-fence reads use content's `readFences`: one statement per tuple partition, at most 100 tuples, so a larger page takes `ceil(T / 100)` statements in that partition.
 `subject_pkey(route, subject_id)` and `fact_pkey(route, subject_id, slot_id, log_seq)` locate a subject and one slot. `fact_label (route, subject_id, language) WHERE kind = 'label' AND operation = 'assert'` reaches label rows without the subject's other facts.
-Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET, partition SELECT, one page SELECT, COMMIT (five statements). A subject read adds one statement per slot view and one batched read per related partition.
+Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET timeout, partition SELECT, one page SELECT, COMMIT (five statements); link and relation pages add one `SET LOCAL enable_seqscan = off` before their indexed projection range. Inverse link pages also probe pending merge work for at most `4 × limit + 1` scanned holder ids, then reread the page after that work finishes. A subject read checks the current partition's projection checkpoint before its snapshot, then adds one `SET LOCAL enable_seqscan = off` when its type has relation properties, one statement per descriptive slot view, one 13-row outbound range and one counter probe per relation property, 12 relation slot views per property, and one batched read per related partition. The checkpoint wait includes a pending merge-member probe.
 For commands, K denotes seven framework statements per successful fresh attempt: BEGIN, two SETs, time SELECT, another SET, fence SQL, COMMIT; add one receipt SELECT when configured and the body statements below.
 The fence statement updates one `core.partition` row through `partition_pkey`, inserts one `core.outbox` row per event through `outbox_pkey`, and optionally one `core.receipt` and one `editorial.write_basis` row through `receipt_pkey`, `write_basis_pkey` and `write_basis_partition_no_position_key`; their partition foreign keys probe `partition_pkey`.
 Contention retries stop at three attempts; fence waits and retries use the deadline (default two seconds), so the stated counts are per attempt, with extra constant-size partition polls, rather than a claim about machine speed.
@@ -140,8 +148,20 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 ### Anchored subject read
 
 - Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown.
-- Bound: Rows O(F + 32 × properties), blocks O((F + related) log N). Semantic statements are O(related partitions), bounded by the subject's own item values. Access still runs one permission check per related id. Independent of P and U×t. F is at most 512.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Anchored subject read stays within its bound as the subject's history grows`
+- Bound: Rows O(F + 13 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. Access still runs one permission check per related id.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`; `growth-reads.test.ts` also checks history growth.
+
+### Forward relation page
+
+- Touches: one outbound index range (`limit + 1`, or at most `4 × limit + 1` under a type filter), one counter probe, the selected slot views, and one target-label read per page partition. The type-filtered count has its own sample of at most 1,000 projection rows.
+- Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page.
+- Growth check: `test/semantic/growth-relations.test.ts`: middle page at limit 25 for 100, 1,000 and 3,000 relations.
+
+### Relation-key re-emission
+
+- Touches: one page of the changed subject's outbound links per holder-key relay step, or one page of its inbound links plus the corresponding holder outbound rows per target-key step; each page updates its mirror projection and counters.
+- Bound: O(page) per relay step; O(degree) total work spread across steps, never in a request.
+- Growth check: key changes with 100 and 3,000 holders; per-step work stays bounded by the configured page size.
 
 ### Batch label fill
 
@@ -229,8 +249,8 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 ### Anchored read with related labels across manifests
 
-- Touches: HTTP subject read. `readSubject` loads the subject's facts and calls `slotView` for each property of its type, then `readRelease` for related property labels and one batched related read per partition for related subjects. A warm `readRelease` reads the digest only. Grow M; fix the type, F, related ids and authorization evidence.
-- Bound: Rows, blocks and statements constant in M. In-process work uses the type's properties and the facts' properties. A cold release read is linear in release bytes, once per digest per process.
+- Touches: HTTP subject read. `readSubject` loads descriptive facts and the first 12 relation slots for each relation property on the type, then `readRelease` for related property labels and one batched related read per partition for the preview's targets. A warm `readRelease` reads the digest only. Grow M; fix the type, F, preview size and authorization evidence.
+- Bound: Rows, blocks and statements constant in M. In-process work uses the type's relation properties, descriptive facts and bounded preview. A cold release read is linear in release bytes, once per digest per process.
 - Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
 
 ### Candidate listing across manifests
@@ -282,7 +302,7 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 ### Inverse page
 
-- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
+- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one pending-merge index probe for the scanned holder ids, one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
 - Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Summary work depends only on the bounded returned holders and their selected covers, as described below.
 - Growth check: `test/semantic/growth-inverse-pages.test.ts`: `an inverse page examines the same rows whatever the anchor's in-degree`, scales `[64, 512, 4096]` at limit 25; first and middle page rows and blocks stay flat.
 
@@ -294,10 +314,10 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 ### Subject summaries
 
-- Touches: per subject partition, one batched read of the subjects, their default labels, and their preferred image or representative-edition statement. Per edition partition, one batched read of the editions' preferred images. Per media partition, one content cover reference read.
+- Touches: per subject partition, one indexed 12-row representative-edition range and one batched read of the subjects, their default labels, and their preferred images or selected representative-edition slots. Per edition partition, one batched read of the editions' preferred images. Per media partition, one content cover reference read.
 - Bound: rows O(i) for i ≤ 256 ids; statements O(subject partitions + edition partitions + media partitions) ≤ O(3i); independent of how many editions a work has. Access preparation and authorization retain their separately documented evidence costs.
-- Growth check: `test/semantic/subject-summaries.test.ts`: `subject summaries for a page of subjects cost one statement per partition, not one per subject`, scales `[4, 32, 256]` ids; `test/semantic/subject-summaries.test.ts`: `a representative cover read stays flat as the work gains editions`, scales `[16, 128, 1024]` editions. Statements and rows per id stay flat.
+- Growth check: `test/semantic/subject-summaries.test.ts`: `subject summaries for a page use two bounded reads per partition, not one read per subject`, scales `[4, 32, 256]` ids; `test/semantic/subject-summaries.test.ts`: `a representative cover read stays flat as the work gains editions`, scales `[16, 128, 1024]` editions. Statements and rows per id stay flat.
 
-`readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Labels follow requested languages (including their primary tags), English, then the first language tag. The selected label's actual language selects the representative edition, falling back to an unqualified representative and then the first statement. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
+`readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Labels follow requested languages (including their primary tags), English, then the first language tag. The selected label's actual language selects a representative edition among the first 12 rows in the outbound projection, falling back to an unqualified representative and then the first row. The projection range runs with sequential scans disabled; the batched summary query uses the normal planner. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
 
 Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.

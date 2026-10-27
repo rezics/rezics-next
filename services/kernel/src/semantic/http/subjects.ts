@@ -17,9 +17,9 @@ import {
 import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
-import { SubjectInputError, type Item, type Snak } from '../item.ts';
+import { isRelationProperty, relationSlotForApi, SubjectInputError, type Item, type Snak } from '../item.ts';
 import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
-import { DATA_TYPES, type DataType } from '@rezics/definitions';
+import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
@@ -31,7 +31,7 @@ import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
-import { listSubjectLinks, waitForSubjectLinks } from '../links.ts';
+import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateStatement,
@@ -89,6 +89,7 @@ export const ItemSchema = t.Object(
     release: t.String(),
     context: t.String({ format: 'uuid' }),
     resolution: t.Record(t.String(), t.Any()),
+    relationCounts: t.Record(t.String(), t.Integer({ minimum: 0 })),
     labels: t.Record(t.String(), t.String()),
     descriptions: t.Record(t.String(), t.String()),
     aliases: t.Record(t.String(), t.Array(t.String())),
@@ -185,6 +186,9 @@ const AdoptionBody = t.Object(
   {
     context: EditorialBodyContext,
     property: t.String({ minLength: 1 }),
+    target: t.Optional(t.String({ format: 'uuid' })),
+    sameAs: t.Optional(t.String({ minLength: 1 })),
+    key: t.Optional(t.String({ format: 'uuid' })),
     mode: AdoptionMode,
     selection: Selection,
     expected_head: ExpectedHead,
@@ -293,6 +297,26 @@ type SubjectRouteDependencies = {
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
+}
+
+function relationSlotAddress(
+  subject: string,
+  property: string,
+  release: Release,
+  input: { target?: string; sameAs?: string; key?: string },
+): string {
+  const fail = (pointers: string[]) =>
+    new SubjectInputError(pointers.map((pointer) => ({ pointer: `/${pointer}`, code: 'invalid_format' as const })));
+  const relation = release.properties[property]?.relation;
+  const isRelation = isRelationProperty(release, property);
+  if (input.target !== undefined && input.sameAs !== undefined) throw fail(['target', 'sameAs']);
+  if (!isRelation && (input.target !== undefined || input.sameAs !== undefined || input.key !== undefined))
+    throw fail([input.target !== undefined ? 'target' : input.sameAs !== undefined ? 'sameAs' : 'key']);
+  if (input.target !== undefined && routeOf(input.target) === null) throw fail(['target']);
+  if (input.sameAs !== undefined && !/^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(input.sameAs)) throw fail(['sameAs']);
+  if (input.key !== undefined && (input.target === undefined || !relation?.slotKey || routeOf(input.key) === null))
+    throw fail(['key']);
+  return relationSlotForApi(subject, property, relation, input);
 }
 
 type CommandAuthorizer = (resource: Resource, denied: () => Error) => Promise<CommandAuthorization>;
@@ -568,6 +592,8 @@ function subjectRoutes(
           readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
             languages,
             authorize: authorizeSummary,
+            seen: [...session.components],
+            deadline: job.deadline,
           }).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
@@ -625,7 +651,7 @@ function subjectRoutes(
         const active = await activeRelease(pool);
         const summaries = active
           ? await readSubjectSummaries(
-              { client: { query: pool.query.bind(pool) }, release: active.release, authorize: authorizeSummary },
+              { client: { query: pool.query.bind(pool) }, pool, release: active.release, authorize: authorizeSummary },
               Object.entries(references).map(([id, value]) => value.redirect ?? id),
               { languages },
             )
@@ -1317,6 +1343,7 @@ function subjectRoutes(
         if (contextRoute === null) throw new ProblemError('invalid_request');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
+        const slot = relationSlotAddress(params.id, body.property, active.release, body);
         const authorization = await authorizeSemanticWrite({
           access: access(),
           actor,
@@ -1334,6 +1361,7 @@ function subjectRoutes(
               subject: params.id,
               context: body.context,
               property: body.property,
+              slot,
               mode: body.mode,
               selection: body.selection as { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[],
               expectedHead: body.expected_head,
@@ -1361,6 +1389,9 @@ function subjectRoutes(
           ...pageQuery,
           property: t.String({ minLength: 1 }),
           context: t.Optional(EditorialBodyContext),
+          target: t.Optional(t.String({ format: 'uuid' })),
+          sameAs: t.Optional(t.String({ minLength: 1 })),
+          key: t.Optional(t.String({ format: 'uuid' })),
         }),
         response: {
           200: withHeaders(
@@ -1405,6 +1436,10 @@ function subjectRoutes(
       async ({ params, query, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        if (!Object.hasOwn(active.release.properties, query.property)) throw new ProblemError('invalid_request');
+        const slot = relationSlotAddress(params.id, query.property, active.release, query);
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
@@ -1412,6 +1447,7 @@ function subjectRoutes(
             listCandidates(pool, tokens, {
               subject: params.id,
               property: query.property,
+              slot,
               context: query.context ?? GLOBAL_CONTEXT,
               limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
@@ -1586,6 +1622,117 @@ function subjectRoutes(
           if (error instanceof SubjectRedirectError) {
             set.status = 308;
             set.headers.location = `/v1/subjects/${error.to}/links${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/relations',
+      {
+        params: t.Object({ id: t.String() }),
+        query: t.Object({
+          ...pageQuery,
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+          property: t.String({ minLength: 1 }),
+          filter: t.Optional(t.String({ format: 'uuid' })),
+          type: t.Optional(t.String({ minLength: 1 })),
+          context: t.Optional(EditorialBodyContext),
+          language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' })),
+        }),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                relations: t.Array(
+                  t.Object(
+                    {
+                      statement: StatementSchema,
+                      target: t.Union([t.String({ format: 'uuid' }), t.Null()]),
+                      external: t.Union([t.String(), t.Null()]),
+                      type: t.Optional(t.String()),
+                      label: t.Optional(t.String()),
+                    },
+                    { additionalProperties: false },
+                  ),
+                ),
+                count: t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() }),
+                freshness: t.Object(
+                  {
+                    consistency: t.Literal('eventual'),
+                    target_seconds: t.Literal(10),
+                    caught_up: t.Boolean(),
+                  },
+                  { additionalProperties: false },
+                ),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              { additionalProperties: false },
+            ),
+            cacheControl,
+          ),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'subject.relations',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        if (
+          !Object.hasOwn(active.release.properties, query.property) ||
+          !isRelationProperty(active.release, query.property)
+        )
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && !active.release.properties[query.property]?.relation?.filter)
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
+        if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
+          throw new ProblemError('invalid_request');
+        if (query.context !== undefined && routeOf(query.context) === null) throw new ProblemError('invalid_request');
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        const caughtUp = await admission.run('normal', job, () =>
+          waitForSubjectLinks(pool, seen, params.id, job.deadline),
+        );
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            listSubjectRelations(pool, tokens, {
+              subject: params.id,
+              property: query.property,
+              context: query.context,
+              limit: query.limit ?? 25,
+              ...(query.filter === undefined ? {} : { filter: query.filter }),
+              ...(query.type === undefined ? {} : { type: query.type }),
+              ...((query.language ?? request.headers.get('accept-language')?.split(',')[0]?.split(';')[0]?.trim())
+                ? {
+                    language:
+                      query.language ?? request.headers.get('accept-language')!.split(',')[0]!.split(';')[0]!.trim(),
+                  }
+                : {}),
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              release: active.release,
+              authorize: check,
+              seen,
+              caughtUp,
+            }),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          return result;
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/relations${new URL(request.url).search}`;
             return { redirect: { from: error.from, to: error.to } };
           }
           return candidateError(error);

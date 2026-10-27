@@ -147,20 +147,19 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         ],
         descriptions: [{ language: 'en', value: 'A satirical novel' }],
         statements: expect.arrayContaining([
-          { property: 'schema:author', value: soseki.id, facet: { kind: 'item' } },
           { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
           { property: 'schema:datePublished', value: '+1905-01-01T00:00:00Z', facet: { kind: 'time', year: 1905 } },
         ]),
       },
     ],
   });
-  expect(snapshot.subjects[0]!.statements).toHaveLength(3);
+  expect(snapshot.subjects[0]!.statements).toHaveLength(2);
 
   const [language] = work.statements['schema:inLanguage'].map(({ id }: { id: string }) => id);
   await ok(`/v1/subjects/${work.id}/candidates/${language}:hide`, { reason: 'spam' });
   const hidden = (await source.read(partition, [work.id])).subjects[0]!;
   expect(hidden.securityRevision).toBe(1);
-  expect(hidden.statements.map(({ property }) => property).sort()).toEqual(['schema:author', 'schema:datePublished']);
+  expect(hidden.statements.map(({ property }) => property).sort()).toEqual(['schema:datePublished']);
 
   const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
   await expect(source.read(partition, [elsewhere])).rejects.toThrow(TypeError);

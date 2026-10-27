@@ -8,6 +8,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { createContext } from '../../src/semantic/context.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { moderateStatement } from '../../src/semantic/moderation.ts';
 import { adoptCandidates, decideCandidate, proposeStatement } from '../../src/semantic/candidates.ts';
 import { createSubject, readLabels, writeFacts } from '../../src/semantic/subject.ts';
@@ -89,6 +90,12 @@ beforeAll(async () => {
       })),
     },
   );
+  const projection = linkProjection(db.pool);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(BOOK_PARTITION);
+    if (result.status !== 'busy' && result.envelopes === 0) break;
+    if (step === 199) throw new Error('Semantic link projection did not catch up');
+  }
   await seed({ pool: db.pool, admin: db.admin }, accessGrants(), { from: 0, to: 2_000 });
 }, 60_000);
 

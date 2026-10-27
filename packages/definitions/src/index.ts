@@ -56,6 +56,7 @@ export type RelationDefinition = {
   acyclic?: true;
   order?: 'position' | 'date' | 'name';
   filter?: string;
+  slotKey?: string;
 };
 export type PropertyDefinition = {
   iri: string;
@@ -361,6 +362,11 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         const qualifier = release.properties[relation.filter];
         if (!property.qualifiers.includes(relation.filter) || qualifier?.datatype !== 'wikibase-item')
           add(at(relationPointer, 'filter'));
+      }
+      if (relation.slotKey !== undefined) {
+        const qualifier = release.properties[relation.slotKey];
+        if (!property.qualifiers.includes(relation.slotKey) || qualifier?.datatype !== 'wikibase-item')
+          add(at(relationPointer, 'slotKey'));
       }
     }
     for (const member of ['targets', 'units', 'minimum', 'maximum'] as const) {

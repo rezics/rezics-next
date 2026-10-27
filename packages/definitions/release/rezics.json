@@ -3560,6 +3560,7 @@
         "order": "position",
         "inverse": "rezics:voiceActorOf",
         "filter": "wdt:P3831",
+        "slotKey": "wdt:P453",
         "inverseLabels": {
           "de": "Sprechrollen in",
           "en": "Voice roles in",

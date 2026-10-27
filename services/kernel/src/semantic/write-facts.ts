@@ -14,6 +14,7 @@ export type StoredFact = {
   statement_id: string | null;
   body: unknown;
   release: string | null;
+  relation?: boolean;
 };
 
 export type FactWriter = {

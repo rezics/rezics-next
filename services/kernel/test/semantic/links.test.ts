@@ -192,7 +192,7 @@ test('a stale links read leaves at least half of the request deadline to authori
   }
 });
 
-test('a Global adoption moves the link to the new work and replaying the whole log never brings the old one back', async () => {
+test('a Global adoption is scoped to the target slot and replaying the whole log keeps both links', async () => {
   const kokoro = await work('Kokoro');
   const botchan = await work('Botchan');
   const penguin = await edition('Kokoro, Penguin Classics', kokoro.id);
@@ -219,22 +219,23 @@ test('a Global adoption moves the link to the new work and replaying the whole l
     body: {
       context: GLOBAL_CONTEXT,
       property: 'schema:exampleOfWork',
+      target: botchan.id,
       mode: 'replace',
       selection: [{ candidate, rank: 'normal' }],
-      expected_head: 1,
+      expected_head: null,
     },
   });
   expect(adopted.response.status).toBe(200);
   const moved = { subject: penguin.id, property: 'schema:exampleOfWork', statement: candidate };
-  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [], freshness: fresh(true), next: null });
+  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [original], freshness: fresh(true), next: null });
   expect(await links(botchan.id, 'acceptor')).toEqual({ links: [moved], freshness: fresh(true), next: null });
   await relays.pause();
   await admin.query("UPDATE core.consumer_checkpoint SET epoch = NULL, position = 0 WHERE consumer = 'semantic_links'");
   relays.resume();
   expect(await links(botchan.id, 'acceptor')).toEqual({ links: [moved], freshness: fresh(true), next: null });
-  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [], freshness: fresh(true), next: null });
+  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [original], freshness: fresh(true), next: null });
   expect((await inbound(kokoro.id)).map((row) => [row.statement_id, row.present])).toEqual([
-    [original.statement, false],
+    [original.statement, true],
   ]);
   expect((await inbound(botchan.id)).map((row) => [row.statement_id, row.present])).toEqual([[candidate, true]]);
 });

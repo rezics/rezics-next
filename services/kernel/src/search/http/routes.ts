@@ -103,6 +103,7 @@ export function searchRoutes<App>(
       ? await readSubjectSummaries(
           {
             client: { query: pool.query.bind(pool) },
+            pool,
             release: active.release,
             async authorize(connection, id, batch) {
               const route = routeOf(id);

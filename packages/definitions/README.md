@@ -58,7 +58,10 @@ facets.
 
 An item property may compile a `relation` with a group, exactly one of an inverse
 CURIE, `inverse: "none"`, or `symmetric: true`, optional acyclicity, an order key
-(default `name`), and an item-qualifier filter. A standard inverse is export and
+(default `name`), an item-qualifier filter, and an optional `slotKey`.
+The `slotKey` names an admitted item qualifier whose value distinguishes repeated
+relations to the same target. The bundled voice-actor property (`wdt:P725`) uses
+the character voiced (`wdt:P453`), distinguishing actor–character pairs. A standard inverse is export and
 mapping metadata; it cannot also be a property in the release. Directed inverses
 also carry `relation.inverseLabels`, supplied under `inverseProperties` in the
 presentation group for the schema file that defines the property. Types may carry
@@ -405,7 +408,9 @@ Source conventions:
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
 - Slot `annotations` permits `datatype`, `units`, `qualifiers`, `relation_group`,
-  `inverse`, `symmetric`, `acyclic`, `relation_order`, and `relation_filter`.
+  `inverse`, `symmetric`, `acyclic`, `relation_order`, `relation_filter`, and
+  `relation_slot_key`. The last annotation compiles to `relation.slotKey` and must
+  name an admitted item qualifier.
   `datatype` is required: `wikibase-item` needs a class range or `any_of` class
   ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.

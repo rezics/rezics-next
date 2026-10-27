@@ -518,6 +518,7 @@ slots:
       inverse: rezics:voiceActorOf
       relation_order: position
       relation_filter: wdt:P3831
+      relation_slot_key: wdt:P453
   contributor:
     slot_uri: schema:contributor
     description: A person or organization credited in any other job, specified by its detailed role.

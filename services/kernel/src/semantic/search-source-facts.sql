@@ -28,6 +28,7 @@ requested AS MATERIALIZED (
     FROM semantic.fact f
     CROSS JOIN input
     WHERE f.route = requested.route AND f.subject_id = requested.subject_id AND f.kind = 'statement'
+      AND NOT f.relation
       AND f.route >= input.partition_no * 16
       AND f.route < (input.partition_no + 1) * 16
     ORDER BY f.slot_id, f.log_seq

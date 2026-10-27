@@ -2,6 +2,8 @@ import type { Release } from '@rezics/definitions';
 import type { FactRow } from './item.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import type { Pool } from 'pg';
+import { withConnection } from '../database/pool.ts';
 import { slotView } from './slots.ts';
 import readSubject from './read-holder-facts.sql';
 
@@ -217,7 +219,7 @@ export function positionKey(value: unknown): string {
   const magnitude = String(200000 + exponent).padStart(6, '0') + digits.padEnd(1500, '0');
   return match[1] === '-' ? '00' + magnitude.replace(/[0-9]/g, (c) => String(9 - Number(c))) : '02' + magnitude;
 }
-function dateKey(value: unknown): string {
+export function dateOrderKey(value: unknown): string {
   const time = (value as { time?: string } | null)?.time;
   const match = time?.match(/^([+-][0-9]+)-(\d{2})-(\d{2})T/);
   if (!match) return '1';
@@ -238,7 +240,7 @@ export function holderKeys(facts: readonly FactRow[], type: string) {
       body.rank !== 'deprecated' &&
       body.value?.type === 'value'
     )
-      dates.push(dateKey(body.value.content));
+      dates.push(dateOrderKey(body.value.content));
   }
   const label = subjectLabel(labels);
   return {
@@ -250,11 +252,16 @@ export function holderKeys(facts: readonly FactRow[], type: string) {
   };
 }
 
-/** Current Global statements plus label facts, bounded by the holder's fact cap. */
+export function labelOrderKey(labels: Record<string, string>): string {
+  const label = subjectLabel(labels);
+  return label ? '0' + [...sortName(label)].slice(0, 256).join('') : '1';
+}
+
+/** Holder identity facts used to derive link keys; it never walks relation slots. */
 export async function holderFacts(
   tx: CommandTransaction,
   subject: string,
-  release: Release,
+  _release: Release,
 ): Promise<{ type: string; facts: FactRow[] }> {
   const rows = await readSubject.run(tx, { route: routeOf(subject)!, subject_id: subject });
   const type = rows[0]?.type;
@@ -262,7 +269,14 @@ export async function holderFacts(
   const facts: FactRow[] = rows
     .filter((row) => row.kind === 'label')
     .map((row) => ({ ...row, kind: 'label' as const, operation: row.operation as FactRow['operation'] }));
-  for (const property of release.types[type]?.properties ?? [])
-    facts.push(...(await slotView(tx, subject, property)).facts);
+  facts.push(...(await slotView(tx, subject, 'schema:datePublished')).facts);
   return { type, facts };
+}
+
+/** The identity keys needed by one page of target-key re-emission. */
+export async function readHolderKeys(pool: Pool, subject: string) {
+  return withConnection(pool, async (client) => {
+    const identity = await holderFacts(client, subject, {} as Release);
+    return holderKeys(identity.facts, identity.type);
+  });
 }

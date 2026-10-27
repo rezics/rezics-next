@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route
 )
-SELECT r.revision, r.release, f.statement_id::text AS candidate_id, f.property, f.slot_id::text AS slot_id
+SELECT r.revision, r.release, f.statement_id::text AS candidate_id, f.property, f.slot_id::text AS slot_id, f.relation
 FROM semantic.fact f
 CROSS JOIN input
 JOIN semantic.subject s ON s.route = input.route AND s.subject_id = f.subject_id AND s.visibility = 'visible'

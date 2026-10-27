@@ -4,10 +4,11 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { relatedReadEligibility } from '../../src/semantic/eligibility.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject, writeFacts } from '../../src/semantic/subject.ts';
 import { readSubjectSummaries, type CoverSummary, type SummaryDependencies } from '../../src/semantic/summaries.ts';
 import { expandSlot } from '../../src/semantic/slots.ts';
@@ -74,28 +75,46 @@ async function subject(
   statements: Record<string, unknown[]> = {},
 ) {
   const id = newId(route);
+  const projectedStatements = Object.fromEntries(
+    Object.entries(statements).filter(([property]) => property !== 'schema:image'),
+  );
+  const imageStatements = Object.fromEntries(
+    Object.entries(statements).filter(([property]) => property === 'schema:image'),
+  );
   const created = await createSubject(db.pool, {
     actor,
     target: { route, id },
     idempotencyKey: randomUUID(),
     digest: createHash('sha256').update(id).digest(),
-    item: { type, labels },
+    item: { type, labels, statements: projectedStatements },
     release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
-  // Native compact fixtures share the creation revision, including its content references.
-  const revision = await db.admin.query(
-    'SELECT recorded_transaction_id FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=1',
-    [route, id],
-  );
-  const facts = itemFacts(id, { labels, statements }).filter((fact) => fact.kind === 'statement');
-  if (facts.length)
+  if (Object.keys(imageStatements).length) {
+    const revision = await db.admin.query(
+      'SELECT recorded_transaction_id FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=1',
+      [route, id],
+    );
+    const facts = itemFacts(id, { labels, statements: imageStatements }, type, bundledRelease).filter(
+      (fact) => fact.kind === 'statement',
+    );
     await writeFacts(db.admin, {
       route,
       subject_id: id,
       transaction_id: revision.rows[0].recorded_transaction_id,
       facts: facts.map((fact) => ({ ...fact, release: bundledDigest })),
     });
+  }
+  if (Object.keys(projectedStatements).length) {
+    const projection = linkProjection(db.pool);
+    const partition = partitionOf(route);
+    if (partition === null) throw new TypeError('Expected a routed subject fixture');
+    for (let step = 0; step < 200; step++) {
+      const result = await projection.run(partition);
+      if (result.status !== 'busy' && result.envelopes === 0) break;
+      if (step === 199) throw new Error('Semantic link projection did not catch up');
+    }
+  }
   return created.subject.id;
 }
 async function cover(route: number, container: string) {
@@ -116,6 +135,7 @@ function dependencies(client: SummaryDependencies['client'] = db.pool): SummaryD
   const checks = new Map<string, ReturnType<typeof accessCheck>>();
   return {
     client,
+    pool: db.pool,
     release: bundledRelease,
     async authorize(_client, id, batch) {
       const route = routeOf(id)!;
@@ -183,7 +203,7 @@ beforeAll(async () => {
     ],
   });
   book = await subject(
-    'schema:Book',
+    'bf:Instance',
     32096,
     { en: 'Book' },
     {
@@ -205,8 +225,8 @@ test("a subject read returns the subject's type, types and cover summary, and th
   const body = await response.json();
   expect(body.summary).toEqual({
     id: book,
-    type: 'schema:Book',
-    types: types('schema:Book'),
+    type: 'bf:Instance',
+    types: types('bf:Instance'),
     label: { value: 'Book', language: 'en' },
     creativeWork: true,
     cover: expectedCover(english),
@@ -397,7 +417,7 @@ test('summary batches refuse more than 256 ids before SQL', async () => {
   expect(queried).toBe(false);
 });
 
-test('subject summaries for a page of subjects cost one statement per partition, not one per subject', async () => {
+test('subject summaries for a page use two bounded reads per partition, not one read per subject', async () => {
   const ids: string[] = [];
   const deps = dependencies();
   const report = await checkGrowth(db, {
@@ -423,7 +443,7 @@ test('subject summaries for a page of subjects cost one statement per partition,
       return summaries;
     },
   });
-  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([6, 6, 6]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([11, 11, 11]);
 }, 120_000);
 
 test('a representative cover read stays flat as the work gains editions', async () => {
@@ -447,5 +467,5 @@ test('a representative cover read stays flat as the work gains editions', async 
       return result;
     },
   });
-  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([3, 3, 3]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([5, 5, 5]);
 }, 120_000);

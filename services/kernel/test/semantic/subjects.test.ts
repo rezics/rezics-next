@@ -5,14 +5,16 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const projection = linkProjection(pool);
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -63,8 +65,19 @@ const statement = (property: string, content: unknown, extra: Record<string, unk
 });
 const aozora = { parts: [statement('schema:url', 'https://www.aozora.gr.jp/cards/000148/card773.html')] };
 const date = (time: string, precision = 11) => ({ time, precision, calendarmodel: GREGORIAN });
-const create = (body: unknown, token: string | null = 'editor') =>
-  call('POST', '/v1/subjects', { ...(token ? { token } : {}), key: `"${randomUUID()}"`, body });
+const create = async (body: unknown, token: string | null = 'editor') => {
+  const result = await call('POST', '/v1/subjects', { ...(token ? { token } : {}), key: `"${randomUUID()}"`, body });
+  const id = result.body.subject?.id;
+  const route = typeof id === 'string' ? routeOf(id) : null;
+  if (route !== null) {
+    for (let step = 0; step < 200; step++) {
+      const projected = await projection.run(partitionOf(route));
+      if (projected.status !== 'busy' && projected.envelopes === 0) break;
+      if (step === 199) throw new Error('Semantic link projection did not catch up');
+    }
+  }
+  return result;
+};
 async function created(body: unknown): Promise<string> {
   const answer = await create(body);
   expect(answer.response.status).toBe(201);

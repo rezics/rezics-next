@@ -1,7 +1,13 @@
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
-import { activeRelease } from './definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { readItemTypes, readLabels } from './subject.ts';
+import { holderFacts, labelOrderKey, readHolderKeys, subjectLabel } from './link-keys.ts';
+import { factDataTypes, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
+import { linkChanges } from './link-changes.ts';
+import { slotView } from './slots.ts';
+import { contextSnapshot } from './context.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { matchesTarget } from './targets.ts';
 import readInboundLinkCount from './read-inbound-link-count.sql';
@@ -22,32 +28,67 @@ import { SubjectNotFoundError } from './candidates.ts';
 import { moveMergePage } from './merge-moves.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { accountAgentsForSubjects } from './agents.ts';
-import { LINKS_MOVING, SUBJECT_MERGED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
+import {
+  LINK_KEYS_CHANGED,
+  LINKS_MOVING,
+  LINKS_VISIBILITY_CHANGED,
+  SUBJECT_MERGED,
+  LINKS_CHANGED,
+  LINKS_PROJECTED,
+} from './events.ts';
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
-import readLinkCheckpoint from './read-link-checkpoint.sql';
-import readPendingMember from './links-read-pending-member.sql';
+import { FRESHNESS_WAIT_MS, linksCaughtUp, pendingMergeSources } from './link-freshness.ts';
+export { waitForSubjectLinks } from './link-freshness.ts';
 import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
+import upsertOutboundLinks from './upsert-outbound-links.sql';
+import listOutboundLinksByProperty from './list-outbound-links-by-property.sql';
+import readOutboundLinkCount from './read-outbound-link-count.sql';
+import countOutboundLinkTypes from './count-outbound-link-types.sql';
+import listOutboundKeyReemit from './list-outbound-key-reemit.sql';
+import listInboundKeyReemit from './list-inbound-key-reemit.sql';
+import readOutboundForTargetReemit from './read-outbound-for-target-reemit.sql';
+import listOutboundVisibility from './list-outbound-visibility.sql';
 
 export const LINKS_CONSUMER = 'semantic_links';
 const FRESHNESS_TARGET_SECONDS = 10;
-const FRESHNESS_WAIT_MS = 2_000;
-const FRESHNESS_POLL_MS = 100;
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type LinkChangeRow = {
   property: string;
   statement: string;
-  target: string;
+  target: string | null;
   present: boolean;
+  project_outbound?: boolean;
+  relation?: boolean;
+  slot_id?: string;
+  external?: string | null;
+  value?: 'value' | 'somevalue' | 'novalue';
+  outbound_order?: 'position' | 'date' | 'name' | null;
+  outbound_order_key?: string;
   source_type?: string;
   order_key?: string;
   filter_value?: string;
 };
 type LinksChanged = { subject: string; revision: number; security_revision: number; changes: LinkChangeRow[] };
+type LinkKeysChanged = {
+  subject: string;
+  direction: 'holder' | 'target';
+  revision: number;
+  security_revision: number;
+  cursor: (string | number)[];
+};
+type LinksVisibilityChanged = {
+  subject: string;
+  revision: number;
+  security_revision: number;
+  release: string;
+  visible: boolean;
+  cursor: (string | number)[];
+};
 type StoredChange = {
   route: number;
   subjectId: string;
@@ -60,6 +101,29 @@ type StoredChange = {
   position: bigint;
   sourceType: string;
   orderKey: string;
+  filterValue: string;
+};
+type StoredOutboundChange = {
+  route: number;
+  subjectId: string;
+  property: string;
+  statementId: string;
+  target: string | null;
+  targetOrderKey?: string;
+  targetRevision?: number;
+  targetType?: string;
+  slotId: string;
+  relation: boolean;
+  external: string | null;
+  value: 'value' | 'somevalue' | 'novalue';
+  outboundOrder: 'position' | 'date' | 'name' | null;
+  outboundOrderKey: string;
+  sourceType: string;
+  sourceOrderKey: string;
+  sourceRevision: number;
+  sourceSecurityRevision: number;
+  present: boolean;
+  position: bigint;
   filterValue: string;
 };
 
@@ -76,43 +140,6 @@ function preferredChange(change: StoredChange, current: StoredChange): boolean {
   return change.position >= current.position;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function covers(
-  row: { epoch: number | null; position: string | number | bigint } | null,
-  component: SessionComponent,
-): boolean {
-  if (!row || row.epoch === null) return false;
-  const epoch = typeof row.epoch === 'number' ? row.epoch : Number(row.epoch);
-  const position = typeof row.position === 'bigint' ? row.position : BigInt(row.position);
-  return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
-}
-
-async function linksCaughtUp(
-  pool: Pool,
-  seen: readonly SessionComponent[],
-  subject: string,
-  deadline = deadlineFor(FRESHNESS_WAIT_MS),
-): Promise<boolean> {
-  while (Date.now() < deadline) {
-    const covered = await withConnection(pool, async (client) => {
-      for (const component of seen) {
-        const row = await readLinkCheckpoint.run(client, {
-          partition_no: component.partition,
-          consumer: LINKS_CONSUMER,
-        });
-        if (!covers(row, component)) return false;
-      }
-      const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-      return pending === null;
-    });
-    if (covered) return true;
-    if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
-    await sleep(FRESHNESS_POLL_MS);
-  }
-  return false;
-}
-
 function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange[]> {
   const newest = new Map<string, StoredChange>();
   for (const envelope of envelopes) {
@@ -121,6 +148,7 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
       const data = event.data as LinksChanged;
       const security = Number(data.security_revision);
       for (const change of data.changes) {
+        if (change.target === null) continue;
         const route = routeOf(change.target);
         if (route === null) continue;
         const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}\0${change.filter_value ?? NIL_UUID}`;
@@ -144,6 +172,70 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
     }
   }
   const grouped = new Map<number, StoredChange[]>();
+  for (const change of newest.values()) {
+    const partition = partitionOf(change.route);
+    const list = grouped.get(partition) ?? [];
+    list.push(change);
+    grouped.set(partition, list);
+  }
+  return grouped;
+}
+
+function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, StoredOutboundChange[]> {
+  const newest = new Map<string, StoredOutboundChange>();
+  for (const envelope of envelopes) {
+    for (const event of envelope.events) {
+      if (event.type !== LINKS_CHANGED) continue;
+      const data = event.data as LinksChanged;
+      const holder = routeOf(data.subject);
+      if (holder === null) continue;
+      const security = Number(data.security_revision);
+      for (const change of data.changes) {
+        if (!change.project_outbound || !change.slot_id) continue;
+        const key = `${data.subject}\0${change.property}\0${change.statement}\0${change.target ?? ''}\0${change.external ?? ''}\0${change.filter_value ?? NIL_UUID}`;
+        const current = newest.get(key);
+        if (
+          current &&
+          olderChange(data.revision, security, envelope.position, {
+            route: holder,
+            subjectId: data.subject,
+            property: change.property,
+            sourceSubjectId: data.subject,
+            statementId: change.statement,
+            sourceRevision: current.sourceRevision,
+            sourceSecurityRevision: current.sourceSecurityRevision,
+            present: current.present,
+            position: current.position,
+            sourceType: current.sourceType,
+            orderKey: current.sourceOrderKey,
+            filterValue: current.filterValue,
+          })
+        )
+          continue;
+        newest.set(key, {
+          route: holder,
+          subjectId: data.subject,
+          property: change.property,
+          statementId: change.statement,
+          target: change.target,
+          slotId: change.slot_id,
+          relation: change.relation === true,
+          external: change.external ?? null,
+          value: change.value ?? (change.target === null ? 'somevalue' : 'value'),
+          outboundOrder: change.outbound_order ?? null,
+          outboundOrderKey: change.outbound_order_key ?? '',
+          sourceType: change.source_type ?? '',
+          sourceOrderKey: change.order_key ?? '',
+          sourceRevision: data.revision,
+          sourceSecurityRevision: security,
+          present: change.present,
+          position: envelope.position,
+          filterValue: change.filter_value ?? NIL_UUID,
+        });
+      }
+    }
+  }
+  const grouped = new Map<number, StoredOutboundChange[]>();
   for (const change of newest.values()) {
     const partition = partitionOf(change.route);
     const list = grouped.get(partition) ?? [];
@@ -222,7 +314,384 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   }
 }
 
+async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[]): Promise<void> {
+  const routes = new Map<number, StoredOutboundChange[]>();
+  for (const change of changes) {
+    const group = routes.get(change.route) ?? [];
+    group.push(change);
+    routes.set(change.route, group);
+  }
+  for (const [route, routeChanges] of routes) {
+    for (let offset = 0; offset < routeChanges.length; offset += 100) {
+      const page = routeChanges.slice(offset, offset + 100);
+      const typeTargets = page.flatMap((change) =>
+        change.target && change.targetType === undefined ? [change.target] : [],
+      );
+      const nameTargets = page.flatMap((change) =>
+        change.target && change.targetOrderKey === undefined && change.outboundOrder === 'name' ? [change.target] : [],
+      );
+      const dateTargets = [
+        ...new Set(
+          page.flatMap((change) =>
+            change.target && change.targetOrderKey === undefined && change.outboundOrder === 'date'
+              ? [change.target]
+              : [],
+          ),
+        ),
+      ];
+      const [types, labels] = await Promise.all([
+        readItemTypes(pool, [...new Set(typeTargets)]),
+        readLabels(pool, [...new Set(nameTargets)]),
+      ]);
+      const dateKeys = new Map(
+        await Promise.all(
+          dateTargets.map(async (target) => [target, (await readHolderKeys(pool, target)).date] as const),
+        ),
+      );
+      await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+        await upsertOutboundLinks.run(tx, {
+          route,
+          transaction_id: transactionId,
+          changes: page.map((change) => {
+            const target = change.target;
+            const unresolved = target === null;
+            const external = change.external;
+            const targetOrder =
+              change.targetOrderKey ??
+              (unresolved
+                ? `Z${change.outboundOrderKey}\u0001${external ?? ''}`
+                : change.outboundOrder === 'name'
+                  ? labelOrderKey(labels.get(target) ?? {})
+                  : change.outboundOrder === 'position'
+                    ? change.outboundOrderKey
+                    : change.outboundOrder === 'date'
+                      ? (dateKeys.get(target) ?? '1')
+                      : target);
+            return {
+              subject_id: change.subjectId,
+              property: change.property,
+              filter_value: change.filterValue,
+              order_key: targetOrder,
+              target_subject_id: target ?? NIL_UUID,
+              statement_id: change.statementId,
+              slot_id: change.slotId,
+              relation: change.relation,
+              source_type: change.sourceType,
+              source_order_key: change.sourceOrderKey,
+              outbound_order: change.outboundOrder,
+              source_revision: change.sourceRevision,
+              source_security_revision: change.sourceSecurityRevision,
+              target_revision: change.targetRevision ?? 0,
+              target_type: change.targetType ?? (target ? (types.get(target) ?? '') : ''),
+              external,
+              value: change.value,
+              present: change.present,
+            };
+          }),
+        });
+        return {
+          value: null,
+          events: [{ type: LINKS_PROJECTED, data: { subjects: [...new Set(page.map((change) => change.subjectId))] } }],
+        };
+      });
+    }
+  }
+}
+
+function sourceOrder(order: string | null, keys: { name: string; date: string }, prior: string): string {
+  if (order === 'name') return keys.name;
+  if (order === 'date') return keys.date;
+  if (order === 'position') return prior;
+  return '';
+}
+
+function outboundProjectionRow(row: Record<string, unknown>): StoredOutboundChange {
+  return {
+    route: Number(row.route),
+    subjectId: String(row.subject_id),
+    property: String(row.property),
+    statementId: String(row.statement_id),
+    target: typeof row.target === 'string' ? row.target : null,
+    slotId: String(row.slot_id),
+    relation: row.relation === true,
+    external: typeof row.external === 'string' ? row.external : null,
+    value: row.value === 'novalue' || row.value === 'somevalue' ? row.value : 'value',
+    outboundOrder:
+      row.outbound_order === 'name' || row.outbound_order === 'date' || row.outbound_order === 'position'
+        ? row.outbound_order
+        : null,
+    outboundOrderKey: String(row.outbound_order === 'position' ? (row.source_order_key ?? '') : ''),
+    sourceType: String(row.source_type ?? ''),
+    sourceOrderKey: String(row.source_order_key ?? ''),
+    sourceRevision: Number(row.source_revision),
+    sourceSecurityRevision: Number(row.source_security_revision ?? 0),
+    targetRevision: Number(row.target_revision ?? 0),
+    targetType: String(row.target_type ?? ''),
+    targetOrderKey: String(row.order_key ?? ''),
+    present: true,
+    position: 0n,
+    filterValue: String(row.filter_value),
+  };
+}
+
+async function enqueueKeyContinuation(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject);
+  if (route === null) return;
+  await runCommand(pool, { partition: partitionOf(route) }, async () => ({
+    value: null,
+    events: [{ type: LINK_KEYS_CHANGED, subject: data.subject, data }],
+  }));
+}
+
+async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterTarget, afterStatement, afterFilter] = data.cursor;
+  const rows = (await listOutboundKeyReemit.run(pool, {
+    route,
+    subject_id: data.subject,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+  })) as Record<string, unknown>[];
+  const page = rows.slice(0, 100);
+  if (page.length === 0) return;
+  const keys = await readHolderKeys(pool, data.subject);
+  const outbound = page.map((raw) => {
+    const row = outboundProjectionRow({ ...raw, subject_id: data.subject, route });
+    row.sourceType = keys.source_type;
+    row.sourceOrderKey = sourceOrder(row.outboundOrder, keys, row.sourceOrderKey);
+    row.sourceRevision = data.revision;
+    row.sourceSecurityRevision = data.security_revision;
+    return row;
+  });
+  await applyOutboundChanges(pool, outbound);
+  await applyChanges(
+    pool,
+    outbound.flatMap((change): StoredChange[] =>
+      change.target === null
+        ? []
+        : [
+            {
+              route: routeOf(change.target)!,
+              subjectId: change.target,
+              property: change.property,
+              sourceSubjectId: data.subject,
+              statementId: change.statementId,
+              sourceRevision: data.revision,
+              sourceSecurityRevision: data.security_revision,
+              present: true,
+              position: 0n,
+              sourceType: keys.source_type,
+              orderKey: change.sourceOrderKey,
+              filterValue: change.filterValue,
+            },
+          ],
+    ),
+  );
+  if (rows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueKeyContinuation(pool, {
+      ...data,
+      cursor: [
+        String(last.property),
+        typeof last.target === 'string' ? last.target : NIL_UUID,
+        String(last.statement),
+        String(last.filter_value),
+      ],
+    });
+  }
+}
+
+async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterSource, afterStatement, afterFilter] = data.cursor;
+  const inboundRows = await listInboundKeyReemit.run(pool, {
+    route,
+    subject_id: data.subject,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_source: typeof afterSource === 'string' ? afterSource : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+  });
+  const page = inboundRows.slice(0, 100) as {
+    property: string;
+    source: string;
+    statement: string;
+    filter_value: string;
+  }[];
+  if (page.length === 0) return;
+  const keys = await readHolderKeys(pool, data.subject);
+  const targetType = keys.source_type;
+  const byRoute = new Map<number, typeof page>();
+  for (const row of page) {
+    const holderRoute = routeOf(row.source);
+    if (holderRoute === null) continue;
+    const group = byRoute.get(holderRoute) ?? [];
+    group.push(row);
+    byRoute.set(holderRoute, group);
+  }
+  const found = (
+    await Promise.all(
+      [...byRoute].map(([holderRoute, rows]) =>
+        readOutboundForTargetReemit.run(pool, {
+          route: holderRoute,
+          links: rows.map((row) => ({
+            subject_id: row.source,
+            property: row.property,
+            statement_id: row.statement,
+            filter_value: row.filter_value,
+          })),
+        }),
+      ),
+    )
+  ).flat() as Record<string, unknown>[];
+  const outbound = found.map((raw) => {
+    const row = outboundProjectionRow(raw);
+    row.targetType = targetType;
+    row.targetRevision = data.revision;
+    row.targetOrderKey =
+      row.outboundOrder === 'name'
+        ? keys.name
+        : row.outboundOrder === 'date'
+          ? keys.date
+          : row.outboundOrder === 'position'
+            ? row.outboundOrderKey
+            : data.subject;
+    return row;
+  });
+  await applyOutboundChanges(pool, outbound);
+  if (inboundRows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueKeyContinuation(pool, {
+      ...data,
+      cursor: [last.property, last.source, last.statement, last.filter_value],
+    });
+  }
+}
+
+async function enqueueVisibilityContinuation(pool: Pool, data: LinksVisibilityChanged): Promise<void> {
+  const route = routeOf(data.subject);
+  if (route === null) return;
+  await runCommand(pool, { partition: partitionOf(route) }, async () => ({
+    value: null,
+    events: [{ type: LINKS_VISIBILITY_CHANGED, subject: data.subject, data }],
+  }));
+}
+
+async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterTarget, afterStatement, afterFilter] = data.cursor;
+  const rows = (await listOutboundVisibility.run(pool, {
+    route,
+    subject_id: data.subject,
+    visible: data.visible,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+  })) as Record<string, unknown>[];
+  const page = rows.slice(0, 100);
+  if (page.length === 0) return;
+  const release = await readRelease(pool, data.release);
+  if (!release) throw new Error('Subject revision release is missing');
+  const keys = await readHolderKeys(pool, data.subject);
+  let changes: StoredOutboundChange[];
+  if (!data.visible) {
+    changes = page.map((raw) => {
+      const row = outboundProjectionRow({
+        ...raw,
+        subject_id: data.subject,
+        route,
+        statement_id: raw.statement,
+        slot_id: raw.slot,
+      });
+      row.sourceRevision = data.revision;
+      row.sourceSecurityRevision = data.security_revision;
+      row.present = false;
+      return row;
+    });
+  } else {
+    const slots = new Map<string, string>();
+    for (const row of page) slots.set(`${String(row.property)}\0${String(row.slot)}`, String(row.property));
+    const currentFacts: FactRow[] = await withConnection(pool, async (client) => {
+      const facts: FactRow[] = [];
+      for (const [key, property] of slots) {
+        const slot = key.slice(key.indexOf('\0') + 1);
+        facts.push(...(await slotView(client, data.subject, property, GLOBAL_CONTEXT, {}, slot)).facts);
+      }
+      return facts;
+    });
+    const identity = await withConnection(pool, (client) => holderFacts(client, data.subject, release));
+    const links = linkChanges([], currentFacts, factDataTypes(release, currentFacts), {
+      subject: data.subject,
+      release,
+      type: identity.type,
+      identityFacts: identity.facts,
+    });
+    changes = links.map((link) => ({
+      route,
+      subjectId: data.subject,
+      property: link.property,
+      statementId: link.statement,
+      target: link.target,
+      slotId: link.slot_id ?? '',
+      relation: link.relation === true,
+      external: link.external ?? null,
+      value: link.value ?? (link.target === null ? 'somevalue' : 'value'),
+      outboundOrder: link.outbound_order ?? null,
+      outboundOrderKey: link.outbound_order_key ?? '',
+      sourceType: keys.source_type,
+      sourceOrderKey: link.order_key ?? '',
+      sourceRevision: data.revision,
+      sourceSecurityRevision: data.security_revision,
+      present: true,
+      position: 0n,
+      filterValue: link.filter_value ?? NIL_UUID,
+    }));
+  }
+  await applyOutboundChanges(pool, changes);
+  await applyChanges(
+    pool,
+    changes.flatMap((change): StoredChange[] =>
+      change.target === null
+        ? []
+        : [
+            {
+              route: routeOf(change.target)!,
+              subjectId: change.target,
+              property: change.property,
+              sourceSubjectId: data.subject,
+              statementId: change.statementId,
+              sourceRevision: data.revision,
+              sourceSecurityRevision: data.security_revision,
+              present: change.present,
+              position: 0n,
+              sourceType: change.sourceType,
+              orderKey: change.sourceOrderKey,
+              filterValue: change.filterValue,
+            },
+          ],
+    ),
+  );
+  if (rows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueVisibilityContinuation(pool, {
+      ...data,
+      cursor: [
+        String(last.property),
+        typeof last.target === 'string' ? last.target : NIL_UUID,
+        String(last.statement),
+        String(last.filter_value),
+      ],
+    });
+  }
+}
+
 async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promise<void> {
+  const outbound = newestOutboundChanges(envelopes);
+  for (const partition of [...outbound.keys()].sort((a, b) => a - b))
+    await applyOutboundChanges(pool, outbound.get(partition)!);
   const grouped = newestChanges(envelopes);
   for (const partition of [...grouped.keys()].sort((a, b) => a - b)) {
     await applyChanges(pool, grouped.get(partition)!);
@@ -243,6 +712,17 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
     const link = agentLinks.get(event.survivor);
     if (link?.verified && link.receipt_id && link.agent_id === event.id)
       verificationBySubject.set(event.survivor, { account: link.account, receipt: link.receipt_id });
+  }
+  for (const envelope of envelopes) {
+    for (const event of envelope.events) {
+      if (event.type === LINK_KEYS_CHANGED) {
+        const data = event.data as LinkKeysChanged;
+        if (data.direction === 'holder') await reemitHolderKeys(pool, data);
+        else await reemitTargetKeys(pool, data);
+      } else if (event.type === LINKS_VISIBILITY_CHANGED) {
+        await applyVisibilityPage(pool, event.data as LinksVisibilityChanged);
+      }
+    }
   }
   const moved = new Set<string>();
   for (const envelope of envelopes) {
@@ -293,18 +773,6 @@ export type SubjectLinksPage = {
   next: string | null;
   component: { partition: number; epoch: number; position: bigint };
 };
-
-export function waitForSubjectLinks(
-  pool: Pool,
-  seen: readonly SessionComponent[],
-  subject: string,
-  deadline: number,
-): Promise<boolean> {
-  const started = Date.now();
-  // Leave at least half of the remaining request budget for authorization and the read.
-  const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil);
-}
 
 function validAfter(after: CursorKey[], property: string | null): boolean {
   if (after.length !== 3) return false;
@@ -357,9 +825,13 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
+  const freshnessDeadline = deadlineFor(FRESHNESS_WAIT_MS);
+  let caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline));
   const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const page = await withReadTransaction<SubjectLinksPage>(pool, async (client) => {
+  const readPage = async () => await withReadTransaction<{
+    page: SubjectLinksPage;
+    scannedMembers: string[];
+  }>(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
       visibility: string;
@@ -368,6 +840,7 @@ export async function listSubjectLinks(
       throw new SubjectNotFoundError();
     const redirect = await redirectOf(client, options.subject);
     if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+    await client.query('SET LOCAL enable_seqscan = off');
     if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
     const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
     const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
@@ -392,6 +865,8 @@ export async function listSubjectLinks(
             page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
           });
     const scanLimit = options.type ? 4 * options.limit : options.limit;
+    const scanned = rows.slice(0, scanLimit);
+    const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
     const links: Omit<SubjectLink, 'label'>[] = [];
     let examined = 0;
     for (const row of rows.slice(0, scanLimit)) {
@@ -422,33 +897,54 @@ export async function listSubjectLinks(
       }
     }
     return {
-      links,
-      ...(count ? { count } : {}),
-      freshness: {
-        consistency: 'eventual',
-        target_seconds: FRESHNESS_TARGET_SECONDS,
-        caught_up: caughtUp,
+      page: {
+        links,
+        ...(count ? { count } : {}),
+        freshness: {
+          consistency: 'eventual',
+          target_seconds: FRESHNESS_TARGET_SECONDS,
+          caught_up: caughtUp,
+        },
+        next:
+          rows.length > examined && last
+            ? encodeCursor(ring, binding, {
+                epoch: partition.epoch,
+                after: [
+                  options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                  last.subject,
+                  last.statement,
+                ],
+              })
+            : null,
+        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       },
-      next:
-        rows.length > examined && last
-          ? encodeCursor(ring, binding, {
-              epoch: partition.epoch,
-              after: [
-                options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
-                last.subject,
-                last.statement,
-              ],
-            })
-          : null,
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+      scannedMembers,
     };
   });
+  let snapshot = await readPage();
+  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  while (pendingMembers.length) {
+    if (Date.now() >= deadline) {
+      caughtUp = false;
+      snapshot.page.freshness.caught_up = false;
+      break;
+    }
+    caughtUp = await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline, pendingMembers);
+    if (!caughtUp) {
+      snapshot.page.freshness.caught_up = false;
+      break;
+    }
+    snapshot = await readPage();
+    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  }
+  const page = snapshot.page;
   const includeLabels = options.includeLabels ?? options.property !== null;
   const summaryRelease = includeLabels ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
   const summaries = summaryRelease
     ? await readSubjectSummaries(
         {
           client: { query: pool.query.bind(pool) },
+          pool,
           release: summaryRelease,
           authorize: options.authorizeSummary ?? (async () => false),
         },
@@ -467,6 +963,193 @@ export async function listSubjectLinks(
             summary: summaries.get(link.subject) ?? null,
           }
         : { subject: link.subject, property: link.property, statement: link.statement },
+    ),
+  };
+}
+
+export type SubjectRelation = {
+  statement: Statement;
+  target: string | null;
+  external: string | null;
+  type?: string;
+  label?: string;
+};
+export type SubjectRelationsPage = {
+  relations: SubjectRelation[];
+  count: { value: number; exact: boolean };
+  freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
+  next: string | null;
+  component: { partition: number; epoch: number; position: bigint };
+};
+
+function validRelationAfter(after: CursorKey[]): boolean {
+  return (
+    after.length === 3 &&
+    typeof after[0] === 'string' &&
+    typeof after[1] === 'string' &&
+    typeof after[2] === 'string' &&
+    UUID.test(after[1]) &&
+    UUID.test(after[2])
+  );
+}
+
+/** Forward relation page over the holder-local projection, with slot views filled only for this page. */
+export async function listSubjectRelations(
+  pool: Pool,
+  ring: KeyRing,
+  options: {
+    subject: string;
+    property: string;
+    context?: string;
+    limit: number;
+    filter?: string;
+    type?: string;
+    language?: string;
+    cursor?: string;
+    release: Release;
+    authorize: (client: PoolClient) => Promise<boolean>;
+    seen: readonly SessionComponent[];
+    caughtUp?: boolean;
+  },
+): Promise<SubjectRelationsPage> {
+  const route = routeOf(options.subject);
+  if (route === null) throw new SubjectNotFoundError();
+  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
+    throw new RangeError('Invalid relation page limit');
+  const context = options.context ?? NIL_UUID;
+  const contextRecord = context === NIL_UUID ? null : await contextSnapshot(pool, context);
+  if (context !== NIL_UUID && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
+  const binding = {
+    operation: 'subject.relations',
+    parameters: {
+      subject: options.subject,
+      property: options.property,
+      context,
+      filter: options.filter ?? null,
+      type: options.type ?? null,
+      language: options.language ?? null,
+    },
+  };
+  let cursor: { epoch: number; after: CursorKey[] } | null = null;
+  if (options.cursor !== undefined) {
+    const decoded = decodeCursor(ring, binding, options.cursor);
+    if (!decoded.ok) throw new PageCursorError(decoded.reason);
+    if (!validRelationAfter(decoded.after)) throw new PageCursorError('invalid');
+    cursor = decoded;
+  }
+  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      visibility: string;
+    } | null;
+    if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
+      throw new SubjectNotFoundError();
+    const redirect = await redirectOf(client, options.subject);
+    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+    await client.query('SET LOCAL enable_seqscan = off');
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const scanLimit = options.type ? 4 * options.limit : options.limit;
+    const rows = (await listOutboundLinksByProperty.run(client, {
+      route,
+      subject_id: options.subject,
+      property: options.property,
+      filter_value: options.filter ?? NIL_UUID,
+      after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+      after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
+      after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
+      page_limit: scanLimit + 1,
+    })) as {
+      statement: string;
+      slot: string;
+      target: string | null;
+      type: string;
+      external: string | null;
+      value: 'value' | 'somevalue' | 'novalue';
+      order_key: string;
+    }[];
+    const visibleRows = rows.slice(0, scanLimit);
+    const selected: typeof visibleRows = [];
+    let examined = 0;
+    for (const row of visibleRows) {
+      examined++;
+      if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
+        selected.push(row);
+      if (selected.length === options.limit) break;
+    }
+    const total = await readOutboundLinkCount.run(client, {
+      route,
+      subject_id: options.subject,
+      property: options.property,
+      filter_value: options.filter ?? NIL_UUID,
+    });
+    const totalValue = Number(total?.value ?? 0);
+    let count = { value: totalValue, exact: true };
+    if (options.type) {
+      const sample = (await countOutboundLinkTypes.run(client, {
+        route,
+        subject_id: options.subject,
+        property: options.property,
+        filter_value: options.filter ?? NIL_UUID,
+      })) as { type: string }[];
+      count = {
+        value: sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!]))
+          .length,
+        exact: totalValue <= 1000,
+      };
+    }
+    const relations: SubjectRelation[] = [];
+    const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      type?: string;
+    } | null;
+    for (const row of selected) {
+      const view = await slotView(client, options.subject, options.property, context, defaults, row.slot);
+      const fact = view.facts.find((entry) => entry.statement_id === row.statement);
+      if (!fact) continue;
+      const dataTypes = factDataTypes(options.release, [fact]);
+      const statement = resolveItem(options.subject, [fact], holder?.type ?? '', dataTypes, {
+        revision: fact.fact_revision ?? 1,
+        release: fact.fact_release ?? '',
+        context,
+      }).statements[options.property]?.[0];
+      if (!statement) continue;
+      relations.push({
+        statement,
+        target: row.target,
+        external: row.external,
+        ...(row.target === null ? {} : { type: row.type }),
+      });
+    }
+    const last = visibleRows[examined - 1];
+    return {
+      relations,
+      count,
+      freshness: {
+        consistency: 'eventual',
+        target_seconds: FRESHNESS_TARGET_SECONDS,
+        caught_up: caughtUp,
+      },
+      next:
+        rows.length > examined && last
+          ? encodeCursor(ring, binding, {
+              epoch: partition.epoch,
+              after: [last.order_key, last.target ?? NIL_UUID, last.statement],
+            })
+          : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
+  });
+  const labels = await readLabels(
+    pool,
+    page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+  );
+  requireAccessDeadline(deadline);
+  return {
+    ...page,
+    relations: page.relations.map((entry) =>
+      entry.target ? { ...entry, label: subjectLabel(labels.get(entry.target) ?? {}, options.language) } : entry,
     ),
   };
 }

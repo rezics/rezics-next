@@ -1,8 +1,8 @@
 import type { CommandTransaction } from '../command/command.ts';
-import { derivedId, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { writeFacts } from './write-facts.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
-import { SLOT_NS, type FactRow, type Statement } from './item.ts';
+import { statementSlotId, type FactRow, type Statement } from './item.ts';
 import insertAcceptanceCurrent from './slots-insert-acceptance-current.sql';
 import insertAcceptanceHead from './slots-insert-acceptance.sql';
 import insertAdoptionHead from './slots-insert-adoption.sql';
@@ -23,6 +23,7 @@ export type Candidate = {
   release: string;
   revision: number;
   view_order: number;
+  relation: boolean;
 };
 export type Adoption = {
   mode: 'inherit' | 'replace' | 'suppress';
@@ -31,7 +32,7 @@ export type Adoption = {
   revision: number;
 };
 export function slotId(subject: string, property: string): string {
-  return derivedId(SLOT_NS, `${subject}\nstatement\n${property}`, routeOf(subject)!);
+  return statementSlotId(subject, property);
 }
 
 /** A single bounded resolver for virtual compact state and persisted editorial state. */
@@ -40,11 +41,12 @@ export async function latestAdoption(
   subject: string,
   property: string,
   context: string,
+  slot = slotId(subject, property),
 ): Promise<Adoption | null> {
   const row = (await readLatestAdoption.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     context_id: context,
   })) as Adoption | null;
   return row;
@@ -65,12 +67,17 @@ export async function currentAcceptance(
   return row ?? null;
 }
 
-export async function resolveSlot(tx: CommandTransaction, subject: string, property: string, context = GLOBAL_CONTEXT) {
+export async function resolveSlot(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  context = GLOBAL_CONTEXT,
+  slot = slotId(subject, property),
+) {
   const route = routeOf(subject)!;
-  const slot = slotId(subject, property);
   const last = await readSlotOperation.run(tx, { route, subject_id: subject, slot_id: slot });
   if (last?.operation === 'expand') {
-    const adoption = await latestAdoption(tx, subject, property, context);
+    const adoption = await latestAdoption(tx, subject, property, context, slot);
     return { expanded: true, compact: [] as Candidate[], adoption };
   }
   const rows = (await readCompactFacts.run(tx, { route, subject_id: subject, slot_id: slot })) as (Candidate & {
@@ -127,8 +134,13 @@ async function selectionFacts(
   return rows.map((row) => candidateFact(property, row, row.adopted_rank));
 }
 
-async function globalSlotView(tx: CommandTransaction, subject: string, property: string): Promise<FactRow[]> {
-  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT);
+async function globalSlotView(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  slot = slotId(subject, property),
+): Promise<FactRow[]> {
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (!state.expanded) return state.compact.map((candidate) => candidateFact(property, candidate));
 
   const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
@@ -139,7 +151,7 @@ async function globalSlotView(tx: CommandTransaction, subject: string, property:
     route: routeOf(subject)!,
     subject_id: subject,
     context_id: GLOBAL_CONTEXT,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     rejected_limit: rejectedLimit,
     excluded: selection.map((row) => row.candidate),
   });
@@ -167,10 +179,11 @@ async function readSlotView(
   property: string,
   context = GLOBAL_CONTEXT,
   defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+  slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
-  if (context === GLOBAL_CONTEXT) return { facts: await globalSlotView(tx, subject, property) };
+  if (context === GLOBAL_CONTEXT) return { facts: await globalSlotView(tx, subject, property, slot) };
 
-  const state = await resolveSlot(tx, subject, property, context);
+  const state = await resolveSlot(tx, subject, property, context, slot);
   if (!state.expanded) {
     if (defaults[property] === 'suppress') return { facts: [], resolution: 'suppressed' };
     return { facts: state.compact.map((candidate) => candidateFact(property, candidate)) };
@@ -180,7 +193,7 @@ async function readSlotView(
   if (state.adoption?.mode === 'replace')
     return { facts: await selectionFacts(tx, subject, property, state.adoption.selection) };
 
-  const global = await globalSlotView(tx, subject, property);
+  const global = await globalSlotView(tx, subject, property, slot);
   if (!global.length) return { facts: global };
   const inherited: FactRow[] = [];
   for (const fact of global) {
@@ -196,8 +209,9 @@ export async function slotView(
   property: string,
   context = GLOBAL_CONTEXT,
   defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+  slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
-  const view = await readSlotView(tx, subject, property, context, defaults);
+  const view = await readSlotView(tx, subject, property, context, defaults, slot);
   return { ...view, facts: await omitHidden(tx, subject, view.facts) };
 }
 
@@ -246,12 +260,13 @@ export async function insertAdoption(
   mode: Adoption['mode'],
   selection: Adoption['selection'],
   revision: number,
+  slot = slotId(subject, property),
 ): Promise<number> {
   const head = (expectedHead ?? 0) + 1;
   const inserted = await insertAdoptionHead.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     context_id: context,
     head,
     mode,
@@ -267,32 +282,26 @@ export async function expandSlot(
   subject: string,
   property: string,
   transactionId: string,
+  slot = slotId(subject, property),
+  relation?: boolean,
 ): Promise<void> {
-  const state = await resolveSlot(tx, subject, property);
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (state.expanded) return;
   for (const row of state.compact) {
     await insertCandidate.run(tx, {
       route: routeOf(subject)!,
       subject_id: subject,
       candidate_id: row.candidate_id,
-      slot_id: slotId(subject, property),
+      slot_id: slot,
       property,
       rank: row.rank,
       statement: row.statement,
       release: row.release,
       revision: row.revision,
       view_order: row.view_order,
+      relation: row.relation,
     });
-    await insertAcceptance(
-      tx,
-      subject,
-      row.candidate_id,
-      GLOBAL_CONTEXT,
-      null,
-      'accept',
-      row.revision,
-      slotId(subject, property),
-    );
+    await insertAcceptance(tx, subject, row.candidate_id, GLOBAL_CONTEXT, null, 'accept', row.revision, slot);
   }
   if (state.adoption) {
     const { head, mode, selection, revision } = state.adoption;
@@ -300,7 +309,7 @@ export async function expandSlot(
     await insertExpandedAdoption.run(tx, {
       route: routeOf(subject)!,
       subject_id: subject,
-      slot_id: slotId(subject, property),
+      slot_id: slot,
       context_id: GLOBAL_CONTEXT,
       head,
       mode,
@@ -316,7 +325,7 @@ export async function expandSlot(
     transaction_id: transactionId,
     facts: [
       {
-        slot_id: slotId(subject, property),
+        slot_id: slot,
         log_seq: 33,
         operation: 'expand',
         kind: 'statement',
@@ -325,6 +334,7 @@ export async function expandSlot(
         statement_id: null,
         body: {},
         release: null,
+        relation: relation ?? state.compact.some((row) => row.relation),
       },
     ],
   });

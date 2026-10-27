@@ -16,7 +16,15 @@ import type {
 
 setDefaultTimeout(60_000);
 let driver: SemanticDriver;
+const relationProperties = new Map<string, Set<string>>();
+const relationTargets = new Map<string, Set<string>>();
+const relationCandidateTargets = new Map<string, string>();
+const relationKey = (id: string, property: string) => `${id}\n${property}`;
+const candidateKey = (id: string, property: string, candidate: string) => `${id}\n${property}\n${candidate}`;
 beforeEach(async () => {
+  relationProperties.clear();
+  relationTargets.clear();
+  relationCandidateTargets.clear();
   const location = process.env.SEMANTIC_DRIVER;
   if (!location) throw new Error('Semantic outcome driver is required');
   if (!isAbsolute(location) && !location.startsWith('file:'))
@@ -33,8 +41,31 @@ afterEach(async () => {
   await current?.close();
 });
 const key = () => `"${randomUUID()}"`;
-const write = (persona: Persona, method: 'POST' | 'PUT', path: string, body: unknown, token = key()) =>
-  driver.request(persona, method, path, body, { 'Idempotency-Key': token });
+const write = (persona: Persona, method: 'POST' | 'PUT', path: string, body: unknown, token = key()) => {
+  let requestBody = body;
+  const adoption = method === 'POST' && path.match(/^\/v1\/subjects\/([^/:]+):adopt$/);
+  if (adoption && body && typeof body === 'object' && !Array.isArray(body)) {
+    const input = body as Record<string, unknown>;
+    const id = adoption[1]!;
+    const property = typeof input.property === 'string' ? input.property : '';
+    const targets = relationTargets.get(relationKey(id, property));
+    if (relationProperties.get(id)?.has(property) && !input.target && !input.sameAs) {
+      const selected = Array.isArray(input.selection)
+        ? [...new Set(input.selection.flatMap((item) => {
+            if (!item || typeof item !== 'object' || typeof (item as { candidate?: unknown }).candidate !== 'string')
+              return [];
+            const target = relationCandidateTargets.get(
+              candidateKey(id, property, (item as { candidate: string }).candidate),
+            );
+            return target ? [target] : [];
+          }))]
+        : [];
+      const target = selected.length === 1 ? selected[0] : selected.length === 0 && targets?.size === 1 ? [...targets][0] : undefined;
+      if (target) requestBody = { ...input, target };
+    }
+  }
+  return driver.request(persona, method, path, requestBody, { 'Idempotency-Key': token });
+};
 const get = (path: string, persona: Persona = 'anonymous') => driver.request(persona, 'GET', path);
 const subjectPath = (id: string) => `/v1/subjects/${id}`;
 const value = (content: Json) => ({ type: 'value' as const, content });
@@ -81,13 +112,32 @@ async function create(type: string, label: string, statements: Record<string, St
   const response = await write('editor', 'POST', '/v1/subjects', { type, labels: { en: label }, statements });
   expect(response.status).toBe(201);
   const subject = response.body.subject as Subject;
+  const relationCounts = (subject as Subject & { relationCounts?: Record<string, number> }).relationCounts ?? {};
+  const properties = new Set(Object.keys(relationCounts));
+  relationProperties.set(subject.id, properties);
+  for (const property of properties) {
+    const entries = statements[property] ?? [];
+    const created = subject.statements[property] ?? [];
+    for (let index = 0; index < entries.length; index++) {
+      const target = entries[index]?.value.type === 'value' ? entries[index]?.value.content : undefined;
+      const candidate = created[index]?.id;
+      if (typeof target !== 'string') continue;
+      const targets = relationTargets.get(relationKey(subject.id, property)) ?? new Set<string>();
+      targets.add(target);
+      relationTargets.set(relationKey(subject.id, property), targets);
+      if (candidate) relationCandidateTargets.set(candidateKey(subject.id, property, candidate), target);
+    }
+  }
   expect(response.headers.get('location')).toBe(subjectPath(subject.id));
   expect(response.headers.get('etag')).toBe('"1"');
   expect(response.headers.get('rezics-session-token')).toBeTruthy();
   return subject;
 }
-async function read(id: string, context?: string) {
-  const response = await get(`${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`);
+async function read(id: string, context?: string, persona: Persona = context ? 'acceptor' : 'editor') {
+  const response = await get(
+    `${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`,
+    persona,
+  );
   expect(response.status).toBe(200);
   const subject = response.body.subject as Subject;
   expect(response.headers.get('etag')).toBe(`"${subject.revision}"`);
@@ -99,9 +149,12 @@ async function read(id: string, context?: string) {
     >,
   };
 }
-async function candidates(id: string, property: string, context = driver.globalContext) {
+async function candidates(id: string, property: string, context = driver.globalContext, target?: string) {
+  const knownTargets = relationTargets.get(relationKey(id, property));
+  const scopedTarget = target ?? (knownTargets?.size === 1 ? [...knownTargets][0] : undefined);
+  const scope = scopedTarget ? `&target=${encodeURIComponent(scopedTarget)}` : '';
   const response = await get(
-    `${subjectPath(id)}/candidates?property=${encodeURIComponent(property)}&context=${context}`,
+    `${subjectPath(id)}/candidates?property=${encodeURIComponent(property)}&context=${context}${scope}`,
   );
   expect(response.status).toBe(200);
   expect(response.body.next).toBeNull();
@@ -113,6 +166,12 @@ async function propose(id: string, property: string, content: Json) {
   const path = `${subjectPath(id)}/candidates`;
   const response = await write('editor', 'POST', path, { statement: input }, token);
   expect(response.status).toBe(201);
+  if (relationProperties.get(id)?.has(property) && typeof content === 'string') {
+    const targets = relationTargets.get(relationKey(id, property)) ?? new Set<string>();
+    targets.add(content);
+    relationTargets.set(relationKey(id, property), targets);
+    relationCandidateTargets.set(candidateKey(id, property, response.body.candidate as string), content);
+  }
   await unchanged(id, async () => {
     const replay = await write('editor', 'POST', path, { statement: input }, token);
     expect(replay.status).toBe(201);
@@ -597,7 +656,9 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   const proposed = await propose(book.id, 'schema:author', second.id);
   expect(proposed.revision).toBe(2);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
-  const pending = (await candidates(book.id, 'schema:author')).find((c) => c.id === proposed.candidate)!;
+  const pending = (await candidates(book.id, 'schema:author', driver.globalContext, second.id)).find(
+    (c) => c.id === proposed.candidate,
+  )!;
   expect(pending).toMatchObject({
     id: proposed.candidate,
     release: digest,
@@ -627,9 +688,10 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   const adoption = await write('acceptor', 'POST', adoptionPath(book.id), {
     context: driver.globalContext,
     property: 'schema:author',
+    target: second.id,
     mode: 'replace',
-    selection: [selection(original.id, 'preferred'), selection(proposed.candidate)],
-    expected_head: original.head,
+    selection: [selection(proposed.candidate)],
+    expected_head: null,
   });
   expect(adoption.status).toBe(200);
   expect(adoption.body).toMatchObject({
@@ -638,11 +700,11 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
       context: driver.globalContext,
       property: 'schema:author',
       mode: 'replace',
-      selection: [selection(original.id, 'preferred'), selection(proposed.candidate)],
+      selection: [selection(proposed.candidate)],
       head: expect.any(Number),
     },
   });
-  const shown = (await read(book.id)).subject;
+  const shown = (await read(book.id, undefined, 'acceptor')).subject;
   expect(shown.revision).toBe(4);
   expect(shown.statements['schema:author']).toHaveLength(2);
   expect(shown.statements['schema:author']).toEqual(
@@ -671,7 +733,7 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   });
 });
 
-test('Rejected date candidates remain deprecated with references while rejected pending and multiple single values cannot be adopted', async () => {
+test('Rejected date candidates remain deprecated and relation adoptions stay within their target slots', async () => {
   const { digest } = await active();
   const work = await create('schema:Book', 'Kokoro');
   const otherWork = await create('schema:Book', 'Botchan');
@@ -717,24 +779,35 @@ test('Rejected date candidates remain deprecated with references while rejected 
         property: 'schema:exampleOfWork',
         mode: 'replace',
         selection: [selection(alternative.candidate)],
-        expected_head: original.head,
+        expected_head: null,
       }),
       409,
       'conflict',
     );
   });
   await accept(edition.id, alternative.candidate);
+  const secondSlot = await write('acceptor', 'POST', adoptionPath(edition.id), {
+    context: driver.globalContext,
+    property: 'schema:exampleOfWork',
+    target: otherWork.id,
+    mode: 'replace',
+    selection: [selection(alternative.candidate)],
+    expected_head: null,
+  });
+  expect(secondSlot.status).toBe(200);
+  expect((await read(edition.id, undefined, 'acceptor')).subject.statements['schema:exampleOfWork']).toHaveLength(2);
   await unchanged(edition.id, async () => {
     field(
       await write('acceptor', 'POST', adoptionPath(edition.id), {
         context: driver.globalContext,
         property: 'schema:exampleOfWork',
         mode: 'replace',
+        target: work.id,
         selection: [selection(original.id), selection(alternative.candidate)],
-        expected_head: original.head,
+        expected_head: null,
       }),
-      '/selection',
-      'out_of_range',
+      '/selection/1/candidate',
+      'unsupported',
     );
   });
 });
@@ -956,7 +1029,25 @@ interface Link {
   subject: string;
   property: string;
   statement: string;
+  type: string;
+  label: string;
+  summary: {
+    id: string;
+    type: string;
+    types: string[];
+    label: { value: string; language: string };
+    creativeWork: boolean;
+    cover: null;
+  };
 }
+const instanceSummary = (id: string, label: string): Link['summary'] => ({
+  id,
+  type: 'bf:Instance',
+  types: ['bf:Instance', 'schema:CreativeWork', 'schema:Thing'],
+  label: { value: label, language: 'en' },
+  creativeWork: true,
+  cover: null,
+});
 async function links(id: string, persona: Persona) {
   const response = await get(
     `${subjectPath(id)}/links?property=${encodeURIComponent('schema:exampleOfWork')}`,
@@ -995,6 +1086,9 @@ test('Incoming links honor the editor session and become visible anonymously wit
     subject: edition.id,
     property: 'schema:exampleOfWork',
     statement: edition.statements['schema:exampleOfWork']![0]!.id,
+    type: 'bf:Instance',
+    label: 'Kokoro, Penguin Classics',
+    summary: instanceSummary(edition.id, 'Kokoro, Penguin Classics'),
   };
   const own = await links(work.id, 'editor');
   expect(own.links).toContainEqual(expected);
@@ -1014,6 +1108,9 @@ test('Paused projection answers the editor within three seconds with stale links
       subject: edition.id,
       property: 'schema:exampleOfWork',
       statement: edition.statements['schema:exampleOfWork']![0]!.id,
+      type: 'bf:Instance',
+      label: 'Kokoro, another edition',
+      summary: instanceSummary(edition.id, 'Kokoro, another edition'),
     };
     const started = performance.now();
     const stale = await links(work.id, 'editor');

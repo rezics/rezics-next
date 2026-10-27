@@ -4,7 +4,7 @@ import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from './definitions.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { holderFacts } from './link-keys.ts';
@@ -21,7 +21,7 @@ import moderationUpdateVisibility from './moderation-update-visibility.sql';
 import moderationUpsertHidden from './moderation-upsert-hidden.sql';
 import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
-import { expandSlot } from './slots.ts';
+import { expandSlot, slotView } from './slots.ts';
 
 export type SubjectVisibility = 'visible' | 'hidden' | 'taken_down';
 export type SubjectVisibilityState = { visibility: SubjectVisibility; securityRevision: string };
@@ -128,11 +128,8 @@ async function readModeratedSubject(
   return moderationReadSubject.run(tx, { route, subject_id: subject });
 }
 
-async function shownFacts(tx: CommandTransaction, subject: string, _property?: string): Promise<FactRow[]> {
-  const current = await readModeratedSubject(tx, routeOf(subject)!, subject);
-  const release = current && (await readRelease(tx, current.release));
-  if (!release) throw new Error('Subject revision release is missing');
-  return (await holderFacts(tx, subject, release)).facts;
+async function shownFacts(tx: CommandTransaction, subject: string, property: string, slot: string): Promise<FactRow[]> {
+  return (await slotView(tx, subject, property, undefined, {}, slot)).facts;
 }
 
 async function moderationLinks(
@@ -147,9 +144,12 @@ async function moderationLinks(
   if (before.length === 0 && after.length === 0) return null;
   const release = await readRelease(tx, releaseDigest);
   if (!release) throw new Error('Subject revision release is missing');
+  const identity = await holderFacts(tx, subject, release);
   const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]), {
+    subject,
     release,
-    type: (await holderFacts(tx, subject, release)).type,
+    type: identity.type,
+    identityFacts: identity.facts,
   });
   if (changes.length === 0) return null;
   return {
@@ -219,7 +219,6 @@ export async function moderateSubject(
       if (!allowed) throw new ModerationConflictError();
 
       const body = validateModerationBody(options.action, options.body);
-      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const updated = await moderationUpdateVisibility.run(tx, {
         route,
         subject_id: options.subject,
@@ -248,24 +247,25 @@ export async function moderateSubject(
             : 0;
       if (countDelta !== 0 && !(await readRedirect.run(tx, { route, subject_id: options.subject })))
         await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: countDelta });
-      const after = nextVisibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.visibility_changed.v1',
           subject: options.subject,
           data: { id: options.subject, visibility: nextVisibility, security_revision: securityRevision },
         },
+        {
+          type: LINKS_VISIBILITY_CHANGED,
+          subject: options.subject,
+          data: {
+            subject: options.subject,
+            revision: current.revision,
+            security_revision: securityRevision,
+            release: current.release,
+            visible: nextVisibility === 'visible',
+            cursor: [],
+          },
+        },
       ];
-      const links = await moderationLinks(
-        tx,
-        options.subject,
-        current.revision,
-        securityRevision,
-        current.release,
-        before,
-        after,
-      );
-      if (links) events.push(links);
       return {
         value: { subject: options.subject, visibility: nextVisibility, security_revision: securityRevision },
         events,
@@ -333,7 +333,8 @@ export async function moderateStatement(
         candidate_id: options.candidate,
       });
       const property = located?.property;
-      if (!current || property == null) throw new ModerationSubjectNotFoundError();
+      const slot = located?.slot_id;
+      if (!current || property == null || slot == null) throw new ModerationSubjectNotFoundError();
       const hidden = await moderationReadHidden.run(tx, {
         route,
         subject_id: options.subject,
@@ -343,8 +344,8 @@ export async function moderateStatement(
       if (!statementTransition(options.action, currentVisibility)) throw new ModerationConflictError();
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
-      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
-      await expandSlot(tx, options.subject, property, transactionId);
+      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
+      await expandSlot(tx, options.subject, property, transactionId, slot, located.relation);
       const updated = await moderationBumpSecurity.run(tx, {
         route,
         subject_id: options.subject,
@@ -379,7 +380,7 @@ export async function moderateStatement(
         });
       }
       const securityRevision = Number(revision);
-      const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
+      const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.statement_visibility_changed.v1',

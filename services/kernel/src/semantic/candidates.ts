@@ -12,9 +12,17 @@ import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '
 import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
-import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statement, type Violation } from './item.ts';
+import {
+  factDataTypes,
+  itemFacts,
+  isRelationProperty,
+  resolveItem,
+  SubjectInputError,
+  type Statement,
+  type Violation,
+} from './item.ts';
 import { holderFacts } from './link-keys.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
@@ -88,7 +96,7 @@ function validatedStatement(
   const violations = [...subjectErrors, ...checked.violations];
   if (violations.length) throw new SubjectInputError(violations);
   const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
-  const facts = itemFacts(subject, input, type);
+  const facts = itemFacts(subject, input, type, release.release);
   return { property, fact: facts.find((fact) => fact.kind === 'statement')!, items: checked.targets };
 }
 
@@ -227,7 +235,14 @@ export async function writeProposal(
     authoredEvents.push(...installed.events);
   }
   try {
-    await expandSlot(tx, options.subject, input.property, transactionId);
+    await expandSlot(
+      tx,
+      options.subject,
+      input.property,
+      transactionId,
+      input.fact.slot_id,
+      isRelationProperty(options.release.release, input.property),
+    );
     await insertProposalRevision.run(tx, {
       route,
       subject_id: options.subject,
@@ -245,11 +260,12 @@ export async function writeProposal(
       route,
       subject_id: options.subject,
       candidate_id: candidate,
-      slot_id: slotId(options.subject, input.property),
+      slot_id: input.fact.slot_id,
       property: input.property,
       rank: (input.fact.body as { rank: string }).rank,
       statement: factBody,
       release: options.release.digest,
+      relation: isRelationProperty(options.release.release, input.property),
       revision,
     });
   } catch (error) {
@@ -359,6 +375,7 @@ export async function decideCandidate(
         candidate_id: string;
         property: string;
         slot_id: string;
+        relation: boolean;
       };
       const found = listed(
         await readDecisionCandidate.run(tx, {
@@ -386,9 +403,15 @@ export async function decideCandidate(
       if (listed(concealed).length > 0) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
 
-      await expandSlot(tx, options.subject, candidate.property, transactionId);
+      await expandSlot(tx, options.subject, candidate.property, transactionId, candidate.slot_id, candidate.relation);
       if (options.decision === 'reject') {
-        const adoption = await latestAdoption(tx, options.subject, candidate.property, options.context);
+        const adoption = await latestAdoption(
+          tx,
+          options.subject,
+          candidate.property,
+          options.context,
+          candidate.slot_id,
+        );
         if (adoption?.mode === 'replace' && adoption.selection.some((entry) => entry.candidate === options.candidate))
           throw new EditorialConflictError();
       }
@@ -454,6 +477,7 @@ export async function adoptCandidates(
   options: EditorialWriteOptions & {
     context: string;
     property: string;
+    slot?: string;
     mode: Adoption['mode'];
     selection: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
     expectedHead: number | null;
@@ -494,6 +518,7 @@ export async function adoptCandidates(
       const definition = options.release.release.properties[options.property];
       if (!type || !type.properties.includes(options.property) || !definition)
         throw new SubjectInputError([{ pointer: '/property', code: 'unsupported' }]);
+      const slot = options.slot ?? slotId(options.subject, options.property);
 
       if (options.selection.length > 32) throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
       const hiddenCandidates = new Set<string>();
@@ -508,7 +533,7 @@ export async function adoptCandidates(
         });
         for (const row of listed(concealed)) hiddenCandidates.add(row.candidate_id);
       }
-      const state = await resolveSlot(tx, options.subject, options.property, options.context);
+      const state = await resolveSlot(tx, options.subject, options.property, options.context, slot);
       const compact = new Set(state.compact.map((candidate) => candidate.candidate_id));
       for (const [index, entry] of options.selection.entries()) {
         let supported = compact.has(entry.candidate);
@@ -516,7 +541,7 @@ export async function adoptCandidates(
           const result = await readSlotCandidate.run(tx, {
             route,
             subject_id: options.subject,
-            slot_id: slotId(options.subject, options.property),
+            slot_id: slot,
             candidate_id: entry.candidate,
           });
           supported = listed(result).length > 0;
@@ -536,21 +561,31 @@ export async function adoptCandidates(
       if (!definition.multivalued && options.selection.length > 1)
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
-      const beforeLinks =
-        options.context === GLOBAL_CONTEXT ? await holderFacts(tx, options.subject, options.release.release) : null;
+      const beforeFacts =
+        options.context === GLOBAL_CONTEXT
+          ? (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts
+          : null;
+      const identity = beforeFacts ? await holderFacts(tx, options.subject, options.release.release) : null;
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
-        const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT);
+        const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT, slot);
         oldGlobalCount = global.expanded
           ? global.adoption?.mode === 'replace'
             ? global.adoption.selection.length
             : 0
           : global.compact.length;
       }
-      await expandSlot(tx, options.subject, options.property, transactionId);
+      await expandSlot(
+        tx,
+        options.subject,
+        options.property,
+        transactionId,
+        slot,
+        isRelationProperty(options.release.release, options.property),
+      );
       const revision = subject.revision + 1;
       const selection = options.selection as Adoption['selection'];
-      if (options.context === GLOBAL_CONTEXT) {
+      if (options.context === GLOBAL_CONTEXT && !isRelationProperty(options.release.release, options.property)) {
         const newGlobalCount = options.mode === 'replace' ? selection.length : 0;
         const updated = await changeCurrentFacts.run(tx, {
           route,
@@ -577,6 +612,7 @@ export async function adoptCandidates(
           options.mode,
           selection,
           revision,
+          slot,
         );
         for (const entry of selection) {
           const local = await currentAcceptance(tx, options.subject, entry.candidate, options.context);
@@ -594,16 +630,17 @@ export async function adoptCandidates(
             data: { id: options.subject, revision, kind: 'adopt' },
           },
         ];
-        if (beforeLinks) {
-          const afterFacts = (await holderFacts(tx, options.subject, options.release.release)).facts;
+        if (beforeFacts) {
+          const afterFacts = (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts;
           const changes = linkChanges(
-            beforeLinks.facts,
+            beforeFacts,
             afterFacts,
-            factDataTypes(options.release.release, [...beforeLinks.facts, ...afterFacts]),
+            factDataTypes(options.release.release, [...beforeFacts, ...afterFacts]),
             {
+              subject: options.subject,
               release: options.release.release,
-              type: beforeLinks.type,
-              refresh: options.property === 'schema:datePublished',
+              type: subject.type,
+              identityFacts: identity?.facts,
             },
           );
           if (changes.length > 0) {
@@ -617,6 +654,20 @@ export async function adoptCandidates(
                 changes,
               },
             });
+          }
+          if (options.property === 'schema:datePublished') {
+            for (const direction of ['holder', 'target'] as const)
+              events.push({
+                type: LINK_KEYS_CHANGED,
+                subject: options.subject,
+                data: {
+                  subject: options.subject,
+                  direction,
+                  revision,
+                  security_revision: Number(subject.security_revision),
+                  cursor: [],
+                },
+              });
           }
         }
         return {
@@ -707,7 +758,7 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
 export async function listCandidates(
   pool: Pool,
   ring: KeyRing,
-  options: PageOptions & { property: string; context: string; routeKey?: Uint8Array },
+  options: PageOptions & { property: string; context: string; slot?: string; routeKey?: Uint8Array },
 ) {
   const contextRecord = options.context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, options.context);
   if (options.context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -721,6 +772,7 @@ export async function listCandidates(
       parameters: {
         subject: options.subject,
         property: options.property,
+        slot: options.slot ?? slotId(options.subject, options.property),
         context: options.context,
       },
     },
@@ -734,7 +786,8 @@ export async function listCandidates(
       typeof after[2] === 'string' &&
       routeOf(after[2]) === routeOf(options.subject),
     async (client, after) => {
-      const state = await resolveSlot(client, options.subject, options.property, options.context);
+      const slot = options.slot ?? slotId(options.subject, options.property);
+      const state = await resolveSlot(client, options.subject, options.property, options.context, slot);
       type Decided = Candidate & { verdict: 'accept' | 'reject' | 'abstain' | null; head: number | null };
       let rows: Decided[];
       if (state.expanded) {
@@ -742,7 +795,7 @@ export async function listCandidates(
           await readCandidatePage.run(client, {
             route: routeOf(options.subject)!,
             subject_id: options.subject,
-            slot_id: slotId(options.subject, options.property),
+            slot_id: slot,
             context_id: options.context,
             after_revision: Number(after?.[0] ?? 0),
             after_view_order: Number(after?.[1] ?? 0),
@@ -785,7 +838,7 @@ export async function listCandidates(
         if (!release) throw new Error('Candidate release is missing');
         releases.set(row.release, release);
       }
-      const view = await slotView(client, options.subject, options.property, options.context, defaults);
+      const view = await slotView(client, options.subject, options.property, options.context, defaults, slot);
       const ranks = new Map(
         view.facts.map((fact) => [
           fact.statement_id!,

@@ -4,10 +4,7 @@ import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
-import { LINKS_CHANGED, SUBJECT_MERGED } from './events.ts';
-import { factDataTypes } from './item.ts';
-import { linkChanges } from './link-changes.ts';
-import { slotView } from './slots.ts';
+import { SUBJECT_MERGED } from './events.ts';
 import type { Release } from '@rezics/definitions';
 import readRedirect from './read-redirect.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
@@ -17,6 +14,7 @@ import insertRevision from './merges-insert-revision.sql';
 import readLatestRevision from './merges-read-latest-revision.sql';
 import readVisible from './merges-read-visible.sql';
 import { AccountAgentVerificationError, accountAgentsForSubjects } from './agents.ts';
+import markProjectionPending from './merge-mark-projection-pending.sql';
 
 export class SubjectRedirectError extends Error {
   constructor(
@@ -132,7 +130,6 @@ export async function mergeSubjectsInCommand(
   if (route === null) throw new SubjectNotFoundError();
   const latest = (await readLatestRevision.run(tx, { route, subject_id: options.redirected }))!;
   const revision = latest.revision + 1;
-  const securityRevision = Number(latest.security_revision);
   await insertRevision.run(tx, {
     route,
     subject_id: options.redirected,
@@ -153,22 +150,9 @@ export async function mergeSubjectsInCommand(
     target: options.survivor,
     transaction_id: transactionId,
   });
-  const facts = [];
-  for (const property of options.release.release.types[gone.type]?.properties ?? []) {
-    facts.push(...(await slotView(tx, options.redirected, property)).facts);
-  }
-  const changes = linkChanges(facts, [], factDataTypes(options.release.release, facts), {
-    release: options.release.release,
-    type: gone.type,
-  });
+  await markProjectionPending.run(tx, { route, subject_id: options.redirected });
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: SUBJECT_MERGED, subject: options.redirected, data: { id: options.redirected, survivor: options.survivor } },
   ];
-  if (changes.length)
-    events.push({
-      type: LINKS_CHANGED,
-      subject: options.redirected,
-      data: { subject: options.redirected, revision, security_revision: securityRevision, changes },
-    });
   return { value: { survivor: options.survivor, redirected: options.redirected, revision }, events };
 }

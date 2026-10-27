@@ -10,8 +10,17 @@ const linkChange = Type.Object(
   {
     property: Type.String({ minLength: 1 }),
     statement: UUID,
-    target: UUID,
+    target: Type.Union([UUID, Type.Null()]),
     present: Type.Boolean(),
+    project_outbound: Type.Optional(Type.Boolean()),
+    relation: Type.Optional(Type.Boolean()),
+    slot_id: Type.Optional(UUID),
+    external: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    value: Type.Optional(Type.Union([Type.Literal('value'), Type.Literal('somevalue'), Type.Literal('novalue')])),
+    outbound_order: Type.Optional(
+      Type.Union([Type.Literal('position'), Type.Literal('date'), Type.Literal('name'), Type.Null()]),
+    ),
+    outbound_order_key: Type.Optional(Type.String()),
     source_type: Type.Optional(Type.String()),
     order_key: Type.Optional(Type.String()),
     filter_value: Type.Optional(UUID),
@@ -24,6 +33,8 @@ export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
 export const LINKS_MOVING = 'com.rezics.semantic.links.moving.v1' as const;
 
 export const LINKS_CHANGED = 'com.rezics.semantic.links.changed.v1' as const;
+export const LINK_KEYS_CHANGED = 'com.rezics.semantic.links.keys-changed.v1' as const;
+export const LINKS_VISIBILITY_CHANGED = 'com.rezics.semantic.links.visibility-changed.v1' as const;
 export const LINKS_PROJECTED = 'com.rezics.semantic.links.projected.v1' as const;
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
@@ -52,6 +63,27 @@ export const SEMANTIC_EVENTS = {
       survivor: UUID,
       cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])),
       verification: Type.Optional(verification),
+    },
+    { additionalProperties: false },
+  ),
+  [LINK_KEYS_CHANGED]: Type.Object(
+    {
+      subject: UUID,
+      direction: Type.Union([Type.Literal('holder'), Type.Literal('target')]),
+      revision,
+      security_revision: Type.Integer({ minimum: 0 }),
+      cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])),
+    },
+    { additionalProperties: false },
+  ),
+  [LINKS_VISIBILITY_CHANGED]: Type.Object(
+    {
+      subject: UUID,
+      revision,
+      security_revision: Type.Integer({ minimum: 0 }),
+      release: Type.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
+      visible: Type.Boolean(),
+      cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])),
     },
     { additionalProperties: false },
   ),

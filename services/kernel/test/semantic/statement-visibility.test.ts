@@ -6,7 +6,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -16,7 +16,8 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
+const projection = linkProjection(pool);
+const relays = startRelays(pool, [projection], { intervalMs: 50 });
 afterAll(async () => {
   await relays.stop();
   await pool.end();
@@ -56,6 +57,19 @@ const kernel = createKernel({
 });
 
 const sessions: Record<string, string> = {};
+async function catchUpLinks(id: string): Promise<void> {
+  const route = routeOf(id);
+  if (route === null) throw new Error('Subject id must carry a route');
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partitionOf(route));
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
 async function call(method: string, path: string, options: { as?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
   if (options.as) {
@@ -87,6 +101,7 @@ const source = { parts: [statement('schema:url', 'https://example.org/record')] 
 async function created(body: unknown): Promise<Record<string, any>> {
   const answer = await call('POST', '/v1/subjects', { as: 'editor', key: key(), body });
   expect(answer.response.status).toBe(201);
+  await catchUpLinks(answer.body.subject.id as string);
   return answer.body.subject;
 }
 const person = (name: string) => created({ type: 'schema:Person', labels: { en: name } });
