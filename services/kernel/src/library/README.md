@@ -6,6 +6,9 @@ Library is the kernel module for a person's shelves and reading state, and for t
 
 A Collection has ordered members. The same subject may appear more than once. An account keeps library entries, one state per subject. Progress is stored as progress sessions, with units and history for one subject and an optional version subject. Owned items are copies, each a private row. The kernel's single follow model is follows, and community's join step uses the same membership follow. Public snapshots are published logs. The public subject listing is the count and pair rows of public Collection membership.
 
+Profiles, labels and built-in dynamic Collections remain part of this one Library capability. The deletion lifecycle
+does not split or reassign those contracts; user-saved dynamic queries remain deferred.
+
 ## Partitions
 
 Everything personal lives in the owner's partition. That includes Collections and their members, entries, progress sessions, units and history, copies, follows and published logs. A partition is `route >>> 4`. It is not a physically partitioned SQL table.
@@ -35,6 +38,11 @@ route or parameter is currently exposed. If one is added, it must require a sepa
 permission on the exact target; ordinary owner/delete authority is insufficient. That permission/action binding is
 missing, so existing delete routes must not be reinterpreted as early purge.
 
+Takedown is a disclosure hold, not a delete: withhold the least covered field or the record when a smaller
+withholding does not satisfy the notice, retain other fields as allowed, and do not schedule purge solely because of
+the notice. A legal-order purge is a distinct platform-authorized operation. Legal holds suspend automatic purge
+without restoring disclosure or extending an ordinary record's undo deadline.
+
 For the rows below, entry, copy, label, assignment and published-log writes require the current owning account and
 their operation scope (`library_entry:delete`, `copy:delete`, `library_entry:update`, or `published_log:delete` as
 applicable). Collection and member writes require the curator's current Collection resource permission
@@ -50,8 +58,8 @@ A stale revision or changed identity conflicts without overwriting a newer fact.
 | Holding `copy` / `DELETE /v1/copies/:copyId` | The owner account hides the holding and private location/source/note/dates immediately. A permitted reference is only its stable identity and deleted state. Undo preserves copy ID, values and pins with a newer revision; it does not mint another copy. | `entry-store-copy-delete.sql` physically deletes. The route pre-reads the row and has no retained tombstone, client CAS delete contract or authorized absent-row replay path. | The owner/subject holding is personal; erase the whole row and its private fields/pins, leaving no account-to-subject skeleton. |
 | Curated `collection_member` / member DELETE | The authorized curator hides that occurrence, note and count/multiplicity contribution immediately, preserving duplicate siblings. A permitted public reference is only occurrence identity and deleted state; private occurrence existence stays concealed. Undo uses the same member ID, subject, note and original placement only if current Collection order/capacity permits it. | `collection-store-collection-member-delete.sql` physically deletes and decrements parent count. There is no retained occurrence revision/expiry or undo. | Minimize a public occurrence to its safe occurrence/parent/subject tombstone; erase a private occurrence whose skeleton is personal. The visible member count/multiplicity changes at hide, never again at purge. |
 | `collection` / Collection DELETE with revision | The curator or currently authorized Collection editor hides metadata, members and every derived disclosure immediately. A permitted public reference is only Collection identity, kind and deleted state; a private Collection remains indistinguishable from an unknown ID. Undo preserves Collection ID, visibility, ordered occurrences, notes and pins, advances Collection revision/order basis, and never revives an independently deleted child. | `collection-store-collection-tombstone.sql` sets deleted and advances revision; there is no explicit deletion/expiry metadata, restore command or purge worker. Reads check active state, but public pair/count cleanup is asynchronous and unstamped. | An ordinarily deleted public Collection is no longer an active public contribution. Erase title, description and personal attribution; retain only a safe structural tombstone and permitted relations/counts, including safe occurrence skeletons. Erase a private/unlisted Collection graph wholly, including previously-public personal remnants. |
-| Label definition / label delete in the separate label contract | The owner hides the name and every assignment-derived fact immediately by definition generation. A permitted reference exposes only allowed tombstone identity. Undo must restore the same label ID/name and only still-valid assignments within the window, with a newer CAS revision/generation. | The separate label contract's terminal tombstone/new-ID and deleted-assignment capacity wording needs reconciliation with this shared policy. No applied Library label tables or commands exist. Its owner must settle name/capacity conflicts; this README does not change that contract. | Erase the whole private definition and its personal assignments through bounded generation-scoped pages; keep no permanent named tombstone or live-cap charge. |
-| Label assignment / unassign in the separate label contract | The owner hides only this assignment immediately. A permitted reference exposes only allowed identity and deleted state. Undo restores the same assignment identity and accepted pin only if its definition is live and current name/capacity constraints permit; it never revives an unrelated definition. | No applied assignment mutation, restore or purge implementation exists. The label owner must reconcile live-cap accounting and undo conflicts. | Erase the whole private assignment and its fact-index link; its owner/label/subject skeleton is personal. |
+| Label definition / label delete in the label contract | The owner hides the name and every assignment-derived fact immediately by definition generation. A permitted reference exposes only allowed tombstone identity. Undo restores the same label ID/name and only still-valid assignments within the window, with a newer CAS revision/generation. | For this first-public deletion lifecycle, the shared 30-day restore contract supersedes the label contract's terminal tombstone/new-ID rule. Name normalization and active-name uniqueness remain in that contract; a recreated name conflicts with restore. No applied Library label tables or commands exist. | Erase the whole private definition and its personal assignments through bounded generation-scoped pages; keep no permanent named tombstone or live-cap charge. |
+| Label assignment / unassign in the label contract | The owner hides only this assignment immediately. A permitted reference exposes only allowed identity and deleted state. Undo restores the same assignment identity and accepted pin only if its definition is live and current name/capacity constraints permit; it never revives an unrelated definition. | The shared deletion contract governs the assignment's 30-day restore and says tombstones do not use live capacity; restore must reacquire the live cap. The label contract's stored-row cap wording is superseded only for deleted assignments. No applied assignment mutation, restore or purge implementation exists. | Erase the whole private assignment and its fact-index link; its owner/label/subject skeleton is personal. |
 | `published_log` / `DELETE /v1/publishedLogs/:logId` | The owner retracts the public snapshot immediately. A permitted reference exposes only log identity and deleted state, never deleted note, session state or personal times. Undo preserves log ID and original publication values/times and note; it never recopies current session state. | `published-log-delete.sql` physically deletes; no tombstone, expiry or undo exists. The source pointer is nullable in schema/store, but no detachment/cleanup consumer is registered. | Erase note, owner/source-session links, session state and personal times. Retain only a permitted public structural log tombstone/subject relation with no second aggregate decrement; erase the whole row if that relation itself is personal. |
 | Session, units, change history, progress head / start, record, complete, abandon | The account owner reads these through existing progress commands/pages while the account is active. Completion and abandonment are factual transitions, not deletion. Entry deletion leaves them available to the owner and a session may continue to support a subject in Everything. Unit removal is an existing progress record with history. There is no independent deleted reference or undo operation for these audit/history rows. | No session/history delete API is promised. Account deletion is terminal at T and must conceal the private graph; there is no account restore to reopen it. The account-private Library purge consumer is absent, and history is unbounded even with the 20000-unit cap. | Under account erasure, erase private units/history before sessions and heads. A removed progress unit follows existing correction history until account erasure; do not invent a separate history-row delete API. |
 | Follow / follow, unfollow | The owner controls only their outgoing follow. Unfollow is a subscription state change, not deletion or a reason to remove another person's inbound preference. It has no deleted tombstone or undo operation. Account deletion is terminal and immediately ends the owner's access to outgoing state. | `follow-store-apply.sql` retains unfollowed rows; the account-private purge consumer for every state/reason is absent. | Erase every outgoing private follow state/reason and account-to-target relation; do not remove another account's inbound follow preference. |
@@ -79,6 +87,10 @@ expected record revision or generation when one exists, and canonical input. Aut
 same-key replay has one effect; stale CAS fails without mutation. Missing current authority conceals payload even
 on replay. Retained deletion metadata must be reachable without the ordinary live-row pre-read.
 
+Every new owner write also passes `shareAccount` in its command transaction, serialized against the terminal account
+barrier. After T, the barrier rejects new owner writes. Account cleanup runs as durable system work bound to the
+deleted account and T; it does not impersonate an active human or invoke an active-only trusted-account command.
+
 Undo checks uniqueness and CAS atomically. An entry replacement at the same owner/subject key, occupied member
 ordinal after reorder, recreated label name, full Collection (5000), or live assignment cap (32) returns conflict
 without overwriting newer facts, repositioning silently or allocating another identity. It may be retried with a
@@ -89,49 +101,57 @@ It grants no authority to introduce new values under a missing profile.
 
 Cursors remain live across pages, not cross-page snapshots. Recheck source deletion/generation on every page and
 invalidate changed ordered bases using the shared cursor protocol; old cursors or delayed positive observations
-cannot resurrect deleted values or overwrite a restored newer generation. The current listing worker reads source
-then releases its connection before target apply, with no monotonic compare in `listing-apply.sql`. A receipt digest
-and DBOS workflow ID do not close that race. Reuse the shared listing freshness contract's stamps/zero tombstones
-and reverse cleanup; an asynchronous zero alone cannot satisfy immediate public count concealment.
+cannot resurrect deleted values or overwrite a restored newer generation. After account deletion, late positive
+consumer deliveries must also recheck terminal account state so they cannot recreate private facts. The current
+listing worker reads source then releases its connection before target apply, with no monotonic compare in
+`listing-apply.sql`. A receipt digest and DBOS workflow ID do not close that race. Reuse the shared listing freshness
+contract's stamps/zero tombstones and reverse cleanup; an asynchronous zero alone cannot satisfy immediate public
+count concealment.
 
 ### Bounded automatic purge and shared authority gaps
 
-At expiry personal/private payload is automatically due, without a platform action or a new user request. Reuse the
-kernel lifecycle, durable enqueue/checkpoint, retention and encrypted list-cursor protocols. This is an adapter
-requirement, not an assertion that a generic deletion engine/import already exists: `work/retention.ts` collects
-terminal DBOS history by age and does not erase Library records; `work.ts` registers listing effects only.
+For an ordinary record tombstone, personal/private payload is automatically due at `restoreUntil`, without a platform
+action or a new user request. Terminal account deletion is the explicit first-scope exception: account-private Library
+payload is due at T, with no 30-day wait or account restore lifecycle. Reuse the kernel lifecycle, durable
+enqueue/checkpoint, retention and encrypted list-cursor protocols. This is an adapter requirement, not an assertion
+that a generic deletion engine/import already exists: `work/retention.ts` collects terminal DBOS history by age and
+does not erase Library records; `work.ts` registers listing effects only.
 
-A native runnable intent must survive commit-before-enqueue; source selection seeks an owner/target-leading keyset
-with **1 <= P <= 100 source rows BEFORE filtering** (including rejected, held and lookahead candidates), or a proven
-partial due/pending index ordered by `(dueAt, route, targetId, generation)`. Advance after the last examined source
-key, including holds; a held row cannot starve later due work. Retain separate parent and child cursors. Each page
-has bounded bytes, <=100 rows/effects, a finite command deadline, and atomic effects + generation/phase/sequence +
-checkpoint + receipt + continuation intent; workflow segments contain <=100 pages. Crash before commit retries;
-commit-before-enqueue/ack redelivery uses native receipts. No OFFSET, broad account/principal/JSON/history scan,
-whole-account arrays/counts, default cascade, or unbounded distinct-subject walk. Existing maintenance session and
-history keyset readers are reusable surfaces, not a purge implementation.
+A native runnable intent must survive commit-before-enqueue. Source selection takes **1 <= P <= 100 indexed source
+rows before filtering**, including held/rejected rows and lookahead candidates, or uses a proven partial due/pending
+index ordered by `(dueAt, route, targetId, generation)`. Advance after the last examined source key, including held
+rows; a held row cannot starve later due work. Retain separate parent and child cursors. Each writing page has
+bounded bytes, at most 100 source rows/effects and a finite command deadline; effects, generation/phase/sequence,
+checkpoint, receipt and continuation intent commit atomically. Workflow segments contain at most 100 pages. Crash
+before commit retries; commit-before-enqueue/ack redelivery uses native receipts. No OFFSET, broad
+account/principal/JSON/history scan, whole-account arrays/counts, default cascade or unbounded distinct-subject walk.
+Existing maintenance session and history keyset readers are reusable surfaces, not a purge implementation. Prove
+bounded actual rows, bytes, blocks and statements at the specified geometric populations; counting only changed rows
+does not establish a bound.
 
-Every destructive page rechecks the authoritative record tombstone or terminal account deletion, exact policy due
-time or explicit early-purge grant, and current legal hold in the writing transaction, including after a pause/retry.
-Legal-hold release
-makes already-due work runnable; a hold never renews undo or public access. Exhaust session units/history before
-session, member rows and acknowledged remote listing cleanup before Collection, and producer/reservation/dictionary
-references before their parents. Shared-policy skeletons retain only permitted identifier/type/relations/counts and
-tombstone; a private fact whose skeleton identifies reading/ownership must be removed entirely. Completion requires
-indexed exhaustion and native receipts, not an empty ordinary read, outbox checkpoint or DBOS success.
+Every destructive page rechecks the authoritative record tombstone or terminal account state/T and the current legal
+hold in its writing transaction, including after a pause/retry. Ordinary record work also checks `restoreUntil` or an
+explicit early-purge grant. Account-private cleanup is eligible immediately at T and needs no platform grant or
+synchronous consumer wait. Legal-hold release makes already-due work runnable; a hold never renews undo or public
+access. Exhaust session units/history before their session and head, member rows and acknowledged remote listing
+cleanup before Collection parents, and producer/reservation/dictionary references before their parents.
+Shared-policy skeletons retain only permitted identifier/type/relations/counts and tombstone; a private fact whose
+skeleton identifies reading/ownership must be removed entirely. Completion requires indexed exhaustion and native
+receipts, not an empty ordinary read, outbox checkpoint or DBOS success.
 
-Missing imports/contracts requiring owner agreement before implementation:
+Missing production adapters and code paths (policy timing is settled by the shared contract):
 
-- **Accounts:** terminal account deletion at T is the first-scope behavior. Accounts has no account-restore operation
-  or account-generation counter, and a Library purge must not invent either. The current terminal
-  `account-tombstoned.v1` event and deleted account state establish T but do not by themselves define the earliest
-  Library account-private purge time. Exact manager question: what Accounts-owned evidence should each page check to
-  bind the terminal T and the shared-policy account-purge eligibility under the authoritative account lock? No
-  consumer may make account deletion wait, and routine due purge needs no platform action.
+- **Accounts and Library work:** terminal account deletion at T is the first-scope behavior. Accounts publishes
+  `account-tombstoned.v1`; Library has no consumer. Bind each page to the terminal account row and T under the
+  authoritative account lock, and enqueue bounded cleanup durably without making account deletion wait. Do not add
+  account restore, an account restore window, an account-generation counter or an account-restoration event.
+  Ordinary owner writes already have the `shareAccount` barrier; purge work must not impersonate an active human or
+  invent a `trustedAccount` bypass.
 - **Kernel lifecycle/work and command owners:** target tombstone/CAS/expiry and hold guard, native runnable index,
   checkpoint/receipt/continuation adapter and exact shared receipt/outbox/workflow payload locators with custody
-  acknowledgement. `shareAccount`, `runCommand`, event checkpoints and DBOS registration exist; a general
-  deletion/hold authority port does not. Agree exported module/types rather than importing an imagined engine.
+  acknowledgement. `shareAccount`, `runCommand`, `registerEffects`, event checkpoints and DBOS registration exist;
+  a general deletion/hold authority port does not. Agree exported module/types rather than importing an imagined
+  engine.
 - **Search/web/listing and subject-fact owners:** live generation/disclosure witnesses, active-only counters and
   bounded reverse pair cleanup/stamps covering every apply path. Existing listing freshness and shelf/bulk
   protocols are reused; missing shared subject-fact/hold APIs remain explicit dependencies.
@@ -139,34 +159,35 @@ Missing imports/contracts requiring owner agreement before implementation:
 ### Account deletion
 
 Account deletion is terminal at T. The account-delete result for this contract contains only `deletedAt`; there is no
-account restore, account restore window, account-generation counter, or account-restoration event/port. Ordinary
-private Library reads and producers must be withheld at T, and account erasure requires no platform action or wait
-for a Library consumer. Accounts currently emits `account-tombstoned.v1`; Library's registered worker currently has
-no account-purge consumer, so this required behavior is not implemented.
+account restore, account restore window, account-generation counter or account-restoration event/port. Ordinary
+private Library reads and producers are withheld at T. Accounts emits `account-tombstoned.v1`; Library's registered
+worker currently has no account-purge consumer, so immediate bounded cleanup is a real implementation gap. The
+consumer is asynchronous: deletion does not wait for it, and no platform grant or 30-day delay applies to
+account-private cleanup. A legal hold suspends destructive cleanup but never disclosure or an account restore.
 
-The account retention and child-before-parent outcomes advance the terminal account clock to T+30 days and check
-that the targeted private payload is gone by then. That coverage is an upper-bound erasure check only: it does not
-authorize an immediate or otherwise early account purge, and does not set the earliest eligible time. The earliest
-Library account-private purge timing requires explicit manager/supermanager reconciliation with
-[the shared deletion policy](../../../../docs/deletion.md); this README does not infer an account lifecycle or weaken
-that policy. A legal hold suspends purge, never disclosure or an account restore.
+Account-retention and child-before-parent outcomes drain actual durable cleanup at unchanged T. They inspect native
+rows and persisted work state; advancing 30 days is not part of account-erasure eligibility. Crash tests arm the
+failure before account deletion, then restart against the same durable stores. Ordinary per-record tombstones retain
+their independent 30-day undo deadlines and can never reopen a deleted account.
 
-The retained Collection set is **only active PUBLIC Collections at T**. Private, unlisted and already-deleted
-Collections are withheld at T. Private/unlisted graphs are erased after the applicable policy window, including
-previously-public Collections whose visibility is private or unlisted at T. Already-deleted public Collections retain
-at most the minimal safe skeleton described above and produce no public output. Freeze a public dynamic Collection's
-LAST COMPLETELY PUBLISHED GENERATION A; discard pending B and never evaluate a fresh query at T over undisclosed
-private facts. Erase private query/source data with policy. Curated output freezes its last published
+The retained Collection set is **only active PUBLIC Collections at T**. These Collections remain visible with
+stable Collection/member identities and de-identified account attribution; no ownership transfer or new account
+identity is created. Private, unlisted and already-deleted
+Collections are withheld and their personal/private payload is erased by bounded durable cleanup from T, including
+previously-public Collections whose visibility is private or unlisted at T. An already-deleted public Collection
+retains at most the minimal safe skeleton described above and produces no public output. Freeze a public dynamic
+Collection's LAST COMPLETELY PUBLISHED GENERATION A; discard pending B and never evaluate a fresh query at T over
+undisclosed private facts. Erase private query/source data. Curated output freezes its last published
 occurrences/notes; keep stable identities and de-identified attribution, with no ownership transfer or new
-publication. No unlisted Collection is retained. Published-log payloads and private source sessions follow the
-windowed minimization/erasure path; do not revive an unpublished or retracted snapshot. Account deletion cannot be
-restored; independent record tombstones keep their original deadlines but cannot reopen a deleted account.
+publication. No unlisted Collection is retained. Published-log payloads and private source sessions are erased by
+bounded cleanup from T; do not revive an unpublished or retracted snapshot. Account deletion cannot be restored;
+independent record tombstones keep their original deadlines but cannot reopen a deleted account.
 
 The existing privacy contact remains the assisted removal/data-copy channel; add no legal timetable or self-serve
 export. Native completion and overall evidence custody are separate claims. The inventory below lists required
-cleanup, not an implemented guarantee. The prior retention research is evidence, superseded where it assumes
-account restoration or retention beyond the fixed active-public Collection set. Terminal account restore is an
-unsupported first-scope gap, separate from per-record undo.
+cleanup, not an implemented guarantee. Logs, caches, exports, replicas and backups lack a complete Library-specific
+custody inventory and enforced erasure deadline; do not make a blanket physical-erasure claim while those boundaries
+remain open.
 
 #### Retention inventory
 
@@ -177,10 +198,10 @@ workflow history.
 
 | Native data                                                                                                                               | Deletion boundary                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `library.collection`, `library.collection_member`                                                                                         | Retain only active/public Collections at T and their last completely published generation. Withhold private, unlisted and already-deleted Collections at T, including previously-public private/unlisted ones. After the applicable window erase private/unlisted graphs wholly; minimize already-deleted public Collections to safe structural tombstones, never active contributions. Remove personal text/attribution and occurrences whose skeleton is personal. Acknowledge public-listing cleanup before finalizing parents; hide/decrement public pairs and counts once, not again at purge.                                                                                                    |
+| `library.collection`, `library.collection_member`                                                                                         | Retain only active/public Collections at T and their last completely published generation. Withhold private, unlisted and already-deleted Collections at T, including previously-public private/unlisted ones. Erase private/unlisted graphs from T by bounded cleanup; minimize already-deleted public Collections to safe structural tombstones, never active contributions. Remove personal text/attribution and occurrences whose skeleton is personal. Acknowledge public-listing cleanup before finalizing parents; hide/decrement public pairs and counts once, not again at purge.                                                                                                    |
 | `library.entry`, `library.copy`, `library.follow`                                                                                         | Erase every entry state, all copies and private copy text, and every outgoing follow regardless of state or reason. An entry deletion alone is not account erasure.                                                                                                                                                                                                        |
 | `library.progress_session`, `library.progress_unit`, `library.progress_change`, `library.progress_head`                                   | Erase active, completed and abandoned sessions, unit rows, full change-intent history and heads, including heads with no remaining entry or session. Remove child units/history before their session. Never copy private progress into a retained log.                                                                                                                     |
-| `library.published_log`                                                                                                                   | Withhold every snapshot on terminal account deletion; no published log is retained as an active contribution. After the applicable window erase personal snapshot fields and source/owner links, retaining only a nonpersonal structural tombstone if safe. Do not revive an unpublished or retracted snapshot. Nullable source detachment is supported, not wired cleanup.                                                                                                               |
+| `library.published_log`                                                                                                                   | Withhold every snapshot on terminal account deletion; no published log is retained as an active contribution. Erase personal snapshot fields and source/owner links from T by bounded cleanup, retaining only a nonpersonal structural tombstone if safe. Do not revive an unpublished or retracted snapshot. Nullable source detachment is supported, not wired cleanup.                                                                                                               |
 | `library.shelf_type_reservation`, `library.shelf_type_node`, `library.shelf_type_root`, `library.shelf_type_value`, `library.shelf_count` | Erase full staged reservation input, roots, every trie node (including partial/orphan paths), exact type text including zero-use identities, and every private counter/bucket/generation. Fence continuations first so a stale reservation cannot recreate a value.                                                                                                        |
 | `library.bulk_target`, `library.bulk_effect`, planned `library.bulk_operation`, entry-slot generations and temporary bulk selections      | Erase canonical selection/request payloads, target manifests/outcomes, receipts and target-side capture/transfer/ack payloads after already-committed outcomes are reconciled under the bulk contract. Erase absent-entry slot generations once terminal fencing prevents ABA. Some stores remain planned or unnamed; their locators and cleanup are not implemented here. |
 | Maintenance and listing-cleanup state                                                                                                     | Erase nonminimal gate, rebuild/backfill generations, checkpoints, cursors, page receipts, enqueue intents, manifests and target acknowledgements after dependent phases finish. Preserve only the minimal terminal fence/completion marker needed to reject replay.                                                                                                        |
@@ -188,9 +209,9 @@ workflow history.
 
 Cleanup must use bounded, indexed native phases with child-before-parent ordering and durable receipts/cursors; a Collection tombstone, terminal flag or empty account-local read is not proof that children and remote listing pairs are gone. Proposed page bounds have not been measured here. The [listing freshness contract](listing-freshness-contract.md#bounded-storage-purge-and-delivery) records the stale-positive projection race and fencing requirement.
 
-Library cleanup does not run broad SQL over shared stores. `core.receipt` can retain command request/response payloads; `core.outbox` must keep tombstone and projection events deliverable until durable custody is established; `core.consumer_checkpoint` is a shared stream position, not per-account state. `editorial.write_basis` and DBOS status/input/output/step/event/message histories follow their owners' retention and minimization rules. Existing age-based workflow history collection does not establish Library erasure. Exact evidence locators, account-specific payload cleanup and some consumer-custody acknowledgements are still missing; do not delete these stores by broad principal or JSON scans.
+Library cleanup does not run broad SQL over shared stores. `core.receipt` can retain command request/response payloads; `core.outbox` must keep tombstone and projection events deliverable until durable custody is established; `core.consumer_checkpoint` is a shared stream position, not per-account state. `editorial.write_basis` and DBOS status/input/output/step/event/message histories follow their owners' retention and minimization rules. Existing age-based workflow history collection does not establish Library erasure. Exact event, receipt, workflow and payload locators, account-specific cleanup and some consumer-custody acknowledgements are still missing; do not delete shared stores by broad principal or JSON scans. No claim extends beyond the demonstrated native locators. Logs, caches, exports, replicas and backups remain explicit custody gaps.
 
-Logs, caches, exports, replicas and backups have no complete Library-specific inventory or enforced account-erasure/restore deadline. These are explicit custody gaps. A tombstone, `state = 'deleted'`, or exhaustion of Library-native rows does not support a blanket physical-erasure claim while those gaps remain. See the [Access deletion policy](../access/README.md#account-deletion-policy) and [Access retention inventory](../access/README.md#retention-inventory) for the shared authority boundary and shared-store coverage; the detailed Library table/locator inventory remains here.
+Logs, caches, exports, replicas and backups have no complete Library-specific inventory or enforced account-erasure deadline. These are explicit custody gaps. A tombstone, `state = 'deleted'`, or exhaustion of Library-native rows does not support a blanket physical-erasure claim while those gaps remain. See the [Access deletion policy](../access/README.md#account-deletion-policy) and [Access retention inventory](../access/README.md#retention-inventory) for the shared authority boundary and shared-store coverage; the detailed Library table/locator inventory remains here.
 
 ### Audit evidence and implementation handoff
 
@@ -202,9 +223,10 @@ snapshots session values and retracts physically. `collection-reads.ts`, `views.
 `sitemap-page.sql`, `listing-source.sql`, `listing-apply.sql`, `listing.ts` and `work.ts` were inspected: Collection
 reads gate active state, sitemap uses an active/public partial index, listing source/apply is asynchronous and
 unstamped, and the registered worker has no restore/purge consumer. `maintenance-session-page.sql` and
-`maintenance-history-page.sql` provide indexed page shapes, not deletion. `docs/library-labels.md` still specifies
-terminal tombstones and counts deleted assignments against 32: its owner reconciles those draft rules separately.
-No profile, label or common-Collection specification is overwritten here.
+`maintenance-history-page.sql` provide indexed page shapes, not deletion. For first-public deletion only, the shared
+deletion lifecycle supersedes `docs/library-labels.md` where it specifies terminal label deletion or counts deleted
+assignments against 32; label name normalization and active-assignment behavior remain unchanged. No profile, label
+or common-Collection specification is otherwise overwritten here.
 
 `specs/library-deletion-driver.ts` specifies real production HTTP/native seams and persisted inspection/SQL evidence.
 Every case in `specs/library-deletion-outcomes.test.ts` requires the exact absent-driver marker; pure fixture checks
@@ -221,7 +243,7 @@ proceed in parallel against agreed ports; this audit itself requires no unfinish
 
 | Owner / slice | Production file ownership and required agreement | Outcome covered |
 | --- | --- | --- |
-| Accounts lifecycle | `access/lifecycle.ts`, `access/events.ts` and Accounts-owned lifecycle SQL/migration (up to six other files). Reuse terminal account deletion at T; agree the current account-state check, terminal-time evidence, due-time authority and durable event custody for each consumer page. Do not add an account restore operation or account-generation counter. | Terminal account authority for due private purge; no consumer wait. |
+| Accounts lifecycle | `access/lifecycle.ts`, `access/events.ts` and Accounts-owned lifecycle SQL/migration (up to six other files). Reuse terminal account deletion at T; bind the current deleted account and T for each page and preserve durable event custody. The event starts asynchronous work and deletion does not wait for consumers. Do not add account restore, a restore window or account generation. | Terminal account authority for immediate private cleanup. |
 | Shared kernel work/command | Proposed `work/deletion-contract.ts`, `work/deletion-checkpoint.ts`, `work/deletion-page.sql`, native pending-index migration, `work/registry.ts`, `command/command.ts`, `events/effects.ts`, one owner test. Agree hold authority, transactional guard, exact evidence locators, continuation/receipt custody; no such generic engine exists today. | Due automatic work, legal hold, bounded source pages, crash recovery. |
 | Library schema adapter | One Library migration plus proposed `library/deletion-adapter.ts` and `library/deletion-state.sql`, `library/command-support.ts`, one native adapter test. Agree shared exports first; add owner/target/incarnation/expiry and due indexes without default cascades. | Shared protocol adoption, deletion-state lookup before receipts. |
 | Entry / copy command owners (one slice per family) | Entry slice: `entries.ts`, `entry-store.ts`, entry delete/read/page SQL, `personal-routes.ts`, one test. Copy slice: `copies.ts`, copy delete/read/page/subject-page SQL, one test. Entry slice owns shared `entry-store.ts` and route wiring for both; copy slice consumes the agreed signatures, with no concurrent edit of those files. | Soft delete, CAS, replay, pinned undo, replacement conflict. |
