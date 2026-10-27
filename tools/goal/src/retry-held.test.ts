@@ -112,3 +112,24 @@ test('a held task accepts a reshaped brief and stays held while its dependency i
     expect(h.store.task(task.id).brief.markdown).toContain('Cost: one point read.');
   } finally { h.dispose(); }
 });
+
+test('a reshape that only records a held contract does not wait for host capacity', async () => {
+  const h = harness();
+  try {
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id); await job.drain();
+    await h.tasks.stop(task.id);
+    // A host with no free worker slot.
+    writeFileSync(join(h.tasks.settings.stateDirectory, 'capacity.json'), JSON.stringify({ maxWorkers: 0 }));
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const reshaped = join(h.root, '.temp/goal/reshaped.md');
+    writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    await Promise.race([
+      job.start(task.id, { brief: reshaped }).then(() => job.drain()),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('waited for host capacity')), 10_000)),
+    ]);
+    expect(h.store.task(task.id).state).toBe('held');
+    expect(h.store.task(task.id).brief.markdown).toContain(dependency.id);
+  } finally { h.dispose(); }
+});
