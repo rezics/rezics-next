@@ -5,7 +5,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function counter(value: unknown): boolean {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 /** Checks native completion metadata only; callers must validate hits, sort tuples and aggregations. */
