@@ -195,6 +195,8 @@ are also tried in filename order before the existing routes, preserving their ex
 recordings override discovered recordings for module answers. Bun tests, Storybook and the dev server discover the
 files automatically once per process, with no shared index or import line.
 
+The recording check is in `tests/recorded-responses.test.ts`; it type-checks every committed kernel response against `@rezics/client`.
+
 Run `bun run storybook` from this directory to browse the page stories. The browser stories replay the committed
 kernel responses and run as part of `bun run check`. To refresh those responses, run `bun run record`. It needs Bun,
 Docker access to start a disposable PostgreSQL container and a disposable OpenSearch container, and permission to run
