@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { releaseDigest, valueSchema, type DataType, type Release } from '@rezics/definitions';
-import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
@@ -16,6 +15,7 @@ import { createRealAccess } from './real-access.ts';
 import { capture, checkGrowth, openGrowthDatabase, type Capture, type GrowthDatabase } from '../support/growth.ts';
 import {
   assertUnforcedIndexes,
+  captureUnforcedIndexes,
   logGrowthSeeding,
   seedSemanticPopulation,
   unrelatedSemanticPopulation,
@@ -23,7 +23,8 @@ import {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
+const growth: GrowthDatabase = await openGrowthDatabase(databaseUrl);
+const pool = growth.pool;
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 4 });
 const editor = newId(31_000);
 const access = await createRealAccess(admin, { editor }, [
@@ -104,7 +105,6 @@ const release: Release = {
   },
 };
 const digest = releaseDigest(release);
-let growth: GrowthDatabase;
 const coveringCaptures: { scale: number; raw: Capture }[] = [];
 let growthAnchor = '';
 let growthTarget = '';
@@ -191,7 +191,6 @@ beforeAll(async () => {
   const published = await call('POST', '/v1/definitions/releases', { release });
   await call('POST', `/v1/definitions/releases/${published.digest}:activate`, { expected_head: null });
 
-  growth = await openGrowthDatabase(databaseUrl);
   const actorRelease = { digest, release };
   const actor = { ...editorActor, clientId: 'graph-growth' };
   const route = 51_200;
@@ -215,7 +214,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await relays.stop();
-  await Promise.allSettled([growth?.close(), pool.end(), admin.end()]);
+  await Promise.allSettled([growth.close(), admin.end()]);
 });
 
 test('a graph read returns the anchored neighbourhood for explicit properties to depth two', async () => {
@@ -234,7 +233,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
   const characterC = await create('ex:Character', 'Character C', { knows: [characterA.id, characterD.id] });
   await catchUp(createdIds);
 
-  const directWorks = await request('GET', graphPath(workA.id, ['ex:follows', 'ex:basedOn'], 'both', 1));
+  const directWorks = await captureUnforcedIndexes(
+    growth,
+    'ordinary graph API direct work read',
+    1,
+    () => request('GET', graphPath(workA.id, ['ex:follows', 'ex:basedOn'], 'both', 1)),
+    {},
+  );
   expect(directWorks.response.status).toBe(200);
   expect(directWorks.body.edges).toEqual(
     expect.arrayContaining([
@@ -246,9 +251,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     ]),
   );
 
-  const works = await request('GET', graphPath(workA.id, ['ex:follows', 'ex:basedOn'], 'both', 2, 1), {
-    language: 'ja, en;q=0.5',
-  });
+  const works = await captureUnforcedIndexes(
+    growth,
+    'ordinary graph API depth-two work read',
+    1,
+    () => request('GET', graphPath(workA.id, ['ex:follows', 'ex:basedOn'], 'both', 2, 1), { language: 'ja, en;q=0.5' }),
+    {},
+  );
   expect(works.response.status).toBe(200);
   expect(works.body.nodes[0]).toEqual({
     id: workA.id,
@@ -313,9 +322,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     [workE.id, workF.id].filter((id) => id !== firstBasedOnSource),
   );
 
-  const characters = await request('GET', graphPath(characterA.id, ['ex:knows'], 'both', 2), {
-    language: 'ja, en;q=0.5',
-  });
+  const characters = await captureUnforcedIndexes(
+    growth,
+    'ordinary graph API depth-two character read',
+    1,
+    () => request('GET', graphPath(characterA.id, ['ex:knows'], 'both', 2), { language: 'ja, en;q=0.5' }),
+    {},
+  );
   expect(characters.response.status).toBe(200);
   expect(characters.body.nodes.map((node: { id: string }) => node.id)).toEqual(
     expect.arrayContaining([characterA.id, characterB.id, characterC.id, characterD.id]),
@@ -329,7 +342,13 @@ test('a graph read returns the anchored neighbourhood for explicit properties to
     ]),
   );
 
-  const directCharacters = await request('GET', graphPath(characterA.id, ['ex:knows'], 'both', 1));
+  const directCharacters = await captureUnforcedIndexes(
+    growth,
+    'ordinary graph API direct character read',
+    1,
+    () => request('GET', graphPath(characterA.id, ['ex:knows'], 'both', 1)),
+    {},
+  );
   expect(directCharacters.response.status).toBe(200);
   expect(directCharacters.body.edges).toEqual(
     expect.arrayContaining([
@@ -442,7 +461,7 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
       await growth.admin.query(
         `INSERT INTO semantic.outbound_link_count(route,subject_id,property,filter_value,value)
          VALUES ($1,$2,'ex:follows','00000000-0000-0000-0000-000000000000',$3)
-         ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
+         ON CONFLICT(route,subject_id,context_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
         [anchorRoute, growthAnchor, scale],
       );
       await seedSemanticPopulation({ pool: growth.pool, admin: growth.admin }, unrelated.population, {
@@ -463,12 +482,19 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
 
 test('graph and summary covering reads use unforced indexed access as their populations grow', () => {
   expect(coveringCaptures.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
-  for (const { scale, raw } of coveringCaptures)
-    assertUnforcedIndexes('bounded graph expansion and node summaries', scale, raw, {
-      'semantic.subject': 'subject_pkey',
-      'semantic.fact': 'fact_label',
-      'semantic.outbound_link': 'outbound_link_maintenance',
-      'semantic.inbound_link': 'inbound_link_present',
-      'semantic.outbound_link_count': 'outbound_link_count_pkey',
-    });
+  const failures: unknown[] = [];
+  for (const { scale, raw } of coveringCaptures) {
+    try {
+      assertUnforcedIndexes('bounded graph expansion and node summaries', scale, raw, {
+        'semantic.subject': 'subject_pkey',
+        'semantic.fact': 'fact_label',
+        'semantic.outbound_link': 'outbound_link_maintenance',
+        'semantic.inbound_link': 'inbound_link_present',
+        'semantic.outbound_link_count': 'outbound_link_count_pkey',
+      });
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  expect(failures).toEqual([]);
 });

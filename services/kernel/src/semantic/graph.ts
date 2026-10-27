@@ -208,9 +208,6 @@ export async function listSubjectGraph(
       throw new SubjectNotFoundError();
     const redirect = await redirectOf(client, options.subject);
     if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-    await client.query('SET LOCAL enable_seqscan = off');
-    // Ordered graph pages must stop in the index; a bitmap plan reads every edge in a hub before applying LIMIT.
-    await client.query('SET LOCAL enable_bitmapscan = off');
 
     const visibleNodes = new Set([options.subject]);
     let frontier = [options.subject];

@@ -1,3 +1,4 @@
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -14,7 +15,12 @@ import { readSubjectSummaries, type CoverSummary, type SummaryDependencies } fro
 import { expandSlot } from '../../src/semantic/slots.ts';
 import { createContext } from '../../src/semantic/context.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
-import { captureUnforcedIndexes, logGrowthSeeding, unrelatedSemanticPopulation } from './planner-graph-fixtures.ts';
+import {
+  captureUnforcedIndexes,
+  logGrowthSeeding,
+  unrelatedMediaPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-graph-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -36,7 +42,7 @@ const credit = {
   license: 'LicenseRef-unknown',
   obligations: [],
 };
-const provenance = {
+const provenance: MediaImportRequest['provenance'] = {
   source: 'catalogue',
   external_id: '42',
   record_revision: '1',
@@ -434,7 +440,15 @@ test('summary batches refuse more than 256 ids before SQL', async () => {
 test('subject summaries for a page use two bounded reads per partition, not one read per subject', async () => {
   const ids: string[] = [];
   const deps = dependencies();
-  const unrelated = unrelatedSemanticPopulation('summary-page-unrelated', routeOf(edition)! >>> 4);
+  const unrelated = unrelatedSemanticPopulation(
+    'summary-page-unrelated',
+    routeOf(edition)! >>> 4,
+    [2020, 2021, 2022, 2023],
+  );
+  const mediaPopulation = unrelatedMediaPopulation('summary-cover-media', routeOf(english)! >>> 4, actor.accountId, {
+    credit,
+    provenance,
+  });
   const operation = async (_db: GrowthDatabase, scale: number) => {
     const summaries = await readSubjectSummaries(deps, ids.slice(0, scale));
     expect(summaries.size).toBe(scale);
@@ -458,6 +472,7 @@ test('subject summaries for a page use two bounded reads per partition, not one 
         from: previous * 500,
         to: scale * 500,
       });
+      await seed(db, mediaPopulation, { from: previous * 500, to: scale * 500 });
       for (const id of ids) await deps.authorize(db.admin, id, ids);
       await deps.authorize(db.admin, edition, [edition]);
     },
@@ -467,6 +482,8 @@ test('subject summaries for a page use two bounded reads per partition, not one 
         'semantic.subject': 'subject_pkey',
         'semantic.fact': ['fact_label', 'fact_terms'],
         'semantic.outbound_link': 'outbound_link_present',
+        'content.media': 'media_pkey',
+        'content.media_variant': 'media_variant_pkey',
       });
     },
   });
@@ -477,7 +494,14 @@ test('subject summaries for a page use two bounded reads per partition, not one 
 
 test('a representative cover read stays flat as the work gains editions', async () => {
   const deps = dependencies();
-  const unrelated = unrelatedSemanticPopulation('representative-cover-unrelated', routeOf(work)! >>> 4);
+  const unrelated = unrelatedSemanticPopulation('representative-cover-unrelated', routeOf(work)! >>> 4, [
+    routeOf(edition)! >>> 4,
+    32048 >>> 4,
+  ]);
+  const mediaPopulation = unrelatedMediaPopulation('summary-cover-media', routeOf(english)! >>> 4, actor.accountId, {
+    credit,
+    provenance,
+  });
   const operation = async () => {
     const result = await readSubjectSummaries(deps, [work]);
     expect(result.get(work)!.cover).toEqual(expectedCover(english));
@@ -498,6 +522,7 @@ test('a representative cover read stays flat as the work gains editions', async 
         from: previous * 500,
         to: scale * 500,
       });
+      await seed(db, mediaPopulation, { from: previous * 500, to: scale * 500 });
       for (const id of [work, edition]) await deps.authorize(db.admin, id, [work, edition]);
     },
     operation,
@@ -506,6 +531,8 @@ test('a representative cover read stays flat as the work gains editions', async 
         'semantic.subject': 'subject_pkey',
         'semantic.fact': ['fact_label', 'fact_terms'],
         'semantic.outbound_link': 'outbound_link_present',
+        'content.media': 'media_pkey',
+        'content.media_variant': 'media_variant_pkey',
       });
     },
   });

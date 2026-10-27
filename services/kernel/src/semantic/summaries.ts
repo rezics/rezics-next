@@ -135,7 +135,6 @@ export async function readSubjectSummaries(
       const subjects = group.map((id) => ({ route: routeOf(id)!, id }));
       const representatives = storage.pool
         ? await withReadTransaction(storage.pool, async (client) => {
-            await client.query('SET LOCAL enable_seqscan = off');
             const found = await readRepresentativeEditions.run(client, { partition_no: partition, subjects });
             return found.map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
           })

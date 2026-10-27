@@ -6,6 +6,8 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { newId } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import {
   capture,
   costOf,
@@ -26,12 +28,15 @@ const NIL = '00000000-0000-0000-0000-000000000000';
 export function unrelatedSemanticPopulation(
   name: string,
   hotPartition: number,
+  otherPartitions: readonly number[] = [],
 ): {
   readonly target: string;
   readonly population: Population;
 } {
+  const partitions = [hotPartition, ...otherPartitions];
   const baseRoute = hotPartition * 16;
   const target = newId(baseRoute);
+  const targetOrder = labelOrderKey({ en: `Unrelated target ${name}` });
   const filters = [NIL];
   return {
     target,
@@ -39,7 +44,8 @@ export function unrelatedSemanticPopulation(
       name,
       hotPartition,
       hotShare: 1,
-      rows: ({ ordinal, route }) => {
+      rows: ({ ordinal, route: placedRoute }) => {
+        const route = partitions[ordinal % partitions.length]! * 16 + (placedRoute % 16);
         const source = newId(route);
         const transaction = randomUUID();
         const label = `Unrelated ${name} ${String(ordinal).padStart(7, '0')}`;
@@ -96,11 +102,12 @@ export function unrelatedSemanticPopulation(
             relation: fact.kind === 'statement',
           })),
           'semantic.outbound_link': filters.map((filter_value) => ({
+            context_id: GLOBAL_CONTEXT,
             route,
             subject_id: source,
             property: 'schema:author',
             filter_value,
-            order_key: orderKey,
+            order_key: targetOrder,
             target_subject_id: target,
             statement_id: relation.statement_id,
             slot_id: relation.slot_id,
@@ -118,6 +125,7 @@ export function unrelatedSemanticPopulation(
             recorded_transaction_id: transaction,
           })),
           'semantic.inbound_link': filters.map((filter_value) => ({
+            context_id: GLOBAL_CONTEXT,
             route: baseRoute,
             subject_id: target,
             property: 'schema:author',
@@ -132,6 +140,7 @@ export function unrelatedSemanticPopulation(
             filter_value,
           })),
           'semantic.outbound_link_count': filters.map((filter_value) => ({
+            context_id: GLOBAL_CONTEXT,
             route,
             subject_id: source,
             property: 'schema:author',
@@ -183,17 +192,77 @@ export function unrelatedSemanticPopulation(
       },
       finish: async (admin, range) => {
         await admin.query(
-          `INSERT INTO semantic.inbound_link_count(route,subject_id,property,filter_value,value)
-           VALUES($1,$2,'schema:author',$3,$4)
-           ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
-          [baseRoute, target, NIL, range.to],
+          `INSERT INTO semantic.inbound_link_count(route,subject_id,context_id,property,filter_value,value)
+           VALUES($1,$2,$5,'schema:author',$3,$4)
+           ON CONFLICT(route,subject_id,context_id,property,filter_value) DO UPDATE SET value=EXCLUDED.value`,
+          [baseRoute, target, NIL, range.to, GLOBAL_CONTEXT],
         );
-        await admin.query(
-          `INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES($1,$2)
-           ON CONFLICT(partition_no) DO UPDATE SET visible=semantic.partition_subjects.visible+EXCLUDED.visible`,
-          [hotPartition, range.to - range.from + (range.from === 0 && range.to > 0 ? 1 : 0)],
-        );
+        for (const [index, partition] of partitions.entries()) {
+          const count = (end: number) => Math.floor((end + partitions.length - 1 - index) / partitions.length);
+          await admin.query(
+            `INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES($1,$2)
+             ON CONFLICT(partition_no) DO UPDATE SET visible=semantic.partition_subjects.visible+EXCLUDED.visible`,
+            [
+              partition,
+              count(range.to) - count(range.from) + (index === 0 && range.from === 0 && range.to > 0 ? 1 : 0),
+            ],
+          );
+        }
       },
+    },
+  };
+}
+
+export function unrelatedMediaPopulation(
+  name: string,
+  hotPartition: number,
+  uploader: string,
+  metadata: Pick<MediaImportRequest, 'credit' | 'provenance'>,
+): Population {
+  return {
+    name,
+    hotPartition,
+    hotShare: 1,
+    rows: ({ route }) => {
+      const media = newId(route);
+      const transaction = randomUUID();
+      return {
+        'content.media': [
+          {
+            route,
+            media_id: media,
+            container_id: newId(route),
+            uploader_id: uploader,
+            reservation_request_id: media,
+            purpose: 'cover',
+            media_type: 'image/jpeg',
+            byte_count: 256,
+            actual_byte_count: 256,
+            sha256: 'a'.repeat(64),
+            state: 'available',
+            key: `m/${media}/original`,
+            transaction_id: transaction,
+            source_url: 'https://images.example.test/cover.jpg',
+            ...metadata,
+            width: 1200,
+            height: 1800,
+            thumbhash: new Uint8Array([1, 2, 3]),
+            average_color: '#5a4632',
+          },
+        ],
+        'content.media_variant': ['avif', 'webp'].map((format) => ({
+          route,
+          media_id: media,
+          format,
+          width: 320,
+          height: 533,
+          media_type: `image/${format}`,
+          byte_count: 1,
+          sha256: 'c'.repeat(64),
+          key: `m/${media}/${format}-320`,
+          transaction_id: transaction,
+        })),
+      };
     },
   };
 }
@@ -249,8 +318,10 @@ export function assertUnforcedIndexes(name: string, scale: number, raw: Capture,
   });
   const cost = costOf(raw);
   console.info(
-    `Unforced semantic plans ${JSON.stringify({ name, scale, plannerSettings, indexes, rows: cost.rows, blocks: cost.blocks, statements: cost.statements, controlStatements: cost.controlStatements })}`,
+    `Unforced semantic plans ${JSON.stringify({ name, scale, plannerSettings, indexes, rows: cost.rows, blocks: cost.blocks, statements: cost.statements, controlStatements: cost.controlStatements, relations: cost.relations })}`,
   );
+  // Keep all statements and plans together: a failing growth bound needs every scale's evidence.
+  console.info(`UNFORCED_RAW_PLANS ${JSON.stringify({ name, scale, statements: raw.statements, plans: raw.plans })}`);
   if (process.env.DUMP_SEMANTIC_PLANS === '1') {
     const directory = resolve(process.cwd(), '../..', '.temp');
     mkdirSync(directory, { recursive: true });
@@ -279,7 +350,7 @@ export function logGrowthSeeding(report: Pick<GrowthReport, 'name' | 'samples'>)
   console.info(
     `Semantic growth seeding ${JSON.stringify({
       name: report.name,
-      samples: report.samples.map(({ scale, seeding }) => ({ scale, ...seeding })),
+      samples: report.samples.map(({ scale, cost, seeding }) => ({ scale, cost, ...seeding })),
     })}`,
   );
 }
