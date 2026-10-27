@@ -891,7 +891,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
       },
       async ({ query, admission, job }) =>
-        contentOperation(() => admission.run('normal', job, () => listSitemapBoards(dependencies, job.deadline, query))),
+        contentOperation(() =>
+          admission.run('normal', job, () => listSitemapBoards(dependencies, job.deadline, query)),
+        ),
     )
     .get(
       '/v1/sitemap/threads',

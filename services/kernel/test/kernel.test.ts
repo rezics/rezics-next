@@ -149,6 +149,8 @@ const typed = [
   'GET /v1/posts/:id/revisions',
   'GET /v1/posts/:id/revisions/:revisionId',
   'GET /v1/boards/:id/threads',
+  'GET /v1/sitemap/boards',
+  'GET /v1/sitemap/threads',
   'GET /v1/boards/:id',
   'GET /v1/boards/:id/reports',
   'GET /v1/threads/:id/reports',
