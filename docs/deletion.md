@@ -18,6 +18,11 @@ promises still hold.
   skeleton: identifier, type, relations, aggregate counts and the tombstone, so threads, lists, counts and
   references stay consistent. A whole record is removed only when the skeleton itself is personal data, such as a
   private library fact that one account reads a subject.
+- **Account deletion in the first public scope.** Deleting an account is final at the confirmation, which asks for
+  fresh authentication and a typed confirmation: private data is purged at once by bounded durable work and retained
+  public contributions are de-identified under the account deletion rules. A restorable account window needs a
+  non-human deletion authority in Auth, a timer and changes to the frozen workflow outcomes, and is deferred.
+  Records deleted one by one keep the 30-day restore.
 - **Takedown and legal holds.** A takedown hides, it never deletes: it withholds the least that the notice covers
   (one image, one passage, one field, or the record when nothing smaller does), keeps the data for a counter-notice
   or a reversed decision to restore, and keeps the record's other fields visible. Only a legal order purges, through
