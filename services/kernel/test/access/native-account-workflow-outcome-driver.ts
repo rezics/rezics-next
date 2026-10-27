@@ -452,6 +452,20 @@ async function continuationAllowlist(f: Fixture, fallback: ContinuationEntry[]):
   return [...row.allowlist, ...pages.rows.flatMap((page) => page.allowlist)];
 }
 
+async function continuationStepRecorded(f: Fixture, step: string, target: string): Promise<boolean> {
+  const result = await facts.query<{ recorded: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM access.committed_continuation_completion AS completion
+       JOIN access.committed_continuation AS continuation USING (route, continuation_id)
+       WHERE continuation.route=$1 AND continuation.operation_key=$2
+         AND completion.step=$3 AND completion.target=$4
+     ) AS recorded`,
+    [route(continuationAccount(f)), f.work.operationKey, step, target],
+  );
+  return result.rows[0]?.recorded ?? false;
+}
+
 function continuationAccount(f: Fixture): string {
   return f.work.operation.kind === 'delete' ? f.work.operation.accountId : f.ownerId;
 }
@@ -1076,7 +1090,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         }
         if (work.operation.kind === 'delete' && name === 'erase-auth-owner') {
           const view = await native().continuations.read(work.operationKey, work.operation.accountId);
-          if (view) {
+          if (view && !(await continuationStepRecorded(fixture, name, work.operation.accountId))) {
             continuationPausedAtStep = true;
             continuationPaused?.();
             await new Promise<void>((resolve) => {
@@ -1128,22 +1142,16 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
                 ),
               ]);
               if (continuationPausedAtStep) {
-                const current = await refused(() =>
-                  approvals().resolveForCaller(caller, reference, nativeOperation, context()),
-                );
-                if ('outcome' in current) {
-                  pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
-                  completion
-                    .finally(() => {
-                      const currentPending = pendingWorkflows.get(work.operationKey);
-                      if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
-                      if (stepObserver === executionObserver) stepObserver = priorObserver;
-                    })
-                    .catch(() => {});
-                  pendingCompletion = true;
-                  return { outcome: 'denied' as const };
-                }
-                releaseGate();
+                pendingWorkflows.set(work.operationKey, { release: () => releaseGate(), promise: completion });
+                completion
+                  .finally(() => {
+                    const currentPending = pendingWorkflows.get(work.operationKey);
+                    if (currentPending?.promise === completion) pendingWorkflows.delete(work.operationKey);
+                    if (stepObserver === executionObserver) stepObserver = priorObserver;
+                  })
+                  .catch(() => {});
+                pendingCompletion = true;
+                return { outcome: 'denied' as const };
               }
             }
             if (!settled && !continuation) throw new Error('Native account workflow did not reach its barrier');
