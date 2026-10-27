@@ -32,6 +32,11 @@ export type RemoteCheck = {
   answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
   started?: (host: string) => void;
+  /**
+   * Workspace-relative files or directories copied back after the command ends, whatever its exit code, and before
+   * the run directory is removed. A path that is not on the host is skipped.
+   */
+  returns?: string[];
 };
 
 /** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
@@ -488,6 +493,76 @@ function reportDuration(phase: string, started: number, host: string): void {
   console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}`);
 }
 
+function assertReturnPath(path: string): void {
+  if (path === '' || path.startsWith('/') || path.split('/').includes('..') || /[\0\n]/.test(path)) {
+    throw new Error(`return path must stay inside the workspace: ${path}`);
+  }
+}
+
+/** One remote script lists which declared outputs exist, so a missing path is skipped instead of failing the copy. */
+function returnsProbe(directory: string, paths: string[]): string {
+  const body = paths
+    .map((path) => {
+      const full = `${directory}/${path}`;
+      return `# PATH ${path}
+if [ -e ${quote(full)} ] || [ -L ${quote(full)} ]; then printf 'PRESENT %s\\n' ${quote(path)}; else printf 'ABSENT %s\\n' ${quote(path)}; fi`;
+    })
+    .join('\n');
+  return `REMOTE_CHECK_RETURNS
+${body}`;
+}
+
+/** Copies declared outputs back in one rsync. Missing paths log one stderr line and are left out of that rsync. */
+async function copyReturns(host: Host, directory: string, options: RemoteCheck, signal: AbortSignal): Promise<void> {
+  const paths = options.returns ?? [];
+  if (paths.length === 0) return;
+  for (const path of paths) assertReturnPath(path);
+  const probe = Bun.spawn(['ssh', ...sshOptions(host), host.address, returnsProbe(directory, paths)], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'inherit',
+  });
+  const [probed, output] = await Promise.all([finished(probe, signal), new Response(probe.stdout).text()]);
+  if (signal.aborted) throw new Aborted();
+  if (probed !== 0) throw new Error(`could not read outputs on ${host.name}`);
+  const present: string[] = [];
+  const seen = new Set<string>();
+  for (const line of output.split('\n')) {
+    const found = line.match(/^PRESENT (.*)$/);
+    const missing = line.match(/^ABSENT (.*)$/);
+    if (found) {
+      seen.add(found[1]!);
+      present.push(found[1]!);
+    } else if (missing) {
+      seen.add(missing[1]!);
+      console.error(`remote-check: ${missing[1]} is not on ${host.name}, skipping`);
+    }
+  }
+  for (const path of paths) {
+    if (!seen.has(path)) console.error(`remote-check: ${path} is not on ${host.name}, skipping`);
+  }
+  if (present.length === 0) return;
+  const started = performance.now();
+  const sync = Bun.spawn(
+    [
+      'rsync',
+      '-rlpt',
+      '--mkpath',
+      '--from0',
+      '--files-from=-',
+      '-e',
+      ['ssh', ...sshOptions(host)].map(quote).join(' '),
+      `${host.address}:${directory}/`,
+      `${resolve(options.workspace)}/`,
+    ],
+    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'inherit' },
+  );
+  const synced = await finished(sync, signal);
+  reportDuration('rsync back', started, host.name);
+  if (signal.aborted) throw new Aborted();
+  if (synced !== 0) throw new Error(`rsync from ${host.name} failed with exit code ${synced}`);
+}
+
 /** Runs the command on the lease's host and always removes the run's directory and releases the lease. */
 async function runLeased(
   lease: Lease,
@@ -533,6 +608,8 @@ async function runLeased(
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
     const code = await finished(run, signal);
+    if (signal.aborted) throw new Aborted();
+    await copyReturns(host, directory, options, signal);
     if (signal.aborted) throw new Aborted();
     return code;
   } finally {
@@ -606,9 +683,17 @@ function parse(argv: string[]): RemoteCheck {
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   let cwd: string | undefined;
   let slots: number | undefined;
+  let returns: string[] | undefined;
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
+    if (flag === '--returns') {
+      const value = rest.shift();
+      if (!value) throw new Error('--returns needs a path');
+      returns ??= [];
+      returns.push(value);
+      continue;
+    }
     if ((flag !== '--cwd' && flag !== '--slots') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
     const value = rest.shift()!;
     if (flag === '--cwd') cwd = value;
@@ -631,6 +716,7 @@ function parse(argv: string[]): RemoteCheck {
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
     ...(slots === undefined ? {} : { slots }),
+    ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
   };
 }

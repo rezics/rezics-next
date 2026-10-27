@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { facetProperties } from '@rezics/filter';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
+import { stackRun } from '../../../scripts/stack-run.ts';
 
 // Names on the command line select the recordings to write; with none, every recording is written.
 const only = Bun.argv.slice(2).filter((argument) => argument !== '--');
@@ -1642,20 +1643,45 @@ async function main(): Promise<void> {
     throw new Error(`Formatting the recordings failed: ${formatted.stderr.toString() || formatted.stdout.toString()}`);
 }
 
-try {
-  await main();
-} finally {
-  await stopKernel();
-  await pool?.end();
-  jwks?.stop(true);
-  const failures: unknown[] = [];
-  for (const id of [searchContainer, container]) {
-    if (!id) continue;
-    try {
-      docker(['rm', '-f', id]);
-    } catch (error) {
-      failures.push(error);
+async function executeRecord(): Promise<number> {
+  try {
+    await main();
+    return 0;
+  } finally {
+    await stopKernel();
+    await pool?.end();
+    jwks?.stop(true);
+    const failures: unknown[] = [];
+    for (const id of [searchContainer, container]) {
+      if (!id) continue;
+      try {
+        docker(['rm', '-f', id]);
+      } catch (error) {
+        failures.push(error);
+      }
     }
+    if (failures.length) throw failures[0];
   }
-  if (failures.length) throw failures[0];
+}
+
+/** Hands the recording to a check host and copies the recorded pages back, including when the recording fails. */
+export async function runRecord(argv: readonly string[] = Bun.argv.slice(2)): Promise<number> {
+  const names = argv.filter((argument) => argument !== '--');
+  return stackRun(
+    {
+      label: 'web record',
+      root,
+      cwd: app,
+      command: ['bun', 'scripts/record.ts', ...names],
+      returns: ['apps/web/src/kernel/recorded'],
+    },
+    () => executeRecord(),
+  );
+}
+
+if (import.meta.main) {
+  runRecord().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

@@ -7,9 +7,10 @@ import {
   type FileOutcome,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
@@ -24,6 +25,10 @@ export type WebTestLanesOptions = {
   env?: NodeJS.ProcessEnv;
   testScript?: string;
   onComplete?: (outcome: FileOutcome<string>) => void;
+  /** JUnit reports are written here. The caller removes it unless `retainReport` is set. */
+  reportDirectory?: string;
+  /** Leave the report directory in place so a check host can copy it back after this process exits. */
+  retainReport?: boolean;
 };
 
 export type WebTestLanesResult = {
@@ -89,7 +94,10 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
   const unitFiles = options.files.filter((file) => !browserFiles.includes(file));
   const previous = readTimings(timingsFile);
   mkdirSync(join(root, '.temp'), { recursive: true });
-  const reportDirectory = mkdtempSync(join(root, '.temp/web-check-'));
+  const reportDirectory = options.reportDirectory
+    ? resolve(options.reportDirectory)
+    : mkdtempSync(join(root, '.temp/web-check-'));
+  mkdirSync(reportDirectory, { recursive: true });
   const recorder = createRecorder();
   const runner = recorder.wrap<string>(
     {
@@ -157,7 +165,125 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
       timings,
     };
   } finally {
-    rmSync(reportDirectory, { recursive: true, force: true });
+    if (!options.retainReport) rmSync(reportDirectory, { recursive: true, force: true });
+  }
+}
+
+export type BrowserPlacement = {
+  code: number;
+  failed: string[];
+  timings: Record<string, FileTiming>;
+};
+
+function readReportFragment(directory: string): { failed: string[]; timings: Record<string, FileTiming> } {
+  let timings: Record<string, FileTiming> = {};
+  const timingsPath = join(directory, 'timings.json');
+  if (existsSync(timingsPath)) {
+    const parsed = JSON.parse(readFileSync(timingsPath, 'utf8')) as { files?: Record<string, FileTiming> };
+    if (parsed.files && typeof parsed.files === 'object') timings = parsed.files;
+  }
+  const failedPath = join(directory, 'failed.txt');
+  const failed = existsSync(failedPath) ? readFileSync(failedPath, 'utf8').split('\n').filter(Boolean) : [];
+  return { failed, timings };
+}
+
+/**
+ * Runs the browser files on this machine and leaves `report` in place. A check host runs this after placement; it
+ * does not place the work again.
+ */
+export async function runBrowserWorker(input: {
+  files: string[];
+  report: string;
+  testScript?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<number> {
+  if (input.report === '' || input.report.startsWith('/') || input.report.split('/').includes('..')) {
+    throw new Error(`report must stay inside the workspace: ${input.report}`);
+  }
+  const reportDirectory = resolve(root, input.report);
+  const result = await runWebTestLanes({
+    files: input.files,
+    ...(input.env === undefined ? {} : { env: input.env }),
+    ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
+    reportDirectory,
+    timingsFile: join(reportDirectory, 'timings.json'),
+    retainReport: true,
+  });
+  if (result.failed.length > 0) writeFileSync(join(reportDirectory, 'failed.txt'), `${result.failed.join('\n')}\n`);
+  return result.failed.length > 0 ? 1 : 0;
+}
+
+/** `--browser` is the command a check host runs; it carries the report directory the caller asked to have back. */
+export function browserWorkerRequest(args: string[]): { files: string[]; report: string; testScript: string } | null {
+  if (!args.includes('--browser')) return null;
+  const testScript = testScriptArgument(args);
+  const reportAt = args.indexOf('--report');
+  const report = reportAt >= 0 ? args[reportAt + 1] : undefined;
+  if (!report || report.startsWith('--')) throw new Error('--browser needs --report <directory>');
+  const files: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === '--browser' || argument === '--skip-format') continue;
+    if (argument === '--report' || argument === '--test-command') {
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('--')) throw new Error(`Unknown option: ${argument}`);
+    files.push(argument);
+  }
+  return { files, report, testScript };
+}
+
+/**
+ * Hands browser files to the check-host placement and returns their report directory. The per-file isolated runs
+ * already take a local stack slot, so a placement that stays here does not take another one around them. A worker
+ * that is already on a check host does not call this.
+ */
+export async function placeBrowserCheck(
+  files: string[],
+  options: { env?: NodeJS.ProcessEnv; testScript?: string } = {},
+): Promise<BrowserPlacement> {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const report = relative(root, mkdtempSync(join(root, '.temp/web-check-')))
+    .split(sep)
+    .join('/');
+  const directory = resolve(root, report);
+  const testScript = options.testScript;
+  try {
+    const code = await runOnCheckHost(
+      {
+        label: 'web browser check',
+        root,
+        cwd: app,
+        command: [
+          'bun',
+          'scripts/check.ts',
+          '--browser',
+          '--report',
+          report,
+          ...(testScript === undefined ? [] : ['--test-command', testScript]),
+          ...files,
+        ],
+        returns: [report],
+      },
+      options.env ?? process.env,
+    );
+    if (code === null) {
+      const result = await runWebTestLanes({
+        files,
+        ...(options.env === undefined ? {} : { env: options.env }),
+        ...(testScript === undefined ? {} : { testScript }),
+        reportDirectory: directory,
+        timingsFile: join(directory, 'timings.json'),
+        retainReport: true,
+      });
+      return { code: result.failed.length > 0 ? 1 : 0, failed: result.failed, timings: result.timings };
+    }
+    const fragment = readReportFragment(directory);
+    const failed = fragment.failed.length > 0 || code === 0 ? fragment.failed : [`browser check exited ${code}`];
+    return { code, failed, timings: fragment.timings };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -185,12 +311,47 @@ function testScriptArgument(args: string[]): string {
 }
 
 async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: string): Promise<void> {
-  const result = await runWebTestLanes({ files, env, testScript });
-  if (result.failed.length > 0)
-    throw new Error(`Web tests failed for ${result.failed.length} file(s):\n${result.failed.join('\n')}`);
+  const browserFiles = files.filter((file) => isBrowserTest(file, app));
+  const unitFiles = files.filter((file) => !browserFiles.includes(file));
+  const failed: string[] = [];
+  let browserTimings: Record<string, FileTiming> = {};
+  let unitTimings: Record<string, FileTiming> = {};
+  await Promise.all([
+    (async () => {
+      if (browserFiles.length === 0) return;
+      const placed = await placeBrowserCheck(browserFiles, { env, testScript });
+      browserTimings = placed.timings;
+      failed.push(...placed.failed);
+    })(),
+    (async () => {
+      if (unitFiles.length === 0) return;
+      const fragment = join(root, '.temp', `web-unit-timings-${process.pid}-${Date.now()}.json`);
+      try {
+        const result = await runWebTestLanes({ files: unitFiles, env, testScript, timingsFile: fragment });
+        unitTimings = result.timings;
+        failed.push(...result.failed);
+      } finally {
+        rmSync(fragment, { force: true });
+      }
+    })(),
+  ]);
+  writeTimings(defaultTimingsFile, readTimings(defaultTimingsFile), { ...unitTimings, ...browserTimings });
+  const unique = [...new Set(failed)].sort();
+  if (unique.length > 0) throw new Error(`Web tests failed for ${unique.length} file(s):\n${unique.join('\n')}`);
 }
 
 async function main(args: string[]): Promise<void> {
+  const worker = browserWorkerRequest(args);
+  if (worker) {
+    const code = await runBrowserWorker(worker);
+    if (code !== 0) {
+      const fragment = readReportFragment(resolve(root, worker.report));
+      const detail = fragment.failed.length > 0 ? fragment.failed.join('\n') : `status ${code}`;
+      throw new Error(`Web tests failed for ${Math.max(fragment.failed.length, 1)} file(s):\n${detail}`);
+    }
+    return;
+  }
+
   const env = process.env;
   const testScript = testScriptArgument(args);
   if (args.includes('--stories')) {

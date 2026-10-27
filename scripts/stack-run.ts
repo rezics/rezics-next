@@ -6,10 +6,11 @@
  *
  * The hosts file is KERNEL_CHECK_REMOTE when that name is non-empty, otherwise the shared file
  * `<main checkout>/.temp/goal/remote-check-hosts.json` when it is readable. The main checkout is the parent of
- * `git rev-parse --git-common-dir`.
+ * `git rev-parse --git-common-dir`. A run that keeps files it writes stays local unless it declares workspace-relative
+ * paths to copy back.
  *
  * A person (GOAL_TASK_ID unset or empty) can keep a run local with REZICS_STACK_REMOTE=off or an inherited
- * REZICS_STACK_SLOT. A worker cannot. A run that keeps the files it writes stays local either way.
+ * REZICS_STACK_SLOT. A worker cannot. KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE never decide placement.
  * KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE never decide placement.
  *
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
@@ -31,6 +32,11 @@ export type StackRun = {
   slots?: number;
   /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it must stay local. */
   keepsFiles?: boolean;
+  /**
+   * Workspace-relative paths copied back after the run, including when it fails. Declaring them means the run does
+   * not stay local for the files it writes.
+   */
+  returns?: string[];
 };
 
 type Environment = Record<string, string | undefined>;
@@ -132,7 +138,7 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
   if (onCheckHost(run.cwd)) return 'already on a check host';
   if (!isWorker(env) && env.REZICS_STACK_REMOTE === 'off') return 'REZICS_STACK_REMOTE=off';
   if (!isWorker(env) && env.REZICS_STACK_SLOT !== undefined) return 'already inside a stack slot';
-  if (run.keepsFiles) return 'the run keeps files it writes';
+  if (run.keepsFiles && run.returns === undefined) return 'the run keeps files it writes';
   const inside = relative(resolve(run.root), resolve(run.cwd));
   if (inside === '..' || inside.startsWith('../') || isAbsolute(inside))
     return 'the directory is outside the workspace';
@@ -173,6 +179,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         command: run.command,
         ...(run.slots === undefined ? {} : { slots: run.slots }),
         ...(interval === undefined ? {} : { pollMs: interval }),
+        ...(run.returns === undefined ? {} : { returns: run.returns }),
         answered: () => {
           answered = true;
         },
@@ -209,14 +216,19 @@ export async function stackRun(
 }
 
 if (import.meta.main) {
-  const usage = 'Usage: bun scripts/stack-run.ts [--keeps-files] [--slots <n>] <label> <root> <cwd> -- <command...>';
+  const usage =
+    'Usage: bun scripts/stack-run.ts [--keeps-files] [--returns <path>]... [--slots <n>] <label> <root> <cwd> -- <command...>';
   const rest = process.argv.slice(2);
   let keepsFiles = false;
   let slots: number | undefined;
+  let returns: string[] | undefined;
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
     if (flag === '--keeps-files') keepsFiles = true;
-    else if (flag === '--slots' && rest.length > 0) slots = Number(rest.shift());
+    else if (flag === '--returns' && rest.length > 0) {
+      returns ??= [];
+      returns.push(rest.shift()!);
+    } else if (flag === '--slots' && rest.length > 0) slots = Number(rest.shift());
     else throw new Error(`Unknown option: ${flag}\n${usage}`);
   }
   const [label, root, cwd, separator, ...command] = rest;
@@ -235,6 +247,7 @@ if (import.meta.main) {
           cwd: resolve(cwd),
           command,
           keepsFiles,
+          ...(returns === undefined ? {} : { returns }),
           ...(slots === undefined ? {} : { slots }),
         },
         async (env) => {

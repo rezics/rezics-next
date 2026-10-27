@@ -105,6 +105,11 @@ if (script.includes('MemAvailable')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+} else if (script.includes('REMOTE_CHECK_RETURNS')) {
+  const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
+  log({ kind: 'returns', paths });
+  const present = new Set(config.present ?? []);
+  for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
 } else if (script.includes('systemd-run')) {
   log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1] });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
@@ -152,6 +157,7 @@ type HostConfig = {
   stdout?: string;
   stderr?: string;
   hang?: boolean;
+  present?: string[];
 };
 
 let root: string;
@@ -616,6 +622,49 @@ test('every container a check host run starts is in the check slice', () => {
     ['port', 'create', '5432/tcp'],
     ['volume', 'create', 'run'],
   ]);
+});
+
+test('a remote run copies the declared output paths back after it ends, also when it fails', async () => {
+  const failed = scenario({ a: { available: 8e9, exit: 7, present: ['.temp/screenshots'] } });
+  const failedWorkspace = workspace();
+  const failure = await remote(
+    failed.env,
+    failedWorkspace,
+    ['bun', 'test'],
+    ['--returns', '.temp/screenshots', '--returns', '.temp/missing'],
+  );
+
+  expect(failure.code).toBe(7);
+  expect(failure.stderr.split('\n').filter((line) => line.includes(', skipping'))).toEqual([
+    'remote-check: .temp/missing is not on a, skipping',
+  ]);
+  const failedEvents = failed.events();
+  const syncs = failedEvents.filter((event) => event.kind === 'rsync');
+  expect(syncs).toHaveLength(2);
+  expect(String(syncs[0]!.destination)).toStartWith('ops@a.test:/srv/rezics-check/runs/');
+  expect(String(syncs[1]!.destination)).toBe(`${failedWorkspace}/`);
+  expect(syncs[1]!.files).toEqual(['.temp/screenshots']);
+  const kinds = failedEvents.map((event) => event.kind);
+  const runAt = kinds.indexOf('run');
+  expect(runAt).toBeGreaterThanOrEqual(0);
+  expect(kinds.indexOf('returns')).toBeGreaterThan(runAt);
+  expect(kinds.lastIndexOf('rsync')).toBeGreaterThan(kinds.indexOf('returns'));
+  expect(kinds.indexOf('cleanup')).toBeGreaterThan(kinds.lastIndexOf('rsync'));
+
+  const succeeded = scenario({
+    a: { available: 8e9, present: ['.temp/screenshots', 'apps/web/src/kernel/recorded'] },
+  });
+  const success = await remote(
+    succeeded.env,
+    workspace(),
+    ['true'],
+    ['--returns', '.temp/screenshots', '--returns', 'apps/web/src/kernel/recorded'],
+  );
+  expect(success.code).toBe(0);
+  expect(success.stderr).not.toContain('skipping');
+  const copied = succeeded.events().filter((event) => event.kind === 'rsync');
+  expect(copied).toHaveLength(2);
+  expect(copied[1]!.files).toEqual(['.temp/screenshots', 'apps/web/src/kernel/recorded']);
 });
 
 test('the docker wrapper calls the docker behind it, not a shim that called the wrapper', () => {

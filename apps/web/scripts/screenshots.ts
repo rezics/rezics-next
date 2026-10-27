@@ -1,7 +1,8 @@
 import { stat } from 'node:fs/promises';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { stackRun } from '../../../scripts/stack-run.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -101,7 +102,9 @@ function parse(argv: readonly string[]): Options {
       continue;
     }
     if (flag === '--out') {
-      options.out = resolve(take(flag, index));
+      const value = take(flag, index);
+      // A relative directory is from the workspace root, so a check host writes into its copy of the same path.
+      options.out = isAbsolute(value) ? resolve(value) : resolve(root, value);
       index += 1;
       continue;
     }
@@ -262,12 +265,30 @@ async function capture(
   return files.filter((file): file is string => file !== undefined);
 }
 
-async function main(): Promise<void> {
-  const options = parse(process.argv.slice(2));
-  if (options.help) {
-    process.stdout.write(`${usage()}\n`);
-    return;
+function workspaceRelative(path: string): string | undefined {
+  const inside = relative(root, resolve(path));
+  if (inside === '' || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) return undefined;
+  return inside.split(sep).join('/');
+}
+
+/** Keeps every flag, and rewrites `--out` to the workspace-relative directory a host can copy back. */
+function screenshotCommand(argv: readonly string[], relativeOut: string | undefined): string[] {
+  if (relativeOut === undefined) return ['bun', 'scripts/screenshots.ts', ...argv];
+  const command = ['bun', 'scripts/screenshots.ts'];
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === undefined) continue;
+    if (argument === '--out') {
+      index += 1;
+      continue;
+    }
+    command.push(argument);
   }
+  command.push('--out', relativeOut);
+  return command;
+}
+
+async function captureScreenshots(options: Options): Promise<void> {
   await mkdir(join(root, '.temp'), { recursive: true });
   await mkdir(options.out, { recursive: true });
   const buildDir = await mkdtemp(join(root, '.temp/storybook-build-'));
@@ -312,7 +333,32 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+/** Hands the capture to a check host. An output outside the workspace stays local, because nothing can copy it back. */
+export async function runScreenshots(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  const options = parse(argv);
+  if (options.help) {
+    process.stdout.write(`${usage()}\n`);
+    return 0;
+  }
+  const returned = workspaceRelative(options.out);
+  return stackRun(
+    {
+      label: 'web screenshots',
+      root,
+      cwd: app,
+      command: screenshotCommand(argv, returned),
+      ...(returned === undefined ? { keepsFiles: true } : { returns: [returned] }),
+    },
+    async () => {
+      await captureScreenshots(options);
+      return 0;
+    },
+  );
+}
+
+if (import.meta.main) {
+  runScreenshots().catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
