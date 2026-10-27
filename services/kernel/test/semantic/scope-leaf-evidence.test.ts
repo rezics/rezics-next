@@ -4,7 +4,7 @@ import { proposeStatement } from '../../src/semantic/candidates.ts';
 import { batchCommand } from '../../src/semantic/bulk.ts';
 import { takedownSourceFence } from '../../src/content/source-fence-command.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { changeStatementDisclosure } from '../../src/semantic/statement-disclosure.ts';
+import { changeStatementDisclosure, readStatementAs } from '../../src/semantic/statement-disclosure.ts';
 import type { FactClause } from '../../src/search/disclosure/check.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
@@ -547,7 +547,9 @@ test('public consent and terminal retraction cannot disclose a private body thro
   const privateRead = await read(db.pool, f.request(pen, leaf), f.options());
   expect(privateRead.state !== 'current' || privateRead.facts.length === 0).toBe(true);
   // Even the owner/moderator cannot accidentally opt this internal public evidence read into a private overlay.
-  const ownerRead = await read(db.pool, f.request(pen, leaf), { ...f.options(), actor: f.editor });
+  const ownerRead = await readStatementAs(db.pool, f.access, f.editor, deadline(), () =>
+    read(db.pool, f.request(pen, leaf), { ...f.options(), actor: f.editor }),
+  );
   expect(ownerRead.state !== 'current' || ownerRead.facts.length === 0).toBe(true);
   expect(JSON.stringify(privateRead)).not.toContain(agent.subject.id);
   await changeStatementDisclosure(db.pool, {
