@@ -505,7 +505,21 @@ same row `FOR UPDATE`, so a deletion starting during the command waits for its c
 barrier therefore sees the command's committed state. A command starting after deletion commits sees the
 deleted account and refuses. The share lock supplements the owner's normal command authorization.
 
+[`pageActiveAccounts(client, { afterRoute, afterAccountId, limit })`](active-account-page.ts) is an internal deployment
+surface for repairs such as the Library counter rebuild with `--all`. It returns only `{ route, accountId }` for active,
+unfenced accounts in `(route, account_id)` order, strictly after the cursor, with an integer limit from 1 through 100.
+Start at route 0 and the zero UUID; release the caller's client between pages and re-check each account with
+`shareAccount` inside the owner's command. Enumeration confers no command authority and has no route or action.
+
 ## Cost
+
+### Active account page
+
+- Touches: one range read on `account_active_pages`, from the cursor, up to the limit; no heap row is read for a
+  row it skips. The unchanged account agent backfill query uses the same partial index.
+- Bound: constant statements; at most 100 rows; buffers logarithmic in active accounts plus the page.
+- Growth check: `test/access/growth-active-account-page.test.ts`, "active account page reads stay bounded as inactive
+  accounts grow".
 
 ### Close an organization
 

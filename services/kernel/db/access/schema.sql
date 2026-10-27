@@ -1431,6 +1431,13 @@ ALTER TABLE ONLY access.write_rate_counter
 
 
 --
+-- Name: account_active_pages; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX account_active_pages ON access.account USING btree (route, account_id) WHERE ((state = 'active'::text) AND (NOT authn_fenced));
+
+
+--
 -- Name: account_agent_pages; Type: INDEX; Schema: access; Owner: -
 --
 
