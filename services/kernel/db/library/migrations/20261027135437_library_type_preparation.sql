@@ -61,7 +61,7 @@ CREATE TABLE library.type_preparation_slot (
     REFERENCES library.type_preparation_header (route, account_id, binding_digest, preparation_id)
 );
 COMMENT ON TABLE library.type_preparation_header IS
-  'Immutable provenance storage, not authority or proof of completed effects. The authorized native creator validates exact TypePreparationBinding/Origin and principal/basis namespace (no bearer or actor permission result), and commits this header with the core receipt response metadataCommitment in one owner command. Before continuation, independently verify the actual receipt digest, transaction and full allowlisted header commitment; copied or late receipt JSON is never authority. Source and subject may be remote.';
+  'Immutable provenance storage, not authority or proof of completed effects. The authorized native creator validates exact TypePreparationBinding/Origin, the exact native creator receipt locator in creation_receipt and principal/basis namespace (no bearer or actor permission result), and commits this header with the core receipt response metadataCommitment in one owner command. Before continuation, independently verify the actual receipt digest, transaction and full allowlisted header commitment; copied or late receipt JSON is never authority. Source and subject may be remote.';
 COMMENT ON COLUMN library.type_preparation_header.creation_commitment IS
   'Commits preparation, owner, full binding, origin, principal/input association and creator receipt locator, excluding this commitment field itself. Publication and key payload remain exact native evidence.';
 COMMENT ON COLUMN library.type_preparation_header.reservation_id IS

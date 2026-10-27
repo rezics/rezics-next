@@ -600,7 +600,7 @@ CREATE TABLE library.type_preparation_header (
 -- Name: TABLE type_preparation_header; Type: COMMENT; Schema: library; Owner: -
 --
 
-COMMENT ON TABLE library.type_preparation_header IS 'Immutable provenance storage, not authority or proof of completed effects. The authorized native creator validates exact TypePreparationBinding/Origin and principal/basis namespace (no bearer or actor permission result), and commits this header with the core receipt response metadataCommitment in one owner command. Before continuation, independently verify the actual receipt digest, transaction and full allowlisted header commitment; copied or late receipt JSON is never authority. Source and subject may be remote.';
+COMMENT ON TABLE library.type_preparation_header IS 'Immutable provenance storage, not authority or proof of completed effects. The authorized native creator validates exact TypePreparationBinding/Origin, the exact native creator receipt locator in creation_receipt and principal/basis namespace (no bearer or actor permission result), and commits this header with the core receipt response metadataCommitment in one owner command. Before continuation, independently verify the actual receipt digest, transaction and full allowlisted header commitment; copied or late receipt JSON is never authority. Source and subject may be remote.';
 
 
 --
