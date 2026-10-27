@@ -296,11 +296,16 @@ test('Zone pages use closed shared appearance and current viewer access', async 
 test('Zone deletion restoration and least-data purge obey the owner window while takedown retains data', async () => {
   await f.available();
   const body = createBody();
+  body.configuration.labels.en = 'Personal Zone title to erase';
   body.configuration.pages = [
     { route: '', document: page('Personal payload to erase') },
     { route: 'about', document: page('Unaffected text') },
   ];
   const zone = await f.create(body);
+  const beforePurgeReceipts = await f.db.admin.query('SELECT response FROM core.receipt WHERE principal_id=$1', [
+    f.accounts.owner,
+  ]);
+  expect(JSON.stringify(beforePurgeReceipts.rows)).toContain('Personal Zone title to erase');
   let revision = await publish(zone.id, zone.revision);
   revision = await remove(zone.id, revision);
   expect((await f.read(zone.id, 'owner')).status).toBe(404);
@@ -343,6 +348,7 @@ test('Zone deletion restoration and least-data purge obey the owner window while
     f.accounts.owner,
   ]);
   expect(JSON.stringify(receipts.rows)).not.toContain('Personal payload to erase');
+  expect(JSON.stringify(receipts.rows)).not.toContain('Personal Zone title to erase');
   expect((await f.call('owner', 'POST', `${path(zone.id)}:restore`, {}, f.conditional(skeleton.revision))).status).toBe(
     404,
   );
