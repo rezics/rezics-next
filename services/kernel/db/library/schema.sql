@@ -39,6 +39,19 @@ END;
 $$;
 
 
+--
+-- Name: guard_type_preparation_header(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_type_preparation_header() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Type preparation headers are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -551,6 +564,122 @@ CREATE TABLE library.subject_listing (
 
 
 --
+-- Name: type_preparation_header; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.type_preparation_header (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    preparation_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    binding jsonb NOT NULL,
+    origin jsonb NOT NULL,
+    principal_namespace jsonb NOT NULL,
+    reservation_id uuid,
+    input_byte_length bigint NOT NULL,
+    input_digest bytea NOT NULL,
+    creation_transaction_id uuid NOT NULL,
+    creation_receipt jsonb NOT NULL,
+    creation_commitment text NOT NULL,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT type_preparation_header_binding_check CHECK ((jsonb_typeof(binding) = 'object'::text)),
+    CONSTRAINT type_preparation_header_binding_digest_check CHECK ((binding_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT type_preparation_header_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT type_preparation_header_check1 CHECK ((route = ((get_byte(uuid_send(preparation_id), 10) * 256) + get_byte(uuid_send(preparation_id), 11)))),
+    CONSTRAINT type_preparation_header_creation_commitment_check CHECK ((creation_commitment ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT type_preparation_header_creation_receipt_check CHECK ((jsonb_typeof(creation_receipt) = 'object'::text)),
+    CONSTRAINT type_preparation_header_input_byte_length_check CHECK ((input_byte_length >= 0)),
+    CONSTRAINT type_preparation_header_input_digest_check CHECK ((octet_length(input_digest) = 32)),
+    CONSTRAINT type_preparation_header_origin_check CHECK ((jsonb_typeof(origin) = 'object'::text)),
+    CONSTRAINT type_preparation_header_principal_namespace_check CHECK ((jsonb_typeof(principal_namespace) = 'object'::text)),
+    CONSTRAINT type_preparation_header_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE type_preparation_header; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.type_preparation_header IS 'Immutable provenance storage, not authority or proof of completed effects. The authorized native creator validates exact TypePreparationBinding/Origin and principal/basis namespace (no bearer or actor permission result), and commits this header with the core receipt response metadataCommitment in one owner command. Before continuation, independently verify the actual receipt digest, transaction and full allowlisted header commitment; copied or late receipt JSON is never authority. Source and subject may be remote.';
+
+
+--
+-- Name: COLUMN type_preparation_header.reservation_id; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_header.reservation_id IS 'No FK: the native reservation retains exact accepted text and matching immutable EXTERNAL bytes until atomic final dictionary publication/removal. Header and DBOS contain no input copy. Ready progress refers to the immutable published value; exact reservation/value text comparison is required, never only a hash.';
+
+
+--
+-- Name: COLUMN type_preparation_header.input_digest; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_header.input_digest IS 'Lookup acceleration only, never exact input equality evidence or authority; no new per-type cap.';
+
+
+--
+-- Name: COLUMN type_preparation_header.creation_commitment; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.type_preparation_header.creation_commitment IS 'Commits preparation, owner, full binding, origin, principal/input association and creator receipt locator, excluding this commitment field itself. Publication and key payload remain exact native evidence.';
+
+
+--
+-- Name: type_preparation_progress; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.type_preparation_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    preparation_id uuid NOT NULL,
+    chunk bigint DEFAULT 0 NOT NULL,
+    byte_offset bigint DEFAULT 0 NOT NULL,
+    node_id uuid,
+    state text NOT NULL,
+    type_id uuid,
+    enqueue_pending boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT type_preparation_progress_byte_offset_check CHECK ((byte_offset >= 0)),
+    CONSTRAINT type_preparation_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT type_preparation_progress_check1 CHECK ((route = ((get_byte(uuid_send(preparation_id), 10) * 256) + get_byte(uuid_send(preparation_id), 11)))),
+    CONSTRAINT type_preparation_progress_check2 CHECK (((state <> 'ready'::text) OR ((type_id IS NOT NULL) AND (NOT enqueue_pending)))),
+    CONSTRAINT type_preparation_progress_chunk_check CHECK ((chunk >= 0)),
+    CONSTRAINT type_preparation_progress_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT type_preparation_progress_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: TABLE type_preparation_progress; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.type_preparation_progress IS 'Mutable native checkpoint/final mapping, separate from immutable evidence. Runner verifies offset <= header length, reservation/source association, current owner epoch, command and readiness. Edges/reservation progress, checkpoint and successor outbox commit together; final key, ready progress and reservation removal commit atomically. No cross-table CHECK or callback confers authority.';
+
+
+--
+-- Name: type_preparation_slot; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.type_preparation_slot (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    preparation_id uuid NOT NULL,
+    CONSTRAINT type_preparation_slot_binding_digest_check CHECK ((binding_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT type_preparation_slot_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT type_preparation_slot_check1 CHECK ((route = ((get_byte(uuid_send(preparation_id), 10) * 256) + get_byte(uuid_send(preparation_id), 11)))),
+    CONSTRAINT type_preparation_slot_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE type_preparation_slot; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.type_preparation_slot IS 'Active owner binding slot. Digest hits require exact full binding, principal and native input comparison; collisions never alias. Equal live work converges. Only an admitted producer under current account/gate locks may replace cancelled/missing generations with a fresh UUID; source/owner epoch changes binding. Old receipts cannot trap replacement; purged owners cannot recreate slots. PKs support bounded owner enumeration: retirement/purge removes slots, progress, then headers/reservations and retains a minimal terminal fence. No automatic TTL or cascade.';
+
+
+--
 -- Name: bulk_effect bulk_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -724,6 +853,38 @@ ALTER TABLE ONLY library.subject_collection
 
 ALTER TABLE ONLY library.subject_listing
     ADD CONSTRAINT subject_listing_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: type_preparation_header type_preparation_header_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_pkey PRIMARY KEY (route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_header type_preparation_header_route_account_id_binding_digest_pre_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_route_account_id_binding_digest_pre_key UNIQUE (route, account_id, binding_digest, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_pkey PRIMARY KEY (route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_slot type_preparation_slot_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_slot
+    ADD CONSTRAINT type_preparation_slot_pkey PRIMARY KEY (route, account_id, binding_digest);
 
 
 --
@@ -958,10 +1119,24 @@ CREATE UNIQUE INDEX shelf_type_node_terminal_type ON library.shelf_type_node USI
 
 
 --
+-- Name: type_preparation_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX type_preparation_pending ON library.type_preparation_progress USING btree (route, account_id, preparation_id) WHERE (enqueue_pending AND (state = 'pending'::text));
+
+
+--
 -- Name: follow follow_target_type_immutable; Type: TRIGGER; Schema: library; Owner: -
 --
 
 CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON library.follow FOR EACH ROW EXECUTE FUNCTION library.guard_follow_target_type();
+
+
+--
+-- Name: type_preparation_header type_preparation_header_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_preparation_header FOR EACH ROW EXECUTE FUNCTION library.guard_type_preparation_header();
 
 
 --
@@ -1002,6 +1177,30 @@ ALTER TABLE ONLY library.shelf_type_node
 
 ALTER TABLE ONLY library.shelf_type_root
     ADD CONSTRAINT shelf_type_root_primary_type_id_fkey FOREIGN KEY (route, account_id, primary_type_id) REFERENCES library.shelf_type_value(route, account_id, type_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_route_account_id_preparation_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_route_account_id_preparation_id_fkey FOREIGN KEY (route, account_id, preparation_id) REFERENCES library.type_preparation_header(route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_route_account_id_type_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_route_account_id_type_id_fkey FOREIGN KEY (route, account_id, type_id) REFERENCES library.shelf_type_value(route, account_id, type_id);
+
+
+--
+-- Name: type_preparation_slot type_preparation_slot_route_account_id_binding_digest_prep_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_slot
+    ADD CONSTRAINT type_preparation_slot_route_account_id_binding_digest_prep_fkey FOREIGN KEY (route, account_id, binding_digest, preparation_id) REFERENCES library.type_preparation_header(route, account_id, binding_digest, preparation_id);
 
 
 --
