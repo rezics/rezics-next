@@ -588,9 +588,10 @@ test('create cost stays constant as unrelated collections grow', async () => {
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) =>
       seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
-    operation: async (_database, _scale, repetition) => {
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.createCollection(
-        prepared.actor,
+        actor,
         { title: `Created ${repetition}`, visibility: 'private' },
         `growth-create-${repetition}`,
       );
@@ -612,11 +613,12 @@ test('update cost stays constant as unrelated collections grow', async () => {
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) =>
       seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
-    operation: async (_database, _scale, repetition) => {
+    operation: async (database, _scale, repetition) => {
       const expected = revision;
       revision += 1;
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.updateCollection(
-        prepared.actor,
+        actor,
         created.value.id,
         { revision: expected, title: `Updated ${repetition}` },
         `growth-update-${repetition}`,
@@ -638,9 +640,10 @@ test('add cost stays constant as unrelated collections grow', async () => {
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) =>
       seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
-    operation: async (_database, _scale, repetition) => {
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.addMember(
-        prepared.actor,
+        actor,
         created.value.id,
         { subjectId: prepared.subjectId },
         `growth-add-${repetition}`,
@@ -668,9 +671,10 @@ test('move cost stays constant as unrelated collections grow', async () => {
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) =>
       seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
-    operation: async (_database, _scale, repetition) => {
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.moveMember(
-        prepared.actor,
+        actor,
         created.value.id,
         member.value.id,
         { after: null },
@@ -704,11 +708,12 @@ test('remove cost stays constant as unrelated collections grow', async () => {
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) =>
       seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
-    operation: async (_database, _scale, repetition) => {
+    operation: async (database, _scale, repetition) => {
       const memberId = members[cursor];
       cursor += 1;
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.removeMember(
-        prepared.actor,
+        actor,
         created.value.id,
         memberId!,
         `growth-remove-${repetition}`,
