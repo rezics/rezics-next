@@ -126,42 +126,42 @@ const confirmations = {
   en: [
     'delete my account',
     'Type “delete my account” to confirm.',
-    'Deletion is final and cannot be undone. Your private data is removed at once. Your public contributions stay without your name.',
+    'Deletion is final and cannot be undone.',
   ],
   de: [
     'mein Konto löschen',
     'Gib zur Bestätigung „mein Konto löschen“ ein.',
-    'Die Löschung ist endgültig und kann nicht rückgängig gemacht werden. Deine privaten Daten werden sofort gelöscht. Deine öffentlichen Beiträge bleiben ohne deinen Namen erhalten.',
+    'Die Löschung ist endgültig und kann nicht rückgängig gemacht werden.',
   ],
   es: [
     'eliminar mi cuenta',
     'Escribe «eliminar mi cuenta» para confirmar.',
-    'La eliminación es definitiva y no se puede deshacer. Tus datos privados se eliminan de inmediato. Tus contribuciones públicas se conservan sin tu nombre.',
+    'La eliminación es definitiva y no se puede deshacer.',
   ],
   fr: [
     'supprimer mon compte',
     'Saisissez « supprimer mon compte » pour confirmer.',
-    'La suppression est définitive et irréversible. Vos données privées sont effacées immédiatement. Vos contributions publiques restent sans votre nom.',
+    'La suppression est définitive et irréversible.',
   ],
   ja: [
     'アカウントを削除',
     '確認のため「アカウントを削除」と入力してください。',
-    'アカウントの削除は確定後に取り消せません。非公開データは直ちに削除され、公開した投稿などは名前を伏せて残ります。',
+    'アカウントの削除は確定後に取り消せません。',
   ],
   ko: [
     '내 계정 삭제',
     '확인하려면 “내 계정 삭제”를 입력하세요.',
-    '계정을 삭제하면 되돌릴 수 없습니다. 비공개 데이터는 즉시 삭제되며, 공개한 기여는 이름 없이 남습니다.',
+    '계정을 삭제하면 되돌릴 수 없습니다.',
   ],
   'zh-Hans': [
     '删除我的账号',
     '请输入“删除我的账号”以确认。',
-    '账号一经删除便无法恢复。私密数据会立即删除，公开贡献会保留，但不再显示你的名字。',
+    '账号一经删除便无法恢复。',
   ],
   'zh-Hant': [
     '刪除我的帳號',
     '請輸入「刪除我的帳號」以確認。',
-    '帳號一經刪除便無法復原。私人資料會立即刪除，公開貢獻會保留，但不再顯示你的名字。',
+    '帳號一經刪除便無法復原。',
   ],
 } as const;
 
@@ -218,7 +218,7 @@ test(
 );
 
 test(
-  "the page says plainly, before the control, that deletion is final and cannot be undone, that private data is removed at once and that public contributions stay without the person's name",
+  "the page says plainly, before the control, that deletion is final and cannot be undone; its existing sections on what is erased and what is retained stay as they are, and it makes no promise of timing",
   async () => {
     for (const [locale, [, label, outcome]] of Object.entries(confirmations)) {
       reset();
@@ -227,6 +227,9 @@ test(
         const warning = page.getByText(outcome, { exact: true });
         await warning.waitFor();
         expect(await warning.isVisible()).toBe(true);
+        expect(await page.locator('main').innerText()).not.toMatch(
+          /\b(immediately|instantly|at once|within \d+|by \d{4}|sofort|unverzüglich|inmediatamente|de inmediato|immédiatement)\b|即時|立即|马上|馬上|すぐに|直ちに|즉시/iu,
+        );
         const input = page.getByRole('textbox', { name: label, exact: true });
         expect(
           await warning.evaluate(
