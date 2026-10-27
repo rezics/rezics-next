@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
+import { readPrivacyContact } from '../privacy-contact';
 import {
   forgetOperationKey,
   loadAccountSession,
@@ -20,10 +21,15 @@ const STEP_UP_URL = '/step-up?return_to=%2Faccount%2Fdelete';
 
 export const Route = createFileRoute('/account/delete')({
   head: () => ({ meta: [{ title: `${m.auth_account_delete_heading()} · REZICS` }] }),
+  loader: () => readPrivacyContact(),
   component: DeleteAccountPage,
 });
 
 function DeleteAccountPage() {
+  const privacyContact = Route.useLoaderData();
+  const [privacyBefore, privacyAfter] = m
+    .auth_account_delete_privacy_contact({ contact: privacyContact })
+    .split(privacyContact);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
@@ -132,6 +138,35 @@ function DeleteAccountPage() {
     <AuthPage heading={m.auth_account_delete_heading()}>
       <div className="auth-account-operation-copy">
         <p>{m.auth_account_delete_description()}</p>
+        <section aria-labelledby="account-delete-erased" className="grid gap-2">
+          <h2 id="account-delete-erased" className="font-semibold">
+            {m.auth_account_delete_erased_heading()}
+          </h2>
+          <ul className="auth-account-operation-requirements">
+            <li>{m.auth_account_delete_erased_profile()}</li>
+            <li>{m.auth_account_delete_erased_library()}</li>
+            <li>{m.auth_account_delete_erased_collections()}</li>
+          </ul>
+        </section>
+        <section aria-labelledby="account-delete-retained" className="grid gap-2">
+          <h2 id="account-delete-retained" className="font-semibold">
+            {m.auth_account_delete_retained_heading()}
+          </h2>
+          <ul className="auth-account-operation-requirements">
+            <li>{m.auth_account_delete_retained_collections()}</li>
+            <li>{m.auth_account_delete_retained_logs()}</li>
+            <li>{m.auth_account_delete_retained_posts()}</li>
+          </ul>
+          <p>{m.auth_account_delete_retained_attribution()}</p>
+        </section>
+        <p>{m.auth_account_delete_prepare()}</p>
+        <p>
+          {privacyBefore}
+          <a href={privacyContact} className="wrap-anywhere underline underline-offset-4">
+            {privacyContact}
+          </a>
+          {privacyAfter}
+        </p>
         <ul className="auth-account-operation-requirements">
           <li>{m.auth_account_delete_no_automated_accounts()}</li>
           <li>{m.auth_account_delete_not_last_owner()}</li>

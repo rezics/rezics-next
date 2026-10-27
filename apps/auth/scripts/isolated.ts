@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
+import { fakePrivacyContactUrl } from './fake-auth';
 
 const command = process.argv.slice(2);
 
@@ -56,7 +57,11 @@ if (command.length === 0) {
       }
 
       const child = Bun.spawn(invocation, {
-        env: { ...process.env, ...env },
+        env: {
+          ...process.env,
+          ...env,
+          PRIVACY_CONTACT_URL: process.env.PRIVACY_CONTACT_URL ?? fakePrivacyContactUrl,
+        },
         stdin: 'inherit',
         stdout: 'inherit',
         stderr: 'inherit',

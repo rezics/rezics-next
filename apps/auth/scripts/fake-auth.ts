@@ -1,6 +1,8 @@
 const accountId = 'screenshot-account';
 const now = Date.now();
 
+export const fakePrivacyContactUrl = 'mailto:privacy@example.test';
+
 export type FakeAuthRequest = {
   method: string;
   url: string;
@@ -76,6 +78,7 @@ const sessions = [
 ];
 
 export function startFakeAuth(options: FakeAuthOptions = {}) {
+  process.env.PRIVACY_CONTACT_URL ??= fakePrivacyContactUrl;
   const state = options.state ?? createFakeAuthState();
   const approvals = new Map<string, { operation: unknown; reference: string }>();
   const results = new Map<string, { operation: unknown; result: { accountId: string } }>();
