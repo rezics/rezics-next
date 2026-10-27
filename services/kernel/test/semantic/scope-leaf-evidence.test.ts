@@ -210,6 +210,21 @@ test('current absence never comes from sampled or historically rejected witnesse
   await finishWitnessRepair(db.pool, book);
   const fresh = current(await read(db.pool, f.request(book, leaf), f.options()));
   expect(evaluate(expression, [fresh])).toBe(true);
+  // A foreign target can restore behind an unchanged raw keyset without touching source selection.
+  await f.hideSubject(target);
+  let foreignAfter: LeafProgress | null = null;
+  for (let step = 0; step < 10; step++) {
+    const hidden = current(await read(db.pool, f.request(book, leaf, foreignAfter), f.options()));
+    expect(hidden.coverage).toBeNull();
+    expect(evaluate({ not: expression }, [hidden])).toBe('not_proven');
+    if (!hidden.progress) break;
+    foreignAfter = hidden.progress;
+  }
+  await f.hideSubject(target, 'restore');
+  const resumed = await read(db.pool, f.request(book, leaf, foreignAfter), f.options());
+  expect(resumed.state !== 'current' || resumed.coverage === null).toBe(true);
+  expect(evaluate({ not: expression }, [resumed])).not.toBe(true);
+  expect(evaluate(expression, [current(await read(db.pool, f.request(book, leaf), f.options()))])).toBe(true);
   // Complete possible-pair absence is independent of sampled overflow and has no foreign witness to invalidate.
   const absent = await f.create();
   const absentLeaf: FactClause = { facet: 'statement', property: 'ex:credit', values: [absent] };
