@@ -38,6 +38,8 @@ export type TypeDefinition = {
   properties: string[];
   facets: string[];
   coverRatio?: string;
+  /** Explicit https://schema.org/Type IRI used as JSON-LD @type; absent in older releases. */
+  schemaOrgType?: string;
 };
 export type RelationGroup =
   | 'order'

@@ -179,6 +179,11 @@
           "type": "string",
           "pattern": "^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\\s\\S])"
         },
+        "schemaOrgType": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^https://schema\\.org/[A-Za-z0-9_-]+$(?![\\s\\S])"
+        },
         "descriptions": {
           "$ref": "#/$defs/descriptions"
         }

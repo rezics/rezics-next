@@ -93,6 +93,7 @@ const relationAnnotationKeys = [
   'relation_filter',
   'relation_slot_key',
 ] as const;
+const schemaOrgType = /^https:\/\/schema\.org\/[A-Za-z0-9_-]+$(?![\s\S])/u;
 const coverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
 
 function savedFilterCode(error: FilterValidationError): 'invalid' | 'limit' {
@@ -209,7 +210,7 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets cover_ratio', annotationLocation);
+            allowed(definition.annotations, 'facets cover_ratio schema_org_type', annotationLocation);
             const annotations = object(definition.annotations);
             const facets = annotations.facets;
             if (facets !== undefined && typeof facets !== 'string')
@@ -226,6 +227,17 @@ export async function compileCatalogue(input: {
                 { ...annotationLocation, pointer: at(annotationLocation.pointer, 'cover_ratio') },
                 'invalid',
                 'Cover ratio must be W:H with positive integer sides from 1 to 64',
+              );
+            if (
+              annotations.schema_org_type !== undefined &&
+              (typeof annotations.schema_org_type !== 'string' ||
+                annotations.schema_org_type.length > 256 ||
+                !schemaOrgType.test(annotations.schema_org_type))
+            )
+              add(
+                { ...annotationLocation, pointer: at(annotationLocation.pointer, 'schema_org_type') },
+                'invalid',
+                'Schema.org type must be https://schema.org/ followed by one term of letters, digits, underscores or hyphens',
               );
           }
           const usage = definition.slot_usage;
@@ -472,6 +484,8 @@ export async function compileCatalogue(input: {
         break;
       }
     }
+    // Explicit and per class: nothing is derived from names, mappings or ancestors.
+    const ownSchemaOrgType = object(sourceClasses.get(term.name)?.value.annotations).schema_org_type;
     const facets: string[] = [];
     const facetNames = new Set<string>();
     const origins = new Map<string, { name: string; location: Location }>();
@@ -513,6 +527,7 @@ export async function compileCatalogue(input: {
       properties,
       facets,
       ...(effectiveCoverRatio === undefined ? {} : { coverRatio: effectiveCoverRatio }),
+      ...(typeof ownSchemaOrgType === 'string' ? { schemaOrgType: ownSchemaOrgType } : {}),
     };
   }
   for (const term of slots) {

@@ -67,7 +67,9 @@ also carry `relation.inverseLabels`, supplied under `inverseProperties` in the
 presentation group for the schema file that defines the property. Types may carry
 `coverRatio` as `W:H`, where each positive integer is at most 64; compilation
 inherits the nearest annotated base's ratio when a type has no annotation of its
-own.
+own. A type may also carry `schemaOrgType`, a full `https://schema.org/Type` IRI
+that consumers use as the JSON-LD `@type`; a release without it stays valid, and
+consumers fall back to `CreativeWork`.
 
 The relation groups are `order`, `derivation`, `world`, `membership`, and
 `association` for the Relations view; `credit` for staff and cast in Credits and
@@ -388,6 +390,13 @@ Source conventions:
 - A class may set `annotations.facets` to a space-separated list of slot names and
   `annotations.cover_ratio` to a `W:H` ratio with positive integer sides from 1 to 64. A type compiles its own ratio or the first annotated base's ratio, nearest
   first; absent ratios stay absent for consumers to default.
+- A class may set `annotations.schema_org_type` to `https://schema.org/` plus one
+  term of ASCII letters, digits, underscores or hyphens (a term may start with a digit, as in
+  `3DModel`). The compiler copies the value to that type's `schemaOrgType` and rejects anything else
+  (other origins, queries, fragments, extra path segments, nonstrings); nothing is fetched. The
+  transport is explicit only: no value is inferred from class names, Wikidata ids, mappings or
+  ancestors, and subclasses do not inherit it. Older releases and types without the annotation omit
+  the field, and consumers use `CreativeWork`.
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is
   `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the
