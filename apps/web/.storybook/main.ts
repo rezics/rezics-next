@@ -8,6 +8,8 @@ const config: StorybookConfig = {
   stories: ['../src/stories/**/*.stories.tsx'],
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
   core: { disableTelemetry: true },
+  // Generated cover images for the recorded summaries, served where the site's media route would be.
+  staticDirs: [{ from: './media', to: '/media' }],
   async viteFinal(config) {
     const storyPlugins = (plugins: typeof config.plugins): typeof config.plugins =>
       plugins?.flatMap((plugin) =>

@@ -190,6 +190,12 @@ kernel: one query that matches the subject and one that matches nothing. It also
 missing ID. It stops the kernel and removes the containers it started on success and failure; it does not use a
 development kernel, the shared search node, or a shared database.
 
+The thread and subject recordings carry story content the recorder keeps when it re-records: the thread's `subjectIds`,
+a cover `summary` on the recorded subject and a second recorded subject without a cover (`subject-uncovered.json`), so
+the thread page shows an image and a placeholder. The one cover image is generated, not copied, and lives in
+`.storybook/media/`, which Storybook serves at `/media/`. The recordings hold only the kernel contract's fields; the
+Storybook kernel adds the board row's reply count and last activity time, derived from the recorded posts.
+
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
 full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
@@ -372,7 +378,8 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 ### Board page (`/<locale>/boards/<id>`)
 
 - **Touches:** Root preferences/D and public board plus thread-page K reads started together, then one batched
-  identity read for the page's authors; preserve kernel thread order and pass `next` as the paging cursor
+  identity read for the page's authors; preserve kernel thread order and pass `next` as the paging cursor. Each row
+  is compact: author, reply count and last activity come from the thread row itself, with no read per thread
 - **Bound:** ≤3 K (board and one page of at most s ≤ 100 threads, then at most one identity read), ≤1 D, 0 R/A;
   work and buffered JSON are O(s)
 - **Growth check:** `tests/request-cost.test.ts`: `board page stays within its bound as s grows`
@@ -388,12 +395,23 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 - **Touches:** Root preferences/D and thread plus post-page K reads started together, then one batched identity read
   for the page's authors; render each page body locally with `DocumentBody`. Reactions add no read, because counts and
-  the viewer's kind come with the thread and post-page reads.
+  the viewer's kind come with the thread and post-page reads. Each post draws its byline with the shadcn `avatar` and
+  puts its reactions beside the overflow menu, which holds copy-link and report (or edit and delete for the author).
   A signed-in page read resolves the session credential once and sends it on those two reads
 - **Bound:** ≤3 K (thread and one page of at most s ≤ 100 posts started together, then at most one identity read),
-  ≤1 D, 0 R/A; work is O(total body size of the page), each body capped at 2 MiB (ADR-0036)
+  plus the subject reads of Thread subjects, ≤1 D, 0 R/A; work is O(total body size of the page), each body capped at
+  2 MiB (ADR-0036)
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
   `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
+
+### Thread subjects
+
+- **Touches:** the first four ids of the thread's `subjectIds` each get one `GET /v1/subjects/<id>` K read, started
+  together with the identity read once the thread has loaded. The cover summary, types and labels of that read feed
+  `Cover` (`sharedRatio` for the strip) and the title; a read that fails leaves that subject out of the strip
+- **Bound:** ≤4 K per page view whatever the number of attached subjects (at most 128 ids); no D, R or A; work is O(1)
+- **Growth check:** `tests/threads-subjects-cost.test.ts`: a thread page reads at most four of its subjects, together,
+  whatever the number attached
 
 ### Page authors
 

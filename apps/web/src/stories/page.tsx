@@ -125,6 +125,8 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   if (!title) throw new Error('The recorded thread has no title.');
   await view.findByRole('heading', { level: 1, name: title });
   await view.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  const attached = subjectRecording.subject.labels as Record<string, string>;
+  await view.findByRole('link', { name: attached[getLocale()] ?? attached.en! });
   await view.findByRole('heading', { level: 2, name: 'Flight notes' });
   const note = await view.findByText('Watch the baobabs');
   const items = await view.findAllByRole('listitem');

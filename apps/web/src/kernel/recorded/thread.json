@@ -5,7 +5,7 @@
     "authorId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
     "title": "Letters from B-612",
     "licence": "MIT",
-    "subjectIds": [],
+    "subjectIds": ["01a17a3b-0884-721b-91ef-d7ffd7bb58e4", "01a17a3b-0884-7c02-9b4e-c0de00000002"],
     "boardId": "01a17a3b-09a4-7204-87d4-43219f9a15ad",
     "visibility": "published",
     "securityRevision": "1",

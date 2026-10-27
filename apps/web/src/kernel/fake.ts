@@ -13,6 +13,7 @@ import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
 import subjectPageRecording from './recorded/subject-page.json';
 import subjectRecording from './recorded/subject.json';
+import subjectUncoveredRecording from './recorded/subject-uncovered.json';
 import boardRecording from './recorded/board.json';
 import boardThreadsRecording from './recorded/board-threads.json';
 import threadRecording from './recorded/thread.json';
@@ -168,6 +169,7 @@ async function selectRecording(
     const subject = /^\/v1\/subjects\/([^/]+)$/.exec(pathname);
     if (subject?.[1]) {
       const id = decodeURIComponent(subject[1]);
+      if (id === resourceId(recordings['subject-uncovered'], 'subject')) return recordings['subject-uncovered'];
       return recordings[id === missingSubjectId ? 'missing-subject' : 'subject'];
     }
     const boardThreads = /^\/v1\/boards\/([^/]+)\/threads$/.exec(pathname);
@@ -235,6 +237,22 @@ function libraryStoryRecordings(): Record<string, KernelRecording> {
   return JSON.parse(JSON.stringify(recordings).replaceAll(owner, storyViewerId)) as Record<string, KernelRecording>;
 }
 
+/**
+ * The board's recorded thread row with the reply count and last activity time that thread rows will carry. They are
+ * derived from the recorded post page, and kept out of the recording, which holds only the contract's fields.
+ */
+function boardThreadsWithActivity(): KernelRecording {
+  const posts = threadPostsRecording.posts;
+  return {
+    ...boardThreadsRecording,
+    threads: boardThreadsRecording.threads.map((thread) => ({
+      ...thread,
+      replyCount: Math.max(0, posts.length - 1),
+      lastActivityAt: posts.at(-1)?.createdAt ?? thread.createdAt,
+    })),
+  };
+}
+
 /** The browser-only Storybook kernel uses the checked-in responses for the real page routes. */
 export function createStoryRecordedKernelFetch(): typeof fetch {
   return createRecordedKernelFetch({
@@ -243,8 +261,9 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'missing-subject': missingSubjectRecording,
     'subject-page': subjectPageRecording,
     subject: subjectRecording,
+    'subject-uncovered': subjectUncoveredRecording,
     board: boardRecording,
-    'board-threads': boardThreadsRecording,
+    'board-threads': boardThreadsWithActivity(),
     thread: threadRecording,
     'thread-posts': threadPostsRecording,
     accounts: accountsRecording,

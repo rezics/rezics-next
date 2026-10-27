@@ -227,13 +227,13 @@ function PostSlot({
 
   return (
     <li id={anchorId} className="py-5">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <Byline
           author={authors?.[post.authorId]}
           createdAt={post.createdAt}
           now={now}
           showAuthor={authors !== null}
-          className="min-h-8"
+          className="min-h-8 flex-1"
         >
           {post.revisedAt ? (
             <>
@@ -244,7 +244,7 @@ function PostSlot({
             </>
           ) : null}
         </Byline>
-        <div className="ms-auto flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <ThreadReactions counts={counts} returnTo={returnTo} signedIn={signedIn} target={target} value={value} />
           {editing ? null : ownsPost ? (
             <ContentActions
@@ -288,7 +288,7 @@ function PostSlot({
           }}
         />
       ) : (
-        <DocumentBody document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
+        <DocumentBody className="mx-0!" document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
       )}
     </li>
   );

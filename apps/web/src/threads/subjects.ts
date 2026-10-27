@@ -46,7 +46,7 @@ export async function readThreadSubjects(
   return reads.filter((subject): subject is ThreadSubject => subject !== null);
 }
 
-/** The title to show in `locale`: the kernel's label, else the subject's own label for the locale or English. */
+/** The title to show in `locale`: the subject's label for it, else the kernel's label, else English or any language. */
 export function subjectTitle(subject: Pick<ThreadSubject, 'label' | 'labels'>, locale: string): string | null {
-  return subject.label ?? subject.labels[locale] ?? subject.labels.en ?? Object.values(subject.labels)[0] ?? null;
+  return subject.labels[locale] ?? subject.label ?? subject.labels.en ?? Object.values(subject.labels)[0] ?? null;
 }
