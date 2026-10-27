@@ -319,6 +319,11 @@ function createLifecycleAccess(resources: FixtureResources) {
 export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDriver> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated kernel database');
+  const traceDirectory = fileURLToPath(new URL('../../../../.temp/', import.meta.url));
+  mkdirSync(traceDirectory, { recursive: true });
+  const tracePath = resolve(traceDirectory, 'durable-initiator-transport.log');
+  const setupStarted = performance.now();
+  appendFileSync(tracePath, `${Date.now()} start setup\n`);
   // The executor imports this module too. Keep the HTTP/Auth fixture builder in
   // the parent process so each real worker restart loads only executor modules.
   const { buildBoardAndThreads, createFixtureResources, ensureAuthorAccessGrant, request } =
@@ -2047,9 +2052,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
       parked = undefined;
     };
     const inFlight = new Set<Promise<unknown>>();
-    const traceDirectory = fileURLToPath(new URL('../../../../.temp/', import.meta.url));
-    mkdirSync(traceDirectory, { recursive: true });
-    const tracePath = resolve(traceDirectory, 'durable-initiator-transport.log');
+    appendFileSync(tracePath, `${Date.now()} done setup ${Math.round(performance.now() - setupStarted)}ms\n`);
     let closed = false;
     let closing: Promise<void> | undefined;
     // A runner timeout does not cancel its JavaScript continuation. Finish the
