@@ -685,6 +685,16 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/subject-views.test.ts`: `the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping`; the preview bounds of
   `tests/subject-data-components.test.ts`
 
+### Subject view frame (every `/<locale>/subjects/<id>/<view>` and `/relations`)
+
+- **Touches:** Nothing beyond the reads above: the compact header (xs cover, title, original title, type, date) and
+  the view tabs are built from the overview page read the view already makes. The Relations view takes its subject
+  from that overview page read (`POST /v1/pages:read`) instead of `GET /v1/subjects/<id>`, so its request count is
+  unchanged; type frame and relation labels come from the cached definitions
+- **Bound:** A constant number of fields of one subject, however large it is; the same ≤2 K for a view page and 2 K
+  for Relations; 0 R/A
+- **Growth check:** `tests/subject-view-frame.test.ts`: `the compact header and tabs render without JavaScript and add no kernel read beyond what the view already makes`
+
 ### Agent page (`/<locale>/@<handle>` and `/<locale>/@<handle>/<view>`)
 
 - **Touches:** One public K `POST /v1/pages:read` for the account target: the kernel reads the handle once and, chained
