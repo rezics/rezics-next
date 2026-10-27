@@ -23,11 +23,11 @@ function check(name: string, options: { rule?: 'step' | 'series'; repetitions?: 
   });
 }
 
-test('the series rule rejects a constant check whose rows grow by one per scale unit', async () => {
+test('the series rule fails a series no allowed family explains with GrowthBoundError', async () => {
   await expect(check('series constant violation', { rule: 'series' })).rejects.toBeInstanceOf(GrowthBoundError);
 });
 
-test('the series rule reports dispersed repetitions as insufficient evidence', async () => {
+test('the series rule fails dispersed evidence with GrowthEvidenceError', async () => {
   await expect(check('series uncertain repetitions', { rule: 'series', repetitions: 3, variable: true })).rejects.toBeInstanceOf(GrowthEvidenceError);
 });
 
