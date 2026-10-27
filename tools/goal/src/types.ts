@@ -51,6 +51,8 @@ export type Settings = {
   gate: string[];
   formatCommand: string[];
   terminationGraceMs: number;
+  /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
+  startGraceMs?: number;
   codex: {
     serviceTier: string;
     compactTokens: { sol: number; luna: number };
