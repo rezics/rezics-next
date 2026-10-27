@@ -276,8 +276,7 @@ export async function placeBrowserCheck(
       options.env ?? process.env,
     );
     const fragment = readReportFragment(directory);
-    const failed =
-      fragment.failed.length > 0 ? fragment.failed : code === 0 ? [] : [`browser check exited ${code}`];
+    const failed = fragment.failed.length > 0 ? fragment.failed : code === 0 ? [] : [`browser check exited ${code}`];
     return { code, failed, timings: fragment.timings };
   } finally {
     rmSync(directory, { recursive: true, force: true });
