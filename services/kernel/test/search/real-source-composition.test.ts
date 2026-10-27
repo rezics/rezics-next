@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { SearchDriver, HttpResponse } from '../../../../specs/search-driver.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createDriverClient, type DriverClient } from './support/driver-client.ts';
 
 const clients = new Set<DriverClient>();
@@ -103,6 +104,24 @@ async function drained(client: DriverClient) {
   await gone(client);
 }
 
+async function withKernelDatabase<T>(client: DriverClient, read: (pool: Pool) => Promise<T>): Promise<T> {
+  const database = client.ledger().resources.find((resource) => resource.kind === 'kernel_database');
+  if (!database || database.kind !== 'kernel_database') throw new Error('Missing acknowledged database');
+  const url = new URL(process.env.DATABASE_URL!);
+  url.pathname = `/${database.name}`;
+  const pool = new Pool({
+    connectionString: url.href,
+    max: 1,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 10_000,
+  });
+  try {
+    return await read(pool);
+  } finally {
+    await pool.end();
+  }
+}
+
 test('two concurrent factories isolate real credentials, grants, sessions, cursors and owned resources', async () => {
   const left = fixture();
   const right = fixture();
@@ -187,6 +206,17 @@ test('Search pause drains its runner while real semantic relation events converg
     (response) => ids(response).includes(book.id),
   );
   await driver.indexing('paused');
+  const route = routeOf(book.id);
+  if (route === null) throw new Error('Book must have a source anchor');
+  const partition = partitionOf(route);
+  const position = await withKernelDatabase(client, async (pool) => {
+    const result = await pool.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no = $1',
+      [partition],
+    );
+    expect(result.rows).toHaveLength(1);
+    return result.rows[0]!.position;
+  });
   const pending = await create(driver, `${text} pending`);
   expect(ids(await search(driver, text))).not.toContain(pending.id);
   const candidate = await write(driver, `/v1/subjects/${book.id}/candidates`, {
@@ -236,8 +266,30 @@ test('Search pause drains its runner while real semantic relation events converg
         and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:author', in: [author.id] } }],
       },
     });
-  // This requires the default Semantic services to process relation witnesses while Search is paused.
-  await eventually(related, (response) => ids(response).includes(book.id));
+  // A newly adopted value cannot enter the stale Search candidate while its runner is paused.
+  // Observe Semantic's published witness and its committed SOURCE event instead of running its factory here.
+  await withKernelDatabase(client, async (pool) => {
+    await eventually(
+      async () => {
+        const result = await pool.query<{ witness_id: string; changed: boolean }>(
+          `SELECT value.witness_id, EXISTS (
+             SELECT 1 FROM core.outbox
+             WHERE partition_no = $1 AND position > $2::bigint AND position <= $2::bigint + 4096
+               AND subject = $3::uuid AND type = 'com.rezics.subject.relation_facet_changed.v1'
+             LIMIT 1
+           ) AS changed
+           FROM semantic.relation_facet_value AS value
+           WHERE route = $4 AND subject_id = $3::uuid AND property = $5 AND value.value = $6
+           LIMIT 1`,
+          [partition, position, book.id, route, 'schema:author', author.id],
+        );
+        return result.rows;
+      },
+      (rows) => rows.length === 1 && rows[0]!.witness_id === candidate.body.candidate && rows[0]!.changed,
+    );
+  });
+  expect(ids(await related())).not.toContain(book.id);
+  expect(ids(await search(driver, text))).not.toContain(pending.id);
   const paused = await client.inspect();
   expect(paused.workerStats!.startedServices.semantic).toBe(before.workerStats!.startedServices.semantic);
   expect(paused.workerStats!.searchStarterInvocations).toBe(1);
