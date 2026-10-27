@@ -53,6 +53,7 @@ const homeSubjects = [
 let container = '';
 let searchContainer = '';
 let kernel: ReturnType<typeof spawn> | undefined;
+let worker: ReturnType<typeof spawn> | undefined;
 let relayPool: Pool | undefined;
 let relays: { stop(): Promise<void> } | undefined;
 let jwks: ReturnType<typeof Bun.serve> | undefined;
@@ -143,6 +144,13 @@ async function stopKernel(): Promise<void> {
   await relayPool?.end();
   relays = undefined;
   relayPool = undefined;
+  if (worker?.pid) {
+    const child = worker;
+    child.kill('SIGTERM');
+    await Promise.race([new Promise<void>((resolve) => child.once('exit', () => resolve())), Bun.sleep(10_000)]);
+    if (child.exitCode === null) child.kill('SIGKILL');
+  }
+  worker = undefined;
   if (!kernel?.pid) return;
   kernel.kill('SIGTERM');
   await Promise.race([new Promise<void>((resolve) => kernel!.once('exit', () => resolve())), Bun.sleep(10_000)]);
@@ -557,9 +565,20 @@ async function recordLibrary(input: {
     subjectId: subject('snow-country'),
   });
   await call('follow collection', tokens.me, 'PUT', `/v1/follows/${neighbour}`, 200);
-  // The listing of the collections that hold a subject is projected by the worker, which the recorder does not run.
-  const { syncSubjectListing } = await import('../../../services/kernel/src/library/listing.ts');
-  await syncSubjectListing({ pool: database }, { subjectId: princeId, collectionId: shelf });
+  // The worker projects the listing of the collections that hold a subject; wait until the read names the shelf.
+  const listingDeadline = Date.now() + 60_000;
+  for (;;) {
+    const listed = await retryOverloaded(() =>
+      fetch(new URL(`/v1/subjects/${princeId}/collections?view=FULL&limit=100`, origin), {
+        headers: { authorization: `Bearer ${tokens.me}` },
+      }),
+    );
+    const collections = listed.status === 200 ? objectBody(await listed.json(), 'subject collections').collections : [];
+    if (Array.isArray(collections) && collections.length > 0) break;
+    if (Date.now() > listingDeadline)
+      throw new Error(`The subject listing did not name a collection: ${listed.status}`);
+    await Bun.sleep(500);
+  }
   // The collections that hold the subject are seeded; the other recordings read the rest of the library.
   if (!writes('library-', 'settings-')) return new Map();
 
@@ -899,6 +918,12 @@ async function main(): Promise<void> {
     env: kernelEnvironment,
   });
   await waitForKernel(origin, kernel);
+  // The worker projects the library listing and runs the effects the kernel leaves to it.
+  worker = spawn('bun', ['src/worker.ts'], {
+    cwd: resolve(root, 'services/kernel'),
+    stdio: ['ignore', 'ignore', 'inherit'],
+    env: { ...kernelEnvironment, KERNEL_RATING_COUNTER_SECRET: randomBytes(32).toString('base64url') },
+  });
   // The relation projection normally runs in the worker; without it a page's links reads stay empty. The recorder
   // runs just that projection over its own pool.
   const projectionBase = '../../../services/kernel';
