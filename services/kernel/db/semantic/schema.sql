@@ -161,6 +161,7 @@ CREATE TABLE semantic.account_agent_moved_link (
     property text NOT NULL,
     source_subject_id uuid NOT NULL,
     filter_value uuid NOT NULL,
+    context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
     source_revision integer,
     source_security_revision bigint,
     present boolean,
@@ -678,7 +679,7 @@ ALTER TABLE ONLY semantic.acceptance
 --
 
 ALTER TABLE ONLY semantic.account_agent_moved_link
-    ADD CONSTRAINT account_agent_moved_link_pkey PRIMARY KEY (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value);
+    ADD CONSTRAINT account_agent_moved_link_pkey PRIMARY KEY (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value, context_id);
 
 
 --

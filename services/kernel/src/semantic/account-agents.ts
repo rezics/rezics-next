@@ -506,6 +506,7 @@ export async function unverifyAccountAgent(
     for (const property of active.release.types[node.type]?.properties ?? [])
       facts.push(...(await slotView(tx, agentId, property)).facts);
     const changes = linkChanges([], facts, factDataTypes(active.release, facts), {
+      subject: agentId,
       release: active.release,
       type: node.type,
     });

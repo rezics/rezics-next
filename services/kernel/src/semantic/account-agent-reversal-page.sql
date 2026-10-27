@@ -3,9 +3,9 @@ WITH input AS NOT MATERIALIZED (
          :account_id::uuid AS account_id, :survivor::uuid AS survivor,
          :moved_from::uuid AS moved_from, :after_property::text AS after_property,
          :after_source::uuid AS after_source, :after_statement::uuid AS after_statement,
-         :after_filter::uuid AS after_filter
+         :after_filter::uuid AS after_filter, :after_context::uuid AS after_context
 ), page AS (
-  SELECT moved.route, moved.receipt_id, moved.moved_from, moved.statement_id,
+  SELECT moved.route, moved.receipt_id, moved.moved_from, moved.statement_id, moved.context_id,
          moved.property, moved.source_subject_id, moved.filter_value, moved.reversal_prepared,
          moved.source_revision AS saved_source_revision,
          moved.source_security_revision AS saved_source_security_revision,
@@ -20,18 +20,19 @@ WITH input AS NOT MATERIALIZED (
     ON moved.route = input.route AND moved.receipt_id = input.receipt_id
    AND moved.account_id = input.account_id AND moved.survivor = input.survivor
    AND moved.moved_from = input.moved_from
-   AND (moved.property, moved.source_subject_id, moved.statement_id, moved.filter_value) >
-       (input.after_property, input.after_source, input.after_statement, input.after_filter)
+   AND (moved.property, moved.source_subject_id, moved.statement_id, moved.filter_value, moved.context_id) >
+       (input.after_property, input.after_source, input.after_statement, input.after_filter, input.after_context)
   LEFT JOIN LATERAL (
     SELECT link.source_revision, link.source_security_revision, link.present, link.source_type, link.order_key
     FROM semantic.inbound_link AS link
     WHERE link.route = input.route AND link.subject_id = moved.survivor
       AND link.property = moved.property AND link.source_subject_id = moved.source_subject_id
       AND link.statement_id = moved.statement_id AND link.filter_value = moved.filter_value
+      AND link.context_id = moved.context_id
     LIMIT 1
   ) AS link ON true
   WHERE NOT moved.reversed
-  ORDER BY moved.property, moved.source_subject_id, moved.statement_id, moved.filter_value
+  ORDER BY moved.property, moved.source_subject_id, moved.statement_id, moved.filter_value, moved.context_id
   LIMIT 100
 ), prepared AS (
   UPDATE semantic.account_agent_moved_link AS moved
@@ -45,10 +46,10 @@ WITH input AS NOT MATERIALIZED (
   WHERE moved.route = input.route AND moved.receipt_id = page.receipt_id
     AND moved.moved_from = page.moved_from AND moved.property = page.property
     AND moved.source_subject_id = page.source_subject_id AND moved.statement_id = page.statement_id
-    AND moved.filter_value = page.filter_value
-  RETURNING moved.statement_id::text AS statement_id, moved.property,
+    AND moved.filter_value = page.filter_value AND moved.context_id = page.context_id
+  RETURNING moved.context_id::text AS context_id, moved.statement_id::text AS statement_id, moved.property,
             moved.source_subject_id::text AS source_subject_id, moved.filter_value::text AS filter_value,
             moved.source_revision, moved.source_security_revision::text AS source_security_revision,
             moved.present, moved.source_type, moved.order_key
 )
-SELECT * FROM prepared ORDER BY property, source_subject_id, statement_id, filter_value;
+SELECT * FROM prepared ORDER BY property, source_subject_id, statement_id, filter_value, context_id;

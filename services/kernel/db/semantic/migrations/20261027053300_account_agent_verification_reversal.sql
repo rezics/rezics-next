@@ -3,6 +3,7 @@ ALTER TABLE semantic.account_agent_moved_link
   ADD COLUMN property text,
   ADD COLUMN source_subject_id uuid,
   ADD COLUMN filter_value uuid,
+  ADD COLUMN context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid,
   ADD COLUMN source_revision integer,
   ADD COLUMN source_security_revision bigint,
   ADD COLUMN present boolean,
@@ -14,33 +15,38 @@ ALTER TABLE semantic.account_agent_moved_link
 UPDATE semantic.account_agent_moved_link AS moved
 SET property = link.property,
     source_subject_id = link.source_subject_id,
-    filter_value = link.filter_value
+    filter_value = link.filter_value,
+    context_id = link.context_id
 FROM semantic.inbound_link AS link
 WHERE link.route = moved.route AND link.subject_id = moved.survivor
   AND link.statement_id = moved.statement_id;
 
+DELETE FROM semantic.account_agent_moved_link AS moved
+WHERE moved.property IS NULL OR moved.source_subject_id IS NULL
+   OR moved.filter_value IS NULL OR moved.context_id IS NULL;
+
 ALTER TABLE semantic.account_agent_moved_link
   ALTER COLUMN property SET NOT NULL,
   ALTER COLUMN source_subject_id SET NOT NULL,
-  ALTER COLUMN filter_value SET NOT NULL;
+  ALTER COLUMN filter_value SET NOT NULL,
+  ALTER COLUMN context_id SET NOT NULL;
 
 ALTER TABLE semantic.account_agent_moved_link
   DROP CONSTRAINT account_agent_moved_link_pkey,
   ADD CONSTRAINT account_agent_moved_link_pkey
-    PRIMARY KEY (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value);
+    PRIMARY KEY (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value, context_id);
 
 INSERT INTO semantic.account_agent_moved_link (
   route, receipt_id, account_id, survivor, moved_from, statement_id,
-  property, source_subject_id, filter_value
+  property, source_subject_id, filter_value, context_id
 )
 SELECT moved.route, moved.receipt_id, moved.account_id, moved.survivor, moved.moved_from,
-       moved.statement_id, link.property, link.source_subject_id, link.filter_value
+       moved.statement_id, link.property, link.source_subject_id, link.filter_value, link.context_id
 FROM semantic.account_agent_moved_link AS moved
 JOIN semantic.inbound_link AS link
   ON link.route = moved.route AND link.subject_id = moved.survivor
- AND link.property = moved.property AND link.source_subject_id = moved.source_subject_id
  AND link.statement_id = moved.statement_id
-ON CONFLICT (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value) DO NOTHING;
+ON CONFLICT (route, receipt_id, moved_from, property, source_subject_id, statement_id, filter_value, context_id) DO NOTHING;
 
 ALTER TABLE semantic.revision
   ADD COLUMN revocation_receipt_id text,
@@ -90,7 +96,7 @@ ALTER TABLE semantic.account_agent_moved_link
 DELETE FROM semantic.account_agent_moved_link AS moved
 USING (
   SELECT ctid, row_number() OVER (
-    PARTITION BY route, receipt_id, moved_from, statement_id ORDER BY property, source_subject_id, filter_value
+    PARTITION BY route, receipt_id, moved_from, statement_id ORDER BY property, source_subject_id, filter_value, context_id
   ) AS duplicate_number
   FROM semantic.account_agent_moved_link
 ) AS duplicates
@@ -103,6 +109,7 @@ ALTER TABLE semantic.account_agent_moved_link
   DROP COLUMN property,
   DROP COLUMN source_subject_id,
   DROP COLUMN filter_value,
+  DROP COLUMN context_id,
   DROP COLUMN source_revision,
   DROP COLUMN source_security_revision,
   DROP COLUMN present,
