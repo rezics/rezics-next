@@ -71,7 +71,7 @@ test('organization speakers page stays bounded as unrelated and revoked assignme
       const body = await response.json();
       expect(response.status).toBe(200);
       expect(body.speakers.map(({ id }: { id: string }) => id)).toEqual(speakers.slice(0, 20));
-      expect(body.next).toContain('.');
+      expect(body.next).toMatch(/^[A-Za-z0-9_-]+$/);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);

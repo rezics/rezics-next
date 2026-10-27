@@ -6,7 +6,7 @@ import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { Access, AccessContext, Actor, Resource } from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -87,10 +87,6 @@ type VerificationRow = {
 };
 
 type VerificationContext = AccessContext & { actor: Actor };
-const PENDING_CURSOR_BINDING = {
-  operation: 'verification.list_pending',
-  parameters: { state: 'pending', sort: 'created_at:asc,request_id:asc' },
-} as const;
 const FIRST_CREATED_AT = '0001-01-01 00:00:00+00';
 const FIRST_REQUEST_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -339,10 +335,15 @@ export async function readPendingAgentVerificationRequests(
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   if (!Number.isFinite(at.getTime())) throw new ProblemError('invalid_request');
+  const binding = {
+    route: 'GET /v1/verification-requests',
+    viewer: actor.accountId,
+    query: { state: 'pending', sort: 'created_at:asc,request_id:asc', limit },
+  };
   let afterCreated = FIRST_CREATED_AT;
   let afterRequest = FIRST_REQUEST_ID;
   if (input.cursor !== undefined) {
-    const decoded = decodeCursor(tokens, PENDING_CURSOR_BINDING, input.cursor, at.getTime());
+    const decoded = await decodeListCursor(tokens, binding, input.cursor, at);
     if (
       !decoded.ok ||
       decoded.epoch !== 1 ||
@@ -381,11 +382,11 @@ export async function readPendingAgentVerificationRequests(
     verificationRequests: selected.map(asRequest),
     next:
       page.length > limit && selected.length
-        ? encodeCursor(
+        ? await encodeListCursor(
             tokens,
-            PENDING_CURSOR_BINDING,
+            binding,
             { epoch: 1, after: [selected.at(-1)!.createdAt, selected.at(-1)!.id] },
-            at.getTime(),
+            at,
           )
         : null,
   };

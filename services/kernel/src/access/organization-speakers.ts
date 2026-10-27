@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { PublicIdentity } from './account-data.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import organizationRead from './organization-speakers-organization.sql';
 import pageRead from './organization-speakers-page.sql';
@@ -15,7 +15,7 @@ export async function readOrganizationSpeakers(
   pool: Pool,
   tokens: KeyRing,
   at: Date,
-  input: { accountId: string; limit?: number; cursor?: string },
+  input: { accountId: string; limit?: number; cursor?: string; viewer?: string | null },
 ): Promise<OrganizationSpeakersPage> {
   const empty: OrganizationSpeakersPage = { speakers: [], next: null };
   const route = routeOf(input.accountId);
@@ -26,12 +26,13 @@ export async function readOrganizationSpeakers(
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const binding = {
-    operation: 'account.list_speakers',
-    parameters: { accountId: input.accountId, sort: 'assignedActorId:asc' },
+    route: 'GET /v1/accounts/:accountId/speakers',
+    viewer: input.viewer ?? null,
+    query: { accountId: input.accountId, sort: 'assignedActorId:asc', limit },
   };
   let after = '00000000-0000-0000-0000-000000000000';
   if (input.cursor !== undefined) {
-    const decoded = decodeCursor(tokens, binding, input.cursor, at.getTime());
+    const decoded = await decodeListCursor(tokens, binding, input.cursor, at);
     if (
       !decoded.ok ||
       decoded.epoch !== 1 ||
@@ -61,6 +62,6 @@ export async function readOrganizationSpeakers(
       kind: row.kind === 'organization' ? 'organization' : 'actor',
       state: 'active',
     })),
-    next: rows.length > limit ? encodeCursor(tokens, binding, { epoch: 1, after: [page.at(-1)!] }, at.getTime()) : null,
+    next: rows.length > limit ? await encodeListCursor(tokens, binding, { epoch: 1, after: [page.at(-1)!] }, at) : null,
   };
 }

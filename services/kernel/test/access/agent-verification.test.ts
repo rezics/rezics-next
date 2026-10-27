@@ -64,6 +64,18 @@ function key(): string {
   return randomUUID();
 }
 
+function expectOpaqueCursor(token: string, after: readonly string[]) {
+  expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
+  const decoded = Buffer.from(token, 'base64url').toString('utf8');
+  for (const value of after) {
+    expect(token).not.toContain(value);
+    expect(decoded).not.toContain(value);
+  }
+  const serialized = JSON.stringify(after);
+  expect(token).not.toContain(serialized);
+  expect(decoded).not.toContain(serialized);
+}
+
 async function seedAccount(
   handle: string,
   options: { kind?: 'actor' | 'organization'; automatedBy?: string } = {},
@@ -361,6 +373,23 @@ test('person and organization manager requests, withdrawal, pending page, reject
   expect(firstPage.response.status).toBe(200);
   expect(firstPage.body.verificationRequests).toHaveLength(1);
   expect(firstPage.body.next).toEqual(expect.any(String));
+  const after = [firstPage.body.verificationRequests[0].createdAt, firstPage.body.verificationRequests[0].id];
+  expectOpaqueCursor(firstPage.body.next, after);
+  const differentViewer = await get(
+    `/v1/verification-requests?state=pending&limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    personBearer,
+  );
+  expect(differentViewer.response.status).toBe(400);
+  expect(differentViewer.body).toMatchObject({ code: 'invalid_cursor' });
+  const anonymous = await get(
+    `/v1/verification-requests?state=pending&limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(anonymous.response.status).toBe(401);
+  const changedLimit = await get(
+    `/v1/verification-requests?state=pending&limit=2&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    staffBearer,
+  );
+  expect(changedLimit.response.status).toBe(400);
   const secondPage = await get(
     `/v1/verification-requests?state=pending&limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
     staffBearer,

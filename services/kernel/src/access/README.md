@@ -153,7 +153,8 @@ per account may be pending or in approval. `GET /v1/accounts/{accountId}/verific
 request, and `POST /v1/accounts/{accountId}:withdrawVerification` withdraws its pending request.
 
 Platform governance reviews `GET /v1/verification-requests?state=pending`, which returns
-`{ verificationRequests, next }` with a signed cursor and a limit from 1 to 100. The approval and rejection routes,
+`{ verificationRequests, next }` with an opaque `encodeListCursor` cursor bound to the route, governance viewer,
+pending state, ordering and page size, and a limit from 1 to 100. The approval and rejection routes,
 `POST /v1/verification-requests/{requestId}:approve` and `:reject`, accept an optional reason of at most 500 characters.
 Both require `account:verify_agent` on the Global Context, held by `platform.governance`. The six verification routes
 stay closed behind `gate:agent-verification` until governance opens that exposure group. The public handle identity
@@ -661,11 +662,12 @@ every caller receives `{ speakers: [], next: null }`. This gate precedes cursor 
 reveal a hidden organization's speakers. Revoked assignments, expired or future validity, and inactive or fenced
 speakers do not appear.
 
-Pages order by assigned actor UUID. `next` and `cursor` use `tokens/cursor.ts` signed keyset tokens, bound to this
-operation, organization and ordering, with format epoch 1 and the shared 15-minute lifetime. The cursor records the
-last scanned actor, so filtering hidden identities may yield a short or empty page with a non-null `next`; clients
-continue until `next` is null. This avoids an unbounded search to fill a page. Each request evaluates live facts at
-its own T; a cursor does not freeze assignments or public identity state.
+Pages order by assigned actor UUID. `next` and `cursor` use opaque `encodeListCursor` and `decodeListCursor` tokens
+from `tokens/list-cursor.ts`, bound to this route, the acting viewer (including anonymous), organization, ordering and
+page size, with format epoch 1 and the shared 15-minute lifetime. The cursor records the last scanned actor, so
+filtering hidden identities may yield a short or empty page with a non-null `next`; clients continue until `next` is
+null. This avoids an unbounded search to fill a page. Each request evaluates live facts at its own T; a cursor does not
+freeze assignments or public identity state.
 
 - Touches: one organization `account_pkey(route, account_id)` point read; one bounded distinct-actor range on the
   principal's own partition via the partial `principal_assignment_speakers` index; one statement projecting public
@@ -1005,9 +1007,10 @@ the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts
 
 `GET /v1/agent-pages?cursor=&limit=` returns `{ agentPages, next }`, where each item is
 `{ handle, kind, lastModified }`. The public route uses `account:read_public_identity`.
-The limit defaults to 1000 and accepts integers from 1 through 1000; `next` is a signed,
-operation-bound cursor, or null at the end. Cursors expire after 15 minutes. Omit `cursor`
-for the first page; the limit may change between pages without restarting the walk.
+The limit defaults to 1000 and accepts integers from 1 through 1000; `next` is an opaque
+`encodeListCursor` cursor bound to the route, acting viewer and page size, or null at the end.
+Cursors expire after 15 minutes. Omit `cursor` for the first page and keep the same limit while
+continuing that walk.
 Pages seek in `(route, account_id)` order through the partial `account_agent_pages` index:
 only active, unfenced accounts with a handle are indexable.
 Pending, suspended, fenced and deleted accounts never appear.

@@ -720,7 +720,7 @@ export function accessRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ query, admission, job }) =>
+      async ({ query, actor, admission, job }) =>
         admission.run('normal', job, () =>
           readAgentPages(
             dependencies.pool,
@@ -728,6 +728,7 @@ export function accessRoutes(
             {
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              viewer: actor.kind === 'account' ? actor.accountId : null,
             },
             dependencies.clock(),
           ),
@@ -810,10 +811,14 @@ export function accessRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, admission, job, set }) => {
+      async ({ params, query, actor, admission, job, set }) => {
         const at = dependencies.clock();
         const page = await admission.run('normal', job, () =>
-          readOrganizationSpeakers(dependencies.pool, dependencies.tokens, at, { ...params, ...query }),
+          readOrganizationSpeakers(dependencies.pool, dependencies.tokens, at, {
+            ...params,
+            ...query,
+            viewer: actor.kind === 'account' ? actor.accountId : null,
+          }),
         );
         set.headers['cache-control'] = 'no-cache';
         return page;

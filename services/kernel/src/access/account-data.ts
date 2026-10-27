@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import handleRead from './account-handle-read.sql';
 import agentPagesPage from './agent-pages-page.sql';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import accountRead from './account-read.sql';
@@ -207,21 +207,24 @@ export type AgentPagesPage = {
   agentPages: { handle: string; kind: AccountKind; lastModified: string }[];
   next: string | null;
 };
-const agentPagesBinding = { operation: 'account.agent_pages', parameters: {} } as const;
-
 /** One range of the index containing only indexable handle pages, with one lookahead entry. */
 export async function readAgentPages(
   client: Queryable,
   tokens: KeyRing,
-  input: { cursor?: string; limit?: number },
+  input: { cursor?: string; limit?: number; viewer?: string | null },
   at = new Date(),
 ): Promise<AgentPagesPage> {
   const limit = input.limit ?? 1000;
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new ProblemError('invalid_request');
+  const binding = {
+    route: 'GET /v1/agent-pages',
+    viewer: input.viewer ?? null,
+    query: { limit },
+  };
   let afterRoute = -1;
   let afterAccountId = '00000000-0000-0000-0000-000000000000';
   if (input.cursor !== undefined) {
-    const decoded = decodeCursor(tokens, agentPagesBinding, input.cursor, at.getTime());
+    const decoded = await decodeListCursor(tokens, binding, input.cursor, at);
     if (
       !decoded.ok ||
       decoded.epoch !== 1 ||
@@ -247,7 +250,7 @@ export async function readAgentPages(
     agentPages: selected.map(({ handle, kind, lastModified }) => ({ handle: handle!, kind, lastModified })),
     next:
       page.length > limit && last
-        ? encodeCursor(tokens, agentPagesBinding, { epoch: 1, after: [last.route, last.accountId] }, at.getTime())
+        ? await encodeListCursor(tokens, binding, { epoch: 1, after: [last.route, last.accountId] }, at)
         : null,
   };
 }

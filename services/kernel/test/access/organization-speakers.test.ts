@@ -10,10 +10,18 @@ const route = 0x4567;
 const organization = newId(route);
 const other = newId(route);
 const reader = newId(route);
+const otherReader = newId(route);
 let now = new Date('2030-01-01T00:00:00Z');
 const access: Access = {
-  async authenticate() {
-    return { kind: 'account', accountId: reader, clientId: 'test', scopes: [], requestedBy: null, authnEpoch: 1 };
+  async authenticate(token) {
+    return {
+      kind: 'account',
+      accountId: token === 'reader-2' ? otherReader : reader,
+      clientId: 'test',
+      scopes: [],
+      requestedBy: null,
+      authnEpoch: 1,
+    };
   },
   async authorize() {
     return true;
@@ -40,10 +48,10 @@ async function assignment(actorId: string, principalId = organization, valid = '
   );
   return requestId;
 }
-async function read(id = organization, query = '', authenticated = false) {
+async function read(id = organization, query = '', authenticated: boolean | 'reader-2' = false) {
   const response = await kernel.handle(
     new Request(`https://kernel.test/v1/accounts/${id}/speakers${query}`, {
-      headers: authenticated ? { authorization: 'Bearer reader' } : {},
+      headers: authenticated ? { authorization: `Bearer ${authenticated === 'reader-2' ? 'reader-2' : 'reader'}` } : {},
     }),
   );
   return { status: response.status, body: (await response.json()) as OrganizationSpeakersPage };
@@ -53,6 +61,7 @@ beforeAll(async () => {
   await account(organization, 'organization', 'active', false, true);
   await account(other, 'organization');
   await account(reader);
+  await account(otherReader);
   for (const id of speakers) {
     await account(id);
     await assignment(id);
@@ -115,7 +124,7 @@ test('unlisted, actor, unknown, fenced and deleted organization pages are empty 
       expect(await read(id, '', authenticated)).toEqual({ status: 200, body: { speakers: [], next: null } });
 });
 
-test('signed keyset pages advance across filtered identities and bind the organization with a bounded limit', async () => {
+test('opaque keyset pages advance across filtered identities and bind the organization with a bounded limit', async () => {
   const found: string[] = [];
   let cursor: string | null = null;
   let pages = 0;
@@ -125,10 +134,7 @@ test('signed keyset pages advance across filtered identities and bind the organi
     expect(result.body.speakers.length).toBeLessThanOrEqual(1);
     found.push(...result.body.speakers.map(({ id }) => id));
     cursor = result.body.next;
-    if (cursor) {
-      expect(cursor).toContain('.');
-      expect(routeOf(cursor)).toBeNull();
-    }
+    if (cursor) expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(++pages).toBeLessThan(20);
   } while (cursor);
   expect(found).toEqual(speakers);
@@ -145,6 +151,29 @@ test('signed keyset pages advance across filtered identities and bind the organi
   now = new Date('2030-01-01T00:00:00Z');
   for (const limit of ['0', '101', '1.5', 'no']) expect((await read(organization, `?limit=${limit}`)).status).toBe(400);
   expect((await read(organization, '?limit=100')).status).toBe(200);
+});
+
+test('organization speakers cursors hide their after-key and bind the query and viewer', async () => {
+  const anonymousFirst = await read(organization, '?limit=1');
+  const anonymousCursor = anonymousFirst.body.next!;
+  expect(anonymousFirst.status).toBe(200);
+  expect(anonymousCursor).toEqual(expect.any(String));
+  expect(anonymousCursor).not.toContain(speakers[0]!);
+  expect(Buffer.from(anonymousCursor, 'base64url').toString('utf8')).not.toContain(speakers[0]!);
+  expect((await read(organization, `?limit=1&cursor=${encodeURIComponent(anonymousCursor)}`, true)).status).toBe(400);
+
+  const accountFirst = await read(organization, '?limit=1', true);
+  const accountCursor = accountFirst.body.next!;
+  expect(accountFirst.status).toBe(200);
+  expect(accountCursor).toEqual(expect.any(String));
+  expect(accountCursor).toMatch(/^[A-Za-z0-9_-]+$/);
+  expect(accountCursor).not.toContain(speakers[0]!);
+  expect(Buffer.from(accountCursor, 'base64url').toString('utf8')).not.toContain(speakers[0]!);
+  expect((await read(organization, `?limit=1&cursor=${encodeURIComponent(accountCursor)}`, 'reader-2')).status).toBe(
+    400,
+  );
+  expect((await read(organization, `?limit=1&cursor=${encodeURIComponent(accountCursor)}`)).status).toBe(400);
+  expect((await read(organization, `?limit=2&cursor=${encodeURIComponent(accountCursor)}`, true)).status).toBe(400);
 });
 
 test('the speakers route declares the public identity action and public exposure', () => {

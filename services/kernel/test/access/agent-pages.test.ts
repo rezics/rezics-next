@@ -4,6 +4,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { readAgentPages } from '../../src/access/account-data.ts';
+import type { Access } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -12,6 +13,42 @@ const kernel = createKernel({ pool, routeKey: new Uint8Array(32).fill(29) });
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(41)]]) };
 const created = '2000-01-01T00:00:00.123456Z';
 const seeded: Array<{ id: string; handle: string; kind: string }> = [];
+const firstViewer = newId(23);
+const secondViewer = newId(23);
+const viewerAccess: Access = {
+  async authenticate(token) {
+    return {
+      kind: 'account',
+      accountId: token === 'first-viewer' ? firstViewer : secondViewer,
+      clientId: 'agent-pages-test',
+      scopes: [],
+      requestedBy: null,
+      authnEpoch: 1,
+    };
+  },
+  async authorize() {
+    return true;
+  },
+};
+const viewerKernel = createKernel({ pool, routeKey: new Uint8Array(32).fill(30), access: viewerAccess });
+
+function expectOpaqueCursor(token: string, after: readonly (string | number)[]) {
+  expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
+  const decoded = Buffer.from(token, 'base64url').toString('utf8');
+  for (const value of after.filter((item): item is string => typeof item === 'string')) {
+    expect(token).not.toContain(value);
+    expect(decoded).not.toContain(value);
+  }
+  const serialized = JSON.stringify(after);
+  expect(token).not.toContain(serialized);
+  expect(decoded).not.toContain(serialized);
+}
+
+async function getPage(path: string, bearer?: string) {
+  return viewerKernel.handle(
+    new Request(`http://kernel${path}`, bearer ? { headers: { authorization: `Bearer ${bearer}` } } : {}),
+  );
+}
 async function insert(
   route: number,
   state = 'active',
@@ -44,7 +81,7 @@ beforeAll(async () => {
 });
 afterAll(async () => pool.end());
 
-test('agent pages list exactly active unfenced handles in signed keyset order', async () => {
+test('agent pages list exactly active unfenced handles in opaque keyset order', async () => {
   const expected = seeded.toSorted((a, b) => routeOf(a.id)! - routeOf(b.id)! || a.id.localeCompare(b.id));
   const found = [];
   let cursor: string | undefined;
@@ -63,6 +100,34 @@ test('agent pages list exactly active unfenced handles in signed keyset order', 
     expected.map(({ handle, kind }) => ({ handle, kind, lastModified: '2000-01-01 00:00:00.123456+00' })),
   );
   expect((await readAgentPages(pool, tokens, {})).agentPages).toHaveLength(4);
+});
+
+test('agent pages cursors hide their after-keys and bind the feed query and viewer', async () => {
+  const anonymous = await getPage('/v1/agent-pages?limit=1');
+  expect(anonymous.status).toBe(200);
+  const anonymousPage = await anonymous.json();
+  const after = seeded
+    .toSorted((a, b) => routeOf(a.id)! - routeOf(b.id)! || a.id.localeCompare(b.id))
+    .slice(0, 1)
+    .map(({ id }) => id);
+  expect(anonymousPage.next).toEqual(expect.any(String));
+  expectOpaqueCursor(anonymousPage.next, [routeOf(after[0]!)!, after[0]!]);
+  expect(
+    (await getPage(`/v1/agent-pages?limit=1&cursor=${encodeURIComponent(anonymousPage.next)}`, 'first-viewer')).status,
+  ).toBe(400);
+
+  const accountPageResponse = await getPage('/v1/agent-pages?limit=1', 'first-viewer');
+  expect(accountPageResponse.status).toBe(200);
+  const accountPage = await accountPageResponse.json();
+  expect(accountPage.next).toEqual(expect.any(String));
+  expectOpaqueCursor(accountPage.next, [routeOf(after[0]!)!, after[0]!]);
+  expect(
+    (await getPage(`/v1/agent-pages?limit=1&cursor=${encodeURIComponent(accountPage.next)}`, 'second-viewer')).status,
+  ).toBe(400);
+  expect((await getPage(`/v1/agent-pages?limit=1&cursor=${encodeURIComponent(accountPage.next)}`)).status).toBe(400);
+  expect(
+    (await getPage(`/v1/agent-pages?limit=2&cursor=${encodeURIComponent(accountPage.next)}`, 'first-viewer')).status,
+  ).toBe(400);
 });
 
 test('agent pages refuse tampered cursors and limits outside 1 through 1000', async () => {
