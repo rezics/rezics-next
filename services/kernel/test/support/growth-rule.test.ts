@@ -11,8 +11,8 @@ afterAll(async () => { await db?.close(); });
 function check(name: string, options: { rule?: 'step' | 'series'; repetitions?: number; variable?: boolean; fixed?: boolean } = {}) {
   return checkGrowth(db, {
     name,
-    rule: options.rule,
-    repetitions: options.repetitions,
+    ...(options.rule === undefined ? {} : { rule: options.rule }),
+    ...(options.repetitions === undefined ? {} : { repetitions: options.repetitions }),
     bounds: { rows: 'constant', blocks: 'linear', statements: 'linear' },
     slack: { rows: { absolute: 0, relative: 0 } },
     grow: async () => {},
