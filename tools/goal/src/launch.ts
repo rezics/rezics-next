@@ -266,6 +266,19 @@ function availableMiB(): number {
   const match = /^MemAvailable:\s+(\d+) kB/m.exec(readFileSync('/proc/meminfo', 'utf8'));
   return match ? Number(match[1]) / 1024 : Number.POSITIVE_INFINITY;
 }
+/** Whether an ordinary start could begin now, without waiting; a host without capacity.json always has room. */
+export function capacityAvailable(store: WorkerStore, stateDirectory: string): boolean {
+  const file = join(stateDirectory, 'capacity.json');
+  if (!existsSync(file)) return true;
+  let capacity = DEFAULT_CAPACITY;
+  try {
+    capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+  } catch {
+    /* Defaults. */
+  }
+  const running = store.attempts().filter((candidate) => candidate.state === 'running').length;
+  return hasCapacity(running, availableMiB(), capacity);
+}
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
 export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
   return task.taskClass === 'critical-path' || task.brief.criticalPath === true || task.brief.target === 'stabilize';
