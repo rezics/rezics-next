@@ -5,22 +5,20 @@ import { useLayoutEffect } from 'react';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../session/client.ts';
 import { readSessionState } from '../session/state.ts';
-import { m } from '../paraglide/messages.js';
-import { getLocale, locales } from '../paraglide/runtime.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { AppShell, NotFoundPage } from '../shell/shell';
 import { ClosedErrorPage, ClosedPage } from '../shell/closed.tsx';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
+import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
+import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
 
 const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
   const cookie = getRequestHeader('cookie') ?? '';
   const theme = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(cookie)?.[1] ?? 'system';
-  const host = getRequestHeader('host') ?? 'localhost';
-  const protocol = getRequestHeader('x-forwarded-proto') ?? 'http';
   const session = await readSessionState(getRequest(), env as Partial<SessionEnv>);
   return {
     theme,
-    origin: `${protocol}://${host}`,
     collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie),
     session: session.state,
     csrfToken: session.csrfToken,
@@ -29,25 +27,34 @@ const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
 const setClosedResponseStatus = createIsomorphicFn()
   .server(() => setResponseStatus(403, 'Forbidden'))
   .client(() => undefined);
+const publicOrigin = createIsomorphicFn()
+  .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
+  .client(() =>
+    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
+  );
 export const Route = createRootRoute({
   loader: () => readPreferences(),
-  head: ({ loaderData }) => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: m.home_heading() },
-      ...(loaderData?.csrfToken ? [{ name: 'csrf-token', content: loaderData.csrfToken }] : []),
-    ],
-    links: [
-      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-      ...locales.map((locale) => ({
-        rel: 'alternate',
-        hrefLang: locale,
-        href: `${loaderData?.origin ?? 'http://localhost'}/${locale}`,
-      })),
-      { rel: 'alternate', hrefLang: 'x-default', href: `${loaderData?.origin ?? 'http://localhost'}/` },
-    ],
-  }),
+  head: ({ loaderData, matches }) => {
+    const locale = getLocale();
+    const last = matches.at(-1);
+    const data = last?.loaderData as { paths?: PagePaths } | undefined;
+    const path = last?.pathname ?? '/';
+    const origin = publicOrigin();
+    const context = { origin, locale, path, ...(data?.paths ? { paths: data.paths } : {}) };
+    const head = pageHead({}, context);
+    return {
+      meta: [
+        { charSet: 'utf-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        ...head.meta,
+        ...(loaderData?.csrfToken ? [{ name: 'csrf-token', content: loaderData.csrfToken }] : []),
+      ],
+      links: [
+        { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+        ...pageLinks(origin, locale, path, data?.paths),
+      ],
+    };
+  },
   component: Root,
   notFoundComponent: NotFoundPage,
   errorComponent: ClosedErrorPage,

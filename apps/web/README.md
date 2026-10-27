@@ -300,6 +300,12 @@ and the kernel chooses embedded labels from it.
 Follow-ups below are proposed tests in `tests/request-cost.test.ts`, counting calls through the fake kernel and session
 at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests cited cover only the stated call assertion.
 
+### Page head
+
+- **Touches:** No kernel read; the head uses the loaded page and matched route.
+- **Bound:** Constant per page: eight alternates, one canonical and at most one JSON-LD script.
+- **Growth check:** Page head rendering does not add a kernel request.
+
 ### Page security headers
 
 - **Touches:** Request-local nonce → SSR and response headers

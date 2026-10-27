@@ -33,6 +33,7 @@ if (command.length === 0) {
   }
   const childEnvironment = {
     ...process.env,
+    PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? 'http://127.0.0.1:3000',
     WEB_TEST_STATE_DIR: stateRoot ?? join(temporary!, 'cloudflare-state'),
   };
   const invocation = isolated

@@ -163,21 +163,20 @@ export default {
 
 async function siteRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname === '/') {
-    const locale = await extractLocaleFromRequestAsync(request);
-    const location = localizeUrl(url, { locale });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: location.href, 'Cache-Control': 'private, no-store' },
-    });
-  }
-  if ((request.method === 'GET' || request.method === 'HEAD') && /^\/orders\/[^/]+$/.test(url.pathname)) {
-    const locale = await extractLocaleFromRequestAsync(request);
-    const location = localizeUrl(url, { locale });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: location.href, 'Cache-Control': 'private, no-store' },
-    });
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+      url.pathname = url.pathname.replace(/\/+$/, '');
+      return new Response(null, { status: 301, headers: { Location: url.href } });
+    }
+    const first = url.pathname.split('/')[1];
+    if (!locales.some((locale) => locale === first)) {
+      const locale = await extractLocaleFromRequestAsync(request);
+      const location = localizeUrl(url, { locale });
+      return new Response(null, {
+        status: 302,
+        headers: { Location: location.href, Vary: 'Cookie, Accept-Language', 'Cache-Control': 'private, no-store' },
+      });
+    }
   }
   return paraglideMiddleware(request, () => fetchHandler(request)).then((response: Response) => {
     const headers = new Headers(response.headers);
