@@ -19,6 +19,14 @@ import boardThreadsRecording from './recorded/board-threads.json';
 import threadRecording from './recorded/thread.json';
 import threadPostsRecording from './recorded/thread-posts.json';
 import accountsRecording from './recorded/accounts.json';
+import threadOwnedRecording from './recorded/thread-owned.json';
+import threadOwnedPostsRecording from './recorded/thread-owned-posts.json';
+import offerRecording from './recorded/offer.json';
+import offerCjkRecording from './recorded/offer-cjk.json';
+import offerDelistedRecording from './recorded/offer-delisted.json';
+import orderFailedRecording from './recorded/order-failed.json';
+import orderPaidRecording from './recorded/order-paid.json';
+import orderPendingRecording from './recorded/order-pending.json';
 import searchRecording from './recorded/search.json';
 import searchEmptyRecording from './recorded/search-empty.json';
 import searchTypedRecording from './recorded/search-typed.json';
@@ -123,6 +131,18 @@ function filterType(filter: unknown): string | undefined {
       if (found) return found;
     }
   return undefined;
+}
+
+/** The recording named `prefix` or `prefix-…` whose `key` resource has this id. */
+function recordingsWithId(
+  recordings: Record<string, KernelRecording>,
+  prefix: string,
+  key: string,
+  id: string,
+): KernelRecording | undefined {
+  return Object.entries(recordings).find(
+    ([name, recording]) => (name === prefix || name.startsWith(`${prefix}-`)) && resourceId(recording, key) === id,
+  )?.[1];
 }
 
 /** The account the story session signs in as. */
@@ -235,9 +255,17 @@ async function selectRecording(
     const posts = /^\/v1\/threads\/([^/]+)\/posts$/.exec(pathname);
     if (posts?.[1] && decodeURIComponent(posts[1]) === resourceId(recordings.thread, 'thread'))
       return recordings['thread-posts'];
+    if (posts?.[1] && decodeURIComponent(posts[1]) === resourceId(recordings['thread-owned'], 'thread'))
+      return recordings['thread-owned-posts'];
     const thread = /^\/v1\/threads\/([^/]+)$/.exec(pathname);
     if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings.thread, 'thread'))
       return recordings.thread;
+    if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings['thread-owned'], 'thread'))
+      return recordings['thread-owned'];
+    const offer = /^\/v1\/offers\/([^/]+)$/.exec(pathname);
+    if (offer?.[1]) return recordingsWithId(recordings, 'offer', 'offer', decodeURIComponent(offer[1]));
+    const order = /^\/v1\/orders\/([^/]+)$/.exec(pathname);
+    if (order?.[1]) return recordingsWithId(recordings, 'order', 'order', decodeURIComponent(order[1]));
     if (pathname === '/v1/definitions/active') return recordings['definitions-active'];
     const release = /^\/v1\/definitions\/releases\/([^/]+)$/.exec(pathname);
     if (release?.[1] && decodeURIComponent(release[1]) === recordings['definitions-release']?.digest)
@@ -308,6 +336,13 @@ function boardThreadsWithActivity(): KernelRecording {
   };
 }
 
+/** The thread the recording account wrote, with the story visitor in its place so that the visitor may edit it. */
+function ownedThreadRecordings(): Record<string, KernelRecording> {
+  const recordings = { 'thread-owned': threadOwnedRecording, 'thread-owned-posts': threadOwnedPostsRecording };
+  const author = threadOwnedRecording.thread.authorId;
+  return JSON.parse(JSON.stringify(recordings).replaceAll(author, storyViewerId)) as Record<string, KernelRecording>;
+}
+
 /** The browser-only Storybook kernel uses the checked-in responses for the real page routes. */
 export function createStoryRecordedKernelFetch(): typeof fetch {
   return createRecordedKernelFetch({
@@ -328,6 +363,13 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'definitions-active': definitionsActiveRecording,
     'definitions-release': definitionsReleaseRecording,
     'settings-preferences': settingsPreferencesRecording,
+    ...ownedThreadRecordings(),
+    offer: offerRecording,
+    'offer-cjk': offerCjkRecording,
+    'offer-delisted': offerDelistedRecording,
+    'order-failed': orderFailedRecording,
+    'order-paid': orderPaidRecording,
+    'order-pending': orderPendingRecording,
     ...libraryStoryRecordings(),
     'my-realms': myRealmsRecording,
     realm: realmRecording,

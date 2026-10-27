@@ -1,0 +1,64 @@
+{
+  "thread": {
+    "id": "01a17a7a-1071-720c-8100-2345e36e8473",
+    "route": 9029,
+    "authorId": "01a17a79-0af6-71c2-a357-5eefeef704f4",
+    "kind": "discussion",
+    "title": "Baobab seedlings: a watering schedule",
+    "licence": "MIT",
+    "subjectIds": [],
+    "boardId": "01a17a79-d8f5-7437-ab91-432169df9a93",
+    "visibility": "published",
+    "securityRevision": "1",
+    "availability": "available",
+    "createdAt": "2026-10-24T00:00:00.000Z",
+    "firstPost": {
+      "id": "01a17a7a-1071-720d-8a61-2345df6e12ae",
+      "threadId": "01a17a7a-1071-720c-8100-2345e36e8473",
+      "route": 9029,
+      "authorId": "01a17a79-0af6-71c2-a357-5eefeef704f4",
+      "parentId": null,
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a17a79-d8f5-7437-ab91-432169df9a93",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "revisedAt": "2026-10-26T23:09:42.385Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a17a7a-1071-720e-b2ad-234584ec2ff7",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "watering-plan", "lang": null, "level": 2, "textAlign": null },
+              "content": [{ "text": "Watering plan", "type": "text" }],
+              "type": "heading"
+            },
+            {
+              "attrs": { "dir": null, "id": "watering-intro", "lang": null, "textAlign": null },
+              "content": [
+                { "text": "Pull the baobab seedlings ", "type": "text" },
+                { "marks": [{ "type": "bold" }], "text": "every morning", "type": "text" },
+                {
+                  "text": ", before breakfast, while they are still small enough to tell from the rosebushes.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "b701dce3b46f00f2f574a9c2af6f1e27250d6d63475ed61ac7573354a6a19766",
+      "availability": "available"
+    },
+    "reactions": {}
+  },
+  "reactionsAsOf": null,
+  "status": 200
+}

@@ -1,0 +1,22 @@
+{
+  "order": {
+    "id": "01a17a7a-4833-72f9-95e4-074c6aca9bb5",
+    "offerId": "01a17a7a-477c-777f-9812-c7322f4814a8",
+    "title": "The Little Prince: annotated e-book edition",
+    "targetSubjectId": "01a17a79-d88a-77aa-a166-81d2b657df87",
+    "subject": {
+      "id": "01a17a79-d88a-77aa-a166-81d2b657df87",
+      "type": "schema:Book",
+      "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+      "label": { "value": "The Little Prince", "language": "en" },
+      "creativeWork": true,
+      "cover": null
+    },
+    "settlement": "paid",
+    "checkoutUrl": "https://checkout.stripe.com/c/pay/cs_test_000000000002",
+    "checkoutExpiresAt": "2026-10-27T00:09:56.000Z",
+    "entitlementId": "01a17a7a-4856-7052-a40c-074c3803e6ce",
+    "createdAt": "2026-10-26T23:09:56.659Z"
+  },
+  "status": 200
+}

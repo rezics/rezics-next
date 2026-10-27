@@ -1,0 +1,26 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { PageStory, pagePaths, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
+
+const meta = { title: 'Pages/Offer', parameters: { layout: 'fullscreen' } } satisfies Meta;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const SignedIn: Story = {
+  name: 'Signed In',
+  play: offerPageReady,
+  render: () => <PageStory visitor="Signed In" path={pagePaths['offer']} />,
+};
+export const SignedOut: Story = {
+  name: 'Signed Out',
+  play: offerPageReady,
+  render: () => <PageStory visitor="Signed Out" path={pagePaths['offer']} />,
+};
+export const LongCjkTitle: Story = {
+  name: 'Long CJK Title',
+  play: offerCjkReady,
+  render: () => <PageStory visitor="Signed In" path={pagePaths['offer-cjk']} />,
+};
+export const Delisted: Story = {
+  name: 'Delisted',
+  play: offerDelistedReady,
+  render: () => <PageStory visitor="Signed In" path={pagePaths['offer-delisted']} />,
+};

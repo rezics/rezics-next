@@ -1,0 +1,92 @@
+{
+  "posts": [
+    {
+      "id": "01a17a7a-1071-720d-8a61-2345df6e12ae",
+      "threadId": "01a17a7a-1071-720c-8100-2345e36e8473",
+      "route": 9029,
+      "authorId": "01a17a79-0af6-71c2-a357-5eefeef704f4",
+      "parentId": null,
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a17a79-d8f5-7437-ab91-432169df9a93",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "revisedAt": "2026-10-26T23:09:42.385Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a17a7a-1071-720e-b2ad-234584ec2ff7",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "watering-plan", "lang": null, "level": 2, "textAlign": null },
+              "content": [{ "text": "Watering plan", "type": "text" }],
+              "type": "heading"
+            },
+            {
+              "attrs": { "dir": null, "id": "watering-intro", "lang": null, "textAlign": null },
+              "content": [
+                { "text": "Pull the baobab seedlings ", "type": "text" },
+                { "marks": [{ "type": "bold" }], "text": "every morning", "type": "text" },
+                {
+                  "text": ", before breakfast, while they are still small enough to tell from the rosebushes.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "b701dce3b46f00f2f574a9c2af6f1e27250d6d63475ed61ac7573354a6a19766",
+      "availability": "available",
+      "reactions": {}
+    },
+    {
+      "id": "01a17a7a-1071-720f-b9a4-2345289d6dc4",
+      "threadId": "01a17a7a-1071-720c-8100-2345e36e8473",
+      "route": 9029,
+      "authorId": "01a17a79-0af6-71c2-a357-5eefeef704f4",
+      "parentId": "01a17a7a-1071-720d-8a61-2345df6e12ae",
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a17a79-d8f5-7437-ab91-432169df9a93",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:01:00.000Z",
+      "revisedAt": "2026-10-26T23:09:42.385Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a17a7a-1071-7210-a190-2345deb4c70b",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "screen-question", "lang": null, "textAlign": null },
+              "content": [
+                {
+                  "text": "Does anyone know how the rose copes with wind? I still need to build a screen.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "d22d9753b6e6476449c8f87580a2d056700a65b2c6ff8f8d9dc03f29c436c72e",
+      "availability": "available",
+      "reactions": {}
+    }
+  ],
+  "next": null,
+  "reactionsAsOf": null,
+  "status": 200
+}

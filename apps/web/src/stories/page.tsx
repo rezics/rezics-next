@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
 import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
@@ -12,6 +12,14 @@ import searchRecording from '../kernel/recorded/search.json';
 import searchTypedRecording from '../kernel/recorded/search-typed.json';
 import subjectRecording from '../kernel/recorded/subject.json';
 import threadRecording from '../kernel/recorded/thread.json';
+import threadOwnedRecording from '../kernel/recorded/thread-owned.json';
+import threadOwnedPostsRecording from '../kernel/recorded/thread-owned-posts.json';
+import offerRecording from '../kernel/recorded/offer.json';
+import offerCjkRecording from '../kernel/recorded/offer-cjk.json';
+import offerDelistedRecording from '../kernel/recorded/offer-delisted.json';
+import orderFailedRecording from '../kernel/recorded/order-failed.json';
+import orderPaidRecording from '../kernel/recorded/order-paid.json';
+import orderPendingRecording from '../kernel/recorded/order-pending.json';
 import libraryChangesRecording from '../kernel/recorded/library-progress-changes.json';
 import libraryCollectionMembersRecording from '../kernel/recorded/library-collection-members.json';
 import libraryCollectionRecording from '../kernel/recorded/library-collection.json';
@@ -33,6 +41,15 @@ export const pagePaths = {
   'missing-subject': `/subjects/${missingSubjectId}`,
   board: `/boards/${boardRecording.board.id}`,
   thread: `/threads/${threadRecording.thread.id}`,
+  'thread-owned': `/threads/${threadOwnedRecording.thread.id}`,
+  'board-new': `/boards/${boardRecording.board.id}/new`,
+  offer: `/offers/${offerRecording.offer.id}`,
+  'offer-cjk': `/offers/${offerCjkRecording.offer.id}`,
+  'offer-delisted': `/offers/${offerDelistedRecording.offer.id}`,
+  'order-paid': `/orders/${orderPaidRecording.order.id}?checkout=success`,
+  'order-pending': `/orders/${orderPendingRecording.order.id}?checkout=success`,
+  'order-canceled': `/orders/${orderPendingRecording.order.id}?checkout=canceled`,
+  'order-failed': `/orders/${orderFailedRecording.order.id}`,
   search: `/search?q=${encodeURIComponent(searchRecording.query)}`,
   'search-typed': `/search?q=${encodeURIComponent(searchTypedRecording.query)}&type=${encodeURIComponent(searchTypedRecording.filterType)}`,
   'search-empty': `/search?q=${encodeURIComponent(searchEmptyRecording.query)}`,
@@ -134,6 +151,86 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   await listItemWithLink(view, 'The asteroid');
   await userEvent.click(await view.findByRole('button', { name: m.thread_reveal_spoiler() }));
   await expect(view.getByText('The rose was unique')).toBeVisible();
+}
+
+/** The offer page shows the recorded title and price, and the one control that starts checkout. */
+function offerReady(recording: typeof offerRecording, available: boolean) {
+  return async (context: { canvasElement: HTMLElement }) => {
+    await pageReady(context);
+    const view = viewOf(context);
+    const { currency, title, unitAmountMinor } = recording.offer;
+    const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
+    await view.findByRole('heading', { level: 1, name: title });
+    await view.findByText(
+      new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(unitAmountMinor / 10 ** (digits ?? 2)),
+    );
+    const buy = await view.findByRole('button', { name: m.offer_buy() });
+    if (available) await expect(buy).toBeEnabled();
+    else {
+      await expect(buy).toBeDisabled();
+      await view.findByText(m.offer_unavailable());
+    }
+  };
+}
+
+export const offerPageReady = offerReady(offerRecording, true);
+export const offerCjkReady = offerReady(offerCjkRecording, true);
+export const offerDelistedReady = offerReady(offerDelistedRecording, false);
+
+/** The order page states what happened to the payment in its heading. */
+function orderReady(heading: () => string, note?: () => string) {
+  return async (context: { canvasElement: HTMLElement }) => {
+    await pageReady(context);
+    const view = viewOf(context);
+    await view.findByRole('heading', { level: 1, name: heading() });
+    if (note) await view.findByText(note());
+  };
+}
+
+export const orderPaidReady = orderReady(() => m.order_paid());
+export const orderPendingReady = orderReady(() => m.order_pending());
+export const orderCanceledReady = orderReady(
+  () => m.order_pending(),
+  () => m.order_canceled(),
+);
+export const orderFailedReady = orderReady(() => m.order_failed());
+
+/** The new-thread page asks for a title and a body, and cannot send until both are filled. */
+export async function newThreadReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 1, name: m.thread_new_heading() });
+  await view.findByRole('textbox', { name: m.thread_title_label() });
+  await expect(await view.findByRole('button', { name: m.thread_write_send() })).toBeDisabled();
+}
+
+/** A reply is typed under the thread; sending becomes possible once there is something to send. */
+export async function replyReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 1, name: threadRecording.thread.title });
+  // The recorded thread holds a hidden spoiler; the thread story reveals it for the same reason.
+  await userEvent.click(await view.findByRole('button', { name: m.thread_reveal_spoiler() }));
+  const editor = await view.findByRole('textbox', { name: m.thread_reply_body_label() });
+  await expect(await view.findByRole('button', { name: m.thread_write_send() })).toBeDisabled();
+  await userEvent.click(editor);
+  await userEvent.keyboard('The baobabs are easy to spot once you know the leaves.');
+  await waitFor(async () => expect(await view.findByRole('button', { name: m.thread_write_send() })).toBeEnabled());
+}
+
+/** The author of a post opens its inline editor from the post's action menu. */
+export async function editReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  const opening = threadOwnedPostsRecording.posts[0];
+  if (!opening) throw new Error('The recorded thread has no post to edit.');
+  await view.findByRole('heading', { level: 1, name: threadOwnedRecording.thread.title });
+  const [actions] = await view.findAllByRole('button', { name: m.thread_content_more_actions() });
+  if (!actions) throw new Error('The author sees no post actions.');
+  await userEvent.click(actions);
+  await userEvent.click(await within(document.body).findByRole('menuitem', { name: m.thread_content_edit() }));
+  await expect(await view.findByRole('button', { name: m.thread_edit_save() })).toBeEnabled();
+  await view.findByRole('button', { name: m.thread_edit_cancel() });
 }
 
 function searchLabel(recording: typeof searchRecording | typeof searchTypedRecording) {

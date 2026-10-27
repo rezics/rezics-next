@@ -320,6 +320,130 @@ test(
 );
 
 test(
+  'the offer page and the order page have stories from recorded responses: paid, pending and failed orders, a long CJK title and a missing cover',
+  async () => {
+    const read = (name: string) => Bun.file(join(recorded, `${name}.json`)).json();
+    const offer = await read('offer');
+    const cjk = await read('offer-cjk');
+    const delisted = await read('offer-delisted');
+    const orders = {
+      Paid: await read('order-paid'),
+      Pending: await read('order-pending'),
+      Failed: await read('order-failed'),
+    };
+    expect(orders.Paid.order.settlement).toBe('paid');
+    expect(orders.Pending.order.settlement).toBe('pending');
+    expect(orders.Failed.order.settlement).toBe('failed');
+    expect(cjk.offer.title, 'the long title is CJK text').toMatch(/\p{Script=Han}/u);
+    expect([...cjk.offer.title].length).toBeGreaterThanOrEqual(30);
+    expect(delisted.offer.state).toBe('delisted');
+    for (const recording of [offer, cjk, delisted])
+      expect(Object.keys(recording.offer), 'the kernel offer carries no cover').not.toContain('cover');
+
+    const price = (locale: string, recording: typeof offer) => {
+      const currency = recording.offer.currency.toUpperCase();
+      const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions()
+        .maximumFractionDigits!;
+      return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(
+        recording.offer.unitAmountMinor / 10 ** digits,
+      );
+    };
+    for (const locale of ['en', 'zh-Hans']) {
+      const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+      for (const [name, recording] of [
+        ['Signed In', offer],
+        ['Signed Out', offer],
+        ['Long CJK Title', cjk],
+      ] as const) {
+        const opened = await openStory('offer', name, locale);
+        try {
+          const main = opened.page.getByRole('main');
+          expect((await main.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(recording.offer.title);
+          await main.getByText(price(locale, recording), { exact: true }).waitFor();
+          expect(await main.getByRole('button', { name: own.offer_buy, exact: true }).isEnabled()).toBe(true);
+          expect(await main.locator('img').count(), 'a missing cover leaves no broken image').toBe(0);
+        } finally {
+          await opened.context.close();
+        }
+      }
+      const unavailable = await openStory('offer', 'Delisted', locale);
+      try {
+        const main = unavailable.page.getByRole('main');
+        await main.getByText(own.offer_unavailable, { exact: true }).waitFor();
+        expect(await main.getByRole('button', { name: own.offer_buy, exact: true }).isDisabled()).toBe(true);
+      } finally {
+        await unavailable.context.close();
+      }
+      for (const [name, key] of [
+        ['Paid', 'order_paid'],
+        ['Pending', 'order_pending'],
+        ['Failed', 'order_failed'],
+      ] as const) {
+        const opened = await openStory('order', name, locale);
+        try {
+          const main = opened.page.getByRole('main');
+          expect((await main.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(own[key]);
+        } finally {
+          await opened.context.close();
+        }
+      }
+      const canceled = await openStory('order', 'Canceled', locale);
+      try {
+        const main = canceled.page.getByRole('main');
+        await main.getByText(own.order_canceled, { exact: true }).waitFor();
+        expect(await main.getByRole('link', { name: own.order_back, exact: true }).count()).toBe(1);
+      } finally {
+        await canceled.context.close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'the post editor has stories for a new thread, a reply and an edit of an existing post, from recorded responses',
+  async () => {
+    const owned = await Bun.file(join(recorded, 'thread-owned-posts.json')).json();
+    const text = JSON.stringify(owned.posts[0].body);
+    const phrase: string = /"text":"([^"]+)"/.exec(text)![1]!;
+    for (const locale of ['en', 'zh-Hant']) {
+      const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+      const created = await openStory('composer', 'New Thread', locale);
+      try {
+        const main = created.page.getByRole('main');
+        await main.getByRole('textbox', { name: own.thread_title_label, exact: true }).waitFor();
+        await main.getByText(own.thread_new_body_label, { exact: true }).first().waitFor();
+        expect(await main.getByRole('button', { name: own.thread_write_send, exact: true }).isDisabled()).toBe(true);
+      } finally {
+        await created.context.close();
+      }
+
+      const reply = await openStory('composer', 'Reply', locale);
+      try {
+        const main = reply.page.getByRole('main');
+        await main.getByRole('textbox', { name: own.thread_reply_body_label, exact: true }).waitFor();
+        expect(await main.getByRole('textbox', { name: own.thread_title_label, exact: true }).count()).toBe(0);
+        await main.getByRole('button', { name: own.thread_write_send, exact: true }).waitFor();
+        expect(await main.getByRole('button', { name: own.thread_edit_save, exact: true }).count()).toBe(0);
+      } finally {
+        await reply.context.close();
+      }
+
+      const edit = await openStory('composer', 'Edit', locale);
+      try {
+        const main = edit.page.getByRole('main');
+        await main.getByRole('button', { name: own.thread_edit_save, exact: true }).waitFor();
+        await main.getByRole('button', { name: own.thread_edit_cancel, exact: true }).waitFor();
+        await main.getByText(phrase, { exact: false }).first().waitFor();
+      } finally {
+        await edit.context.close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
   'the subject story shows its description, its statements with linked values, and its editions',
   async () => {
     const recording = await Bun.file(join(recorded, 'subject.json')).json();
@@ -412,6 +536,8 @@ test(
       'type RealmSubjectsResponse = { subjects: Record<string, SubjectResponse> };',
       'type NoContentResponse = { status: 204 };',
       "type MyRealmsResponse = Data<ReturnType<KernelClient['me']['realms']['get']>>;",
+      "type OfferResponse = Data<ReturnType<ReturnType<KernelClient['offers']>['get']>>;",
+      "type OrderResponse = Data<ReturnType<ReturnType<KernelClient['orders']>['get']>>;",
     ];
     const responseType: Record<string, string> = {
       'accounts.json': 'AccountsResponse',
@@ -451,6 +577,14 @@ test(
       'realm-subjects.json': 'RealmSubjectsResponse',
       'realm-participation.json': 'NoContentResponse',
       'my-realms.json': 'MyRealmsResponse',
+      'offer.json': 'OfferResponse',
+      'offer-cjk.json': 'OfferResponse',
+      'offer-delisted.json': 'OfferResponse',
+      'order-paid.json': 'OrderResponse',
+      'order-pending.json': 'OrderResponse',
+      'order-failed.json': 'OrderResponse',
+      'thread-owned.json': 'ThreadResponse',
+      'thread-owned-posts.json': 'PostsResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);
@@ -488,6 +622,9 @@ test(
         'thread-posts.json',
         'search.json',
         'search-empty.json',
+        'offer.json',
+        'order-paid.json',
+        'thread-owned.json',
       ]),
     );
   },

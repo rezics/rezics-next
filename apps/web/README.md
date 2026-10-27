@@ -190,8 +190,13 @@ board and a published thread with three posts, and records the board, its first 
 post page, and the public identities used by their bylines. The kernel server does not mount subject search, so the
 recorder indexes that subject in its OpenSearch node and records `POST /v1/subjects:search` through an in-process
 kernel: one query that matches the subject and one that matches nothing. It also records the subject read and a
-missing ID. It stops the kernel and removes the containers it started on success and failure; it does not use a
-development kernel, the shared search node, or a shared database.
+missing ID. A second thread of two posts belongs to the recording account, and the story visitor stands in for that
+account so that the post editor can edit it. The checkout pages are recorded through an in-process kernel over the same
+database with a local Stripe fixture: three offers (one with a long CJK title, one delisted) and three orders that reach
+the paid, pending and failed settlements. It stops the kernel and removes the containers it started on success and
+failure; it does not use a development kernel, the shared search node, or a shared database. Name recordings to write
+only those files, for example `bun run --cwd apps/web record -- offer order-paid`; with no names the recorder writes
+every recording.
 
 The thread and subject recordings carry story content the recorder keeps when it re-records: the thread's `subjectIds`,
 a cover `summary` on the recorded subject and a second recorded subject without a cover (`subject-uncovered.json`), so

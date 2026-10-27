@@ -1,0 +1,19 @@
+{
+  "offer": {
+    "id": "01a17a7a-477c-777f-9812-c7322f4814a8",
+    "targetSubjectId": "01a17a79-d88a-77aa-a166-81d2b657df87",
+    "subject": {
+      "id": "01a17a79-d88a-77aa-a166-81d2b657df87",
+      "type": "schema:Book",
+      "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+      "label": { "value": "The Little Prince", "language": "en" },
+      "creativeWork": true,
+      "cover": null
+    },
+    "title": "The Little Prince: annotated e-book edition",
+    "currency": "usd",
+    "unitAmountMinor": 1299,
+    "state": "active"
+  },
+  "status": 200
+}

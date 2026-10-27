@@ -20,10 +20,12 @@ const publicJwk = { ...(await exportJWK(signing.publicKey)), kid: 'web-recorder'
 const privateJwk = { ...(await exportJWK(signing.privateKey)), kid: 'web-recorder', alg: 'ES256' };
 const boardRoute = 0x4321;
 const threadRoute = 0x1234;
+const ownedThreadRoute = 0x2345;
 const threadAt = '2026-10-24T00:00:00.000Z';
 const postTimes = ['2026-10-24T00:00:00.000Z', '2026-10-24T00:01:00.000Z', '2026-10-24T00:02:00.000Z'] as const;
 const boardTitle = 'Stories of the little prince';
 const threadTitle = 'Letters from B-612';
+const ownedThreadTitle = 'Baobab seedlings: a watering schedule';
 const searchPrefix = 'webrec';
 const pagePrefix = 'webrecpage';
 const matchingQuery = 'Prince';
@@ -200,10 +202,10 @@ const libraryScopes = [
   'published_log:read',
 ].join(' ');
 
-async function libraryToken(account: string): Promise<string> {
+async function libraryToken(account: string, scope = libraryScopes): Promise<string> {
   return new SignJWT({
     client_id: 'web-recorder',
-    scope: libraryScopes,
+    scope,
     authn_epoch: 1,
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
@@ -258,6 +260,99 @@ const librarySubjects = [
     labels: { en: 'Snow Country', 'zh-Hant': '雪國', ja: '雪国', ko: '설국', fr: 'Pays de neige' },
   },
 ] as const;
+
+type ValidatedDocument = { canonicalBytes: Uint8Array; searchText: string; subjectIds: readonly string[] };
+
+/**
+ * Writes one published thread with its posts straight into the content tables. The last post replies to the opening
+ * post; the others are top level. The posts belong to `accountId`.
+ */
+async function seedThread(
+  database: Pool,
+  input: {
+    route: number;
+    accountId: string;
+    boardId: string;
+    title: string;
+    at: string;
+    times: readonly string[];
+    documents: readonly ValidatedDocument[];
+  },
+): Promise<{ threadId: string; openingPostId: string }> {
+  const kernelBase = '../../../services/kernel';
+  const { newId, partitionOf } = await import(`${kernelBase}/src/route/route.ts`);
+  const { runCommand } = await import(`${kernelBase}/src/command/command.ts`);
+  const { applyBoardCandidate } = await import(`${kernelBase}/src/content/board-projection.ts`);
+  const { GLOBAL_CONTEXT } = await import(`${kernelBase}/src/semantic/definitions.ts`);
+  const { route, boardId, title, at, times, documents } = input;
+  const threadId = newId(route);
+  const posts = times.map(() => ({ post: newId(route), revision: newId(route) }));
+  const opening = posts[0];
+  if (!opening) throw new Error('The recording thread needs an opening post.');
+  await runCommand(
+    database,
+    { partition: partitionOf(route) },
+    async (tx: { query: (sql: string, values: readonly unknown[]) => Promise<unknown> }) => {
+      await tx.query(
+        `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
+       VALUES ($1,$2,$3,$4,$5,'published',1,$2,$6,$7)`,
+        [route, threadId, input.accountId, boardId, title, opening.post, at],
+      );
+      for (const [index, post] of posts.entries()) {
+        const document = documents[index];
+        const postedAt = times[index];
+        if (!document || !postedAt) throw new Error(`Recording post ${index} is missing its document.`);
+        await tx.query(
+          `INSERT INTO content.post(route,thread_id,post_id,reply_to_post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'published',1,$3,$7)`,
+          [
+            route,
+            threadId,
+            post.post,
+            index === posts.length - 1 ? opening.post : null,
+            input.accountId,
+            post.revision,
+            postedAt,
+          ],
+        );
+        await tx.query(
+          `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+         VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT','{}'::uuid[],$7,'available',$4)`,
+          [
+            route,
+            threadId,
+            post.post,
+            post.revision,
+            Buffer.from(document.canonicalBytes),
+            document.searchText,
+            boardId,
+          ],
+        );
+      }
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.content.thread.created.v1',
+            subject: threadId,
+            data: {
+              threadId,
+              itemId: opening.post,
+              revisionId: opening.revision,
+              actorId: input.accountId,
+              placeId: GLOBAL_CONTEXT,
+              kind: 'discussion',
+              subjectIds: documents[0]!.subjectIds,
+              activityAt: at,
+            },
+          },
+        ],
+      };
+    },
+  );
+  await applyBoardCandidate(database, { id: threadId, boardId, createdAt: at, epoch: 1, position: 1n });
+  return { threadId, openingPostId: opening.post };
+}
 
 /**
  * Seeds a used-looking library through the kernel's public API and records the Library reads the pages make.
@@ -518,6 +613,207 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   );
 }
 
+/**
+ * Records the checkout reads: offers and the buyer's orders. The kernel runs in this process over the same database
+ * with a local Stripe fixture, so the orders reach the settlements the pages show: paid, still pending and failed.
+ */
+async function recordCommerce(input: {
+  pool: Pool;
+  accountId: string;
+  subjectId: string;
+}): Promise<Map<string, JsonObject>> {
+  const { pool: database, accountId: governor, subjectId } = input;
+  const kernelBase = '../../../services/kernel';
+  const { createKernel } = await import(`${kernelBase}/src/http/kernel.ts`);
+  const { createAccess } = await import(`${kernelBase}/src/access/index.ts`);
+  const { createCommerceCommands } = await import(`${kernelBase}/src/commerce/commands.ts`);
+  const { createStripePort } = await import(`${kernelBase}/src/commerce/stripe.ts`);
+  const { routeOf } = await import(`${kernelBase}/src/route/route.ts`);
+  const { GLOBAL_CONTEXT } = await import(`${kernelBase}/src/semantic/definitions.ts`);
+  const { startFakeStripe } = await import(`${kernelBase}/test/commerce/support/fake-stripe.ts`);
+  const stripeFixture = startFakeStripe();
+  try {
+    const stripe = createStripePort({
+      apiKey: 'sk_test_recorder',
+      managedPayments: false,
+      host: '127.0.0.1',
+      port: stripeFixture.port,
+      protocol: 'http',
+      maxNetworkRetries: 0,
+      timeoutMs: 5000,
+      clock: () => new Date(),
+    });
+    // The seller holds only an explicit grant: a governor's reach over the platform is a separate path.
+    const [seller, buyer] = [Bun.randomUUIDv7(), Bun.randomUUIDv7()];
+    for (const account of [seller, buyer]) {
+      const route = routeOf(account);
+      if (route === null) throw new Error('A commerce recording account id is not routable.');
+      await database.query(
+        `INSERT INTO access.account (route, account_id, kind, state, content_preferences, minimum_authn_epoch, transaction_id)
+         VALUES ($1, $2, 'actor', 'active', '{}', 1, $2)`,
+        [route, account],
+      );
+    }
+    await database.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+       VALUES (0,$1,$2,'offer:create','(,)',$2)`,
+      [GLOBAL_CONTEXT, seller],
+    );
+    let access: unknown;
+    const kernel = createKernel({
+      pool: database,
+      routeKey: Buffer.from(kernelRouteKey, 'base64url'),
+      tokens: { current: 1, keys: new Map([[1, randomBytes(32)]]) },
+      writeRate: {
+        async spend() {
+          return { allowed: true as const };
+        },
+      },
+      access: (config: object) =>
+        (access = createAccess({
+          ...config,
+          auth: {
+            issuer,
+            audience,
+            jwksUrl: `${issuer}/jwks`,
+            fetch: async () => Response.json({ keys: [publicJwk] }),
+          },
+        })),
+      commerce: {
+        stripe,
+        successUrl: 'https://example.test/orders/{ORDER_ID}?checkout=success',
+        cancelUrl: 'https://example.test/orders/{ORDER_ID}?checkout=canceled',
+        webhookSecrets: [stripeFixture.webhookSecret],
+        work: { async enqueueStripeEvent() {} },
+      },
+    });
+    const tokens = {
+      governor: await libraryToken(governor, 'exposure:open'),
+      seller: await libraryToken(seller, 'offer:create offer:manage offer:read'),
+      buyer: await libraryToken(buyer, 'offer:read order:create order:read'),
+    };
+    const call = async (
+      name: string,
+      token: string | null,
+      method: string,
+      path: string,
+      status: number,
+      body?: unknown,
+    ): Promise<JsonObject> => {
+      const key = JSON.stringify(Bun.randomUUIDv7());
+      const response = await retryOverloaded(() =>
+        kernel.handle(
+          new Request(`http://kernel.test${path}`, {
+            method,
+            headers: {
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+              ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+              ...(method === 'GET' ? {} : { 'idempotency-key': key }),
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        ),
+      );
+      const raw = await response.text();
+      const parsed = raw ? objectBody(JSON.parse(raw), name) : {};
+      if (response.status !== status) throw new Error(`${name} returned ${response.status}: ${raw}`);
+      return parsed;
+    };
+    const idOf = (body: JsonObject, key: string): string => {
+      const id = objectBody(body[key], key).id;
+      if (typeof id !== 'string') throw new Error(`${key} has no id: ${JSON.stringify(body)}`);
+      return id;
+    };
+    for (const group of ['purchases', 'selling'])
+      await call(`open ${group}`, tokens.governor, 'POST', `/v1/platform/exposure/${group}:open`, 200);
+
+    const taxCode = 'txcd_10302000';
+    const offerBody = (title: string, currency: string, unitAmountMinor: number) => ({
+      targetSubjectId: subjectId,
+      title,
+      currency,
+      unitAmountMinor,
+      taxCode,
+    });
+    const offers = {
+      offer: idOf(
+        await call(
+          'offer',
+          tokens.seller,
+          'POST',
+          '/v1/offers',
+          201,
+          offerBody('The Little Prince: annotated e-book edition', 'usd', 1299),
+        ),
+        'offer',
+      ),
+      'offer-cjk': idOf(
+        await call(
+          'offer cjk',
+          tokens.seller,
+          'POST',
+          '/v1/offers',
+          201,
+          offerBody('小王子（全新註解・雙語對照・電子書典藏版）——附作者手繪水彩插圖、譯者導讀與版本考證', 'jpy', 1800),
+        ),
+        'offer',
+      ),
+      'offer-delisted': idOf(
+        await call(
+          'offer delisted',
+          tokens.seller,
+          'POST',
+          '/v1/offers',
+          201,
+          offerBody('The Little Prince: first printing facsimile', 'eur', 2450),
+        ),
+        'offer',
+      ),
+    };
+    await call('delist', tokens.seller, 'POST', `/v1/offers/${offers['offer-delisted']}:delist`, 200);
+
+    const order = (offerId: string) => call('order', tokens.buyer, 'POST', '/v1/orders', 201, { offerId });
+    const pending = idOf(await order(offers.offer), 'order');
+    const toPay = idOf(await order(offers.offer), 'order');
+    const sessionOf = async (orderId: string) => {
+      const row = await database.query(`SELECT checkout_session_id FROM commerce.purchase_order WHERE order_id = $1`, [
+        orderId,
+      ]);
+      const session = row.rows[0]?.checkout_session_id;
+      if (typeof session !== 'string') throw new Error(`Order ${orderId} has no checkout session.`);
+      return session;
+    };
+    const session = await sessionOf(toPay);
+    stripeFixture.pay(session);
+    await createCommerceCommands({ pool: database, access }).applyCheckoutSnapshot(
+      await stripe.readCheckout(session),
+      Bun.randomUUIDv7(),
+    );
+    stripeFixture.nextCreateFault = 'rejected';
+    const failed = idOf(await order(offers.offer), 'order');
+
+    const recordedCommerce = new Map<string, JsonObject>();
+    for (const [name, id] of Object.entries(offers))
+      recordedCommerce.set(name, { ...(await call(name, null, 'GET', `/v1/offers/${id}`, 200)), status: 200 });
+    for (const [name, id] of [
+      ['order-paid', toPay],
+      ['order-pending', pending],
+      ['order-failed', failed],
+    ] as const)
+      recordedCommerce.set(name, { ...(await call(name, tokens.buyer, 'GET', `/v1/orders/${id}`, 200)), status: 200 });
+    const settled = (name: string) => objectBody(recordedCommerce.get(name)?.order, name).settlement;
+    if (
+      settled('order-paid') !== 'paid' ||
+      settled('order-pending') !== 'pending' ||
+      settled('order-failed') !== 'failed'
+    )
+      throw new Error(`The orders did not reach their settlements: ${JSON.stringify([...recordedCommerce])}`);
+    return recordedCommerce;
+  } finally {
+    stripeFixture.stop();
+  }
+}
+
 async function main(): Promise<void> {
   const kernelBase = '../../../services/kernel';
   const { startPostgresContainer } = await import(`${kernelBase}/scripts/check.ts`);
@@ -748,10 +1044,7 @@ async function main(): Promise<void> {
   ];
   if (!pool) throw new Error('Database pool is not open.');
   const database = pool;
-  const { newId, partitionOf } = await import(`${kernelBase}/src/route/route.ts`);
-  const { runCommand } = await import(`${kernelBase}/src/command/command.ts`);
-  const { GLOBAL_CONTEXT } = await import(`${kernelBase}/src/semantic/definitions.ts`);
-  const { applyBoardCandidate } = await import(`${kernelBase}/src/content/board-projection.ts`);
+  const { newId } = await import(`${kernelBase}/src/route/route.ts`);
   const { validateContentDocument } = await import(`${kernelBase}/src/content/document.ts`);
   const documents = [
     blocks([
@@ -783,72 +1076,15 @@ async function main(): Promise<void> {
      VALUES ($1,$2,$3,$4,'published',1,$2)`,
     [boardRoute, boardId, subjectId, boardTitle],
   );
-  const threadId = newId(threadRoute);
-  const posts = postTimes.map(() => ({ post: newId(threadRoute), revision: newId(threadRoute) }));
-  const opening = posts[0];
-  if (!opening) throw new Error('The recording thread needs an opening post.');
-  await runCommand(
-    database,
-    { partition: partitionOf(threadRoute) },
-    async (tx: { query: (sql: string, values: readonly unknown[]) => Promise<unknown> }) => {
-      await tx.query(
-        `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
-       VALUES ($1,$2,$3,$4,$5,'published',1,$2,$6,$7)`,
-        [threadRoute, threadId, accountId, boardId, threadTitle, opening.post, threadAt],
-      );
-      for (const [index, post] of posts.entries()) {
-        const document = documents[index];
-        const at = postTimes[index];
-        if (!document || !at) throw new Error(`Recording post ${index} is missing its document.`);
-        await tx.query(
-          `INSERT INTO content.post(route,thread_id,post_id,reply_to_post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'published',1,$3,$7)`,
-          [
-            threadRoute,
-            threadId,
-            post.post,
-            index === posts.length - 1 ? opening.post : null,
-            accountId,
-            post.revision,
-            at,
-          ],
-        );
-        await tx.query(
-          `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-         VALUES ($1,$2,$3,$4,$5,sha256($5),$6,'MIT','{}'::uuid[],$7,'available',$4)`,
-          [
-            threadRoute,
-            threadId,
-            post.post,
-            post.revision,
-            Buffer.from(document.canonicalBytes),
-            document.searchText,
-            boardId,
-          ],
-        );
-      }
-      return {
-        value: null,
-        events: [
-          {
-            type: 'com.rezics.content.thread.created.v1',
-            subject: threadId,
-            data: {
-              threadId,
-              itemId: opening.post,
-              revisionId: opening.revision,
-              actorId: accountId,
-              placeId: GLOBAL_CONTEXT,
-              kind: 'discussion',
-              subjectIds: documents[0]!.subjectIds,
-              activityAt: threadAt,
-            },
-          },
-        ],
-      };
-    },
-  );
-  await applyBoardCandidate(database, { id: threadId, boardId, createdAt: threadAt, epoch: 1, position: 1n });
+  const { threadId, openingPostId } = await seedThread(database, {
+    route: threadRoute,
+    accountId,
+    boardId,
+    title: threadTitle,
+    at: threadAt,
+    times: postTimes,
+    documents,
+  });
 
   const searchUrl = `http://127.0.0.1:${publishedPort(searchContainer, '9200/tcp')}`;
   await waitForSearch(searchUrl, searchContainer);
@@ -901,7 +1137,7 @@ async function main(): Promise<void> {
   await expectStatus('missing-subject', '/v1/subjects/00000000-0000-4000-8000-000000000000', 404);
   const missingSubjectId = '00000000-0000-4000-8000-000000000000';
   const savePost = async (name: string, payload: unknown) => {
-    const response = await retryOverloaded(async () =>
+    const response = await retryOverloaded(() =>
       pageKernel.handle(
         new Request('http://kernel.test/v1/pages:read', {
           method: 'POST',
@@ -947,6 +1183,37 @@ async function main(): Promise<void> {
   await expectStatus('thread', `/v1/threads/${threadId}`, 200);
   await expectStatus('thread-posts', `/v1/threads/${threadId}/posts`, 200);
 
+  // A thread the recording account wrote and may edit; the story visitor stands in for the recording account.
+  const ownedDocuments = [
+    blocks([
+      { type: 'heading', attrs: { id: 'watering-plan', level: 2 }, content: [text('Watering plan')] },
+      paragraph('watering-intro', [
+        text('Pull the baobab seedlings '),
+        text('every morning', [{ type: 'bold' }]),
+        text(', before breakfast, while they are still small enough to tell from the rosebushes.'),
+      ]),
+    ]),
+    blocks([
+      paragraph('screen-question', [
+        text('Does anyone know how the rose copes with wind? I still need to build a screen.'),
+      ]),
+    ]),
+  ].map((input) => validateContentDocument(input));
+  const owned = await seedThread(database, {
+    route: ownedThreadRoute,
+    accountId,
+    boardId,
+    title: ownedThreadTitle,
+    at: threadAt,
+    times: postTimes.slice(0, 2),
+    documents: ownedDocuments,
+  });
+  await expectStatus('thread-owned', `/v1/threads/${owned.threadId}`, 200);
+  await expectStatus('thread-owned-posts', `/v1/threads/${owned.threadId}/posts`, 200);
+  const ownedPosts = recorded.get('thread-owned-posts')?.posts;
+  if (!Array.isArray(ownedPosts) || ownedPosts.length !== 2)
+    throw new Error(`The owned thread should hold two posts: ${JSON.stringify(ownedPosts)}`);
+
   const threadPage = recorded.get('board-threads');
   const postPage = recorded.get('thread-posts');
   const threads = threadPage?.threads;
@@ -965,7 +1232,7 @@ async function main(): Promise<void> {
     'The rose was unique',
   ])
     if (!serializedPosts.includes(snippet)) throw new Error(`Post page is missing ${snippet}.`);
-  const reply = pagePosts.find((post) => objectBody(post, 'post').parentId === opening.post);
+  const reply = pagePosts.find((post) => objectBody(post, 'post').parentId === openingPostId);
   if (!reply) throw new Error('The third post should reply to the opening post.');
 
   const subject = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
@@ -1126,16 +1393,25 @@ async function main(): Promise<void> {
   for (const [name, body] of await recordLibrary({ origin, pool: database, accountId, subjectId }))
     recorded.set(name, body);
   await expectStatus('accounts', `/v1/accounts?ids=${accountId}`, 200);
+  for (const [name, body] of await recordCommerce({ pool: database, accountId, subjectId })) recorded.set(name, body);
 
   const output = join(app, 'src/kernel/recorded');
   await mkdir(output, { recursive: true });
+  // Names on the command line select the recordings to write; with none, every recording is written.
+  const only = Bun.argv.slice(2).filter((argument) => argument !== '--');
+  const unknown = only.filter((name) => !recorded.has(name));
+  if (unknown.length)
+    throw new Error(`Unknown recordings: ${unknown.join(', ')}. Recorded: ${[...recorded.keys()].join(', ')}`);
+  const written: string[] = [];
   for (const [name, body] of recorded) {
+    if (only.length && !only.includes(name)) continue;
     const file = join(output, `${name}.json`);
+    written.push(file);
     const previous = name !== 'accounts' && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
     await writeFile(file, JSON.stringify(stableRecording(body, previous)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
-  const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', output], {
+  const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', ...written], {
     cwd: root,
     stdout: 'pipe',
     stderr: 'pipe',
