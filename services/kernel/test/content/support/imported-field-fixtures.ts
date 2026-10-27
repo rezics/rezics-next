@@ -56,6 +56,7 @@ if (process.argv.includes('--imported-field-native-worker')) {
         !message.includes(marker)
       )
         return;
+      const capture = activeCapture;
       const activeQuery = (
         client as PoolClient & { _getActiveQuery?: () => { text?: string; values?: unknown[] } | null }
       )._getActiveQuery?.();
@@ -70,9 +71,9 @@ if (process.argv.includes('--imported-field-native-worker')) {
           typeof entry === 'object' &&
           'Query Text' in entry &&
           typeof entry['Query Text'] === 'string' &&
-          activeCapture.statements.includes(entry['Query Text']),
+          capture.statements.includes(entry['Query Text']),
       );
-      if (matchesCapturedStatement) activeCapture.plans.push(plan);
+      if (matchesCapturedStatement) capture.plans.push(plan);
     });
     for (const statement of [
       "LOAD 'auto_explain'",

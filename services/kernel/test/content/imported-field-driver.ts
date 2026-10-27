@@ -1433,7 +1433,8 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         return { status: result.status, body: result.body };
       },
       async checkGrowth(input) {
-        const scales = input.scales;
+        const scales: number[] = [...input.scales];
+        const changedRowCounts: number[] = [...input.changedRows];
         if (scales.join(',') !== '32,256,2048') throw new Error('Imported-field growth scales changed');
         const document = fromPlainText(
           'Full source summary: first paragraph.\nSecond paragraph, including the ending.',
@@ -1467,6 +1468,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         const transformed = await transformImage(sources!.validBytes);
         const webp320 = transformed.variants.find((variant) => variant.format === 'webp' && variant.width === 320);
         if (!webp320) throw new Error('The shared Sharp pipeline produced no 320px WebP growth variant');
+        const growthVariant = webp320;
         const imageBytes = transformed.variants.reduce((total, variant) => total + variant.bytes.byteLength, 0);
         if (imageBytes <= 0) throw new Error('The shared Sharp pipeline produced no growth image bytes');
 
@@ -1719,13 +1721,13 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                   {
                     route: rowRoute,
                     media_id: mediaId,
-                    format: webp320.format,
-                    width: webp320.width,
-                    height: webp320.height,
-                    media_type: webp320.mediaType,
-                    byte_count: webp320.byteCount,
-                    sha256: webp320.sha256,
-                    key: `m/${mediaId}/${webp320.format}-${webp320.width}`,
+                    format: growthVariant.format,
+                    width: growthVariant.width,
+                    height: growthVariant.height,
+                    media_type: growthVariant.mediaType,
+                    byte_count: growthVariant.byteCount,
+                    sha256: growthVariant.sha256,
+                    key: `m/${mediaId}/${growthVariant.format}-${growthVariant.width}`,
                     transaction_id: seedTransaction,
                   },
                 ],
@@ -1850,7 +1852,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         }[] = [];
         const growthExternalIdList = growthExternalIds(native.routeKey, growthSource, tuplePartition, 2_800);
         const sharedPopulation = population(growthSource, growthExternalIdList, true, 'shared');
-        for (const changedRows of input.changedRows) {
+        for (const changedRows of changedRowCounts) {
           for (const operation of growthOperations) {
             const source = growthSource;
             const externalIds = growthExternalIdList;
@@ -1864,7 +1866,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             };
             if (operation === 'reference') {
               const key = requestKey();
-              const referenceId = externalIds[input.changedRows.indexOf(changedRows)]!;
+              const referenceId = externalIds[changedRowCounts.indexOf(changedRows)]!;
               const reply = await this.refresh('importer', growthField(source, referenceId), key);
               if (reply.status < 200 || reply.status >= 300)
                 throw new Error(`Growth reference anchor failed (${reply.status}): ${JSON.stringify(reply.body)}`);
@@ -1884,10 +1886,10 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           const scaleIndex = scales.indexOf(scale);
           if (scaleIndex < 0) throw new Error(`Unexpected imported-field growth scale ${scale}`);
           if (group.operation === 'reference') {
-            const referenceIndex = input.changedRows.indexOf(group.changedRows);
+            const referenceIndex = changedRowCounts.indexOf(group.changedRows);
             const externalId = group.externalIds[referenceIndex];
             if (!externalId) throw new Error('Growth reference run lacks its exact seeded document');
-            return Array.from({ length: group.changedRows }, () => externalId);
+            return Array.from({ length: group.changedRows }, () => externalId!);
           }
           let start = 2;
           for (const prior of groups) {
@@ -2287,8 +2289,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                     throw new Error(`Native DBOS growth jobs did not publish valid images: ${states.join(',')}`);
                   await waitForProjections();
                 }
-                if (group.operation !== 'job')
-                  measuredCosts.set(`${group.groupIndex}:${scale}:${measuredRepetition}`, measured.cost);
+                measuredCosts.set(`${group.groupIndex}:${scale}:${measuredRepetition}`, measured.cost);
               }
             },
             operation: (_database, scale, repetition) => perform(groups[0]!, scale, repetition),
