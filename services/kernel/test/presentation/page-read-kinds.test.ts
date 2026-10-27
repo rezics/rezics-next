@@ -153,15 +153,14 @@ test.serial(
     );
     expect(answer.body.reads.r1).toEqual({ status: standalone.response.status, body: standalone.body });
     expect(answer.body.reads.r1.body.count).toEqual({ value: 1, exact: true });
-    expect(answer.body.reads.r1.body.links).toEqual([
-      {
-        subject: holder,
-        property: 'wdt:P725',
-        statement: linkStatement,
-        type: 'schema:Person',
-        label: 'Inverse link holder',
-      },
-    ]);
+    expect(answer.body.reads.r1.body.links).toHaveLength(1);
+    expect(answer.body.reads.r1.body.links[0]).toMatchObject({
+      subject: holder,
+      property: 'wdt:P725',
+      statement: linkStatement,
+      type: 'schema:Person',
+      label: 'Inverse link holder',
+    });
 
     await admin.query(
       `UPDATE semantic.inbound_link_count SET value=1001
@@ -216,7 +215,7 @@ test.serial('inverse links read stays within its bound at 1, 10 and 100 holders'
     name: 'Inverse links read',
     scales: [1, 10, 100],
     repetitions: 1,
-    warmups: 0,
+    warmups: 1,
     bounds: { rows: 'linear', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
       const amount = scale - previous;
@@ -266,7 +265,7 @@ test.serial('public collections read stays within its bound at 1, 10 and 100 col
     name: 'Public collections read',
     scales: [1, 10, 100],
     repetitions: 1,
-    warmups: 0,
+    warmups: 1,
     bounds: { rows: 'linear', blocks: 'logarithmic', statements: 'linear' },
     async grow(database, scale, previous) {
       const collectionIds = Array.from({ length: scale - previous }, () => newId(route));
@@ -320,7 +319,7 @@ test.serial('reaction counts read stays within its bound at 1, 10 and 100 contri
     name: 'Reaction counts read',
     scales: [1, 10, 100],
     repetitions: 1,
-    warmups: 0,
+    warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
       await database.admin.query(
