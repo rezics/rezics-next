@@ -1,4 +1,5 @@
 import type { FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
+import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
@@ -49,84 +50,6 @@ function holds(subject: IndexedSubject, clause: FactClause): boolean {
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
-function anyMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
-  if (values.includes(true)) return true;
-  return values.includes('not_proven') ? 'not_proven' : false;
-}
-
-function allMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
-  if (values.includes(false)) return false;
-  return values.includes('not_proven') ? 'not_proven' : true;
-}
-
-function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): FilterQualifier[] {
-  const clauses = new Map<string, FilterQualifier>();
-  for (const { property, in: values } of qualifiers) {
-    const clause = { property, in: sortedValues(values) };
-    clauses.set(JSON.stringify(clause), clause);
-  }
-  return [...clauses.keys()].sort().map((key) => clauses.get(key)!);
-}
-
-/** Semantic keys let named index clauses prioritize the same leaves in the complete filter. */
-function clauseKey(clause: FactClause): string {
-  if (clause.facet === 'type') return JSON.stringify(['type', sortedValues(clause.values)]);
-  return JSON.stringify([
-    'statement',
-    clause.property,
-    'values' in clause
-      ? ['values', sortedValues(clause.values)]
-      : ['range', clause.range.gte, clause.range.lte, clause.range.unit],
-    normalizedQualifiers(clause.qualifiers),
-  ]);
-}
-
-function filterPlan(filter: FilterDocument) {
-  const leaves: FactClause[] = [];
-  const indices = new Map<string, number>();
-  const positive = new Set<number>();
-  type Evaluate = (values: readonly RelationFacetMatch[]) => RelationFacetMatch;
-  function visit(node: FilterDocument, negated = false): Evaluate {
-    if ('and' in node) {
-      const children = node.and.map((child) => visit(child, negated));
-      return (values) => allMatch(children.map((child) => child(values)));
-    }
-    if ('or' in node) {
-      const children = node.or.map((child) => visit(child, negated));
-      return (values) => anyMatch(children.map((child) => child(values)));
-    }
-    if ('not' in node) {
-      const child = visit(node.not, !negated);
-      return (values) => {
-        const result = child(values);
-        return result === 'not_proven' ? result : !result;
-      };
-    }
-    if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
-    const clause: FactClause =
-      'type' in node
-        ? { facet: 'type', values: node.type.in }
-        : {
-            facet: 'statement',
-            property: node.statement.property,
-            ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
-            ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
-          };
-    const key = clauseKey(clause);
-    let index = indices.get(key);
-    if (index === undefined) {
-      index = leaves.length;
-      indices.set(key, index);
-      leaves.push(clause);
-    }
-    if (!negated) positive.add(index);
-    const leaf = index;
-    return (values) => values[leaf]!;
-  }
-  const evaluate = visit(filter);
-  return { leaves, indices, positive, evaluate };
-}
-
 /** Recheck candidates against current anchor snapshots; any failed read rejects the whole page. */
 export async function checkHits(
   source: SubjectSource,
@@ -138,13 +61,13 @@ export async function checkHits(
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     throw new RangeError('Concurrency must be a positive safe integer');
 
-  const plan = options?.filter === undefined ? undefined : filterPlan(options.filter);
+  const plan = options?.filter === undefined ? undefined : compileCurrentFilter(options.filter);
   const relationProperties = new Set(options?.relationProperties);
   let relationRejected = false;
   const hints = new Map<string, number>();
   if (plan) {
     for (const [name, clause] of clauses) {
-      const index = plan.indices.get(clauseKey(clause));
+      const index = plan.indices.get(currentClauseKey(clause));
       if (index !== undefined) hints.set(name, index);
     }
   }
@@ -227,7 +150,7 @@ export async function checkHits(
           }
           evaluations.set(subject.id, () => {
             const resolved = values.map((value) =>
-              typeof value === 'boolean' ? value : anyMatch(value.map((point) => point.result!)),
+              typeof value === 'boolean' ? value : anyCurrentMatch(value.map((point) => point.result!)),
             );
             // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
             const passed = plan.evaluate(resolved) === true;
