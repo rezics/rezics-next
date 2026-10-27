@@ -771,7 +771,7 @@ test(
     try {
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('50');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('[data-progress]').filter({ hasText: '50 of 200 (25%)' }).waitFor();
+      await page.locator('main').getByText('p. 50/200', { exact: true }).waitFor();
       expect(sessions.get(current)).toMatchObject({ amount: '50', state: 'active', revision: 2, completedAt: null });
       const saved = writesFor(`/${current}:record`);
       expect(saved).toHaveLength(1);
@@ -792,8 +792,8 @@ test(
       expect(await alert.innerText()).toContain('old revision');
       expect(await alert.innerText()).toContain('still here');
       expect(await page.getByRole('textbox', { name: 'Amount', exact: true }).inputValue()).toBe('80');
-      expect(await page.locator('[data-progress]').innerText()).toContain('50 of 200 (25%)');
-      expect(await page.locator('[data-progress]').innerText()).not.toContain('80 of 200');
+      expect(await page.locator('main').innerText()).toContain('p. 50/200');
+      expect(await page.locator('main').innerText()).not.toContain('p. 80/200');
       expect(sessions.get(current)).toMatchObject({ amount: '50', revision: seen + 1, state: 'active' });
       const stale = writesFor(`/${current}:record`);
       expect(stale).toHaveLength(2);
@@ -866,7 +866,8 @@ test(
       const history = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await history.innerText()).toMatch(/\b4\b/);
       expect(writesFor(':complete')).toHaveLength(0);
-      await page.getByRole('button', { name: 'Complete', exact: true }).click();
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Complete', exact: true }).click();
       expect(writesFor(':complete')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
       await page.locator('main [data-progress-state="completed"]').waitFor();
@@ -896,7 +897,8 @@ test(
       const abandonedHistory = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await abandonedHistory.innerText()).toMatch(/\b9\b/);
       expect(writesFor(':abandon')).toHaveLength(0);
-      await page.getByRole('button', { name: 'Abandon', exact: true }).click();
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Abandon', exact: true }).click();
       expect(writesFor(':abandon')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm abandon', exact: true }).click();
       await page.locator('main [data-progress-state="abandoned"]').waitFor();
@@ -922,7 +924,7 @@ test(
     try {
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('120');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('[data-progress]').filter({ hasText: '120 of 120 (100%)' }).waitFor();
+      await page.locator('main').getByText('min 120/120', { exact: true }).waitFor();
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
       expect(await page.locator('main [data-progress-state]').innerText()).toBe('Active');
       expect(sessions.get(current)).toMatchObject({ amount: '120', state: 'active', completedAt: null, revision: 2 });

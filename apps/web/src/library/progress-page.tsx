@@ -1,6 +1,8 @@
+import { ProgressRow } from '@rezics/ui/progress-row';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
@@ -34,6 +36,31 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
   if (state === 'completed') return m.library_progress_state_completed();
   if (state === 'abandoned') return m.library_progress_state_abandoned();
   return m.library_progress_state_active();
+}
+
+export function progressValue(session: ProgressIndex['sessions'][number]): { value: number | null; label: string } {
+  const amount =
+    session.mode === 'completed_units'
+      ? String(session.completedUnitCount)
+      : session.mode === 'cursor_position'
+        ? session.position
+        : session.amount;
+  if (amount == null || amount === '') return { value: null, label: '' };
+  if (session.unit === 'percent') return { value: Number(amount) / 100, label: `${amount}%` };
+  if (!session.total || Number(session.total) <= 0 || !Number.isFinite(Number(amount)))
+    return { value: null, label: amount };
+  const prefixes: Record<ProgressUnit, string> = {
+    page: 'p.',
+    episode: 'Ep',
+    chapter: 'Ch',
+    volume: 'Vol',
+    minute: 'min',
+    percent: '%',
+  };
+  return {
+    value: Number(amount) / Number(session.total),
+    label: `${getLocale() === 'en' ? prefixes[session.unit] : unitLabel(session.unit)} ${amount}/${session.total}`,
+  };
 }
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
@@ -152,6 +179,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                   <p>{stateLabel(session.state)}</p>
                   <p>{modeLabel(session.mode)}</p>
                   <p>{unitLabel(session.unit)}</p>
+                  <ProgressRow {...progressValue(session)} />
                   <p>
                     <Link
                       to="/library/progress/$id"

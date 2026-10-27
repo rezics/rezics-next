@@ -1,3 +1,4 @@
+import { RelativeTime } from './logs-progress';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -20,7 +21,7 @@ function SnapshotTime({ label, value }: { label: string; value: string }) {
   return (
     <p>
       <span className="font-medium">{label}: </span>
-      <time dateTime={value}>{value}</time>
+      <RelativeTime value={value} />
     </p>
   );
 }

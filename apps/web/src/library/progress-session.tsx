@@ -1,3 +1,12 @@
+import { ProgressRow } from '@rezics/ui/progress-row';
+import { Button } from '@rezics/ui/shadcn/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@rezics/ui/shadcn/dropdown-menu';
+import { EllipsisIcon } from 'lucide-react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -8,12 +17,12 @@ import {
   type ProgressChange,
   type ProgressMode,
   type ProgressSessionPage,
-  type ProgressSessionView,
   type ProgressState,
   type ProgressUnit,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
 import { rowRatio, SubjectIdentity } from './subject-row';
+import { progressValue } from './progress-page';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -38,34 +47,6 @@ function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
   if (state === 'abandoned') return m.library_progress_state_abandoned();
   return m.library_progress_state_active();
-}
-
-function percentOf(amount: string, total: string): string {
-  const value = Number(amount);
-  const whole = Number(total);
-  if (!Number.isFinite(value) || !Number.isFinite(whole) || whole === 0) return '0';
-  return String(Math.round((value / whole) * 100 * 100) / 100);
-}
-
-function progressText(session: ProgressSessionView): string | null {
-  if (session.mode === 'scalar_amount' && session.amount && session.total) {
-    return m.library_progress_ratio({
-      amount: session.amount,
-      total: session.total,
-      percent: percentOf(session.amount, session.total),
-    });
-  }
-  if (session.mode === 'scalar_amount' && session.unit === 'percent' && session.amount) {
-    return m.library_progress_percent({ percent: session.amount });
-  }
-  if (session.mode === 'completed_units' && session.total) {
-    return m.library_progress_ratio({
-      amount: String(session.completedUnitCount),
-      total: session.total,
-      percent: percentOf(String(session.completedUnitCount), session.total),
-    });
-  }
-  return null;
 }
 
 function changeText(change: ProgressChange): string {
@@ -273,7 +254,6 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
     }
   }
 
-  const progress = progressText(session);
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
 
   return (
@@ -292,10 +272,29 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
         <p>{unitLabel(session.unit)}</p>
         {session.total ? <p>{session.total}</p> : null}
         <p data-progress-state={session.state}>{stateLabel(session.state)}</p>
-        {progress ? <p data-progress>{progress}</p> : null}
-        {session.mode === 'cursor_position' && (session.locator || session.position) ? (
-          <p>{[session.locator, session.position].filter(Boolean).join(' ')}</p>
-        ) : null}
+        <ProgressRow
+          {...progressValue(session)}
+          menu={
+            session.state === 'active' ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
+                >
+                  <EllipsisIcon aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setConfirming('complete')}>
+                    {m.library_progress_complete()}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConfirming('abandon')}>
+                    {m.library_progress_abandon()}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : undefined
+          }
+        />
+        {session.mode === 'cursor_position' && session.locator ? <p>{session.locator}</p> : null}
       </header>
       <input type="hidden" name="idempotencyKey" value={key} />
       {alert ? (
@@ -369,12 +368,6 @@ function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn
       ) : null}
       {session.state === 'active' ? (
         <div className="flex flex-wrap gap-3">
-          <button type="button" className={buttonClass} onClick={() => setConfirming('complete')}>
-            {m.library_progress_complete()}
-          </button>
-          <button type="button" className={buttonClass} onClick={() => setConfirming('abandon')}>
-            {m.library_progress_abandon()}
-          </button>
           {confirming === 'complete' ? (
             <>
               <button type="button" className={buttonClass} onClick={() => void onFinish('complete')}>
