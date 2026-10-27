@@ -166,6 +166,13 @@ export interface Counters {
   partitions: readonly string[];
   /** Complete raw capture from growth.ts; never SQLite returned-row counters. */
   postgres: import('../services/kernel/test/support/growth-cost').Capture;
+  /**
+   * Unmeasured index proof: the generic plan of every distinct PostgreSQL text in this capture, client statements and
+   * nested auto_explain query texts alike, from `BEGIN; SET LOCAL enable_seqscan = off; EXPLAIN (GENERIC_PLAN, FORMAT
+   * JSON) <text>; ROLLBACK` on the fixture's admin connection after the measured operation. Measured sessions are never
+   * pinned.
+   */
+  indexPlans: readonly { sql: string; plan: unknown }[];
   sqlite: {
     /** Actual ANALYZE executed after seeding at this scale, before measuring. */
     analyzed: boolean;

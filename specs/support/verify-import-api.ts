@@ -24,7 +24,7 @@ export function assertIndexedSqlite(
   }
   if (statement.classification === 'transaction-control') {
     assert(
-      /^\s*(?:BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?|(?:COMMIT|END)(?:\s+TRANSACTION)?|ROLLBACK(?:\s+TRANSACTION)?(?:\s+TO\s+(?:SAVEPOINT\s+)?\S+)?|SAVEPOINT\s+\S+|RELEASE\s+(?:SAVEPOINT\s+)?\S+)\s*;?\s*$/i.test(
+      /^\s*(?:BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?|(?:COMMIT|END)(?:\s+TRANSACTION)?|ROLLBACK(?:\s+TRANSACTION)?(?:\s+TO\s+(?:SAVEPOINT\s+)?(?:"(?:[^"]|"")+"|\w+))?|SAVEPOINT\s+(?:"(?:[^"]|"")+"|\w+)|RELEASE\s+(?:SAVEPOINT\s+)?(?:"(?:[^"]|"")+"|\w+))\s*;?\s*$/i.test(
         statement.sql,
       ),
     );
