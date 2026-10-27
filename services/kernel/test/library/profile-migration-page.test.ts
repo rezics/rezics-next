@@ -27,7 +27,7 @@ async function page(kind: 'entry' | 'session' | 'copy', after: string | null, li
     },
     async (tx) => ({
       value: await pinLegacyFactsPage(tx, { accountId: id(1), kind, releaseDigest, after, limit }),
-      events: [],
+      events: [{ type: 'com.rezics.test.migration.v1', subject: id(1), data: { kind } }],
     }),
   );
 }
