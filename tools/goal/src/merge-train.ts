@@ -45,7 +45,10 @@ export async function runIntegrationChecks(
     output += result.output;
     passed &&= result.passed;
     timedOut ||= result.timedOut;
-    appendFileSync(logPath, `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`);
+    appendFileSync(
+      logPath,
+      `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`,
+    );
   };
   // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors. Installing
   // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
@@ -583,18 +586,27 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
-        const configuredChecks = typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const configuredChecks =
+          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
         if (integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
-          const commands = integrationChecks.map((check) => check.command);
+          // The workspace typecheck covers only the workspaces this change can affect (scripts/typecheck.ts reads
+          // TYPECHECK_CHANGED); a scoped result is a baseline only for the same change, so the key names it.
+          const changed = result.changedFiles.join('\n');
+          const commands = integrationChecks.map((check) =>
+            check.command.join(' ').includes('scripts/typecheck.ts')
+              ? ['env', `TYPECHECK_CHANGED=${changed}`, ...check.command]
+              : check.command,
+          );
           const checked = await runIntegrationChecks(commands, trainTree, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
-          const key = `integration-check:${JSON.stringify(integrationChecks)}`;
+          const scoped = commands.some((command) => command[0] === 'env');
+          const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed).toString(16)}` : ''}`;
           // An integrated candidate is dev's next head, so its result is that head's baseline.
           o.queue.saveBaseline(candidate, key, checked);
           if (!checked.passed) {

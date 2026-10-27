@@ -297,3 +297,26 @@ test('read-only integration checks run at once, and a check that writes the tree
     expect(text.indexOf('second')).toBeLessThan(text.indexOf('generate step'));
   } finally { remove(dir, { recursive: true, force: true }); }
 });
+
+test("the workspace typecheck check receives the branch's changed files; other checks do not", async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const seen = join(h.root, '.temp', 'typecheck-changed.txt');
+    const other = join(h.root, '.temp', 'other-changed.txt');
+    integrationChecks(h, [
+      { paths: ['**'], command: ['sh', '-c', `printf '%s' "$TYPECHECK_CHANGED" > ${seen} # scripts/typecheck.ts`] },
+      { paths: ['**'], command: ['sh', '-c', `printf '%s' "\${TYPECHECK_CHANGED-unset}" > ${other}`] },
+    ]);
+    const task = h.dispatch('feature');
+    await h.start(task);
+
+    await h.train(undefined, false);
+
+    expect(h.outcomes[0]?.passed).toBe(true);
+    expect(readFileSync(seen, 'utf8').split('\n')).toContain('feature');
+    expect(readFileSync(other, 'utf8')).toBe('unset');
+  } finally {
+    h.dispose();
+  }
+});
