@@ -63,3 +63,17 @@ test('delivery inside a shared write transaction signals only after commit', asy
     expect(existsSync(inbox.signalPath('manager'))).toBe(true); expect(inbox.pending('manager')).toHaveLength(1);
   } finally { db.close(); t.close(); }
 });
+
+test('wait with a settle window returns a burst of events at once, after the window', async () => {
+  const s = setup();
+  try {
+    const waiting = s.inbox.wait('manager', undefined, 150);
+    const before = Date.now();
+    s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'First' });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'Second' });
+    const events = await waiting;
+    expect(Date.now() - before).toBeGreaterThanOrEqual(140);
+    expect(events.map(event => event.event.summary)).toEqual(['First', 'Second']);
+  } finally { s.close(); }
+});

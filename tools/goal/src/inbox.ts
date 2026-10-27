@@ -64,12 +64,24 @@ export class SqliteManagerInbox implements ManagerInbox {
   notified(id: number): void { this.db.query('UPDATE manager_inbox SET notified = 1 WHERE id = ?').run(id); }
 
   /** Subscribe before checking the database so delivery in the setup window cannot be lost. */
-  wait(manager: string, signal?: AbortSignal): Promise<InboxEntry[]> {
+  /**
+   * Resolve with the pending events once there are any. With `settleMs`, keep collecting for that long after the first
+   * event, so a burst of events costs the reader one turn instead of one per event.
+   */
+  wait(manager: string, signal?: AbortSignal, settleMs = 0): Promise<InboxEntry[]> {
     return new Promise((resolve, reject) => {
-      const close = () => { watcher.close(); signal?.removeEventListener('abort', abort); };
-      const check = () => {
-        try { if (this.pending(manager).length) { const events = this.read(manager); close(); resolve(events); } }
+      let settling: ReturnType<typeof setTimeout> | undefined;
+      const close = () => { watcher.close(); if (settling) clearTimeout(settling); signal?.removeEventListener('abort', abort); };
+      const finish = () => {
+        try { const events = this.read(manager); close(); resolve(events); }
         catch (error) { close(); reject(error); }
+      };
+      const check = () => {
+        try {
+          if (!this.pending(manager).length || settling) return;
+          if (settleMs > 0) settling = setTimeout(finish, settleMs);
+          else finish();
+        } catch (error) { close(); reject(error); }
       };
       const abort = () => { close(); reject(signal?.reason ?? new Error('Inbox wait aborted')); };
       const watcher = watch(this.signalDirectory, check);
