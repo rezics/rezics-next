@@ -13,7 +13,7 @@ import {
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
-import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from './lease.ts';
+import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
 import { choosePoolWithFallback } from './allowance.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
@@ -288,6 +288,8 @@ export class WorkerTasks {
     // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
+      // Another process may have started it while this one waited for capacity.
+      if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
       return await this.startReleasedTask(taskId);
     } finally {
       lease.release();
