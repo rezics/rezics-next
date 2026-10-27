@@ -13,6 +13,13 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { REACTION_KINDS } from '../content/events.ts';
+import {
+  SitemapBoardItemSchema,
+  SitemapBoardPageSchema,
+  SitemapQuerySchema,
+  sitemapPageSchema,
+} from '../content/schemas.ts';
+import { InvalidCommunitySitemapCursorError, listSitemapRealms, listSitemapSpaces } from './sitemap.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -210,6 +217,11 @@ const banResponse = t.Object(
   closed,
 );
 const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
+const sitemapQuery = strict(SitemapQuerySchema);
+const sitemapRealmPage = strict(SitemapBoardPageSchema);
+const sitemapSpacePage = strict(
+  sitemapPageSchema(t.Object({ ...SitemapBoardItemSchema.properties, address: t.String() }, closed)),
+);
 const banQuery = t.Object(
   { limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), cursor: t.Optional(t.String()) },
   closed,
@@ -259,6 +271,10 @@ const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const params = t.Object({ spaceId: t.String() }, closed);
 const addressParams = t.Object({ address: t.String() }, closed);
 const realmParams = t.Object({ realmId: t.String() }, closed);
+const sitemapFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
+const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
+  `Keyset feed of the public ${kind} for server-to-server sitemaps, evaluated as an anonymous reader. Each page ` +
+  `examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.`;
 
 export type CommunityRouteDependencies = {
   pool: Pool;
@@ -283,6 +299,12 @@ function communityProblem(error: unknown): never {
     throw new ProblemError('precondition_failed');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof RealmMembershipConflictError) throw new ProblemError('idempotency_conflict');
+  throw error;
+}
+
+function communitySitemapProblem(error: unknown): never {
+  if (error instanceof InvalidCommunitySitemapCursorError) throw new ProblemError('invalid_cursor');
+  if (error instanceof RangeError) throw new ProblemError('invalid_request');
   throw error;
 }
 
@@ -373,8 +395,66 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     client: await dependencies.workClient(),
   });
   const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
+  const sitemapDependencies = () => ({
+    pool: dependencies.pool,
+    access: dependencies.access(),
+    tokens: dependencies.tokens,
+    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+  });
 
   return app
+    .get(
+      '/v1/sitemap/realms',
+      {
+        query: SitemapQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: { 200: sitemapRealmPage, ...sitemapFailures },
+        detail: {
+          operationId: 'sitemap_realms.list',
+          description: SITEMAP_DESCRIPTION('Realms'),
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ query, admission, job }) => {
+        try {
+          return await admission.run('normal', job, () =>
+            listSitemapRealms(sitemapDependencies(), job.deadline, query),
+          );
+        } catch (error) {
+          communitySitemapProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/sitemap/spaces',
+      {
+        query: SitemapQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: { 200: sitemapSpacePage, ...sitemapFailures },
+        detail: {
+          operationId: 'sitemap_spaces.list',
+          description: SITEMAP_DESCRIPTION('Spaces'),
+          'x-exposure': 'public',
+          'x-action': 'space:read',
+          security: readSecurity,
+        },
+      },
+      async ({ query, admission, job }) => {
+        try {
+          return await admission.run('normal', job, () =>
+            listSitemapSpaces(sitemapDependencies(), job.deadline, query),
+          );
+        } catch (error) {
+          communitySitemapProblem(error);
+        }
+      },
+    )
     .get(
       '/v1/me/realms',
       {

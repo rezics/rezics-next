@@ -102,7 +102,34 @@ current records ordered by account ID, with an opaque cursor bound to the Realm,
 viewer, limit and partition epoch. Denials stay on the Realm; content writes must check
 Realm participation directly, and public reads remain open.
 
+## Sitemap feeds
+
+`GET /v1/sitemap/realms` returns public Realms as `{ id, lastModified }`. `GET /v1/sitemap/spaces`
+returns anonymously readable Spaces with an address as `{ id, address, lastModified }`; it omits a
+Space whose Realm slot is occupied by a protected or inactive Realm. Both are public server-to-server
+feeds evaluated as an anonymous reader, even when a bearer is present. They use keyset cursors and
+may return fewer items than requested when candidates are skipped. Pages may contain up to 1,000
+items, an exception to the shared list maximum of 100. `lastModified` is the current head revision
+time; a Realm also uses the time of its newest board when that is later.
+
 ## Cost
+
+### Realm sitemap feed
+
+- Touches: At most `4 × limit` candidates ordered by `(route, realm_id)`. A public Realm adds its
+  exact head revision read and one newest-board seek through `board_realm_page`.
+- Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
+  `4L` and `L` respectively. The cursor seals its position so skipped Realm identities are not exposed.
+- Growth check: `test/community/growth-sitemap.test.ts`, "Realm sitemap page stays within its bound as listed items grow" and "Realm sitemap page stays within its bound as protected Realms grow".
+
+### Space sitemap feed
+
+- Touches: At most `4 × limit` candidates ordered by `(route, space_id)`. Each candidate uses the
+  anonymous `space:read` eligibility check. A listed Space adds its exact head revision read and
+  `realm_route_space_id_key` slot probe; a filled slot adds one Realm primary-key read.
+- Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
+  `4L` and `L` respectively. The cursor seals its position so skipped Space identities are not exposed.
+- Growth check: `test/community/growth-sitemap.test.ts`, "Space sitemap page stays within its bound as listed items grow" and "Space sitemap page stays within its bound as protected Realms grow".
 
 A is Access's bounded admission and permission evaluation; C is a partition-local `runCommand`
 transaction. Access grant initialization uses fixed role templates and point inserts. R denotes
