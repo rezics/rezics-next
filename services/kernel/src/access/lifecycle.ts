@@ -42,6 +42,7 @@ import holdsRead from './lifecycle-holds.sql';
 import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
+import organizationClose from './organization-close-create.sql';
 import fenceStatement from './lifecycle-fence.sql';
 import authBarrier from './auth-barriers-advance.sql';
 import openingRead from './auth-barriers-opening-read.sql';
@@ -70,6 +71,12 @@ import {
  * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
  * Coordination holds have NO expiry: only a durable workflow may resolve them.
  */
+export class OrganizationCloseBlockedError extends LifecycleDeniedError {
+  constructor(readonly blocker: { purpose: string; relatedAccountId: string }) {
+    super();
+    this.message = `Organization close blocked by ${blocker.purpose}: ${blocker.relatedAccountId}`;
+  }
+}
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
@@ -1585,15 +1592,38 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         subject?.kind === 'actor' && subject.state === 'active'
           ? subject.operatorAccountId
           : (replayOperator?.priorOperatorAccountId ?? null);
-      const authorization = operatorId
-        ? await authorize(context, 'account:manage', operatorId)
-        : await authorize(context, 'account:delete', input.accountId);
+      const organization =
+        subject?.kind === 'organization' &&
+        (
+          await withConnection(pool, (client) =>
+            ownersRead.run(client, {
+              route,
+              organization_id: input.accountId,
+              member_id: context.actor.accountId,
+              at: iso(config.clock ?? accessClock(access)),
+            }),
+          )
+        )?.owners !== 0;
+      const authorization =
+        operatorId || organization
+          ? await authorize(context, 'account:manage', operatorId ?? input.accountId)
+          : await authorize(context, 'account:delete', input.accountId);
       const allowed = authorization.check;
       return execute(
         {
           route,
           id: input.accountId,
           kind: 'account-tombstoned',
+          additionalEvents: () =>
+            subject?.kind === 'organization'
+              ? [
+                  {
+                    type: 'com.rezics.access.account-updated.v1',
+                    subject: input.accountId,
+                    data: { accountId: input.accountId },
+                  },
+                ]
+              : [],
           key: input.key,
           input: continuation
             ? {
@@ -1612,20 +1642,37 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           requireAllowed(await allowed(tx));
           requireAllowed(account.state === 'active');
           const holds = await holdsRead.run(tx, { route, account_id: input.accountId });
+          if (account.kind === 'organization' && holds?.held && holds.purpose && holds.relatedAccountId)
+            throw new OrganizationCloseBlockedError({
+              purpose: holds.purpose,
+              relatedAccountId: holds.relatedAccountId,
+            });
           requireAllowed(holds && !holds.held);
           if (account.kind === 'organization') {
             const owners = await ownersRead.run(tx, {
               route,
               organization_id: input.accountId,
-              member_id: input.accountId,
+              member_id: context.actor.accountId,
               at: authoritativeTimeValue(currentCommand(tx).time),
             });
-            requireAllowed(owners && owners.owners === 0);
+            // Existing zero-owner deletion remains available through account:delete.
+            requireAllowed(owners && (organization ? owners.target === 1 : owners.owners === 0));
           }
           const priorHandle = account.handle;
           const priorOperatorAccountId = account.operatorAccountId;
           const priorReservationId = account.operatorReservationId;
           const receipt = await fence(tx, account, true, transactionId);
+          if (account.kind === 'organization') {
+            await organizationClose.run(tx, {
+              route,
+              organization_id: input.accountId,
+              receipt_id: receipt.receiptId,
+              handle: priorHandle,
+              handle_key: continuation
+                ? `${continuation.commandKeyPrefix}:redirect-deleted-handle`
+                : `organization-close:${input.accountId}:handle`,
+            });
+          }
           if (continuation) {
             await insertDeletionContinuation(tx, {
               accountId: account.accountId,

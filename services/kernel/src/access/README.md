@@ -90,13 +90,33 @@ Who may delete an account (`account:delete`):
   authority is `account:manage` on the operator, read through the operator relation at command time. It is never
   copied into a standing grant on the automated account, so it follows the relation on transfer: the previous
   operator's managers lose it and the new operator's managers gain it. The delete approval reads the same relation.
-- Organizations are unchanged.
+- An organization is closed by a current owner who holds `account:manage` on it. Both management and the
+  owner membership are read at command time T. A manager without an owner membership and governance receive no
+  new deletion power. The existing zero-owner deletion through `account:delete` remains supported.
 
 The operator relation adds one anchored point read to deleting another account: O(log R), with no extra statement
 when the account deletes itself.
 
 An operator cannot be deleted while it operates accounts; the responsibility hold ends only when each operated
 account has transferred or been deleted and its responsibility released.
+
+An organization close atomically tombstones and fences its account at T, without first removing its owners.
+Every organization membership and owner-role grant stops conferring authority at that barrier, including retained
+history, operator openings and organization-role reads. Responsibility holds still block the command; refusal
+identifies the hold's purpose and related account. An organization operating automated accounts must first transfer
+or delete each account and release its responsibility.
+
+The tombstone transaction stores a durable cleanup checkpoint. The accounts work module consumes the committed
+tombstone event and runs separate workflows of at most 100 membership rows, ordered by member ID and validity range.
+Each page commits the removed rows, terminal reservation proofs and its cursor with an immutable receipt before
+releasing the corresponding inverse rows on their own actor anchors. Replay finishes the same receipt's releases;
+restart resumes the saved step. Final cleanup runs the existing deleted-handle redirect step under the same
+committed key as any Auth deletion continuation. Member accounts,
+their grants and their other memberships are preserved, including suspended or deleted members' accounts.
+Deleted organization public identities expose only `{ id, state, kind }`.
+
+Resources owned by the organization in other modules, including Realm roles and content, remain those modules'
+responsibility. They learn of deletion from `account-updated`; organization close changes no such resources.
 
 No organization exists in any deployment yet, so these creation defaults need no upgrade path.
 Organization creation writes two additional grant rows; request paths and their costs are unchanged.
@@ -419,6 +439,23 @@ its explicit branch only when requested and the authenticated scope permits it. 
 checks leave that branch disabled and read the same grant and denial keys as before.
 
 ## Cost
+
+### Close an organization
+
+- Touches: the organization's account, hold and saturated owner reads, the actor's exact owner membership and one
+  cleanup checkpoint, all anchored in the organization's partition. No member enumeration.
+- Bound: constant rows and statements, independent of member count; indexed probes use logarithmic buffers.
+- Growth check: `test/access/growth-organization-close.test.ts`, at `[256, 1024, 4096]` with a warm-up, growing both
+  this organization's members and unrelated organizations' members in `grow`.
+
+### Organization cleanup step
+
+- Touches: at most 100 membership rows after the saved key cursor and their exact reservation slots and inverse
+  rows. Inverse releases lock only each affected member's anchor and remove only this organization's reservation.
+- Bound: O(batch) rows and statements per step; O(members / batch) steps, with a final empty step when the count is
+  an exact multiple of 100. A step is independent of other organizations and completed history.
+- Growth check: `test/access/growth-organization-close.test.ts`, one fixed-batch step as membership grows at
+  `[256, 1024, 4096]`, with a warm-up.
 
 ### Page authorization
 

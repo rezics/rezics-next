@@ -889,6 +889,24 @@ CREATE TABLE access.operator_relation_slot (
 
 
 --
+-- Name: organization_close; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.organization_close (
+    route integer NOT NULL,
+    organization_id uuid NOT NULL,
+    receipt_id uuid NOT NULL,
+    handle text,
+    step integer DEFAULT 0 NOT NULL,
+    cursor_member uuid,
+    cursor_valid tstzrange,
+    complete boolean DEFAULT false NOT NULL,
+    handle_key text NOT NULL,
+    CONSTRAINT organization_close_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
+);
+
+
+--
 -- Name: organization_member; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -1294,6 +1312,14 @@ ALTER TABLE ONLY access.operator_relation_slot
 
 
 --
+-- Name: organization_close organization_close_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.organization_close
+    ADD CONSTRAINT organization_close_pkey PRIMARY KEY (route, organization_id);
+
+
+--
 -- Name: organization_member organization_member_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1442,6 +1468,13 @@ CREATE UNIQUE INDEX lifecycle_membership_live ON access.lifecycle_membership_slo
 --
 
 CREATE INDEX organization_member_change ON access.organization_member USING btree (route, organization_id, member_account_id, transaction_id);
+
+
+--
+-- Name: organization_member_cleanup; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_cleanup ON access.organization_member USING btree (route, organization_id, member_account_id, valid);
 
 
 --

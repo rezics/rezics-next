@@ -1,6 +1,17 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.access.organization-close.page.v1': Type.TObject<{
+        count: Type.TInteger;
+        members: Type.TArray<Type.TString>;
+        handle: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.organization-close.release.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.organization-close.completed.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly 'com.rezics.access.rating-counter.changed.v1': Type.TObject<{
         accountId: Type.TString;
         at: Type.TString;

@@ -1,3 +1,4 @@
+import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import type { Pool } from 'pg';
 import { type CommandAttempt } from '../command/command.ts';
@@ -8,6 +9,16 @@ import { type ContinuationBinding } from './committed-continuations.ts';
  * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
  * Coordination holds have NO expiry: only a durable workflow may resolve them.
  */
+export declare class OrganizationCloseBlockedError extends LifecycleDeniedError {
+    readonly blocker: {
+        purpose: string;
+        relatedAccountId: string;
+    };
+    constructor(blocker: {
+        purpose: string;
+        relatedAccountId: string;
+    });
+}
 export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
 export declare const LIFECYCLE_ACTIONS: ActionCatalogue;

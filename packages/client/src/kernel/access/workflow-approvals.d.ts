@@ -43,9 +43,11 @@ type TransferAcceptanceOperation = {
     sourceOperationKey: string;
     authorization: string;
 };
-type AccountOperation = Exclude<ContractAccountOperation, {
+type AccountOperation = (Exclude<ContractAccountOperation, {
     kind: 'transfer' | 'revoke';
-}> | RevokeOperation | TransferOperation | TransferAcceptanceOperation;
+}> | RevokeOperation | TransferOperation | TransferAcceptanceOperation) & {
+    operationKey?: string;
+};
 export type WorkflowApprovalRequest = {
     operationKey: string;
     operation: AccountOperation;

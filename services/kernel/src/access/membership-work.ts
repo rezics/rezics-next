@@ -1,3 +1,4 @@
+import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
@@ -206,6 +207,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
       registerAccounts(context, membershipWorkPorts(context, options, config));
       context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);
+      registerOrganizationCloseWork(context);
       await writeRateExpiryWorkModule.register(context);
     },
   };

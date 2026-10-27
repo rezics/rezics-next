@@ -64,6 +64,10 @@ const publicIdentity = t.Object(
   },
   closed,
 );
+const deletedIdentity = t.Object(
+  { id, kind: t.Union([t.Literal('actor'), t.Literal('organization')]), state: t.Literal('deleted') },
+  closed,
+);
 const coverSummary = t.Object(
   {
     media: id,
@@ -111,7 +115,10 @@ const publicAccountList = t.Unsafe<{
   next: null;
 }>(
   t.Object(
-    { accounts: t.Array(t.Union([publicProfile, publicHandleIdentity, publicIdentity])), next: t.Null() },
+    {
+      accounts: t.Array(t.Union([publicProfile, publicHandleIdentity, publicIdentity, deletedIdentity])),
+      next: t.Null(),
+    },
     closed,
   ),
 );

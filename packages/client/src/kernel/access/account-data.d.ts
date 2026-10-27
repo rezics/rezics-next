@@ -27,7 +27,17 @@ export type PublicAccount = {
     kind: string;
     state: 'deleted';
 };
-export type PublicIdentity = {
+export type DeletedPublicIdentity = {
+    id: string;
+    kind: 'actor' | 'organization';
+    state: 'deleted';
+    handle?: never;
+    displayName?: never;
+    automated?: never;
+    operatorId?: never;
+};
+export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
+export type PublicIdentityFields = {
     id: string;
     kind: 'actor' | 'organization';
     handle: string | null;
@@ -40,7 +50,7 @@ export type AccountLink = {
     label: string;
     url: string;
 };
-export type PublicAccountProfile = PublicIdentity & {
+export type PublicAccountProfile = PublicIdentityFields & {
     bio: string | null;
     links: AccountLink[];
     avatar: AvatarSummary | null;
@@ -54,7 +64,7 @@ export type PublicSubject = {
     label: string;
     type: string;
 };
-export type PublicHandleIdentity = PublicIdentity & {
+export type PublicHandleIdentity = PublicIdentityFields & {
     subject: PublicSubject | null;
     verified: boolean;
 };

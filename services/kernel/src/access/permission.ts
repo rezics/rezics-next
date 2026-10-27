@@ -436,11 +436,7 @@ export function createAccess(config: PermissionConfig): Access {
                   member_id: group.account_id,
                   at,
                 });
-                if (
-                  rows.length !== 2 ||
-                  rows.some((r) => r.kind !== 'organization' || r.state !== 'active' || r.fenced !== false)
-                )
-                  return null;
+                if (rows.length !== 2 || rows.some((r) => r.kind !== 'organization')) return null;
                 return rows;
               });
               if (

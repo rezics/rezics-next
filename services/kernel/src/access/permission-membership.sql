@@ -3,8 +3,10 @@ WITH input AS NOT MATERIALIZED (
          :member_id::uuid AS member_id, :at::timestamptz AS at
 )
 SELECT a.kind, a.state, a.authn_fenced AS fenced, r.role,
-       m.valid IS NOT NULL AS member,
-       COALESCE(m.valid, tstzrange(i.at, n.starts_at, '[)'))::text AS valid
+       (a.state = 'active' AND NOT a.authn_fenced AND m.valid IS NOT NULL) AS member,
+       (CASE WHEN a.state = 'active' AND NOT a.authn_fenced
+         THEN COALESCE(m.valid, tstzrange(i.at, n.starts_at, '[)'))
+         ELSE tstzrange(i.at, NULL, '[)') END)::text AS valid
 FROM input i
 JOIN access.account a ON a.route = i.route AND a.account_id = i.organization_id
 CROSS JOIN (VALUES ('owner'), ('member')) r(role)

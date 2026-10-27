@@ -36,7 +36,17 @@ export type PublicAccount =
     }
   | { accountId: string; kind: string; state: 'deleted' };
 
-export type PublicIdentity = {
+export type DeletedPublicIdentity = {
+  id: string;
+  kind: 'actor' | 'organization';
+  state: 'deleted';
+  handle?: never;
+  displayName?: never;
+  automated?: never;
+  operatorId?: never;
+};
+export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
+export type PublicIdentityFields = {
   id: string;
   kind: 'actor' | 'organization';
   handle: string | null;
@@ -47,7 +57,7 @@ export type PublicIdentity = {
 };
 
 export type AccountLink = { label: string; url: string };
-export type PublicAccountProfile = PublicIdentity & {
+export type PublicAccountProfile = PublicIdentityFields & {
   bio: string | null;
   links: AccountLink[];
   avatar: AvatarSummary | null;
@@ -57,7 +67,7 @@ export type PublicAccountProfile = PublicIdentity & {
   verified: boolean;
 };
 export type PublicSubject = { id: string; label: string; type: string };
-export type PublicHandleIdentity = PublicIdentity & { subject: PublicSubject | null; verified: boolean };
+export type PublicHandleIdentity = PublicIdentityFields & { subject: PublicSubject | null; verified: boolean };
 
 /** Resolve only an active claim, then read the account on its own anchor. */
 export async function readPublicAccountByHandle(
@@ -69,17 +79,18 @@ export async function readPublicAccountByHandle(
   if (!claim) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending') return [];
-  const deleted = row.state === 'deleted';
-  const identity: PublicIdentity = {
+  if (row.state === 'deleted' && row.kind === 'organization')
+    return [{ id: row.accountId, kind: 'organization', state: 'deleted' }];
+  const identity: PublicIdentityFields = {
     id: row.accountId,
     kind: row.kind === 'organization' ? 'organization' : 'actor',
     handle: row.handle,
     displayName: row.displayName,
-    state: deleted ? 'deleted' : 'active',
-    automated: !deleted && row.operatorAccountId !== null,
+    state: row.state === 'deleted' ? 'deleted' : 'active',
+    automated: row.state !== 'deleted' && row.operatorAccountId !== null,
     operatorId: row.operatorAccountId,
   };
-  if (deleted) return [{ ...identity, subject: null, verified: false }];
+  if (row.state === 'deleted') return [{ ...identity, subject: null, verified: false }];
   const subjectId = row.agentVerified ? row.agentSubjectId : accountAgentId(row.accountId);
   let subject: PublicSubject | null = null;
   if (subjectId !== null) {
@@ -154,11 +165,16 @@ export async function readPublicIdentities(
   for (const [route, ids] of anchors) {
     const rows = await publicPage.run(client, { route, account_ids: ids });
     for (const row of rows)
-      found.set(`${route}:${row.id}`, {
-        ...row,
-        kind: row.kind === 'organization' ? 'organization' : 'actor',
-        state: row.state === 'deleted' ? 'deleted' : 'active',
-      });
+      found.set(
+        `${route}:${row.id}`,
+        row.state === 'deleted' && row.kind === 'organization'
+          ? { id: row.id, kind: 'organization', state: 'deleted' }
+          : {
+              ...row,
+              kind: row.kind === 'organization' ? 'organization' : 'actor',
+              state: row.state === 'deleted' ? 'deleted' : 'active',
+            },
+      );
   }
   return routes.flatMap((route, index) => {
     const row = found.get(`${route}:${accountIds[index]}`);

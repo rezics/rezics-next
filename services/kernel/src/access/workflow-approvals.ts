@@ -37,6 +37,7 @@ import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
 import clientManagementAnchor from './workflow-approvals-client-anchor.sql';
 import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
+import ownersRead from './lifecycle-owners.sql';
 import operatorAccount from './operator-account.sql';
 import operatorSlot from './operator-slot.sql';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -416,6 +417,20 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         readAccount(deadlineClient(client, deadline), routeOf(operation.accountId)!, operation.accountId),
       ),
     );
+    if (subject?.kind === 'organization' && subject.state === 'active') {
+      const owners = await within(deadline, () =>
+        withConnection(config.pool, (client) =>
+          ownersRead.run(deadlineClient(client, deadline), {
+            route: routeOf(operation.accountId)!,
+            organization_id: operation.accountId,
+            member_id: actor.accountId,
+            at: accessClock(config.access)().toISOString(),
+          }),
+        ),
+      );
+      if (owners && owners.owners > 0)
+        return { action: 'account:manage', target: operation.accountId, targetKind: 'organization' };
+    }
     if (subject?.kind === 'actor' && subject.state === 'active' && subject.operatorAccountId !== null)
       return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
     if (subject?.kind !== 'actor' || subject.state !== 'deleted' || !approval) return descriptor;
