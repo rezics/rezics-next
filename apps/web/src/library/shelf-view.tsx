@@ -123,7 +123,7 @@ function EntryMenu({
           {
             type: 'item' as const,
             label: m.library_entry_progress(),
-            onSelect: () => void navigate({ to: '/library/progress/', search: { subjectId } }),
+            onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
           },
         ]
       : []),

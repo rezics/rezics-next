@@ -602,6 +602,7 @@ test(
       await actions.click();
       await menu.getByRole('menuitem', { name: 'Change status' }).click();
       await page.getByRole('menuitemradio', { name: 'Paused' }).click();
+      await closeMenus(page);
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(1);
       expect(calls.find((call) => call.method === 'PUT')).toMatchObject({
@@ -619,6 +620,7 @@ test(
       await page.getByRole('button', { name: 'Actions for Zebra story' }).click();
       await menu.getByRole('menuitem', { name: 'Change status' }).click();
       await page.getByRole('menuitemradio', { name: 'Completed' }).click();
+      await closeMenus(page);
       await eventually(() =>
         calls.some((call) => call.method === 'GET' && call.path === `/v1/libraryEntries/${id(13)}`),
       );
