@@ -139,10 +139,15 @@ async function up(): Promise<void> {
 }
 
 async function rebuild(): Promise<void> {
-  const { ConfigError } = await import('../src/server.ts');
-  const { readSearchConfig } = await import('../src/search/work.ts');
+  const { ConfigError } = await import('../src/commerce/config.ts');
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new ConfigError('DATABASE_URL');
+  const encodedRouteKey = process.env.KERNEL_ROUTE_KEY;
+  if (!encodedRouteKey || !/^[A-Za-z0-9_-]+$/.test(encodedRouteKey)) throw new ConfigError('KERNEL_ROUTE_KEY');
+  const routeKey = Buffer.from(encodedRouteKey, 'base64url');
+  if (routeKey.byteLength !== 32 || routeKey.toString('base64url') !== encodedRouteKey)
+    throw new ConfigError('KERNEL_ROUTE_KEY');
+  const { readSearchConfig } = await import('../src/search/work.ts');
   const config = readSearchConfig(process.env);
   if (!config) throw new ConfigError('OPENSEARCH_URL');
   const { createPool } = await import('../src/database/pool.ts');
@@ -154,7 +159,7 @@ async function rebuild(): Promise<void> {
     const result = await rebuildSubjects({
       pool,
       search: createOpenSearch(config.url),
-      source: subjectSource(pool),
+      source: subjectSource(pool, routeKey),
       prefix: config.prefix,
       // The worker's runner discovers the new generation on its own.
       runner: { async refresh() {} },

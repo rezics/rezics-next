@@ -139,7 +139,13 @@ test('the rebuild command builds the next generation and switches the alias', as
   try {
     const run = Bun.spawn(['bun', 'scripts/search.ts', 'rebuild'], {
       cwd: kernelDirectory,
-      env: { ...process.env, DATABASE_URL: databaseUrl, OPENSEARCH_URL: searchUrl, KERNEL_SEARCH_PREFIX: prefix },
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl,
+        OPENSEARCH_URL: searchUrl,
+        KERNEL_SEARCH_PREFIX: prefix,
+        KERNEL_ROUTE_KEY: env.KERNEL_ROUTE_KEY,
+      },
       stdout: 'pipe',
       stderr: 'pipe',
     });

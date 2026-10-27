@@ -21,6 +21,9 @@ check command starts its own disposable OpenSearch node.
 ## Rebuilding the search index
 
 Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
+Set `DATABASE_URL`, `OPENSEARCH_URL`, and the deployment's `KERNEL_ROUTE_KEY` (canonical unpadded base64url encoding
+of exactly 32 bytes). Rebuild validates the route key before opening the database pool and supplies it to the source
+for imported-source fence checks. Other server credentials are not required; `up`, `down`, and `reset` need no route key.
 The worker replays the log into the new generation. A failed rebuild reports one of `timeout`, `mismatch`, `busy`,
 `running`, or `limit`. The previous generation is deleted 15 minutes after the switch.
 
