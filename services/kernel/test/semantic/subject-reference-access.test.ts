@@ -119,10 +119,10 @@ test('reference identity and Access share one RR client and preserve native acce
   expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => ordinary(client)))).toBeNull();
   const resource = { ...f.resource, eligibility };
   const authorize = await check(f, resource);
-  // Native T exists only during its live command attempt. The nested reference
-  // read forwards that capability to Access on the reference's own RR client.
+  // Native T exists only during its live command attempt. A separately anchored
+  // reference read forwards it to Access on the reference's own RR client.
   const result = await runCommand(
-    pool,
+    admin,
     { partition: partitionOf(f.resource.route), deadline: Date.now() + 5_000, clock: () => ahead },
     async (_, command) => {
       acceptanceAt = authoritativeTimeValue(command.time);
