@@ -245,6 +245,8 @@ test('Zone membership is the deduplicated saved-scope and mounted-Collection uni
   const a = await f.subject('Overlap');
   const b = await f.subject('Second book');
   const c = await f.subject('Collection-only game', 'schema:VideoGame');
+  const scopeOnly = await f.subject('Saved-scope-only book');
+  const outside = await f.subject('Outside every source', 'schema:VideoGame');
   const withheld = await f.subject('Withheld');
   const first = await f.collection();
   const second = await f.collection();
@@ -256,6 +258,8 @@ test('Zone membership is the deduplicated saved-scope and mounted-Collection uni
   expect(ids).toContain(a);
   expect(ids).toContain(b);
   expect(ids).toContain(c);
+  expect(ids).toContain(scopeOnly);
+  expect(ids).not.toContain(outside);
   expect(ids).not.toContain(withheld);
   expect(ids.length).toBe(new Set(ids).size);
   // A fresh public read must not broaden subject rights through Zone ownership.
@@ -286,6 +290,9 @@ test('private revoked deleted and withheld sources reveal no Zone data or counts
       expect(mounts.collections).toEqual([]);
       expect(JSON.stringify(mounts)).not.toContain(source.id);
       expect(JSON.stringify(mounts)).not.toContain(source.title);
+      const metadata = await f.json(await f.request('GET', `/v1/zones/${z.id}`, undefined, true));
+      expect(JSON.stringify(metadata)).not.toContain(source.id);
+      expect(JSON.stringify(metadata)).not.toContain(source.title);
     }
     const shell = await f.json<Record<string, unknown>>(
       await f.request('POST', `/v1/zones/${z.id}:readPage`, { target: { route: '' } }, true),
@@ -403,6 +410,15 @@ test('native built-in Collection membership uses Commerce common reader and hide
     expect(after.subjects).toEqual(before.subjects);
     expect(JSON.stringify(after)).not.toContain('SECRET-PRIVATE-COPY-VALUE');
     expect(JSON.stringify(after)).not.toContain('in_progress');
+    const publicSource = await f.json<{ collection: Collection }>(
+      await f.request('GET', `/v1/collections/${candidate.id}`, undefined, true),
+    );
+    expect(publicSource.collection).not.toHaveProperty('memberCount');
+    expect(JSON.stringify(publicSource)).not.toContain('SECRET-PRIVATE-COPY-VALUE');
+    expect(JSON.stringify(publicSource)).not.toContain('in_progress');
+    const mounts = await f.json(await f.request('GET', `/v1/zones/${z.id}/collections`, undefined, true));
+    expect(JSON.stringify(mounts)).not.toContain('SECRET-PRIVATE-COPY-VALUE');
+    expect(JSON.stringify(mounts)).not.toContain('in_progress');
     mounted = true;
     break;
   }
