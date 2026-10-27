@@ -1,14 +1,12 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { deriveAccess } from '../../src/access/derived-access.ts';
-import { AccessUnavailableError } from '../../src/access/index.ts';
-import { runCommand, authoritativeTimeValue, type AuthoritativeTime } from '../../src/command/command.ts';
+
 import { newId } from '../../src/route/route.ts';
-import { mergeSubjectsInCommand } from '../../src/semantic/merges.ts';
+
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
-import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
+
 import { accessCheck } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
@@ -19,7 +17,6 @@ import {
   identityFixture,
   terminalReader,
   basisReader,
-  homeReader,
   groupReader,
   readOptions,
   readyBasis,
@@ -35,7 +32,6 @@ import {
   type IdentityFixture,
   type IdentityBasis,
   type GroupReader,
-  type HomeReader,
 } from './identity-fixture.ts';
 import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';
 
@@ -51,239 +47,6 @@ beforeEach(async () => {
 }, 30_000);
 afterAll(async () => {
   if (db) await db.close();
-});
-
-function lightweight(statements: readonly string[]) {
-  const sql = statements.join('\n');
-  expect(sql).not.toMatch(
-    /semantic\.(?:fact|revision|outbound_link|inbound_link|adoption|candidate|definition_release|partition_subjects)\b/i,
-  );
-  expect(sql).not.toMatch(/(?:checkpoint|waitFor|summary|read-subject\.sql)/i);
-  expect(sql).not.toMatch(/WITH\s+RECURSIVE|enable_seqscan/i);
-}
-
-async function observedHome(read: HomeReader, id: string) {
-  const client = await db.pool.connect();
-  try {
-    return await read(client, homeOf(id));
-  } finally {
-    client.release();
-  }
-}
-
-// Frozen reference and metadata helpers are deliberately neither imported nor implemented here.
-test('terminal identity is a lightweight current authorized read with explicit maintenance readiness', async () => {
-  const source = await f.create(0x6e10);
-  const root = await f.create(0x6e00);
-  await f.baseline(source);
-  const read = await terminalReader();
-  const live = await capture(db, () => read(db.pool, source, readOptions(f)));
-  expect(live.value).toMatchObject({ state: 'ready', id: source });
-  lightweight(live.capture.statements);
-  expect(Object.keys(live.value ?? {}).sort()).toEqual(['components', 'id', 'state']);
-
-  await f.merge(source, root);
-  // Redirect insertion predates alias registration: neither a fresh checkpoint nor an idle worker proves readiness.
-  const pending = await capture(db, () => read(db.pool, source, readOptions(f)));
-  expect(pending.value).toEqual({ state: 'not_ready' });
-  lightweight(pending.capture.statements);
-  await f.finishMove(source, root);
-  const redirected = await capture(db, () => read(db.pool, source, readOptions(f)));
-  expect(redirected.value).toMatchObject({ state: 'ready', id: root });
-  lightweight(redirected.capture.statements);
-
-  await f.hide(root);
-  expect(await read(db.pool, source, readOptions(f))).toBeNull();
-  await f.hide(root, 'restore');
-  await f.hide(source);
-  expect(await read(db.pool, source, readOptions(f))).toBeNull();
-  expect(await read(db.pool, newId(0x6e10), readOptions(f))).toBeNull();
-  expect(await read(db.pool, 'bad-id', readOptions(f))).toBeNull();
-  // Even an explicit native grant cannot disclose a hidden original.
-  await f.real.grant(resource(source), 'reader', 'subject:read');
-  expect(await read(db.pool, source, readOptions(f))).toBeNull();
-  await f.hide(source, 'restore');
-  expect(await read(db.pool, source, readOptions(f))).toMatchObject({ state: 'ready', id: root });
-});
-
-test('terminal anchors use released same-client RR Access and native preparation time', async () => {
-  const source = await f.create(0x6e30);
-  const root = await f.create(0x6e00);
-  await f.merge(source, root);
-  await f.finishMove(source, root);
-  await f.baseline(source);
-  const read = await terminalReader();
-  const checks: { id: string; client: unknown; time: AuthoritativeTime | undefined }[] = [];
-  const access = deriveAccess(f.access, {
-    async authorize(client, actor, action, anchor, evidence, time) {
-      if (action === 'subject:read') {
-        const isolation = await client.query('SHOW transaction_isolation');
-        expect(isolation.rows[0].transaction_isolation).toBe('repeatable read');
-        const mode = await client.query('SHOW transaction_read_only');
-        expect(mode.rows[0].transaction_read_only).toBe('on');
-        checks.push({ id: anchor.id, client, time });
-      }
-      return f.access.authorize(client, actor, action, anchor, evidence, time);
-    },
-    async prepare(actor, action, anchor, context) {
-      // A pool of size one can prepare the next anchor only after releasing the previous RR checkout.
-      const value = await f.access.prepare!(actor, action, anchor, context);
-      return value;
-    },
-  });
-  const single = db.openPool({ max: 1 });
-  try {
-    const authorization = await f.authorization('subject:merge');
-    let nativeT: AuthoritativeTime | undefined;
-    await runCommand(
-      db.pool,
-      {
-        partition: homeOf(source),
-        deadline: deadline(),
-        basis: { actorAccountId: f.editor.accountId, clientId: f.editor.clientId, requestedBy: f.editor.requestedBy },
-        authorization: {
-          ...authorization,
-          async prepare(attempt) {
-            nativeT = attempt.time;
-            expect(Number.isFinite(Date.parse(authoritativeTimeValue(attempt.time)))).toBe(true);
-            const observed = await capture(db, () =>
-              read(single, source, {
-                ...readOptions(f),
-                access,
-                nativeT: attempt.time,
-              }),
-            );
-            expect(observed.value).toMatchObject({ state: 'ready', id: root });
-            lightweight(observed.capture.statements);
-            return authorization.prepare!(attempt);
-          },
-        },
-      },
-      async () => ({ value: null, events: [{ type: 'com.rezics.semantic.identity-observed.v1', data: {} }] }),
-    );
-    expect(checks.map((check) => check.id)).toEqual([source, root]);
-    expect(checks.every((check) => check.time === nativeT)).toBe(true);
-  } finally {
-    await single.end();
-  }
-
-  // An installed native authenticated-only catalogue proves original and terminal grants independently.
-  const privateAccess = f.real.access({ actions: new Map([['subject:read', { anonymous: false }]]) });
-  const options = { ...readOptions(f), access: privateAccess };
-  await f.real.grant(resource(source), 'reader', 'subject:read');
-  expect(await read(db.pool, source, options)).toBeNull();
-  await f.real.grant(resource(root), 'reader', 'subject:read');
-  expect(await read(db.pool, source, options)).toMatchObject({ state: 'ready', id: root });
-  await f.real.revoke(resource(source), 'reader', 'subject:read');
-  expect(await read(db.pool, source, options)).toBeNull();
-  await expect(read(db.pool, root, { ...readOptions(f), deadline: Date.now() - 1 })).rejects.toBeInstanceOf(
-    AccessUnavailableError,
-  );
-});
-
-test('structural identity generation changes atomically on redirect unmerge and repoint but not unrelated positions', async () => {
-  const next = await f.create(0x6df0);
-  const source = await f.create(0x6e10);
-  const root = await f.create(0x6e00);
-  await f.baseline(source);
-  const home = await homeReader();
-  const basis = await basisReader();
-  const before = await observedHome(home, source);
-  const stable = await readyBasis(basis, db.pool);
-  const check = await accessCheck(f.access, f.editor, 'subject:create', resource(root), {
-    pool: db.pool,
-    deadline: deadline(),
-  });
-  await f.real.grant(resource(root), 'editor', 'subject:create');
-  await updateSubjectIdentity(db.pool, {
-    subject: root,
-    labels: { en: 'Unrelated editorial change' },
-    release,
-    authorize: check,
-  });
-  expect(await readyBasis(basis, db.pool)).toEqual(stable);
-  const failure = new Error('Rollback native redirect and generation');
-  const authorization = await f.authorization('subject:merge');
-  await expect(
-    runCommand(
-      db.pool,
-      {
-        partition: homeOf(source),
-        deadline: deadline(),
-        authorization,
-        basis: { actorAccountId: f.editor.accountId, clientId: f.editor.clientId, requestedBy: f.editor.requestedBy },
-      },
-      async (tx, { transactionId }) => {
-        await mergeSubjectsInCommand(tx, transactionId, { survivor: root, redirected: source, release });
-        expect((await home(tx as PoolClient, homeOf(source))).generation).toBe(before.generation + 1n);
-        throw failure;
-      },
-    ),
-  ).rejects.toBe(failure);
-  expect(await observedHome(home, source)).toEqual(before);
-  expect(await readyBasis(basis, db.pool)).toEqual(stable);
-
-  const replayKey = randomUUID();
-  await f.merge(source, root, replayKey);
-  const inserted = await observedHome(home, source);
-  expect(inserted.generation).toBe(before.generation + 1n);
-  expect(inserted.pending).toBeGreaterThan(0n);
-  expect(await basis(db.pool, { deadline: deadline() })).toEqual({ state: 'not_ready' });
-  await f.merge(source, root, replayKey);
-  expect((await observedHome(home, source)).generation).toBe(inserted.generation);
-  await f.finishMove(source, root);
-  const mergedBasis = await readyBasis(basis, db.pool);
-  expect(mergedBasis).not.toEqual(stable);
-
-  await f.merge(root, next);
-  await f.finishMove(root, next);
-  // Native member maintenance repoints the old original in its own home.
-  await f.finishMove(source, next);
-  expect((await observedHome(home, source)).generation).toBe(inserted.generation + 1n);
-  expect(await readyBasis(basis, db.pool)).not.toEqual(mergedBasis);
-
-  // Trusted native platform verification adapter; this is not an end-user verification receipt.
-  const account = f.other.accountId;
-  await ensureAccountAgent(db.pool, { account, kind: 'person', name: null });
-  const catalogue = await f.create(0x6df0);
-  const agent = accountAgentId(account);
-  const agentHome = await observedHome(home, agent);
-  await verifyAccountAgent(db.pool, { account, catalogue, receipt: randomUUID() });
-  expect((await observedHome(home, agent)).generation).toBe(agentHome.generation + 1n);
-  await f.finishMove(agent, catalogue);
-  const verified = await readyBasis(basis, db.pool);
-  await unverifyAccountAgent(db.pool, { account, receipt: randomUUID() });
-  expect((await observedHome(home, agent)).generation).toBe(agentHome.generation + 2n);
-  expect(await readyBasis(basis, db.pool)).not.toEqual(verified);
-});
-
-test('concurrent native redirects cannot lose structural increments and epoch or home changes invalidate a basis', async () => {
-  const first = await f.create(0x6e70);
-  const second = await f.create(0x6e70);
-  const root = await f.create(0x6e00);
-  await f.baseline(first);
-  const home = await homeReader();
-  const basis = await basisReader();
-  const before = await observedHome(home, first);
-  await Promise.all([f.merge(first, root), f.merge(second, root)]);
-  expect((await observedHome(home, first)).generation).toBe(before.generation + 2n);
-  await f.finishMove(first, root);
-  await f.finishMove(second, root);
-  const old = await readyBasis(basis, db.pool);
-  // Negative invalidation probe of existing core metadata, never a positive subject/permission fixture.
-  await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [homeOf(first)]);
-  expect(await readyBasis(basis, db.pool)).not.toEqual(old);
-  const current = await observedHome(home, first);
-  expect(current.epoch).toBe(before.epoch + 1);
-  expect(current.home).toBeString();
-  const epochBasis = await readyBasis(basis, db.pool);
-  await db.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [
-    homeOf(first),
-    `${current.home}-replacement`,
-  ]);
-  expect(await readyBasis(basis, db.pool)).not.toEqual(epochBasis);
-  // Restore routing metadata after the negative incarnation probe.
-  await db.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [homeOf(first), current.home]);
 });
 
 async function groupStep(read: GroupReader, root: string, basis: IdentityBasis, after: string | null, limit = 63) {

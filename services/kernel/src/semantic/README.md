@@ -512,12 +512,22 @@ never an invented zero generation. The digest is lowercase SHA-256 hex over vers
 Small implementation slices are terminal points and anchored Access in `terminal-identity.ts`, home metadata and
 fixed-home observation in `identity-basis.ts`, writer/maintenance hooks in existing merge modules, and member
 keyset enumeration in `alias-group.ts`. Each uses focused typed SQL files beside its module; no broad subject
-renderer refactor is needed. Focused native tests in `identity-contract.test.ts` are:
+renderer refactor is needed. Each native test file owns its database setup, fixture reset and cleanup, so the
+managed check can run each production slice by actual file path. The shared `identity-fixture.ts` remains the
+single fixture authority. Focused native tests are:
+
+`terminal-identity-contract.test.ts`:
 
 - `terminal identity is a lightweight current authorized read with explicit maintenance readiness`;
 - `terminal anchors use released same-client RR Access and native preparation time`;
+
+`identity-generation.test.ts`:
+
 - `structural identity generation changes atomically on redirect unmerge and repoint but not unrelated positions`;
 - `concurrent native redirects cannot lose structural increments and epoch or home changes invalidate a basis`;
+
+`identity-contract.test.ts`:
+
 - `resumable alias groups find the last readable member beyond two hundred fifty six without unbounded scans`;
 - `concealed groups exhaust with advancing empty windows and current eligibility behind progress requires a fresh traversal`;
 - `alias continuation rejects invalid viewer route query group and structural bases and keeps shared token lifetimes`;
@@ -578,6 +588,65 @@ own obligation atomically with deletion and proves the restored root and removed
 No synchronous cross-home transaction or new scheduler is introduced; existing durable events drive the work.
 Requested survivors need not decrease in UUID order. Existing register/repoint retry branches must consult actual
 current native redirects rather than treating lexical target order as a concurrency or convergence proof.
+
+#### Same-home metadata ownership and internal ports
+
+The structural-store/hooks implementation owns `identity-maintenance.ts` and ALL new metadata-table SQL and
+migrations. Terminal and group implementations call its internal read port; they never create a competing table,
+write metadata or infer readiness from jobs/history. The public independent exports above remain unchanged.
+`identity-basis.ts:readIdentityHome` delegates the home point to this same metadata owner; its fixed-home sweeps
+remain independently implementable. This is an internal service handoff, never a public Access or holder claim.
+
+The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation, pending, and the
+current core epoch/home incarnation. The authoritative `semantic.identity_obligation` current-row primary key is
+`(partition_no, route, subject_id)`, where subject_id is the original and partition_no is its native home. Its
+`version` is that home's generation assigned by the actual mutation; `epoch`, `home`, `target` (nullable for removal),
+`sealed_version` (nullable), and bounded phase/keyset frontier describe ONLY that current mapping obligation.
+Replace the current row on a newer actual change; old acknowledgements compare version/target/epoch/home and cannot
+seal or decrement the replacement. Retain the sealed current row until superseded; no historical-row lookup is
+needed. `pending` counts unsealed current obligations, so replacement of an unsealed obligation does not double-count.
+A sealed removal remains evidence of restored-root/member-removal coverage. Initial rollout must establish current
+rows for existing redirects before making the home ready.
+
+The narrow internal handoff is:
+
+```ts
+// identity-maintenance.ts; metadata writer owns implementations and SQL
+export type IdentityMutation = Readonly<{
+  original: string; previous: string | null; target: string | null;
+}>;
+export type IdentityObligation = Readonly<{
+  original: string; version: bigint; epoch: number; home: string; target: string | null;
+}>;
+export function readHomeIdentity(client: PoolClient, partition: number): Promise<HomeIdentity>;
+export function readIdentityReadiness(client: PoolClient, mapping: {
+  original: string; target: string | null;
+}): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
+export function recordIdentityMutation(
+  client: PoolClient, mutation: IdentityMutation
+): Promise<IdentityObligation | null>;
+export function advanceIdentityObligation(client: PoolClient, options: {
+  obligation: IdentityObligation;
+  expected: { phase: string; after: readonly string[] };
+  next: { phase: string; after: readonly string[] } | { sealed: true };
+}): Promise<boolean>;
+```
+
+All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
+`recordIdentityMutation` accompanies the verified actual native redirect change in its command transaction;
+unchanged/replayed mappings return null. It atomically increments the home generation and replaces the obligation.
+`advanceIdentityObligation` compares the current obligation token and expected bounded frontier; false means stale
+work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
+`sealed:true` is permitted only after complete inherited coverage, and decrements pending exactly once. These ports
+are for trusted native writers, not caller-supplied positive membership or authorization assertions.
+
+`readIdentityReadiness` checks the exact original's current native mapping and current obligation point, with the
+home/core epoch and incarnation on the same RR client. A redirect needs matching target, epoch/home and
+`sealed_version === version`; missing/mismatched/unsealed evidence is not_ready. A restored live original with an
+obligation needs the same current-version removal seal. A never-redirected live original needs no obligation scan.
+Do NOT compare the obligation version to the home's latest generation: another original's mutation can legitimately
+advance that generation. The terminal recheck compares the observed original mapping and home generation; basis
+readiness additionally requires home pending zero. None of these checks reads maintenance jobs, revisions or history.
 
 A redirected original is ready only after its current obligation is sealed and its direct terminal is currently
 live. Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
@@ -651,14 +720,19 @@ not an exact global live total; current-keyset late eligibility or insertion beh
 traversal. Reconstructing compact progress must find a last readable original beyond 256 in finite bounded steps.
 
 Direct Zone subject-target reads use the SAME resumable group path and budget. They cannot permanently return 404
-for a valid last-alias member or spin through every alias in one request. The existing `readPage` success ABI remains
-common page plus zone. Before production, propose this exact minimal additive shared transport to manager/Web:
-`{ code: 'semantic_identity_continuation', continuation: string }` as a retryable 503 problem extension, with the
-existing optional `cursor` request field carrying the encrypted continuation on retry. No partial page/document is
-returned. Genuine advancing group progress may use this transport; zero-progress maintenance uses existing readiness
-instead. This is a proposal pending shared protocol adoption, not a new production route, permission service or a
-change to Zone's typed-schema owner. Lists can use their existing next cursor. The source-native composition tests
-here establish the identity seam, not production Search/Commerce/Zone completion.
+for a valid last-alias member or spin through every alias in one request. The confirmed additive transport is an
+optional opaque `cursor` QUERY parameter on `POST :readPage`. Actual advancing bounded progress returns
+`202 { next: string }` with `Cache-Control: private, no-store`; `next` uses the existing encrypted shared codec and
+request/actor/target/basis bindings above. `200` retains the unchanged commonPage-plus-zone ABI. No partial document
+is returned. Zero progress or maintenance/readiness failure uses the existing `503` standardProblem with
+`Retry-After`, no cursor. There is no new problem extension, continuation code or Link header. The shared schema
+owner exports separate query/progress schemas; this specification does not edit that owner's files.
+
+The loader takes at most four steps per render. If unfinished, its preparing page is a no-store 503, retains the
+last 202 cursor and continues with it; a readiness 503 supplies no replacement cursor. Lists retain their existing
+next cursor. Search/Commerce pass the compact internal group/source/keyset progress through this same handoff and
+revalidate current owner membership and subject Access before final use. The source-native composition tests here
+establish the identity seam, not production Search/Commerce/Zone completion.
 
 ## Cost
 
@@ -691,7 +765,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 - Touches: terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus the original mapping recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
 - Bound: terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Maintenance writes one home counter/obligation per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
-- Growth check: `test/semantic/growth-identity-contract.test.ts`: `identity alias steps keep fixed candidate and point budgets as the native group grows`, `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`, and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional native continuation and writer-atomicity coverage is in `test/semantic/identity-contract.test.ts`.
+- Growth check: `test/semantic/growth-terminal-identity.test.ts` owns `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`. `test/semantic/growth-identity-contract.test.ts` owns `identity alias steps keep fixed candidate and point budgets as the native group grows` and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional continuation, terminal authorization and atomicity coverage is split across `identity-contract.test.ts`, `terminal-identity-contract.test.ts` and `identity-generation.test.ts` as named above.
 
 ### Command and receipt
 
