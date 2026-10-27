@@ -1296,7 +1296,11 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
               ? f.ownerId
               : issuer;
         const identity = required(registrations.get(grantor), `Missing native grant issuer session for ${grantor}`);
-        const session = await login(identity.email, f.identity.clientId);
+        const grantorClient =
+          grantor === required(governor, 'Platform governance is not bootstrapped').accountId
+            ? loginClient
+            : f.identity.clientId;
+        const session = await login(identity.email, grantorClient);
         const grantActor = await required(accessPort, 'Access is not composed').authenticate(session.bearer, context());
         const target =
           operation.kind === 'delete' && operation.responsibility && actor.accountId !== operation.accountId
