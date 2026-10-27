@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync } from 'node:crypto';
 import { seal, type KeyRing } from '../../src/tokens/seal.ts';
 import { decodeCursor } from '../../src/tokens/cursor.ts';
 import {
@@ -264,4 +265,101 @@ test('a token from the HMAC seal is not a list cursor and a list cursor is not a
   expect(
     decodeCursor(ring, { operation: binding.route, parameters: binding.query }, `${token}.${token}`, now.getTime()),
   ).toEqual({ ok: false, reason: 'invalid' });
+});
+
+test('encoding the same anonymous route query and position twice at different times gives the identical token', async () => {
+  const anonymous = { ...binding, viewer: null };
+  const token = await encodeListCursor(ring, anonymous, position, now);
+  const reordered = { ...anonymous, query: { after: null, hidden: false, size: 20, sort: 'recent' } };
+  expect(await encodeListCursor(ring, reordered, position, later(365 * 24 * 60 * 60_000))).toBe(token);
+});
+
+test('an anonymous cursor still decodes a day and a year after issue', async () => {
+  const anonymous = { ...binding, viewer: null };
+  const token = await encodeListCursor(ring, anonymous, position, now);
+  for (const elapsed of [-60_001, 24 * 60 * 60_000, 365 * 24 * 60 * 60_000]) {
+    expect(await decodeListCursor(rotated, anonymous, token, later(elapsed))).toEqual({
+      ok: true,
+      epoch: position.epoch,
+      after: [...position.after],
+    });
+  }
+  expect(await encodeListCursor(rotated, anonymous, position, now)).not.toBe(token);
+});
+
+test('a different position or query gives a different anonymous token', async () => {
+  const anonymous = { ...binding, viewer: null };
+  const token = await encodeListCursor(ring, anonymous, position, now);
+  for (const other of [
+    { ...position, epoch: position.epoch + 1 },
+    { ...position, after: ['another-position', position.after[1]!] },
+    { ...position, after: [...position.after].reverse() },
+  ])
+    expect(await encodeListCursor(ring, anonymous, other, now)).not.toBe(token);
+  for (const other of [
+    { ...anonymous, query: { ...anonymous.query, size: 21 } },
+    { ...anonymous, query: { ...anonymous.query, size: '20' } },
+    { ...anonymous, route: 'GET /v1/other-pages' },
+  ]) {
+    expect(await encodeListCursor(ring, other, position, now)).not.toBe(token);
+    expect(await decodeListCursor(ring, other, token, now)).toEqual({ ok: false, reason: 'invalid' });
+  }
+});
+
+test('tampering and an unknown or retired key id answer invalid for both kinds', async () => {
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    const token = await encodeListCursor(ring, bound, position, now);
+    for (let index = 0; index < token.length; index += 1)
+      expect(await decodeListCursor(ring, bound, flip(token, index), now)).toEqual({ ok: false, reason: 'invalid' });
+    expect(await decodeListCursor(retired, bound, token, now)).toEqual({ ok: false, reason: 'invalid' });
+    const unknown = Buffer.from(token, 'base64url');
+    unknown[1] = 255;
+    expect(await decodeListCursor(ring, bound, unknown.toString('base64url'), now)).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+  }
+});
+
+test('anonymous salts authenticate associated data and timeless plaintext with a separate HKDF key', async () => {
+  const anonymous = { ...binding, viewer: null };
+  const token = await encodeListCursor(ring, anonymous, position, now);
+  const bytes = Buffer.from(token, 'base64url');
+  const salt = bytes.subarray(2, 18);
+  const data = Buffer.from(
+    JSON.stringify([
+      'list-cursor',
+      1,
+      1,
+      anonymous.route,
+      'anonymous',
+      null,
+      JSON.stringify({ after: null, hidden: false, size: 20, sort: 'recent' }),
+    ]),
+  );
+  const material = Buffer.from(hkdfSync('sha256', key(1), salt, 'rezics/list-cursor/v1', 44));
+  const decipher = createDecipheriv('aes-256-gcm', material.subarray(0, 32), material.subarray(32));
+  decipher.setAAD(data);
+  decipher.setAuthTag(bytes.subarray(-16));
+  const plaintext = Buffer.concat([decipher.update(bytes.subarray(18, -16)), decipher.final()]);
+  expect(plaintext.toString()).toBe(JSON.stringify({ e: position.epoch, a: position.after }));
+  const sivKey = hkdfSync('sha256', key(1), Buffer.alloc(0), 'rezics/list-cursor/v1/siv', 32);
+  const expectedSalt = createHmac('sha256', sivKey).update(data).update(plaintext).digest().subarray(0, 16);
+  expect(salt).toEqual(expectedSalt);
+
+  // A valid GCM tag alone is insufficient: decoding must also verify the synthetic salt.
+  const wrongSalt = Buffer.from(salt);
+  wrongSalt[0] = wrongSalt[0]! ^ 1;
+  const wrongMaterial = Buffer.from(hkdfSync('sha256', key(1), wrongSalt, 'rezics/list-cursor/v1', 44));
+  const cipher = createCipheriv('aes-256-gcm', wrongMaterial.subarray(0, 32), wrongMaterial.subarray(32));
+  cipher.setAAD(data);
+  const forged = Buffer.concat([
+    bytes.subarray(0, 2),
+    wrongSalt,
+    cipher.update(plaintext),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ]).toString('base64url');
+  expect(await decodeListCursor(ring, anonymous, forged, now)).toEqual({ ok: false, reason: 'invalid' });
 });

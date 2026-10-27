@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { canonicalParameters, type CursorKey, type CursorResult } from './cursor.ts';
 import type { KeyRing } from './seal.ts';
 
@@ -27,12 +28,14 @@ const MAX_AFTER_KEYS = 8;
 const MAX_FUTURE_MS = 60_000;
 const LIFETIME_MS = 15 * 60_000;
 const HKDF_INFO = new TextEncoder().encode('rezics/list-cursor/v1');
+const SIV_HKDF_INFO = new TextEncoder().encode('rezics/list-cursor/v1/siv');
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const invalid = (): ListCursorResult => ({ ok: false, reason: 'invalid' });
 
 const encoder = new TextEncoder();
 const hkdfKeys = new WeakMap<Uint8Array, Promise<CryptoKey>>();
+const sivKeys = new WeakMap<Uint8Array, Promise<CryptoKey>>();
 
 function byteLength(value: string): number {
   return encoder.encode(value).byteLength;
@@ -45,6 +48,23 @@ function hkdfKey(key: Uint8Array): Promise<CryptoKey> {
     hkdfKeys.set(key, imported);
   }
   return imported;
+}
+
+async function syntheticSalt(key: Uint8Array, data: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+  let imported = sivKeys.get(key);
+  if (imported === undefined) {
+    imported = (async () => {
+      const bits = await crypto.subtle.deriveBits(
+        { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: SIV_HKDF_INFO },
+        await hkdfKey(key),
+        256,
+      );
+      return crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    })();
+    sivKeys.set(key, imported);
+  }
+  const mac = await crypto.subtle.sign('HMAC', await imported, Buffer.concat([data, plaintext]));
+  return new Uint8Array(mac).slice(0, SALT_BYTES);
 }
 
 async function perTokenKey(
@@ -119,9 +139,18 @@ export async function encodeListCursor(
     throw new TypeError('Invalid list cursor position');
   const data = associatedData(kid, binding);
 
-  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const plaintext = encoder.encode(
+    JSON.stringify(
+      binding.viewer === null
+        ? { e: position.epoch, a: position.after }
+        : { e: position.epoch, a: position.after, t: issuedAt },
+    ),
+  );
+  const salt =
+    binding.viewer === null
+      ? await syntheticSalt(key, data, plaintext)
+      : crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const { aes, iv } = await perTokenKey(key, salt);
-  const plaintext = encoder.encode(JSON.stringify({ e: position.epoch, a: position.after, t: issuedAt }));
   const sealed = new Uint8Array(
     await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: data, tagLength: TAG_BYTES * 8 },
@@ -152,7 +181,8 @@ export async function decodeListCursor(
     if (!Number.isSafeInteger(nowMs)) return invalid();
     const data = associatedData(kid, binding);
 
-    const { aes, iv } = await perTokenKey(key, bytes.subarray(2, HEADER_BYTES));
+    const salt = bytes.subarray(2, HEADER_BYTES);
+    const { aes, iv } = await perTokenKey(key, salt);
     const plaintext = new Uint8Array(
       await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv, additionalData: data, tagLength: TAG_BYTES * 8 },
@@ -163,16 +193,15 @@ export async function decodeListCursor(
     const payload: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
     if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return invalid();
     const value = payload as Record<string, unknown>;
-    if (
-      !Number.isSafeInteger(value.e) ||
-      (value.e as number) < 1 ||
-      !validAfter(value.a) ||
-      !Number.isSafeInteger(value.t)
-    )
-      return invalid();
-    const issuedAt = value.t as number;
-    if (issuedAt - nowMs > MAX_FUTURE_MS) return invalid();
-    if (nowMs - issuedAt > LIFETIME_MS) return { ok: false, reason: 'expired' };
+    if (!Number.isSafeInteger(value.e) || (value.e as number) < 1 || !validAfter(value.a)) return invalid();
+    if (binding.viewer === null) {
+      if (!timingSafeEqual(salt, await syntheticSalt(key, data, plaintext))) return invalid();
+    } else {
+      if (!Number.isSafeInteger(value.t)) return invalid();
+      const issuedAt = value.t as number;
+      if (issuedAt - nowMs > MAX_FUTURE_MS) return invalid();
+      if (nowMs - issuedAt > LIFETIME_MS) return { ok: false, reason: 'expired' };
+    }
     return { ok: true, epoch: value.e as number, after: value.a };
   } catch {
     return invalid();
