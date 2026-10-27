@@ -149,13 +149,13 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 - Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown.
 - Bound: Rows O(F + 12 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. Access still runs one permission check per related id.
-- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`; `growth-reads.test.ts` also checks history growth.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, scales `[64, 512, 4096]`; `growth-reads.test.ts` also checks history growth.
 
 ### Forward relation page
 
 - Touches: one outbound index range (`limit + 1`, or at most `4 × limit + 1` under a type filter), one counter probe, the selected slot views, and one target-label read per page partition. The type-filtered count has its own sample of at most 1,000 projection rows.
 - Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page.
-- Growth check: `test/semantic/growth-relations.test.ts`: middle page at limit 25 for 100, 1,000 and 3,000 relations.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, middle page at limit 25 and scales `[64, 512, 4096]`.
 
 ### Relation-key re-emission
 

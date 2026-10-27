@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import type { GrowthSample, Population } from '../support/growth.ts';
-import { capture, costOf, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import type { Population } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
@@ -145,12 +145,8 @@ function createPopulation(): Population {
   return current;
 }
 
-async function grow(previous: number, scale: number): Promise<void> {
-  await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale });
-  await db.admin.query('ANALYZE semantic.subject');
-  await db.admin.query('ANALYZE semantic.fact');
-  await db.admin.query('ANALYZE semantic.outbound_link');
-  await db.admin.query('ANALYZE semantic.outbound_link_count');
+async function grow(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
+  await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
 }
 
 function middleCursor(size: number): string {
@@ -190,7 +186,7 @@ beforeAll(async () => {
     release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
-  people = Array.from({ length: 3_000 }, () => newId(anchorRoute));
+  people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
   peopleLabels = people.map((id, index) => rowsFor(id, { labels: { en: `Author ${String(index).padStart(4, '0')}` } }));
   relationFacts = people.map((id) =>
     rowsFor(
@@ -207,15 +203,23 @@ afterAll(async () => {
 });
 
 test('A subject read examines the same rows whatever the number of relations it holds', async () => {
-  const samples: GrowthSample[] = [];
-  let previous = 0;
-  for (const scale of [100, 1_000, 3_000]) {
-    await grow(previous, scale);
-    const pageCursor = middleCursor(scale);
-    const measured = await capture(db, async () => {
-      const subject = await readSubject(db.pool, anchor, async () => true, GLOBAL_CONTEXT);
+  const report = await checkGrowth(db, {
+    name: 'A subject read examines the same rows whatever the number of relations it holds',
+    scales: [64, 512, 4096],
+    warmups: 1,
+    repetitions: 5,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    slack: {
+      rows: { absolute: 2, relative: 0.1 },
+      blocks: { absolute: 4, relative: 0.5 },
+      statements: { absolute: 0, relative: 0 },
+    },
+    grow,
+    operation: async (database, scale) => {
+      const pageCursor = middleCursor(scale);
+      const subject = await readSubject(database.pool, anchor, async () => true, GLOBAL_CONTEXT);
       if (!subject) throw new Error('Growth anchor disappeared');
-      const page = await listSubjectRelations(db.pool, tokenRing, {
+      const page = await listSubjectRelations(database.pool, tokenRing, {
         subject: anchor,
         property: 'schema:author',
         context: GLOBAL_CONTEXT,
@@ -233,15 +237,16 @@ test('A subject read examines the same rows whatever the number of relations it 
       if (page.relations.length !== 25 || page.count.value !== scale)
         throw new Error(`Expected a 25 statement middle page at ${scale}`);
       return { subject: subject.subject, page };
-    });
-    samples.push({ scale, cost: costOf(measured.capture) });
-    previous = scale;
-  }
-
-  const first = samples[0]!.cost;
-  const allowedRows = Math.max(2, first.rows * 0.1);
-  const allowedBlocks = Math.max(4, first.blocks * 0.5);
-  expect(Math.max(...samples.map(({ cost }) => cost.rows)) - first.rows).toBeLessThanOrEqual(allowedRows);
-  expect(Math.max(...samples.map(({ cost }) => cost.blocks)) - first.blocks).toBeLessThanOrEqual(allowedBlocks);
-  expect(samples.map(({ cost }) => cost.statements)).toEqual([first.statements, first.statements, first.statements]);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+  console.info(
+    'Growth median costs (1 warmup, 5 repetitions):',
+    report.samples.map(({ scale, cost }) => ({
+      scale,
+      rows: cost.rows,
+      blocks: cost.blocks,
+      statements: cost.statements,
+    })),
+  );
 });
