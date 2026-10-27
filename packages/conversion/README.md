@@ -199,6 +199,28 @@ modules do not know the server-assigned id of an earlier candidate, so they
 cannot safely retract it. The importer tracks actual returned candidate ids
 for later reconciliation and retraction.
 
+## Deletion
+
+The [common deletion policy](../../docs/deletion.md) is the lifecycle authority.
+Under the [first public scope](../../docs/scope.md), conversion covers Bangumi,
+VNDB, Open Library and Wikidata, with no recipe-site source or user posts.
+The converters persist nothing and have no delete, restore or purge operation
+or job. Their bounded source proposals, citations and deferred asset intents
+confer no lifecycle authority; pure conversion has no purge work to schedule.
+
+The caller and authoritative owners enforce lifecycle through public APIs:
+[Semantic](../../services/kernel/src/semantic/README.md) owns contributions and
+subjects, [Content](../../services/kernel/src/content/README.md) owns media, and
+[Access](../../services/kernel/src/access/README.md#account-deletion-policy)
+owns account lifecycle. Imported proposals and media remain subject to their
+deletion, restore, purge and disclosure rules under the common policy.
+Conversion cannot bypass server deletion or authorization. The
+[importer](../../services/importer/README.md#deletion) checks takedown tuple
+fences even on unchanged refreshes and must not clear them to recreate withheld
+material. Only the caller tracking actual returned candidate IDs can reconcile
+source disappearance or replacement through public retraction; converters
+cannot retract an earlier candidate from source data alone.
+
 ## Cost derivation and verification
 
 Pure conversion performs `O(record bytes)` work for one bounded record `M`.

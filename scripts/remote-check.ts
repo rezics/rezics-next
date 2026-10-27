@@ -2,7 +2,7 @@
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
 // stay off the machine the agents run on.
 //
-//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] <workspace> -- <command...>
+//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--gate] <workspace> -- <command...>
 //
 // The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
@@ -27,6 +27,8 @@ export type RemoteCheck = {
   cwd?: string;
   command: string[];
   slots?: number;
+  /** Allows the promotion gate to use all but one slot of its host. */
+  gate?: boolean;
   pollMs?: number;
   /** Called for each probe round that finds at least one responding host. */
   answered?: () => void;
@@ -46,11 +48,22 @@ export const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
+const SLOT_REQUEST_TOO_LARGE = 64;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
 export const CHECK_SLOT_PROCESSORS = 2;
 const MAX_WAIT_RECORD_MS = 60_000;
 
 export class Aborted extends Error {}
+
+export class SlotRequestTooLarge extends Error {
+  constructor(
+    readonly cap: number,
+    readonly requested: number,
+  ) {
+    super(`remote-check: requested ${requested} slots exceeds the cap of ${cap}; lower the run's concurrency to match`);
+    this.name = 'SlotRequestTooLarge';
+  }
+}
 
 export class RemoteTransportError extends Error {
   constructor(
@@ -148,59 +161,61 @@ while [ "$i" -lt ${host.slots} ]; do
   fi
   i=$((i + 1))
 done
-printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nSLOTS_USED %s\\n' "$processors" "$slice_processors" "$load" "$slots_used"`;
+gate_waiting=0
+gate_marker=${ROOT}/slots/gate-wait.lock
+if [ -e "$gate_marker" ]; then
+  exec 7>"$gate_marker"
+  if flock -n 7; then flock -u 7; else gate_waiting=1; fi
+  exec 7<&-
+fi
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nSLOTS_USED %s\\nGATE_WAITING %s\\n' "$processors" "$slice_processors" "$load" "$slots_used" "$gate_waiting"`;
 }
 
-/** Holds a host's exclusive reservation while a multi-slot run collects its slots. */
-function reservationScript(wait = true): string {
-  return `# REMOTE_CHECK_RESERVATION
-mkdir -p ${ROOT}/slots ${ROOT}/runs
-exec 8>"${ROOT}/slots/reserve.lock"
-${wait ? 'flock 8' : `flock -n 8 || exit ${SLOT_BUSY}`}
-echo RESERVATION
+/** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
+function gateMarkerScript(): string {
+  return `# REMOTE_CHECK_GATE_MARKER
+mkdir -p ${ROOT}/slots
+exec 8>"${ROOT}/slots/gate-wait.lock"
+flock -n 8 || exit ${SLOT_BUSY}
+echo GATE_MARKER
 exec cat >/dev/null`;
 }
 
-/** Takes a free slot while the connection lives: the lock goes with the session. */
-function slotScript(host: Host, reserved: boolean, slotLimit: number): string {
-  const mode = reserved ? 'REMOTE_CHECK_SLOT_RESERVED' : 'REMOTE_CHECK_SLOT_SINGLE';
-  const reservation = reserved
-    ? ''
-    : `exec 8>"${ROOT}/slots/reserve.lock"
-flock -x -n 8 || exit ${SLOT_BUSY}
-`;
-  const unlockReservation = reserved
-    ? ''
-    : `flock -u 8
-exec 8>&-
-`;
-  return `mkdir -p ${ROOT}/slots ${ROOT}/runs
-${mode}=1
-# REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
-${reservation}
-occupied=0
-i=0
-while [ "$i" -lt ${host.slots} ]; do
-  exec 9>"${ROOT}/slots/$i.lock"
-  if flock -n 9; then flock -u 9; else occupied=$((occupied + 1)); fi
-  exec 9>&-
-  i=$((i + 1))
-done
-if [ "$occupied" -ge ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
-i=0
-while [ "$i" -lt ${host.slots} ]; do
-  exec 9>"${ROOT}/slots/$i.lock"
-  if flock -n 9; then
-    for run in ${ROOT}/runs/*; do
-      [ -d "$run" ] || continue
-      if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then rm -rf -- "$run"; fi
-    done
-    ${unlockReservation}echo "SLOT $i"
-    exec cat >/dev/null
+/** Takes all requested slots together, or none. The host reservation protects only this short take. */
+function slotScript(host: Host, count: number, slotLimit: number): string {
+  const locks = Array.from({ length: host.slots }, (_, index) => {
+    const fd = index + 9;
+    return `exec ${fd}>"${ROOT}/slots/${index}.lock"
+if flock -n ${fd}; then
+  if [ "$acquired" -lt ${count} ]; then
+    acquired=$((acquired + 1))
+  else
+    flock -u ${fd}
+    exec ${fd}>&-
   fi
-  i=$((i + 1))
+else
+  occupied=$((occupied + 1))
+  exec ${fd}>&-
+fi`;
+  }).join('\n');
+  return `mkdir -p ${ROOT}/slots ${ROOT}/runs
+REMOTE_CHECK_SLOT_TAKE=1
+# REMOTE_CHECK_SLOT_COUNT ${count}
+# REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
+exec 8>"${ROOT}/slots/reserve.lock"
+flock -x -n 8 || exit ${SLOT_BUSY}
+occupied=0
+acquired=0
+${locks}
+if [ "$acquired" -ne ${count} ] || [ "$((occupied + acquired))" -gt ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
+flock -u 8
+exec 8>&-
+for run in ${ROOT}/runs/*; do
+  [ -d "$run" ] || continue
+  if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then rm -rf -- "$run"; fi
 done
-exit ${SLOT_BUSY}`;
+echo "SLOTS ${count}"
+exec cat >/dev/null`;
 }
 
 const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
@@ -350,19 +365,31 @@ type HostProbe = {
   sliceProcessors: number;
   load: number;
   memoryHeadroom: number;
+  memoryMaximum: number | null;
   slotsUsed: number;
+  gateWaiting: boolean;
 };
 type RankedHost = {
   host: Host;
+  capacity: number;
+  gateCapacity: number;
   resourceSlots: number;
   freeSlots: number;
   slotLimit: number;
   memoryHeadroom: number;
+  gateWaiting: boolean;
 };
 
-function probeCapacity(host: Host, probe: HostProbe): number {
+function hostCapacity(host: Host, probe: HostProbe): number {
+  const memoryMaximum = probe.memoryMaximum ?? host.memoryMaxGiB * 2 ** 30;
+  const memorySlots = Math.floor(memoryMaximum / CHECK_SLOT_MEMORY_BYTES);
+  const processorSlots = Math.floor(probe.sliceProcessors / CHECK_SLOT_PROCESSORS);
+  return Math.min(host.slots, memorySlots, processorSlots);
+}
+
+function probeCapacity(probe: HostProbe, capacity: number): number {
   let freeSlots = 0;
-  for (let count = 1; count <= host.slots; count += 1) {
+  for (let count = 1; count <= capacity; count += 1) {
     if (
       probe.memoryHeadroom < count * CHECK_SLOT_MEMORY_BYTES ||
       probe.load + count * CHECK_SLOT_PROCESSORS > probe.sliceProcessors
@@ -373,11 +400,23 @@ function probeCapacity(host: Host, probe: HostProbe): number {
   return freeSlots;
 }
 
-function rankHost(host: Host, probe: HostProbe): RankedHost {
-  const resourceSlots = probeCapacity(host, probe);
-  const freeSlots = Math.min(resourceSlots, Math.max(0, host.slots - probe.slotsUsed));
-  const slotLimit = Math.min(host.slots, probe.slotsUsed + resourceSlots);
-  return { host, resourceSlots, freeSlots, slotLimit, memoryHeadroom: probe.memoryHeadroom };
+function rankHost(host: Host, probe: HostProbe, gate: boolean): RankedHost {
+  const capacity = hostCapacity(host, probe);
+  const gateCapacity = Math.max(0, capacity - 1);
+  const resourceSlots = probeCapacity(probe, capacity);
+  const admissionLimit = gate ? gateCapacity : capacity;
+  const freeSlots = Math.min(resourceSlots, Math.max(0, admissionLimit - probe.slotsUsed));
+  const slotLimit = Math.min(admissionLimit, probe.slotsUsed + resourceSlots);
+  return {
+    host,
+    capacity,
+    gateCapacity,
+    resourceSlots,
+    freeSlots,
+    slotLimit,
+    memoryHeadroom: probe.memoryHeadroom,
+    gateWaiting: probe.gateWaiting,
+  };
 }
 
 function parseProbe(output: string): HostProbe | null {
@@ -396,6 +435,8 @@ function parseProbe(output: string): HostProbe | null {
   const maximum = value('MEMORY_MAX');
   const sliceMemory = current !== null && maximum !== null && /^\d+$/.test(current) && /^\d+$/.test(maximum);
   const memoryFallback = current === '-' && maximum === '-';
+  const gateWaitingValue = value('GATE_WAITING');
+  const gateWaiting = gateWaitingValue === '1';
   if (
     processorValue === null ||
     sliceProcessorValue === null ||
@@ -413,10 +454,19 @@ function parseProbe(output: string): HostProbe | null {
     !Number.isSafeInteger(slotsUsed) ||
     slotsUsed < 0 ||
     slotsUsed > 1_000_000 ||
+    (gateWaitingValue !== '0' && gateWaitingValue !== '1') ||
     (!sliceMemory && !memoryFallback)
   )
     return null;
-  return { processors, sliceProcessors, load, memoryHeadroom, slotsUsed };
+  return {
+    processors,
+    sliceProcessors,
+    load,
+    memoryHeadroom,
+    memoryMaximum: sliceMemory ? Number(maximum) : null,
+    slotsUsed,
+    gateWaiting,
+  };
 }
 
 async function probeHost(host: Host): Promise<HostProbe | null> {
@@ -466,7 +516,6 @@ async function takeSession(
   script: string,
   token: RegExp,
   signal: AbortSignal,
-  reservation?: SessionLease,
 ): Promise<SessionLease | null> {
   if (signal.aborted) throw new Aborted();
   const holder = Bun.spawn(['ssh', ...sshOptions(host), host.address, script], {
@@ -484,11 +533,7 @@ async function takeSession(
       // The session may already have exited.
     }
   };
-  const reservationLost = () => {
-    if (!accepted) stop();
-  };
   signal.addEventListener('abort', stop, { once: true });
-  if (reservation) void reservation.exited.then(reservationLost);
   try {
     let seen = '';
     while (!token.test(seen)) {
@@ -502,10 +547,6 @@ async function takeSession(
       seen += new TextDecoder().decode(chunk.value);
     }
     if (signal.aborted) throw new Aborted();
-    if (reservation && !reservation.isActive()) {
-      await lease.release();
-      return null;
-    }
     accepted = true;
     return lease;
   } catch (error) {
@@ -520,112 +561,71 @@ async function takeSession(
   }
 }
 
-/** Takes the short exclusive reservation used to keep slot acquisition inside the probed limit. */
-async function takeSlot(
-  host: Host,
-  reserved: boolean,
-  slotLimit: number,
-  signal: AbortSignal,
-  reservation?: SessionLease,
-): Promise<Lease | null> {
-  return takeSession(host, slotScript(host, reserved, slotLimit), /^SLOT \d+$/m, signal, reservation);
+/** Takes one or more slots under a short host-wide reservation. */
+async function takeSlots(host: Host, count: number, slotLimit: number, signal: AbortSignal): Promise<Lease | null> {
+  return takeSession(host, slotScript(host, count, slotLimit), /^SLOTS \d+$/m, signal);
 }
 
-async function takeReservation(host: Host, signal: AbortSignal, wait = true): Promise<SessionLease | null> {
-  return takeSession(host, reservationScript(wait), /^RESERVATION$/m, signal);
-}
-
-/**
- * Keeps every slot it gets while exclusively reserving the host for this multi-slot acquisition. Without
- * `announceWait` it does not wait: one busy slot releases what it holds and returns null.
- */
-async function takeReservedSlots(
-  host: Host,
-  count: number,
-  capacity: number,
-  pollMs: number,
-  signal: AbortSignal,
-  reservation: SessionLease,
-  announceWait?: () => void,
-): Promise<Lease | null> {
-  const held: Lease[] = [];
-  const releaseAll = async (): Promise<void> => {
-    await Promise.all(held.map((lease) => lease.release()));
-  };
-  try {
-    while (held.length < count) {
-      if (signal.aborted) throw new Aborted();
-      if (!reservation.isActive()) {
-        await releaseAll();
-        await reservation.release();
-        return null;
-      }
-      const lease = await takeSlot(host, true, capacity, signal, reservation);
-      if (lease) {
-        held.push(lease);
-        continue;
-      }
-      if (!reservation.isActive()) {
-        await releaseAll();
-        await reservation.release();
-        return null;
-      }
-      if (!announceWait) {
-        await releaseAll();
-        await reservation.release();
-        return null;
-      }
-      announceWait();
-      const probe = await probeHost(host);
-      if (!probe || !reservation.isActive()) {
-        await releaseAll();
-        await reservation.release();
-        return null;
-      }
-      const resourceSlots = probeCapacity(host, probe);
-      const otherSlotsUsed = Math.max(0, probe.slotsUsed - held.length);
-      capacity = Math.min(host.slots, otherSlotsUsed + resourceSlots);
-      await sleep(pollMs, signal);
-    }
-    await reservation.release();
-    if (signal.aborted) throw new Aborted();
-    return { host, release: releaseAll };
-  } catch (error) {
-    await releaseAll();
-    await reservation.release();
-    throw error;
-  }
+async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionLease | null> {
+  return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal);
 }
 
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
-async function rankedHosts(hosts: Host[], signal: AbortSignal): Promise<RankedHost[]> {
+async function rankedHosts(
+  hosts: Host[],
+  signal: AbortSignal,
+  gate: boolean,
+  preferUngated = false,
+): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
   return (
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
-      .map(({ host, probe }) => rankHost(host, probe))
+      .map(({ host, probe }) => rankHost(host, probe, gate))
       // Equal slot counts prefer the host with more measured slice memory headroom.
-      .sort((left, right) => right.freeSlots - left.freeSlots || right.memoryHeadroom - left.memoryHeadroom)
+      .sort(
+        (left, right) =>
+          (preferUngated ? Number(left.gateWaiting) - Number(right.gateWaiting) : 0) ||
+          right.freeSlots - left.freeSlots ||
+          right.memoryHeadroom - left.memoryHeadroom,
+      )
   );
 }
 
 /** One probe round. Responding hosts are ranked by resource-backed free slots. */
 export async function answeringHosts(hosts: Host[]): Promise<Host[]> {
-  return (await rankedHosts(hosts, new AbortController().signal)).map(({ host }) => host);
+  return (await rankedHosts(hosts, new AbortController().signal, false)).map(({ host }) => host);
 }
 
 /** Tries every host's slots once, most resource-backed free slots first, and never waits for one. */
-async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): Promise<Lease | null> {
-  for (const { host, freeSlots, slotLimit } of await rankedHosts(hosts, signal)) {
-    if (freeSlots < slots) continue;
-    let lease: Lease | null;
-    if (slots === 1) lease = await takeSlot(host, false, slotLimit, signal);
-    else {
-      const reservation = await takeReservation(host, signal, false);
-      if (!reservation) continue;
-      lease = await takeReservedSlots(host, slots, slotLimit, 0, signal, reservation);
+async function acquireOnce(
+  hosts: Host[],
+  requestedSlots: number,
+  signal: AbortSignal,
+  gate = false,
+): Promise<Lease | null> {
+  const ranked = await rankedHosts(hosts, signal, gate);
+  let slots = requestedSlots;
+  if (ranked.length > 0) {
+    if (gate) {
+      const largestAdmissible = Math.max(...ranked.map(({ gateCapacity }) => gateCapacity));
+      if (largestAdmissible < 1)
+        throw new Error('remote-check: no check host can run the gate while leaving one slot free');
+      if (slots > largestAdmissible) {
+        slots = largestAdmissible;
+        console.error(
+          `remote-check: gate requested ${requestedSlots} slots; using ${slots} to leave one slot of the host free`,
+        );
+      }
+    } else {
+      const cap = Math.max(1, Math.floor(Math.min(...ranked.map(({ capacity }) => capacity)) / 2));
+      if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
     }
+  }
+  for (const { host, freeSlots, slotLimit } of ranked) {
+    if (freeSlots < slots) continue;
+    const lease = await takeSlots(host, slots, slotLimit, signal);
     if (lease && signal.aborted) {
       await lease.release();
       throw new Aborted();
@@ -637,14 +637,19 @@ async function acquireOnce(hosts: Host[], slots: number, signal: AbortSignal): P
 
 async function acquire(
   hosts: Host[],
-  slots: number,
+  requestedSlots: number,
   pollMs: number,
   signal: AbortSignal,
   giveUpIfUnanswered = false,
   onAnswered?: () => void,
+  gate = false,
 ): Promise<Lease | null> {
   let announced = false;
   let answered = false;
+  let slots = requestedSlots;
+  let warnedGateReduction = false;
+  let marker: SessionLease | undefined;
+  let markerHost: string | undefined;
   const wait = waitRecorder();
   const announceWait = (): void => {
     wait.begin();
@@ -654,60 +659,64 @@ async function acquire(
   };
   try {
     while (true) {
-      const ranked = await rankedHosts(hosts, signal);
+      if (marker && !marker.isActive()) {
+        await marker.release();
+        marker = undefined;
+        markerHost = undefined;
+      }
+      const ranked = await rankedHosts(hosts, signal, gate, slots === 1);
       if (ranked.length > 0) {
         answered = true;
         onAnswered?.();
+        if (gate) {
+          const largestAdmissible = Math.max(...ranked.map(({ gateCapacity }) => gateCapacity));
+          if (largestAdmissible < 1) {
+            throw new Error('remote-check: no check host can run the gate while leaving one slot free');
+          }
+          if (slots > largestAdmissible) {
+            slots = largestAdmissible;
+            if (!warnedGateReduction) {
+              console.error(
+                `remote-check: gate requested ${requestedSlots} slots; using ${slots} to leave one slot of the host free`,
+              );
+              warnedGateReduction = true;
+            }
+          }
+        } else {
+          const smallestCapacity = Math.min(...ranked.map(({ capacity }) => capacity));
+          const cap = Math.max(1, Math.floor(smallestCapacity / 2));
+          if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
+        }
       } else if (giveUpIfUnanswered && !answered) return null;
       for (const entry of ranked) {
-        const { host, freeSlots, resourceSlots, slotLimit } = entry;
-        if (slots === 1) {
-          if (freeSlots < 1) continue;
-          const lease = await takeSlot(host, false, slotLimit, signal);
-          if (lease && signal.aborted) {
-            await lease.release();
-            throw new Aborted();
-          }
-          if (lease) return lease;
-          continue;
-        }
-        let reservation = await takeReservation(host, signal, false);
-        let waitedForReservation = false;
-        if (!reservation) {
-          announceWait();
-          wait.record();
-          reservation = await takeReservation(host, signal);
-          waitedForReservation = true;
-        }
-        if (!reservation) continue;
-        let current = entry;
-        if (waitedForReservation) {
-          const probe = await probeHost(host);
-          if (!probe) {
-            await reservation.release();
-            continue;
-          }
-          current = rankHost(host, probe);
-        }
-        if (current.freeSlots < 1) {
-          await reservation.release();
-          continue;
-        }
-        const lease = await takeReservedSlots(host, slots, current.slotLimit, pollMs, signal, reservation, () => {
-          announceWait();
-          wait.record();
-        });
+        const { host, freeSlots, slotLimit } = entry;
+        if (freeSlots < slots) continue;
+        const lease = await takeSlots(host, slots, slotLimit, signal);
         if (lease && signal.aborted) {
           await lease.release();
           throw new Aborted();
         }
-        if (lease) return lease;
+        if (lease) {
+          if (marker) await marker.release();
+          return lease;
+        }
+      }
+      if (gate && ranked.length > 0) {
+        const candidates = ranked.filter(({ gateCapacity }) => gateCapacity >= slots);
+        const target = candidates.find(({ host }) => host.name === markerHost) ?? candidates[0];
+        if (target && target.host.name !== markerHost) {
+          if (marker) await marker.release();
+          marker = undefined;
+          markerHost = target.host.name;
+          marker = (await takeGateMarker(target.host, signal)) ?? undefined;
+        }
       }
       announceWait();
       wait.record();
       await sleep(pollMs, signal);
     }
   } finally {
+    if (marker) await marker.release();
     wait.stop();
   }
 }
@@ -878,18 +887,12 @@ async function runLeased(
   }
 }
 
-/** Hosts with enough slots for the run; a host with fewer can never serve it, so it is not asked and not waited for. */
-function hostsWithSlots(options: RemoteCheck, slots: number): Host[] {
-  return options.hosts.filter((host) => host.slots >= slots);
-}
-
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
   const slots = options.slots ?? 1;
-  const hosts = hostsWithSlots(options, slots);
-  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
+  const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal);
+  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal, false, undefined, options.gate ?? false);
   if (!lease) throw new Error('remote-check: no check host answered');
   return await runLeased(lease, options, files, slotWaitStarted, signal);
 }
@@ -900,11 +903,18 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
  */
 export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
   const slots = options.slots ?? 1;
-  const hosts = hostsWithSlots(options, slots);
-  if (hosts.length === 0) throw new Error(`No check host has ${slots} slots`);
+  const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquire(hosts, slots, options.pollMs ?? 5000, signal, true, options.answered);
+  const lease = await acquire(
+    hosts,
+    slots,
+    options.pollMs ?? 5000,
+    signal,
+    true,
+    options.answered,
+    options.gate ?? false,
+  );
   if (!lease) return null;
   return await runLeased(lease, options, files, slotWaitStarted, signal);
 }
@@ -915,11 +925,10 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
  */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   const slots = options.slots ?? 1;
-  const hosts = hostsWithSlots(options, slots);
-  if (hosts.length === 0) return { status: 'no-slot' };
+  const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquireOnce(hosts, slots, signal);
+  const lease = await acquireOnce(hosts, slots, signal, options.gate ?? false);
   if (!lease) return { status: 'no-slot' };
   return {
     status: 'ran',
@@ -933,6 +942,7 @@ function parse(argv: string[]): RemoteCheck {
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   let cwd: string | undefined;
   let slots: number | undefined;
+  let gate = false;
   let returns: string[] | undefined;
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
@@ -942,6 +952,10 @@ function parse(argv: string[]): RemoteCheck {
       if (!value) throw new Error('--returns needs a path');
       returns ??= [];
       returns.push(value);
+      continue;
+    }
+    if (flag === '--gate') {
+      gate = true;
       continue;
     }
     if ((flag !== '--cwd' && flag !== '--slots') || rest.length === 0) throw new Error(`Unknown option: ${flag}`);
@@ -956,7 +970,7 @@ function parse(argv: string[]): RemoteCheck {
   const workspace = rest.shift();
   const separator = rest.shift();
   if (!workspace || separator !== '--' || rest.length === 0) {
-    throw new Error('Usage: remote-check.ts [--cwd <directory>] [--slots <n>] <workspace> -- <command...>');
+    throw new Error('Usage: remote-check.ts [--cwd <directory>] [--slots <n>] [--gate] <workspace> -- <command...>');
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
   const pollMs = process.env.REMOTE_CHECK_POLL_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_POLL_MS);
@@ -966,6 +980,7 @@ function parse(argv: string[]): RemoteCheck {
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
     ...(slots === undefined ? {} : { slots }),
+    ...(gate ? { gate } : {}),
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
   };
@@ -990,6 +1005,9 @@ if (import.meta.main) {
     if (error instanceof RemoteTransportError) {
       console.error(error.message);
       process.exitCode = REMOTE_TRANSPORT_FAILURE;
+    } else if (error instanceof SlotRequestTooLarge) {
+      console.error(error.message);
+      process.exitCode = SLOT_REQUEST_TOO_LARGE;
     } else {
       if (!(error instanceof Aborted)) console.error(error instanceof Error ? error.message : error);
       process.exitCode = 1;

@@ -47,6 +47,49 @@ This adopts the [bulk backpressure research](../../docs/research/importer-bulk-b
 
 `tests/write-width.test.ts` verifies this behaviour in `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes`.
 
+## Deletion
+
+The [common deletion policy](../../docs/deletion.md) governs lifecycle; the
+[first public scope](../../docs/scope.md) limits imports to Bangumi, VNDB,
+Open Library and Wikidata, with no recipe-site source or user posts. Imports
+owns pure conversion, an ordinary authenticated API client and private,
+operator-managed SQLite coordination state. Authoritative contributions and
+subjects belong to [Semantic](../kernel/src/semantic/README.md), media to
+[Content](../kernel/src/content/README.md), and account lifecycle to
+[Access](../kernel/src/access/README.md#account-deletion-policy).
+
+Those owners are responsible for enforcing platform soft deletion, record-owner
+restore within 30 days, separate bounded purge, account erasure, early-purge
+permission, takedown and legal holds through their public APIs under the common
+policy. Imported proposals and media remain under those owners. The importer
+does not soft-delete, restore or purge authoritative user-owned records, expose
+parallel lifecycle routes, or use privileged SQL into those modules.
+
+In [`importer.ts`](src/importer.ts), source disappearance and replacement reconcile
+provenance by publicly bulk-retracting the actual returned source candidate IDs.
+This does not delete a communal subject, another contributor's adoption or media
+bytes. [`record-bindings.ts`](src/record-bindings.ts) removes an acknowledged
+retracted candidate's local binding pointer and retains its journal receipt;
+that cleanup is not content purge. The `present`/`vanished` checkpoints and
+generations in [`run-store.ts`](src/run-store.ts) and
+[`record-store.ts`](src/record-store.ts) describe source state, not user-facing
+soft deletion or restoration.
+
+Refresh must respect server deletion, authorization and disclosure checks.
+Planning checks `(source, external_id, field_group)` takedown fences before even
+the unchanged-record shortcut, and dispatch checks them again. Never clear
+those fences or terminal source claims to recreate withheld material.
+
+Operational source/key/revision/digest/converter-revision rows, sanitized source
+projections, generation pages, returned IDs, exact prepared request bytes and
+replay receipts support restart safety. They have no product browse, count,
+search or sitemap surface. Bearers stay in memory; the automated account key
+file is externally provisioned, not an account-content database. This state is
+not a workaround for retaining deleted private account content. Current code
+has no timed coordination-state purge job or retention interval; do not clear
+state while effects remain unresolved. Authoritative lifecycle work and its
+bounds belong to the linked owners; conversion itself has no purge work.
+
 ## Cost
 
 ### Adaptive writes

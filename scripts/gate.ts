@@ -4,7 +4,7 @@
 //
 // With KERNEL_CHECK_REMOTE naming a readable hosts file, the whole gate runs on one development check host instead, so
 // no workspace's tests compete with the machine the agents work on. GATE_REMOTE_SLOTS (default 6) is how many of that
-// host's slots the run holds; the output and exit code are the same as a local run's.
+// host's slots the run holds, while leaving one available for other checks; the output and exit code are the same as a local run's.
 import { accessSync, constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { classifyLoadInducedOutput } from './test-lanes.ts';
@@ -38,6 +38,7 @@ async function runRemoteAttempt(slots: number, concurrency: string | undefined):
     [
       process.execPath,
       join(import.meta.dir, 'remote-check.ts'),
+      '--gate',
       '--slots',
       String(slots),
       root,

@@ -8,30 +8,57 @@ const gate = join(repository, 'scripts/gate.ts');
 // A fake ssh answers each kind of remote script by what it contains; a fake rsync and a fake bun record what reaches
 // them. Nothing here touches a network or installs packages.
 const fakeSsh = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const script = args.at(-1)!;
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address: args.at(-2), ...event }) + '\\n');
-if (script.includes('MemAvailable')) {
-  log({ kind: 'probe' });
-  console.log('AVAILABLE 8000000000');
-} else if (script.includes('REMOTE_CHECK_RESERVATION')) {
-  log({ kind: 'reservation' });
-  console.log('RESERVATION');
+const address = args.at(-2)!;
+const hostKey = address.replace(/[^a-z0-9]/gi, '_');
+const config = JSON.parse(readFileSync(dir + '/config.json', 'utf8'))[address];
+if (script.includes('/proc/loadavg')) {
+  const maximum = config.memoryMax;
+  const used = Array.from({ length: config.slots }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
+  const gateWaiting = existsSync(dir + '/' + hostKey + '.gate-marker');
+  log({ kind: 'probe', script, slotsUsed: used, gateWaiting });
+  console.log('MEMORY_CURRENT 0');
+  console.log('MEMORY_MAX ' + maximum);
+  console.log('MEMORY_HEADROOM ' + maximum);
+  console.log('PROCESSORS 16');
+  console.log('SLICE_PROCESSORS ' + config.cpuQuotaPercent / 100);
+  console.log('LOAD 0');
+  console.log('SLOTS_USED ' + used);
+  console.log('GATE_WAITING ' + (gateWaiting ? 1 : 0));
+} else if (script.includes('REMOTE_CHECK_GATE_MARKER')) {
+  const marker = dir + '/' + hostKey + '.gate-marker';
+  if (existsSync(marker)) process.exit(75);
+  mkdirSync(marker);
+  log({ kind: 'gate-marker' });
+  console.log('GATE_MARKER');
   const release = () => {
-    log({ kind: 'reservation-release' });
+    rmSync(marker, { recursive: true, force: true });
+    log({ kind: 'gate-marker-release' });
     process.exit(0);
   };
   process.stdin.on('end', release);
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
-} else if (script.includes('flock')) {
-  log({ kind: 'slot' });
-  console.log('SLOT 0');
+} else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
+  const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
+  const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? config.slots);
+  const occupied = Array.from({ length: config.slots }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
+  const available = Array.from({ length: config.slots }, (_, index) => index).filter((index) => !occupied.includes(index));
+  if (occupied.length + requested > slotLimit || available.length < requested) process.exit(75);
+  const selected = available.slice(0, requested);
+  for (const slot of selected) mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
+  for (const slot of selected) log({ kind: 'slot', slot, requested });
+  console.log('SLOTS ' + requested);
   const release = () => {
-    log({ kind: 'release' });
+    for (const slot of selected) {
+      rmSync(dir + '/' + hostKey + '.slot.' + slot, { recursive: true, force: true });
+      log({ kind: 'release', slot });
+    }
     process.exit(0);
   };
   process.stdin.on('end', release);
@@ -132,6 +159,10 @@ function scenario(slots = 6): { env: Record<string, string>; events: () => Event
   const dir = join(root, `scenario-${counter++}`);
   mkdirSync(dir);
   writeFileSync(
+    join(dir, 'config.json'),
+    JSON.stringify({ 'ops@b.test': { slots, memoryMax: 48 * 2 ** 30, cpuQuotaPercent: 1400 } }),
+  );
+  writeFileSync(
     join(dir, 'hosts.json'),
     JSON.stringify({
       hosts: [
@@ -208,8 +239,22 @@ test('with KERNEL_CHECK_REMOTE set the root gate runs whole on one check host an
   expect(seen.map((event) => event.kind).slice(-4)).toEqual(['cleanup', 'release', 'release', 'release']);
 });
 
+test('the gate is not capped at half capacity and leaves one slot of its host free', async () => {
+  const { env, events } = scenario(6);
+  const result = await runGate({ ...env, GATE_REMOTE_SLOTS: '6' });
+
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('gate requested 6 slots; using 5 to leave one slot of the host free');
+  const seen = events();
+  expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(5);
+  const probe = seen.find((event) => event.kind === 'probe')!.script as string;
+  expect(probe).toContain('GATE_WAITING');
+  const take = seen.find((event) => event.kind === 'slot')!;
+  expect(take.requested).toBe(5);
+});
+
 test("the gate retries its remote run once after a transport failure and exits with the second run's code", async () => {
-  const { env, events } = scenario(1);
+  const { env, events } = scenario(2);
   const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_EXIT: '7', GATE_REMOTE_SLOTS: '1' });
 
   expect(result.code).toBe(7);
@@ -225,14 +270,15 @@ test('the gate asks for six slots and forwards no concurrency unless set', async
   const result = await runGate(env);
   expect(result.code).toBe(0);
   const seen = events();
-  expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(6);
+  expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(5);
+  expect(result.stderr).toContain('using 5 to leave one slot');
   const script = seen.find((event) => event.kind === 'run')!.script as string;
   expect(script).toContain('bun scripts/gate.ts');
   expect(script).not.toContain('GATE_CONCURRENCY');
 });
 
 test('a signal sent to the gate reaches the remote run, which is cleaned up before the gate exits', async () => {
-  const { env, events } = scenario(1);
+  const { env, events } = scenario(2);
   const child = Bun.spawn([process.execPath, gate], {
     cwd: repository,
     env: { ...env, FAKE_HANG: '1', GATE_REMOTE_SLOTS: '1' },
