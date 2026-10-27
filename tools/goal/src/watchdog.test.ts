@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
+import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { migrate, openDb } from './db.ts';
-import { violations, watch } from './watchdog.ts';
+import { sshProbe, violations, watch } from './watchdog.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
 
@@ -179,6 +181,105 @@ test('failure signatures classify each documented infrastructure error', () => {
   }
 });
 
+test('the check-host probe starts its SSH attempts in the background and never blocks the sweep', () => {
+  const root = temporaryDirectory('goal-watchdog-background-hosts-');
+  const host = { name: 'kernel-a', address: 'ops@kernel-a.test', identity: '/secret/identity' };
+  try {
+    const calls: { command: string; args: string[]; options: { detached?: boolean; stdio?: unknown } }[] = [];
+    const child = new EventEmitter() as EventEmitter & { stderr: PassThrough; unref: () => void };
+    child.stderr = new PassThrough();
+    let unrefed = false;
+    child.unref = () => {
+      unrefed = true;
+    };
+    const fakeSpawn = ((command: string, args: string[], options: { detached?: boolean; stdio?: unknown }) => {
+      calls.push({ command, args, options });
+      return child;
+    }) as unknown as typeof import('node:child_process').spawn;
+    const received: { status: number | null; stderr: string }[] = [];
+
+    sshProbe(host, (result) => received.push(result), fakeSpawn);
+    expect(calls).toEqual([
+      {
+        command: 'ssh',
+        args: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', host.identity, host.address, 'true'],
+        options: { detached: true, stdio: ['ignore', 'ignore', 'pipe'] },
+      },
+    ]);
+    expect(unrefed).toBe(true);
+    expect(received).toEqual([]);
+
+    writeFileSync(join(root, 'remote-check-hosts.json'), JSON.stringify({ hosts: [host] }));
+    const empty = store([], []);
+    const branches = { stabilize: 'none', integration: 'none' };
+    let finishProbe: ((result: { status: number | null; stderr: string }) => void) | undefined;
+    const launched: string[] = [];
+    const started = Date.now();
+    expect(
+      watch(empty, root, branches, root, () => {}, now, (probeHost, complete) => {
+        launched.push(probeHost.name);
+        finishProbe = complete;
+      }),
+    ).toBe(0);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(launched).toEqual(['kernel-a']);
+    expect(finishProbe).toBeDefined();
+    expect(existsSync(join(root, 'host-probes', 'kernel-a.json'))).toBe(false);
+
+    child.stderr.write('ssh: Connection refused\n/private/key /secret/identity');
+    child.emit('close', 255, null);
+    expect(received).toEqual([{ status: 255, stderr: 'ssh: Connection refused' }]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a sweep judges the probe results the previous sweep started, and two failures in a row report the host once', () => {
+  const root = temporaryDirectory('goal-watchdog-previous-hosts-');
+  try {
+    writeFileSync(
+      join(root, 'remote-check-hosts.json'),
+      JSON.stringify({ hosts: [{ name: 'kernel-a', address: 'ops@kernel-a.test', identity: '/secret/identity' }] }),
+    );
+    const empty = store([], []);
+    const delivered: string[] = [];
+    const completions: ((result: { status: number | null; stderr: string }) => void)[] = [];
+    const probe = (
+      _host: { name: string; address: string; identity: string },
+      complete: (result: { status: number | null; stderr: string }) => void,
+    ) => {
+      completions.push(complete);
+    };
+    const branches = { stabilize: 'none', integration: 'none' };
+    const run = (at: number) => watch(empty, root, branches, root, (message) => delivered.push(message), at, probe);
+    const failure = { status: 255, stderr: 'ssh: Connection refused\n/private/key /secret/identity' };
+
+    expect(run(now)).toBe(0);
+    expect(completions).toHaveLength(1);
+    expect(existsSync(join(root, 'host-probes', 'kernel-a.json'))).toBe(false);
+
+    // This job is still running at the next due sweep, so it is no result. A late completion is stale.
+    expect(run(now + 5 * 60_000)).toBe(0);
+    expect(completions).toHaveLength(2);
+    completions[0]!(failure);
+    completions[1]!(failure);
+
+    // The sweep consumes only the result from the sweep at +5 minutes: failure one.
+    expect(run(now + 10 * 60_000)).toBe(0);
+    expect(completions).toHaveLength(3);
+    completions[2]!(failure);
+
+    // The next due sweep sees the second consecutive failed result and reports exactly once.
+    expect(run(now + 15 * 60_000)).toBe(1);
+    expect(delivered).toEqual(['Incident: check host kernel-a refuses SSH: ssh: Connection refused']);
+    expect(delivered[0]).not.toContain('/secret/identity');
+    expect(run(now + 20 * 60_000)).toBe(0);
+    expect(delivered).toHaveLength(1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('check hosts are probed once per five minutes and a repeated outage alerts again after recovery', () => {
   const root = temporaryDirectory('goal-watchdog-hosts-');
   try {
@@ -190,11 +291,14 @@ test('check hosts are probed once per five minutes and a repeated outage alerts 
     const delivered: string[] = [];
     const probes: string[] = [];
     let succeeds = false;
-    const probe = (host: { name: string; address: string; identity: string }) => {
+    const probe = (
+      host: { name: string; address: string; identity: string },
+      complete: (result: { status: number | null; stderr: string }) => void,
+    ) => {
       probes.push(host.name);
-      return succeeds
+      complete(succeeds
         ? { status: 0, stderr: '' }
-        : { status: 255, stderr: 'ssh: Connection refused\n/private/key /secret/identity' };
+        : { status: 255, stderr: 'ssh: Connection refused\n/private/key /secret/identity' });
     };
     const branches = { stabilize: 'none', integration: 'none' };
     const run = (at: number) => watch(empty, root, branches, root, (message) => delivered.push(message), at, probe);
@@ -202,22 +306,24 @@ test('check hosts are probed once per five minutes and a repeated outage alerts 
     expect(run(now)).toBe(0);
     expect(run(now + 60_000)).toBe(0);
     expect(probes).toEqual(['kernel-a']);
-    expect(run(now + 5 * 60_000)).toBe(1);
+    expect(run(now + 5 * 60_000)).toBe(0);
+    expect(run(now + 10 * 60_000)).toBe(1);
     expect(delivered).toEqual(['Incident: check host kernel-a refuses SSH: ssh: Connection refused']);
     expect(delivered[0]).not.toContain('/secret/identity');
-    expect(run(now + 10 * 60_000)).toBe(0);
+    expect(run(now + 15 * 60_000)).toBe(0);
     expect(delivered).toHaveLength(1);
 
     succeeds = true;
-    expect(run(now + 15 * 60_000)).toBe(0);
-    succeeds = false;
     expect(run(now + 20 * 60_000)).toBe(0);
-    expect(run(now + 25 * 60_000)).toBe(1);
+    succeeds = false;
+    expect(run(now + 25 * 60_000)).toBe(0);
+    expect(run(now + 30 * 60_000)).toBe(0);
+    expect(run(now + 35 * 60_000)).toBe(1);
     expect(delivered).toHaveLength(2);
 
     const probeCount = probes.length;
     rmSync(join(root, 'remote-check-hosts.json'));
-    expect(run(now + 30 * 60_000)).toBe(0);
+    expect(run(now + 40 * 60_000)).toBe(0);
     expect(probes).toHaveLength(probeCount);
   } finally {
     rmSync(root, { recursive: true, force: true });
