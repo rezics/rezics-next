@@ -6,7 +6,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
-import { authoritativeTimeValue, runCommand, type AuthoritativeTime } from '../../src/command/command.ts';
+import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { accessCheck, type AccessClient, type Resource } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -90,27 +90,12 @@ test('reference identity and Access share one RR client and preserve native acce
   const created = await subject(f);
   const databaseAt = (await admin.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
   const ahead = new Date(databaseAt.getTime() + 30_000);
-  let time: AuthoritativeTime | undefined;
-  await runCommand(
-    pool,
-    {
-      partition: partitionOf(f.resource.route),
-      deadline: Date.now() + 5_000,
-      clock: () => ahead,
-    },
-    async (tx, command) => {
-      time = command.time;
-      await tx.query(
-        `UPDATE access.resource_grant SET valid=tstzrange($4::timestamptz,NULL,'[)')
+  await admin.query(
+    `UPDATE access.resource_grant SET valid=tstzrange($4::timestamptz,NULL,'[)')
       WHERE route=$1 AND resource_id=$2 AND subject_id=$3`,
-        [f.resource.route, f.resource.id, f.actorId, authoritativeTimeValue(command.time)],
-      );
-      return { value: true, events: [{ type: 'com.rezics.access.time-probe.v1', data: {} }] };
-    },
+    [f.resource.route, f.resource.id, f.actorId, ahead],
   );
-  expect(time).toBeDefined();
-  const nativeTime = time!;
-  expect(Date.parse(authoritativeTimeValue(nativeTime))).toBeGreaterThan(databaseAt.getTime() + 20_000);
+  let acceptanceAt: string | undefined;
   let authorizationClient: PoolClient | undefined;
   let eligibilityClient: AccessClient | undefined;
   const eligibility = createResourcePublicEligibility({
@@ -122,7 +107,7 @@ test('reference identity and Access share one RR client and preserve native acce
     async verify({ client, at, evidence }) {
       eligibilityClient = client;
       expect(client).toBe(authorizationClient!);
-      expect(at).toBe(authoritativeTimeValue(nativeTime));
+      expect(at).toBe(acceptanceAt!);
       const row = await client.query('SELECT visibility FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
         f.resource.route,
         evidence.id,
@@ -134,24 +119,28 @@ test('reference identity and Access share one RR client and preserve native acce
   expect(await observed(() => readSubjectReference(pool, f.resource.id, (client) => ordinary(client)))).toBeNull();
   const resource = { ...f.resource, eligibility };
   const authorize = await check(f, resource);
-  // The grant starts at the actual command T, ahead of the ordinary read clock.
-  const result = await observed(() =>
-    readSubjectReference(pool, f.resource.id, async (client) => {
-      authorizationClient = client;
-      const state = await client.query('SHOW transaction_isolation');
-      expect(state.rows[0]?.transaction_isolation).toBe('repeatable read');
-      expect((await client.query('SHOW transaction_read_only')).rows[0]?.transaction_read_only).toBe('on');
-      return authorize(client, nativeTime);
-    }),
+  // Native T exists only during its live command attempt. The nested reference
+  // read forwards that capability to Access on the reference's own RR client.
+  const result = await runCommand(
+    pool,
+    { partition: partitionOf(f.resource.route), deadline: Date.now() + 5_000, clock: () => ahead },
+    async (_, command) => {
+      acceptanceAt = authoritativeTimeValue(command.time);
+      expect(Date.parse(acceptanceAt)).toBeGreaterThan(databaseAt.getTime() + 20_000);
+      const value = await observed(() =>
+        readSubjectReference(pool, f.resource.id, async (client) => {
+          authorizationClient = client;
+          const state = await client.query('SHOW transaction_isolation');
+          expect(state.rows[0]?.transaction_isolation).toBe('repeatable read');
+          expect((await client.query('SHOW transaction_read_only')).rows[0]?.transaction_read_only).toBe('on');
+          return authorize(client, command.time);
+        }),
+      );
+      return { value, events: [{ type: 'com.rezics.access.time-probe.v1', data: {} }] };
+    },
   );
   expect(eligibilityClient).toBe(authorizationClient!);
-  expect(result).toEqual({
-    id: f.resource.id,
-    component: {
-      ...created.component,
-      position: created.component.position + 1n,
-    },
-  });
+  expect(result.value).toEqual({ id: f.resource.id, component: created.component });
 });
 
 test('references enforce current explicit denial, suspension and native visibility', async () => {
