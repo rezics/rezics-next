@@ -8,6 +8,7 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { relatedReadEligibility } from './eligibility.ts';
 import type { Statement } from './item.ts';
 import { slotId } from './slots.ts';
+import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { withReadTransaction } from './read.ts';
@@ -52,19 +53,10 @@ type Row = {
   id: string;
   type: string;
   labels: Record<string, string>;
+  original: string | null;
   choices: { property: string; statement: StoredStatement }[];
 };
 
-function labelFor(labels: Record<string, string>, languages: readonly string[]): SubjectSummary['label'] {
-  for (const language of [
-    ...languages.flatMap((tag) => [tag, tag.split('-')[0]!]),
-    'en',
-    ...Object.keys(labels).sort(),
-  ]) {
-    if (labels[language] !== undefined) return { value: labels[language]!, language };
-  }
-  return null;
-}
 function content(statement: StoredStatement | undefined): string | null {
   return statement?.value.type === 'value' && typeof statement.value.content === 'string'
     ? statement.value.content
@@ -137,6 +129,7 @@ export async function readSubjectSummaries(
           route: routeOf(id)!,
           id,
           image: slotId(id, 'schema:image'),
+          original: slotId(id, 'schema:inLanguage'),
         })),
       };
       const subjects = group.map((id) => ({ route: routeOf(id)!, id }));
@@ -162,7 +155,7 @@ export async function readSubjectSummaries(
   const representatives = new Map<string, string>();
   for (const row of subjects.values()) {
     const types = [...new Set([row.type, ...(deps.release.types[row.type]?.bases ?? [])])];
-    const label = labelFor(row.labels, languages);
+    const label = chooseLabel(row.labels, languages, row.original);
     const creativeWork = types.includes('schema:CreativeWork');
     results.set(row.id, { id: row.id, type: row.type, types, label, creativeWork, cover: null });
     const own = image(row);

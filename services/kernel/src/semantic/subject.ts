@@ -31,12 +31,13 @@ import readIdentityVisibility from './read-visibility.sql';
 import updateIdentity from './update-subject-identity.sql';
 import readIdentitySubject from './candidates-read-adoption-subject.sql';
 import { linkChanges } from './link-changes.ts';
-import { slotView } from './slots.ts';
+import { slotId, slotView } from './slots.ts';
 import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertSubject from './create-subject.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import readLabelsStatement from './read-labels.sql';
+import readLabelChoicesStatement from './read-label-choices.sql';
 import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
 import readTypesStatement from './read-item-types.sql';
@@ -557,6 +558,26 @@ export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Ma
         })) as { id: string; labels: Record<string, string> }[] | { id: string; labels: Record<string, string> } | null,
       );
       for (const row of rows) labels.set(row.id, row.labels ?? {});
+    }),
+  );
+  return labels;
+}
+
+/** Chosen-label inputs use one statement per partition, including the original-language slot. */
+export async function readLabelChoices(
+  pool: Pool,
+  ids: readonly string[],
+): Promise<Map<string, { labels: Item['labels']; original: string | null }>> {
+  assertBatch(ids, 'A label fill accepts at most 256 ids');
+  const labels = new Map<string, { labels: Item['labels']; original: string | null }>();
+  await Promise.all(
+    [...groupsOf(ids)].map(async ([partition, subjectIds]) => {
+      const rows = (await readLabelChoicesStatement.run(pool, {
+        partition_no: partition,
+        context_id: GLOBAL_CONTEXT,
+        subjects: subjectIds.map((id) => ({ route: routeOf(id)!, id, original: slotId(id, 'schema:inLanguage') })),
+      })) as { id: string; labels: Record<string, string>; original: string | null }[];
+      for (const row of rows) labels.set(row.id, { labels: row.labels ?? {}, original: row.original });
     }),
   );
   return labels;

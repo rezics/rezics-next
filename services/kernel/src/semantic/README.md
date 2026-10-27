@@ -78,9 +78,17 @@ The relation properties a subject can take, with their labels and admitted quali
 
 The value side of a relation is read through an indexed inverse read: the subjects whose statements with a given property point at a given subject, filtered by type and qualifier, ordered by a declared key (credit order, series position, date, name) and paged with an opaque continuation. Every inverse read returns an exact count or an "at least" count. Inverse reads never load the holding subjects' other facts.
 
-`GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id for its declared qualifier), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 20), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and reader language. Property-page links include the holder's `type` and `label`; `language` or the first `Accept-Language` tag selects a label, falling back to English and then the first language tag. Label fills use one batch per holder partition and never read holders' other facts.
+`GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id for its declared qualifier), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 20), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and the reader's ordered language ranges. Property-page links include the holder's `type` and `label`, chosen by the shared label rule below. Label fills use one batch per holder partition, including the original-language slot, without reading unrelated facts.
 
-The projection stores a base row with the nil UUID and a row per distinct declared qualifier value. A two-role statement appears once in each role page and once unfiltered. Every row carries the holder type and its order key. Name keys use the same default-label fallback, NFKC case folding and a 256-character cap. Position keys use a fixed-width decimal encoding, preserving large integer ordinals; dates normalize signed years and date parts. The holder computes these keys with its write release. Global adoption of a publication date and identity writes through `updateSubjectIdentity` enqueue paged outbound-link re-emission when holder keys change. Changing a property's declared order or filter in a release requires a projection rebuild.
+Every module embedding a chosen subject label uses `languageRanges` and `chooseLabel` from `language.ts`, including inverse and forward pages, previews and `readSubjectSummaries`. Reads returning all labels retain that shape. The label choice rule is:
+
+1. Parse the whole `Accept-Language` list in descending q order, preserving header order for ties. Ignore malformed entries, q=0 and `*`; put a valid explicit `language` query tag first and keep at most 16 ranges, including that override.
+2. For each range in order, match case-insensitively: exact tag, then truncate one subtag at a time (removing a trailing extension singleton too). If none matches, maximize it with `Intl.Locale` and try that likely-script form with the same truncation. Thus `zh-CN` can find `zh-Hans` and `zh-TW` can find `zh-Hant`.
+3. After every reader range, try the subject's original language (`schema:inLanguage`) with the same lookup, then English, then the first label in language-tag order. Return null if there are no labels. Preserve the chosen label's actual stored language tag.
+
+The original language is read alongside labels in the same batched statement, with one additional indexed fact range per subject. For multivalued original languages, use the first live preferred statement, then the first live normal statement in slot order. Expanded slots use the current Global adoption. Retracted, deprecated and hidden statements are excluded.
+
+The projection stores a base row with the nil UUID and a row per distinct declared qualifier value. A two-role statement appears once in each role page and once unfiltered. Every row carries the holder type and its order key. Name keys use English then the first language tag (without reader or original-language preferences), NFKC case folding and a 256-character cap. Position keys use a fixed-width decimal encoding, preserving large integer ordinals; dates normalize signed years and date parts. The holder computes these keys with its write release. Global adoption of a publication date and identity writes through `updateSubjectIdentity` enqueue paged outbound-link re-emission when holder keys change. Changing a property's declared order or filter in a release requires a projection rebuild.
 
 Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
 
@@ -131,31 +139,31 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 - Touches: `runCommand` reads time without a relation and 0/1 receipt by its full PK; fresh fence writes partition 1, outbox 1 (2 for bootstrap), basis 0/1, receipt 0/1 as above. Replay authorizes before receipt, returns its saved response, and skips body/fence. Grow total N and H; fix F, event count and authorization evidence.
 - Bound: Fresh rows O(1), blocks O(C), statements K + 1 + body for receipted commands; replay rows O(1), blocks O(C), six framework statements, no writes.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Command and receipt stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Command and receipt stays within its bound as N grows`, scales `[1, 4, 16]`.
 
 ### Subject creation
 
 - Touches: `createSubject`: insert 1 `semantic.subject` via `subject_pkey`; one `insert-facts.sql` inserts F `semantic.fact` rows via `fact_pkey` and F subject FK probes; receipt stores the resolved item, fence emits 1 event. Grow total N; fix F, partition and command history size.
 - Bound: Rows O(1 + F), blocks O((1 + F)L + C), two body statements, ten including receipted command; F <= 512 in `writeFacts` before any insert.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Subject creation stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Subject creation stays within its bound as N grows`, scales `[1, 4, 16]`.
 
 ### Account agents
 
 - Touches: `ensureAccountAgent` reads the node by its derived id and writes at most the subject, its label and the back link. Label synchronization deletes the node's label rows and installs zero or one replacement, without reading or changing other facts. It records a name-free identity revision and subject event. Migration removes prior label history once. Verification is one merge. Inbound link moves append one reversal row per moved statement. The write-rule probe adds the back-link lookup to the batched target-type read. Grow total subjects and links; fix the account, label count, merge page and authorization evidence.
 - Bound: Ensure and label erasure touch O(1) rows and statements, independent of previous name changes. Erasure touches only that node's label rows, plus constant revision, subject and command bookkeeping. The write-rule probe adds no statement per target. Verification uses the existing merge page cost plus O(L) ledger rows for L moved statements.
-- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow` at scales `[1, 8, 64]`; `account agent ownership probe uses constant statements at 1, 8 and 64 targets` at scales `[1, 8, 64]`.
+- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow` at scales `[1, 8, 64]`; `test/semantic/account-agent-cost.test.ts`: `account agent ownership probe uses constant statements at targets 1, 8 and 64` at scales `[1, 8, 64]`.
 
 ### Anchored subject read
 
-- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown.
-- Bound: Rows O(F + 12 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. Access still runs one permission check per related id.
-- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, scales `[64, 512, 4096]`; `growth-reads.test.ts` also checks history growth.
+- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived under Subject summaries.
+- Bound: Rows O(F + 12 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. The display fills add O((i + 1) × (labels + 65)) rows for i ≤ 256 related ids and O(subject, edition and media partitions) statements. Access still runs one permission check per related id.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, scales `[64, 512, 4096]`; `test/semantic/growth-reads.test.ts`: `Anchored subject read stays within its bound as the subject's history grows`, scales `[8, 64, 512]`.
 
 ### Forward relation page
 
-- Touches: one outbound index range (`limit + 1`, or at most `4 × limit + 1` under a type filter), one counter probe, the selected slot views, and one target-label read per page partition. The type-filtered count has its own sample of at most 1,000 projection rows.
-- Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page.
-- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, middle page at limit 25 and scales `[64, 512, 4096]`.
+- Touches: one outbound index range (`limit + 1`, or at most `4 × limit + 1` under a type filter), one counter probe, the selected slot views, and one target-label read per page partition. Each target adds one `fact_pkey` range for the original-language slot (at most 33 fact rows); an expanded slot adds its current Global adoption and at most 32 selected candidates and hidden-candidate probes, all in that same statement. The type-filtered count has its own sample of at most 1,000 projection rows.
+- Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page: for i ≤ s targets, label work is O(i × (labels + 33 + 32)) rows and O(i × (labels + 65) log N) blocks, with no extra statements per target.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`, scales `[64, 512, 4096]`, also measures a middle forward page at limit 25.
 
 ### Material-list statements
 
@@ -174,103 +182,103 @@ append, with no additional SQL. The API round trips are covered by
 
 - Touches: one page of the changed subject's outbound links per holder-key relay step, or one page of its inbound links plus the corresponding holder outbound rows per target-key step; each page updates its mirror projection and counters.
 - Bound: O(page) per relay step; O(degree) total work spread across steps, never in a request.
-- Growth check: key changes with 100 and 3,000 holders; per-step work stays bounded by the configured page size.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, scales `[64, 512, 4096]`; per-step work stays bounded by the configured page size.
 
 ### Batch label fill
 
 - Touches: `readLabels` takes at most 256 ids, groups them by partition, and issues one statement per partition. Each id is an exact `(route, subject_id)` pair: one `subject_pkey` probe and one `fact_label` probe. The label probe reads label rows only. Grow that partition and the total; the eight subjects stay fixed.
 - Bound: Rows O(i × labels), blocks O(i log N), one statement per nonempty partition. Independent of P. i is at most 256.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`
+- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`, scales `[1, 8, 64]`.
 
 ### Partition keyset page
 
 - Touches: `page-subjects.sql` reads s + 1 subjects by `subject_pkey` with a bound limit, then each of those rows probes `fact_label` for its label rows only. The label probe is a per-row read. `readPartition` reads one `core.partition` row. Grow the partition, the total and page depth; the check uses page size 1.
 - Bound: Rows O((s + 1) × labels), blocks O((s + 1) log N), five statements. Independent of P, of d, and of facts other than labels.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`, scales `[1, 4, 16]`.
 
 ### Item projection and related labels
 
-- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. Grow the related partitions and the total; the subject and its six related ids stay fixed.
-- Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Independent of P. Access permission checks remain one per related id and are bounded by that same fixed id list.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Related labels of a subject read stay within their bound as the related partitions grow`
+- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived under Subject summaries. Grow the related partitions and the total; the subject and its six related ids stay fixed.
+- Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Independent of P. The additional summary fill costs O(i × (labels + 65)) rows and O(subject, edition and media partitions) statements. Access permission checks remain one per related id and are bounded by that same fixed id list.
+- Growth check: `test/semantic/growth-reads.test.ts`: `Related labels of a subject read stay within their bound as the related partitions grow`, scales `[1, 8, 64]`.
 
 ### Definition publish
 
 - Touches: `publishRelease`: validate/hash one body, insert 0/1 `semantic.definition_release` through `definition_release_pkey(route, digest)`, conflict does nothing; receipted command emits 1 event even on existing digest. Grow D and H; fix body size and authorization evidence.
 - Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; no scan of prior releases.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition activate
 
 - Touches: `activateRelease`: read 0/1 release body via `definition_release_pkey`; activation SQL reads latest head through backward `definition_activation_pkey(route, head)` then inserts 0/1 activation with expected-head conflict protection and release FK probe. Grow D; fix body size, H and authorization evidence.
 - Bound: Rows O(1), blocks O(log D + C), two body statements, ten including command; stale head writes no activation and rolls back.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition activate stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition activate stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition read
 
 - Touches: `readRelease`: a malformed digest does no SQL. A cache hit reads 0/1 digest through `definition_release_pkey` and returns the cached body; a miss reads the body, validates it, checks the digest and freezes it. The cache holds only validated, digest-checked bodies, and a release is immutable, so a hit does not read the body. HTTP authorizes the global context first. Grow D; exercise a warm and a cold cache.
 - Bound: Rows O(1), blocks O(log D) on a hit. A cold read is linear in release bytes, once per digest per process. Zero or one data statement; no history scan.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition read stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition read stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Active definition lookup
 
 - Touches: `activeRelease` / HTTP active endpoint: backward activation PK probe for route 0 with LIMIT 1 reads 0/1 head; cache miss adds Definition read. Subject commands call `activeRelease` for this pointer; a cache hit adds no body read. Grow D; fix active body size and authorization evidence, exercise a cold cache. The manifest rows below bound request cost in M.
 - Bound: Rows O(1), blocks O(log D), one data statement on a cache hit and two on a miss. A subject request pays this pointer; a cache hit adds no definition-body statement.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Active definition lookup stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Active definition lookup stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition bootstrap
 
 - Touches: `bootstrapRelease`: outer latest-head probe; when absent, command repeats probe, publishes 0/1 release, inserts first activation and emits 2 events, no receipt/basis. Uses definition PKs and fence indexes above. Grow D and H; fix body size, including already-active fast path.
 - Bound: Rows O(1), blocks O(log D + C), one statement if active, otherwise eleven including command; race recovery may add one head lookup after rollback.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Typed validation
 
 - Touches: `checkTyped` in `rules.ts` checks a supplied release and input in memory, uses the portable checks, which cache compiled validators per release/property and returns referenced item targets without fetching them; it is not wired into subject HTTP on this base. Grow D; fix supplied release, input values and cache state.
 - Bound: Zero relation rows, shared blocks or SQL statements; work follows supplied statement/qualifier/reference values, with no internal input-count cap and no iteration over D releases.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Typed validation stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Typed validation stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Request authorization
 
 - Touches: Subject/definition HTTP checks call Access preparation then final resource check; no semantic relations. Default Access reads account/optional assignment by `account_pkey`/`principal_assignment_pkey`, resource grant/role-grant/denial prefixes through their temporal GiST PKs, and organization memberships through `organization_member_pkey` plus organization account PK; candidate organizations cause up to two membership statements each. Grow total N or D; hold this Access neighbourhood fixed.
 - Bound: Rows O(1 + G + U + q), statements O(1 + q); temporal GiST access has a conservative O((1 + q)A) block bound, not the B-tree point-probe guarantee. Independent of N, P, d, D with Access data fixed; uncapped G, U and q exceed the criterion through evidence fan-out and permission history scans.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Request authorization stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Request authorization stays within its bound as N grows`, scales `[1, 4, 16]`.
 
 ### Subject creation across manifests
 
 - Touches: HTTP `createSubject` on the active release. A warm cache resolves the activation pointer and looks up datatypes for the new facts only. Grow M; fix the subject's type, fact count and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. In-process work touches that type and those properties through the digest cache.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Statement proposal across manifests
 
 - Touches: HTTP `proposeStatement` on the active release. A warm cache resolves the activation pointer and checks the one property on the subject's type. Grow M; fix the statement and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Candidate acceptance across manifests
 
 - Touches: HTTP `decideCandidate`. Acceptance does not load a release body. Grow M; fix the candidate and authorization evidence.
 - Bound: Rows, blocks and statements constant in M.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Candidate adoption across manifests
 
 - Touches: HTTP `adoptCandidates` on the active release. A warm cache resolves the activation pointer and checks that one property on the subject's type. Grow M; fix the selection and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Anchored read with related labels across manifests
 
 - Touches: HTTP subject read. `readSubject` loads descriptive facts and the first 12 relation slots for each relation property on the type, then `readRelease` for related property labels and one batched related read per partition for the preview's targets. A warm `readRelease` reads the digest only. Grow M; fix the type, F, preview size and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. In-process work uses the type's relation properties, descriptive facts and bounded preview. A cold release read is linear in release bytes, once per digest per process.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Candidate listing across manifests
 
 - Touches: HTTP `listCandidates`. One `readRelease` per distinct candidate release, then datatypes for that candidate's fact only, plus one `slotView`. A warm `readRelease` reads the digest only. Grow M; fix the property, page size and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release. A cold release read is linear in release bytes, once per digest per process. A route key adds one `readFences` per tuple partition among the candidates shown, T probes chunked at 100, independent of N and of the subject's history.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Authored documents
 
@@ -319,21 +327,21 @@ The global context is inserted once by migration and has no runtime semantic rea
 ### Inverse page
 
 - Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one pending-merge index probe for the scanned holder ids, one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
-- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. Summary work depends only on the bounded returned holders and their selected covers, as described below.
+- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. For i ≤ s returned holders, the label and original-language fill adds O(i × (labels + 65)) rows and O(i × (labels + 65) log N) blocks in the same per-partition summary statements; selected-cover costs are derived below.
 - Growth check: `test/semantic/growth-inverse-pages.test.ts`: `an inverse page examines the same rows whatever the anchor's in-degree`, scales `[64, 512, 4096]` at limit 25; first and middle page rows and blocks stay flat.
 
 ### Links projection write
 
 - Touches: per changed statement, `1 + filter values` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, property, filter_value, order_key, source_subject_id, statement_id)`.
 - Bound: O(changed statements × (1 + filter values)) per event. Key changes enqueue paged re-emission, with O(page) work per relay step and O(degree) work spread across steps. Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value.
-- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, a measured loop over 10, 100 and 500 changed links and an in-degree check at `[64, 512, 4096]`.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, a measured loop over 10, 100 and 500 changed links and an in-degree check at scales `[64, 512, 4096]`.
 
 ### Subject summaries
 
-- Touches: per subject partition, one indexed 12-row representative-edition range and one batched read of the subjects, their default labels, and their preferred images or selected representative-edition slots. Per edition partition, one batched read of the editions' preferred images. Per media partition, one content cover reference read.
-- Bound: rows O(i) for i ≤ 256 ids; statements O(subject partitions + edition partitions + media partitions) ≤ O(3i); independent of how many editions a work has. Access preparation and authorization retain their separately documented evidence costs.
+- Touches: per subject partition, one indexed 12-row representative-edition range and one batched read of the subjects, their default labels, and their preferred images or selected representative-edition slots. The same statement adds one `fact_pkey` range for each subject's `schema:inLanguage` slot (at most 33 rows), and, if expanded, one current Global adoption plus at most 32 selected candidates and hidden-candidate probes. Per edition partition, one batched read of the editions' preferred images. Per media partition, one content cover reference read.
+- Bound: rows O(i × (labels + 33 + 32)) for i ≤ 256 ids, with the existing image and 12 representative slot probes bounded independently; statements O(subject partitions + edition partitions + media partitions) ≤ O(3i); independent of how many editions a work has. Blocks are O(i × (labels + 65) log N) plus the existing bounded cover lookups. Access preparation and authorization retain their separately documented evidence costs.
 - Growth check: `test/semantic/subject-summaries.test.ts`: `subject summaries for a page use two bounded reads per partition, not one read per subject`, scales `[4, 32, 256]` ids; `test/semantic/subject-summaries.test.ts`: `a representative cover read stays flat as the work gains editions`, scales `[16, 128, 1024]` editions. Statements and rows per id stay flat.
 
-`readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Labels follow requested languages (including their primary tags), English, then the first language tag. The selected label's actual language selects a representative edition among the first 12 rows in the outbound projection, falling back to an unqualified representative and then the first row. The projection range runs with sequential scans disabled; the batched summary query uses the normal planner. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
+`readSubjectSummaries` is the shared display projection. Callers provide the active release and a current reader authorization check; representative editions pass that same check. Its `languages` option receives the parsed ranges and its labels follow the shared label rule above. The selected label's actual language selects a representative edition among the first 12 rows in the outbound projection, falling back to an unqualified representative and then the first row. The projection range runs with sequential scans disabled; the batched summary query uses the normal planner. Preferred images win over normal images; deprecated, hidden and retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen image yields null rather than switching editions. Suitability policies may withhold a cover through `maySeeCover`, producing null without hiding the subject.
 
 Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.

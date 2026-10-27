@@ -176,7 +176,7 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
       id: subject.id,
       type: 'bf:Instance',
       types: ['bf:Instance', ...bundledRelease.types['bf:Instance']!.bases],
-      label: { value: 'Kokoro', language: 'en' },
+      label: { value: 'こゝろ', language: 'ja' },
       creativeWork: true,
       cover: null,
     },

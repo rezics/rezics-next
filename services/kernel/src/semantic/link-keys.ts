@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import { chooseLabel, languageRanges } from './language.ts';
 import type { FactRow } from './item.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
@@ -7,14 +8,9 @@ import { withConnection } from '../database/pool.ts';
 import { slotView } from './slots.ts';
 import readSubject from './read-holder-facts.sql';
 
-/** Shared fallback for an unlocalized subject title: English, then the first language tag. */
+/** Unlocalized projection keys use the shared label rule without reader or original-language preferences. */
 export function subjectLabel(labels: Record<string, string>, language?: string): string {
-  return (
-    (language ? (labels[language] ?? labels[language.split('-')[0]!]) : undefined) ??
-    labels.en ??
-    Object.entries(labels).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))[0]?.[1] ??
-    ''
-  );
+  return chooseLabel(labels, languageRanges(null, language))?.value ?? '';
 }
 const folds: Record<string, string> = {
   '\u00b5': '\u03bc',

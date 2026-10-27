@@ -1,4 +1,5 @@
 import { readSubjectSummaries } from '../summaries.ts';
+import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
 import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
@@ -569,10 +570,7 @@ function subjectRoutes(
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
-        const languages = (query.language ?? request.headers.get('accept-language') ?? '')
-          .split(',')
-          .map((tag) => tag.split(';')[0]!.trim())
-          .filter(Boolean);
+        const languages = languageRanges(request.headers.get('accept-language'), query.language);
         const checksById = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
         const authorizeSummary: import('../summaries.ts').SummaryDependencies['authorize'] = async (
           client,
@@ -1523,7 +1521,7 @@ function subjectRoutes(
           property: t.Optional(t.String({ minLength: 1 })),
           filter: t.Optional(t.String({ format: 'uuid' })),
           type: t.Optional(t.String({ minLength: 1 })),
-          language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' })),
+          language: t.Optional(t.String({ pattern: '^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$' })),
         }),
         response: {
           200: withHeaders(
@@ -1595,12 +1593,7 @@ function subjectRoutes(
               limit: query.limit ?? 20,
               ...(query.filter === undefined ? {} : { filter: query.filter }),
               ...(query.type === undefined ? {} : { type: query.type }),
-              ...((query.language ?? request.headers.get('accept-language')?.split(',')[0]?.split(';')[0]?.trim())
-                ? {
-                    language:
-                      query.language ?? request.headers.get('accept-language')!.split(',')[0]!.split(';')[0]!.trim(),
-                  }
-                : {}),
+              languages: languageRanges(request.headers.get('accept-language'), query.language),
               release: active.release,
               includeLabels: query.property !== undefined,
               async authorizeSummary(client, id, batch) {
@@ -1639,7 +1632,7 @@ function subjectRoutes(
           filter: t.Optional(t.String({ format: 'uuid' })),
           type: t.Optional(t.String({ minLength: 1 })),
           context: t.Optional(EditorialBodyContext),
-          language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' })),
+          language: t.Optional(t.String({ pattern: '^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$' })),
         }),
         response: {
           200: withHeaders(
@@ -1713,12 +1706,7 @@ function subjectRoutes(
               limit: query.limit ?? 25,
               ...(query.filter === undefined ? {} : { filter: query.filter }),
               ...(query.type === undefined ? {} : { type: query.type }),
-              ...((query.language ?? request.headers.get('accept-language')?.split(',')[0]?.split(';')[0]?.trim())
-                ? {
-                    language:
-                      query.language ?? request.headers.get('accept-language')!.split(',')[0]!.split(';')[0]!.trim(),
-                  }
-                : {}),
+              languages: languageRanges(request.headers.get('accept-language'), query.language),
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               release: active.release,
               authorize: check,

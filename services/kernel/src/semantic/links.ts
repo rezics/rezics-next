@@ -2,8 +2,9 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { readItemTypes, readLabels } from './subject.ts';
-import { holderFacts, labelOrderKey, readHolderKeys, subjectLabel } from './link-keys.ts';
+import { readItemTypes, readLabels, readLabelChoices } from './subject.ts';
+import { chooseLabel, languageRanges } from './language.ts';
+import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
@@ -793,6 +794,7 @@ export async function listSubjectLinks(
     filter?: string;
     type?: string;
     language?: string;
+    languages?: readonly string[];
     includeLabels?: boolean;
     authorizeSummary?: SummaryDependencies['authorize'];
     release?: Release;
@@ -806,6 +808,7 @@ export async function listSubjectLinks(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
+  const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.links',
     parameters: {
@@ -813,7 +816,7 @@ export async function listSubjectLinks(
       property: options.property,
       filter: options.filter ?? null,
       type: options.type ?? null,
-      language: options.language ?? null,
+      language: languages.join(',') || null,
     },
   };
   const release = options.type ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
@@ -950,7 +953,7 @@ export async function listSubjectLinks(
           authorize: options.authorizeSummary ?? (async () => false),
         },
         page.links.map((link) => link.subject),
-        { languages: options.language ? [options.language] : [] },
+        { languages },
       )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deadline);
@@ -1006,6 +1009,7 @@ export async function listSubjectRelations(
     filter?: string;
     type?: string;
     language?: string;
+    languages?: readonly string[];
     cursor?: string;
     release: Release;
     authorize: (client: PoolClient) => Promise<boolean>;
@@ -1021,6 +1025,7 @@ export async function listSubjectRelations(
   const contextRecord = context === NIL_UUID ? null : await contextSnapshot(pool, context);
   if (context !== NIL_UUID && !contextRecord) throw new SubjectNotFoundError();
   const defaults = contextRecord?.defaults ?? {};
+  const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.relations',
     parameters: {
@@ -1029,7 +1034,7 @@ export async function listSubjectRelations(
       context,
       filter: options.filter ?? null,
       type: options.type ?? null,
-      language: options.language ?? null,
+      language: languages.join(',') || null,
     },
   };
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
@@ -1142,7 +1147,7 @@ export async function listSubjectRelations(
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
   });
-  const labels = await readLabels(
+  const labels = await readLabelChoices(
     pool,
     page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
   );
@@ -1150,7 +1155,14 @@ export async function listSubjectRelations(
   return {
     ...page,
     relations: page.relations.map((entry) =>
-      entry.target ? { ...entry, label: subjectLabel(labels.get(entry.target) ?? {}, options.language) } : entry,
+      entry.target
+        ? {
+            ...entry,
+            label:
+              chooseLabel(labels.get(entry.target)?.labels ?? {}, languages, labels.get(entry.target)?.original)
+                ?.value ?? '',
+          }
+        : entry,
     ),
   };
 }
