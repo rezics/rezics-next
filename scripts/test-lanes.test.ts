@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { runWebTestLanes } from '../apps/web/scripts/check.ts';
 import {
   laneConcurrency,
   orderFiles,
@@ -189,6 +190,181 @@ test('a suite names the files whose tests failed and still drops their clones', 
       expect(dropped).toEqual(['fixture_test_1']);
       expect(readLatest(resolve(directory, 'timings'))['test/bad.test.ts']!.result).toBe('fail');
       expect(slotIsFree(env)).toBe(true);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+});
+
+test('a file whose only failures are timeouts or deadline errors is rerun once alone and reported as load-sensitive when it passes', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const attempts = resolve(directory, 'attempts.txt');
+    const attemptsLiteral = JSON.stringify(attempts);
+    writeTestFiles(module, {
+      'test/retry.test.ts': [
+        "import { test } from 'bun:test';",
+        "import { existsSync, readFileSync, writeFileSync } from 'node:fs';",
+        `const attempts = ${attemptsLiteral};`,
+        "test('a timeout passes alone', () => {",
+        "  const count = existsSync(attempts) ? Number(readFileSync(attempts, 'utf8')) : 0;",
+        '  writeFileSync(attempts, String(count + 1));',
+        "  if (count === 0) throw new Error('this test timed out after 60000ms');",
+        '});',
+        '',
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    let printed = '';
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      printed += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/retry.test.ts'],
+        partial: false,
+        createDatabase: async () => undefined,
+        dropDatabase: async () => undefined,
+        environment: () => ({ ...env }),
+        env,
+      });
+      expect(result.failed).toEqual([]);
+      expect(readFileSync(attempts, 'utf8')).toBe('2');
+      expect(printed).toContain('Load-sensitive tests (passed alone): 1');
+      expect(printed).toContain('test/retry.test.ts :: a timeout passes alone');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+});
+
+test('a load-induced failure that fails again alone fails the run', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const attempts = resolve(directory, 'attempts.txt');
+    const attemptsLiteral = JSON.stringify(attempts);
+    writeTestFiles(module, {
+      'test/retry.test.ts': [
+        "import { test } from 'bun:test';",
+        "import { existsSync, readFileSync, writeFileSync } from 'node:fs';",
+        `const attempts = ${attemptsLiteral};`,
+        "const count = existsSync(attempts) ? Number(readFileSync(attempts, 'utf8')) : 0;",
+        'writeFileSync(attempts, String(count + 1));',
+        "test('the timeout remains alone', () => { throw new Error('this test timed out after 60000ms'); });",
+        '',
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      const result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/retry.test.ts'],
+        partial: false,
+        createDatabase: async () => undefined,
+        dropDatabase: async () => undefined,
+        environment: () => ({ ...env }),
+        env,
+      });
+      expect(result.failed).toEqual(['test/retry.test.ts']);
+      expect(readFileSync(attempts, 'utf8')).toBe('2');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+});
+
+test('a file with any other failure is not rerun', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const attempts = resolve(directory, 'attempts.txt');
+    const attemptsLiteral = JSON.stringify(attempts);
+    writeTestFiles(module, {
+      'test/retry.test.ts': [
+        "import { expect, test } from 'bun:test';",
+        "import { existsSync, readFileSync, writeFileSync } from 'node:fs';",
+        `const attempts = ${attemptsLiteral};`,
+        "const count = existsSync(attempts) ? Number(readFileSync(attempts, 'utf8')) : 0;",
+        'writeFileSync(attempts, String(count + 1));',
+        "test('a timeout failure', () => { throw new Error('this test timed out after 60000ms'); });",
+        "test('an assertion failure', () => expect(1).toBe(2));",
+        '',
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      const result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/retry.test.ts'],
+        partial: false,
+        createDatabase: async () => undefined,
+        dropDatabase: async () => undefined,
+        environment: () => ({ ...env }),
+        env,
+      });
+      expect(result.failed).toEqual(['test/retry.test.ts']);
+      expect(readFileSync(attempts, 'utf8')).toBe('1');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+});
+
+test('the web check reruns load-induced browser failures alone', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'web');
+    const attempts = resolve(directory, 'attempts.txt');
+    const attemptsLiteral = JSON.stringify(attempts);
+    writeTestFiles(module, {
+      'scripts/isolated.ts': [
+        "import { spawnSync } from 'node:child_process';",
+        "const result = spawnSync(process.argv[2]!, process.argv.slice(3), { stdio: 'inherit' });",
+        'process.exit(result.status ?? 1);',
+        '',
+      ].join('\n'),
+      'tests/browser-timeout.test.ts': [
+        "import { test } from 'bun:test';",
+        "import { existsSync, readFileSync, writeFileSync } from 'node:fs';",
+        '// browser.launch marks this fixture as a browser lane.',
+        `const attempts = ${attemptsLiteral};`,
+        "test('the browser timeout passes alone', () => {",
+        "  const count = existsSync(attempts) ? Number(readFileSync(attempts, 'utf8')) : 0;",
+        '  writeFileSync(attempts, String(count + 1));',
+        "  if (count === 0) throw new Error('TimeoutError: page.goto: Timeout 30000ms exceeded');",
+        '});',
+        '',
+      ].join('\n'),
+    });
+    const env = laneEnvironment(directory, 1);
+    env.WEB_BROWSER_CHECK_CONCURRENCY = '1';
+    env.WEB_UNIT_CHECK_CONCURRENCY = '1';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    let printed = '';
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      printed += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const result = await runWebTestLanes({
+        files: ['tests/browser-timeout.test.ts'],
+        directory: module,
+        timingsFile: resolve(directory, 'timings.json'),
+        reportDirectory: resolve(directory, 'reports'),
+        env,
+      });
+      expect(result.failed).toEqual([]);
+      expect(readFileSync(attempts, 'utf8')).toBe('2');
+      expect(printed).toContain('Load-sensitive tests (passed alone): 1');
+      expect(printed).toContain('tests/browser-timeout.test.ts :: the browser timeout passes alone');
     } finally {
       process.stderr.write = originalWrite;
     }

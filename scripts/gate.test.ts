@@ -80,6 +80,30 @@ echo "bun $*" >> "$FAKE_DIR/local.log"
 exit 3
 `;
 
+const fakeWorkspaceBun = `#!/usr/bin/env node
+import { appendFileSync, readFileSync } from 'node:fs';
+const dir = process.env.FAKE_DIR;
+const args = process.argv.slice(2);
+const log = (event) => appendFileSync(dir + '/log.jsonl', JSON.stringify(event) + '\\n');
+if (args[0] === 'install') {
+  log({ kind: 'install' });
+} else if (args[0] === 'run' && args[1] === 'check') {
+  const workspace = process.cwd().split('/').at(-1);
+  const events = readFileSync(dir + '/log.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map((line) => JSON.parse(line));
+  const attempt = events.filter((event) => event.kind === 'check' && event.workspace === workspace).length + 1;
+  log({ kind: 'check', workspace, attempt });
+  if (workspace === 'a-plain' && attempt === 1) {
+    console.log('(fail) only failure is a timeout [60000ms]');
+    console.log('  ^ this test timed out after 60000ms.');
+    console.log('1 tests failed:');
+    process.exit(1);
+  }
+  console.log(workspace === 'a-plain' ? '(pass) timeout test passed alone [1ms]' : 'runner workspace complete');
+} else if (args[0] === 'tools/goal/scripts/gate.ts') {
+  log({ kind: 'control-gate' });
+}
+`;
+
 type Event = { kind: string; address?: string; [key: string]: unknown };
 let root: string;
 let counter = 0;
@@ -88,10 +112,12 @@ beforeAll(() => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   root = mkdtempSync(join(repository, '.temp/gate-test-'));
   mkdirSync(join(root, 'bin'));
+  mkdirSync(join(root, 'gate-bin'));
   mkdirSync(join(root, 'local'));
   for (const [directory, name, source] of [
     ['bin', 'ssh', fakeSsh],
     ['bin', 'rsync', fakeRsync],
+    ['gate-bin', 'bun', fakeWorkspaceBun],
     ['local', 'bun', fakeBun],
   ] as const) {
     const file = join(root, directory, name);
@@ -139,9 +165,12 @@ function scenario(slots = 6): { env: Record<string, string>; events: () => Event
   };
 }
 
-async function runGate(env: Record<string, string>): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runGate(
+  env: Record<string, string>,
+  cwd = repository,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn([process.execPath, gate], {
-    cwd: repository,
+    cwd,
     env,
     stdin: 'ignore',
     stdout: 'pipe',
@@ -252,4 +281,33 @@ test('without KERNEL_CHECK_REMOTE, or on the check host, the gate runs locally a
   expect(third.code).toBe(3);
   expect(unreadable.local()).toBe('bun install --frozen-lockfile\n');
   expect(unreadable.events()).toEqual([]);
+});
+
+test('the gate reruns a plain workspace whose only test failures are load-induced after the other workspaces finish', async () => {
+  const { env, events } = scenario();
+  delete env.KERNEL_CHECK_REMOTE;
+  env.PATH = `${join(root, 'gate-bin')}:${env.PATH}`;
+  env.GATE_CONCURRENCY = '1';
+  const plain = join(env.FAKE_DIR, 'apps/a-plain');
+  const runner = join(env.FAKE_DIR, 'packages/b-runner');
+  mkdirSync(plain, { recursive: true });
+  mkdirSync(runner, { recursive: true });
+  writeFileSync(
+    join(plain, 'package.json'),
+    JSON.stringify({ name: '@fixture/plain', scripts: { check: 'bun test && bun run after-tests' } }),
+  );
+  writeFileSync(
+    join(runner, 'package.json'),
+    JSON.stringify({ name: '@fixture/runner', scripts: { check: 'bun scripts/check.ts && bun test' } }),
+  );
+
+  const result = await runGate(env, env.FAKE_DIR);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain('Load-sensitive workspaces (passed on retry): 1');
+  expect(result.stdout).toContain('@fixture/plain (apps/a-plain)');
+  expect(
+    events()
+      .filter((event) => event.kind === 'install' || event.kind === 'check' || event.kind === 'control-gate')
+      .map((event) => `${event.kind}${event.workspace ? ` ${event.workspace}` : ''}`),
+  ).toEqual(['install', 'check a-plain', 'check b-runner', 'check a-plain', 'control-gate']);
 });

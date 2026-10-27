@@ -1,8 +1,11 @@
 import {
   createRecorder,
   capture,
+  classifyLoadInducedFailures,
   parseJunit,
+  rerunLoadFailures,
   runTestFiles,
+  scheduleFiles,
   testCommand,
   type FileOutcome,
   type FileTiming,
@@ -99,6 +102,7 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
     : mkdtempSync(join(root, '.temp/web-check-'));
   mkdirSync(reportDirectory, { recursive: true });
   const recorder = createRecorder();
+  const reportsByFile = new Map<string, string>();
   const runner = recorder.wrap<string>(
     {
       create: () => undefined,
@@ -115,6 +119,11 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
             env,
             directory,
           );
+          try {
+            reportsByFile.set(file, readFileSync(report, 'utf8'));
+          } catch {
+            reportsByFile.delete(file);
+          }
           if (result.status !== 0) throw new Error(`${testScript} ./${file} failed:\n${result.output}`);
           return result.output;
         } finally {
@@ -154,13 +163,19 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
         env,
       ),
     ]);
+    let rerunIndex = 0;
+    const { failed } = await rerunLoadFailures(
+      [...browserOutcomes, ...unitOutcomes],
+      async (file) => {
+        const [outcome] = await scheduleFiles(`web_rerun_${++rerunIndex}_test`, [file], 1, runner);
+        return outcome!;
+      },
+      (outcome) => classifyLoadInducedFailures(outcome, reportsByFile.get(outcome.file)),
+    );
     const timings = recorder.timings();
     writeTimings(timingsFile, previous, timings);
     return {
-      failed: [...browserOutcomes, ...unitOutcomes]
-        .filter((outcome) => outcome.error)
-        .map((outcome) => outcome.file)
-        .sort(),
+      failed: failed.map((outcome) => outcome.file).sort(),
       concurrency: { browser: stackConcurrency, unit: unitConcurrency },
       timings,
     };

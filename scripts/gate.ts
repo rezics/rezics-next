@@ -7,6 +7,7 @@
 // host's slots the run holds; the output and exit code are the same as a local run's.
 import { accessSync, constants } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { classifyLoadInducedOutput } from './test-lanes.ts';
 
 const root = process.cwd();
 
@@ -76,8 +77,8 @@ async function run(command: string[], cwd: string): Promise<void> {
   if (code !== 0) process.exit(code);
 }
 
-type Workspace = { name: string; directory: string };
-type WorkspaceResult = { block: string; code: number; directory: string };
+type Workspace = { name: string; directory: string; checkScript: string };
+type WorkspaceResult = { block: string; code: number; directory: string; output: string; workspace: Workspace };
 
 async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
   const command = ['bun', 'run', 'check'];
@@ -103,7 +104,7 @@ async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
   ]
     .filter(Boolean)
     .join('\n');
-  return { block: `${block}\n\n`, code, directory: relativeDirectory };
+  return { block: `${block}\n\n`, code, directory: relativeDirectory, output, workspace };
 }
 
 if (remoteHostsFile()) process.exit(await runRemotely());
@@ -117,7 +118,11 @@ for (const manifest of manifests) {
     scripts?: Record<string, string>;
   };
   if (!scripts?.check) throw new Error(`${manifest} has no check script`);
-  workspaces.push({ name: name ?? dirname(manifest), directory: join(root, dirname(manifest)) });
+  workspaces.push({
+    name: name ?? dirname(manifest),
+    directory: join(root, dirname(manifest)),
+    checkScript: scripts.check,
+  });
 }
 
 const configuredConcurrency = process.env.GATE_CONCURRENCY;
@@ -139,10 +144,42 @@ const worker = async (): Promise<void> => {
 
 await Promise.all(Array.from({ length: Math.min(concurrency, workspaces.length) }, () => worker()));
 
-if (failures.length > 0) {
-  for (const failure of failures) process.stdout.write(failure.block);
+const failedByDirectory = new Map(failures.map((failure) => [failure.workspace.directory, failure]));
+const remainingFailures: WorkspaceResult[] = [];
+const loadSensitive: string[] = [];
+for (const workspace of workspaces) {
+  const failure = failedByDirectory.get(workspace.directory);
+  if (!failure) continue;
+  const usesCheckRunner = /\bscripts\/check\.ts\b/.test(workspace.checkScript);
+  const loadFailures = classifyLoadInducedOutput(failure.output);
+  if (usesCheckRunner || !loadFailures || loadFailures.length === 0) {
+    remainingFailures.push(failure);
+    continue;
+  }
+
+  const again = await checkWorkspace(workspace);
+  if (again.code === 0) {
+    process.stdout.write(failure.block);
+    process.stdout.write(again.block);
+    loadSensitive.push(`${workspace.name} (${failure.directory})`);
+  } else {
+    remainingFailures.push({
+      ...again,
+      block: `${failure.block}Workspace ${workspace.name} failed again alone:\n${again.block}`,
+    });
+  }
+}
+
+if (loadSensitive.length > 0) {
+  process.stdout.write(
+    `Load-sensitive workspaces (passed on retry): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`,
+  );
+}
+
+if (remainingFailures.length > 0) {
+  for (const failure of remainingFailures) process.stdout.write(failure.block);
   // Promotion bisects on the first named workspace's check instead of the whole gate.
-  process.stdout.write(`Failed workspaces: ${failures.map((failure) => failure.directory).join(' ')}\n`);
+  process.stdout.write(`Failed workspaces: ${remainingFailures.map((failure) => failure.directory).join(' ')}\n`);
   process.exitCode = 1;
 } else {
   await run(['bun', 'tools/goal/scripts/gate.ts'], root);

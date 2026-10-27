@@ -47,6 +47,7 @@ function attribute(tag: string, name: string): string | undefined {
 
 type GrowthFailure = { title: string; message: string };
 type ReportedFailure = GrowthFailure & { type: string };
+export type RetriableTestFailure = GrowthFailure & { kind?: 'growth' | 'load' };
 
 /** Growth errors and their test titles, when the JUnit report includes complete per-failure metadata. */
 function junitFailures(xml: string): ReportedFailure[] | null {
@@ -112,16 +113,17 @@ function outputGrowthFailures(output: string): GrowthFailure[] | null {
 }
 
 /**
- * Reruns each eligible file once, in order. A file is eligible only when every reported test failure is a growth
- * bound error; failed files that cannot be classified this way or fail again remain in the result.
+ * Reruns each eligible file once, in order. Every reported failure must be classified as the same retryable kind;
+ * failed files that cannot be classified this way or fail again remain in the result.
  */
 export async function rerunGrowthFailures<T>(
   outcomes: FileOutcome<T>[],
   rerun: (file: string) => Promise<FileOutcome<T>>,
-  classify: (outcome: FileOutcome<T>) => GrowthFailure[] | null,
+  classify: (outcome: FileOutcome<T>) => RetriableTestFailure[] | null,
   write: (text: string) => void = (text) => void process.stderr.write(text),
 ): Promise<{ failed: FileOutcome<T>[] }> {
   const failed: FileOutcome<T>[] = [];
+  const growthSensitive: string[] = [];
   const loadSensitive: string[] = [];
   for (const outcome of outcomes) {
     if (!outcome.error) continue;
@@ -138,11 +140,16 @@ export async function rerunGrowthFailures<T>(
     }
     for (const failure of failures) {
       const message = failure.message.split('\n')[0]!;
-      loadSensitive.push(`load-sensitive growth check: ${outcome.file} :: ${failure.title} :: ${message}`);
+      const item = `${outcome.file} :: ${failure.title} :: ${message}`;
+      if (failure.kind === 'load') loadSensitive.push(`load-sensitive test: ${item}`);
+      else growthSensitive.push(`load-sensitive growth check: ${item}`);
     }
   }
+  if (growthSensitive.length > 0) {
+    write(`Load-sensitive growth checks (passed alone): ${growthSensitive.length}\n${growthSensitive.join('\n')}\n`);
+  }
   if (loadSensitive.length > 0) {
-    write(`Load-sensitive growth checks (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
+    write(`Load-sensitive tests (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
   }
   return { failed };
 }
@@ -158,6 +165,132 @@ function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | u
     }
   }
   return outputGrowthFailures(outcome.error.message);
+}
+
+type LoadFailure = GrowthFailure & { kind: 'load' };
+
+const loadFailurePatterns = [
+  /\bthis test timed out after \d+ms\b/i,
+  /\ba (?:beforeEach|afterEach|beforeAll|afterAll) hook timed out\b/i,
+  /\bTimeoutError:\s*.+?:\s*Timeout \d+ms exceeded\b/i,
+  /\bAccessUnavailableError:\s*Access unavailable: deadline\b/i,
+  /\bdeadline_exceeded\b/i,
+];
+
+function isLoadInducedFailure(text: string): boolean {
+  return loadFailurePatterns.some((pattern) => pattern.test(text));
+}
+
+/** Parse complete JUnit failure details, including implementations that put the error in the element body. */
+function junitLoadFailures(xml: string): GrowthFailure[] | null {
+  const root = xml.match(/<testsuites\b[^>]*>/)?.[0];
+  if (!root) return null;
+  const failureCount = attribute(root, 'failures');
+  const errorCount = attribute(root, 'errors');
+  if (failureCount === undefined || errorCount === undefined) return null;
+  const expectedCount = Number(failureCount) + Number(errorCount);
+  if (!Number.isInteger(expectedCount)) return null;
+
+  const results: GrowthFailure[] = [];
+  const testcaseRanges: Array<[number, number]> = [];
+  const testcases = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase\s*>)/g;
+  for (const match of xml.matchAll(testcases)) {
+    const tag = `<testcase ${match[1]}>`;
+    const suite = attribute(tag, 'classname');
+    const name = attribute(tag, 'name') ?? '';
+    const body = match[2] ?? '';
+    testcaseRanges.push([match.index!, match.index! + match[0].length]);
+    const failures = /<(failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1\s*>)/g;
+    for (const failure of body.matchAll(failures)) {
+      const failureTag = `<${failure[1]} ${failure[2]}>`;
+      const type = attribute(failureTag, 'type') ?? '';
+      const message = attribute(failureTag, 'message') ?? '';
+      const detail = (failure[3] ?? '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const combined = [type, message, detail].filter(Boolean).join(': ');
+      if (!combined) return null;
+      results.push({ title: suite ? `${suite} ${name}` : name, message: combined });
+    }
+  }
+
+  const allFailureTags = Array.from(xml.matchAll(/<(?:failure|error)\b/g));
+  if (allFailureTags.length !== expectedCount || results.length !== expectedCount) return null;
+  if (
+    allFailureTags.some(
+      (failure) => !testcaseRanges.some(([start, end]) => failure.index! > start && failure.index! < end),
+    )
+  ) {
+    return null;
+  }
+  return results;
+}
+
+/** Bun console output fallback when a JUnit report does not carry complete failure messages. */
+export function classifyLoadInducedOutput(output: string): GrowthFailure[] | null {
+  const lines = output.replace(/\u001b\[[0-9;]*m/g, '').split(/\r\n?|\n/);
+  const failures: Array<{ title: string; line: number }> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (/^\s*\d+ tests? failed:\s*$/.test(line) || /^\s*\d+ (?:pass|fail|skip|todo)\b/.test(line)) break;
+    const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
+    if (failure) failures.push({ title: failure[1]!, line: index });
+  }
+  if (failures.length === 0) return null;
+
+  const classified = failures.map((failure, index) => {
+    const previous = failures[index - 1]?.line ?? -1;
+    const next = failures[index + 1]?.line ?? lines.length;
+    const lower = index === 0 ? previous + 1 : Math.floor((previous + failure.line) / 2) + 1;
+    const upper = index === failures.length - 1 ? next - 1 : Math.floor((failure.line + next) / 2);
+    const messages = lines.slice(lower, upper + 1);
+    return { ...failure, messages };
+  });
+
+  for (const failure of classified) {
+    if (!failure.messages.some((line) => isLoadInducedFailure(line))) return null;
+    if (failure.messages.some((line) => /^(?:error:|# Unhandled)/.test(line) && !isLoadInducedFailure(line))) {
+      return null;
+    }
+  }
+  return classified.map(({ title, messages }) => ({
+    title,
+    message: messages.find((line) => isLoadInducedFailure(line))!.trim(),
+  }));
+}
+
+export function classifyLoadInducedFailures(
+  outcome: FileOutcome<string>,
+  report: string | undefined,
+): LoadFailure[] | null {
+  if (!outcome.error || outcome.error.message.includes('Database cleanup failed:')) return null;
+  if (report) {
+    const failures = junitLoadFailures(report);
+    if (failures !== null) {
+      return failures.length > 0 && failures.every((failure) => isLoadInducedFailure(failure.message))
+        ? failures.map((failure) => ({ ...failure, kind: 'load' as const }))
+        : null;
+    }
+  }
+  const failures = classifyLoadInducedOutput(outcome.error.message);
+  return failures?.map((failure) => ({ ...failure, kind: 'load' })) ?? null;
+}
+
+/** Retry only load-induced failures, once each, after their original lane run has finished. */
+export async function rerunLoadFailures<T>(
+  outcomes: FileOutcome<T>[],
+  rerun: (file: string) => Promise<FileOutcome<T>>,
+  classify: (outcome: FileOutcome<T>) => GrowthFailure[] | null,
+  write: (text: string) => void = (text) => void process.stderr.write(text),
+): Promise<{ failed: FileOutcome<T>[] }> {
+  return rerunGrowthFailures(
+    outcomes,
+    rerun,
+    (outcome) => classify(outcome)?.map((failure) => ({ ...failure, kind: 'load' })),
+    write,
+  );
 }
 
 /** Each test case's name (prefixed by its suite) and time in seconds, from Bun's JUnit report. */
@@ -484,7 +617,11 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         const [outcome] = await scheduleFiles(`${suite.service}_growth_${++rerunIndex}_test`, [file], 1, laneRunner);
         return outcome!;
       },
-      (outcome) => classifyGrowthFailures(outcome, reportsByFile.get(outcome.file)),
+      (outcome) => {
+        const report = reportsByFile.get(outcome.file);
+        const growthFailures = classifyGrowthFailures(outcome, report);
+        return growthFailures ?? classifyLoadInducedFailures(outcome, report);
+      },
     );
     if (timingsPath) writeTimings(timingsPath, recorder.timings(), { partial: suite.partial });
     return { failed: failed.map((outcome) => outcome.file), concurrency };
