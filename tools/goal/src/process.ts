@@ -101,8 +101,17 @@ except FileNotFoundError: pass
     waiter.once('error', reject);
     waiter.once('exit', (code) => {
       signal?.removeEventListener('abort', abort);
-      if (code === 0 || signal?.aborted) resolve();
-      else reject(new Error('pidfd waiter failed'));
+      if (code === 0 || signal?.aborted) {
+        resolve();
+        return;
+      }
+      // The waiter can fail on a loaded host (a race in /proc, an interrupted wait). Its failure says nothing about the
+      // process, so fall back to checking the identity until it is gone; never report an exit that did not happen.
+      const poll = () => {
+        if (signal?.aborted || !sameProcess(identity)) resolve();
+        else setTimeout(poll, 50);
+      };
+      poll();
     });
   });
 }

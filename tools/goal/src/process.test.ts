@@ -56,3 +56,24 @@ test('a server that left its group is stopped by its working directory, and proc
     rmSync(root, { recursive: true, force: true });
   }
 });
+test('a failing pidfd waiter falls back to the identity and resolves only once the process is gone', async () => {
+  const root = tempDirectory(), bin = join(root, 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'python3'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const child = spawn(process.execPath, ['-e', "console.log('ready'); setTimeout(() => {}, 300)"], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  await new Promise<void>((resolve, reject) => { child.stdout!.once('data', () => resolve()); child.once('error', reject); });
+  const identity = processIdentity(child.pid!)!;
+  const path = process.env.PATH;
+  try {
+    process.env.PATH = `${bin}:${path}`;
+    const started = Date.now();
+    await waitForProcess(identity);
+    process.env.PATH = path;
+    expect(sameProcess(identity)).toBe(false);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
+  } finally {
+    process.env.PATH = path;
+    await terminateProcessGroup(identity, 20).catch(() => {});
+    rmSync(root, { recursive: true, force: true });
+  }
+});
