@@ -225,3 +225,11 @@ Missing lifecycle routes, scoped withholding, the state/retention adapters and t
 assertion remain expected native reds, **not observed outcomes of this reconciliation**. Neither 512/4096 growth
 measurements nor account-at-confirmation cleanup, legal holds or replay results are claimed. Native validation
 is blocked by the check-host workspace-upload transport failures, not by a test-slot wait or a product-code change.
+
+Continuation validation preserved all existing acceptance assertions and rechecked the reconciliation against the
+latest deletion policy. Root TC0 completed successfully again across every workspace; focused lint, formatting
+and diff checks also passed. The exact focused acceptance command was retried with the unchanged native tests.
+It waited for a slot for 276.133 seconds on host `b`, then SSH closed during workspace upload and rsync exited 12. The runner raised `RemoteTransportError` for `workspace upload` and exited 1 before returning any native
+test result. This independently reproduces the supplied evidence's transport failure; it supplies no new
+lifecycle, account-erasure or growth outcome. No production files or acceptance tests were changed in this
+continuation, and no file outside the declared specification paths was changed.
