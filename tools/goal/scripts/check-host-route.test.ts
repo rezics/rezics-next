@@ -337,19 +337,28 @@ describe('input and ownership boundaries', () => {
     };
     expect(readHosts({ hosts: [host] })).toEqual([{ name: 'a', address: `root@${A}`, ip: A }]);
     const planned = fixture();
-    planned.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    planned.files.set(
+      HOSTS,
+      JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }),
+    );
     await execute(['plan', '--hosts', HOSTS], planned.d);
     expect(planned.stats).toEqual([]);
 
     const applied = fixture();
     applied.uid = 0;
-    applied.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    applied.files.set(
+      HOSTS,
+      JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }),
+    );
     await execute(['apply', '--hosts', HOSTS], applied.d);
     expect(applied.stats).toEqual([]);
 
     const removed = fixture();
     removed.uid = 0;
-    removed.files.set(HOSTS, JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }));
+    removed.files.set(
+      HOSTS,
+      JSON.stringify({ hosts: [{ name: 'a', address: `root@${A}`, identity: 'relative/key' }] }),
+    );
     await execute(['remove', '--hosts', HOSTS], removed.d);
     expect(removed.stats).toEqual([]);
   });
