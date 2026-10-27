@@ -391,7 +391,9 @@ test(
     try {
       const response = await fetch(`${origin}/en/threads/${id(2)}`);
       await response.text();
-      expect(calls).toEqual([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`), read('/v1/accounts')]);
+      expect(calls.slice(0, 2)).toEqual([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`)]);
+      expect(calls.slice(2)).toContainEqual(read(`/v1/boards/${id(1)}`));
+      expect(calls).toHaveLength(4);
       expect(calls.filter((call) => call.path === '/v1/accounts')).toHaveLength(1);
       expect(events.slice(0, 2).sort()).toEqual(
         [`start /v1/threads/${id(2)}`, `start /v1/threads/${id(2)}/posts`].sort(),
@@ -399,7 +401,10 @@ test(
       expect(events.slice(2, 4).sort()).toEqual(
         [`answer /v1/threads/${id(2)}`, `answer /v1/threads/${id(2)}/posts`].sort(),
       );
-      expect(events.slice(4)).toEqual(['start /v1/accounts', 'answer /v1/accounts']);
+      expect(events).toContain(`start /v1/boards/${id(1)}`);
+      expect(events).toContain(`answer /v1/boards/${id(1)}`);
+      expect(events).toContain('start /v1/accounts');
+      expect(events).toContain('answer /v1/accounts');
       expect(response.status).toBe(200);
     } finally {
       clearTimeout(fallback);

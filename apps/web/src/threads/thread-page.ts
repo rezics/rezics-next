@@ -48,6 +48,13 @@ export async function loadThreadPage(
   const threadRead = authorization
     ? client.threads({ id: data.id }).get({ headers: { authorization } })
     : client.threads({ id: data.id }).get();
+  const postsRead = authorization
+    ? client
+        .threads({ id: data.id })
+        .posts.get(
+          data.cursor ? { query: { cursor: data.cursor }, headers: { authorization } } : { headers: { authorization } },
+        )
+    : client.threads({ id: data.id }).posts.get(data.cursor ? { query: { cursor: data.cursor } } : {});
   const threadResult = await threadRead;
   const thread = checkRead<Thread>(threadResult, 'thread');
   if (thread.thread.id !== data.id) throw notFound();
@@ -57,13 +64,6 @@ export async function loadThreadPage(
         .get()
         .catch(() => null)
     : Promise.resolve(null);
-  const postsRead = authorization
-    ? client
-        .threads({ id: data.id })
-        .posts.get(
-          data.cursor ? { query: { cursor: data.cursor }, headers: { authorization } } : { headers: { authorization } },
-        )
-    : client.threads({ id: data.id }).posts.get(data.cursor ? { query: { cursor: data.cursor } } : {});
   const [boardResult, postsResult] = await Promise.all([boardRead, postsRead]);
   const posts = checkRead<PostPage>(postsResult, 'thread posts');
   return {

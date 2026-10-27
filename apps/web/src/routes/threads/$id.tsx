@@ -75,16 +75,7 @@ function ThreadPage() {
           </Link>
         ) : null}
         <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
-        <div className="flex min-w-0 items-center gap-2">
-          <Byline
-            author={authors?.[thread.authorId]}
-            createdAt={thread.createdAt}
-            now={now}
-            size="sm"
-            className="shrink-0"
-          />
-          <ThreadSubjects subjects={subjects} />
-        </div>
+        <ThreadSubjects subjects={subjects} />
       </header>
       <section className="space-y-6" aria-labelledby="thread-posts-heading">
         <h2 id="thread-posts-heading" className="text-xl font-semibold">

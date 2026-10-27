@@ -354,6 +354,7 @@ test('thread page stays within its bound as s grows', async () => {
     expect(kernelCalls).toEqual([
       `GET /v1/threads/${threadId}`,
       `GET /v1/threads/${threadId}/posts`,
+      `GET /v1/boards/${boardId}`,
       `GET /v1/accounts?ids=${contentId(999)}`,
     ]);
     expect(authCalls).toEqual([]);
