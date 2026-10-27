@@ -19,6 +19,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { seedCollectionGrowthPopulation } from './support/collection-growth-population.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -563,61 +564,16 @@ async function prepareGrowth(): Promise<{
   subjectId: string;
   collectionCommands: ReturnType<typeof createCollectionCommands>;
 }> {
-  if (!growth) growth = await openGrowthDatabase(databaseUrl);
-  const database = growth;
+  if (growth) await growth.close();
+  growth = undefined;
+  const database = await openGrowthDatabase(databaseUrl);
+  growth = database;
   await bootstrapRelease(database.pool, bundledRelease);
   const accountId = newId(route);
   await insertAccount(database.pool, accountId);
   const actor = await authenticate(accountId, curatorScopes, database.pool);
   const subjectId = await makeSubject(actor, 'Growth subject', database.pool);
   return { database, actor, subjectId, collectionCommands: createCollectionCommands({ pool: database.pool, access }) };
-}
-
-let seeded = 0;
-
-async function seedUnrelated(
-  database: GrowthDatabase,
-  scale: number,
-  previous: number,
-  curatorId: string,
-): Promise<void> {
-  const count = scale - previous;
-  if (count <= 0) return;
-  const start = seeded;
-  seeded += count;
-  const curatorRoute = routeOf(curatorId)!;
-  await database.admin.query(
-    `WITH source AS (
-       SELECT n,
-         ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS collection_id,
-         ('20000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS member_id,
-         ('30000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS subject_id
-       FROM generate_series($2::int + 1, $3::int) AS n
-     )
-     INSERT INTO library.collection
-       (route, collection_id, curator_account_id, title, description, visibility, state, revision, member_count,
-        order_epoch, created_at, updated_at, transaction_id)
-     SELECT $1, collection_id, $4, 'Unrelated', NULL, 'private', 'active', 1, 1, 0, $5::timestamptz, $5::timestamptz,
-            collection_id
-     FROM source`,
-    [curatorRoute, start, seeded, curatorId, new Date().toISOString()],
-  );
-  await database.admin.query(
-    `WITH source AS (
-       SELECT n,
-         ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS collection_id,
-         ('20000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS member_id,
-         ('30000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n::bigint), 8, '0'))::uuid AS subject_id
-       FROM generate_series($2::int + 1, $3::int) AS n
-     )
-     INSERT INTO library.collection_member
-       (route, collection_id, member_id, subject_id, note, ordinal_key, added_at, transaction_id)
-     SELECT $1, collection_id, member_id, subject_id, NULL, 'a0000', $4::timestamptz, member_id
-     FROM source`,
-    [curatorRoute, start, seeded, new Date().toISOString()],
-  );
-  await database.admin.query('ANALYZE library.collection');
-  await database.admin.query('ANALYZE library.collection_member');
 }
 
 function equalStatements(samples: { cost: { statements: number } }[]): void {
@@ -630,10 +586,12 @@ test('create cost stays constant as unrelated collections grow', async () => {
   const report = await checkGrowth(prepared.database, {
     name: 'collection create',
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seedUnrelated(database, scale, previous, prepared.actor.accountId),
-    operation: async (_database, _scale, repetition) => {
+    grow: (database, scale, previous) =>
+      seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.createCollection(
-        prepared.actor,
+        actor,
         { title: `Created ${repetition}`, visibility: 'private' },
         `growth-create-${repetition}`,
       );
@@ -653,12 +611,14 @@ test('update cost stays constant as unrelated collections grow', async () => {
   const report = await checkGrowth(prepared.database, {
     name: 'collection update',
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seedUnrelated(database, scale, previous, prepared.actor.accountId),
-    operation: async (_database, _scale, repetition) => {
+    grow: (database, scale, previous) =>
+      seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
+    operation: async (database, _scale, repetition) => {
       const expected = revision;
       revision += 1;
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.updateCollection(
-        prepared.actor,
+        actor,
         created.value.id,
         { revision: expected, title: `Updated ${repetition}` },
         `growth-update-${repetition}`,
@@ -678,10 +638,12 @@ test('add cost stays constant as unrelated collections grow', async () => {
   const report = await checkGrowth(prepared.database, {
     name: 'collection add',
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seedUnrelated(database, scale, previous, prepared.actor.accountId),
-    operation: async (_database, _scale, repetition) => {
+    grow: (database, scale, previous) =>
+      seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.addMember(
-        prepared.actor,
+        actor,
         created.value.id,
         { subjectId: prepared.subjectId },
         `growth-add-${repetition}`,
@@ -707,10 +669,12 @@ test('move cost stays constant as unrelated collections grow', async () => {
   const report = await checkGrowth(prepared.database, {
     name: 'collection move',
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seedUnrelated(database, scale, previous, prepared.actor.accountId),
-    operation: async (_database, _scale, repetition) => {
+    grow: (database, scale, previous) =>
+      seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
+    operation: async (database, _scale, repetition) => {
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
       await prepared.collectionCommands.moveMember(
-        prepared.actor,
+        actor,
         created.value.id,
         member.value.id,
         { after: null },
@@ -742,16 +706,13 @@ test('remove cost stays constant as unrelated collections grow', async () => {
   const report = await checkGrowth(prepared.database, {
     name: 'collection remove',
     bounds: { rows: 'logarithmic', blocks: 'logarithmic', statements: 'constant' },
-    grow: (database, scale, previous) => seedUnrelated(database, scale, previous, prepared.actor.accountId),
-    operation: async (_database, _scale, repetition) => {
+    grow: (database, scale, previous) =>
+      seedCollectionGrowthPopulation(database, scale, previous, prepared.actor.accountId, prepared.subjectId),
+    operation: async (database, _scale, repetition) => {
       const memberId = members[cursor];
       cursor += 1;
-      await prepared.collectionCommands.removeMember(
-        prepared.actor,
-        created.value.id,
-        memberId!,
-        `growth-remove-${repetition}`,
-      );
+      const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
+      await prepared.collectionCommands.removeMember(actor, created.value.id, memberId!, `growth-remove-${repetition}`);
     },
   });
   equalStatements([...report.samples]);
