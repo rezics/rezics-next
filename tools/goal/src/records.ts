@@ -26,6 +26,12 @@ function tokens(value: Record<string, unknown>): Tokens {
 /** A worker CLI's own words for an allowance that is spent, in a stream error or, before any session, on stderr. */
 /** A provider-side capacity refusal: transient and independent of the model, so the attempt simply continues. */
 export const MODEL_AT_CAPACITY = /selected model is at capacity|model is at capacity|try a different model|server is overloaded|temporarily overloaded/i;
+/**
+ * A check host that dropped the connection (sshd throttling, a transport reset) failed the attempt, not its work: the
+ * attempt is continued like a capacity refusal and never counts toward a repeated launch failure.
+ */
+export const CHECK_HOST_TRANSPORT =
+  /RemoteTransportError|Connection closed by [0-9a-f.:]+ port 22|kex_exchange_identification|ssh: connect to host|Connection reset by peer|rsync error: (?:unexplained error|error in rsync protocol)|SSH (?:exit(?:ed)? )?255|exit(?:ed)? (?:with )?(?:code )?255/i;
 export const POOL_EXHAUSTED = /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
 export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
