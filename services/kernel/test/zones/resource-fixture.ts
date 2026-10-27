@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
+import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { installResourceRoleCatalogue, resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -34,6 +35,7 @@ export async function resourceFixture() {
       operator: newId(0x7115),
     };
     const actions = [
+      'account:delete',
       'zone:create',
       'zone:read',
       'zone:configure',
@@ -164,6 +166,17 @@ export async function resourceFixture() {
         next: string | null;
       }>;
     }
+    async function tombstoneOwner() {
+      // The real account confirmation barrier, not a fabricated account/Zone row or a grace timer.
+      const lifecycleAccess = access.access({ actions: LIFECYCLE_ACTIONS });
+      const context = { pool: db.pool, deadline: Date.now() + 30_000 };
+      await access.grant(resource(accounts.owner), 'owner', 'account:delete');
+      const actor = await lifecycleAccess.authenticate(access.bearer('owner'), context);
+      return createLifecycleCommands({ pool: db.pool, access: lifecycleAccess, clock }).tombstone(
+        { actor, deadline: context.deadline },
+        { accountId: accounts.owner, key: randomUUID() },
+      );
+    }
     return {
       db,
       app,
@@ -182,6 +195,7 @@ export async function resourceFixture() {
       events,
       receipts,
       purge,
+      tombstoneOwner,
       advance(ms: number) {
         now += ms;
       },

@@ -421,3 +421,168 @@ test('Zone deletion restoration and least-data purge obey the owner window while
   expect(types).not.toContain('com.rezics.zone.deleted.v1');
   expect(types).not.toContain('com.rezics.zone.purged.v1');
 }, 180_000);
+
+test('all Zone list envelopes accept 1 through 100 with default 20', async () => {
+  await f.available();
+  const body = createBody();
+  body.configuration.scope = [];
+  body.configuration.pages = [{ route: '', document: page('List boundary') }];
+  const zone = await f.create(body);
+  for (const endpoint of ['/v1/zones', `${path(zone.id)}/subjects`, `${path(zone.id)}/collections`]) {
+    for (const limit of [1, 24, 25, 100]) {
+      expect((await f.call('owner', 'GET', `${endpoint}?limit=${limit}`)).status).toBe(200);
+    }
+    for (const limit of [0, 101]) {
+      const invalid = await f.call('owner', 'GET', `${endpoint}?limit=${limit}`);
+      expect(invalid.status).toBe(400);
+      expect(invalid.body.code).toBe('invalid_request');
+    }
+    const field = endpoint === '/v1/zones' ? 'zones' : endpoint.endsWith('/subjects') ? 'subjects' : 'collections';
+    const implicit = await f.call('owner', 'GET', endpoint);
+    const explicit = await f.call('owner', 'GET', `${endpoint}?limit=20`);
+    expect(implicit.status).toBe(200);
+    expect(implicit.body[field]).toEqual(explicit.body[field]);
+    // Opaque sealed continuations may differ byte-for-byte for the same boundary.
+    expect(implicit.body.next === null).toBe(explicit.body.next === null);
+  }
+});
+
+test('withheld public labels are partial and owner restoration never releases current withholding', async () => {
+  await f.available();
+  const body = createBody();
+  body.configuration.pages = [{ route: '', document: page('Covered original retained') }];
+  const zone = await f.create(body);
+  let revision = await publish(zone.id, zone.revision);
+  await f.grant(zone.id, 'operator', 'moderation:takedown');
+  const fields = ['/labels/en', '/pages/0/document/content/0/props/text'];
+  const withheld = await f.call(
+    'operator',
+    'POST',
+    `${path(zone.id)}:takedown`,
+    {
+      notice: { complaint: 'Least fields only', received_at: f.clock().toISOString() },
+      fields,
+    },
+    f.conditional(revision),
+  );
+  expect(withheld.status).toBe(200);
+  revision = withheld.body.zone.revision;
+  const labels = { ...body.configuration.labels } as Partial<typeof body.configuration.labels>;
+  delete labels.en;
+  expect((await f.call('anonymous', 'GET', path(zone.id))).body.zone.labels).toEqual(labels);
+  revision = await remove(zone.id, revision);
+  const restored = await f.call('owner', 'POST', `${path(zone.id)}:restore`, {}, f.conditional(revision));
+  expect(restored.status).toBe(200);
+  const read = await f.read(zone.id);
+  expect(read.status).toBe(200);
+  expect(read.body.zone.labels).toEqual(labels);
+  expect(read.body.document.content[0].props.text).toBe('');
+  expect((await f.raw(zone.id))!.configuration).toEqual(body.configuration);
+  expect((await f.events(zone.id)).map((event) => event.type)).not.toContain('com.rezics.zone.withholding_released.v1');
+});
+
+test('early privacy purge retains taken-down payload until explicit legal order and a hold blocks even that order', async () => {
+  await f.available();
+  const body = createBody();
+  body.configuration.labels.en = 'Uncovered private label to purge';
+  body.configuration.pages = [
+    { route: '', document: page('Covered evidence must survive privacy purge') },
+    { route: 'about', document: page('Uncovered private passage to purge') },
+  ];
+  const zone = await f.create(body);
+  await f.grant(zone.id, 'operator', 'moderation:takedown');
+  await f.access.grant(PLATFORM_RESOURCE, 'operator', 'zone:purge');
+  const withheld = await f.call(
+    'operator',
+    'POST',
+    `${path(zone.id)}:takedown`,
+    {
+      notice: { complaint: 'Retain covered passage', received_at: f.clock().toISOString() },
+      fields: ['/pages/0/document/content/0/props/text'],
+    },
+    f.conditional(zone.revision),
+  );
+  expect(withheld.status).toBe(200);
+  await remove(zone.id, withheld.body.zone.revision);
+  expect(
+    (
+      await f.call('operator', 'POST', `/v1/platform/zones/${zone.id}:purge`, {
+        reason: 'Early privacy purge',
+      })
+    ).status,
+  ).toBe(200);
+  await finishPurge(zone.id);
+  const retained = JSON.stringify(await f.raw(zone.id));
+  expect(retained).toContain('Covered evidence must survive privacy purge');
+  expect(retained).not.toContain('Uncovered private passage to purge');
+  expect(retained).not.toContain('Uncovered private label to purge');
+  f.advance(31 * day);
+  await finishPurge(zone.id);
+  expect(JSON.stringify(await f.raw(zone.id))).toContain('Covered evidence must survive privacy purge');
+  expect(
+    (
+      await f.call('operator', 'POST', `/v1/platform/zones/${zone.id}:hold`, {
+        reason: 'Preserve evidence despite order',
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.call('operator', 'POST', `/v1/platform/zones/${zone.id}:purge`, {
+        reason: 'Legal order',
+        order: 'explicit-court-order',
+      })
+    ).status,
+  ).toBe(200);
+  await finishPurge(zone.id);
+  expect(JSON.stringify(await f.raw(zone.id))).toContain('Covered evidence must survive privacy purge');
+  expect((await f.call('operator', 'POST', `/v1/platform/zones/${zone.id}:releaseHold`, {})).status).toBe(200);
+  await finishPurge(zone.id);
+  expect(await f.raw(zone.id)).toBeUndefined();
+});
+
+test('terminal account confirmation starts private Zone cleanup immediately without an account grace window', async () => {
+  // An isolated real account keeps this terminal barrier from changing other resource cases' actors.
+  const account = await resourceFixture();
+  try {
+    await account.available();
+    const body = createBody();
+    body.configuration.pages = [{ route: '', document: page('Private account payload') }];
+    const active = await account.create(body);
+    const deleted = await account.create(body);
+    expect(
+      (await account.call('owner', 'DELETE', path(deleted.id), undefined, account.conditional(deleted.revision)))
+        .status,
+    ).toBe(200);
+    const time = account.clock().toISOString();
+    const outcome = await account.tombstoneOwner();
+    expect(account.clock().toISOString()).toBe(time);
+    const barrier = await account.db.admin.query('SELECT type,data FROM core.outbox WHERE transaction_id=$1', [
+      outcome.transactionId,
+    ]);
+    expect(barrier.rows).toContainEqual({
+      type: 'com.rezics.access.account-tombstoned.v1',
+      data: { accountId: account.accounts.owner },
+    });
+    // Exercise the production worker at T, not T+30 days, for active and individually deleted private sites.
+    for (const zone of [active, deleted]) {
+      let cursor: string | null = null;
+      for (let steps = 0; steps < 100; steps++) {
+        const page = await account.purge(zone.id, cursor, 2);
+        if (page.next === null) break;
+        expect(steps).toBeLessThan(99);
+        expect(page.next).not.toBe(cursor);
+        cursor = page.next;
+      }
+      expect(await account.raw(zone.id)).toBeUndefined();
+      expect((await account.read(zone.id)).status).toBe(404);
+    }
+    const receipts = await account.db.admin.query('SELECT response FROM core.receipt WHERE principal_id=$1', [
+      account.accounts.owner,
+    ]);
+    expect(JSON.stringify(receipts.rows)).not.toContain('Private account payload');
+    expect(account.clock().toISOString()).toBe(time);
+  } finally {
+    await account.close();
+  }
+}, 180_000);
