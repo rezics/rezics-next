@@ -99,6 +99,11 @@ export async function createProfileEntryFixture() {
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
       }),
     });
+    // The kernel composes Access lazily from its complete mounted action catalogue.
+    // Resolve it through an ordinary public read before authenticating native actors.
+    const warm = await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
+    expect([200, 404]).toContain(warm.status);
+    expect(access).toBeDefined();
     const commands = createEntryCommands({ pool, access, tokens });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
 
