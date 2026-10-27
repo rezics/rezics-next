@@ -33,7 +33,9 @@ test('the thread head, subjects, composer and post anchors provide a compact acc
   const route = await Bun.file(new URL('../src/routes/threads/$id.tsx', import.meta.url)).text();
   const subjects = await Bun.file(new URL('../src/threads/thread-subjects.tsx', import.meta.url)).text();
   const composer = await Bun.file(new URL('../src/threads/composer.tsx', import.meta.url)).text();
-  expect(route).toContain('to="/boards/$id"');
+  const context = await Bun.file(new URL('../src/threads/thread-context.tsx', import.meta.url)).text();
+  expect(route).toContain('<BoardContext');
+  expect(context).toContain('to="/boards/$id"');
   const head = route.split('<header')[1]!.split('</header>')[0]!;
   expect(head).not.toContain('<Byline');
   expect(head).not.toContain('createdAt');

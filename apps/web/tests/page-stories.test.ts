@@ -593,6 +593,11 @@ test(
       'order-failed.json': 'OrderResponse',
       'thread-owned.json': 'ThreadResponse',
       'thread-owned-posts.json': 'PostsResponse',
+      'board-realm.json': 'BoardResponse',
+      'board-realm-realm.json': 'RealmResponse',
+      'board-realm-threads.json': 'BoardThreadsResponse',
+      'board-realm-thread.json': 'ThreadResponse',
+      'board-realm-thread-posts.json': 'PostsResponse',
     };
     files.forEach((file, index) => {
       const path = join(recorded, file);
