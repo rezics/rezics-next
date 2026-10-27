@@ -29,6 +29,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
+import { capacityAvailable } from './launch.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -154,6 +155,9 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   private async resumeRetryIntents(): Promise<void> {
+    // A command settles retries only while the host has room; otherwise it would wait for capacity, and the host's
+    // sweep starts them anyway (a status command waited over two minutes).
+    if (!capacityAvailable(this.tasks.store, this.tasks.settings.stateDirectory)) return;
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       await this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt });
   }
@@ -168,6 +172,8 @@ export class WorkerJob implements GateOutcomeSink {
       if (!(error instanceof TaskHeldForDependenciesError)) throw error;
     }
   }
+  /** Tasks whose lost pending attempt this process is already retrying. */
+  private readonly recovering = new Set<string>();
   /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
@@ -440,6 +446,29 @@ export class WorkerJob implements GateOutcomeSink {
           (!attempt.driver || !sameProcess(attempt.driver)) &&
           ownsRunLog(attempt.logPath),
       );
+    // A pending attempt exists only while a process holds its task's lease to launch it. One that is old and whose
+    // lease is free lost its launcher (nine tasks sat pending for three hours): the host retries the task.
+    if (adoptRunning) {
+      const graceMs = this.tasks.settings.startGraceMs ?? START_GRACE_MS;
+      for (const attempt of store.attempts()) {
+        if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
+        const task = store.task(attempt.taskId);
+        if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
+        try {
+          acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
+        } catch (error) {
+          if (error instanceof LeaseHeldError) continue;
+          throw error;
+        }
+        if (this.recovering.has(attempt.taskId)) continue;
+        this.recovering.add(attempt.taskId);
+        this.track(
+          this.start(attempt.taskId)
+            .catch((error) => console.error(error))
+            .finally(() => this.recovering.delete(attempt.taskId)),
+        );
+      }
+    }
     // One /proc scan for all candidates: a scan per candidate made every command cost attempts × processes.
     const live = adoptRunning || !candidates.length ? null : liveGroups();
     // Adopted attempts are followed at once: followed in turn, one long-running worker held back every later settle.
