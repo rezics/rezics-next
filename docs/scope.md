@@ -8,10 +8,10 @@ grants until they are. An owner is the Goal that dispatches the system's work; c
 | --- | --- | --- |
 | Subject pages, relations, editions and credits | web | In ([subject pages](subject-pages.md)) |
 | Catalogue, editorial contributions, identity resolution, definitions and vertical editors | semantic | In |
-| Provider imports and bridges | imports | In: books, recipes, VNDB, Bangumi |
+| Provider imports and bridges | imports | In: Bangumi, VNDB, Open Library and Wikidata. Recipes enter through definitions, the editor and contributions (dishes from Wikidata where licensed); no recipe-site import, since method text is copyrighted |
 | Search, facets and discovery | search | In |
 | Library, Collections, progress and copies | commerce (kernel), web | In ([library and Collections](library-and-collections.md)): profiles, labels, curated and built-in dynamic Collections; user-saved dynamic queries later |
-| Ratings and reviews | content | In |
+| Ratings and reviews | content | In; content publishes the bounded public rating aggregate (standard question, privacy threshold, Bayesian prior from the same question and population) that search sorts by |
 | Posts, threads and boards | content | In |
 | Articles, hosted works and media | content | Closed behind grants until polished |
 | Realms and Spaces | accounts | In |
@@ -21,7 +21,7 @@ grants until they are. An owner is the Goal that dispatches the system's work; c
 | Notifications | content; accounts for preferences | In, minimal: in-app notices for replies, mentions and moderation outcomes, with per-kind preferences and send-time access checks; no email |
 | Follows | accounts, commerce | In: follow edges and counts |
 | Feeds | none | Deferred: home shows Continue and catalogue rows, not a following feed |
-| Recommendations and rankings | none | Deferred: rankings are curated Collections and search sorted by rating |
+| Recommendations and rankings | none | Deferred: rankings are curated Collections and search sorted by content's public rating aggregate |
 | Commerce, offers, orders and points | commerce | In |
 | Accounts, authentication, preferences and deletion | accounts | In |
 | Sitemaps, metadata, sharing and SEO | web | In ([SEO](seo.md)) |
