@@ -13,7 +13,13 @@ export type Measured = Readonly<Record<Metric, number>> & {
     Record<string, { readonly rows: number; readonly blocks: number; readonly sequentialScans?: number }>
   >;
 };
-export type GrowthSample = { readonly scale: number; readonly cost: Measured };
+export type RelationSize = { readonly reltuples: number; readonly relpages: number };
+export type GrowthSample = {
+  readonly scale: number;
+  readonly cost: Measured;
+  readonly repetitions?: readonly Readonly<Record<Metric, number>>[];
+  readonly relationSizes?: Readonly<Record<string, RelationSize>>;
+};
 export type Violation = {
   readonly metric: Metric;
   readonly bound: Bound;
@@ -122,6 +128,20 @@ function formatRelations(samples: readonly GrowthSample[]): string[] {
     lines.push(
       `Sequential scans: ${sequentialScans.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')} (a sequential scan of a small relation is the planner's choice; seed every relation the operation reads to thousands of rows at the smallest scale)`,
     );
+  const firstSizes = samples[0]?.relationSizes;
+  const lastSizes = samples.at(-1)?.relationSizes;
+  if (firstSizes && lastSizes) {
+    const nonGrowing = Object.entries(firstSizes)
+      .flatMap(([name, first]) => {
+        const last = lastSizes[name];
+        return last && last.reltuples <= first.reltuples ? [[name, first.reltuples, last.reltuples] as const] : [];
+      })
+      .toSorted(([left], [right]) => left.localeCompare(right));
+    if (nonGrowing.length > 0)
+      lines.push(
+        `Relations whose reltuples did not grow: ${nonGrowing.map(([name, first, last]) => `${name} (${first} to ${last})`).join(', ')}`,
+      );
+  }
   return lines;
 }
 
@@ -130,7 +150,14 @@ function formatMessage(violations: readonly Violation[], samples: readonly Growt
     ({ metric, bound, scales, values, observed, allowed }) =>
       `${metric} grows beyond ${bound}: ${values.join(', ')} at scales ${scales.join(', ')}; second step +${observed} exceeds allowed +${allowed}`,
   );
-  return [...lines, ...formatRelations(samples)].join('\n');
+  const repetitionLines = violations.flatMap(({ metric }) => {
+    if (!samples.some(({ repetitions }) => repetitions !== undefined)) return [];
+    const byScale = samples.map(
+      ({ scale, repetitions }) => `${scale} [${repetitions?.map((cost) => cost[metric]).join(', ') ?? ''}]`,
+    );
+    return [`${metric} repetitions by scale: ${byScale.join(', ')}`];
+  });
+  return [...lines, ...repetitionLines, ...formatRelations(samples)].join('\n');
 }
 
 export function assertGrowth(

@@ -274,6 +274,8 @@ Plans are collected only inside a capture: an instrumented connection runs auto_
 measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
 `grow` (every pool, `admin` included) with the time of `grow` and of the vacuum after it; when `GROWTH_PROFILE` names a
 file, `checkGrowth` appends one JSON line per check with the test file, check name, scales and each scale's `seeding`.
+Each report sample also carries `repetitions`, the cost of every measured run in order, and `relationSizes`, the
+`reltuples` and `relpages` of every relation the measured plans read at that scale.
 `seed` skips its own vacuum inside `grow`, since `checkGrowth` vacuums right after.
 
 Declare the check's growth model: the relations, partitions and keys that grow with N in production (subjects,

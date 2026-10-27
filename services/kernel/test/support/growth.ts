@@ -1,6 +1,14 @@
 import { appendFileSync } from 'node:fs';
 import { relative } from 'node:path';
-import { assertGrowth, DEFAULT_SLACK, GrowthBoundError, type Bound, type Metric, type Slack } from './growth-bound.ts';
+import {
+  assertGrowth,
+  DEFAULT_SLACK,
+  GrowthBoundError,
+  type Bound,
+  type Metric,
+  type RelationSize,
+  type Slack,
+} from './growth-bound.ts';
 import { capture, trackGrow, type GrowthDatabase } from './growth-capture.ts';
 import {
   catalogStatementBound,
@@ -53,7 +61,13 @@ export type SeedingCost = {
   readonly vacuumMs: number;
 };
 
-export type ReportSample = { readonly scale: number; readonly cost: Cost; readonly seeding: SeedingCost };
+export type ReportSample = {
+  readonly scale: number;
+  readonly cost: Cost;
+  readonly repetitions: readonly Cost[];
+  readonly relationSizes: Readonly<Record<string, RelationSize>>;
+  readonly seeding: SeedingCost;
+};
 
 export type GrowthReport = {
   readonly name: string;
@@ -133,6 +147,33 @@ function assertBackgroundBound(name: string, samples: readonly ReportSample[]): 
   throw error;
 }
 
+async function readRelationSizes(db: GrowthDatabase): Promise<Readonly<Record<string, RelationSize>>> {
+  const result = await db.admin.query<{ name: string; reltuples: number; relpages: number }>(
+    `SELECT CASE WHEN c.relkind IN ('i', 'I') THEN 'index:' || c.relname
+                 ELSE n.nspname || '.' || c.relname
+            END AS name,
+            c.reltuples,
+            c.relpages
+     FROM pg_class AS c
+     JOIN pg_namespace AS n ON n.oid = c.relnamespace`,
+  );
+  return Object.fromEntries(result.rows.map(({ name, reltuples, relpages }) => [name, { reltuples, relpages }]));
+}
+
+function sizesForMeasuredRelations(
+  costs: readonly Cost[],
+  available: Readonly<Record<string, RelationSize>>,
+): Readonly<Record<string, RelationSize>> {
+  const names = new Set(costs.flatMap(({ relations }) => Object.keys(relations)));
+  return Object.fromEntries(
+    Array.from(names, (name) => {
+      const size = available[name];
+      if (!size) throw new Error(`Measured relation ${name} was missing from pg_class statistics`);
+      return [name, size];
+    }),
+  );
+}
+
 /**
  * For a capture taken outside checkGrowth: holds it to the bound checkGrowth enforces, catalog-only statements may not
  * exceed the distinct non-catalog statement texts, and returns it without them. Throws GrowthBoundError otherwise.
@@ -175,6 +216,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     await db.admin.query('VACUUM (ANALYZE)');
     const vacuumMs = performance.now() - vacuumStart;
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs };
+    const availableRelationSizes = await readRelationSizes(db);
     for (let warmup = 0; warmup < warmups; warmup++) {
       if (check.warmup) await check.warmup(db, scale, repetition);
       else await check.operation(db, scale, repetition);
@@ -194,7 +236,13 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       costs.push(cost);
       repetition++;
     }
-    samples.push({ scale, cost: medianCost(costs), seeding });
+    samples.push({
+      scale,
+      cost: medianCost(costs),
+      repetitions: costs,
+      relationSizes: sizesForMeasuredRelations(costs, availableRelationSizes),
+      seeding,
+    });
     previous = scale;
   }
 
