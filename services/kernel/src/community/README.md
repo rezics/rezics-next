@@ -109,8 +109,9 @@ returns anonymously readable Spaces with an address as `{ id, address, lastModif
 Space whose Realm slot is occupied by a protected or inactive Realm. Both are public server-to-server
 feeds evaluated as an anonymous reader, even when a bearer is present. They use keyset cursors and
 may return fewer items than requested when candidates are skipped. Pages may contain up to 1,000
-items, an exception to the shared list maximum of 100. `lastModified` is the current head revision
-time; a Realm also uses the time of its newest board when that is later.
+items, an exception to the shared list maximum of 100. Their positions use the shared opaque list cursor contract in
+[`../tokens/list-cursor.ts`](../tokens/list-cursor.ts), bound to the feed route, anonymous viewer and empty query.
+`lastModified` is the current head revision time; a Realm also uses the time of its newest board when that is later.
 
 ## Cost
 
@@ -119,7 +120,7 @@ time; a Realm also uses the time of its newest board when that is later.
 - Touches: At most `4 × limit` candidates ordered by `(route, realm_id)`. A public Realm adds its
   exact head revision read and one newest-board seek through `board_realm_page`.
 - Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
-  `4L` and `L` respectively. The cursor seals its position so skipped Realm identities are not exposed.
+  `4L` and `L` respectively. The shared list cursor keeps skipped Realm identities confidential.
 - Growth check: `test/community/growth-sitemap.test.ts`, "Realm sitemap page stays within its bound as listed items grow" and "Realm sitemap page stays within its bound as protected Realms grow".
 
 ### Space sitemap feed
@@ -128,7 +129,7 @@ time; a Realm also uses the time of its newest board when that is later.
   anonymous `space:read` eligibility check. A listed Space adds its exact head revision read and
   `realm_route_space_id_key` slot probe; a filled slot adds one Realm primary-key read.
 - Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
-  `4L` and `L` respectively. The cursor seals its position so skipped Space identities are not exposed.
+  `4L` and `L` respectively. The shared list cursor keeps skipped Space identities confidential.
 - Growth check: `test/community/growth-sitemap.test.ts`, "Space sitemap page stays within its bound as listed items grow" and "Space sitemap page stays within its bound as protected Realms grow".
 
 A is Access's bounded admission and permission evaluation; C is a partition-local `runCommand`

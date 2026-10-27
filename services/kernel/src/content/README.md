@@ -180,13 +180,12 @@ shared shape that other modules' feeds reuse.
 
 These feeds return up to 1,000 entries per page (`limit` 1–1000, default 1000), an exception to the shared list
 maximum of 100. `cursor` is an opaque string from a previous `next` and is bound to its feed; any other value is
-`invalid_cursor`. The position is AES-256-GCM encrypted inside the signed cursor, with a separate HMAC-derived
-key per feed. Skipped candidates reveal no identity, route or creation time. Other feeds can reuse
-`sealSitemapPosition` and `openSitemapPosition`, supplying their own encryption purpose and validating the opened
-position.
+`invalid_cursor`. The position uses the shared opaque list cursor contract in
+[`../tokens/list-cursor.ts`](../tokens/list-cursor.ts), bound to the feed route, anonymous viewer and empty query.
+Skipped candidates reveal no identity, route or creation time.
 
-Every caller gets the same bytes. A feed evaluates as the anonymous reader even when the request carries a bearer, and
-lists exactly what an anonymous reader can open:
+A feed evaluates as the anonymous reader even when the request carries a bearer, and lists exactly what an anonymous
+reader can open:
 
 - **Boards:** published and not taken down, with no Realm or a public Realm, and with at least one listed thread. An empty board is a thin page and is not listed.
 - **Threads:** published and available, on a listed board, passing the thread disclosure of the anonymous
@@ -518,7 +517,7 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 - **Touches:** Keyset seeks of `content.board` by `(route, board_id)` and, for each disclosed board, a descending `board_thread_page_idx` probe with the shared thread disclosure until one is listed. Board and thread candidates total at most 4L; an encrypted cursor resumes an unfinished probe. Board and Realm checks use primary-key probes.
 - **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. A full walk visits boards and their bounded newest-first probes; threads under protected Realms and removed boards are never scanned.
-- **Growth check:** `test/content/growth-sitemap.test.ts`, `Sitemap boards page, listed items`, and `Sitemap boards page, protected Realm content`, at 200, 1600 and 12800 listed boards or protected Realm boards behind a fixed page. Rows and statements stay constant; blocks stay logarithmic.
+- **Growth check:** `test/content/growth-sitemap.test.ts`, "Sitemap boards page, listed items" and "Sitemap boards page, protected Realm content".
 
 ### Lift takedown
 
@@ -529,7 +528,7 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 - **Touches:** The board seek above, and for each disclosed board one keyset range of `board_thread_page_idx` rows by `(created_at, thread_id)` in pages of at most 200, with the shared thread disclosure per candidate. Candidates, board and thread, total at most 4L per page.
 - **Bound:** L ≤ 1000, so O(L log N) rows and constant statements per page for a fixed L. Threads of protected Realms and removed boards are never scanned.
-- **Growth check:** `test/content/growth-sitemap.test.ts`, `Sitemap threads page, listed items`, and `Sitemap threads page, protected Realm content`, at 200, 1600 and 12800 listed threads or protected Realm threads behind a fixed page. Rows and statements stay constant; blocks stay logarithmic.
+- **Growth check:** `test/content/growth-sitemap.test.ts`, "Sitemap threads page, listed items" and "Sitemap threads page, protected Realm content".
 
 ### Author thread page
 

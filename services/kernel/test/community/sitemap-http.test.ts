@@ -7,6 +7,7 @@ import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
 import { decodeCursor } from '../../src/tokens/cursor.ts';
+import { decodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -170,6 +171,49 @@ async function walk(feed: 'realms' | 'spaces', limit: number, token?: string): P
   } while (cursor);
   return items;
 }
+
+test('a sitemap cursor issued for one feed is invalid_cursor on every other feed', async () => {
+  for (const feed of ['realms', 'spaces'] as const) {
+    const issued = await get(feed, { limit: '1' });
+    expect(issued.response.status).toBe(200);
+    expect(issued.body.next).toEqual(expect.any(String));
+    const decoded = await decodeListCursor(
+      tokens,
+      {
+        route: `GET /v1/sitemap/${feed}`,
+        viewer: null,
+        query: {},
+      },
+      issued.body.next!,
+      new Date(fixedNow),
+    );
+    expect(decoded.ok).toBe(true);
+    for (const other of ['realms', 'spaces'] as const) {
+      if (other === feed) continue;
+      expect((await get(other, { cursor: issued.body.next! })).body).toMatchObject({ code: 'invalid_cursor' });
+    }
+  }
+});
+
+test('a sitemap cursor sealed under the previous key still resumes after rotation, and one under a retired key is invalid_cursor', async () => {
+  const issued = await get('realms', { limit: '1' });
+  expect(issued.body.next).toEqual(expect.any(String));
+  const originalCurrent = tokens.current;
+  const originalKeys = new Map(tokens.keys);
+  try {
+    tokens.current = 2;
+    tokens.keys.set(2, new Uint8Array(32).fill(73));
+    expect((await get('realms', { limit: '1', cursor: issued.body.next! })).response.status).toBe(200);
+    tokens.keys.delete(1);
+    expect((await get('realms', { limit: '1', cursor: issued.body.next! })).body).toMatchObject({
+      code: 'invalid_cursor',
+    });
+  } finally {
+    tokens.current = originalCurrent;
+    tokens.keys.clear();
+    for (const [id, key] of originalKeys) tokens.keys.set(id, key);
+  }
+});
 
 test('the Realm and Space sitemap feeds are public and use the shared page shapes', async () => {
   const document = openApiDocument(kernel);

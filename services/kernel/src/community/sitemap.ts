@@ -1,11 +1,10 @@
 import type { Pool } from 'pg';
-import type { CursorBinding } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { openSitemapPosition, sealSitemapPosition } from '../content/sitemap.ts';
 import { readRealm } from './realm.ts';
 import { spaceReadEligibility } from './space.ts';
 import realmsPage from './sitemap-realms-page.sql';
@@ -44,31 +43,29 @@ export class InvalidCommunitySitemapCursorError extends Error {
   }
 }
 
-function binding(feed: Feed): CursorBinding {
-  return { operation: `sitemap.${feed}.list`, parameters: {} };
-}
-
-function purpose(feed: Feed): string {
-  return `community.sitemap.${feed}.cursor.encryption.v1`;
+function binding(feed: Feed): ListCursorBinding {
+  return { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
 }
 
 function cursorTime(dependencies: CommunitySitemapDependencies): number {
   return (dependencies.cursorNow ?? (() => (dependencies.clock ?? (() => new Date()))().getTime()))();
 }
 
-function positionOf(dependencies: CommunitySitemapDependencies, feed: Feed, cursor?: string): Position | null {
+async function positionOf(
+  dependencies: CommunitySitemapDependencies,
+  feed: Feed,
+  cursor?: string,
+): Promise<Position | null> {
   if (cursor === undefined) return null;
   try {
-    const position = openSitemapPosition(
+    const decoded = await decodeListCursor(
       dependencies.tokens,
       binding(feed),
-      purpose(feed),
       cursor,
-      cursorTime(dependencies),
+      new Date(cursorTime(dependencies)),
     );
-    if (typeof position !== 'object' || position === null) throw new Error();
-    const route = (position as { route?: unknown }).route;
-    const id = (position as { id?: unknown }).id;
+    if (!decoded.ok || decoded.epoch !== 1 || decoded.after.length !== 2) throw new Error();
+    const [route, id] = decoded.after;
     if (
       typeof route !== 'number' ||
       !Number.isInteger(route) ||
@@ -84,8 +81,13 @@ function positionOf(dependencies: CommunitySitemapDependencies, feed: Feed, curs
   }
 }
 
-function nextCursor(dependencies: CommunitySitemapDependencies, feed: Feed, position: Position): string {
-  return sealSitemapPosition(dependencies.tokens, binding(feed), purpose(feed), position, cursorTime(dependencies));
+function nextCursor(dependencies: CommunitySitemapDependencies, feed: Feed, position: Position): Promise<string> {
+  return encodeListCursor(
+    dependencies.tokens,
+    binding(feed),
+    { epoch: 1, after: [position.route, position.id] },
+    new Date(cursorTime(dependencies)),
+  );
 }
 
 function pageLimit(input: CommunitySitemapInput): number {
@@ -183,7 +185,7 @@ async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(
   input: CommunitySitemapInput,
 ): Promise<CommunitySitemapPage<Item>> {
   const limit = pageLimit(input);
-  let position = positionOf(dependencies, feed, input.cursor);
+  let position = await positionOf(dependencies, feed, input.cursor);
   const rows = await candidates(dependencies, feed, position, limit * CANDIDATES_PER_ITEM);
   const items: Item[] = [];
   const at = observedAt(dependencies);
@@ -203,7 +205,7 @@ async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(
   }
   return {
     items,
-    next: finished || position === null ? null : nextCursor(dependencies, feed, position),
+    next: finished || position === null ? null : await nextCursor(dependencies, feed, position),
   };
 }
 
