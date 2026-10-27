@@ -288,7 +288,12 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         ...(values.has('--evidence') ? { evidencePath: values.get('--evidence')! } : {}) });
     } else {
       await recordManagerCommand(runtime);
-      if (subcommand === 'wait') console.log(JSON.stringify(await inbox.wait(id)));
+      if (subcommand === 'wait') {
+        const at = flags.indexOf('--settle');
+        const settle = at < 0 ? 0 : Number(flags[at + 1]);
+        if (!Number.isFinite(settle) || settle < 0) throw new Error('usage: inbox wait <manager> [--settle <seconds>]');
+        console.log(JSON.stringify(await inbox.wait(id, undefined, settle * 1000)));
+      }
       else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
       else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
       else throw new Error(`unknown inbox command: ${subcommand ?? '(missing)'}`);
@@ -305,7 +310,11 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await recordManagerCommand(runtime);
       console.log(JSON.stringify(await hostRequest(runtime.managerSocket, { command: 'start', spec: runtime.manager(id, engine, budget) })));
     } else if (subcommand === 'renew') {
-      if (flags.length) throw new Error('usage: manager renew <manager>');
+      // --engine moves a manager to another engine, for example to keep a weekly allowance within its week.
+      const engineAt = flags.indexOf('--engine');
+      const engineFlag = engineAt < 0 ? undefined : flags[engineAt + 1];
+      if ((engineAt < 0 && flags.length) || (engineAt >= 0 && (flags.length !== 2 || (engineFlag !== 'codex' && engineFlag !== 'claude'))))
+        throw new Error('usage: manager renew <manager> [--engine <codex|claude>]');
       const hasManagerTable = runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get();
       const row = hasManagerTable
         ? runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null : null;
@@ -314,7 +323,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
       console.log(JSON.stringify(await hostRequest(runtime.managerSocket,
-        { command: 'renew', manager: id, spec: runtime.manager(id, current.engine, current.budget) })));
+        { command: 'renew', manager: id, spec: runtime.manager(id, (engineFlag as 'codex' | 'claude' | undefined) ?? current.engine, current.budget) })));
     } else if (subcommand && ['stop', 'complete', 'decision', 'turn-start', 'turn-end'].includes(subcommand)) {
       await ensureHost(runtime);
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);
