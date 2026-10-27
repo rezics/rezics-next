@@ -336,6 +336,12 @@ The global context is inserted once by migration and has no runtime semantic rea
 - Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), statements O(1 + partitions on the page) ≤ O(s), independent of in-degree. For i ≤ s returned holders, the label and original-language fill adds O(i × (labels + 65)) rows and O(i × (labels + 65) log N) blocks in the same per-partition summary statements; selected-cover costs are derived below.
 - Growth check: `test/semantic/growth-inverse-pages.test.ts`: `an inverse page examines the same rows whatever the anchor's in-degree`, scales `[64, 512, 4096]` at limit 25; first and middle pages filtered by the second of two qualifiers have flat rows and blocks.
 
+### Graph read
+
+- Touches: for each depth, one index range of at most `limit + 1` rows per `(node, property, direction)`, batched into one statement per partition, plus one count probe per expansion. Node labels use the existing batched label read and types use one batched read per partition.
+- Bound: rows O(min(500, (p × l)²)); statements O(partitions touched) ≤ O(p × l) per depth. Cost is independent of graph size beyond the response and page bounds.
+- Growth check: `test/semantic/graph-read.test.ts`: `a graph read costs the same whatever the size of the graph beyond its bounds`, scales `[64, 512, 4096]` at depth 2 and limit 12; rows and statements stay flat.
+
 ### Links projection write
 
 - Touches: per changed statement, `1 + distinct values across both filter qualifiers` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, context_id, property, filter_value, order_key, source_subject_id, statement_id)`.

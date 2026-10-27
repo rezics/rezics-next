@@ -33,6 +33,7 @@ import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
+import { listSubjectGraph } from '../graph.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateStatement,
@@ -167,6 +168,40 @@ const readResponse = t.Object(
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     related: t.Record(t.String(), LabelsSchema),
+  },
+  { additionalProperties: false },
+);
+const graphResponse = t.Object(
+  {
+    nodes: t.Array(
+      t.Object(
+        { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String() },
+        { additionalProperties: false },
+      ),
+    ),
+    edges: t.Array(
+      t.Object(
+        {
+          from: t.String({ format: 'uuid' }),
+          property: t.String(),
+          to: t.String({ format: 'uuid' }),
+          statement: t.String({ format: 'uuid' }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    truncated: t.Array(
+      t.Object(
+        {
+          node: t.String({ format: 'uuid' }),
+          property: t.String(),
+          direction: t.Union([t.Literal('out'), t.Literal('in')]),
+          count: t.Integer({ minimum: 0 }),
+          cursor: t.String(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -1508,6 +1543,88 @@ function subjectRoutes(
           set.headers['cache-control'] = 'no-cache';
           return result;
         } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/graph',
+      {
+        query: t.Any(),
+        response: { 400: problemSchema('invalid_request') },
+        detail: {
+          operationId: 'subject.graph_missing_anchor',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      () => {
+        throw new ProblemError('invalid_request', { errors: [{ pointer: '/id', code: 'required' }] });
+      },
+    )
+    .get(
+      '/v1/subjects/:id/graph',
+      {
+        params: t.Object({ id: t.String() }),
+        query: t.Object({
+          property: t.Array(t.String({ minLength: 1 }), { minItems: 1, maxItems: 8 }),
+          direction: t.Union([t.Literal('out'), t.Literal('in'), t.Literal('both')]),
+          depth: t.Numeric({ minimum: 1, maximum: 2, multipleOf: 1 }),
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 25, multipleOf: 1, default: 12 })),
+        }),
+        response: {
+          200: withHeaders(graphResponse, cacheControl),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'subject.graph',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null)
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/id', code: 'invalid_format' }] });
+        const properties = [...new Set(query.property)];
+        if (properties.length !== query.property.length)
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/property', code: 'invalid_format' }] });
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        for (const property of properties) {
+          if (!Object.hasOwn(active.release.properties, property) || !isRelationProperty(active.release, property))
+            throw new ProblemError('invalid_request', {
+              errors: [{ pointer: '/property', code: 'unsupported' }],
+            });
+        }
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            listSubjectGraph(pool, tokens, {
+              subject: params.id,
+              properties,
+              direction: query.direction,
+              depth: query.depth as 1 | 2,
+              limit: query.limit ?? 12,
+              languages: languageRanges(request.headers.get('accept-language')),
+              authorize: check,
+            }),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          return result;
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/graph${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
           return candidateError(error);
         }
       },
