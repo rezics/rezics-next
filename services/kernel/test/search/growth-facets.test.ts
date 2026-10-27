@@ -536,6 +536,52 @@ test('Facet counts stays within its bound as N grows', async () => {
   }
 }, 90_000);
 
+test('type facet stays within its bound as subjects grow', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  const report = await checkSeeded(db, {
+    name: 'type facet stays within its bound as subjects grow',
+    scales: [1, 4, 16],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    grow: growPopulation,
+    operation: async () => {
+      probe = { aggregations: 0, reads: [] };
+      try {
+        const response = await kernel!.handle(
+          new Request('http://kernel.test/v1/subjects:facets', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ facets: [{ property: 'type' }] }),
+          }),
+        );
+        expect(response.status).toBe(200);
+        expect((await response.json()).facets).toEqual([
+          {
+            property: 'type',
+            relation: 'exact',
+            values: [
+              { value: 'schema:Book', count: 4, labels: {} },
+              { value: 'schema:Person', count: 2, labels: {} },
+            ],
+          },
+        ]);
+        expect(probe.aggregations).toBe(1);
+        expect(probe.reads).toEqual([]);
+      } finally {
+        probe = undefined;
+      }
+    },
+  });
+  expect(report.samples).toHaveLength(3);
+  for (const sample of report.samples) {
+    const subjectReads = Object.keys(sample.cost.relations ?? {}).filter((relation) =>
+      relation.startsWith('semantic.'),
+    );
+    expect(subjectReads).toEqual([]);
+  }
+}, 90_000);
+
 test('Search hit facts stay within their bound as N grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
   const authorsByBook = [[0], [0, 1], [0], [1]];
@@ -601,9 +647,9 @@ test('Search hit facts stay within their bound as N grows', async () => {
 }, 90_000);
 
 test('every growth-facets check starts empty and seeds at most sixteen scale units of 500', async () => {
-  expect(starts).toHaveLength(2);
-  expect(fixtureRows).toHaveLength(2);
-  expect(finishes).toHaveLength(2);
+  expect(starts).toHaveLength(3);
+  expect(fixtureRows).toHaveLength(3);
+  expect(finishes).toHaveLength(3);
   const sample = unrelatedPopulation('facet-counts-bound');
   const written = Object.fromEntries([...seededRelations, 'visible'].map((relation) => [relation, 0])) as Counts;
   for (let ordinal = 0; ordinal < 16 * unit; ordinal++) {
