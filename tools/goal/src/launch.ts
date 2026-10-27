@@ -268,7 +268,7 @@ function availableMiB(): number {
 }
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
 export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
-  return task.taskClass === 'critical-path' || task.brief.target === 'stabilize';
+  return task.taskClass === 'critical-path' || task.brief.criticalPath === true || task.brief.target === 'stabilize';
 }
 /**
  * A worker starts only while the host has room: at most maxWorkers running and at least minAvailableMiB of memory
