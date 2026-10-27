@@ -34,6 +34,16 @@ test('every worker can ask for research, and a research worker is told how to do
   expect(implementation).not.toContain('This is a research task');
   const research = workerPrompt(task('research'), undefined, undefined, [], '/repo/main');
   expect(research).toContain('This is a research task');
-  expect(research).toContain('/home/edge/projects/rezics/temp/<topic>-refs/');
+  expect(research).toContain('.reference/<topic>/<project>/');
   expect(research).toContain('never install, build or run anything from them');
+  expect(research).toContain('except the reference clones this research task keeps under /repo/main/.reference/');
+  expect(implementation).not.toContain('except the reference clones');
+});
+
+test('a worker starts only below the worker cap and above the memory floor', async () => {
+  const { hasCapacity } = await import('./launch.ts');
+  const capacity = { maxWorkers: 32, minAvailableMiB: 6144 };
+  expect(hasCapacity(31, 8000, capacity)).toBe(true);
+  expect(hasCapacity(32, 8000, capacity)).toBe(false);
+  expect(hasCapacity(10, 4000, capacity)).toBe(false);
 });
