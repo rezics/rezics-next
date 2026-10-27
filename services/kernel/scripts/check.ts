@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { Client } from 'pg';
+import { hostname } from 'node:os';
 import {
   existsSync,
   mkdirSync,
@@ -33,6 +34,7 @@ const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
 let reyloDirectory = '';
+let failedFileOutputs: string[] = [];
 const POSTGRES_MAX_CONNECTIONS = 500;
 const POSTGRES_CONNECTION_SAMPLE_MS = 250;
 const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname';
@@ -360,18 +362,62 @@ export function reportPostgresErrors(
   containerId: string,
   dockerCommand: DockerCommand = docker,
   write: (message: string) => void = (message) => process.stderr.write(message),
-): void {
-  if (!containerId) return;
+): boolean {
+  if (!containerId) return false;
 
   let logs: string;
   try {
     logs = dockerCommand(['logs', '--tail', String(POSTGRES_LOG_TAIL_LINES), containerId]);
   } catch {
-    return;
+    return false;
   }
 
   const summary = formatPostgresErrors(logs);
   if (summary) write(`${summary}\n`);
+  return summary?.split(/\r\n?|\n/).some((line) => /^\s+53100\s/.test(line)) ?? false;
+}
+
+type DatabaseDiskUsage = { free: string; size: string };
+
+function parseDatabaseDiskUsage(output: string): DatabaseDiskUsage | null {
+  const row = output
+    .trim()
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim().split(/\s+/))
+    .find((columns) => columns.at(-1) === '/var/lib/postgresql');
+  if (!row || row.length < 6) return null;
+  const size = row[1];
+  const free = row[3];
+  if (!size || !free || !/^\d+$/.test(size) || !/^\d+$/.test(free)) return null;
+  return { free, size };
+}
+
+/** Report an environment failure only for database storage exhaustion, returning its retryable exit code. */
+export function reportCheckFailure(
+  containerId: string,
+  failedOutputs: readonly string[],
+  dockerCommand: DockerCommand = docker,
+  write: (message: string) => void = (message) => process.stderr.write(message),
+  host = hostname(),
+): 1 | 75 {
+  const serverStorageFull = reportPostgresErrors(containerId, dockerCommand, write);
+  const fileStorageFull = failedOutputs.some((output) => output.includes('No space left on device'));
+  if (!serverStorageFull && !fileStorageFull) return 1;
+
+  let { free, size } = { free: 'unknown', size: 'unknown' };
+  if (containerId) {
+    try {
+      const output = dockerCommand(['exec', containerId, 'df', '-B1', '/var/lib/postgresql']);
+      const diskUsage = parseDatabaseDiskUsage(output);
+      if (diskUsage) ({ free, size } = diskUsage);
+    } catch {
+      // Disk usage is diagnostic only; a failed df still reports the storage failure.
+    }
+  }
+  write(
+    `kernel check: environment failure: database storage full (SQLSTATE 53100) on ${host}; ${free} of ${size} bytes free\n`,
+  );
+  return 75;
 }
 
 export type PostgresActivityRow = { datname: string | null; count: string | number };
@@ -691,6 +737,7 @@ async function main(): Promise<void> {
   const filePeaks = new Map<string, number>();
   sampler.start();
   let failedFiles: string[] = [];
+  const outputByFile = new Map<string, string>();
   try {
     const result = await runLaneSuite({
       service: 'kernel',
@@ -701,6 +748,8 @@ async function main(): Promise<void> {
       dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
       environment: (database) => fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
       onFileComplete: (outcome, timing) => {
+        if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
+        else outputByFile.delete(outcome.file);
         const peak = sampler.peakFor(outcome.database);
         timing.peakConnections = peak;
         filePeaks.set(outcome.file, peak);
@@ -708,6 +757,10 @@ async function main(): Promise<void> {
       },
     });
     failedFiles = result.failed;
+    failedFileOutputs = failedFiles.flatMap((file) => {
+      const output = outputByFile.get(file);
+      return output === undefined ? [] : [output];
+    });
   } finally {
     await sampler.stop();
     if (samplerConnected) await samplerClient.end().catch(() => undefined);
@@ -735,9 +788,8 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
-    reportPostgresErrors(container);
+    process.exitCode = reportCheckFailure(container, failedFileOutputs);
     console.error(error);
-    process.exitCode = 1;
   } finally {
     cleanup();
   }

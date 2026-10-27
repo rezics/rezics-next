@@ -4,6 +4,7 @@ import {
   formatConnectionRunSummary,
   formatFileConnectionResult,
   formatPostgresErrors,
+  reportCheckFailure,
   reportPostgresErrors,
   startPostgresContainer,
 } from './check.ts';
@@ -44,6 +45,80 @@ test("a failing kernel check prints the database server's errors and fatal messa
   expect(printed).toContain('XX000 PANIC: 1; first: forced server panic');
   expect(printed).not.toContain('outside the retained log tail');
   expect(formatPostgresErrors('2026-10-28 01:02:08 UTC [105] [00000] LOG: checkpoint complete')).toBeNull();
+});
+
+test('a check whose database ran out of space reports an environment failure and exits 75', () => {
+  const logOutput =
+    '2026-10-28 01:02:03 UTC [100] [53100] ERROR: could not extend file "base/21191/20378": No space left on device';
+  const calls: string[][] = [];
+  let printed = '';
+
+  const exitCode = reportCheckFailure(
+    'postgres-container',
+    [],
+    (args) => {
+      calls.push(args);
+      if (args[0] === 'logs') return logOutput;
+      return [
+        'Filesystem 1B-blocks Used Available Use% Mounted on',
+        'tmpfs 8589934592 1024 8589933568 1% /var/lib/postgresql',
+      ].join('\n');
+    },
+    (message) => (printed += message),
+    'check-host',
+  );
+
+  expect(exitCode).toBe(75);
+  expect(calls).toEqual([
+    ['logs', '--tail', '300', 'postgres-container'],
+    ['exec', 'postgres-container', 'df', '-B1', '/var/lib/postgresql'],
+  ]);
+  expect(printed).toBe(
+    `${formatPostgresErrors(logOutput)}\nkernel check: environment failure: database storage full (SQLSTATE 53100) on check-host; 8589933568 of 8589934592 bytes free\n`,
+  );
+});
+
+test('a failed file reporting no space exits 75 and reports unknown disk usage when df fails', () => {
+  const calls: string[][] = [];
+  let printed = '';
+
+  const exitCode = reportCheckFailure(
+    'postgres-container',
+    ['bun test ./test/growth.test.ts failed:\nNo space left on device'],
+    (args) => {
+      calls.push(args);
+      if (args[0] === 'logs') return '';
+      throw new Error('df failed');
+    },
+    (message) => (printed += message),
+    'check-host',
+  );
+
+  expect(exitCode).toBe(75);
+  expect(calls).toEqual([
+    ['logs', '--tail', '300', 'postgres-container'],
+    ['exec', 'postgres-container', 'df', '-B1', '/var/lib/postgresql'],
+  ]);
+  expect(printed).toBe(
+    'kernel check: environment failure: database storage full (SQLSTATE 53100) on check-host; unknown of unknown bytes free\n',
+  );
+});
+
+test('a check that fails for any other reason exits 1 without an environment line', () => {
+  const calls: string[][] = [];
+  let printed = '';
+
+  const exitCode = reportCheckFailure(
+    'postgres-container',
+    ['bun test ./test/accounts.test.ts failed:\nExpected 1 to be 2'],
+    (args) => (calls.push(args), ''),
+    (message) => (printed += message),
+    'check-host',
+  );
+
+  expect(exitCode).toBe(1);
+  expect(calls).toEqual([['logs', '--tail', '300', 'postgres-container']]);
+  expect(printed).toBe('');
 });
 
 test("the check reports each file's peak database connections and the run's peak against max_connections", async () => {
