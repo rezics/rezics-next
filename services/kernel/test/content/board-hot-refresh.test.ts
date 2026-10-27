@@ -17,7 +17,14 @@ import { createReactionCountEffect } from '../../src/content/reaction-projection
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
@@ -49,6 +56,21 @@ type RankRow = {
   last_activity_at: Date;
   rank_refreshed_at: Date;
 };
+
+function planNodes(value: unknown, nodes: Record<string, unknown>[] = []): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    for (const child of value) planNodes(child, nodes);
+  } else if (typeof value === 'object' && value !== null) {
+    const object = value as Record<string, unknown>;
+    if (typeof object['Node Type'] === 'string') nodes.push(object);
+    for (const child of Object.values(object)) planNodes(child, nodes);
+  }
+  return nodes;
+}
+
+function growthId(route: number, prefix: string, ordinal: number): string {
+  return `${prefix}-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;
+}
 
 function rank(score: number, inputAt: Date, at: Date): number {
   const hours = Math.max(0, (at.getTime() - inputAt.getTime()) / 3_600_000);
@@ -320,76 +342,89 @@ async function createTestRealm() {
   };
 }
 
-// Every scale step needs 1000 due candidates (two batches of 500), so each ordinal carries several candidates.
-const candidatesPerOrdinal = 4;
-const dueCandidates = 1000;
+const dueCandidates = 500;
 
-function refreshPopulation(baseAt: Date): Population {
+function refreshPopulation(baseAt: Date, prefix = randomUUID().slice(0, 6)): Population {
   return {
-    name: `board-hot-refresh-${randomUUID()}`,
+    name: `board-hot-refresh-${prefix}`,
     hotPartition: partitionOf(sourceRoute),
     hotShare: 1,
     rows: ({ ordinal }) => {
-      const first = ordinal * candidatesPerOrdinal;
-      const dueFrom = (start: number) =>
-        first >= start * candidatesPerOrdinal && first < start * candidatesPerOrdinal + dueCandidates;
+      const key = ordinal + 1;
+      const boardId = growthId(boardRoute, `${prefix}00`, key);
+      const threadId = growthId(sourceRoute, `${prefix}01`, key);
+      const sourcePosition = key;
       const rankRefreshedAt =
-        first < dueCandidates
-          ? staleAt
-          : dueFrom(scales[1])
-            ? new Date(baseAt.getTime() - 38 * 60_000).toISOString()
-            : dueFrom(scales[0])
-              ? new Date(baseAt.getTime() - 49 * 60_000).toISOString()
-              : new Date(baseAt.getTime() + 60 * 60_000).toISOString();
-      const boards: Record<string, unknown>[] = [];
-      const boardThreads: Record<string, unknown>[] = [];
-      const totals: Record<string, unknown>[] = [];
-      for (let copy = 0; copy < candidatesPerOrdinal; copy++) {
-        const boardId = newId(boardRoute);
-        const threadId = newId(sourceRoute);
-        const sourcePosition = first + copy + 1;
-        boards.push({
-          route: boardRoute,
-          board_id: boardId,
-          subject_id: newId(boardRoute),
-          title: 'Rank growth board',
-          visibility: 'published',
-          security_revision: 1,
-          recorded_transaction_id: randomUUID(),
-          created_at: staleAt,
-          realm_id: null,
-        });
-        boardThreads.push({
-          route: boardRoute,
-          board_id: boardId,
-          thread_id: threadId,
-          created_at: staleAt,
-          last_activity_at: staleAt,
-          score: 0,
-          active_rank: 1,
-          hot_rank: 1,
-          rank_refreshed_at: rankRefreshedAt,
-          source_epoch: 1,
-          source_position: sourcePosition,
-          source_revision_id: null,
-        });
-        totals.push({
-          route: sourceRoute,
-          target_id: threadId,
-          kind: 'upvote',
-          count: 2,
-          source_epoch: 1,
-          source_position: sourcePosition,
-        });
-      }
+        ordinal < dueCandidates ? staleAt : new Date(baseAt.getTime() + 60 * 60_000).toISOString();
+      const createdAt = new Date(baseAt.getTime() - 2 * 60 * 60_000).toISOString();
       return {
-        'content.board': boards,
-        'content.board_thread': boardThreads,
-        'content.reaction_total': totals,
+        'content.board': [
+          {
+            route: boardRoute,
+            board_id: boardId,
+            subject_id: growthId(boardRoute, `${prefix}02`, key),
+            title: 'Rank growth board',
+            visibility: 'published',
+            security_revision: 1,
+            recorded_transaction_id: growthId(boardRoute, `${prefix}03`, key),
+            created_at: createdAt,
+            realm_id: null,
+          },
+        ],
+        'content.board_thread': [
+          {
+            route: boardRoute,
+            board_id: boardId,
+            thread_id: threadId,
+            created_at: createdAt,
+            last_activity_at: createdAt,
+            score: 0,
+            active_rank: 1,
+            hot_rank: 1,
+            rank_refreshed_at: rankRefreshedAt,
+            source_epoch: 1,
+            source_position: sourcePosition,
+            source_revision_id: null,
+          },
+        ],
+        'content.reaction_total': [
+          {
+            route: sourceRoute,
+            target_id: threadId,
+            kind: 'upvote',
+            count: 2,
+            source_epoch: 1,
+            source_position: sourcePosition,
+          },
+        ],
       };
     },
   };
 }
+
+test.serial(
+  'the hot rank refresh batch sets no planner method settings and selects candidates through its due index',
+  async () => {
+    const baseAt = new Date(Date.now() + 20 * 60_000);
+    const population = refreshPopulation(baseAt);
+    // Grow 500 × 64 future candidates and reaction totals outside the fixed 500-candidate due window.
+    await seed(db, population, { from: 0, to: 500 * 64 });
+    const measured = await capture(db, () => refreshBoardRankBatch(db.pool, baseAt, [partitionOf(boardRoute)]));
+    expect(measured.value).toBe(dueCandidates);
+    expect(
+      measured.capture.statements.some((statement) => /\b(SET|set_config)\b[^;]*\benable_/is.test(statement)),
+    ).toBe(false);
+    const dueIndexScans = planNodes(measured.capture.plans).filter(
+      (node) =>
+        node.Schema === 'content' &&
+        node['Relation Name'] === 'board_thread' &&
+        node['Index Name'] === 'board_thread_rank_refresh_idx' &&
+        /Index (?:Only )?Scan/.test(String(node['Node Type'])),
+    );
+    expect(dueIndexScans.length).toBeGreaterThan(0);
+  },
+  180_000,
+);
 
 test.serial(
   'one refresh batch stays within its bound as candidates and reactions grow',
@@ -411,10 +446,11 @@ test.serial(
         statements: 'constant',
       },
       repetitions: 1,
+      // This check grows 500 × scale candidates and matching reaction totals outside one fixed 500-row due batch.
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
-          from: previous,
-          to: scale,
+          from: previous * 500,
+          to: scale * 500,
         }),
       warmup: refresh,
       operation: refresh,

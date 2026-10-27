@@ -117,7 +117,6 @@ async function refreshPartition(pool: Pool, partition: number, at: Date): Promis
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     try {
-      await client.query('SET LOCAL enable_seqscan = off');
       const candidates = (await refresh.run(client, { partition, at: at.toISOString() })) as Candidate[];
       if (candidates.length === 0) {
         await client.query('COMMIT');

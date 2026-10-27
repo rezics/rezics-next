@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
@@ -190,6 +191,60 @@ async function get(url: string, token?: string) {
   );
   return { status: response.status, body: await response.json() };
 }
+
+function planNodes(value: unknown, nodes: Record<string, unknown>[] = []): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    for (const child of value) planNodes(child, nodes);
+  } else if (typeof value === 'object' && value !== null) {
+    const object = value as Record<string, unknown>;
+    if (typeof object['Node Type'] === 'string') nodes.push(object);
+    for (const child of Object.values(object)) planNodes(child, nodes);
+  }
+  return nodes;
+}
+
+function growthId(route: number, prefix: string, ordinal: number): string {
+  return `${prefix}-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;
+}
+
+function otherAuthorItems(reply: boolean, prefix: string): Population {
+  return {
+    name: `author-item-growth-${prefix}-${reply ? 'posts' : 'threads'}`,
+    hotPartition: authorRoute >>> 4,
+    hotShare: 1,
+    rows: ({ ordinal }) => {
+      const key = ordinal + 1;
+      const threadId = growthId(contentRoute, `${prefix}00`, key);
+      const itemId = reply ? growthId(contentRoute, `${prefix}01`, key) : threadId;
+      return {
+        'content.author_item': [
+          {
+            route: authorRoute,
+            author_account_id: growthId(authorRoute, `${prefix}02`, key),
+            item_kind: reply ? 'post' : 'thread',
+            item_id: itemId,
+            thread_id: threadId,
+            thread_kind: 'discussion',
+            created_at: new Date(Date.UTC(2026, 0, 1) + ordinal * 1000).toISOString(),
+            source_epoch: 1,
+            source_position: key,
+          },
+        ],
+      };
+    },
+  };
+}
+
+function expectAuthorPageIndex(plans: readonly unknown[], index: string): void {
+  const scans = planNodes(plans).filter(
+    (node) =>
+      node.Schema === 'content' &&
+      node['Relation Name'] === 'author_item' &&
+      node['Index Name'] === index &&
+      /Index (?:Only )?Scan/.test(String(node['Node Type'])),
+  );
+  expect(scans.length).toBeGreaterThan(0);
+}
 async function invalid(url: string, token?: string) {
   const result = await get(url, token);
   expect(result.status).toBe(400);
@@ -370,29 +425,46 @@ test('author pages conceal protected Realms, drafts, takedowns and erasure with 
   }
 });
 
+test('author pages set no planner method settings and read content.author_item through its keyset index', async () => {
+  const captures: { capture: Awaited<ReturnType<typeof capture>>['capture']; index: string }[] = [];
+  for (const reply of [false, true]) {
+    const author = newId(authorRoute);
+    const kind = reply ? 'posts' : 'threads';
+    await fixture(author, '2026-10-20T00:00:00Z', 'discussion', reply);
+    await fixture(author, '2026-10-21T00:00:00Z', 'discussion', reply);
+    // Grow 500 × 64 other-author rows in the same route partition while keeping this author's page fixed.
+    await seed(db, otherAuthorItems(reply, randomUUID().slice(0, 6)), { from: 0, to: 500 * 64 });
+    const measured = await capture(db, () => get(path(author, kind, { limit: '1' })));
+    expect(measured.value.status).toBe(200);
+    captures.push({
+      capture: measured.capture,
+      index: reply ? 'author_item_post_page_idx' : 'author_item_page_idx',
+    });
+  }
+
+  for (const measured of captures) {
+    expect(
+      measured.capture.statements.some((statement) => /\b(SET|set_config)\b[^;]*\benable_/is.test(statement)),
+    ).toBe(false);
+    expectAuthorPageIndex(measured.capture.plans, measured.index);
+  }
+});
+
 for (const reply of [false, true])
   test(reply ? 'author post page' : 'author thread page', async () => {
     const author = newId(authorRoute);
     await ensureAuthor(author);
-    const population: Population = {
-      name: crypto.randomUUID(),
-      hotPartition: contentRoute >>> 4,
-      hotShare: 1,
-      rows: ({ ordinal }) =>
-        rows(
-          author,
-          new Date(Date.UTC(2026, 0, 1) + ordinal * 1000).toISOString(),
-          ordinal % 2 === 0 ? 'discussion' : 'review',
-          reply,
-        ).records,
-    };
+    for (let index = 0; index < 4; index++)
+      await fixture(author, `2026-01-0${index + 1}T00:00:00Z`, 'discussion', reply);
+    const population = otherAuthorItems(reply, randomUUID().slice(0, 6));
+    // This check grows 500 × scale other-author content.author_item rows in this route partition.
     const report = await checkGrowth(db, {
       name: reply ? 'Author post page' : 'Author thread page',
       scales: [64, 512, 4096],
       warmups: 1,
       repetitions: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: (database, scale, previous) => seed(database, population, { from: previous, to: scale }),
+      grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
       async operation() {
         const page = await get(path(author, reply ? 'posts' : 'threads', { limit: '2' }));
         expect(page.status).toBe(200);

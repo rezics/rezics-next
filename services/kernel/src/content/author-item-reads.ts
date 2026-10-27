@@ -132,9 +132,6 @@ async function candidates(
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         await client.query("SET LOCAL statement_timeout = '3000ms'");
-        // Keep the scan budget physical even for tiny or poorly estimated ranges.
-        await client.query('SET LOCAL enable_seqscan = off');
-        await client.query('SET LOCAL enable_bitmapscan = off');
         const partition = await readPartition(client, partitionOf(route));
         if (!partition) throw new CommandUnavailableError('deadline', partitionOf(route));
         if (partition.writeState === 'moved')
