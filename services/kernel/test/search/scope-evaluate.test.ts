@@ -151,8 +151,10 @@ beforeAll(async () => {
   const before = await activeRelease(db.pool);
   expect(before).not.toBeNull();
   const published = await write('/v1/definitions/releases', { release }, 'steward');
-  await write(`/v1/definitions/releases/${published.digest}:activate`, { expected_head: before!.head }, 'steward');
-  expect((await activeRelease(db.pool))!.digest).toBe(published.digest);
+  const digest = published.digest;
+  if (typeof digest !== 'string') throw new Error('Native release publication did not return a digest');
+  await write(`/v1/definitions/releases/${digest}:activate`, { expected_head: before!.head }, 'steward');
+  expect((await activeRelease(db.pool))!.digest).toBe(digest);
   target = await create('schema:Person');
   other = await create('schema:Person');
   role = await create('skos:Concept');
