@@ -153,6 +153,101 @@ Small implementation split: `scope-source.ts` owns admission, opaque preparation
 evaluator home. Native source/facet/identity providers remain Semantic-owned. None of those runtime extractions or
 providers is claimed delivered here.
 
+## Global rating order
+
+The first public rating sort is limited to the public aggregate for the Global population and standard question.
+[First public scope](../../../../docs/scope.md) defers Realm rating sorts; private Realm figures never enter the
+public Search index. [Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
+Search uses the published score and does not recompute or reinterpret that policy.
+
+The rating source is the current public figure for a subject, read with that subject from the same anchor partition
+and the same repeatable-read `core.partition.position`. A missing figure means unscored only after a complete,
+successful source read. Source failure is unavailable evidence and fails closed. The current figure proof must also
+confirm that the figure remains publicly eligible and that its score/revision still matches the indexed candidate;
+an indexed score or matching epoch alone is not current eligibility proof. The runtime composition and its proof
+remain pending, so this section records the contract rather than claiming production support.
+
+The eligible Global prior has one frozen epoch identity. Below its 50-vote eligibility threshold the native state is
+known ineligible and the selected epoch is null; an unavailable native read is an error, not null. Eligible epoch
+identities are never reused after invalidation. The index publishes the epoch and score together from one public
+figure. It accepts only one positive safe-integer epoch and one finite scalar score from 0 through 10; the mapping
+uses a `long` epoch and a `double` score without coercion. Field existence is not a scalar-data validator, so the
+source/document boundary enforces these invariants. Unscored state is absent/null; no numeric sentinel or
+`null_value` substitutes for it.
+
+For the common admitted search predicate `F`, let `P` mean that the selected epoch is non-null, the indexed figure
+epoch equals it and `rating_score` exists. Phase A searches `F AND P`, ordered by score descending, normalized
+`name_sort` ascending with missing last, then unique `id` ascending. Phase B searches `F AND NOT P`, where the
+entire conjunction `P` is one complement clause, ordered by `name_sort` ascending with missing last, then `id`
+ascending. A known null epoch makes A empty and B all of F. A real score of zero belongs to A; stale scores and
+missing/null epochs or scores belong to B. The common query remains identical in both phases. This native order is
+equivalent to scored-first ordering only for a fixed indexed state and the validated scalar-field invariants; it
+uses no per-match rating script or fetched-prefix reranking. See the pinned OpenSearch 3.9.0
+[field sort implementation](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/sort/FieldSortBuilder.java#L410-L449).
+
+Resolve and pin one concrete physical generation before either phase and use it for both phases, count-only searches
+and every refill, including searches returning zero hits. Read the selected native epoch before discovery, keep it
+fixed throughout the response and read it again before returning. An observed epoch or active-generation change
+restarts with HTTP 409; unavailable evidence fails closed. A null epoch at both ends proves only that the current
+ordering rule is unscored at both reads: it does not prove that no eligible interval occurred between them. No
+transition-history field is introduced.
+
+Each refill round uses at most two native searches, including any count-only search. A shared raw-hit budget
+`q = min(200, 2 * remaining_page_slots + 1)` applies across A and B; the page uses at most three rounds and 600
+raw hits. Search advances from the last consumed native hit, including stale or rejected hits, and leaves an
+acceptable lookahead unconsumed. Do not advance through an unconsumed A hit, strip the score from an A tuple to
+make a B tuple, or synthesize a sort sentinel. A's raw tuple is `[score, name_sort|null, id]`; B's is
+`[name_sort|null, id]`. Preserve the engine's null exactly. A short or empty successful response proves exhaustion
+only for that phase after its tuple; timeouts, failed shards, partial responses or early termination do not prove
+order or exhaustion. OpenSearch checks tuple arity against the selected sort and preserves returned null sort values
+([`SearchAfterBuilder`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/searchafter/SearchAfterBuilder.java#L124-L149),
+[`SearchSortValues`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/SearchSortValues.java#L70-L110)).
+
+Current-source rejection consumes and drops an unsafe hit; Search never exposes its old score, relabels it as
+unscored in place or reranks it. The result is a safe ordered subsequence of the indexed candidates, not a complete
+current-native order. There is no current top-N, PIT, snapshot traversal, duplicate-free traversal or completeness
+promise while publication and index updates move keys. A/B phase totals are internal indexed observations under a
+fixed-state theorem only. A rating-sort response's public `total` is always a `lower_bound` from unique, currently
+verified and disclosed hits; never expose a sum of live phase counts as a public exact count or lower bound, since a
+subject can move between phases between searches even when epoch and generation are unchanged.
+
+Keep released `subjects-search-v2` source and ID unchanged. Reuse it if the fixed server-built phase filters, sorts,
+physical target and zero-size count request fit its existing template contract; introduce a new template version
+only if the stored source must change.
+
+## Confidential cursor and bounded name sort
+
+The Search cursor contract uses the shared encrypted list-cursor Search profile with AES-GCM. Its authenticated
+binding covers the route/operation, canonical request hash and viewer. The viewer is a real lowercase account UUID
+or null for anonymous readers. The encrypted position carries the concrete generation, selected Global question
+and epoch, operation/sort-template version, phase and last consumed native tuple; authenticate the original request
+first, then restart with HTTP 409 on a valid cursor whose current rating context has changed. Do not change the
+authenticated request hash to the current epoch. All search positions use fresh random salt,
+15-minute expiry including anonymous viewers and a 60-second future-time allowance. Profile cross-decode fails.
+There is no HMAC-readable position or legacy plaintext fallback. The Search adapter still needs the encrypted
+profile migration and outcome proof; this contract does not claim that runtime work is complete.
+
+The bounded profile accepts at most 8 tuple keys, 2,560 UTF-8 bytes per key, 3,072 aggregate string bytes,
+3,584 serialized bytes and 4,864 token characters; the HTTP cursor limit derives from this profile, with no legacy
+4,096-character cap. Native tuples preserve exact type and value using the profile's `s` string, `n` finite-number
+and `z` null encodings. Phase and tuple arity are validated; score zero remains a number, and neither tuple values
+nor names are truncated, hashed or reconstructed from display data. Base64 inspection cannot recover a hidden sort
+key or subject id. If an acceptable B hit is lookahead before any B hit is consumed, retain the last consumed A
+tuple; the next request may confirm A exhaustion and request B within the same two-search budget. The cursor changes
+to B only after a B hit is consumed.
+
+For native name ordering, Search stores the full normalized name key only when it is at most 512 UTF-16 code units;
+missing and oversized keys use null with native missing-last behavior and unique `id` ties. Do not truncate or hash
+the key. Full names and `names.exact` remain unchanged. The index's `name_key` normalizer is applied to the complete visible name in a
+bounded write-side `_analyze` pass before bulk indexing: deduplicate raw names and analyze at most 256 names per
+request. Do not send hidden or deleted action names to analysis. Keep one bulk action and its anchor external version
+per subject; if normalization fails, do not partially bulk or advance the checkpoint. Mapping `ignore_above: 512`
+is only a defense: OpenSearch checks raw string length before applying the normalizer, so a short input can expand
+past the normalized bound. See the pinned OpenSearch 3.9.0
+[keyword mapping implementation](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/index/mapper/KeywordFieldMapper.java#L1023-L1031).
+Existing oversized indexed keys require replay into a real new generation before bounded-read readiness; a mapping
+update does not rewrite existing terms.
+
 ## Cost
 
 These are derivations from `src/search/`, `src/events/`, the called Access SQL, `db/search/` and the core/semantic
@@ -162,7 +257,9 @@ work and its SQL cost derivation; the [semantic relation-facet design](../semant
 authority for those details. Semantic source/worker composition and its final real-source claim remain pending.
 
 The criterion is a bounded anchor neighbourhood per query, hit or change, with about changes × index depth work;
-OpenSearch's internal query execution is an engine constant, but kernel enumeration and source reads are not.
+kernel enumeration and source reads are bounded as described below. OpenSearch query, sort and count work can grow
+with matching documents and shard merges; these request and candidate limits establish no O(1) engine-work or
+latency guarantee.
 `N` is total subjects, `P` rows in an anchor partition (including history and other consumers where relevant), `H`
 outbox rows in one partition, `b` event changes in a batch, `h` candidates examined on a page, `s` requested results,
 `d` page depth, `C` checkpoints for one consumer (at most 4,096), `k` rows/documents changed by an operation, and
@@ -306,17 +403,21 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Search planning and engine page
 
-- Touches: Route validation, `text.ts`, `filter.ts`, `query.ts` and `subjects-search-v2` compile named clauses; one
-  alias `_search/template` request per round, at most three per page. Index fields are `search_text`, `names.exact`,
-  `names`, keyword type/statements and nested `facts`; sort is score then id (relevance), `name_sort` then id (name),
-  id, or `public_collection_count` descending with missing as 0, then `name_sort` and id (collections). `_source`
-  selects partition/security revision; totals track to 10,000. Relation positive and negative overflow clauses are
-  compiled as safe candidate supersets. A named outer clause keeps exact-value and marker-only matches in the same
-  matched-query lineage. Grow N/P/d, fixing s, query and current hits.
+- Touches: Route validation, `text.ts`, `filter.ts`, `query.ts` and `subjects-search-v2` compile named clauses. The
+  existing non-rating path sends one alias `_search/template` request per round, at most three per page. The Global
+  rating path uses native phases A and B against one pinned physical generation, at most two requests per round.
+  Existing index fields are `search_text`, `names.exact`, `names`, keyword type/statements and nested `facts`; the
+  current sorts are `_score` then id (relevance), `name_sort` then id (name), id, or `public_collection_count`
+  descending with missing as 0, then `name_sort` and id (collections). The Global rating sort is described above.
+  `_source` selects partition/security revision; ordinary totals track to 10,000. Relation positive and negative
+  overflow clauses are compiled as safe candidate supersets. A named outer clause keeps exact-value and marker-only
+  matches in the same matched-query lineage. Grow N/P/d, fixing s, query and current hits.
 - Bound: A filtered request adds one active-release lookup (pointer read; release cached by digest); no lookup
   without a filter. Admission is linear in expanded leaves (`ell <= 32`) times the returnable types' bases; the
   all-types facet union is computed once per release. `O(h)` hit mapping, at most 600 hit documents, and at most
-  three engine searches. Valid text is <= 512 bytes/64 leaves/depth 4; filters <= 32 leaves/depth 4, OR <= 16,
+  three searches for the existing non-rating path; a rating page has at most six native phase searches and 600
+  returned raw hits, with the 200-hit budget shared across phases per round. Native sorting and counting remain
+  match-dependent engine work. Valid text is <= 512 bytes/64 leaves/depth 4; filters <= 32 leaves/depth 4, OR <= 16,
   `IN` <= 64 (bounded scalar sizes). Parsing rejected raw input still depends on input length. Nested leaves touch
   candidate subjects' facts only. Text syntax errors remain typed 422 errors. Qualified relation facets return 400
   `invalid_request` at the filter qualifier pointer; descriptive qualifiers retain their existing meaning. Code
@@ -328,7 +429,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   preserve boolean grouping and same-statement qualifiers”; [test/search/relation-qualifier-admission.test.ts](../../test/search/relation-qualifier-admission.test.ts):
   “qualified relation facet filters are 400 invalid_request without reaching the engine” and “unqualified relation
   facets and descriptive qualifiers retain their semantics”; [test/search/service.test.ts](../../test/search/service.test.ts):
-  “each request makes at most three index requests and reads only the partitions of examined hits”; [test/search/overflow-service.test.ts](../../test/search/overflow-service.test.ts):
+  “each request makes at most three index requests and reads only the partitions of examined hits” for the existing
+  non-rating path; rating phase runtime outcomes remain pending. [test/search/overflow-service.test.ts](../../test/search/overflow-service.test.ts):
   “overflow service work stays bounded at stored degrees 128, 512 and 2048”.
 
 ### Search hit facts
@@ -406,15 +508,44 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Cursor and continuation
 
-- Touches: Signed cursor binds canonical request hash, principal, operation, generation and last consumed sort values
-  (<= 8). Each round/page sends `search_after`; no OFFSET, preceding-page enumeration or database cursor. A changed
-  generation/expired token requires restart. Grow d/N with s, query, key ring and current hit payloads fixed.
-- Bound: Constant SQL rows/blocks/statements (zero); constant sort tuple and bounded request hashing, independent
-  of d; `O(h)` current-page consumption. No kernel `O(d*s)` read from the start. Dropped or unproven candidates are
-  consumed before the next keyset continuation, so refill does not repeat them.
+- Touches: The adopted Search contract uses the shared AES-GCM list-cursor Search profile, binding route/operation,
+  canonical request hash and viewer, and encrypting generation, Global rating context, phase and last consumed native
+  tuple. Each page uses `search_after`; no OFFSET, preceding-page enumeration or database cursor. See [Confidential
+  cursor and bounded name sort](#confidential-cursor-and-bounded-name-sort). The runtime adapter migration and
+  encrypted-token outcome proof remain pending.
+- Bound: Zero SQL or engine I/O in the cursor codec; at most 8 tuple keys, 2,560 UTF-8 bytes per key, 3,072
+  aggregate string bytes, 3,584 serialized bytes and 4,864 token characters. Position encryption uses a fresh random
+  salt, a 15-minute lifetime including anonymous viewers and a 60-second future allowance. Codec and tuple size are
+  independent of page depth; page consumption is `O(h)`. No kernel `O(d*s)` read from the start. Dropped or
+  unproven candidates are consumed before the next keyset continuation, while acceptable lookahead stays unconsumed.
 - Growth check: [test/search/service.test.ts](../../test/search/service.test.ts): “pages continue through signed tokens
   bound to the request and the principal” and “each request makes at most three index requests and reads only the
-  partitions of examined hits”.
+  partitions of examined hits” for the existing path. Encrypted-profile confidentiality and native phase cursor
+  outcomes remain runtime proof requirements.
+
+### Global rating phases
+
+- Touches: Each page resolves one physical generation and brackets its native epoch context; each refill round sends
+  at most two phase searches, including count-only work, then checks current figures in bounded source batches.
+- Bound: At most 200 combined raw hits per round and 600 per three-round response; current-figure reads are batched
+  by anchor partition, at most 256 figure IDs per source call. OpenSearch sort and count work is match-dependent;
+  no SQL, latency or O(1) engine-work claim follows from these request bounds.
+- Growth check: Pinned 3.9.0 runtime coverage remains required for mixed epochs, zero scores, raw A/B continuation,
+  shared quotas, phase counts, source rejection, generation switches, failed searches and live phase movement. This
+  README is the adopted contract, not a runtime result.
+
+### Bounded native name sort
+
+- Touches: Indexing deduplicates changed visible raw names and runs the index's `name_key` normalizer through
+  `_analyze` in chunks of at most 256 names before bulk. Each subject keeps one action and its anchor external version;
+  hidden/deleted names are not analyzed, and normalization failure prevents bulk and checkpoint advancement.
+- Bound: Write work is `O(changed visible names and bytes)`, zero SQL and at most
+  `ceil(distinct_names / 256)` extra engine analysis requests per batch, not per HTTP read. Retain only a complete
+  normalized key of at most 512 UTF-16 code units; larger results use null. Read-side sorting remains
+  match-dependent and follows missing-last plus unique id.
+- Growth check: Pinned-engine verification must show that `ignore_above` alone does not bound normalized output,
+  overlong normalized names become null, ordinary 250-CJK names keep their full key, and a new-generation replay
+  repairs existing values before bounded-read readiness. Those runtime outcomes remain pending.
 
 ### Suggest
 
