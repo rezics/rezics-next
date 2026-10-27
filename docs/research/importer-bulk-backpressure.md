@@ -24,14 +24,14 @@ The following source commits are the inspected snapshots, not claims about every
 Links below pin files to those commits. Hosted documentation was accessed on the inspection date;
 RFC numbers identify immutable standards. No implementation code or verbatim excerpts are reproduced.
 
-| Source | Inspected locations and licence | What it establishes |
-| --- | --- | --- |
-| HTTP semantics | [RFC 9110, sections 9.2.2, 10.2.3 and 15.6.4][http]; [RFC 6585, section 4][429]. IETF Trust Legal Provisions/BCP 78; extracted code components require Revised BSD text in RFC 9110 and Simplified BSD text in RFC 6585. | Idempotent retries, 503, 429 and the syntax/meaning of Retry-After; no adaptive algorithm or retry count. |
-| AWS SDK guidance | [Retry behavior][aws]. AWS-hosted copyrighted documentation; no open-source licence assumed for this prose. | Separate retry quota and adaptive request-rate admission, configuration scope and jitter. |
-| Smithy guidance | [Retrying Requests][smithy-guide] and [behavior traits][smithy-traits]. Hosted prose credits Amazon Web Services; no licence for copying prose assumed here. | Retry safety versus retry permission, server delay hints, token budgets and service-defined deduplication. |
-| AWS/Smithy TypeScript implementation | [smithy-lang/smithy-typescript][smithy-root], commit `cb3a25c37bc9455ccb116fe722c544adac981690`; [root LICENSE][smithy-license] and `packages/core/package.json`: Apache-2.0. | Actual retry accounting, adaptive rate control, classification, delays and limitations described below. |
-| Established bulk ingestion client | [elastic/elasticsearch-js][elastic-root], commit `acf9711ba7f55064ac70dbe1439b931501ccc7d2`; [LICENSE][elastic-license] and `src/helpers.ts` SPDX header: Apache-2.0, Elasticsearch B.V. and contributors. | Fixed-concurrency bulk helper, bounded retries of rejected items, retained serialized operations, drop reporting and abort behavior. |
-| Adaptive concurrency reference | [Netflix/concurrency-limits][netflix-root], commit `78a74b9878d38c4c048b0304ce12a162ab7b7222`; [LICENSE][netflix-license] and inspected Java headers: Apache-2.0, Netflix, Inc. | Actual additive-increase/multiplicative-decrease concurrency admission, separately from retries. It is not a bulk client. |
+| Source                               | Inspected locations and licence                                                                                                                                                                                          | What it establishes                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP semantics                       | [RFC 9110, sections 9.2.2, 10.2.3 and 15.6.4][http]; [RFC 6585, section 4][429]. IETF Trust Legal Provisions/BCP 78; extracted code components require Revised BSD text in RFC 9110 and Simplified BSD text in RFC 6585. | Idempotent retries, 503, 429 and the syntax/meaning of Retry-After; no adaptive algorithm or retry count.                            |
+| AWS SDK guidance                     | [Retry behavior][aws]. AWS-hosted copyrighted documentation; no open-source licence assumed for this prose.                                                                                                              | Separate retry quota and adaptive request-rate admission, configuration scope and jitter.                                            |
+| Smithy guidance                      | [Retrying Requests][smithy-guide] and [behavior traits][smithy-traits]. Hosted prose credits Amazon Web Services; no licence for copying prose assumed here.                                                             | Retry safety versus retry permission, server delay hints, token budgets and service-defined deduplication.                           |
+| AWS/Smithy TypeScript implementation | [smithy-lang/smithy-typescript][smithy-root], commit `cb3a25c37bc9455ccb116fe722c544adac981690`; [root LICENSE][smithy-license] and `packages/core/package.json`: Apache-2.0.                                            | Actual retry accounting, adaptive rate control, classification, delays and limitations described below.                              |
+| Established bulk ingestion client    | [elastic/elasticsearch-js][elastic-root], commit `acf9711ba7f55064ac70dbe1439b931501ccc7d2`; [LICENSE][elastic-license] and `src/helpers.ts` SPDX header: Apache-2.0, Elasticsearch B.V. and contributors.               | Fixed-concurrency bulk helper, bounded retries of rejected items, retained serialized operations, drop reporting and abort behavior. |
+| Adaptive concurrency reference       | [Netflix/concurrency-limits][netflix-root], commit `78a74b9878d38c4c048b0304ce12a162ab7b7222`; [LICENSE][netflix-license] and inspected Java headers: Apache-2.0, Netflix, Inc.                                          | Actual additive-increase/multiplicative-decrease concurrency admission, separately from retries. It is not a bulk client.            |
 
 Patterns may be followed freely. A later implementation port would be separate work and may copy
 only MIT, Apache-2.0 or BSD code with attribution and applicable notices. This report copies none.
@@ -145,16 +145,16 @@ Those remain the caller's responsibilities.
 
 ## Shared patterns and meaningful differences
 
-| Concern | Evidence and implication for the importer |
-| --- | --- |
-| Overload signal | HTTP 429 signals rate limiting. Smithy additionally classifies service errors; Netflix receives caller-classified drops/latency; Elastic item retries recognize only 429. The importer's outer 429/retryable-503 rule is platform-specific, not established by all sources. |
-| Admission | Smithy adapts send rate, Netflix adapts concurrency, Elastic fixes concurrency. Separate admission from replay safety and retry accounting; a small width alone cannot limit repeated calls. |
-| Retry budget | Smithy has per-invocation attempts plus shared quota; Elastic has a finite item-retry loop. Netflix provides neither. Success-refilled quota controls amplification, while a non-resetting per-write limit prevents one failing write borrowing unlimited successes from neighbors. |
-| Growth/decrease | Netflix supports additive/multiplicative feedback with a utilization condition. Smithy uses time/rate-based CUBIC. None establishes the importer's exact +1 on every fulfilled write, half on final overload as optimal. |
-| Timing | Smithy jitters; Elastic's helper uses fixed waits. Retry-After is a separate signal, with an implementation/guidance difference in Smithy. A bounded client can stop rather than retry early when a hint exceeds its allowed wait. |
-| Identity | Stable request/item material and service replay semantics work together. A stable key without a matching body and valid server receipt is insufficient. Whole-record replanning is not required for a failed envelope. |
-| Cancellation | Admission stop, aborting a fetch, waking sleepers and durable recovery are separate observable properties. Neither reference retry loop proves a whole-run cancellation deadline. |
-| Old in-flight work | Admission changes act prospectively. Netflix drains acquired permits; Smithy changes later token acquisition; Elastic abort leaves sent work running. Old failures must not be mistaken for isolated low-width probes. |
+| Concern            | Evidence and implication for the importer                                                                                                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overload signal    | HTTP 429 signals rate limiting. Smithy additionally classifies service errors; Netflix receives caller-classified drops/latency; Elastic item retries recognize only 429. The importer's outer 429/retryable-503 rule is platform-specific, not established by all sources.         |
+| Admission          | Smithy adapts send rate, Netflix adapts concurrency, Elastic fixes concurrency. Separate admission from replay safety and retry accounting; a small width alone cannot limit repeated calls.                                                                                        |
+| Retry budget       | Smithy has per-invocation attempts plus shared quota; Elastic has a finite item-retry loop. Netflix provides neither. Success-refilled quota controls amplification, while a non-resetting per-write limit prevents one failing write borrowing unlimited successes from neighbors. |
+| Growth/decrease    | Netflix supports additive/multiplicative feedback with a utilization condition. Smithy uses time/rate-based CUBIC. None establishes the importer's exact +1 on every fulfilled write, half on final overload as optimal.                                                            |
+| Timing             | Smithy jitters; Elastic's helper uses fixed waits. Retry-After is a separate signal, with an implementation/guidance difference in Smithy. A bounded client can stop rather than retry early when a hint exceeds its allowed wait.                                                  |
+| Identity           | Stable request/item material and service replay semantics work together. A stable key without a matching body and valid server receipt is insufficient. Whole-record replanning is not required for a failed envelope.                                                              |
+| Cancellation       | Admission stop, aborting a fetch, waking sleepers and durable recovery are separate observable properties. Neither reference retry loop proves a whole-run cancellation deadline.                                                                                                   |
+| Old in-flight work | Admission changes act prospectively. Netflix drains acquired permits; Smithy changes later token acquisition; Elastic abort leaves sent work running. Old failures must not be mistaken for isolated low-width probes.                                                              |
 
 ## Comparison with the current importer
 
@@ -216,12 +216,12 @@ Consider K=2, failing write A and successful writes B1, B2, ... , each the final
 already-planned record. Each A failure below means a complete bounded transport invocation returning
 overload. Arrange completions as follows:
 
-| Step | Width/active state and result |
-| --- | --- |
-| 1 | A and B1 start at width 2. A captures `singleWriter=false`. |
-| 2 | A exhausts transport and overloads; width becomes 1. A pauses, B1 remains active. |
-| 3 | B1 succeeds; width becomes 2. The pump resumes A before admitting fresh work. A can begin its next invocation while B1 still occupies its record slot, so again captures false. |
-| 4 | B1 finishes its record; B2 is admitted into the freed slot. A overloads, reducing width to 1; B2 succeeds, restoring 2. Repeat with B3. |
+| Step | Width/active state and result                                                                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | A and B1 start at width 2. A captures `singleWriter=false`.                                                                                                                     |
+| 2    | A exhausts transport and overloads; width becomes 1. A pauses, B1 remains active.                                                                                               |
+| 3    | B1 succeeds; width becomes 2. The pump resumes A before admitting fresh work. A can begin its next invocation while B1 still occupies its record slot, so again captures false. |
+| 4    | B1 finishes its record; B2 is admitted into the freed slot. A overloads, reducing width to 1; B2 succeeds, restoring 2. Repeat with B3.                                         |
 
 Thus A can use arbitrarily many fresh transport budgets as the successful workload grows. An
 unchanged K, five-attempt cap or 120-second request deadline does not bound A's lifetime independently
@@ -272,14 +272,14 @@ neither bounded writes nor bounded memory limits an unlimited input or non-settl
 These are proposed cases, not edits to existing tests or acceptance bounds. Retain the current
 outcome/growth checks. Use controlled completions, a virtual clock and observable network sends.
 
-| Case | Required observation |
-| --- | --- |
-| Partial completion then uncertainty/overload | Complete bootstrap/media once, then lose a later write response. Across transport retry, queued continuation and durable resume, command keys/bodies remain identical and accepted effects remain one per key; no repeated completed media work. |
-| Alternating trace above | Keep A failing while neighbors succeed and width recovers. A exhausts its adopted allowance/deadline without resets; unrelated success cannot extend it. Assert physical sends including 401 renewal and queue residence, plus the existing unresolved-work outcome. |
-| Old cohort and recovery | Hold old requests, reduce width, and complete their failures out of order. They drain without a false isolated failure or fresh admission above current width. A genuine solitary width-one failure terminates its write; successful recovery still reaches K, with active-plus-paused records at most K. |
-| Retry-After at both layers | For 429 and eligible 503, cover integer seconds, HTTP-date, malformed/absent hints and a hint beyond remaining budget. No follow-up send precedes a valid not-before time, including after final transport response or a continuation. Too-long hints stop rather than shorten the wait. |
-| Fallback pacing and classification | Inject randomness and assert fallback delays stay within existing ceilings and vary. Hints are never shortened. Existing non-retryable statuses retain their outcomes and do not gain new continuation rights. |
-| Cancellation and expiration | Abort while queued, sleeping and in flight, and expire a logical deadline during queueing. No new sends follow termination; waiters settle and local work drains. A deliberately late remote commit remains safely replayable from durable state. |
+| Case                                         | Required observation                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Partial completion then uncertainty/overload | Complete bootstrap/media once, then lose a later write response. Across transport retry, queued continuation and durable resume, command keys/bodies remain identical and accepted effects remain one per key; no repeated completed media work.                                                          |
+| Alternating trace above                      | Keep A failing while neighbors succeed and width recovers. A exhausts its adopted allowance/deadline without resets; unrelated success cannot extend it. Assert physical sends including 401 renewal and queue residence, plus the existing unresolved-work outcome.                                      |
+| Old cohort and recovery                      | Hold old requests, reduce width, and complete their failures out of order. They drain without a false isolated failure or fresh admission above current width. A genuine solitary width-one failure terminates its write; successful recovery still reaches K, with active-plus-paused records at most K. |
+| Retry-After at both layers                   | For 429 and eligible 503, cover integer seconds, HTTP-date, malformed/absent hints and a hint beyond remaining budget. No follow-up send precedes a valid not-before time, including after final transport response or a continuation. Too-long hints stop rather than shorten the wait.                  |
+| Fallback pacing and classification           | Inject randomness and assert fallback delays stay within existing ceilings and vary. Hints are never shortened. Existing non-retryable statuses retain their outcomes and do not gain new continuation rights.                                                                                            |
+| Cancellation and expiration                  | Abort while queued, sleeping and in flight, and expire a logical deadline during queueing. No new sends follow termination; waiters settle and local work drains. A deliberately late remote commit remains safely replayable from durable state.                                                         |
 
 ## Unresolved questions for adoption
 
