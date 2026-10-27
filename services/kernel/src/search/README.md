@@ -7,6 +7,58 @@ The optional `languages` request field is the reader's language chain, in priori
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.
 
+## Deletion lifecycle
+
+[Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)
+includes Search, facets and discovery. Search is a disposable public subject projection, never a second authority
+for personal or private state. [Semantic](../semantic/README.md) owns subject/contribution truth,
+[Content](../content/README.md) owns content and moderation, and [Accounts](../access/README.md) owns account erasure.
+Those source owners enforce soft deletion, the 30-day restore window, legal holds and least-data purge, including
+private-data removal and retained public-contribution de-identification. A hold preserves source evidence, not public
+disclosure. Search neither starts a second restore clock nor preserves hidden data as evidence.
+
+Search stores distinct record classes:
+
+- OpenSearch subject documents copy public names, descriptions, fact values, security revisions and public Collection
+  counts. They are replaceable projections, not user-owned source records or restoration backups.
+- Each generation has a physical index, alias/mapping metadata and a relay consumer. Its PostgreSQL
+  `core.consumer_checkpoint` rows contain partition progress, not source bodies. Active and rebuilding generations
+  keep their checkpoints; retirement deletes an old generation’s index, then its checkpoints as described below.
+- Versioned stored query templates are platform query configuration installed by `query.ts`, not saved user queries.
+  Released template IDs/source remain immutable; installation does not expire older scripts. There is no template
+  cleanup job or user delete/purge route. This retention differs from generation retirement.
+
+`disclosure/check.ts` rejects missing, hidden, redirected or security-revision-mismatched candidates and evaluates
+current filter evidence before returning hits; hit data is projected from the current source snapshot. Suggestions
+and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
+subject to the pending real-source/composition proof in [Visibility, completeness and convergence](#visibility-completeness-and-convergence).
+It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include
+stale source subjects despite current hit/value checks. This is a known gap pending policy alignment with
+[Deletion](../../../../docs/deletion.md), whose immediate suppression requirement remains authoritative. The existing
+relation-facet lower-bound behavior does not resolve general totals or bucket counts.
+
+Source delete, takedown and restore must publish the source changes consumed by `indexer.ts`. The relay re-reads
+current state rather than replaying old bodies: a missing/hidden/redirected subject produces an engine delete, and a
+visible subject produces a replacement document. Source restore advances the source partition position; the new
+snapshot position becomes the external version for reindexing in every live generation, so earlier writes cannot
+win over that newer version. Search does not restore documents independently of source eligibility. Complete
+invalidation and default-worker convergence remain pending proof under the [outcome harness contract](../../test/search/README.md).
+
+Physical cleanup uses existing operations only; there is no separate Search 30-day personal-data purge job:
+
+- Per-subject bulk delete/replacement is bounded by the deduplicated affected IDs in one default 64-envelope batch
+  (`b <= 64,000` for command-produced logs), one action per ID per live generation. See [Document build, bulk and erasure](#document-build-bulk-and-erasure)
+  and [Outbox batch](#outbox-batch); this is asynchronous projection repair, not a source purge deadline or a promise
+  about immediate reclamation of engine storage.
+- Discovery defaults to every five seconds. Older generations remain live for the default 15-minute grace measured
+  from the active generation's activation timestamp, then retirement issues one whole-index DELETE and one SQL
+  deletion of at most 4,096 checkpoint rows per generation. Engine work scales with that index's stored data; SQL
+  work is the [Retire](#retire) bound, not constant whole-index erasure. Failures retry on later discovery; absent
+  activation timestamps and newer unfinished generations are retained. Rebuild admission caps generations at three;
+  it does not impose an expiry on an active or unfinished generation.
+
+These lifecycle rules add no operation and preserve the Cost bounds below.
+
 ## Visibility, completeness and convergence
 
 Search separates candidate discovery from current disclosure checks. Evidence from [OpenFGA, SpiceDB and

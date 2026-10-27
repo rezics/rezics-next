@@ -9,6 +9,8 @@ import { documentVersion, type DocumentProfile } from './types.ts';
 
 const closed = { additionalProperties: false };
 const id = Type.String({ minLength: 1, maxLength: 256 });
+const lowerUuidPattern = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+const lowerUuid = new RegExp(lowerUuidPattern);
 const optionalString = Type.Optional(Type.Union([Type.String(), Type.Null()]));
 // CSS Color syntax remains browser-defined; delimiters cannot escape a single declaration.
 const color = Type.Optional(Type.Union([Type.String({ pattern: '^[^;{}\\u0000-\\u001f]*$' }), Type.Null()]));
@@ -41,6 +43,9 @@ export const nodeAttributes: Record<string, Record<string, TSchema>> = {
   taskItem: { ...common, checked: Type.Optional(Type.Boolean()) },
   codeBlock: { ...common, language: optionalString },
   horizontalRule: common,
+  mention: {
+    accountId: Type.String({ pattern: lowerUuidPattern }),
+  },
   ruby: {
     rt: Type.String(),
     position: Type.Optional(choice(['over', 'under', 'inter-character'])),
@@ -129,6 +134,7 @@ export const textNodeNames = [
   'codeBlock',
   'horizontalRule',
   'hardBreak',
+  'mention',
   'ruby',
   'text',
 ] as const;
@@ -215,6 +221,20 @@ function createSchema(profile: DocumentProfile): Schema {
     codeBlock: block({ ...basicNodes.code_block, attrs: { language: { default: null } } }),
     horizontalRule: block(basicNodes.horizontal_rule),
     hardBreak: basicNodes.hard_break,
+    mention: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      attrs: {
+        accountId: {
+          validate: (value: unknown) => {
+            if (typeof value !== 'string' || !lowerUuid.test(value))
+              throw new RangeError('mention accountId must be a lowercase UUID');
+          },
+        },
+      },
+      toDOM: (node) => ['span', { 'data-mention-account-id': node.attrs.accountId }, '@'],
+    },
     text: basicNodes.text,
     ruby: {
       inline: true,
@@ -373,12 +393,13 @@ interface WireRules {
 
 function wireRules(profile: DocumentProfile): WireRules {
   const names = profile === 'text' ? textNodeNames : blocksNodeNames;
-  const inlineNames = ['text', 'hardBreak', 'ruby', ...(profile === 'blocks' ? ['extensionInline'] : [])];
+  const inlineNames = ['text', 'hardBreak', 'mention', 'ruby', ...(profile === 'blocks' ? ['extensionInline'] : [])];
   const blockNames = names.filter(
     (name) =>
       ![
         'text',
         'hardBreak',
+        'mention',
         'ruby',
         'extensionInline',
         'listItem',

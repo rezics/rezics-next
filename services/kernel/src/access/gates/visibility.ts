@@ -68,28 +68,32 @@ function grantRoles(access: Access, action: string): string[] {
  * The admission decision: a public route, a group open at T, or a closed group whose
  * gate:<group> or gate:any the actor and principal both hold on the Global Context.
  */
-function admits(operation: Classified, open: ReadonlySet<string>, held: ReadonlySet<string>, viewer: Actor): boolean {
-  if (operation.exposure.kind === 'public') return true;
-  if (open.has(operation.exposure.group)) return true;
+function admits(exposure: Exposure, open: ReadonlySet<string>, held: ReadonlySet<string>, viewer: Actor): boolean {
+  if (exposure.kind === 'public') return true;
+  if (open.has(exposure.group)) return true;
   if (viewer.kind !== 'account' || (viewer.requestedBy !== null && principalId(viewer) === null)) return false;
-  return held.has(`gate:${operation.exposure.group}`) || held.has('gate:any');
+  return held.has(`gate:${exposure.group}`) || held.has('gate:any');
 }
 
-/** The mounted operations this viewer may use at the kernel clock. */
-export async function visibleOperations(input: {
+type DiscoveryInput = {
   viewer: Actor;
   pool: Pool;
   access: Access;
   routes: readonly MountedRoute[];
   deadline: number;
   clock: () => Date;
-}): Promise<readonly VisibleOperation[]> {
-  const operations = classify(input.routes);
-  const groups = [
-    ...new Set(
-      operations.flatMap((operation) => (operation.exposure.kind === 'gate' ? [operation.exposure.group] : [])),
-    ),
-  ];
+};
+
+/** Mounted gate groups admitted by the same snapshot and rule as operation discovery. */
+export async function admittedGroups(input: DiscoveryInput): Promise<readonly string[]> {
+  const mounted = new Set<string>();
+  for (const route of input.routes) {
+    const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : undefined;
+    if (detail?.hide === true) continue;
+    const exposure = parseExposure(detail);
+    if (exposure.kind === 'gate') mounted.add(exposure.group);
+  }
+  const groups = [...mounted];
   const at = input.clock();
   if (!(at instanceof Date) || !Number.isFinite(at.getTime())) throw new TypeError('Invalid command clock');
   const open = new Set<string>();
@@ -137,8 +141,15 @@ export async function visibleOperations(input: {
       }),
     );
   }
+  return groups.filter((group) => admits({ kind: 'gate', group }, open, held, input.viewer)).sort();
+}
+
+/** The mounted operations this viewer may use at the kernel clock. */
+export async function visibleOperations(input: DiscoveryInput): Promise<readonly VisibleOperation[]> {
+  const operations = classify(input.routes);
+  const admitted = new Set(await admittedGroups(input));
   return operations
-    .filter((operation) => admits(operation, open, held, input.viewer))
+    .filter((operation) => operation.exposure.kind === 'public' || admitted.has(operation.exposure.group))
     .map((operation) => ({
       method: operation.method,
       path: operation.path,

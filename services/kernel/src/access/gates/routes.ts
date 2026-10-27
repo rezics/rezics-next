@@ -11,6 +11,7 @@ import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { PLATFORM_RESOURCE } from '../bootstrap-governance.ts';
 import { createExposureCommands } from './catalogue.ts';
 import { openApiRoutes } from './openapi-route.ts';
+import { admittedGroupsRoutes } from './admitted-groups-route.ts';
 
 const closed = { additionalProperties: false } as const;
 const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_-]{0,62}$' }) }, closed);
@@ -70,7 +71,8 @@ export function exposureRoutes(
     response: { 200: success, ...failures },
     detail: detail(operation),
   });
-  const routed = app
+  const discovered = admittedGroupsRoutes(app, dependencies);
+  const routed = discovered
     .post(
       customMethod('/v1/platform/exposure/:group', 'close'),
       options('close'),

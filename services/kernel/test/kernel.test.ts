@@ -85,6 +85,7 @@ const typed = [
   'GET /v1/accounts/:accountId/preferences',
   'PATCH /v1/accounts/:accountId/preferences',
   'GET /v1/me/realms',
+  'GET /v1/platform/exposure',
   'POST /v1/platform/exposure/:group/$close',
   'POST /v1/platform/exposure/:group/$open',
   'PATCH /v1/spaces/:spaceId',

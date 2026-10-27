@@ -28,6 +28,38 @@ Build checks in `test/presentation/platform-profile.test.ts`:
 - every list in a shipped document is admitted by the bundled release
 - setup activates the platform profile once
 
+## Deletion lifecycle
+
+[Deletion](../../../../docs/deletion.md) and [first public scope](../../../../docs/scope.md) apply to the source
+records rendered on pages. Presentation stores platform configuration: immutable `presentation.profile` bodies keyed
+by `(route, digest)`, and append-only `presentation.profile_activation` rows keyed by `(route, head)` referencing
+those bodies. These are composition templates and activation history, not accounts' public profile records or copies
+of their posts/private state. `profiles.ts` caches validated, frozen configuration by digest; page results and planned
+reads are assembled per request, not persisted as a second source store.
+
+Publishing retains previous bodies; activation appends a head and selects the latest one without deleting old heads
+or profiles. Both record classes currently remain stored without an automatic expiry or physical cleanup job.
+The activation foreign key preserves referenced profiles. There is no user soft-delete, restore or purge route for
+this immutable platform configuration, and no implemented cleanup bound to claim. Selecting an older profile is a
+new activation with the expected current head, not restoration of user data. Configuration retention does not exempt
+personal/private source data from deletion policy.
+
+[Semantic](../semantic/README.md), [Content](../content/README.md) and [Accounts](../access/README.md) remain authoritative
+for source soft deletion, 30-day restoration, legal holds and account erasure; Collection/library state remains with
+[its owner](../library/README.md). Presentation performs no source purge and retains no deleted content for evidence.
+`http/pages.ts` probes subjects/accounts through their current standalone routes before resolving their templates;
+a non-200 subject probe propagates its result, and an unavailable public account yields no account page. Planned
+sub-reads run the same standalone disclosure routes, so page composition cannot authorize a stale search candidate
+or revive a deleted source record. Search-derived page lists inherit [Search's disclosure checks and count-policy
+gap](../search/README.md#deletion-lifecycle), including pending runtime source/composition proof; composition adds no
+immediate count-privacy guarantee.
+
+Restoring source data uses the source owner's restore command and current eligibility checks. For search-backed
+lists it must also advance the source position and emit reindexing changes, producing newer external versions as
+[Search documents](../search/README.md#deletion-lifecycle); Presentation has no separate restore cache or reindex job.
+No physical cleanup operation is added here. Source cleanup bounds belong to their owners; profile reads/writes and
+page dispatch retain the Cost bounds below.
+
 ## Cost
 
 These bounds follow `profiles.ts`, its SQL, and the presentation profile migration and schema dump; they are derivations, not measurements.

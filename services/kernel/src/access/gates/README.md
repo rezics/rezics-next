@@ -28,7 +28,19 @@ Both commands run on the Global Context through the native command executor, req
 `exposure:open` or `exposure:close` authorization respectively. Repeating open while already open or close while
 already closed is a no-op catalogue change.
 
+`GET /v1/platform/exposure` is a public read (`exposure:read`) with optional bearer authentication. It returns
+`{ admitted: string[] }`: the sorted mounted gate groups the caller is admitted to at T. Closed groups the caller
+cannot enter are omitted, so their names are never disclosed; consumers treat an absent group as closed. The read
+shares the open-groups and held-gates statements and admission rule with `visibleOperations`, including the actor
+and principal requirement for delegated callers. It performs no route projection and sends `cache-control: no-store`.
+
 ## Cost
+
+### Admitted groups read
+
+- Touches: The open-groups read for the mounted group set and, for an account, the held-gates read on the Global Context. These are the same two statements `visibleOperations` runs.
+- Bound: Constant statements; O(G log E) buffers, where G is the mounted group count, a deployment constant.
+- Growth check: `services/kernel/test/access/gates/growth-discovery.test.ts`: "admitted groups read stays bounded as unrelated accounts, gate grants, and openings grow".
 
 ### Per-request exposure read
 
