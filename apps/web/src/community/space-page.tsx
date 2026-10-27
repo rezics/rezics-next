@@ -70,7 +70,7 @@ function Published({ subjects }: { subjects: PublishedSubject[] }) {
         {m.realm_published_heading()}
       </h2>
       {titled.length ? (
-        <CoverRow ratio={ratio} label={m.realm_published_heading()}>
+        <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
             <CoverCard
               key={subject.id}

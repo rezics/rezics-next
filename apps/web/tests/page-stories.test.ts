@@ -169,7 +169,6 @@ test(
           .filter((assertion) => assertion.title === visitor && assertion.status === 'passed');
         expect(passed.length, `${page}: ${visitor} must pass in the browser`).toBeGreaterThan(0);
       }
-    expect(run.code, run.output).toBe(0);
     const main = readFileSync(join(app, '.storybook/main.ts'), 'utf8');
     for (const feature of ['@storybook/react-vite', '@storybook/addon-vitest', '@storybook/addon-a11y'])
       expect(main).toContain(feature);
@@ -191,6 +190,7 @@ test(
         expect(
           entries.some((entry) => basename(entry.importPath) === `${name}.stories.tsx` && entry.name === visitor),
         ).toBe(true);
+    const a11yFailures: string[] = [];
     for (const entry of entries) {
       const name = basename(entry.importPath, '.stories.tsx');
       const imports = dependencies(resolve(app, entry.importPath));
@@ -227,7 +227,7 @@ test(
           expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
           const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
           expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
-          const heading = main.getByRole('heading', { level: 1 });
+          const heading = main.getByRole('heading', { level: 1 }).first();
           await heading.waitFor();
           const headingText = (await heading.textContent())?.trim();
           if (!/(missing|error)/i.test(name))
@@ -253,15 +253,14 @@ test(
           const a11y = await new AxeBuilder({ page })
             .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
             .analyze();
-          expect(
-            a11y.violations.map((violation) => violation.id),
-            `${entry.id} ${locale}`,
-          ).toEqual([]);
+          a11yFailures.push(...a11y.violations.map((violation) => `${entry.id} ${locale}: ${violation.id}`));
           expect(external, 'stories replay recordings without contacting Auth or a live kernel').toEqual([]);
           await context.close();
         }),
       );
     }
+    expect(a11yFailures).toEqual([]);
+    expect(run.code, run.output).toBe(0);
   },
   timeout,
 );

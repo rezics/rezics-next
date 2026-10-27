@@ -1,7 +1,28 @@
 import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { readdirSync, existsSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const app = fileURLToPath(new URL('..', import.meta.url));
+const routes = join(app, 'src/routes');
+const routeTree = join(app, 'src/routeTree.gen.ts');
+
+function newestRouteChange(path: string): number {
+  return readdirSync(path, { withFileTypes: true }).reduce((newest, entry) => {
+    const target = join(path, entry.name);
+    return Math.max(newest, entry.isDirectory() ? newestRouteChange(target) : statSync(target).mtimeMs);
+  }, 0);
+}
+
+// Storybook omits TanStack's Vite plugin, so refresh its ignored route tree when it is absent or stale.
+if (!existsSync(routeTree) || newestRouteChange(routes) > statSync(routeTree).mtimeMs) {
+  const result = spawnSync('bun', ['run', 'generate:routes'], { cwd: app, stdio: 'inherit' });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`Could not generate the application route tree (exit ${result.status}).`);
+}
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
