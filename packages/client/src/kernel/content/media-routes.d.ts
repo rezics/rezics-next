@@ -2184,6 +2184,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

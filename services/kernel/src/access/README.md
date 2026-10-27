@@ -815,15 +815,17 @@ the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts
 `{ handle, kind, lastModified }`. The public route uses `account:read_public_identity`.
 The limit defaults to 1000 and accepts integers from 1 through 1000; `next` is a signed,
 operation-bound cursor, or null at the end. Cursors expire after 15 minutes. Omit `cursor`
-for the first page. Pages seek in `(route, account_id)` order through the partial
-`account_agent_pages` index: only active, unfenced accounts with a handle are indexable.
+for the first page; the limit may change between pages without restarting the walk.
+Pages seek in `(route, account_id)` order through the partial `account_agent_pages` index:
+only active, unfenced accounts with a handle are indexable.
 Pending, suspended, fenced and deleted accounts never appear.
 
 `account.public_changed_at` starts at `created_at`, including for existing accounts.
 The single `account_public_change` BEFORE INSERT OR UPDATE trigger initializes it and
 advances it on changes to the account columns used by `account-public-read.sql`, including
-visibility guards. Other updates and unchanged public values preserve it. Keep the trigger's
-comparison aligned with that read. The feed's `lastModified` covers the account's own identity;
+visibility guards. Other updates, unchanged public values and direct timestamp assignments
+preserve it. Keep the trigger's comparison aligned with that read.
+The feed's `lastModified` covers the account's own identity;
 activity lists on the handle page belong to their owning modules and are outside this feed.
 
 Cost:

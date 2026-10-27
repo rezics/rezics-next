@@ -2181,6 +2181,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

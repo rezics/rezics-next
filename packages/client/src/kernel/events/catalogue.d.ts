@@ -969,6 +969,8 @@ declare const productEventTypes: {
         revision: Type.TInteger;
         security_revision: Type.TInteger;
         changes: Type.TArray<Type.TObject<{
+            context_id: Type.TOptional<Type.TString>;
+            suppressed: Type.TOptional<Type.TBoolean>;
             property: Type.TString;
             statement: Type.TString;
             target: Type.TUnion<[Type.TString, Type.TNull]>;

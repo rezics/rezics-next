@@ -2189,6 +2189,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

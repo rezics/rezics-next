@@ -2229,6 +2229,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

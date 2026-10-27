@@ -2192,6 +2192,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;
@@ -3918,7 +3919,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                 params: {};
                 query: {
                     cursor?: string;
-                    limit?: number;
+                    limit?: string | number;
                 };
                 headers: unknown;
                 response: {

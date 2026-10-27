@@ -2187,6 +2187,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

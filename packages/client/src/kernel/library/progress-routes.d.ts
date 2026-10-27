@@ -2191,6 +2191,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

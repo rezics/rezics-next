@@ -2187,6 +2187,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

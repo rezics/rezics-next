@@ -2191,6 +2191,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;

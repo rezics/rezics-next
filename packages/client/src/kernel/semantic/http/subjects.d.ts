@@ -2261,6 +2261,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
                             filter?: string;
                             type?: string;
