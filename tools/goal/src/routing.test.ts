@@ -30,3 +30,19 @@ test('routing uses observable features and task sequence; retry sequence does no
   expect(() => classifyTask({ ...brief(), estimate: { lines: 401, files: 8 } })).toThrow('manager');
   expect(() => classifyTask({ ...brief(), acceptance: { ...brief().acceptance, failing: false } })).toThrow('manager');
 });
+
+test('a brief that pins a Codex model and effort runs on it, outside any experiment', () => {
+  const pinned = routeTask({ ...brief(), model: 'gpt-6.1-sol', effort: 'max' }, 1, table);
+  expect(pinned.profile.cli).toBe('codex');
+  expect(pinned.profile.model).toBe('gpt-6.1-sol');
+  expect(pinned.profile.effort).toBe('max');
+  expect(pinned.experiment).toBeNull();
+  expect(routeTask({ ...brief(), model: 'gpt-6.1-terra' }, 1, table).profile.effort).toBe('high');
+  expect(() => routeTask({ ...brief(), model: 'grok-4.7' }, 1, table)).toThrow('Codex model');
+});
+
+test('a brief parses its pinned model and effort from front matter', () => {
+  const parsed = parseBrief(markdown.replace('waiting: []', 'waiting: []\nmodel: gpt-6.1-sol\neffort: xhigh'), ownership);
+  expect(parsed.model).toBe('gpt-6.1-sol');
+  expect(parsed.effort).toBe('xhigh');
+});
