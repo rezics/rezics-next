@@ -1,5 +1,9 @@
 import { FILTER_LIMITS } from '@rezics/filter';
 
+const FORMAT_VERSION = 1;
+// Zero is reserved for null, so the largest source sequence is u64 max minus one.
+const MAX_SEQUENCE = (1n << 64n) - 2n;
+
 export type ScopeLeafPosition = Readonly<{
   leafOrdinal: number;
   phase: 'compact' | 'selection' | 'witness';
@@ -48,7 +52,7 @@ export function packScopeLeafProgress(position: ScopeLeafPosition, limits: Scope
     if (after !== null) {
       if (!/^(0|[1-9][0-9]{0,19})$/.test(after)) throw new TypeError('Invalid sequence');
       const sequence = BigInt(after);
-      if (sequence > (1n << 64n) - 2n) throw new TypeError('Sequence overflow');
+      if (sequence > MAX_SEQUENCE) throw new TypeError('Sequence overflow');
       bytes.writeBigUInt64BE(sequence + 1n, 2);
     }
   } else if (phase === 'witness') {
@@ -70,7 +74,7 @@ export function unpackScopeLeafProgress(record: unknown, limits: ScopeLeafLimits
     if (record === '') return { ok: true, position: null };
     if (typeof record !== 'string' || !/^[A-Za-z0-9_-]{24}$/.test(record)) return { ok: false, reason: 'invalid' };
     const bytes = Buffer.from(record, 'base64url');
-    if (bytes.length !== 18 || bytes.toString('base64url') !== record || bytes[0]! >>> 5 !== 1)
+    if (bytes.length !== 18 || bytes.toString('base64url') !== record || bytes[0]! >>> 5 !== FORMAT_VERSION)
       return { ok: false, reason: 'invalid' };
     const wirePhase = bytes[1]! >>> 6;
     let after: string | null = null;
