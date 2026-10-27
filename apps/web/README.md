@@ -221,6 +221,28 @@ The defaults are every story, `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr`
 1280 pixels wide, and `.temp/screenshots/`. The script captures four pages at a time, prints one path per file and
 then the total, and stops the server when it exits.
 
+## Routing
+
+[Search engines and sharing](../../docs/seo.md) is the authority for URLs, indexing, metadata, structured data, sitemaps and statuses. These mechanics apply to web routes.
+
+**Locale URLs**: Every page path starts with a site locale. A path without one redirects 302 to the reader's locale, selected from the `rezics_locale` cookie, then `Accept-Language`, then `en`, with `Vary: Cookie, Accept-Language` and `Cache-Control: private, no-store`. A trailing slash redirects 301 to the path without it. The `x-default` alternate is the page path without the locale.
+
+**Public and signed-in routes**: Public routes render on the server without reading the session or any cookie. The session, CSRF token and personal state (library status, own vote, reactions, membership and edit controls) load in the browser after hydration through queries. Signed-in routes check the session in `beforeLoad` and redirect to sign-in with a return path; components never check it themselves.
+
+**Data reads**: Each kernel read has one `queryOptions` factory beside its loader code. Loaders call `context.queryClient.ensureQueryData`; components use `useSuspenseQuery` for public reads and `useQuery` for personal reads in the browser only. Public reads keep `staleTime` 60 s, personal reads 0. The router preloads on intent.
+
+**Search params**: Every route that reads search params declares a Valibot schema in `validateSearch`, with defaults for missing or invalid values. A loader that depends on them declares `loaderDeps`.
+
+**Head**: Every route's `head()` builds tags with `pageHead()` from `apps/web/src/shell/head.ts`: title, description, card, robots and JSON-LD. Canonical and `hreflang` alternates are emitted once for the page by the root, from the leaf route's locale paths.
+
+**Statuses**: Loaders end with real statuses: `notFound()` for 404, with unknown, unreadable and removed ids answering alike; `redirect({ statusCode: 301 })` for moved pages and outdated slugs; and the closed page for 403. A page never answers 200 with an error inside.
+
+**Caching**: Anonymous responses of public routes carry `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600` and a weak `ETag`, never `Set-Cookie`. Server functions that read the session answer `private, no-store`.
+
+**Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.
+
+**Pending and errors**: Routes declare `pendingComponent`, `errorComponent` and `notFoundComponent` where they differ from the router defaults.
+
 ## Security headers
 
 Page HTML receives a fresh base64 nonce from one 16-byte cryptographic random draw. Request middleware keeps

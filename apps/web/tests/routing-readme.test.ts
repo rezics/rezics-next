@@ -4,11 +4,14 @@ import { dirname, resolve } from 'node:path';
 
 const readmePath = resolve(import.meta.dir, '../README.md');
 const readme = readFileSync(readmePath, 'utf8');
-const routing = readme.match(/^## Routing\s*\n([\s\S]*?)(?=^## |\s*$)/m)?.[1] ?? '';
+const routingStart = readme.match(/^## Routing[ \t]*$/m);
+const afterHeading = routingStart ? readme.slice(routingStart.index! + routingStart[0].length) : '';
+const nextHeading = afterHeading.search(/^## /m);
+const routing = nextHeading < 0 ? afterHeading : afterHeading.slice(0, nextHeading);
 
 function rule(label: string, patterns: RegExp[]) {
   test(label, () => {
-    const paragraph = routing.split(/\n\s*\n/).find((part) => patterns[0].test(part)) ?? '';
+    const paragraph = (routing.split(/\n\s*\n/).find((part) => patterns[0].test(part)) ?? '').replace(/\n/g, ' ');
     for (const pattern of patterns) expect(paragraph).toMatch(pattern);
   });
 }
