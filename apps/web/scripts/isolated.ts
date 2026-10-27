@@ -33,6 +33,15 @@ if (command.length === 0) {
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },
     async (slotEnvironment) => {
+      if (!existsSync(join(app, 'src/paraglide/runtime.js'))) {
+        const generation = Bun.spawn(['bun', 'run', 'generate'], {
+          cwd: app,
+          stdout: 'inherit',
+          stderr: 'inherit',
+        });
+        const status = await generation.exited;
+        if (status !== 0) return status;
+      }
       const linux = process.platform === 'linux';
       let isolated = false;
 
