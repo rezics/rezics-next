@@ -59,7 +59,14 @@ const responseSchema = t.Object({
   }),
 });
 
-type Pending = { index: number; route: number | null; command: BatchCommand; errors: FieldError[] };
+/** `unavailable` is an availability verdict. It is raised only after the command's authorization and source fence. */
+type Pending = {
+  index: number;
+  route: number | null;
+  command: BatchCommand;
+  errors: FieldError[];
+  unavailable?: FieldError;
+};
 
 const served = new Set(['facts', 'summary', 'cover']);
 const BULK_WRITE_ROUTE = '/v1/subjects:batchWrite';
@@ -230,10 +237,10 @@ export function bulkRoutes(
             for (const group of groups.values()) {
               const pending = group.find((row) => row.index === item.index);
               if (!pending) continue;
-              pending.errors.push({
+              pending.unavailable = {
                 pointer: `/commands/${item.index}/statement/value/content`,
                 code: 'out_of_range',
-              });
+              };
               break;
             }
           }
@@ -285,13 +292,15 @@ export function bulkRoutes(
                     }),
                 pending.command,
                 pending.route,
-                (tx) =>
-                  enforceSourceFence(
+                async (tx) => {
+                  await enforceSourceFence(
                     tx,
                     plan,
                     partitionOf(pending.route!),
                     sourceTuple(routeKey, pending.command.source),
-                  ),
+                  );
+                  if (pending.unavailable) throw new ProblemError('invalid_request', { errors: [pending.unavailable] });
+                },
               );
               const { component, ...result } = await admission.run('normal', job, () =>
                 batchCommand(pool, {

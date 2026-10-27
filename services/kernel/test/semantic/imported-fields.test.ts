@@ -28,6 +28,7 @@ const issuer = 'https://auth.example.test';
 const audience = 'https://api.rezics.test';
 const importerId = newId(0x5100);
 const otherId = newId(0x5101);
+const bareId = newId(0x5102);
 const platformId = GLOBAL_CONTEXT;
 const importerActions = [
   'subject:batch_write',
@@ -42,6 +43,7 @@ const importerActions = [
   'media:read_reservation',
 ];
 const otherActions = ['subject:batch_write', 'statement:propose', 'subject:read'];
+const bareActions = ['subject:batch_write'];
 const auth = {
   issuer,
   audience,
@@ -65,6 +67,7 @@ class ByteStore implements MediaStorage {
 
 let importer = '';
 let other = '';
+let bare = '';
 let coverBytes = new Uint8Array();
 const storage = new ByteStore();
 const kernel = createKernel({
@@ -99,7 +102,7 @@ beforeAll(async () => {
   const keys = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(keys.publicKey)), alg: 'ES256', kid: 'imported-fields' };
   auth.fetch = async () => Response.json({ keys: [jwk] });
-  for (const id of [importerId, otherId]) {
+  for (const id of [importerId, otherId, bareId]) {
     await pool.query(
       `INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1, $2, 'actor', 'active', $2)`,
       [routeOf(id), id],
@@ -108,6 +111,7 @@ beforeAll(async () => {
   for (const [id, actions] of [
     [importerId, importerActions],
     [otherId, otherActions],
+    [bareId, bareActions],
   ] as const) {
     for (const action of actions) {
       await pool.query(
@@ -136,6 +140,7 @@ beforeAll(async () => {
   };
   importer = await issue(importerId, importerActions);
   other = await issue(otherId, otherActions);
+  bare = await issue(bareId, bareActions);
   coverBytes = await sharp({ create: { width: 96, height: 64, channels: 3, background: '#336699' } })
     .jpeg()
     .toBuffer();
@@ -620,6 +625,100 @@ test('a failed summary or cover command leaves no document and no claim', async 
   expect(coverCandidates.rows).toHaveLength(0);
   const coverReceipt = await pool.query('SELECT 1 FROM core.receipt WHERE idempotency_key = $1', ['bad-cover']);
   expect(coverReceipt.rows).toHaveLength(0);
+});
+
+async function takeDownMedia(mediaId: string) {
+  await pool.query(
+    'UPDATE content.media SET taken_down = true, security_revision = security_revision + 1 WHERE media_id = $1',
+    [mediaId],
+  );
+}
+async function coverEffects(subject: string, mediaId: string) {
+  const rows = await pool.query<{ candidates: number; revisions: number; claimed: boolean }>(
+    `SELECT
+       (SELECT count(*) FROM semantic.candidate WHERE subject_id = $1 AND property = 'schema:image')::int AS candidates,
+       (SELECT count(*) FROM semantic.revision WHERE subject_id = $1)::int AS revisions,
+       (SELECT claimed_at IS NOT NULL FROM content.media WHERE media_id = $2) AS claimed`,
+    [subject, mediaId],
+  );
+  return rows.rows[0]!;
+}
+async function receiptCount(keys: string[]) {
+  const rows = await pool.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM core.receipt WHERE idempotency_key = ANY($1)',
+    [keys],
+  );
+  return rows.rows[0]!.count;
+}
+const coverCommand = (book: { id: string; externalId: string }, mediaId: unknown, key: string): BatchCommand => ({
+  op: 'propose',
+  key,
+  source: record(book.externalId, { field_group: 'cover' }),
+  subject: book.id,
+  statement: cited('schema:image', mediaId),
+});
+
+test('cover availability verdict follows command authorization and the current tuple fence', async () => {
+  const book = await createBook('Botchan');
+  const mediaId = await availableCover(book.id, `media-${randomUUID()}`);
+  const ok = `ok-${randomUUID()}`;
+  const first = await batch([coverCommand(book, mediaId, ok)]);
+  commandAt('available cover', first, 0, 201);
+
+  // An authorized caller meets the availability verdict only when the tuple is not fenced.
+  const free = await createBook('Kokoro');
+  const freeMedia = await availableCover(free.id, `media-${randomUUID()}`);
+  await takeDownMedia(freeMedia);
+  const missing = await batch([coverCommand(free, freeMedia, `missing-${randomUUID()}`)]);
+  const refused = commandAt('unavailable cover', missing, 0, 400);
+  expect(refused.problem.errors).toContainEqual({
+    pointer: '/commands/0/statement/value/content',
+    code: 'out_of_range',
+  });
+  expect(await coverEffects(free.id, freeMedia)).toEqual({ candidates: 0, revisions: 1, claimed: false });
+
+  // Malformed media ids stay syntactic and write nothing.
+  const malformedKey = `malformed-${randomUUID()}`;
+  const malformed = await batch([coverCommand(free, 'not-a-media-id', malformedKey)]);
+  const bad = commandAt('malformed cover', malformed, 0, 400);
+  expect(bad.problem.errors).toContainEqual({ pointer: '/commands/0/statement/value/content', code: 'invalid_format' });
+  expect(await receiptCount([malformedKey])).toBe(0);
+
+  // The tuple is taken down and the media disappears: the replay is fenced, not unavailable.
+  await fence('openlibrary', book.externalId, 'cover');
+  await takeDownMedia(mediaId);
+  const before = await coverEffects(book.id, mediaId);
+  const receipts = await receiptCount([ok]);
+  const replay = await batch([coverCommand(book, mediaId, ok)]);
+  expect(commandAt('fenced replay', replay, 0, 409).problem).toMatchObject({ code: 'fenced', status: 409 });
+  expect(await coverEffects(book.id, mediaId)).toEqual(before);
+  expect(await receiptCount([ok])).toBe(receipts);
+});
+
+test('unauthorized cover commands do not reveal whether the media is available', async () => {
+  const book = await createBook('Light and Dark');
+  const mediaId = await availableCover(book.id, `media-${randomUUID()}`);
+  const gone = await createBook('Grass on the Wayside');
+  const goneMedia = await availableCover(gone.id, `media-${randomUUID()}`);
+  await takeDownMedia(goneMedia);
+  const keys = [0, 1, 2, 3].map((i) => `denied-${i}-${randomUUID()}`);
+  const answer = async (command: BatchCommand) => commandAt('denied cover', await batch([command], bare), 0, 403);
+  const shape = (result: Record<string, any>) => {
+    const { request_id: _id, ...problem } = result.problem;
+    return { status: result.status, problem };
+  };
+  const denied = shape(await answer(coverCommand(book, mediaId, keys[0]!)));
+  expect(shape(await answer(coverCommand(gone, goneMedia, keys[1]!)))).toEqual(denied);
+  expect(denied.problem).toMatchObject({ status: 403, code: 'forbidden' });
+
+  await fence('openlibrary', book.externalId, 'cover');
+  await fence('openlibrary', gone.externalId, 'cover');
+  expect(shape(await answer(coverCommand(book, mediaId, keys[2]!)))).toEqual(denied);
+  expect(shape(await answer(coverCommand(gone, goneMedia, keys[3]!)))).toEqual(denied);
+
+  expect(await receiptCount(keys)).toBe(0);
+  expect(await coverEffects(book.id, mediaId)).toEqual({ candidates: 0, revisions: 1, claimed: false });
+  expect(await coverEffects(gone.id, goneMedia)).toEqual({ candidates: 0, revisions: 1, claimed: false });
 });
 
 test('a source retracts its summary and cover candidates without a content hook', async () => {
