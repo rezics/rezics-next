@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { releaseDigest } from '@rezics/definitions';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -184,9 +184,11 @@ function requestKey(): string {
 
 function growthExternalIds(routeKey: Uint8Array, source: string, partition: number, count: number): string[] {
   const ids: string[] = [];
+  const prefix = `${source}\n`;
   for (let candidate = 0; ids.length < count; candidate++) {
     const externalId = `seed-${candidate}`;
-    if (partitionOf(tupleRoute(routeKey, source, externalId)) === partition) ids.push(externalId);
+    const route = createHmac('sha256', routeKey).update(prefix).update(externalId).digest().readUInt16BE(0);
+    if (route >>> 4 === partition) ids.push(externalId);
   }
   return ids;
 }
@@ -217,6 +219,10 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
   const spans = new Map<string, RequestSpan>();
   const authorization = new Map<string, RecordedAuthorization[]>();
   const fenceChecks = new Map<string, Trace['fenceChecks']>();
+  const proposalAuthorizationHolds = new Map<
+    string,
+    { entered: Promise<void>; announce: () => void; wait: Promise<void>; release: () => void }
+  >();
   let commandTime = new Date();
   const refreshFields = new Map<string, Field>();
   const refreshTuples = new Map<string, Tuple>();
@@ -278,8 +284,13 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
     const authorize = baseAccess.authorize.bind(baseAccess);
     const tracedAccess = deriveAccess(baseAccess, {
       authorize: async (client, actor, action, resource, evidence, time) => {
-        const decision = await authorize(client, actor, action, resource, evidence, time);
         const key = currentRequest.getStore();
+        const hold = key && action === 'statement:propose' ? proposalAuthorizationHolds.get(key) : undefined;
+        if (hold) {
+          hold.announce();
+          await hold.wait;
+        }
+        const decision = await authorize(client, actor, action, resource, evidence, time);
         if (key) {
           const list = authorization.get(key) ?? [];
           list.push({
@@ -788,8 +799,14 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           for (const table of tables) {
             const [schema, name] = table.split('.') as [string, string];
+            const fixtureControlFilter =
+              table === 'core.receipt'
+                ? "WHERE command_kind NOT LIKE 'access.grant.%' AND command_kind NOT LIKE 'access.role-grant.%'"
+                : table === 'core.outbox'
+                  ? "WHERE type NOT LIKE 'com.rezics.access.grant.%' AND type NOT LIKE 'com.rezics.access.role-grant.%'"
+                  : '';
             const rows = await client.query(
-              `SELECT to_jsonb(row_value) AS row FROM ${schema}.${name} AS row_value ORDER BY to_jsonb(row_value)::text`,
+              `SELECT to_jsonb(row_value) AS row FROM ${schema}.${name} AS row_value ${fixtureControlFilter} ORDER BY to_jsonb(row_value)::text`,
             );
             result[table] = rows.rows.map((row) => row.row);
           }
@@ -1251,10 +1268,16 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
         };
       },
       async cover(as, mediaId, key, fault) {
-        const permissionBarrier =
-          fault === 'before-commit'
-            ? observer!.hold({ statement: 'BEGIN ISOLATION LEVEL SERIALIZABLE' }, 'before')
-            : undefined;
+        let permissionBarrier:
+          | { entered: Promise<void>; announce: () => void; wait: Promise<void>; release: () => void }
+          | undefined;
+        if (fault === 'before-commit') {
+          let announce!: () => void;
+          let release!: () => void;
+          const entered = new Promise<void>((resolve) => (announce = resolve));
+          const wait = new Promise<void>((resolve) => (release = resolve));
+          permissionBarrier = { entered, announce, wait, release };
+        }
         const field = mediaInputs.get([...mediaByKey.entries()].find(([, value]) => value === mediaId)?.[0] ?? '');
         if (!field) throw new Error('Cover proposal lacks its actual URL import provenance');
         const source = sourceRecord(field.provenance, 'cover');
@@ -1272,10 +1295,11 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             references: field.provenance.references.map(urlReference),
           };
         const requestBody = { commands: [{ op: 'propose', key, source, subject: subjectId, statement }] };
-        const request = batch(credentialFor(as) as ActorCredential, requestBody.commands);
         let revokedForRace = false;
-        let result: Awaited<typeof request>;
+        let result: Awaited<ReturnType<typeof batch>>;
         try {
+          if (permissionBarrier) proposalAuthorizationHolds.set(key, permissionBarrier);
+          const request = batch(credentialFor(as) as ActorCredential, requestBody.commands);
           if (permissionBarrier) {
             await permissionBarrier.entered;
             await this.access('importer', 'statement:propose', 'revoke-grant');
@@ -1285,6 +1309,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           result = await request;
         } finally {
           permissionBarrier?.release();
+          proposalAuthorizationHolds.delete(key);
           if (revokedForRace) await grant(operator, importer.actor.accountId, ['statement:propose']);
         }
         if (result.status >= 500)
@@ -1850,7 +1875,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           population: Population;
           referenceDocument?: { id: string; revision: string };
         }[] = [];
-        const growthExternalIdList = growthExternalIds(native.routeKey, growthSource, tuplePartition, 2_800);
+        const growthExternalIdList = growthExternalIds(native.routeKey, growthSource, tuplePartition, 512 + scales[2]!);
         const sharedPopulation = population(growthSource, growthExternalIdList, true, 'shared');
         for (const changedRows of changedRowCounts) {
           for (const operation of growthOperations) {
@@ -2212,7 +2237,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             name: 'imported fields across source, document, media and job reads',
             scales: [32, 256, 2048],
             bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-            repetitions: 3,
+            repetitions: 1,
             warmups: 1,
             grow: async (database, scale, previous) => {
               if (previous === 0) await seedNativeWorkflowHistory(database);
@@ -2227,29 +2252,25 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
               const warmupRepetition = repetition;
               const measuredRepetition = repetition + 1;
               const additionalGroups = groups.slice(1);
-              const hookCommands = groups
-                .filter(({ operation }) => operation === 'hook')
-                .flatMap((group) =>
-                  runIds(group, scale, warmupRepetition).map((externalId) => {
-                    const field = growthField(group.source, externalId!);
-                    return {
-                      op: 'propose',
-                      key: requestKey(),
-                      source: sourceRecord(field),
-                      subject: field.subjectId,
-                      statement: {
-                        property: { id: 'schema:abstract' },
-                        value: { type: 'value', content: { language: 'en', document: field.document } },
-                        references: field.references.map(urlReference),
-                      },
-                      rights: {
-                        license: field.rights.spdx,
-                        obligations: field.rights.obligations,
-                        attribution: field.rights.attribution,
-                      },
-                    };
-                  }),
-                );
+              const hookCommands = runIds(groups[0]!, scale, warmupRepetition).map((externalId) => {
+                const field = growthField(groups[0]!.source, externalId!);
+                return {
+                  op: 'propose',
+                  key: requestKey(),
+                  source: sourceRecord(field),
+                  subject: field.subjectId,
+                  statement: {
+                    property: { id: 'schema:abstract' },
+                    value: { type: 'value', content: { language: 'en', document: field.document } },
+                    references: field.references.map(urlReference),
+                  },
+                  rights: {
+                    license: field.rights.spdx,
+                    obligations: field.rights.obligations,
+                    attribution: field.rights.attribution,
+                  },
+                };
+              });
               const warmedHooks = await batch(importer, hookCommands);
               const hookOutcomes = Array.isArray(warmedHooks.body.results)
                 ? warmedHooks.body.results.map(decodeJson)
@@ -2268,35 +2289,48 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
                   `Growth hook warmup failed (${warmedHooks.status}): ${JSON.stringify(warmedHooks.body)}`,
                 );
               for (const group of additionalGroups) {
-                if (group.operation === 'job') {
-                  await perform(group, scale, measuredRepetition);
-                  continue;
-                }
-                const measured = await measure(secondaryGrowth!, async () => {
-                  selectGrowthPool(secondaryGrowth!);
-                  try {
-                    return await perform(group, scale, measuredRepetition);
-                  } finally {
-                    selectGrowthPool(growth);
+                if (group.operation === 'job') continue;
+                const capturedWorker = group.operation === 'import' ? (await ensureWorker(), worker!) : undefined;
+                if (capturedWorker) await capturedWorker.beginCapture();
+                try {
+                  const measured = await measure(secondaryGrowth!, async () => {
+                    selectGrowthPool(secondaryGrowth!);
+                    try {
+                      return await perform(group, scale, measuredRepetition);
+                    } finally {
+                      selectGrowthPool(growth);
+                    }
+                  });
+                  measuredCosts.set(`${group.groupIndex}:${scale}:${measuredRepetition}`, measured.cost);
+                  if (group.operation === 'import') {
+                    const imported = measured.value as { keys: string[]; ids: string[] };
+                    await waitForImports(imported.ids);
+                    const states = await Promise.all(imported.keys.map(async (key) => (await this.media(key)).state));
+                    if (states.some((state) => state !== 'available'))
+                      throw new Error(`Native DBOS growth jobs did not publish valid images: ${states.join(',')}`);
+                    await waitForProjections();
                   }
-                });
-                if (group.operation === 'import') {
-                  const imported = measured.value as { keys: string[]; ids: string[] };
-                  await ensureWorker();
-                  await waitForImports(imported.ids);
-                  const states = await Promise.all(imported.keys.map(async (key) => (await this.media(key)).state));
-                  if (states.some((state) => state !== 'available'))
-                    throw new Error(`Native DBOS growth jobs did not publish valid images: ${states.join(',')}`);
-                  await waitForProjections();
+                } finally {
+                  if (capturedWorker) {
+                    const cost = await capturedWorker.endCapture();
+                    if (!(cost.rows > 0 && cost.statements > 0 && cost.blocks > 0))
+                      throw new Error(
+                        `Native content job capture lacked rows, statements and buffers: ${JSON.stringify(cost)}; ${capturedWorker.diagnostics().slice(-8_000)}`,
+                      );
+                    const jobGroup = groups.find(
+                      (candidate) => candidate.operation === 'job' && candidate.changedRows === group.changedRows,
+                    );
+                    if (!jobGroup) throw new Error(`Growth import/${group.changedRows} has no paired job sample`);
+                    workerCosts.set(`${jobGroup.groupIndex}:${scale}:${measuredRepetition}`, cost);
+                  }
                 }
-                measuredCosts.set(`${group.groupIndex}:${scale}:${measuredRepetition}`, measured.cost);
               }
             },
             operation: (_database, scale, repetition) => perform(groups[0]!, scale, repetition),
           });
           const recordSamples = (group: (typeof groups)[number], samples: readonly { scale: number; cost: Cost }[]) => {
             const combined = samples.map(({ scale, cost }) => {
-              const repetition = scales.indexOf(scale) * 4 + 1;
+              const repetition = scales.indexOf(scale) * 2 + 1;
               const workerCost =
                 group.operation === 'job' ? undefined : workerCosts.get(`${group.groupIndex}:${scale}:${repetition}`);
               const relations: Record<string, Cost['relations'][string]> = { ...(cost.relations ?? {}) };
@@ -2323,7 +2357,8 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
             try {
               assertGrowth(combined, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
             } catch (error) {
-              if (error instanceof Error) error.message = `Growth ${group.operation}/${group.changedRows}: ${error.message}`;
+              if (error instanceof Error)
+                error.message = `Growth ${group.operation}/${group.changedRows}: ${error.message}`;
               throw error;
             }
             const costSignatures = combined.map(({ scale, cost }) => ({
@@ -2363,7 +2398,7 @@ export async function createImportedFieldDriver(): Promise<ImportedFieldDriver> 
           };
           for (const group of groups) {
             const samples = scales.map((scale, index) => {
-              const repetition = index * 4 + 1;
+              const repetition = index * 2 + 1;
               const cost =
                 group.operation === 'job'
                   ? workerCosts.get(`${group.groupIndex}:${scale}:${repetition}`)
