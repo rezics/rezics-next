@@ -41,6 +41,13 @@ export class GrowthBoundError extends Error {
   }
 }
 
+export class GrowthEvidenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GrowthEvidenceError';
+  }
+}
+
 const METRICS: readonly Metric[] = ['rows', 'blocks', 'statements'];
 
 function validateSamples(samples: readonly GrowthSample[]): void {

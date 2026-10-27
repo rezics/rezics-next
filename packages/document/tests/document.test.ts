@@ -331,7 +331,7 @@ test('serialization is canonical JSON of the normalized snapshot, and its text r
 test('the runtime node checker accepts exactly what the published schema accepts', async () => {
   const { Compile } = await import('typebox/compile');
   const { DocumentSnapshotSchema, topLevelNodeNames, wireNodeChecker } = await import('../src/schema.ts');
-  const reference = Compile(DocumentSnapshotSchema);
+  const compiledSchema = Compile(DocumentSnapshotSchema);
   const rich: DocumentNode[] = [
     {
       type: 'heading',
@@ -420,11 +420,14 @@ test('the runtime node checker accepts exactly what the published schema accepts
         for (const index of path) target = target.content![index]!;
         mutate(target as unknown as Record<string, unknown>);
         const value = snapshot(copy.content!, profile);
-        expect(runtime(value)).toBe(reference.Check(value));
+        const compiledResult = compiledSchema.Check(value);
+        expect(runtime(value)).toBe(compiledResult);
         compared++;
       }
     }
-    expect(runtime(snapshot(rich, profile))).toBe(reference.Check(snapshot(rich, profile)));
+    const unmutated = snapshot(rich, profile);
+    const compiledResult = compiledSchema.Check(unmutated);
+    expect(runtime(unmutated)).toBe(compiledResult);
   }
   expect(compared).toBeGreaterThan(300);
   // The reference is the published schema compiled once.

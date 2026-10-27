@@ -4,6 +4,7 @@ import {
   assertGrowth,
   DEFAULT_SLACK,
   GrowthBoundError,
+  GrowthEvidenceError,
   type Bound,
   type Metric,
   type RelationSize,
@@ -20,11 +21,13 @@ import {
   type Cost,
 } from './growth-cost.ts';
 import { classifySeries, type SeriesClassification } from './growth-model.ts';
+import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
 export { openGrowthDatabase, capture, type GrowthDatabase } from './growth-capture.ts';
 export * from './growth-seed.ts';
+export * from './growth-uncertainty.ts';
 
 export function measure<T>(db: GrowthDatabase, operation: () => Promise<T>): Promise<{ value: T; cost: Cost }> {
   return capture(db, operation).then(({ value, capture: raw }) => ({ value, cost: costOf(raw) }));
@@ -37,6 +40,7 @@ export type GrowthCheck = {
     | readonly [number, number, number, number]
     | readonly [number, number, number, number, number]; // default [1, 8, 64]
   readonly bounds: Readonly<Record<Metric, Bound>>;
+  readonly rule?: 'step' | 'series';
   readonly slack?: Partial<Record<Metric, Slack>>;
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
   /**
@@ -76,6 +80,7 @@ export type ReportSample = {
 
 export type GrowthReport = {
   readonly name: string;
+  readonly rule: 'step' | 'series';
   readonly bounds: Readonly<Record<Metric, Bound>>;
   readonly samples: readonly ReportSample[];
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
@@ -89,7 +94,7 @@ export type ShadowVerdict = (
 function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, metric: Metric): ShadowVerdict {
   const uncertainties: number[] = [];
   try {
-    const slack = check.slack?.[metric] ?? DEFAULT_SLACK[metric];
+    const slack = check.slack?.[metric] ?? GROWTH_UNCERTAINTY[metric];
     const points = samples.map(({ scale, cost, repetitions }) => {
       const uncertainty = Math.max(slack.absolute, slack.relative * cost[metric]);
       uncertainties.push(uncertainty);
@@ -253,6 +258,7 @@ export function withoutCatalogStatements(name: string, captureResult: Capture): 
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
+  const rule = check.rule ?? (process.env.GROWTH_RULE === 'series' ? 'series' : 'step');
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
@@ -324,11 +330,39 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     blocks: shadowVerdict(samples, check, 'blocks'),
     statements: shadowVerdict(samples, check, 'statements'),
   };
-  const report: GrowthReport = { name: check.name, bounds: check.bounds, samples, shadow };
+  const report: GrowthReport = { name: check.name, rule, bounds: check.bounds, samples, shadow };
   appendProfile(report);
   assertBackgroundBound(check.name, samples);
   try {
-    assertGrowth(samples, check.bounds, check.slack);
+    if (rule === 'step') {
+      assertGrowth(samples, check.bounds, check.slack);
+    } else {
+      for (const metric of ['rows', 'blocks', 'statements'] as const) {
+        const uncertainties = shadow[metric].uncertainties;
+        const verdict = classifySeries(
+          samples.map(({ scale, repetitions }, index) => ({
+            scale,
+            repetitions: repetitions.map((value) => value[metric]),
+            uncertainty: uncertainties[index]!,
+          })),
+          check.bounds[metric],
+        );
+        if (verdict.outcome === 'insufficient-evidence') {
+          throw new GrowthEvidenceError(
+            `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${uncertainties.join(', ')}`,
+          );
+        }
+        if (verdict.outcome === 'violation') {
+          const error = new GrowthBoundError([], samples);
+          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
+            verdict.families,
+          )
+            .map(([family, fit]) => `${family} factor ${fit.factor}`)
+            .join(', ')}`;
+          throw error;
+        }
+      }
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'GrowthBoundError') {
       error.message = `${check.name}: ${error.message}`;

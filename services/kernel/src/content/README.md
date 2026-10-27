@@ -5,6 +5,92 @@ Content owns boards, threads, posts, immutable documents, media state and public
 A `BoardView` includes `realmId`, which is the containing Realm id or `null` for a board without a Realm. The field is
 output-only and comes from the board row used for disclosure.
 
+## Notifications
+
+Content owns minimal in-app notices for `reply`, `mention` and `moderation_decision`, using the names in accounts'
+notification catalogue (`src/access/notification-kinds.ts`). Accounts owns the preferences and `notificationAllowed`.
+There is no email delivery in this scope. These sections specify the pending implementation; they do not claim that
+notification or appeal routes already exist.
+
+A published post with a parent notifies that parent's author with `reply`. A published post without a parent
+notifies the thread's opening-post author. Creating the opening post never notifies its own author. A `mention`
+inline node with `attrs.accountId` in a post's first published revision notifies each distinct named account, in
+document order, up to the first ten. Duplicate nodes do not consume additional slots. A draft sends nothing;
+its first publication uses that published revision's mentions. Later revisions send no mentions. Web adds the
+mention node to `packages/document`.
+
+For these post notices a recipient gets at most one notice per post, with `reply` winning over `mention`.
+The actor never receives their own notice. A nested reply does not independently notify the opening-post author;
+that author can still receive a mention. Moderation outcomes are separate sources: a takedown notifies the target's
+author with its decision, a report resolution notifies the reporter with `actioned` or `dismissed`, and an appeal
+resolution notifies the appellant.
+
+Content effects on committed events write notices on the recipient's route. Each notice is unique on
+`(recipient, kind, source)`; replay adds nothing. A post notice uses the post as its source. A takedown, report
+outcome and appeal outcome each use their own source identity, so an appeal resolution can notify the author
+after the original decision did. Each notice stores only its identity, kind, time, actor id (`null` for moderation)
+and target ids: thread and post, or decision and report as applicable. It stores no text. The inbox links to the
+author-readable decision or reporter-readable report for statements, deadlines and outcomes.
+
+When the effect runs, each candidate first passes accounts' `notificationAllowed`; `reply` and `mention` then
+pass the same current Access read check as a post read, including the thread, ancestors, board and Realm. A failed
+check writes nothing and is never retried, including on event replay after preferences or membership change.
+Deleted accounts receive nothing. Moderation decisions are mandatory through the catalogue's preference override:
+they still use accounts' check, but turning the kind off cannot suppress them. They do not require the recipient
+to read the taken-down target.
+
+The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. Route
+spelling follows the content routes' conventions and is left to implementation. The GET list returns newest
+first, using an immutable notice ordering to break time ties. `limit` is 1–50, default 20. Its opaque shared list
+cursor (`src/tokens/list-cursor.ts`) binds the viewer and list query. Each item contains `id`, `kind`, `createdAt`,
+`actorId`, target ids and `unread`. Reply and mention candidates pass a current batched post read check; unreadable
+ones are skipped without exposing their notice or post ids, including through a cursor. A page scans at most
+four times its limit, advancing past scanned candidates even when none can be returned, as subject threads do.
+
+The unread count reads at most 101 index rows and returns `{ count, capped }`: `count` is at most 100, and
+`capped` is true only when more than 100 unread notices exist. Exactly 100 returns `{ count: 100, capped: false }`.
+Mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
+Items at or before the marker are read; marking an older item cannot make newer seen items unread again.
+Notices older than 180 days are deleted in bounded batches. Account deletion erases its notices and seen marker.
+
+Notification costs are bounded independently of inbox or thread size:
+
+- Reply delivery considers at most two candidates and writes at most two notices per post (the single-parent
+  rule above currently selects at most one). Mention delivery considers and writes at most ten. Each candidate
+  has one `notificationAllowed` check and, when allowed, one Access check; recipient overlap is deduplicated.
+- Report outcomes write at most one notice per report, amortized against that report's creation. A takedown
+  resolves open reports in bounded batches rather than requiring an unbounded synchronous fan-out.
+- List uses one index range of at most `4 × limit` rows plus a batched read check. Count reads at most 101 index
+  rows. Mark seen moves one row; no inbox scan is needed.
+- Retention deletes bounded batches on recipient routes. Account deletion removes notices in bounded batches
+  and its one seen marker; neither cleanup requires one transaction over an entire inbox.
+
+## Appeals
+
+Each thread or post takedown stores a decision with its target, action, moderator's statement (the takedown
+`reason`), decider and time. Its author can read the decision even though the target is taken down, including
+the statement and appeal deadline. An unrelated account receives 404. A takedown marks the target's open reports
+`actioned`; a moderator can instead mark an open report `dismissed`. A report receives at most one outcome and
+one outcome notice. A later takedown does not replace an already dismissed outcome.
+
+Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
+deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
+including after resolution. A first appeal after the deadline returns 422. An unrelated account cannot read or
+appeal the decision (404); an overlong statement returns 422 without consuming the author's appeal opportunity.
+
+An account with `moderation:takedown` on the target, other than the original decider, resolves a pending appeal
+with a statement. The original decider and accounts lacking that authorization receive 403. `uphold` keeps the
+takedown. `reverse` restores the target, makes it readable under its ordinary disclosure rules, raises its security
+revision and emits a restore event. The resolution notifies the appellant with a mandatory moderation outcome.
+Pending appeals appear alongside reports in the moderator queue and leave it on resolution. This scope covers
+content targets only, not other owners' takedowns.
+
+The executable API contract is `specs/content-notification-outcomes.test.ts`, with the test-only interface in
+`specs/content-notification-driver.ts`. `CONTENT_NOTIFICATION_DRIVER` selects a real product binding exporting
+`createContentNotificationDriver()`; without it every scenario fails with
+`Content notification outcome driver is required`. The suite remains red until that binding and the product
+implementation exist. The specification verifier checks this intentional red state without substituting a driver.
+
 ## Reviews
 
 A review is a thread of kind `review` on a reviews board, with exactly one target subject. Its opening post may

@@ -99,9 +99,9 @@ function outputGrowthFailures(output: string): GrowthFailure[] | null {
   for (const line of output.split(/\r\n?|\n/)) {
     const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
     if (failure) {
-      const message = block.find((candidate) => candidate.startsWith('GrowthBoundError:'));
+      const message = block.find((candidate) => /^(GrowthBoundError|GrowthEvidenceError):/.test(candidate));
       if (message === undefined || block.some((candidate) => /^(error:|# Unhandled)/.test(candidate))) return null;
-      failures.push({ title: failure[1]!, message: message.slice('GrowthBoundError:'.length).trim() });
+      failures.push({ title: failure[1]!, message: message.slice(message.indexOf(':') + 1).trim() });
       block = [];
     } else if (/^\s*\d+ (pass|fail|skip|todo)\b/.test(line) || line.startsWith('Ran ')) {
       finished = true;
@@ -159,7 +159,8 @@ function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | u
   if (report) {
     const failures = junitFailures(report);
     if (failures !== null) {
-      return failures.length > 0 && failures.every((failure) => failure.type === 'GrowthBoundError')
+      return failures.length > 0 &&
+        failures.every((failure) => ['GrowthBoundError', 'GrowthEvidenceError'].includes(failure.type))
         ? failures.map(({ title, message }) => ({ title, message }))
         : null;
     }
