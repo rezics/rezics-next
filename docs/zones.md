@@ -222,8 +222,8 @@ payload and payload-bearing receipt responses. Events/audit retain identifiers a
 page text, original labels, complaint contents, owner link or private source references survive in evidence
 past the window. Prefer command receipts that contain only nonpayload outcome references from the outset;
 cleanup must also scrub any responses that originally contained labels. A replay after the window cannot
-resurrect or disclose the erased response. Previously public Zones keep only a nonpersonal ID/type,
-revision, deletion/tombstone state and nonpersonal relation/count skeleton. Never-public private/unlisted
+resurrect or disclose the erased response. Previously publicly readable (public or unlisted) Zones keep only a nonpersonal ID/type,
+revision, deletion/tombstone state and nonpersonal relation/count skeleton. Always-private
 sites have a personal skeleton (it reveals a private site/owner relationship): erase their whole Zone row.
 Do not preserve private mount edges under the name of relations. Whole-row erasure is this narrow exception,
 not the general purge algorithm. Purged public tombstones retain no owner authorization link.
@@ -302,6 +302,6 @@ Accounts supplies parent/ordinary-role integration, account-erasure continuation
 Content supplies moderation notice/hold evidence retention integration; Web consumes the top-level common
 page wrapper, the preserved path routes and effective tokens. No new route shape changes an existing API:
 all Zone paths are additive. Manager assumptions are explicit: one immediate configuration head (no draft),
-public-only discovery, owner-only index, exact 30-day exclusive restore boundary, never-public skeleton
+public-only discovery, owner-only index, exact 30-day exclusive restore boundary, always-private skeleton
 removal and publication action controlling visibility only. These choices follow this resource scope and
 must not silently become a new publishing workflow, discovery service or query engine.
