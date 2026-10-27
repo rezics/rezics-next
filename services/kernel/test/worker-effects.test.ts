@@ -170,12 +170,12 @@ test("the worker relays every module's effects through one effect workflow", asy
     expect(await DBOS.getWorkflowStatus(subjectWorkflowId)).toMatchObject({
       workflowName: 'effect',
       queueName: 'effects',
-      queuePartitionKey: String(subject.component.partition),
+      queuePartitionKey: `subject_record:${subject.component.partition}`,
     });
     expect(await DBOS.getWorkflowStatus(contextWorkflowId)).toMatchObject({
       workflowName: 'effect',
       queueName: 'effects',
-      queuePartitionKey: String(context.component.partition),
+      queuePartitionKey: `context_record:${context.component.partition}`,
     });
     expect(registerWorkflow.mock.calls.filter((call) => call[1]?.name === 'effect')).toHaveLength(1);
   } finally {
