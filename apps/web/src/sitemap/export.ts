@@ -483,9 +483,9 @@ export type SitemapPublicationOptions = {
 export async function publishSitemapExport(options: SitemapPublicationOptions): Promise<void> {
   const feedKeys = [...options.filesByFeed.keys()];
   const files = [...options.filesByFeed.values()].flat();
-  const fileKeys = new Set<string>();
-  for (const file of files) fileKeys.add(file.key);
-  const uniqueFiles = [...fileKeys].map((key) => files.find((file) => file.key === key)!);
+  const uniqueFilesByKey = new Map<string, ExportFile>();
+  for (const file of files) uniqueFilesByKey.set(file.key, file);
+  const uniqueFiles = [...uniqueFilesByKey.values()];
   try {
     if (uniqueFiles.length > 50_000)
       throw new Error(`A sitemap index holds at most 50,000 files, got ${uniqueFiles.length}`);

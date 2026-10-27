@@ -952,7 +952,8 @@ language through the client's `accept-language`.
 ### Sitemap export
 
 - **Touches:** One daily Workflow normally walks each feed once in cursor order, with one full restart if a cursor is
-  rejected. A feed step reads at most 20 pages and packs at most 2,000 families; each shard gets one R2 `head` and a
+  rejected. A feed step reads at most 20 pages, targets 2,000 families, and holds at most 3,000 when its last page fills
+  the gap; each shard gets one R2 `head` and a
   `put` only when it is absent. Each feed keeps its file list in `runs/`; publication stages a run record and
   conditionally puts `index.xml` after every feed finishes, then lists `shards/` and `runs/` for retention cleanup.
 - **Bound:** Feed requests are about N / 1,000 plus empty pages, a possible full restart, and retries. Each instance
