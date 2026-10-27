@@ -1,4 +1,5 @@
-import { statSync, watch, type FSWatcher } from 'node:fs';
+import { statSync } from 'node:fs';
+import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import {
@@ -228,7 +229,7 @@ export class WorkerJob implements GateOutcomeSink {
     const limits = readRouting(this.tasks.settings.routingFile).classes[
       task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
     ];
-    let watcher: FSWatcher | undefined;
+    let watcher: Watching | undefined;
     let stopping: Promise<void> | undefined;
     const stopIfStalled = (timeLimit: boolean) => {
       try {
@@ -271,6 +272,8 @@ export class WorkerJob implements GateOutcomeSink {
         try {
           store.assertCurrent(ref);
           const attempt = store.attempt(ref);
+          // Only CLIs that stream their log can be judged by it; Cursor's agent writes its log once, at the end.
+          if (!['codex', 'claude'].includes(attempt.profile.cli)) return;
           if (attempt.state !== 'running' || (statSync(ref.logPath, { throwIfNoEntry: false })?.size ?? 0) > 0) return;
           console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
           void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs).catch(() => {});
@@ -281,7 +284,7 @@ export class WorkerJob implements GateOutcomeSink {
       Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - Date.parse(ref.startedAt))),
     );
     try {
-      watcher = watch(ref.logPath, () => stopIfStalled(false));
+      watcher = watchOrPoll(ref.logPath, () => stopIfStalled(false), 30_000);
       try {
         await settle(this.tasks, worker, this.landing, async () => {
           clearTimeout(timer);
@@ -519,8 +522,11 @@ export class WorkerJob implements GateOutcomeSink {
         follows.push(
           (async () => {
             try {
-              if (attempt.process) await waitForProcessGroup(attempt.process);
-              await this.followAttempt({ attempt, exited: Promise.resolve(readWorkerExit(attempt.logPath)) });
+              // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
+              const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
+                readWorkerExit(attempt.logPath),
+              );
+              await this.followAttempt({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);
             }

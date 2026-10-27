@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
-import { mkdirSync, watch, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
@@ -84,8 +85,7 @@ export class SqliteManagerInbox implements ManagerInbox {
         } catch (error) { close(); reject(error); }
       };
       const abort = () => { close(); reject(signal?.reason ?? new Error('Inbox wait aborted')); };
-      const watcher = watch(this.signalDirectory, check);
-      watcher.on('error', error => { close(); reject(error); });
+      const watcher = watchOrPoll(this.signalDirectory, check, 2_000);
       signal?.addEventListener('abort', abort, { once: true });
       if (signal?.aborted) abort(); else check();
     });

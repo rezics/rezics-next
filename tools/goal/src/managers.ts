@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
@@ -43,15 +44,14 @@ export class ManagerSessions {
   private pools = new Map<string, Promise<AppServer>>();
   private chains = new Map<string, Promise<unknown>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
-  private watcher: FSWatcher;
+  private watcher: Watching;
   private closed = false;
   private unsubscribers: (() => void)[] = [];
   constructor(private readonly db: Database, readonly inbox: SqliteManagerInbox, private readonly services: ManagerServices) {
     migrate(db, [{ module: 'managers', version: 1, sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);' }]);
-    this.watcher = watch(inbox.signalDirectory, () => {
+    this.watcher = watchOrPoll(inbox.signalDirectory, () => {
       for (const state of this.list()) if (state.status === 'running') this.background(state.id, () => this.dispatch(state.id));
-    });
-    this.watcher.on('error', error => this.error(error));
+    }, 2_000);
   }
   private now(): number { return (this.services.now ?? Date.now)(); }
   private error(error: unknown): void { (this.services.onError ?? console.error)(error); }
