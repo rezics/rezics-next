@@ -2,7 +2,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
-import { SignInPrompt } from '../threads/composer';
 import type { MemberState, RealmHome } from './space';
 import { changeRealmMembership } from './space-actions';
 
@@ -13,7 +12,7 @@ function csrfHeaders(): HeadersInit {
 
 type Problem = 'closed' | 'refused' | null;
 
-/** The viewer's standing in a Realm and the one write that changes it. Signed-out readers are asked to sign in. */
+/** The viewer's standing in a Realm and the one write that changes it. */
 export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnTo: string }) {
   const viewer = realm.viewer;
   const [state, setState] = useState<MemberState>(viewer?.state ?? 'none');
@@ -51,8 +50,11 @@ export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnT
   if (!viewer)
     return (
       <section aria-label={m.realm_membership_label()} className="space-y-3">
-        <p className="text-muted-foreground">{m.realm_sign_in_to_join()}</p>
-        <SignInPrompt returnTo={returnTo} />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
+            {m.realm_join()}
+          </Button>
+        </div>
       </section>
     );
 
