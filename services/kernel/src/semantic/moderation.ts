@@ -334,7 +334,7 @@ export async function moderateStatement(
       });
       const property = located?.property;
       const slot = located?.slot_id;
-      if (!current || property == null || slot == null) throw new ModerationSubjectNotFoundError();
+      if (!current || !located || property == null || slot == null) throw new ModerationSubjectNotFoundError();
       const hidden = await moderationReadHidden.run(tx, {
         route,
         subject_id: options.subject,

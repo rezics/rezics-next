@@ -122,6 +122,7 @@ const typed = [
   'GET /v1/subjects/:id/candidates',
   'GET /v1/subjects/:id/revisions',
   'GET /v1/subjects/:id/links',
+  'GET /v1/subjects/:id/relations',
   'POST /v1/definitions/releases',
   'GET /v1/definitions/releases/:digest',
   'GET /v1/definitions/active',
@@ -232,6 +233,9 @@ test('semantic editorial listings document their default page size', () => {
       expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 20 }) }),
     );
   }
+  expect(paths['/v1/subjects/{id}/relations']!.get!.parameters).toContainEqual(
+    expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 25 }) }),
+  );
 });
 
 test('subject HTTP refuses an unlicensed document and any media value before attempting storage', async () => {

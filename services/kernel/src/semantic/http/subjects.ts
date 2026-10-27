@@ -1634,7 +1634,7 @@ function subjectRoutes(
         params: t.Object({ id: t.String() }),
         query: t.Object({
           ...pageQuery,
-          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 25 })),
           property: t.String({ minLength: 1 }),
           filter: t.Optional(t.String({ format: 'uuid' })),
           type: t.Optional(t.String({ minLength: 1 })),
@@ -1709,7 +1709,7 @@ function subjectRoutes(
             listSubjectRelations(pool, tokens, {
               subject: params.id,
               property: query.property,
-              context: query.context,
+              ...(query.context === undefined ? {} : { context: query.context }),
               limit: query.limit ?? 25,
               ...(query.filter === undefined ? {} : { filter: query.filter }),
               ...(query.type === undefined ? {} : { type: query.type }),

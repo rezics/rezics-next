@@ -136,7 +136,7 @@ function linksOf(
         relation: relationStatement,
         slot_id,
         external: link.external ?? null,
-        value: link.value,
+        ...(link.value === undefined ? {} : { value: link.value }),
         outbound_order: relationStatement ? (order ?? null) : null,
         outbound_order_key: relationStatement ? outbound_order_key : '',
         source_type: holder.source_type,
@@ -189,7 +189,11 @@ export function linkChanges(
   changes.sort((left, right) => {
     if (left.property !== right.property) return left.property < right.property ? -1 : 1;
     if (left.statement !== right.statement) return left.statement < right.statement ? -1 : 1;
-    if (left.target !== right.target) return left.target < right.target ? -1 : 1;
+    if (left.target !== right.target) {
+      if (left.target === null) return 1;
+      if (right.target === null) return -1;
+      return left.target < right.target ? -1 : 1;
+    }
     return 0;
   });
   return changes;

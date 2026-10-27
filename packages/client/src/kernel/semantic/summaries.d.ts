@@ -33,6 +33,7 @@ export type SubjectSummary = {
 };
 export type SummaryDependencies = {
     client: Pick<PoolClient, 'query'>;
+    pool?: Pool;
     /** The active release, resolved once by the caller for the whole page. */
     release: Release;
     authorize: (client: Pick<PoolClient, 'query'>, id: string, batch: readonly string[]) => Promise<boolean>;

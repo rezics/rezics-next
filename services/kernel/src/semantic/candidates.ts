@@ -640,7 +640,7 @@ export async function adoptCandidates(
               subject: options.subject,
               release: options.release.release,
               type: subject.type,
-              identityFacts: identity?.facts,
+              ...(identity?.facts === undefined ? {} : { identityFacts: identity.facts }),
             },
           );
           if (changes.length > 0) {

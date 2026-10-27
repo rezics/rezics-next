@@ -54,9 +54,9 @@ const actor: AccountActor = {
   authnEpoch: 1,
 };
 const release: FilterRelease = {
-  types: { 'schema:Book': { bases: [], facets: ['schema:author'] }, 'schema:Person': { bases: [], facets: [] } },
+  types: { 'schema:Book': { bases: [], facets: ['schema:genre'] }, 'skos:Concept': { bases: [], facets: [] } },
   properties: {
-    'schema:author': { datatype: 'wikibase-item', qualifiers: [] },
+    'schema:genre': { datatype: 'wikibase-item', qualifiers: [] },
     'schema:inLanguage': { datatype: 'string' },
   },
 };
@@ -142,8 +142,8 @@ async function buildFixtures(): Promise<void> {
   await bootstrapRelease(db.pool, bundledRelease);
 
   const route = hotPartition * 16;
-  const authorA = await addSubject(route + 1, { type: 'schema:Person', labels: { en: 'Author A' } });
-  const authorB = await addSubject(route + 2, { type: 'schema:Person', labels: { en: 'Author B' } });
+  const authorA = await addSubject(route + 1, { type: 'skos:Concept', labels: { en: 'Author A' } });
+  const authorB = await addSubject(route + 2, { type: 'skos:Concept', labels: { en: 'Author B' } });
   authorIds = [authorA, authorB];
   await appendExpandedAuthor(authorA, authorB);
   await appendExpandedAuthor(authorB, authorA);
@@ -152,24 +152,24 @@ async function buildFixtures(): Promise<void> {
     await addSubject(route + 3, {
       type: 'schema:Book',
       labels: { en: 'Book one' },
-      statements: { 'schema:author': [statement('schema:author', authorA)] },
+      statements: { 'schema:genre': [statement('schema:genre', authorA)] },
     }),
     await addSubject(route + 4, {
       type: 'schema:Book',
       labels: { en: 'Book two' },
       statements: {
-        'schema:author': [statement('schema:author', authorA), statement('schema:author', authorB)],
+        'schema:genre': [statement('schema:genre', authorA), statement('schema:genre', authorB)],
       },
     }),
     await addSubject(route + 5, {
       type: 'schema:Book',
       labels: { en: 'Book three' },
-      statements: { 'schema:author': [statement('schema:author', authorA)] },
+      statements: { 'schema:genre': [statement('schema:genre', authorA)] },
     }),
     await addSubject(route + 6, {
       type: 'schema:Book',
       labels: { en: 'Book four' },
-      statements: { 'schema:author': [statement('schema:author', authorB)] },
+      statements: { 'schema:genre': [statement('schema:genre', authorB)] },
     }),
   ];
 
@@ -217,13 +217,13 @@ async function appendExpandedAuthor(subjectId: string, valueId: string): Promise
       `INSERT INTO semantic.fact
          (route, subject_id, slot_id, log_seq, operation, kind, language, property, statement_id, body,
           recorded_transaction_id, release)
-       VALUES ($1, $2, $3, 33, 'expand', 'statement', NULL, 'schema:author', NULL, '{}'::jsonb, $4, NULL)`,
+       VALUES ($1, $2, $3, 33, 'expand', 'statement', NULL, 'schema:genre', NULL, '{}'::jsonb, $4, NULL)`,
       [route, subjectId, slot, transactionId],
     );
     await client.query(
       `INSERT INTO semantic.candidate
          (route, subject_id, candidate_id, slot_id, property, rank, statement, release, revision, origin, view_order)
-       VALUES ($1, $2, $3, $4, 'schema:author', 'normal', $5::jsonb, $6, 1, 'proposal', 0)`,
+       VALUES ($1, $2, $3, $4, 'schema:genre', 'normal', $5::jsonb, $6, 1, 'proposal', 0)`,
       [
         route,
         subjectId,
@@ -491,7 +491,7 @@ test('Facet counts stays within its bound as N grows', async () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               filter: { type: { in: ['schema:Book'] } },
-              facets: [{ property: 'schema:author' }],
+              facets: [{ property: 'schema:genre' }],
             }),
           }),
         );
@@ -507,7 +507,7 @@ test('Facet counts stays within its bound as N grows', async () => {
         expect(answer.total).toEqual({ value: 4, relation: 'exact' });
         expect(answer.facets).toEqual([
           {
-            property: 'schema:author',
+            property: 'schema:genre',
             relation: 'exact',
             values: [
               { value: authorIds[0]!, count: 3, labels: { en: 'Author A' } },
@@ -604,7 +604,7 @@ test('Search hit facts stay within their bound as N grows', async () => {
             body: JSON.stringify({
               filter: { type: { in: ['schema:Book'] } },
               sort: 'name',
-              properties: ['schema:author'],
+              properties: ['schema:genre'],
               languages: ['en'],
             }),
           }),
@@ -618,7 +618,7 @@ test('Search hit facts stay within their bound as N grows', async () => {
         expect(answer.subjects.map(({ id }) => id)).toEqual([bookIds[3]!, bookIds[0]!, bookIds[2]!, bookIds[1]!]);
         for (const hit of answer.subjects) {
           const authors = authorsByBook[bookIds.indexOf(hit.id)]!;
-          expect(hit.facts['schema:author']).toEqual(
+          expect(hit.facts['schema:genre']).toEqual(
             authors.map((index) => ({
               kind: 'item',
               id: authorIds[index]!,

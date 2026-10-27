@@ -4,7 +4,7 @@ import type { Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { readItemTypes, readLabels } from './subject.ts';
 import { holderFacts, labelOrderKey, readHolderKeys, subjectLabel } from './link-keys.ts';
-import { factDataTypes, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
+import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
@@ -828,99 +828,100 @@ export async function listSubjectLinks(
   const freshnessDeadline = deadlineFor(FRESHNESS_WAIT_MS);
   let caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline));
   const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const readPage = async () => await withReadTransaction<{
-    page: SubjectLinksPage;
-    scannedMembers: string[];
-  }>(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-      visibility: string;
-    } | null;
-    if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
-      throw new SubjectNotFoundError();
-    const redirect = await redirectOf(client, options.subject);
-    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-    await client.query('SET LOCAL enable_seqscan = off');
-    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-    const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
-    const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-    const rows =
-      options.property === null
-        ? await listInboundLinks.run(client, {
-            route,
-            subject_id: options.subject,
-            after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-            after_source: afterSource,
-            after_statement: afterStatement,
-            page_limit: options.limit + 1,
-          })
-        : await listInboundLinksByProperty.run(client, {
-            route,
-            subject_id: options.subject,
-            property: options.property,
-            filter_value: options.filter ?? NIL_UUID,
-            after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-            after_source: afterSource,
-            after_statement: afterStatement,
-            page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
-          });
-    const scanLimit = options.type ? 4 * options.limit : options.limit;
-    const scanned = rows.slice(0, scanLimit);
-    const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
-    const links: Omit<SubjectLink, 'label'>[] = [];
-    let examined = 0;
-    for (const row of rows.slice(0, scanLimit)) {
-      examined++;
-      if (matches(row.type))
-        links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
-      if (links.length === options.limit) break;
-    }
-    const last = rows[examined - 1];
-    let count: { value: number; exact: boolean } | undefined;
-    if (options.property !== null) {
-      const total = await readInboundLinkCount.run(client, {
-        route,
-        subject_id: options.subject,
-        property: options.property,
-        filter_value: options.filter ?? NIL_UUID,
-      });
-      const value = Number(total?.value ?? 0);
-      if (!options.type) count = { value, exact: true };
-      else {
-        const sample = await countInboundLinkTypes.run(client, {
+  const readPage = async () =>
+    await withReadTransaction<{
+      page: SubjectLinksPage;
+      scannedMembers: string[];
+    }>(pool, async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        visibility: string;
+      } | null;
+      if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
+        throw new SubjectNotFoundError();
+      const redirect = await redirectOf(client, options.subject);
+      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+      await client.query('SET LOCAL enable_seqscan = off');
+      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+      const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
+      const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
+      const rows =
+        options.property === null
+          ? await listInboundLinks.run(client, {
+              route,
+              subject_id: options.subject,
+              after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+              after_source: afterSource,
+              after_statement: afterStatement,
+              page_limit: options.limit + 1,
+            })
+          : await listInboundLinksByProperty.run(client, {
+              route,
+              subject_id: options.subject,
+              property: options.property,
+              filter_value: options.filter ?? NIL_UUID,
+              after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+              after_source: afterSource,
+              after_statement: afterStatement,
+              page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
+            });
+      const scanLimit = options.type ? 4 * options.limit : options.limit;
+      const scanned = rows.slice(0, scanLimit);
+      const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
+      const links: Omit<SubjectLink, 'label'>[] = [];
+      let examined = 0;
+      for (const row of rows.slice(0, scanLimit)) {
+        examined++;
+        if (matches(row.type))
+          links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
+        if (links.length === options.limit) break;
+      }
+      const last = rows[examined - 1];
+      let count: { value: number; exact: boolean } | undefined;
+      if (options.property !== null) {
+        const total = await readInboundLinkCount.run(client, {
           route,
           subject_id: options.subject,
           property: options.property,
           filter_value: options.filter ?? NIL_UUID,
         });
-        count = { value: sample.filter((row) => matches(row.type)).length, exact: value <= 1000 };
+        const value = Number(total?.value ?? 0);
+        if (!options.type) count = { value, exact: true };
+        else {
+          const sample = await countInboundLinkTypes.run(client, {
+            route,
+            subject_id: options.subject,
+            property: options.property,
+            filter_value: options.filter ?? NIL_UUID,
+          });
+          count = { value: sample.filter((row) => matches(row.type)).length, exact: value <= 1000 };
+        }
       }
-    }
-    return {
-      page: {
-        links,
-        ...(count ? { count } : {}),
-        freshness: {
-          consistency: 'eventual',
-          target_seconds: FRESHNESS_TARGET_SECONDS,
-          caught_up: caughtUp,
+      return {
+        page: {
+          links,
+          ...(count ? { count } : {}),
+          freshness: {
+            consistency: 'eventual',
+            target_seconds: FRESHNESS_TARGET_SECONDS,
+            caught_up: caughtUp,
+          },
+          next:
+            rows.length > examined && last
+              ? encodeCursor(ring, binding, {
+                  epoch: partition.epoch,
+                  after: [
+                    options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                    last.subject,
+                    last.statement,
+                  ],
+                })
+              : null,
+          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
         },
-        next:
-          rows.length > examined && last
-            ? encodeCursor(ring, binding, {
-                epoch: partition.epoch,
-                after: [
-                  options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
-                  last.subject,
-                  last.statement,
-                ],
-              })
-            : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      },
-      scannedMembers,
-    };
-  });
+        scannedMembers,
+      };
+    });
   let snapshot = await readPage();
   let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
   while (pendingMembers.length) {

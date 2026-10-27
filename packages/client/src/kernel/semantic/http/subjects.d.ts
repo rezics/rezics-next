@@ -10,6 +10,7 @@ export declare const ItemSchema: import("typebox").TObject<{
     release: import("typebox").TString;
     context: import("typebox").TString;
     resolution: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
+    relationCounts: import("typebox").TRecord<"^.*$", import("typebox").TInteger>;
     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
     descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
     aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
@@ -138,6 +139,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             release: string;
                             context: string;
                             resolution: Record<string, any>;
+                            relationCounts: Record<string, number>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -415,6 +417,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 release: string;
                                 context: string;
                                 resolution: Record<string, any>;
+                                relationCounts: Record<string, number>;
                                 labels: Record<string, string>;
                                 descriptions: Record<string, string>;
                                 aliases: Record<string, string[]>;
@@ -1794,6 +1797,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         body: {
                             context: string;
                             property: string;
+                            target?: string;
+                            sameAs?: string;
+                            key?: string;
                             mode: "inherit" | "replace" | "suppress";
                             selection: {
                                 candidate: string;
@@ -1942,6 +1948,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             cursor?: string;
                             property: string;
                             context?: string;
+                            target?: string;
+                            sameAs?: string;
+                            key?: string;
                         };
                         headers: unknown;
                         response: {
@@ -2304,6 +2313,176 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     } | null;
                                 }[];
                                 count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
+                                freshness: {
+                                    consistency: "eventual";
+                                    target_seconds: 10;
+                                    caught_up: boolean;
+                                };
+                                next: string | null;
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                relations: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                            property: string;
+                            filter?: string;
+                            type?: string;
+                            context?: string;
+                            language?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                relations: {
+                                    statement: {
+                                        id: string;
+                                        rank: "deprecated" | "normal" | "preferred";
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                        qualifiers: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        references: {
+                                            parts: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            hash: string;
+                                        }[];
+                                        rezics: {
+                                            release: string;
+                                            revision: number;
+                                        };
+                                    };
+                                    target: string | null;
+                                    external: string | null;
+                                    type?: string;
+                                    label?: string;
+                                }[];
+                                count: {
                                     value: number;
                                     exact: boolean;
                                 };
