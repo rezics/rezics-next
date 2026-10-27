@@ -268,13 +268,16 @@ function availableMiB(): number {
  * available. Otherwise it waits; it is never refused. Fifty-two workers on this host exhausted memory and swap and
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
-async function awaitHostCapacity(store: WorkerStore, stateDirectory: string): Promise<void> {
+export async function awaitHostCapacity(store: WorkerStore, stateDirectory: string): Promise<void> {
   for (;;) {
+    // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
+    const file = join(stateDirectory, 'capacity.json');
+    if (!existsSync(file)) return;
     let capacity = DEFAULT_CAPACITY;
     try {
       capacity = {
         ...DEFAULT_CAPACITY,
-        ...(JSON.parse(readFileSync(join(stateDirectory, 'capacity.json'), 'utf8')) as Partial<HostCapacity>),
+        ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>),
       };
     } catch {
       /* Defaults. */
@@ -292,8 +295,6 @@ export async function launch(
   prompt: string,
   codex?: Settings['codex'],
 ): Promise<RunningWorker> {
-  store.assertCurrent(attempt);
-  await awaitHostCapacity(store, dirname(dirname(dirname(attempt.logPath))));
   store.assertCurrent(attempt);
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),

@@ -448,6 +448,9 @@ export class WorkerJob implements GateOutcomeSink {
           this.onAttemptExit(ref);
           continue;
         }
+        // A command never waits for a worker that may still run: following it would hold the command (a dispatch
+        // waited 31 minutes on another Goal's live worker). The host adopts it instead.
+        if (!adoptRunning && attempt.state !== 'exited') continue;
         followed = true;
         follows.push(
           (async () => {
