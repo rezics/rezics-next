@@ -671,6 +671,18 @@ export class WorkerJob implements GateOutcomeSink {
           });
           if (plan) store.clearIntegrationPlan(outcome);
           released = this.releaseMetDependents();
+          // A manager waits for research to decide its next contract; an integration does not otherwise wake it.
+          if (task.brief.kind === 'research') {
+            const reports = (outcome.changedFiles ?? []).filter((path) => path.startsWith('docs/research/'));
+            const event = {
+              managerId: task.brief.manager,
+              taskId: task.id,
+              kind: 'instruction' as const,
+              summary: `Research task ${task.id} integrated as ${outcome.mergedCommit}: ${reports.join(', ') || 'its report'}. Adopt its findings into the owning document and the waiting contracts.`,
+            };
+            store.event(outcome, 'research-integrated', event);
+            this.inbox.deliver(event);
+          }
           const goalTasks = store.tasks().filter((candidate) => candidate.brief.goal === task.brief.goal);
           const goalInFlight = goalTasks.some((candidate) =>
             ['ready', 'running', 'landing', 'held', 'integrated'].includes(candidate.state),

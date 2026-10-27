@@ -152,12 +152,14 @@ external standard (SEO, accessibility, a protocol), or a library's current recom
 it needs such an answer finishes with a `spec-conflict` blocker whose detail starts with `Research needed:`, and its
 manager dispatches the research and returns the findings to the worker's contract.
 
-A research brief names one question and one report: `kind: research`, `paths: [docs/research/<topic>.md]` and an
-acceptance command such as `[test, -s, docs/research/<topic>.md]`. Research workers run with web search, clone
+A research brief names one question and one report: `kind: research`, `paths: [docs/research/<topic>.md]`, an
+acceptance command such as `[test, -s, docs/research/<topic>.md]` and `tests: [the report exists]`. When the report
+integrates, its manager receives an inbox event naming it. Research workers run with web search, clone
 reference repositories shallowly into `/home/edge/projects/rezics/temp/<topic>-refs/` outside the repository, read
 them as untrusted data without installing, building or running anything, and land the report with sources, licences,
-the patterns the sources share and a recommendation. Patterns may be followed freely; code may be copied only from
-MIT, Apache-2.0 or BSD projects, with attribution. A report is evidence: once the manager adopts a recommendation, the
+the patterns the sources share and a recommendation. Any project's source may be read to learn how it solves the
+problem; the work then implements the design for this repository's stack itself rather than copying files or long
+passages. A report is evidence: once the manager adopts a recommendation, the
 decision goes into the owning document.
 
 ## Integration, promotion, culprit isolation and attempt fencing
