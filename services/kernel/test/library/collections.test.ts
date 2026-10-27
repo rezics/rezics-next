@@ -712,12 +712,7 @@ test('remove cost stays constant as unrelated collections grow', async () => {
       const memberId = members[cursor];
       cursor += 1;
       const actor = await authenticate(prepared.actor.accountId, curatorScopes, database.pool);
-      await prepared.collectionCommands.removeMember(
-        actor,
-        created.value.id,
-        memberId!,
-        `growth-remove-${repetition}`,
-      );
+      await prepared.collectionCommands.removeMember(actor, created.value.id, memberId!, `growth-remove-${repetition}`);
     },
   });
   equalStatements([...report.samples]);
