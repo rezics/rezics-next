@@ -39,7 +39,7 @@ const SIGNATURES = [
   },
 ] as const;
 
-function sshProbe(host: CheckHost): CheckHostProbeResult {
+export function sshProbe(host: CheckHost): CheckHostProbeResult {
   const result = spawnSync(
     'ssh',
     ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', host.identity, host.address, 'true'],
@@ -202,7 +202,8 @@ export function watch(
   stateDirectory: string,
   deliver: (summary: string) => void,
   now = Date.now(),
-  probe: CheckHostProbe = sshProbe,
+  // Off until the probe runs outside the host's event loop: a synchronous SSH probe can block it for 40 seconds.
+  probe: CheckHostProbe = () => ({ status: 0, stderr: '' }),
 ): number {
   const path = join(stateDirectory, 'watchdog.json');
   let state: State = { alerts: {} };
