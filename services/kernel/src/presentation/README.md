@@ -42,6 +42,16 @@ Publish and activate are receipted commands on partition 0. K denotes the seven 
 - Bound: For k <= 16 descriptors, equal canonical JSON descriptors share a dispatch, so there are at most k distinct dispatches, with at most four running at once. SQL rows, blocks and statements are the sum of those route costs, plus any followed subject route; this executor issues no SQL. Cost is independent of N, P and H beyond those routes. Session merging is O(k x 32) components.
 - Growth check: `test/presentation/reads.test.ts`: `a page holds at most sixteen valid reads, runs at most four at a time and dispatches identical reads once`; dispatches stay at most k at every page size.
 
+### Page read languages
+
+The optional `languages` chain uses the search request's 1–8 unique language tags. A site sends the reader's locale and
+that locale's sibling scripts in priority order, without appending `en`; search label choice falls back to the work's
+original language and then `en`.
+
+- **Touches:** nothing new; the existing search reads carry one more body field.
+- **Bound:** the page read's reads, statements and engine requests are unchanged. Label choice is linear in at most 8 ranges per hit, inside the search read.
+- **Growth check:** none; no read changes. `test/presentation/page-languages.test.ts`, "a page read passes the reader's language chain to its search reads", proves the behaviour.
+
 ### Page read
 
 A subject or account target may name a `view`; the page is then that view's document, planned and read the same way, and

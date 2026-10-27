@@ -314,12 +314,22 @@ export async function readPage(options: {
   incoming: Request;
   reads: Record<string, PageRead>;
   session: SessionKeys;
+  languages?: readonly string[];
 }): Promise<{ results: Record<string, PageResult>; session: string | null }> {
   const reads = validateReads(options.reads);
   const unique = new Map<string, PreparedRead>();
   for (const read of reads) if (!unique.has(read.canonical)) unique.set(read.canonical, read);
 
-  const distinctReads = [...unique.values()];
+  const distinctReads = [...unique.values()].map((read) => {
+    if (read.descriptor.kind !== 'search' || options.languages === undefined) return read;
+    return {
+      ...read,
+      descriptor: {
+        ...read.descriptor,
+        body: { ...read.descriptor.body, languages: [...options.languages] },
+      },
+    };
+  });
   const origin = new URL(options.incoming.url).origin;
   const credentials = {
     authorization: options.incoming.headers.get('authorization'),

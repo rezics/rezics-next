@@ -24,6 +24,7 @@ import { SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
+import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
@@ -81,7 +82,7 @@ function targetOf(body: unknown): PageTarget {
   const errors: FieldError[] = [];
   if (!isRecord(body)) reject([{ pointer: '', code: 'invalid_type' }]);
   for (const key of Object.keys(body)) {
-    if (key !== 'target') errors.push({ pointer: `/${segment(key)}`, code: 'unknown_field' });
+    if (key !== 'target' && key !== 'languages') errors.push({ pointer: `/${segment(key)}`, code: 'unknown_field' });
   }
   if (!Object.hasOwn(body, 'target')) {
     errors.push({ pointer: '/target', code: 'required' });
@@ -135,6 +136,11 @@ function targetOf(body: unknown): PageTarget {
     else if (errors.length === 0) return { route };
   }
   reject(errors);
+}
+
+function languagesOf(body: unknown): readonly string[] | undefined {
+  if (!isRecord(body) || !Object.hasOwn(body, 'languages')) return undefined;
+  return validateHitOptions({ languages: body.languages }).languages;
 }
 
 function survivor(body: unknown): { id: string; type: string } {
@@ -216,6 +222,7 @@ export function pageRoutes<App>(
     },
     async ({ body, request, authorize, admission, job, actor }) => {
       const target = targetOf(body);
+      const languages = languagesOf(body);
       const check = await authorize({
         ...resource,
         ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
@@ -298,6 +305,7 @@ export function pageRoutes<App>(
         account,
         probes,
         probeSession,
+        ...(languages === undefined ? {} : { languages }),
       });
     },
   );
@@ -315,6 +323,7 @@ async function pageAnswer(input: {
   account: { id: string; handle: string } | null;
   probes: Map<string, ReadResult>;
   probeSession: string | null;
+  languages?: readonly string[];
 }): Promise<Response> {
   // The probes already ran; plan once and run what they did not answer in one call.
   const plan = planReads(platformRegistry, input.resolved.document, { subject: input.subject, account: input.account });
@@ -331,6 +340,7 @@ async function pageAnswer(input: {
       incoming: input.request,
       reads: pending,
       session: input.session,
+      ...(input.languages === undefined ? {} : { languages: input.languages }),
     });
     for (const [key, descriptor] of Object.entries(pending)) results.set(canonicalize(descriptor)!, page.results[key]!);
     readSession = mergedSession(input.session.ring, input.session.scope, readSession, page.session);
