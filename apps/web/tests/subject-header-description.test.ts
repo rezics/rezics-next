@@ -87,7 +87,7 @@ test('About omits prose when the subject has neither summary nor description', (
   const html = render(page);
   expect(html).not.toContain(summary);
   expect(html).not.toContain(description);
-  expect(aboutOf(html)).toContain('data-slot="key-facts"');
+  expect(aboutOf(html)).toContain('data-slot="subject-facts"');
   expect(aboutOf(html)).not.toContain('>英语<');
 });
 
