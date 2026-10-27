@@ -63,8 +63,8 @@ test('preparation creator commitment binds the complete native header without so
   for (const changed of [
     { ...payload, createdAt: '2026-10-27T00:00:00.000002Z' },
     { ...payload, inputByteLength: '9007199254740992' },
-    { ...payload, sourceIdentity: { ...identity, revision: 5 } },
-    { ...payload, originIdentity: { ...identity, transactionId: newId(0x7b20) } },
+    { ...payload, sourceIdentity: { ...identity, revision: 5 }, originIdentity: { ...identity, revision: 5 } },
+    { ...payload, sourceIdentity: { ...identity, revision: 6 }, originIdentity: { ...identity, revision: 6 } },
     { ...payload, creationReceipt: { ...payload.creationReceipt, key: 'other' } },
   ])
     expect(preparationHeaderCommitment(changed)).not.toBe(digest);
