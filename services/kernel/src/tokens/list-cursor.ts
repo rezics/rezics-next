@@ -15,6 +15,7 @@ export type ListCursorPosition = {
   after: readonly (string | number)[];
 };
 export type ListCursorResult = CursorResult;
+export type ListCursorProfile = 'default' | 'search';
 
 const VERSION = 1;
 const SALT_BYTES = 16;
@@ -24,6 +25,9 @@ const MAX_TOKEN_LENGTH = 4_096;
 const MAX_ROUTE_BYTES = 256;
 const MAX_QUERY_BYTES = 2_048;
 const MAX_AFTER_KEY_BYTES = 256;
+const MAX_SEARCH_AFTER_KEY_BYTES = 1_024;
+const MAX_SEARCH_AFTER_BYTES = 2_048;
+const MAX_SEARCH_PLAINTEXT_BYTES = 2_560;
 const MAX_AFTER_KEYS = 8;
 const MAX_FUTURE_MS = 60_000;
 const LIFETIME_MS = 15 * 60_000;
@@ -83,7 +87,7 @@ async function perTokenKey(
 }
 
 /** Throws `TypeError` for a binding outside the contract. */
-function associatedData(kid: number, binding: ListCursorBinding): Uint8Array<ArrayBuffer> {
+function associatedData(kid: number, binding: ListCursorBinding, profile: ListCursorProfile): Uint8Array<ArrayBuffer> {
   if (binding === null || typeof binding !== 'object' || typeof binding.route !== 'string' || binding.route === '')
     throw new TypeError('Invalid list cursor binding');
   if (byteLength(binding.route) > MAX_ROUTE_BYTES) throw new TypeError('The list cursor route is too long');
@@ -101,19 +105,23 @@ function associatedData(kid: number, binding: ListCursorBinding): Uint8Array<Arr
       viewer === null ? 'anonymous' : 'account',
       viewer,
       query,
+      ...(profile === 'search' ? ['search'] : []),
     ]),
   );
 }
 
-function validAfter(after: unknown): after is CursorKey[] {
+function validAfter(after: unknown, profile: ListCursorProfile): after is CursorKey[] {
+  let totalBytes = 0;
   return (
     Array.isArray(after) &&
     after.length <= MAX_AFTER_KEYS &&
-    after.every(
-      (value) =>
-        (typeof value === 'string' && byteLength(value) <= MAX_AFTER_KEY_BYTES) ||
-        (typeof value === 'number' && Number.isSafeInteger(value)),
-    )
+    after.every((value) => {
+      if (typeof value !== 'string') return typeof value === 'number' && Number.isSafeInteger(value);
+      const bytes = byteLength(value);
+      totalBytes += bytes;
+      return bytes <= (profile === 'search' ? MAX_SEARCH_AFTER_KEY_BYTES : MAX_AFTER_KEY_BYTES);
+    }) &&
+    (profile !== 'search' || totalBytes <= MAX_SEARCH_AFTER_BYTES)
   );
 }
 
@@ -122,7 +130,9 @@ export async function encodeListCursor(
   binding: ListCursorBinding,
   position: ListCursorPosition,
   now: Date,
+  options: { profile?: ListCursorProfile } = {},
 ): Promise<string> {
+  const profile = options.profile ?? 'default';
   const kid = ring.current;
   const key = ring.keys.get(kid);
   if (!Number.isInteger(kid) || kid < 0 || kid > 255 || !key || key.byteLength < 32)
@@ -134,22 +144,20 @@ export async function encodeListCursor(
     typeof position !== 'object' ||
     !Number.isSafeInteger(position.epoch) ||
     position.epoch < 1 ||
-    !validAfter(position.after)
+    !validAfter(position.after, profile)
   )
     throw new TypeError('Invalid list cursor position');
-  const data = associatedData(kid, binding);
+  const data = associatedData(kid, binding, profile);
+  const timed = profile === 'search' || binding.viewer !== null;
 
   const plaintext = encoder.encode(
     JSON.stringify(
-      binding.viewer === null
-        ? { e: position.epoch, a: position.after }
-        : { e: position.epoch, a: position.after, t: issuedAt },
+      timed ? { e: position.epoch, a: position.after, t: issuedAt } : { e: position.epoch, a: position.after },
     ),
   );
-  const salt =
-    binding.viewer === null
-      ? await syntheticSalt(key, data, plaintext)
-      : crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  if (profile === 'search' && plaintext.byteLength > MAX_SEARCH_PLAINTEXT_BYTES)
+    throw new TypeError('The list cursor position is too long');
+  const salt = timed ? crypto.getRandomValues(new Uint8Array(SALT_BYTES)) : await syntheticSalt(key, data, plaintext);
   const { aes, iv } = await perTokenKey(key, salt);
   const sealed = new Uint8Array(
     await crypto.subtle.encrypt(
@@ -168,6 +176,7 @@ export async function decodeListCursor(
   binding: ListCursorBinding,
   token: string,
   now: Date,
+  options: { profile?: ListCursorProfile } = {},
 ): Promise<ListCursorResult> {
   try {
     if (typeof token !== 'string' || token.length > MAX_TOKEN_LENGTH || !BASE64URL.test(token)) return invalid();
@@ -179,7 +188,8 @@ export async function decodeListCursor(
     if (!key || key.byteLength < 32) return invalid();
     const nowMs = now instanceof Date ? now.getTime() : Number.NaN;
     if (!Number.isSafeInteger(nowMs)) return invalid();
-    const data = associatedData(kid, binding);
+    const profile = options.profile ?? 'default';
+    const data = associatedData(kid, binding, profile);
 
     const salt = bytes.subarray(2, HEADER_BYTES);
     const { aes, iv } = await perTokenKey(key, salt);
@@ -190,11 +200,12 @@ export async function decodeListCursor(
         bytes.subarray(HEADER_BYTES),
       ),
     );
+    if (profile === 'search' && plaintext.byteLength > MAX_SEARCH_PLAINTEXT_BYTES) return invalid();
     const payload: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
     if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return invalid();
     const value = payload as Record<string, unknown>;
-    if (!Number.isSafeInteger(value.e) || (value.e as number) < 1 || !validAfter(value.a)) return invalid();
-    if (binding.viewer === null) {
+    if (!Number.isSafeInteger(value.e) || (value.e as number) < 1 || !validAfter(value.a, profile)) return invalid();
+    if (profile !== 'search' && binding.viewer === null) {
       if (!timingSafeEqual(salt, await syntheticSalt(key, data, plaintext))) return invalid();
     } else {
       if (!Number.isSafeInteger(value.t)) return invalid();

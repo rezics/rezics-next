@@ -363,3 +363,169 @@ test('anonymous salts authenticate associated data and timeless plaintext with a
   ]).toString('base64url');
   expect(await decodeListCursor(ring, anonymous, forged, now)).toEqual({ ok: false, reason: 'invalid' });
 });
+
+const search = { profile: 'search' } as const;
+
+function searchData(bound: ListCursorBinding): Buffer {
+  const query = Object.fromEntries(Object.entries(bound.query).sort(([a], [b]) => a.localeCompare(b)));
+  return Buffer.from(
+    JSON.stringify([
+      'list-cursor',
+      1,
+      1,
+      bound.route,
+      bound.viewer === null ? 'anonymous' : 'account',
+      bound.viewer,
+      JSON.stringify(query),
+      'search',
+    ]),
+  );
+}
+
+// Construct authenticated payloads independently so decode bounds cannot be hidden by encode validation.
+function handmadeSearchCursor(bound: ListCursorBinding, payload: unknown): string {
+  const salt = Buffer.alloc(16, 3);
+  const material = Buffer.from(hkdfSync('sha256', key(1), salt, 'rezics/list-cursor/v1', 44));
+  const cipher = createCipheriv('aes-256-gcm', material.subarray(0, 32), material.subarray(32));
+  cipher.setAAD(searchData(bound));
+  return Buffer.concat([
+    Buffer.from([1, 1]),
+    salt,
+    cipher.update(JSON.stringify(payload)),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ]).toString('base64url');
+}
+
+test('a search cursor round-trips Unicode after-keys up to 1024 bytes each and 2048 bytes in total', async () => {
+  const cjk = '界'.repeat(340) + '😀';
+  const emoji = '😀'.repeat(256);
+  expect(Buffer.byteLength(cjk)).toBe(1_024);
+  expect(Buffer.byteLength(emoji)).toBe(1_024);
+  const p = { epoch: 7, after: [cjk, emoji, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, 0, -1, '', ''] };
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    const token = await encodeListCursor(ring, bound, p, now, search);
+    expect(token.length).toBeLessThanOrEqual(4_096);
+    expect(await decodeListCursor(ring, bound, token, now, search)).toEqual({ ok: true, ...p });
+    expect(
+      await decodeListCursor(
+        ring,
+        bound,
+        handmadeSearchCursor(bound, { e: 7, a: p.after, t: now.getTime() }),
+        now,
+        search,
+      ),
+    ).toEqual({ ok: true, ...p });
+    expect(Buffer.from(token, 'base64url').includes(Buffer.from(cjk))).toBe(false);
+  }
+});
+
+test('a search cursor above its per-key total or plaintext bound is refused at encode and decodes as invalid', async () => {
+  const invalid = { ok: false, reason: 'invalid' };
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    const payload = { e: 7, a: [''], t: now.getTime() };
+    // JSON escaping can exceed the plaintext cap while the raw key stays well within its byte cap.
+    const room = 2_560 - Buffer.byteLength(JSON.stringify(payload));
+    const atLimit = '\0'.repeat(Math.floor(room / 6)) + 'x'.repeat(room % 6);
+    payload.a = [atLimit];
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBe(2_560);
+    const p = { epoch: 7, after: payload.a };
+    const token = await encodeListCursor(ring, bound, p, now, search);
+    expect(await decodeListCursor(ring, bound, token, now, search)).toEqual({ ok: true, ...p });
+    expect(await decodeListCursor(ring, bound, handmadeSearchCursor(bound, payload), now, search)).toEqual({
+      ok: true,
+      ...p,
+    });
+
+    for (const after of [
+      ['界'.repeat(340) + '😀x'], // 1,025 UTF-8 bytes in one key.
+      ['😀'.repeat(256), '界'.repeat(340) + '😀', 'x'], // 2,049 bytes in total.
+      [atLimit + 'x'], // 2,561 bytes of plaintext.
+      Array.from({ length: 9 }, () => ''),
+      [Number.MAX_SAFE_INTEGER + 1],
+      [1.5],
+    ]) {
+      await expect(encodeListCursor(ring, bound, { epoch: 7, after }, now, search)).rejects.toThrow(TypeError);
+      const forged = handmadeSearchCursor(bound, { e: 7, a: after, t: now.getTime() });
+      expect(forged.length).toBeLessThanOrEqual(4_096);
+      expect(await decodeListCursor(ring, bound, forged, now, search)).toEqual(invalid);
+    }
+    for (const other of [
+      { ...bound, route: '界'.repeat(86) },
+      { ...bound, query: { q: '😀'.repeat(512) } },
+    ]) {
+      await expect(encodeListCursor(ring, other, position, now, search)).rejects.toThrow(TypeError);
+      expect(await decodeListCursor(ring, other, token, now, search)).toEqual(invalid);
+    }
+    // An unusable ring must never be consulted for an oversized token.
+    const unreadableRing = {
+      current: 1,
+      get keys(): KeyRing['keys'] {
+        throw new Error('Unexpected key lookup');
+      },
+    };
+    expect(await decodeListCursor(unreadableRing, bound, 'A'.repeat(4_097), now, search)).toEqual(invalid);
+  }
+});
+
+test('an anonymous search cursor carries its issue time differs on each encode and expires after 15 minutes', async () => {
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    const token = await encodeListCursor(ring, bound, position, now, search);
+    const again = await encodeListCursor(ring, bound, position, now, search);
+    expect(again).not.toBe(token);
+    const bytes = Buffer.from(token, 'base64url');
+    expect(Buffer.from(again, 'base64url').subarray(2, 18)).not.toEqual(bytes.subarray(2, 18));
+    const material = Buffer.from(hkdfSync('sha256', key(1), bytes.subarray(2, 18), 'rezics/list-cursor/v1', 44));
+    const decipher = createDecipheriv('aes-256-gcm', material.subarray(0, 32), material.subarray(32));
+    decipher.setAAD(searchData(bound));
+    decipher.setAuthTag(bytes.subarray(-16));
+    const plaintext = Buffer.concat([decipher.update(bytes.subarray(18, -16)), decipher.final()]);
+    expect(JSON.parse(plaintext.toString())).toEqual({ e: position.epoch, a: position.after, t: now.getTime() });
+    for (const elapsed of [0, 15 * 60_000])
+      expect(await decodeListCursor(ring, bound, token, later(elapsed), search)).toEqual({ ok: true, ...position });
+    expect(await decodeListCursor(ring, bound, token, later(15 * 60_000 + 1), search)).toEqual({
+      ok: false,
+      reason: 'expired',
+    });
+    const fresh = await encodeListCursor(ring, bound, position, later(15 * 60_000 + 1), search);
+    expect(await decodeListCursor(ring, bound, fresh, later(15 * 60_000 + 1), search)).toEqual({
+      ok: true,
+      ...position,
+    });
+    for (const t of [undefined, 'invalid', 1.5])
+      expect(await decodeListCursor(ring, bound, handmadeSearchCursor(bound, { e: 7, a: [], t }), now, search)).toEqual(
+        { ok: false, reason: 'invalid' },
+      );
+  }
+});
+
+test('a search cursor issued more than 60 seconds ahead decodes as invalid', async () => {
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    for (const lead of [60_000, 60_001]) {
+      const token = await encodeListCursor(ring, bound, position, later(lead), search);
+      expect(await decodeListCursor(ring, bound, token, now, search)).toEqual(
+        lead === 60_000 ? { ok: true, ...position } : { ok: false, reason: 'invalid' },
+      );
+    }
+  }
+});
+
+test('a search cursor never decodes under the default profile and a default cursor never decodes under the search profile', async () => {
+  for (const viewer of [null, viewerId]) {
+    const bound = { ...binding, viewer };
+    const token = await encodeListCursor(ring, bound, position, now, search);
+    for (const defaults of [undefined, {}, { profile: 'default' } as const]) {
+      expect(await decodeListCursor(ring, bound, token, now, defaults)).toEqual({ ok: false, reason: 'invalid' });
+      const defaultToken = await encodeListCursor(ring, bound, position, now, defaults);
+      expect(await decodeListCursor(ring, bound, defaultToken, now, search)).toEqual({ ok: false, reason: 'invalid' });
+      expect(await decodeListCursor(ring, bound, defaultToken, now, { profile: 'default' })).toEqual({
+        ok: true,
+        ...position,
+      });
+    }
+  }
+});
