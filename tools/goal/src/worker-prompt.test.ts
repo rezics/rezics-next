@@ -95,3 +95,19 @@ test('stabilize and critical-path starts skip the worker cap but not the memory 
   expect(startsFirst({ taskClass: 'critical-path', brief: {} } as never)).toBe(true);
   expect(startsFirst({ taskClass: 'implementation', brief: {} } as never)).toBe(false);
 });
+
+test('a capacity waiter counts only live, older tickets ahead of it and clears ended ones', async () => {
+  const { waitersAhead } = await import('./launch.ts');
+  const { mkdtempSync, writeFileSync: write, existsSync: exists } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: joinPath } = await import('node:path');
+  const queue = mkdtempSync(joinPath(tmpdir(), 'capacity-queue-'));
+  const live = `${'1'.padStart(15, '0')}-${process.pid}-a`;
+  const ended = `${'2'.padStart(15, '0')}-2147483646-b`;
+  const mine = `${'3'.padStart(15, '0')}-${process.pid}-c`;
+  const newer = `${'4'.padStart(15, '0')}-${process.pid}-d`;
+  for (const name of [live, ended, mine, newer]) write(joinPath(queue, name), '');
+  expect(waitersAhead(queue, mine)).toBe(1);
+  expect(exists(joinPath(queue, ended))).toBe(false);
+  expect(waitersAhead(queue, live)).toBe(0);
+});

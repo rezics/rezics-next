@@ -1,5 +1,5 @@
 import { spawnSync, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
@@ -261,23 +261,60 @@ export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
 export async function awaitHostCapacity(store: WorkerStore, stateDirectory: string, first = false): Promise<void> {
-  let reported = false;
-  for (;;) {
-    // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
-    const file = join(stateDirectory, 'capacity.json');
-    if (!existsSync(file)) return;
-    let capacity = DEFAULT_CAPACITY;
-    try {
-      capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
-    } catch {
-      /* Defaults. */
-    }
-    const running = first ? 0 : store.attempts().filter((candidate) => candidate.state === 'running').length;
-    if (hasCapacity(running, availableMiB(), capacity)) return;
-    if (!reported) console.error(`Waiting for host capacity (${running} workers running, cap ${capacity.maxWorkers}).`);
-    reported = true;
-    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
+  const file = join(stateDirectory, 'capacity.json');
+  if (!existsSync(file)) return;
+  // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
+  const queue = join(stateDirectory, 'capacity-queue');
+  const ticket = `${String(Date.now()).padStart(15, '0')}-${process.pid}-${crypto.randomUUID()}`;
+  if (!first) {
+    mkdirSync(queue, { recursive: true });
+    writeFileSync(join(queue, ticket), '');
   }
+  let reported = false;
+  try {
+    for (;;) {
+      if (!existsSync(file)) return;
+      let capacity = DEFAULT_CAPACITY;
+      try {
+        capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+      } catch {
+        /* Defaults. */
+      }
+      const running = first ? 0 : store.attempts().filter((candidate) => candidate.state === 'running').length;
+      const ahead = first ? 0 : waitersAhead(queue, ticket);
+      if (hasCapacity(running + ahead, availableMiB(), capacity)) return;
+      if (!reported)
+        console.error(
+          `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+        );
+      reported = true;
+      await new Promise((resolve) => setTimeout(resolve, 15_000));
+    }
+  } finally {
+    if (!first) rmSync(join(queue, ticket), { force: true });
+  }
+}
+/** Live waiters whose tickets are older than `ticket`; a ticket whose process has ended is removed. */
+export function waitersAhead(queue: string, ticket: string): number {
+  let names: string[];
+  try {
+    names = readdirSync(queue);
+  } catch {
+    return 0;
+  }
+  return names.filter((name) => {
+    if (name >= ticket) return false;
+    const pid = Number(name.split('-')[1]);
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return true;
+      rmSync(join(queue, name), { force: true });
+      return false;
+    }
+  }).length;
 }
 export async function launch(
   store: WorkerStore,
