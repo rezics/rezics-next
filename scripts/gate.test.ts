@@ -449,11 +449,10 @@ test("a group's transport failure is retried once and a load-induced workspace i
   mkdirSync(fixture);
   fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain', 'bun test && bun run after-tests');
   fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner', 'bun scripts/check.ts && bun test');
-  const selected = await runGate(
-    { ...local.env, KERNEL_CHECK_ON_REMOTE: '1', REMOTE_CHECK_HOST: 'group-b' },
-    fixture,
-    ['--workspaces', 'apps/a-plain'],
-  );
+  const selected = await runGate({ ...local.env, KERNEL_CHECK_ON_REMOTE: '1', REMOTE_CHECK_HOST: 'group-b' }, fixture, [
+    '--workspaces',
+    'apps/a-plain',
+  ]);
   expect(selected.code).toBe(0);
   expect(selected.stdout).toContain('Load-sensitive workspaces (passed on retry): 1');
   expect(
