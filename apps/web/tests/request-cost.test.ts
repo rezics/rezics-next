@@ -329,7 +329,7 @@ test('board page stays within its bound as s grows', async () => {
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual([
       `GET /v1/boards/${boardId}`,
-      `GET /v1/boards/${boardId}/threads`,
+      `GET /v1/boards/${boardId}/threads?sort=active`,
       `GET /v1/accounts?ids=${contentId(999)}`,
     ]);
     expect(authCalls).toEqual([]);

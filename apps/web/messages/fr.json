@@ -3,6 +3,11 @@
   "account_security_settings": "Paramètres de sécurité",
   "account_sign_in": "Se connecter",
   "account_sign_out": "Se déconnecter",
+  "board_sign_in_to_start": "Connectez-vous pour créer une discussion",
+  "board_sort_active": "Actives",
+  "board_sort_hot": "Populaires",
+  "board_sort_label": "Trier les discussions",
+  "board_sort_new": "Récentes",
   "board_start_thread": "Créer une discussion",
   "board_thread_last_activity": "Dernière activité {time}",
   "board_thread_replies": "Réponses : {count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "Envoyer",
   "thread_write_unavailable": "Cette contribution est temporairement indisponible. Veuillez réessayer.",
   "threads_next_page": "Page suivante",
+  "threads_sign_in_to_reply": "Connectez-vous pour répondre",
   "threads_untitled": "Sans titre"
 }

@@ -3,6 +3,11 @@
   "account_security_settings": "보안 설정",
   "account_sign_in": "로그인",
   "account_sign_out": "로그아웃",
+  "board_sign_in_to_start": "로그인하고 스레드 시작",
+  "board_sort_active": "활성",
+  "board_sort_hot": "인기",
+  "board_sort_label": "스레드 정렬",
+  "board_sort_new": "최신",
   "board_start_thread": "새 스레드 시작",
   "board_thread_last_activity": "최근 활동 {time}",
   "board_thread_replies": "답글: {count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "보내기",
   "thread_write_unavailable": "지금은 게시할 수 없습니다. 다시 시도해 주세요.",
   "threads_next_page": "다음 페이지",
+  "threads_sign_in_to_reply": "로그인하고 답글 달기",
   "threads_untitled": "제목 없음"
 }

@@ -3,6 +3,11 @@
   "account_security_settings": "Sicherheitseinstellungen",
   "account_sign_in": "Anmelden",
   "account_sign_out": "Abmelden",
+  "board_sign_in_to_start": "Anmelden, um einen Thread zu starten",
+  "board_sort_active": "Aktiv",
+  "board_sort_hot": "Beliebt",
+  "board_sort_label": "Threads sortieren",
+  "board_sort_new": "Neu",
   "board_start_thread": "Neuen Thread starten",
   "board_thread_last_activity": "Letzte Aktivität {time}",
   "board_thread_replies": "Antworten: {count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "Senden",
   "thread_write_unavailable": "Der Beitrag ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.",
   "threads_next_page": "Nächste Seite",
+  "threads_sign_in_to_reply": "Anmelden, um zu antworten",
   "threads_untitled": "Ohne Titel"
 }

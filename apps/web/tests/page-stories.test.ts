@@ -280,7 +280,7 @@ test(
       const signedOut = await openStory('board', 'Signed Out', locale);
       try {
         const main = signedOut.page.getByRole('main');
-        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('link', { name: own.board_sign_in_to_start, exact: true }).count()).toBe(1);
         expect(await main.getByRole('link', { name: own.board_start_thread, exact: true }).count()).toBe(0);
       } finally {
         await signedOut.context.close();
@@ -308,7 +308,7 @@ test(
       const signedOut = await openStory('thread', 'Signed Out', locale);
       try {
         const main = signedOut.page.getByRole('main');
-        expect(await main.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+        expect(await main.getByRole('link', { name: own.threads_sign_in_to_reply, exact: true }).count()).toBe(1);
         expect(await main.getByRole('textbox', { name: own.thread_reply_body_label, exact: true }).count()).toBe(0);
         expect(await main.getByRole('button', { name: own.thread_write_send, exact: true }).count()).toBe(0);
       } finally {

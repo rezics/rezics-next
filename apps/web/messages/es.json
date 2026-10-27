@@ -3,6 +3,11 @@
   "account_security_settings": "Configuración de seguridad",
   "account_sign_in": "Iniciar sesión",
   "account_sign_out": "Cerrar sesión",
+  "board_sign_in_to_start": "Inicia sesión para crear un hilo",
+  "board_sort_active": "Activos",
+  "board_sort_hot": "Populares",
+  "board_sort_label": "Ordenar hilos",
+  "board_sort_new": "Nuevos",
   "board_start_thread": "Crear un hilo",
   "board_thread_last_activity": "Última actividad {time}",
   "board_thread_replies": "Respuestas: {count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "Enviar",
   "thread_write_unavailable": "Esta contribución no está disponible temporalmente. Inténtalo de nuevo.",
   "threads_next_page": "Página siguiente",
+  "threads_sign_in_to_reply": "Inicia sesión para responder",
   "threads_untitled": "Sin título"
 }

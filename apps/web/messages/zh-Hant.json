@@ -3,6 +3,11 @@
   "account_security_settings": "安全性設定",
   "account_sign_in": "登入",
   "account_sign_out": "登出",
+  "board_sign_in_to_start": "登入後建立討論串",
+  "board_sort_active": "活躍",
+  "board_sort_hot": "熱門",
+  "board_sort_label": "討論串排序",
+  "board_sort_new": "最新",
   "board_start_thread": "建立新討論串",
   "board_thread_last_activity": "最近活動 {time}",
   "board_thread_replies": "回覆：{count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "送出",
   "thread_write_unavailable": "目前無法發布，請稍後再試。",
   "threads_next_page": "下一頁",
+  "threads_sign_in_to_reply": "登入後回覆",
   "threads_untitled": "未命名"
 }

@@ -128,7 +128,7 @@ function ThreadPage() {
           onSuccess={(post) => setPosts((current) => ({ ...current, posts: [...current.posts, post] }))}
         />
       ) : session === 'signed-out' ? (
-        <SignInPrompt returnTo={returnTo} />
+        <SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />
       ) : null}
     </article>
   );

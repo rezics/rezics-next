@@ -3,6 +3,11 @@
   "account_security_settings": "安全设置",
   "account_sign_in": "登录",
   "account_sign_out": "退出登录",
+  "board_sign_in_to_start": "登录后创建讨论串",
+  "board_sort_active": "活跃",
+  "board_sort_hot": "热门",
+  "board_sort_label": "讨论串排序",
+  "board_sort_new": "最新",
   "board_start_thread": "创建新讨论串",
   "board_thread_last_activity": "最近活动 {time}",
   "board_thread_replies": "回复：{count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "发送",
   "thread_write_unavailable": "当前无法发布，请稍后再试。",
   "threads_next_page": "下一页",
+  "threads_sign_in_to_reply": "登录后回复",
   "threads_untitled": "无标题"
 }

@@ -19,7 +19,7 @@ type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type { ThreadPost };
 
-type PageInput = { id: string; cursor?: string };
+type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
 const draftCookie = 'rezics_draft_key';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -38,12 +38,14 @@ function validatePageInput(input: unknown): PageInput {
     !('id' in input) ||
     typeof input.id !== 'string' ||
     input.id.length > 128 ||
-    ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string')
+    ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
+    ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new')
   )
     throw notFound();
   return {
     id: input.id,
     ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    ...('sort' in input && (input.sort === 'hot' || input.sort === 'new') ? { sort: input.sort } : {}),
   };
 }
 

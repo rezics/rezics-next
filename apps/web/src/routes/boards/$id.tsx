@@ -8,14 +8,28 @@ import { readBoardPage } from '../../threads/reads';
 import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
 import { Byline, fullDateTime, timeText } from '../../threads/byline';
+import { BoardSortNav, boardSortFromSearch } from '../../threads/board-sort';
 import { ClosedErrorPage } from '../../shell/closed';
 import { PageHeading } from '../../shell/page-heading';
 
 export const Route = createFileRoute('/boards/$id')({
-  validateSearch: (search: Record<string, unknown>) =>
-    typeof search.cursor === 'string' ? { cursor: search.cursor } : {},
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ params, deps }) => readBoardPage({ data: { id: params.id, cursor: deps.cursor } }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const sort = boardSortFromSearch(search.sort);
+    return {
+      ...(typeof search.cursor === 'string' ? { cursor: search.cursor } : {}),
+      ...(sort ? { sort } : {}),
+    };
+  },
+  // The router passes unvalidated keys through, so read the sort through the same check again.
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, sort: boardSortFromSearch(search.sort) }),
+  loader: ({ params, deps }) =>
+    readBoardPage({
+      data: {
+        id: params.id,
+        ...(deps.cursor ? { cursor: deps.cursor } : {}),
+        ...(deps.sort ? { sort: deps.sort } : {}),
+      },
+    }),
   head: ({ loaderData }) => ({ meta: [{ title: loaderData?.board.title ?? m.threads_untitled() }] }),
   errorComponent: ClosedErrorPage,
   component: BoardPage,
@@ -27,22 +41,27 @@ function BoardPage() {
   const location = useLocation();
   const id = Route.useParams().id;
   const locale = getLocale();
+  const sort = boardSortFromSearch(Route.useSearch().sort);
+  const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
+      <header>
         <PageHeading>{board.title ?? m.threads_untitled()}</PageHeading>
-        {session === 'signed-in' ? (
-          <a className={buttonVariants({ size: 'lg' })} href={`/${locale}/boards/${id}/new`}>
-            {m.board_start_thread()}
-          </a>
-        ) : session === 'signed-out' ? (
-          <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
-        ) : null}
       </header>
       <section className="space-y-4" aria-labelledby="board-threads-heading">
         <h2 id="board-threads-heading" className="text-xl font-semibold">
           {m.board_threads_heading()}
         </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <BoardSortNav boardId={id} sort={sort ?? 'active'} />
+          {session === 'signed-in' ? (
+            <a className={buttonVariants({ size: 'lg' })} href={`/${locale}/boards/${id}/new`}>
+              {m.board_start_thread()}
+            </a>
+          ) : session === 'signed-out' ? (
+            <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
+          ) : null}
+        </div>
         {threads.threads.length ? (
           <ul className="divide-y divide-border/60 border-y border-border/60">
             {threads.threads.map((thread) => {
@@ -96,7 +115,7 @@ function BoardPage() {
             <Link
               to="/boards/$id"
               params={{ id }}
-              search={{ cursor: threads.next }}
+              search={{ cursor: threads.next, ...(sort ? { sort } : {}) }}
               className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
               {m.threads_next_page()}

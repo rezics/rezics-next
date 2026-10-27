@@ -50,7 +50,7 @@ function NewThreadPage() {
           }}
         />
       ) : session === 'signed-out' ? (
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
+        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} label={m.board_sign_in_to_start()} />
       ) : null}
       <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
         {m.board_threads_heading()}

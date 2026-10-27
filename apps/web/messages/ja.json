@@ -3,6 +3,11 @@
   "account_security_settings": "セキュリティ設定",
   "account_sign_in": "ログイン",
   "account_sign_out": "ログアウト",
+  "board_sign_in_to_start": "ログインしてスレッドを作成",
+  "board_sort_active": "アクティブ",
+  "board_sort_hot": "人気",
+  "board_sort_label": "スレッドの並べ替え",
+  "board_sort_new": "新着",
   "board_start_thread": "新しいスレッドを作成",
   "board_thread_last_activity": "最終更新 {time}",
   "board_thread_replies": "返信: {count}",
@@ -447,5 +452,6 @@
   "thread_write_send": "送信",
   "thread_write_unavailable": "現在、投稿機能を利用できません。もう一度お試しください。",
   "threads_next_page": "次のページ",
+  "threads_sign_in_to_reply": "ログインして返信",
   "threads_untitled": "無題"
 }

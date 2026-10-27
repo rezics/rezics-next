@@ -387,7 +387,9 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 - **Touches:** Root preferences/D and public board plus thread-page K reads started together, then one batched
   identity read for the page's authors; preserve kernel thread order and pass `next` as the paging cursor. Each row
-  is compact: author, reply count and last activity come from the thread row itself, with no read per thread
+  is compact: author, reply count and last activity come from the thread row itself, with no read per thread. The
+  `sort` search parameter (`hot` or `new`, Active when absent or unknown) is the threads read's `sort` query, `new`
+  sending none
 - **Bound:** ≤3 K (board and one page of at most s ≤ 100 threads, then at most one identity read), ≤1 D, 0 R/A;
   work and buffered JSON are O(s)
 - **Growth check:** `tests/request-cost.test.ts`: `board page stays within its bound as s grows`

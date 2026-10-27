@@ -9,7 +9,7 @@ import { readPageAuthors, type PageAuthors } from './read';
 type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
-export type PageInput = { id: string; cursor?: string };
+export type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
   if (result.error) {
@@ -24,7 +24,11 @@ export async function loadBoardPageWithAuthors(
   data: PageInput,
 ): Promise<{ board: Board['board']; threads: ThreadPage; authors: PageAuthors; now: string }> {
   const now = new Date().toISOString();
-  const query = data.cursor ? { query: { cursor: data.cursor } } : {};
+  // Active is the default; New is the kernel's own order and sends no sort.
+  const sort: 'active' | 'hot' | undefined = data.sort === 'new' ? undefined : (data.sort ?? 'active');
+  const query = {
+    query: { ...(data.cursor ? { cursor: data.cursor } : {}), ...(sort ? { sort } : {}) },
+  };
   const [boardResult, threadsResult] = await Promise.all([
     client.boards({ id: data.id }).get(),
     client.boards({ id: data.id }).threads.get(query),
