@@ -26,7 +26,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountsWorkModule } from '../../src/access/membership-work.ts';
 import { startWorker } from '../../src/worker.ts';
-import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const password = 'continuation-password';
@@ -473,7 +473,7 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect(errors).toBe('');
     const first = JSON.parse(output) as { next: string; pageKey: string };
     expect(first.next).toBeString();
-    const late = await readyBindings().operators.responsibilityPage({
+    const late = await readyBindings().operators.responsibilityWorkPage({
       operatorAccountId: f.operator.accountId,
       limit: 100,
       cursor: first.next!,
@@ -515,7 +515,7 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect((await suspended(f.subjects[0]!)).epoch).toBe('2');
   }, 60_000);
 
-  test('signed responsibility pages refuse altered, foreign, stale and invalid-limit cursors before scanning', async () => {
+  test('opaque responsibility pages refuse altered, foreign, stale and invalid-limit cursors before scanning', async () => {
     const operator = await person();
     const operatorId = operator.accountId;
     for (let i = 0; i < 3; i++)
@@ -537,20 +537,29 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     const changed = `${cursor.slice(0, 12)}${cursor[12] === 'A' ? 'B' : 'A'}${cursor.slice(13)}`;
     for (const bad of [
       changed,
-      encodeCursor(referenceKeys, { operation: 'wrong-purpose', parameters: {} }, { epoch: 1, after: [newId(1)] }),
+      await encodeListCursor(
+        referenceKeys,
+        { route: 'wrong-purpose', viewer: null, query: {} },
+        { epoch: 1, after: [newId(1)] },
+        new Date(),
+      ),
     ]) {
       await expect(
-        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, cursor: bad }),
+        readyBindings().operators.responsibilityPage({
+          operatorAccountId: f.operator.accountId,
+          limit: 1,
+          cursor: bad,
+        }),
       ).rejects.toThrow();
     }
     await expect(
-      readyBindings().operators.responsibilityPage({ operatorAccountId: governor.accountId, cursor }),
+      readyBindings().operators.responsibilityPage({ operatorAccountId: governor.accountId, limit: 1, cursor }),
     ).rejects.toThrow();
     const partition = partitionOf(routeOf(f.operator.accountId)!);
     await facts.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]);
     try {
       await expect(
-        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, cursor }),
+        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, limit: 1, cursor }),
       ).rejects.toThrow();
     } finally {
       await facts.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [partition]);

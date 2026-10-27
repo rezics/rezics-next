@@ -120,7 +120,7 @@ export function createOperatorFenceRunner(config: {
     // relation and reservation are independently rechecked under its own lock.
     const batch = existing
       ? undefined
-      : await operators.responsibilityPage({
+      : await operators.responsibilityWorkPage({
           operatorAccountId: root.accountId,
           limit: pageSize,
           ...(cursor ? { cursor } : {}),

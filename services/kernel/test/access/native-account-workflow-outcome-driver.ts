@@ -24,7 +24,7 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import platformGovernance from '../../src/access/platform-governance.json';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
 import { registerOperatorFenceWork } from '../../src/access/operator-fence-work.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
@@ -1864,12 +1864,18 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
       if (mismatch === 'bytes') supplied = `${cursor ?? ''}x`;
       if (mismatch === 'epoch' && cursor) {
         const binding = {
-          operation: 'access.operator.responsibility.list',
-          parameters: { operatorAccountId: f.ownerId, purpose: 'operator', sort: 'reservationId:asc' },
+          route: 'access.operator.responsibility.list',
+          viewer: null,
+          query: { operatorAccountId: f.ownerId, purpose: 'operator', sort: 'reservationId:asc', limit },
         };
-        const decoded = decodeCursor(referenceKeys, binding, cursor);
-        if (!decoded.ok) throw new Error('Native page returned an invalid signed cursor');
-        supplied = encodeCursor(referenceKeys, binding, { epoch: decoded.epoch + 1, after: decoded.after });
+        const decoded = await decodeListCursor(referenceKeys, binding, cursor, new Date());
+        if (!decoded.ok) throw new Error('Native page returned an invalid opaque cursor');
+        supplied = await encodeListCursor(
+          referenceKeys,
+          binding,
+          { epoch: decoded.epoch + 1, after: decoded.after },
+          new Date(),
+        );
       }
       return refused(async () => {
         const value = await native().operators.responsibilityPage({

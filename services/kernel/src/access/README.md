@@ -213,18 +213,23 @@ place. The existing request/approval implementation alone does not satisfy that 
 
 `createOperatorCommands` remains an internal privileged application port; it has no public list route.
 Production composition must supply `OperatorConfig.cursorKeys: KeyRing` to use `responsibilityPage` (the field remains optional when constructing commands for other operations):
-`current` is the active key ID (integer 0–255), and `keys` maps trusted IDs to signing keys of at least 32 bytes.
-Keep this ring stable across requests, workers and restarts, and retain verification keys during rotation for the shared 15-minute cursor lifetime.
+`current` is the active key ID (integer 0–255), and `keys` maps trusted IDs to token keys of at least 32 bytes.
+Keep this ring stable across requests, workers and restarts, and retain decryption keys during rotation for the shared 15-minute cursor lifetime.
 Construction without this field still supports existing commands; every page call fails closed without a valid active key.
 There is no environment lookup, generated key or unsigned fallback in this factory.
 The existing pool must reach the operator anchor's `core.partition` row; its epoch is read through `readPartition` in the same repeatable-read snapshot as the page, so callers supply no epoch override.
 A missing anchor partition also denies the page call before reading responsibilities.
 
-The only page contract is `{ operatorAccountId, cursor?: string, limit?: number }` returning `{ operators, next: string | null }`.
+The list port accepts `{ operatorAccountId, cursor?: string, limit?: number }` and an optional authenticated `Actor`, returning `{ operators, next: string | null }`.
+Trusted composition supplies the acting account from authentication; omitting the actor denotes an anonymous viewer.
 The default limit is 20; explicit limits must be integers from 1 to 100.
 Rows retain exactly `{ reservationId, subjectAccountId }`, including pending responsibilities conservatively; they do not establish current relation authority.
-`cursor` and `next` use only the shared `encodeCursor`/`decodeCursor` format, binding operation `access.operator.responsibility.list`, operator identity, purpose `operator`, ascending reservation order and partition epoch.
-Page size may change without changing the ordering or filter semantics.
+`cursor` and `next` use the opaque `encodeListCursor`/`decodeListCursor` format.
+Because this internal port has no HTTP route, its fixed feed name is `access.operator.responsibility.list`; the binding includes the acting account ID (or `null` for anonymous), operator identity, purpose `operator`, ascending reservation order and the effective limit.
+The encrypted position retains the partition epoch and reservation after-key. A cursor cannot cross viewers or page sizes.
+Issuance and expiry use `OperatorConfig.clock`, defaulting to the kernel clock installed on Access.
+The scan touches the same rows and statements; cursor encryption adds constant CPU for HKDF and AES-GCM per token.
+The separate internal `responsibilityWorkPage` port retains sealed work cursors for durable fence fanout; these never reach list readers.
 Malformed, expired, wrong-key, differently bound and stale-epoch cursors fail before the responsibility query.
 A token conveys no permission: only trusted composition may call this internal port, and Auth still authorizes its operation before its bounded 64-row fanout steps.
 

@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { newId } from '../../src/route/route.ts';
-import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
@@ -62,13 +62,15 @@ test('operator responsibility keyset seeks stay bounded with mixed-purpose histo
         if (late) {
           // A fixed deep position is minted by the shared codec, just as a
           // preceding native page would do; never pass raw IDs to the page port.
-          cursor = encodeCursor(
+          cursor = await encodeListCursor(
             cursorKeys,
             {
-              operation: 'access.operator.responsibility.list',
-              parameters: { operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
+              route: 'access.operator.responsibility.list',
+              viewer: null,
+              query: { operatorAccountId, purpose: 'operator', sort: 'reservationId:asc', limit: 20 },
             },
             { epoch: 1, after: [id(start)] },
+            new Date(),
           );
         }
         const page = await commands().responsibilityPage({ operatorAccountId, ...(cursor ? { cursor } : {}) });

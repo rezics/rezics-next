@@ -7,6 +7,7 @@ import credentialConsume from './operator-opening-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
 import {
   runCommand,
   currentCommand,
@@ -19,7 +20,8 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   accessCheck,
@@ -27,6 +29,7 @@ import {
   type AccessClient,
   type AccessContext,
   type AccountActor,
+  type Actor,
   type ActionCatalogue,
 } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
@@ -125,7 +128,9 @@ export type OperatorConfig = {
   actions: ActionCatalogue;
   /** Registered colon-form account/access permission protecting the operator resource. */
   managementAction: string;
-  /** Trusted shared cursor signing keys; required only for responsibilityPage. */
+  /** Trusted kernel clock; defaults to the clock installed on Access. */
+  clock?: KernelClock;
+  /** Trusted shared token keys; required only for responsibility pages. */
   cursorKeys?: KeyRing;
 };
 type Mutation = {
@@ -247,7 +252,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     /^(account|access):[a-z][a-z0-9_-]*$/.test(managementAction) &&
       config.actions.get(managementAction)?.anonymous === false,
   );
-  const clock = accessClock(access);
+  const clock = config.clock ?? accessClock(access);
   const execute = executor(pool, clock);
   const read = (id: string) => withConnection(pool, (client) => account(client, id));
   const authenticated: Evaluation = {
@@ -399,6 +404,83 @@ export function createOperatorCommands(config: OperatorConfig) {
     },
   };
   managements.set(access, management);
+  async function responsibilityPage(
+    input: { operatorAccountId: string; limit?: number; cursor?: string },
+    viewer: Actor = { kind: 'anonymous' },
+    work = false,
+  ) {
+    input = { ...input };
+    const limit = input.limit === undefined ? 20 : input.limit;
+    requireAllowed(Number.isInteger(limit) && limit >= 1 && limit <= 100);
+    const operatorRoute = route(input.operatorAccountId);
+    const ring = config.cursorKeys;
+    requireAllowed(ring);
+    // Even an empty page fails closed if the active token key is unavailable.
+    const tokenKey = ring.keys.get(ring.current);
+    requireAllowed(
+      Number.isInteger(ring.current) &&
+        ring.current >= 0 &&
+        ring.current <= 255 &&
+        tokenKey &&
+        tokenKey.byteLength >= 32,
+    );
+    const workBinding = {
+      operation: 'access.operator.responsibility.list',
+      parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
+    };
+    const binding = {
+      route: workBinding.operation,
+      viewer: viewer.kind === 'account' ? viewer.accountId : null,
+      query: { ...workBinding.parameters, limit },
+    };
+    const now = clock();
+    let after = '';
+    let cursorEpoch: number | undefined;
+    if (input.cursor !== undefined) {
+      const decoded = work
+        ? decodeCursor(ring, workBinding, input.cursor)
+        : await decodeListCursor(ring, binding, input.cursor, now);
+      requireAllowed(decoded.ok);
+      requireAllowed(decoded.after.length === 1 && typeof decoded.after[0] === 'string');
+      after = decoded.after[0];
+      route(after);
+      cursorEpoch = decoded.epoch;
+    }
+    return withConnection(pool, async (client) => {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const partition = await readPartition(client, partitionOf(operatorRoute));
+        requireAllowed(partition && (cursorEpoch === undefined || cursorEpoch === partition.epoch));
+        const rows = await pageRead.run(client, {
+          route: operatorRoute,
+          operator_id: input.operatorAccountId,
+          after,
+          limit: limit + 1,
+        });
+        const operators = rows.slice(0, limit);
+        const next =
+          rows.length > limit
+            ? work
+              ? encodeCursor(ring, workBinding, { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] })
+              : await encodeListCursor(
+                  ring,
+                  binding,
+                  { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] },
+                  now,
+                )
+            : null;
+        await client.query('COMMIT');
+        return { operators, next };
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(client, rollbackError as Error);
+        }
+        throw error;
+      }
+    });
+  }
   return {
     /** Committed mechanical work only. Lock relation and slot with the account,
      * then use the native fence mutation in that same subject transaction. */
@@ -657,67 +739,14 @@ export function createOperatorCommands(config: OperatorConfig) {
         },
       );
     },
-    /** Bounded operator-local page for the later durable suspension fanout. It
-     * includes pending reservations conservatively. It is not relation authority.
+    /** Bounded operator-local observation, including pending reservations; not relation authority.
+     * Trusted composition supplies the authenticated viewer, never a request body's viewer id.
      */
-    async responsibilityPage(input: { operatorAccountId: string; limit?: number; cursor?: string }) {
-      input = { ...input };
-      const limit = input.limit === undefined ? 20 : input.limit;
-      requireAllowed(Number.isInteger(limit) && limit >= 1 && limit <= 100);
-      const operatorRoute = route(input.operatorAccountId);
-      const ring = config.cursorKeys;
-      requireAllowed(ring);
-      // Even an empty page fails closed if the active signing key is unavailable.
-      const signingKey = ring.keys.get(ring.current);
-      requireAllowed(
-        Number.isInteger(ring.current) &&
-          ring.current >= 0 &&
-          ring.current <= 255 &&
-          signingKey &&
-          signingKey.byteLength >= 32,
-      );
-      const binding: CursorBinding = {
-        operation: 'access.operator.responsibility.list',
-        parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
-      };
-      let after = '';
-      let cursorEpoch: number | undefined;
-      if (input.cursor !== undefined) {
-        const decoded = decodeCursor(ring, binding, input.cursor);
-        requireAllowed(decoded.ok);
-        requireAllowed(decoded.after.length === 1 && typeof decoded.after[0] === 'string');
-        after = decoded.after[0];
-        route(after);
-        cursorEpoch = decoded.epoch;
-      }
-      return withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const partition = await readPartition(client, partitionOf(operatorRoute));
-          requireAllowed(partition && (cursorEpoch === undefined || cursorEpoch === partition.epoch));
-          const rows = await pageRead.run(client, {
-            route: operatorRoute,
-            operator_id: input.operatorAccountId,
-            after,
-            limit: limit + 1,
-          });
-          const operators = rows.slice(0, limit);
-          const next =
-            rows.length > limit
-              ? encodeCursor(ring, binding, { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] })
-              : null;
-          await client.query('COMMIT');
-          return { operators, next };
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      });
-    },
+    responsibilityPage: (input: { operatorAccountId: string; limit?: number; cursor?: string }, viewer?: Actor) =>
+      responsibilityPage(input, viewer),
+    /** Internal fanout work cursors stay on the seal and never reach a list reader. */
+    responsibilityWorkPage: (input: { operatorAccountId: string; limit?: number; cursor?: string }) =>
+      responsibilityPage(input, undefined, true),
     /** Advisory local eligibility. The actual lifecycle tombstone rechecks holds
      * with the locked account and database guard, atomically with deletion.
      */
