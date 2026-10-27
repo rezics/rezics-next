@@ -13,6 +13,7 @@
     "services/kernel/test/library/bulk-outcome-page.test.ts",
     "services/kernel/test/library/listing-public-history-schema.test.ts",
     "services/kernel/test/library/listing-source-observer.test.ts",
+    "services/kernel/test/library/sitemap-contract.test.ts",
     "packages/client/src/kernel/**",
     "packages/document/schema/**",
     "packages/ui/src/shadcn/**",

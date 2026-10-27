@@ -430,6 +430,11 @@ The [partitioned-sitemap research](../../../../docs/research/partitioned-sitemap
 partition-major immutable seek design. `GET /v1/sitemap/collections` accepts `cursor` and `limit` from 1 to 1000,
 defaulting to 1000, and returns `{items: [{id, lastModified}], next}` as defined by the shared content schemas.
 This is a bounded JSON discovery feed; downstream sitemap generation consumes it until `next` is null.
+The public route uses the shared public read rate limit. Omitting `cursor` starts a walk; an empty string is invalid,
+as in the content feeds. Malformed, foreign or unauthentic continuations answer `invalid_cursor`.
+Before discovering candidates, the shared collections-group admission checks the anonymous reader. A closed group
+returns `{items: [], next: null}` without candidate discovery or a checkpoint, including for bearer callers.
+Dependency and deadline failures propagate as unavailable responses rather than empty pages or candidate denials.
 
 Walk partitions in numeric order and seek ascending `(route, collection_id)` within each partition's sixteen-route
 interval, using the active/public partial index. IDs and routes are immutable seek keys; mutable timestamps, titles
@@ -449,6 +454,8 @@ an unbounded per-address loop or a request scanning all empty partitions. Short 
 only established exhaustion of the final partition returns null. Preserve the checkpoint partition's epoch,
 including on exhausted markers, and validate it on resume. Partition moves and unavailable authority retain normal
 availability/stale-cursor behavior rather than being treated as empty partitions.
+Revalidating a resumed exhausted marker counts toward the four visited partitions. An otherwise empty catalogue
+therefore makes bounded progress over several requests; a non-null cursor does not promise a remaining item.
 
 Return `lastModified` from the current `collection.updated_at` observed with disclosure. Existing Collection and
 member write paths maintain it; this contract adds neither a new write update nor a synthetic generation timestamp.
@@ -458,8 +465,13 @@ publication behind the checkpoint may wait for a fresh walk, and cursor replay c
 Keep the complete seek position confidential through `src/tokens/list-cursor.ts` WebCrypto AES-GCM, using the shared
 async API and required kernel-clock `Date`. Associated data binds `route: 'GET /v1/sitemap/collections'`,
 `viewer: null` and the effective query including limit. Use the existing `KERNEL_SESSION_KEYS` rotation: the current
-key issues cursors, retained keys decrypt them, and retirement invalidates cursors under that key. Signed-only
-cursors and Library-local AES/HMAC wrappers do not satisfy this contract.
+key issues cursors, retained keys decrypt them, and retirement invalidates cursors under that key. Anonymous
+continuations are deterministic and timeless under the shared helper's `viewer: null` policy, including when
+the request carries a bearer. The account-viewer lifetime does not apply to this feed. The trusted server decoder
+recovers the checkpoint; confidentiality protects its representation on the wire and its associated-data binding.
+Signed-only cursors and Library-local AES/HMAC wrappers do not satisfy this contract. `sitemap-position.ts` only validates and
+maps the typed checkpoint through the shared helper; it implements no cryptography. This shared helper supersedes
+the research's open token representation question. See [Opaque list cursors](../../README.md#opaque-list-cursors).
 
 ## Cost
 
@@ -749,3 +761,9 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Touches: one partition-local route/id partial B-tree range, at most `B` active/public candidates, `B <= 4000`; no member or private-state relation and no all-partition enumeration.
 - Bound: `O(B)` rows, one statement, `O(log N + B)` blocks independent of private/unlisted/deleted population. This is candidate discovery; the eventual feed separately budgets partitions and live anonymous authority checks.
 - Growth check: `test/library/growth-sitemap-discovery.test.ts`: `Collection sitemap discovery cost stays bounded as public and hidden Collections grow`, `[256, 1024, 4096]`, first and continuation pages, no planner pins.
+
+### Collection sitemap page
+
+- Touches: At most four partition-interval partial-index seeks yielding at most `4L` candidates, bounded partition epoch reads and existing anonymous disclosure/gate probes per candidate. No member, subject, progress, copy or private-state population scan.
+- Bound: `O(Q + L)` rows and statements and `O((Q + L) log N)` blocks, with `Q <= 4` and `L <= 1000`, independent of the total Collection, member or curator population. Sparse traversal work carries across pages.
+- Growth check: `test/library/growth-sitemap.test.ts`: `Collection sitemap page cost stays bounded as Collections and hidden candidates grow`, first and continuation pages with listed, filtered and denied candidates grown separately, including empty partitions and routes. Rows and statements stay constant; blocks stay logarithmic. The shared growth classifier counts catalog probes.

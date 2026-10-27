@@ -25,7 +25,7 @@ type CuratorPageOptions = { curatorAccountId: string; cursor?: string | null; li
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
-type Sink = { seen: boolean; row: StoredCollection | null };
+type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
 export type CollectionView = {
   id: string;
   curatorAccountId: string;
@@ -132,7 +132,7 @@ function disclose(
   viewer: Actor,
 ): StoredCollection | null {
   if (!row || row.state !== 'active') return null;
-  if (row.visibility === 'public' || row.visibility === 'unlisted') return row;
+  if (row.visibility === 'public' || row.visibility === 'unlisted') return allowed ? row : null;
   if (!allowed || !actor(viewer) || account === null || !grantCapable(account, viewer)) return null;
   return row;
 }
@@ -180,10 +180,16 @@ function readEligibility(route: number, id: string, sink: Sink) {
     },
     // False leaves the owner's grant path intact. A throw would hide a private Collection from its curator.
     async verify({ client }) {
-      const row = await collectionRead.run(queryOf(client), { route, id });
-      sink.seen = true;
-      sink.row = row;
-      return row !== null && row.state === 'active' && row.visibility !== 'private';
+      try {
+        const row = await collectionRead.run(queryOf(client), { route, id });
+        sink.seen = true;
+        sink.row = row;
+        return row !== null && row.state === 'active' && row.visibility !== 'private';
+      } catch (error) {
+        // Access fails closed on evidence errors. The owning read must still preserve an unavailable outcome.
+        sink.failure = { error };
+        throw error;
+      }
     },
   });
 }
@@ -194,7 +200,11 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
 
   return { readCollection, listCollections, listAccountCollections, listMembers, listSubjectCollections };
 
-  async function loadCollection(viewer: Actor, id: string): Promise<StoredCollection | null> {
+  async function loadCollection(
+    viewer: Actor,
+    id: string,
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+  ): Promise<StoredCollection | null> {
     if (typeof id !== 'string') return null;
     const route = routeOf(id);
     if (route === null) return null;
@@ -206,7 +216,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
       { route, id, eligibility: readEligibility(route, id, sink) },
       {
         pool,
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+        deadline,
       },
     );
     return readOnly(pool, async (client) => {
@@ -215,13 +225,14 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
           ? await readAccount(client, routeOf(viewer.accountId)!, viewer.accountId)
           : null;
       const allowed = await check(client);
+      if (sink.failure) throw sink.failure.error;
       if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
       return disclose(sink.row, allowed, account, viewer);
     });
   }
 
-  async function readCollection(viewer: Actor, id: string): Promise<CollectionView> {
-    const row = await loadCollection(viewer, id);
+  async function readCollection(viewer: Actor, id: string, deadline?: number): Promise<CollectionView> {
+    const row = await loadCollection(viewer, id, deadline);
     if (!row) throw notFound();
     return collectionView(row);
   }

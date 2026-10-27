@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { SitemapQuerySchema, SitemapBoardPageSchema } from '../content/schemas.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -14,6 +15,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
+import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 
@@ -145,7 +147,30 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   const viewDependencies = () => ({ ...dependencies, access: dependencies.access() });
   const write = () => (commands ??= createCollectionCommands({ pool, access: dependencies.access(), clock }));
   const read = () => (reads ??= createCollectionReads({ pool, access: dependencies.access(), tokens }));
+  const sitemapQuery = strict(SitemapQuerySchema);
   return app
+    .get(
+      '/v1/sitemap/collections',
+      {
+        query: SitemapQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: { 200: strict(SitemapBoardPageSchema), ...failures },
+        detail: {
+          operationId: 'sitemap_collections.list',
+          description:
+            'Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 × limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.',
+          'x-exposure': 'public',
+          'x-action': 'collection:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, admission, job }) =>
+        admission.run('normal', job, () =>
+          listSitemapCollections({ pool, tokens, clock, access: dependencies.access() }, job.deadline, query),
+        ),
+    )
     .post(
       '/v1/collections',
       {

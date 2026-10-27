@@ -161,6 +161,7 @@ const typed = [
   'GET /v1/sitemap/threads',
   'GET /v1/sitemap/realms',
   'GET /v1/sitemap/spaces',
+  'GET /v1/sitemap/collections',
   'GET /v1/boards/:id',
   'GET /v1/boards/:id/reports',
   'GET /v1/threads/:id/reports',
