@@ -107,7 +107,7 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
       '-c',
       `tool_output_token_limit=${codex.toolOutputTokens}`,
       '-c',
-      `service_tier=${JSON.stringify(codex.serviceTier)}`,
+      `service_tier=${JSON.stringify(profile.serviceTier ?? codex.serviceTier)}`,
       ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
       '-c',
       'features.multi_agent=false',

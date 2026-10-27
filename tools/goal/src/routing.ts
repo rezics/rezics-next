@@ -16,6 +16,7 @@ export function readRouting(file: string): RoutingTable {
     if (!p || !['codex', 'grok', 'cursor', 'claude'].includes(p.cli) || !p.model || !p.poolClass
       || !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)) throw new Error('invalid routing profile');
     if (p.model.includes('sol') && !['medium', 'high', 'low'].includes(p.effort)) throw new Error('Sol effort exceeds high');
+    if (p.serviceTier !== undefined && !['default', 'fast'].includes(p.serviceTier)) throw new Error('invalid routing profile service tier');
   };
   for (const key of ['implementation', 'interface', 'bulk-text', 'claim', 'specification', 'critical-path', 'research'] as const) {
     const route = table.classes[key];
