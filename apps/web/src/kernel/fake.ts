@@ -11,6 +11,7 @@ import {
 import platformProfileJson from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import type { Related, Subject, Summary } from '../subject/types';
 import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
+import { answerFakeRoute, mergeFakeFixtures } from './fake-modules.ts';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
@@ -85,6 +86,8 @@ type Fixtures = {
   /** Accounts by handle; each is an agent, and `subject` names the subject it is verified as. */
   accounts?: FixtureAccount[];
 };
+
+export type { Fixtures };
 
 /** One account as the fake kernel serves it: the public profile, and the activity its lists page through. */
 export type FixtureAccount = {
@@ -297,6 +300,8 @@ async function selectRecording(
   pathname: string,
   recordings: Record<string, KernelRecording>,
 ): Promise<KernelRecording | undefined> {
+  const moduleRecording = await answerFakeRoute('story', request, recordings);
+  if (moduleRecording) return moduleRecording;
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     // A shelf reads one status at a time; the recording holds every status, so the answer keeps the asked one.
     const state = new URL(request.url).searchParams.get('state');
@@ -825,9 +830,13 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
         subjects: [...given.subjects, ...(demoAgentSubjects as unknown as FixtureSubject[])],
         accounts: demoAgentAccounts,
       };
+  const moduleFixtures = mergeFakeFixtures(fixtures);
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fixtures = moduleFixtures;
     const request = new Request(input, init);
     const url = new URL(request.url);
+    const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
+    if (moduleRecording) return recordedResponse(moduleRecording);
     if (request.method === 'GET' && url.pathname === '/v1/subjects:suggest')
       return recordedResponse(
         suggestionRead(

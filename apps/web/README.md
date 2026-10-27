@@ -184,6 +184,17 @@ subject reads.
 
 ### Storybook and page recordings
 
+Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
+`src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
+`routes` array typed as `FakeRoute[]` from `fake-modules.ts`: each route has a `method`, an exact pathname or regular
+expression `path`, and a `story` answer, a `fixture` answer, or both. Answers receive `{ request, recordings, match }`
+(plus `fixtures` for fixture answers) and return a `KernelRecording` or decline with `undefined`; async answers work
+too. Read recordings by filename without `.json`, for example `recordings['new-page']`. Fixture JSON files contain
+`subjects` and/or `accounts` arrays, appended after the base fixtures and demo accounts in filename order. Modules
+are also tried in filename order before the existing routes, preserving their exported route order; explicit replay
+recordings override discovered recordings for module answers. Bun tests, Storybook and the dev server discover the
+files automatically once per process, with no shared index or import line.
+
 Run `bun run storybook` from this directory to browse the page stories. The browser stories replay the committed
 kernel responses and run as part of `bun run check`. To refresh those responses, run `bun run record`. It needs Bun,
 Docker access to start a disposable PostgreSQL container and a disposable OpenSearch container, and permission to run
