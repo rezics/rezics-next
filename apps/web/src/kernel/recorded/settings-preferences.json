@@ -1,1 +1,8 @@
-{ "shelf": {}, "notifications": { "reply": true, "mention": true }, "spoilerLevel": 1, "suitability": "blur", "version": 1, "status": 200 }
+{
+  "shelf": {},
+  "notifications": { "reply": true, "mention": true },
+  "spoilerLevel": 1,
+  "suitability": "blur",
+  "version": 1,
+  "status": 200
+}
