@@ -185,10 +185,15 @@ without the locale; the website renderer adds the locale.
 the named properties; `MoreStatements` shows the subject's statements whose properties no
 `Statements` node on the page names. `shownProperties(document)` lists those named properties
 once, in document order. `SubjectList` reads subjects whose `property` statement points at the
-page subject, sorted by name and bounded by `limit`. `TypeList` reads subjects matching its
+page subject, in the property's declared order (series position, credit order, date, then name),
+bounded by `limit`, with the route's exact or at-least count. `TypeList` reads subjects matching its
 `types` on any page, sorted by name or by most public Collections first, and bounded by `limit`.
 `RelationGroups` reads inverse links for its property, optional qualifier value and optional
-holder type, including holder labels and the route's exact or at-least count. `CollectionList`
+holder type, including holder labels and the route's exact or at-least count. A page's
+`RelationGroups` nodes are shown together: the website groups their items by the relation group
+of each node's property, labels each item with the property's inverse label (a symmetric
+property's own label), and gives each group the sum of its counts and a link to the paged
+relations view for every property with more than the preview. `CollectionList`
 reads public Collections and their exact total count. `ReactionSummary` reads the subject's
 reaction totals without viewer-specific reaction data. These three components read nothing
 when `page.subject` is `null`.
@@ -199,22 +204,22 @@ The registry's data components cover every overview section. Each reads a bounde
 receives the total or an "at least" count, and renders a link to its full view when the count
 exceeds the preview.
 
-| Component         | Reads                                                                                      | Preview limit |
-| ----------------- | ------------------------------------------------------------------------------------------ | ------------- |
-| `SubjectHeader`   | The page subject, with its cover summary                                                   | —             |
-| `Cover`           | The page subject's cover summary; always renders, with the placeholder when it is `null`   | —             |
-| `Summary`         | The subject's summary document in the reader's language, spoiler-safe                      | —             |
-| `Statements`      | The named properties                                                                       | 32 properties |
-| `RelationGroups`  | Forward and inverse relations, grouped by relation group, each item with its cover summary | 12 per group  |
-| `Appearances`     | Character appearances with role and cast (on a work); works with role (on a character)     | 12            |
-| `Credits`         | Credits grouped by role in credit order (on a work); works by role (on a person)           | 12            |
-| `RatingSummary`   | The headline population's aggregate, the viewer's Realm aggregates, imported scores        | 3 Realms      |
-| `ReactionSummary` | The subject's public reaction totals                                                       | 1             |
-| `ThreadList`      | The most active threads about the subject in the page's population                         | 5             |
-| `ReviewList`      | The most helpful reviews in the page's population                                          | 5             |
-| `CollectionList`  | Public collections containing the subject                                                  | 6             |
-| `Sources`         | Cover credits, fact sources and external identifiers                                       | —             |
-| `MoreStatements`  | Facts no other component on the page shows                                                 | —             |
+| Component         | Reads                                                                                    | Preview limit |
+| ----------------- | ---------------------------------------------------------------------------------------- | ------------- |
+| `SubjectHeader`   | The page subject, with its cover summary                                                 | —             |
+| `Cover`           | The page subject's cover summary; always renders, with the placeholder when it is `null` | —             |
+| `Summary`         | The subject's summary document in the reader's language, spoiler-safe                    | —             |
+| `Statements`      | The named properties                                                                     | 32 properties |
+| `RelationGroups`  | Inverse relations of one property, grouped with the page's other nodes by relation group | 12 per node   |
+| `Appearances`     | Character appearances with role and cast (on a work); works with role (on a character)   | 12            |
+| `Credits`         | Credits grouped by role in credit order (on a work); works by role (on a person)         | 12            |
+| `RatingSummary`   | The headline population's aggregate, the viewer's Realm aggregates, imported scores      | 3 Realms      |
+| `ReactionSummary` | The subject's public reaction totals                                                     | 1             |
+| `ThreadList`      | The most active threads about the subject in the page's population                       | 5             |
+| `ReviewList`      | The most helpful reviews in the page's population                                        | 5             |
+| `CollectionList`  | Public collections containing the subject                                                | 6             |
+| `Sources`         | Cover credits, fact sources and external identifiers                                     | —             |
+| `MoreStatements`  | Facts no other component on the page shows                                               | —             |
 
 `Cover`, `Summary` and `Sources` read the page subject. `Appearances` and `Credits` take the
 statements of one relation property in one of two directions. `inverse`, the default, is the
@@ -320,7 +325,7 @@ the registry. It is absent from the generated JSON Schema, and documents cannot 
 type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
 ```
 
-`SubjectList` uses its `property` and `limit` with `in: [page.subject]`.
+`SubjectList` is the inverse `links` read of its `property` and `limit`, the same read `RelationGroups` uses.
 `TypeList` uses `{ type: { in: types } }` and is independent of `page.subject`.
 `planReads(registry, document, page)` accepts a valid document and returns `{ reads, nodes }`.
 It walks parents before their slot children, with slots in registry order. Descriptors with

@@ -65,11 +65,20 @@ const read = {
     'rezics:role': { labels: { en: 'Role' } },
   },
 };
+// A subject list reads the inverse links; the kernel names each holder in the reader's language.
 const list = {
-  subjects: [{ id: work, type: 'schema:Book', labels: { en: 'Night Flight', fr: 'Vol de nuit' } }],
-  total: { value: 1, relation: 'exact' },
+  links: [
+    {
+      subject: work,
+      property: 'schema:author',
+      statement: '01a1740d-7480-71e4-841f-66c04022d7f2',
+      type: 'schema:Book',
+      label: 'Vol de nuit',
+      summary: null,
+    },
+  ],
+  count: { value: 1, exact: true },
   next: null,
-  as_of: '2026-10-25T00:00:00.000Z',
 };
 const messages: PageMessages = {
   unknown: 'Unknown value',
@@ -147,12 +156,13 @@ test('failed and empty reads leave their components out', () => {
     r1: { status: 503, body: { code: 'index_not_ready' } },
   });
   expect(failed).not.toMatch(/<h1/);
-  expect(failed).not.toContain('Œuvres');
+  // A list whose read failed says so with a retry instead of silently vanishing.
+  expect(failed).toMatch(/data-slot="subject-list" data-state="failed"/);
   expect(failed).not.toContain('Auteur');
   expect(failed).toContain('Fin');
   const empty = render('fr', {
     r0: { status: 200, body: { ...read, subject: { ...read.subject, statements: {} } } },
-    r1: { status: 200, body: { ...list, subjects: [] } },
+    r1: { status: 200, body: { ...list, links: [] } },
   });
   expect(empty).toMatch(/<h1[^>]*>Le Petit Prince<\/h1>/);
   expect(empty).not.toContain('Auteur');
@@ -188,5 +198,5 @@ test('values are text and links stay safe', () => {
   );
   expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}"[^>]*data-router="yes"`));
   expect(linked).toMatch(/<h1[^>]*>星の王子さま<\/h1>/);
-  expect(linked).toMatch(/lang="en"[^>]*>Night Flight/);
+  expect(linked).toMatch(/>Vol de nuit</);
 });

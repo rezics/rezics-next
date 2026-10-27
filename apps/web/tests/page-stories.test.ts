@@ -452,9 +452,9 @@ test(
     const description: string | undefined = recording.subject.descriptions.en;
     const author: string | undefined = recording.related[statements['schema:author']?.[0]?.value.content]?.labels.en;
     const published = statements['schema:datePublished']?.[0]?.value.content;
-    const edition: string | undefined = Object.values<{ body: { subjects?: { labels: Record<string, string> }[] } }>(
-      page.reads,
-    ).find((read) => read.body.subjects)?.body.subjects?.[0]?.labels.en;
+    const edition: string | undefined = Object.values<{ body: { links?: { label?: string }[] } }>(page.reads).find(
+      (read) => read.body.links,
+    )?.body.links?.[0]?.label;
     expect(description, 'the recorded subject has an English description').toBeTruthy();
     expect(Object.keys(recording.subject.descriptions)).toEqual(expect.arrayContaining(['en', 'ja']));
     expect(author, 'the recorded subject has a linked author').toBeTruthy();
@@ -492,6 +492,8 @@ test(
       'type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };',
       "type Read = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>;",
       "type SubjectResponse = NonNullable<Read['data']>;",
+      "type LinksRead = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>;",
+      "type LinksResponse = NonNullable<LinksRead['data']>;",
       "type MissingResponse = Extract<NonNullable<Read['error']>, { status: 404 | '404' }>['value'];",
       "type BoardResource = ReturnType<KernelClient['boards']>;",
       "type BoardResponse = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;",
@@ -557,6 +559,7 @@ test(
       'definitions-release.json': 'DefinitionsReleaseResponse',
       'library-entries.json': 'LibraryEntriesResponse',
       'library-collections.json': 'CollectionsResponse',
+      'subject-links.json': 'LinksResponse',
       'library-collection.json': 'CollectionResponse',
       'library-collection-members.json': 'CollectionMembersResponse',
       'library-copies.json': 'CopiesResponse',

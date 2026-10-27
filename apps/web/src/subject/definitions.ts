@@ -2,13 +2,22 @@ import { pickText } from '@rezics/composition';
 import type { FilterRelease } from '@rezics/filter';
 import { env } from 'cloudflare:workers';
 import { requestLocale } from '../kernel/client.ts';
+import { relationDefinitions, type RelationDefinition } from './relations.ts';
 
 export type Release = FilterRelease & {
   types: Record<
     string,
     { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[]; coverRatio?: string }
   >;
-  properties: Record<string, { labels?: Record<string, string>; datatype: string; value?: { pattern?: string } }>;
+  properties: Record<
+    string,
+    {
+      labels?: Record<string, string>;
+      datatype: string;
+      value?: { pattern?: string };
+      relation?: { group?: string; symmetric?: boolean; inverseLabels?: Record<string, string> };
+    }
+  >;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,5 +150,19 @@ export async function nameSubjectTypes(
   for (const subject of present) {
     const name = names.get(subject.type);
     if (name !== undefined) subject.typeLabel = name;
+  }
+}
+
+/** How each relation property reads on a page, from the active release; with no release every property is unknown. */
+export async function relationLabels(
+  properties: Iterable<string>,
+  locale: string,
+): Promise<Record<string, RelationDefinition>> {
+  const wanted = [...new Set(properties)];
+  if (wanted.length === 0) return {};
+  try {
+    return relationDefinitions(await readRelease(), wanted, locale);
+  } catch {
+    return {};
   }
 }

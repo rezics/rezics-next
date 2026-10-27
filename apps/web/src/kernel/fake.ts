@@ -11,6 +11,7 @@ import type { Related, Subject, Summary } from '../subject/types';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
+import subjectLinksRecording from './recorded/subject-links.json';
 import subjectPageRecording from './recorded/subject-page.json';
 import subjectRecording from './recorded/subject.json';
 import subjectUncoveredRecording from './recorded/subject-uncovered.json';
@@ -252,6 +253,9 @@ async function selectRecording(
       if (id === resourceId(recordings['subject-uncovered'], 'subject')) return recordings['subject-uncovered'];
       return recordings[id === missingSubjectId ? 'missing-subject' : 'subject'];
     }
+    const subjectLinks = /^\/v1\/subjects\/([^/]+)\/links$/.exec(pathname);
+    if (subjectLinks?.[1] && decodeURIComponent(subjectLinks[1]) === resourceId(recordings.subject, 'subject'))
+      return recordings['subject-links'];
     const boardThreads = /^\/v1\/boards\/([^/]+)\/threads$/.exec(pathname);
     if (boardThreads?.[1] && decodeURIComponent(boardThreads[1]) === resourceId(recordings.board, 'board'))
       return recordings['board-threads'];
@@ -355,6 +359,7 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'missing-subject-page': missingSubjectPageRecording,
     'missing-subject': missingSubjectRecording,
     'subject-page': subjectPageRecording,
+    'subject-links': subjectLinksRecording,
     subject: subjectRecording,
     'subject-uncovered': subjectUncoveredRecording,
     board: boardRecording,

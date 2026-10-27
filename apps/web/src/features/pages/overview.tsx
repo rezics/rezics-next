@@ -1,11 +1,12 @@
 import { pickLanguage, type PageRead } from '@rezics/composition';
-import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
+import { Cover as CoverFrame, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import { originalLanguage } from '../../subject/language';
+import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
 import {
@@ -44,6 +45,10 @@ export type OverviewValue = {
   source: string;
   sources: string;
   sections: Map<string, Section>;
+  /** How each relation property reads on this page, from the definition release; absent properties have no label. */
+  relations: Record<string, RelationDefinition>;
+  /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */
+  relationNodes: { id: string; props: Record<string, unknown> }[];
 };
 
 export const OverviewContext = createContext<OverviewValue | null>(null);
@@ -53,8 +58,14 @@ const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 
+/** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
+export type RowValue = Pick<
+  OverviewValue,
+  'locale' | 'link' | 'reader' | 'labels' | 'unlabelled' | 'spoilerShow' | 'ratio'
+>;
+
 type SubjectRead = { subject: Subject; related: Related; summary?: SubjectCover | null };
-type Item = {
+export type Item = {
   id: string;
   label: ReturnType<typeof pageText>;
   summary?: SubjectSummary;
@@ -62,8 +73,11 @@ type Item = {
   /** Qualifier text such as a role or the credited name. */
   notes: string[];
   gated: boolean;
+  /** The property a relation read found the item by, and the holder's date when the read carries one. */
+  property?: string;
+  date?: string;
 };
-type Count = { value: number; exact: boolean };
+export type Count = { value: number; exact: boolean };
 
 function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
   const value = useContext(OverviewContext);
@@ -77,17 +91,35 @@ function subjectRead(section: Section | undefined): SubjectRead | undefined {
   return isRecord(body.subject) && isRecord(body.related) ? (body as unknown as SubjectRead) : undefined;
 }
 
-function countText(count: Count, locale: string): string {
+export function countText(count: Count, locale: string): string {
   return m.home_section_count(
     { count: `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}` },
     { locale: locale as never },
   );
 }
 
-function viewHref(value: OverviewValue, view: string): string | null {
+function viewHref(value: OverviewValue, view: string, property?: string): string | null {
   return value.subject
-    ? `/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(value.subject)}/${view}`
+    ? `/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(value.subject)}/${view}${
+        property === undefined ? '' : `?property=${encodeURIComponent(property)}`
+      }`
     : null;
+}
+
+/** A date in the kernel's partial ISO form, shown at its own precision; any other form is left out. */
+export function dateText(value: unknown, locale: string): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(-?\d{4,})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value);
+  if (!match) return null;
+  const date = new Date(0);
+  date.setUTCFullYear(Number(match[1]), Number(match[2] ?? 1) - 1, Number(match[3] ?? 1));
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    ...(match[2] ? { month: 'long' } : {}),
+    ...(match[3] ? { day: 'numeric' } : {}),
+  }).format(date);
 }
 
 /** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
@@ -159,7 +191,17 @@ function Failed({ slot, id, title, locale }: { slot: string; id: string; title: 
   );
 }
 
-function ItemRow({ item, value, size }: { item: Item; value: OverviewValue; size: 'xs' | 'sm' }) {
+export function ItemRow({
+  item,
+  value,
+  size,
+  ratio,
+}: {
+  item: Item;
+  value: RowValue;
+  size: 'xs' | 'sm';
+  ratio: CoverRatio;
+}) {
   const Link = value.link;
   const title = item.label.text || value.unlabelled;
   const body = (
@@ -173,7 +215,7 @@ function ItemRow({ item, value, size }: { item: Item; value: OverviewValue; size
           suitability={value.reader.suitability}
           labels={value.labels.cover}
           decorative
-          {...(value.ratio ? { ratio: value.ratio } : {})}
+          ratio={ratio}
         />
       </div>
       <div className="min-w-0">
@@ -194,13 +236,17 @@ function ItemRow({ item, value, size }: { item: Item; value: OverviewValue; size
   return <li>{item.gated ? <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate> : body}</li>;
 }
 
-function Items({ items, value }: { items: Item[]; value: OverviewValue }) {
+/** The rows of one list share a frame ratio, so a mixed list stays aligned; a Zone's appearance fixes it for every row. */
+export function Items({ items, value, ordered = false }: { items: Item[]; value: RowValue; ordered?: boolean }) {
+  const ratio =
+    value.ratio ?? sharedRatio(items.map((item) => coverSubject(item.id, item.label.text, item.summary, item.type)));
+  const List = ordered ? 'ol' : 'ul';
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 in-data-[density=compact]:gap-2">
+    <List className="grid gap-3 sm:grid-cols-2 in-data-[density=compact]:gap-2">
       {items.map((item, index) => (
-        <ItemRow key={`${item.id}-${index}`} item={item} value={value} size="sm" />
+        <ItemRow key={`${item.id}-${index}`} item={item} value={value} size="sm" ratio={ratio} />
       ))}
-    </ul>
+    </List>
   );
 }
 
@@ -210,9 +256,15 @@ function limitOf(props: Record<string, unknown>): number {
 
 /** The holders a `links` read returned, in the kernel's order. */
 function linkItems(section: Section | undefined, limit: number): { items: Item[]; count: Count } | undefined {
-  if (!section?.ok || section.read.kind !== 'links' || !Array.isArray(section.body.links)) return;
-  const links = section.body.links.filter(isRecord).slice(0, limit);
-  const count = isRecord(section.body.count) ? section.body.count : undefined;
+  if (!section?.ok || section.read.kind !== 'links') return;
+  return holderItems(section.body, limit);
+}
+
+/** The holders in the body of a `links` read, with its exact or "at least" count. */
+export function holderItems(body: Record<string, unknown>, limit: number): { items: Item[]; count: Count } | undefined {
+  if (!Array.isArray(body.links)) return;
+  const links = body.links.filter(isRecord).slice(0, limit);
+  const count = isRecord(body.count) ? body.count : undefined;
   const items = links.flatMap((link): Item[] =>
     typeof link.subject === 'string'
       ? [
@@ -221,6 +273,8 @@ function linkItems(section: Section | undefined, limit: number): { items: Item[]
             label: { text: typeof link.label === 'string' ? link.label : '', lang: undefined },
             ...(isRecord(link.summary) ? { summary: link.summary as unknown as SubjectSummary } : {}),
             ...(typeof link.type === 'string' ? { type: link.type } : {}),
+            ...(typeof link.property === 'string' ? { property: link.property } : {}),
+            ...(typeof link.date === 'string' ? { date: link.date } : {}),
             notes: [],
             gated: false,
           },
@@ -310,14 +364,156 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
   );
 }
 
+export const GROUP_TITLES: Record<RelationGroup, (options: { locale: never }) => string> = {
+  order: (options) => m.subject_relation_group_order({}, options),
+  derivation: (options) => m.subject_relation_group_derivation({}, options),
+  world: (options) => m.subject_relation_group_world({}, options),
+  membership: (options) => m.subject_relation_group_membership({}, options),
+  association: (options) => m.subject_relation_group_association({}, options),
+  other: (options) => m.subject_relation_group_other({}, options),
+};
+
+type RelationEntry = { property: string; label: string; group: RelationGroup; items: Item[]; count: Count };
+
+/**
+ * The relations of the page, grouped by relation group. Each `RelationGroups` node reads one property; the first
+ * renders them all so a group gathers its properties wherever the template placed them. Items keep the kernel's
+ * order, which follows each property's declared key.
+ */
 export function RelationGroups(props: Record<string, unknown>) {
-  const locale = useContext(OverviewContext)?.locale ?? 'en';
-  return LinkSection(
-    props,
-    'relation-groups',
-    m.subject_relations({}, { locale: locale as never }),
-    'relations',
-    false,
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value } = state;
+  const nodes = value.relationNodes.length ? value.relationNodes : [{ id: String(props.id), props }];
+  if (nodes[0]!.id !== props.id) return null;
+  const options = { locale: value.locale as never };
+  const title = pageText(props.title, value.locale);
+  const heading = title.text || m.subject_relations({}, options);
+  const id = String(props.id);
+
+  const entries: RelationEntry[] = [];
+  let failed = 0;
+  for (const node of nodes) {
+    const section = value.sections.get(node.id);
+    const listed = linkItems(section, limitOf(node.props));
+    if (!listed) {
+      failed += 1;
+      continue;
+    }
+    const property = typeof node.props.property === 'string' ? node.props.property : '';
+    const definition = Object.hasOwn(value.relations, property) ? value.relations[property] : undefined;
+    if (listed.items.length > 0)
+      entries.push({
+        property,
+        label: definition?.label ?? '',
+        group: definition?.group ?? 'other',
+        items: listed.items,
+        count: listed.count,
+      });
+  }
+  if (failed === nodes.length) return <Failed slot="relation-groups" id={id} title={heading} locale={value.locale} />;
+  if (entries.length === 0 && failed === 0) return null;
+
+  const groups = RELATION_GROUPS.flatMap((group) => {
+    const members = entries.filter((entry) => entry.group === group);
+    return members.length ? [{ group, members }] : [];
+  });
+  const total: Count = {
+    value: entries.reduce((sum, entry) => sum + entry.count.value, 0),
+    exact: entries.every((entry) => entry.count.exact),
+  };
+  return (
+    <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={`${sectionClass} space-y-6`}>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id={`${id}-title`} lang={title.text ? title.lang : undefined} className={headingClass}>
+          {heading}
+        </h2>
+        <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
+          {countText(total, value.locale)}
+        </span>
+      </div>
+      {groups.map(({ group, members }) => {
+        const items = members.flatMap((entry) =>
+          entry.items.map((item): Item => {
+            const date = dateText(item.date, value.locale);
+            return { ...item, notes: [entry.label, date ?? ''].filter(Boolean) };
+          }),
+        );
+        const count: Count = {
+          value: members.reduce((sum, entry) => sum + entry.count.value, 0),
+          exact: members.every((entry) => entry.count.exact),
+        };
+        const more = members.filter((entry) => !entry.count.exact || entry.count.value > entry.items.length);
+        return (
+          <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                {groups.length > 1 && (
+                  <h3 className="text-lg font-semibold tracking-tight">{GROUP_TITLES[group](options)}</h3>
+                )}
+                {groups.length > 1 && (
+                  <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
+                    {countText(count, value.locale)}
+                  </span>
+                )}
+              </div>
+              {more.map((entry) => {
+                const href = viewHref(value, 'relations', entry.property);
+                return (
+                  href && (
+                    <a
+                      key={entry.property}
+                      data-slot="see-all"
+                      href={href}
+                      className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
+                    >
+                      {entry.label
+                        ? m.subject_relation_see_all({ label: entry.label }, options)
+                        : m.home_see_all({}, options)}
+                    </a>
+                  )
+                );
+              })}
+            </div>
+            <Items items={items} value={value} ordered={group === 'order'} />
+          </div>
+        );
+      })}
+      {failed > 0 && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.subject_section_failed({}, options)}{' '}
+          <a data-slot="retry" href="?" className={`${linkClass} ${linkColor} font-medium hover:underline`}>
+            {m.subject_section_retry({}, options)}
+          </a>
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** A list of the subjects whose statement of one property points at the page subject, in the property's declared order. */
+export function SubjectList(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  const id = String(props.id);
+  const title = pageText(props.title, value.locale);
+  const listed = linkItems(section, limitOf(props));
+  if (!listed) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
+  if (listed.items.length === 0) return null;
+  return (
+    <Preview
+      slot="subject-list"
+      id={id}
+      title={title.text}
+      titleLang={title.lang}
+      count={listed.count}
+      more={!listed.count.exact || listed.count.value > listed.items.length}
+      href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
+      locale={value.locale}
+    >
+      <Items items={listed.items} value={value} />
+    </Preview>
   );
 }
 

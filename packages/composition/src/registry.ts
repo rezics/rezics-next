@@ -367,14 +367,7 @@ export const platformRegistry = defineRegistry({
       read: (props, page) =>
         page.subject === null
           ? null
-          : {
-              kind: 'search',
-              body: {
-                filter: { statement: { property: props.property as string, in: [page.subject] } },
-                sort: 'name',
-                limit: props.limit as number,
-              },
-            },
+          : { kind: 'links', id: page.subject, property: props.property as string, limit: props.limit as number },
     },
     {
       type: 'RelationGroups',

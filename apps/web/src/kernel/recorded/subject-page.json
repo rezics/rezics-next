@@ -50,7 +50,10 @@
           "property": "schema:exampleOfWork"
         }
       },
-      { "type": "MoreStatements", "props": { "id": "more-statements" } }
+      { "type": "MoreStatements", "props": { "id": "more-statements" } },
+      { "type": "RelationGroups", "props": { "id": "sequels", "property": "wdt:P155", "limit": 12 } },
+      { "type": "RelationGroups", "props": { "id": "adaptations", "property": "wdt:P144", "limit": 12 } },
+      { "type": "RelationGroups", "props": { "id": "settings", "property": "rezics:sameSetting", "limit": 12 } }
     ]
   },
   "reads": {
@@ -518,21 +521,190 @@
     "r1": {
       "status": 200,
       "body": {
-        "subjects": [
+        "links": [
           {
-            "id": "01a17a3b-08ba-770d-b3f3-2254d514d768",
+            "subject": "01a17a3b-08ba-770d-b3f3-2254d514d768",
+            "property": "schema:exampleOfWork",
+            "statement": "01a17a3b-08ba-770d-b3f3-2254d514d7a0",
             "type": "bf:Instance",
-            "labels": { "en": "Le Petit Prince (Gallimard, 1946)", "fr": "Le Petit Prince (Gallimard, 1946)" }
+            "label": "Le Petit Prince (Gallimard, 1946)",
+            "summary": {
+              "id": "01a17a3b-08ba-770d-b3f3-2254d514d768",
+              "type": "bf:Instance",
+              "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "fr" },
+              "creativeWork": true,
+              "cover": {
+                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+                "width": 480,
+                "height": 720,
+                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
+                "variants": [
+                  { "format": "webp", "width": 240 },
+                  { "format": "webp", "width": 480 }
+                ],
+                "focalPoint": null,
+                "credit": {
+                  "rightsHolder": "REZICS fixtures",
+                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
+                  "license": "CC0 1.0"
+                }
+              }
+            }
           },
           {
-            "id": "01a17a3b-089d-7337-9adc-42d72caaa7c5",
+            "subject": "01a17a3b-089d-7337-9adc-42d72caaa7c5",
+            "property": "schema:exampleOfWork",
+            "statement": "01a17a3b-089d-7337-9adc-42d72caaa7c6",
             "type": "bf:Instance",
-            "labels": { "en": "The Little Prince (Reynal & Hitchcock, 1943)" }
+            "label": "The Little Prince (Reynal & Hitchcock, 1943)",
+            "summary": null
           }
         ],
-        "total": { "value": 2, "relation": "exact" },
-        "next": null,
-        "as_of": "2026-10-26T18:21:56.818Z"
+        "count": { "value": 2, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r2": {
+      "status": 200,
+      "body": {
+        "links": [
+          {
+            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
+            "property": "wdt:P155",
+            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0110",
+            "type": "schema:Book",
+            "label": "The Pilot Returns",
+            "summary": {
+              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "The Pilot Returns", "language": "en" },
+              "creativeWork": true,
+              "cover": {
+                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+                "width": 480,
+                "height": 720,
+                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
+                "variants": [
+                  { "format": "webp", "width": 240 },
+                  { "format": "webp", "width": 480 }
+                ],
+                "focalPoint": null,
+                "credit": {
+                  "rightsHolder": "REZICS fixtures",
+                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
+                  "license": "CC0 1.0"
+                }
+              }
+            },
+            "date": "2012-05"
+          },
+          {
+            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0011",
+            "property": "wdt:P155",
+            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0111",
+            "type": "schema:Book",
+            "label": "Letters to the Rose",
+            "summary": null,
+            "date": "2015"
+          }
+        ],
+        "count": { "value": 2, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r3": {
+      "status": 200,
+      "body": {
+        "links": [
+          {
+            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
+            "property": "wdt:P144",
+            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0120",
+            "type": "schema:Book",
+            "label": "The Little Prince on Stage",
+            "summary": {
+              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "The Little Prince on Stage", "language": "en" },
+              "creativeWork": true,
+              "cover": {
+                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+                "width": 480,
+                "height": 720,
+                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
+                "variants": [
+                  { "format": "webp", "width": 240 },
+                  { "format": "webp", "width": 480 }
+                ],
+                "focalPoint": null,
+                "credit": {
+                  "rightsHolder": "REZICS fixtures",
+                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
+                  "license": "CC0 1.0"
+                }
+              }
+            },
+            "date": "2019-03"
+          },
+          {
+            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0021",
+            "property": "wdt:P144",
+            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0121",
+            "type": "schema:Book",
+            "label": "Little Prince, an Opera",
+            "summary": null,
+            "date": "2008"
+          }
+        ],
+        "count": { "value": 2, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
+      }
+    },
+    "r4": {
+      "status": 200,
+      "body": {
+        "links": [
+          {
+            "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
+            "property": "rezics:sameSetting",
+            "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0130",
+            "type": "schema:Book",
+            "label": "Stories from Asteroid B-612",
+            "summary": {
+              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "label": { "value": "Stories from Asteroid B-612", "language": "en" },
+              "creativeWork": true,
+              "cover": {
+                "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+                "width": 480,
+                "height": 720,
+                "placeholder": { "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4", "color": "#7d7a68" },
+                "variants": [
+                  { "format": "webp", "width": 240 },
+                  { "format": "webp", "width": 480 }
+                ],
+                "focalPoint": null,
+                "credit": {
+                  "rightsHolder": "REZICS fixtures",
+                  "via": { "name": "Generated artwork", "url": "https://rezics.com/" },
+                  "license": "CC0 1.0"
+                }
+              }
+            },
+            "date": "2021"
+          }
+        ],
+        "count": { "value": 1, "exact": true },
+        "freshness": { "consistency": "eventual", "target_seconds": 10, "caught_up": true },
+        "next": null
       }
     }
   },

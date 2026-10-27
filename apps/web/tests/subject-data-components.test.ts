@@ -171,7 +171,7 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   const relations = section(html, 'relation-groups');
   expect(relations.match(/<li>/g)).toHaveLength(12);
   expect(text(relations)).toContain('30 total');
-  expect(relations).toContain(`href="/en/subjects/${subjectId}/relations"`);
+  expect(relations).toContain(`href="/en/subjects/${subjectId}/relations?property=wdt%3AP155"`);
 
   const characters = section(html, 'appearances');
   expect(text(characters)).toContain('The Fox');

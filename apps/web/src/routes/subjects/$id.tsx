@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import {
   loadSubjectPage,
   SubjectPage,
+  pageRelationProperties,
   subjectPageJsonLd,
   subjectPageTitle,
   subjectPageType,
@@ -13,7 +14,7 @@ import { kernelClient } from '../../kernel/client';
 import { loadSubjectLibrarySlot } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
 import type { SessionEnv } from '../../session/client';
-import { typeFrame } from '../../subject/definitions';
+import { relationLabels, typeFrame } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -62,8 +63,11 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'redirect') throw redirect({ href: `/${data.locale}/subjects/${result.id}`, statusCode: 308 });
     const type = subjectPageType(result.page);
-    const frame = type ? await typeFrame(type, data.locale) : {};
-    return { page: result.page, library, reader, frame };
+    const [frame, relations] = await Promise.all([
+      type ? typeFrame(type, data.locale) : Promise.resolve<Awaited<ReturnType<typeof typeFrame>>>({}),
+      relationLabels(pageRelationProperties(result.page), data.locale),
+    ]);
+    return { page: result.page, library, reader, frame, relations };
   });
 
 export const Route = createFileRoute('/subjects/$id')({
@@ -108,7 +112,7 @@ function SubjectLink({ href, lang, children }: { href: string; lang?: string; ch
 }
 
 function SubjectRoute() {
-  const { page, library, reader, frame } = Route.useLoaderData();
+  const { page, library, reader, frame, relations } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   return (
     <SubjectPage
@@ -134,6 +138,7 @@ function SubjectRoute() {
       reader={reader}
       {...(frame.label ? { typeLabel: frame.label } : {})}
       {...(frame.ratio ? { ratio: frame.ratio } : {})}
+      relations={relations}
       link={SubjectLink}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}

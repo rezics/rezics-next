@@ -635,6 +635,29 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   O(limit × sections) plus O(s) for the shared subject read
 - **Growth check:** `tests/subject-data-components.test.ts`: `Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and Sources render from their page reads with a bounded preview, a count and a link to the full view`
 
+### Subject relations and lists
+
+- **Touches:** No request of their own beyond the subject route's definitions read for relation labels, which the type
+  frame read already warms (the active pointer for 60 s, a release by digest for good). `RelationGroups` and
+  `SubjectList` render the bodies of the template's planned inverse `links` reads; `TypeList` renders its `search`
+  read. A directed property reads under its inverse label and a symmetric one under its own, a property without a
+  relation definition under its own label in the other group. The first `RelationGroups` node renders every
+  `RelationGroups` node of the page by relation group
+- **Bound:** 0 K, D, R and A beyond the page read and at most 2 K for definitions on a cold cache, 0 when warm. A
+  preview renders at most its `limit` items per read (24) whatever the in-degree, so rendering is O(limit × reads);
+  the count is the read's exact or "at least" count, never a total computed here
+- **Growth check:** `tests/subject-relations-lists.test.ts`: `SubjectList and TypeList show an exact or at-least count and a See all link to a paged view`
+
+### Subject relations view (`/<locale>/subjects/<id>/relations`)
+
+- **Touches:** In parallel, one subject read for the title, one `GET /v1/subjects/<id>/links` page of at most 100
+  holders for one property (`?property=`) or all of them, and for a signed-in reader one preferences read; then the
+  cached definitions read for the labels of the properties on the page. The continuation is the kernel's opaque cursor
+- **Bound:** 2 K (+ 1 K signed in for the session credential, 1 D for preferences) and at most 2 K for definitions on a
+  cold cache; one page of at most 100 rows however large the in-degree, so rendering is O(page) and independent of the
+  count; 0 R/A
+- **Growth check:** `tests/subject-relations-view-cost.test.ts`: `the relations view renders one page of the continuation however large the relation count grows`
+
 ### Subject library slot
 
 - **Touches:** In parallel with the subject page, read one session credential, the viewer's FULL library entry when

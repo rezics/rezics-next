@@ -36,7 +36,12 @@ const release = {
     'schema:exampleOfWork': {
       labels: { en: 'edition of' },
       datatype: 'wikibase-item',
-      relation: { group: 'derivation', order: 'date', inverse: 'schema:workExample', inverseLabels: { en: 'Editions' } },
+      relation: {
+        group: 'derivation',
+        order: 'date',
+        inverse: 'schema:workExample',
+        inverseLabels: { en: 'Editions' },
+      },
     },
     'rezics:newTerm': { labels: { en: 'Linked to' }, datatype: 'wikibase-item' },
   },
@@ -123,7 +128,8 @@ const text = (html: string) =>
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 const groupBlock = (html: string, group: string) =>
-  new RegExp(`<div[^>]*data-slot="relation-group"[^>]*data-group="${group}"[\\s\\S]*?</(?:ol|ul)>`).exec(html)?.[0] ?? '';
+  new RegExp(`<div[^>]*data-slot="relation-group"[^>]*data-group="${group}"[\\s\\S]*?</(?:ol|ul)>`).exec(html)?.[0] ??
+  '';
 
 const relationDocument = {
   root: { props: {} },

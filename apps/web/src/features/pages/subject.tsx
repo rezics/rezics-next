@@ -3,6 +3,7 @@ import { planReads, platformRegistry, type CompositionDocument } from '@rezics/c
 import type { ComponentProps, ReactNode } from 'react';
 import { originalLanguage } from '../../subject/language';
 import type { Reader } from '../../subject/reader';
+import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject } from '../../subject/types';
 import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
@@ -75,6 +76,12 @@ export async function loadSubjectPage(client: KernelClient, id: string): Promise
   throw problemError(result.error?.value);
 }
 
+/** The properties the page's inverse reads follow, for the definitions that label them. */
+export function pageRelationProperties(page: SubjectPageData): string[] {
+  const reads = planReads(platformRegistry, page.document as CompositionDocument, { subject: page.subject }).reads;
+  return [...new Set(Object.values(reads).flatMap((read) => (read.kind === 'links' ? [read.property] : [])))];
+}
+
 /** The subject's label, chosen with the same fallback the page heading uses. */
 export function subjectPageTitle(page: SubjectPageData, locale: string): string {
   const read = subjectBody(page);
@@ -112,6 +119,7 @@ export function SubjectPage({
   reader,
   typeLabel,
   ratio,
+  relations,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -126,6 +134,8 @@ export function SubjectPage({
   typeLabel?: string;
   /** The cover frame the definitions release declares for the subject's type. */
   ratio?: ComponentProps<typeof PageData>['ratio'];
+  /** How each relation property reads on this page, from the definitions release. */
+  relations?: Record<string, RelationDefinition>;
 }) {
   const read = subjectBody(page);
   const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
@@ -143,6 +153,7 @@ export function SubjectPage({
           {...(reader ? { reader } : {})}
           {...(typeLabel ? { typeLabel } : {})}
           {...(ratio ? { ratio } : {})}
+          {...(relations ? { relations } : {})}
         >
           <div className="flex w-full flex-col gap-8">
             <CompositionRender

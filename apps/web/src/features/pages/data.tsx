@@ -13,6 +13,7 @@ import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary'
 import { m } from '../../paraglide/messages.js';
 import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
+import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import type { PageDocument } from './render';
 import * as overview from './overview';
@@ -101,7 +102,6 @@ type PreparedRead = {
   header?: ReactNode;
   groups?: Map<string, ReactNode>;
   more?: ReactNode[];
-  list?: ReactNode[];
   /** The hits of a search read with their cover summaries, and the read's total count. */
   hits?: SearchHit[];
   total?: SearchRead['total'];
@@ -487,6 +487,18 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   };
 }
 
+/** The nodes of one type anywhere in the document, in document order. */
+function nodesOfType(content: readonly unknown[], type: string): { id: string; props: Record<string, unknown> }[] {
+  return content.flatMap((node) => {
+    if (!isRecord(node) || !isRecord(node.props)) return [];
+    const nested = Object.values(node.props).flatMap((value) => (Array.isArray(value) ? nodesOfType(value, type) : []));
+    return [
+      ...(node.type === type && typeof node.props.id === 'string' ? [{ id: node.props.id, props: node.props }] : []),
+      ...nested,
+    ];
+  });
+}
+
 export function PageData({
   locale,
   subject = null,
@@ -497,6 +509,7 @@ export function PageData({
   reader = defaultReader,
   typeLabel,
   ratio,
+  relations = {},
   children,
 }: {
   locale: string;
@@ -508,6 +521,8 @@ export function PageData({
   reader?: Reader;
   typeLabel?: string;
   ratio?: Frame['ratio'];
+  /** How each relation property reads from this page, from the definition release. */
+  relations?: Record<string, RelationDefinition>;
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
@@ -546,7 +561,6 @@ export function PageData({
       const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
       const total = (result.body as SearchRead).total;
       prepared.set(key, {
-        list: subjects.map((item) => <li key={item.id}>{itemLink(item.id, item.labels, options)}</li>),
         hits: subjects,
         ...(total ? { total } : {}),
       });
@@ -592,6 +606,8 @@ export function PageData({
     source: resolved.source,
     sources: resolved.sources,
     sections,
+    relations,
+    relationNodes: nodesOfType(composition.content, 'RelationGroups'),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
     ...(ratio ? { frameRatio: ratio } : {}),
   };
@@ -642,10 +658,6 @@ function Statements(props: Record<string, unknown>) {
 function MoreStatements(props: Record<string, unknown>) {
   const groups = useNodeRead(props.id)?.more;
   return groups?.length ? <dl className={listClass}>{groups}</dl> : null;
-}
-
-function SubjectList(props: Record<string, unknown>) {
-  return <TypeListContent {...props} />;
 }
 
 /** The bounded count of a search read: a lower bound is shown with a plus sign. */
@@ -728,24 +740,6 @@ function TypeList(props: Record<string, unknown>) {
   );
 }
 
-function TypeListContent(props: Record<string, unknown>) {
-  const list = useNodeRead(props.id)?.list;
-  const locale = usePageLocale();
-  const title = pageText(props.title, locale);
-  if (!list?.length) return null;
-  return (
-    <section className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
-      <h2
-        lang={title.lang}
-        className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
-      >
-        {title.text}
-      </h2>
-      <ul className="space-y-2 break-words leading-7">{list}</ul>
-    </section>
-  );
-}
-
 export const dataComponents = {
   Cover: overview.Cover,
   Summary: overview.Summary,
@@ -760,6 +754,6 @@ export const dataComponents = {
   SubjectHeader,
   Statements,
   MoreStatements,
-  SubjectList,
+  SubjectList: overview.SubjectList,
   TypeList,
 };

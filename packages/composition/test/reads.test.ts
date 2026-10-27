@@ -26,10 +26,8 @@ const document = page(
   list('same', 'schema:author'),
   list('series', 'schema:isPartOf', 6),
 );
-const search = (property: string, limit: number) => ({
-  kind: 'search' as const,
-  body: { filter: { statement: { property, in: [subject] } }, sort: 'name' as const, limit },
-});
+/** A subject list reads the inverse links, which the kernel orders by the property's declared key. */
+const inverse = (property: string, limit: number) => ({ kind: 'links' as const, id: subject, property, limit });
 
 test('data components are part of the platform registry and validate', () => {
   expect(validateComposition(platformRegistry, document)).toEqual([]);
@@ -61,8 +59,8 @@ test('a page plans one read per distinct descriptor and maps every data node to 
   const plan = planReads(platformRegistry, document, { subject });
   expect(plan.reads).toEqual({
     r0: { kind: 'subject', id: subject },
-    r1: search('schema:author', 12),
-    r2: search('schema:isPartOf', 6),
+    r1: inverse('schema:author', 12),
+    r2: inverse('schema:isPartOf', 6),
   });
   expect(plan.nodes).toEqual({
     header: 'r0',
