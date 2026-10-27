@@ -31,7 +31,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityAvailable, checkWaitMs } from './launch.ts';
+import { capacityAvailable, capacityWaiters, checkWaitMs } from './launch.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -171,7 +171,10 @@ export class WorkerJob implements GateOutcomeSink {
     try {
       await this.follow(await this.tasks.retry(taskId, options));
     } catch (error) {
-      if (!(error instanceof TaskHeldForDependenciesError)) throw error;
+      if (error instanceof TaskHeldForDependenciesError) return;
+      // Another process already started the attempt this start expected to create.
+      if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
+      throw error;
     }
   }
   /** Tasks whose lost pending attempt this process is already retrying. */
@@ -474,6 +477,28 @@ export class WorkerJob implements GateOutcomeSink {
           this.start(attempt.taskId)
             .catch((error) => console.error(error))
             .finally(() => this.recovering.delete(attempt.taskId)),
+        );
+      }
+    }
+    // A ready task with no attempt is started by the process that dispatched or released it. When that process is
+    // gone (five tasks sat ready for hours), no ticket in the capacity queue names the task and its lease is free.
+    if (adoptRunning) {
+      const graceMs = 2 * (this.tasks.settings.startGraceMs ?? START_GRACE_MS);
+      const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
+      for (const task of store.tasks()) {
+        if (task.state !== 'ready' || task.currentAttempt !== 0 || this.recovering.has(task.id)) continue;
+        if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
+        try {
+          acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();
+        } catch (error) {
+          if (error instanceof LeaseHeldError) continue;
+          throw error;
+        }
+        this.recovering.add(task.id);
+        this.track(
+          this.start(task.id, { expectedAttempt: 0 })
+            .catch((error) => console.error(error))
+            .finally(() => this.recovering.delete(task.id)),
         );
       }
     }

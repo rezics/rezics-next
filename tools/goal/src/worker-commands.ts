@@ -53,7 +53,8 @@ export async function runWorkerCommand(
       const task = tasks.dispatch(arg);
       print(task.id);
       if (task.state === 'held') return 0;
-      await job.start(task.id);
+      // The first start only: if the host already started the task, this command leaves it alone.
+      await job.start(task.id, { expectedAttempt: 0 });
     } else if (command === 'status') {
       if (argv.length > 1) throw new Error('usage: status [task]');
       const show = (task: Task) =>

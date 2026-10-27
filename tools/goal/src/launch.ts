@@ -304,13 +304,19 @@ export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
  * available. Otherwise it waits; it is never refused. Fifty-two workers on this host exhausted memory and swap and
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
-export async function awaitHostCapacity(store: WorkerStore, stateDirectory: string, first = false): Promise<void> {
+export async function awaitHostCapacity(
+  store: WorkerStore,
+  stateDirectory: string,
+  first = false,
+  taskId?: string,
+): Promise<void> {
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
   if (!existsSync(file)) return;
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
   const queue = join(stateDirectory, 'capacity-queue');
-  const ticket = `${String(Date.now()).padStart(15, '0')}-${process.pid}-${crypto.randomUUID()}`;
+  // The ticket names its task, so the host can tell a waiting start from a lost one.
+  const ticket = `${String(Date.now()).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   if (!first) {
     mkdirSync(queue, { recursive: true });
     writeFileSync(join(queue, ticket), '');
@@ -338,6 +344,27 @@ export async function awaitHostCapacity(store: WorkerStore, stateDirectory: stri
   } finally {
     if (!first) rmSync(join(queue, ticket), { force: true });
   }
+}
+/** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
+export function capacityWaiters(stateDirectory: string): Set<string> {
+  const queue = join(stateDirectory, 'capacity-queue');
+  let names: string[];
+  try {
+    names = readdirSync(queue);
+  } catch {
+    return new Set();
+  }
+  const live = new Set<string>();
+  for (const name of names) {
+    const [, pid, ...rest] = name.split('-');
+    try {
+      process.kill(Number(pid), 0);
+      live.add(rest.join('-'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') live.add(rest.join('-'));
+    }
+  }
+  return live;
 }
 /** Live waiters whose tickets are older than `ticket`; a ticket whose process has ended is removed. */
 export function waitersAhead(queue: string, ticket: string): number {
