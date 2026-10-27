@@ -39,6 +39,26 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 - `RatingSummary` takes the aggregates the rating module returns (count, sum and histogram per population, plus the threshold) and never shows a score without its population and count. The headline is the page's own population; every other population is a labelled list and is never averaged or substituted; imported source scores follow, labelled with their source and scale. Below the threshold it shows the count, the votes still needed and why the distribution is hidden; with no votes it draws nothing.
 - `RatingInput` is one slider over the question's scale plus a clear button. It works in displayed points and reports stored units, saves optimistically and rolls back with an announced message when saving fails.
 
+## Deletion
+
+Import `Tombstone` from `@rezics/ui/tombstone` for a reference to a deleted or withheld record. Ordinary reads
+omit deleted records; only references keep a tombstone, following [the deletion policy](../../docs/deletion.md).
+Pass `reason` (`deleted` or `withheld`) and the replaced `shape` (`post`, `card` or `row`). Never pass the record's
+title, author, image or link. Cards keep an empty cover frame and inherit the ratio from `CoverGrid` or `CoverRow`;
+outside a collection pass `ratio`. Match a surface's known item dimensions with `className` or `style`.
+
+Only an owner's deleted reference receives both `restoreUntil` and `onRestore`. It offers Restore with a relative
+deadline until that instant, then removes the control and deadline automatically. Withheld records never offer
+restore. The caller supplies the server's 30-day deadline and performs and authorizes the restore; the component
+makes no request. `labels` accepts English-default message, Restore and deadline-format overrides; relative dates
+use `LocaleProvider`.
+
+Call `undoToast('Post deleted', onUndo)` from `@rezics/ui/undo-toast` after a successful action, with the existing
+shadcn `Toaster` mounted once. It announces the result politely and offers Undo for eight seconds, including while
+hovered or focused. A second call replaces the previous result and invalidates its callback; Undo calls the current
+callback at most once. Pass a third `labels` argument to translate Undo. This immediate feedback complements the
+owner's longer restore window; the site supplies all delete and restore calls.
+
 ## Cover
 
 `Cover` draws the image area of any subject: a work, edition, character, person, organization, recipe or Realm. Import it from `@rezics/ui/cover`. Do not draw subject images with a bare `<img>`.

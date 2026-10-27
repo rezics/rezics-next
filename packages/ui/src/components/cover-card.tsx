@@ -16,6 +16,11 @@ const DensityContext = createContext<CoverDensity | undefined>(undefined);
 
 const RatioContext = createContext<CoverRatio | undefined>(undefined);
 
+/** The frame shared by cards and tombstones in a cover collection. */
+export function useCoverRatio() {
+  return useContext(RatioContext);
+}
+
 /** What the card needs of the link that carries its title: a site passes its router link here. */
 export type CoverCardLink = ComponentType<{
   href: string;
