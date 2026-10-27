@@ -30,6 +30,22 @@ Bulk add skips a subject already present in the target Collection and appends at
 
 The operation is private. Its routes use the existing `personal_library` gate; operation reads also require `library_entry:list`. Status changes use `library_entry:update`, library removal uses `library_entry:delete`, and Collection membership changes use the target's `collections` gate, `collection:update` and the installed Collection permission. Collection additions also run the existing `subject:read` checks. Every target attempt and replay restores the captured durable initiator and rechecks current source and target authority. Enqueueing is not a completed outcome.
 
+### Type filter identity
+
+Shelf facets return `{types: [{type: fullCURIE, count}], next}` and shelf list/summary requests accept
+`type=fullCURIE`. Web retains the exact CURIE/IRI in its URL and saved per-type preference; no extra resolution request
+or public UUID key is needed. Unknown, foreign-account or stale values return `400 invalid_argument`, so web drops the
+filter and rereads. A retained known value with zero entries remains valid: the list is empty and shown counts are zero.
+Read lookup never allocates an identity.
+
+Exact ASCII source values have no per-identifier character or byte cap. The release-wide size bound is not a type limit.
+Full values live in unindexed private dictionary storage in the owner's partition. SQL predicates, counters and opaque
+cursor bindings use a stable account-scoped UUID `typeId` resolved by exact equality. This internal identity is immutable,
+one-to-one and never reused, including after its count becomes zero; it grants no authority and is never a public filter.
+Digest hits require full-value equality; collisions use bounded exact chunk-trie edges, never digest aliases or an
+unbounded collision scan. Facets seek by that private UUID and return every byte of each emitted CURIE, within both row
+and response-byte budgets. See [the shelf contract](shelf-contract.md) for the resolver, continuation and erasure plan.
+
 ## Ordering
 
 Ordering keys are fractional-indexing keys. Keys are generated within 32 characters and stored within 48. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respace happens when no generated key fits. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.

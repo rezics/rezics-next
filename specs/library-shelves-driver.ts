@@ -71,14 +71,30 @@ export interface ShelfItem extends EntryView {
 export interface ShelfSummaryView {
   tabs: Record<ShelfTab, { total: number; shown: number }>;
 }
-/** One authoritative stored row. Column names are the contract's: activity_at, finished_at, subject_type, type_source_id. */
+/** Native entry columns; subjectType is joined from the actual private dictionary value, never inferred. */
 export interface StoredEntry extends EntryView {
   accountId: string;
   activityAt: string;
   finishedAt: string | null;
   subjectType: string;
+  typeId: string;
+  incarnationId: string;
+  transactionId: string;
+  sourceStamp: SourceStamp;
   /** The subject whose primary type this entry follows: its own subject, or the survivor after a merge. */
   typeSourceId: string;
+}
+/** Native bigint; serialize only at JSON/DBOS boundaries as canonical decimal text. */
+export interface SourceStamp {
+  partition: number;
+  epoch: number;
+  position: bigint;
+}
+export interface StoredTypeKey {
+  accountId: string;
+  typeId: string;
+  type: string;
+  byteLength: number;
 }
 export interface StoredSession extends SessionView {
   accountId: string;
@@ -87,22 +103,24 @@ export interface StoredSession extends SessionView {
 export interface StoredHead {
   accountId: string;
   subjectId: string;
-  lastChangedAt: string;
+  lastChangedAt: string | null;
   lastCompletedAt: string | null;
 }
 export interface StoredCount {
   accountId: string;
   bucket: EntryState | 'all' | 'collections';
-  /** The empty string is the rollup over all types and the Collections row. */
-  type: string;
+  /** Native bounded UUID; nil UUID is the all-types/Collections rollup. */
+  typeId: string;
   count: number;
 }
 export interface ShelvesInspection {
   entries: StoredEntry[];
+  /** Actual published native dictionary rows, including retained known-zero identities. */
+  typeKeys: StoredTypeKey[];
   sessions: StoredSession[];
   completedUnits: { sessionId: string; unitId: string }[];
   changes: { sessionId: string; revision: number }[];
-  /** One row per account and subject with persisted progress, kept after the entry is deleted. */
+  /** Includes locked empty heads before progress; retained after entry deletion. */
   heads: StoredHead[];
   /** Counter rows, exactly as stored. A row at zero may linger; readers and tests ignore it. */
   counts: StoredCount[];
@@ -118,6 +136,12 @@ export interface ShelvesSeed {
   /** Totals of completed and abandoned sessions, including history on the owner's tested subjects. */
   inactiveSessions: number;
 }
+/** A one-shot latch at a real production observation boundary, never a replacement apply/resolver. */
+export interface TypeWorkPause {
+  reached: Promise<{ sourceId: string; stamp: SourceStamp; incarnationId?: string }>;
+  /** Release and await this held workflow. Other workflows must run independently while it is held. */
+  resume(): Promise<void>;
+}
 export interface LibraryShelvesDriver {
   readonly accounts: Record<'owner' | 'other' | 'suspended', Anchor>;
   /** A valid absent routable subject id, never a malformed one. */
@@ -132,6 +156,23 @@ export interface LibraryShelvesDriver {
   /** Defaults to the book type. */
   provisionSubject(input?: { type?: string }): Promise<Anchor>;
   provisionSubjects(count: number, input?: { type?: string }): Promise<Anchor[]>;
+  /**
+   * Publish/activate real validated definition releases declaring these exact ASCII CURIEs under shelf:.
+   * Use compact labels and minimal declarations; the expanded IRI also consumes the release byte budget.
+   * Keep the built-in persona types available. Existing subjects retain their stored types across releases.
+   */
+  installTypes(types: readonly string[]): Promise<void>;
+  /**
+   * Override only the production dictionary digest dependency, before entries exist, to force collisions.
+   * Exact comparisons/trie/allocation remain production code. Never modify semantic source or type IDs.
+   */
+  forceTypeDigestCollision(): Promise<void>;
+  pauseTypeWork(input: {
+    workflow: 'sync' | 'verify' | 'entry';
+    boundary: 'sourceObserved' | 'entryObserved';
+    subjectId: string;
+    accountId?: string;
+  }): Promise<TypeWorkPause>;
   /** Production semantic identity update. Returns the source revision it emitted. */
   changeSubjectType(subjectId: string, type: string): Promise<{ revision: number }>;
   /** Production semantic merge of `from` into the survivor `into`. */
@@ -153,8 +194,11 @@ export interface LibraryShelvesDriver {
     },
   ): Promise<Response>;
   inspect(): Promise<ShelvesInspection>;
-  /** Resumes and awaits all enqueued library work, including the type projection. */
-  settle(): Promise<void>;
+  /**
+   * Await all enqueued library work. exceptPaused drains independently runnable work without releasing latches;
+   * the default requires callers to resume their latches first. close always releases owned latches on failure.
+   */
+  settle(input?: { exceptPaused?: boolean }): Promise<void>;
   /**
    * Grow unrelated data to these totals through bulk rows that reproduce what the production commands write (head,
    * counter and activity columns included), preserving every tested row. Seeded timestamps precede 2030-01-01.

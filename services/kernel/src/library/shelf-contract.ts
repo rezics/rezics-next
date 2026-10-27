@@ -90,7 +90,7 @@ export type ShelfTypePage = { types: ShelfTypeCount[]; next: string | null };
 
 // --- Storage rows (names are the migration's) ------------------------------------------------------------------
 
-/** `library.progress_head`: one row per account and subject with persisted progress, kept after the entry is gone. */
+/** `library.progress_head`: one locked row per account and subject, initially empty; retained after entry deletion. */
 export type ProgressHead = {
   accountId: string;
   subjectId: string;
@@ -227,10 +227,35 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
 
 /** One bounded statement set: at most `limit + 1` entry rows and one active-session probe per returned entry. */
 export type ShelfRows = { entries: ShelfEntry[]; more: boolean };
+/** Date adapters return candidates before the independent active-session enrichment. */
+export type ShelfDateRows = { entries: Omit<ShelfEntry, 'activeProgressSession'>[]; more: boolean };
+export interface ShelfDateReader {
+  page(
+    client: Client,
+    route: number,
+    accountId: string,
+    query: ShelfQuery,
+    after: ShelfSeek | null,
+  ): Promise<ShelfDateRows>;
+}
+export interface ShelfActiveReader {
+  sessions(
+    client: Client,
+    route: number,
+    accountId: string,
+    subjectIds: readonly string[],
+  ): Promise<Map<string, ShelfSession>>;
+}
 
 export interface ShelfPageReader {
   /** Same RR client and effective predicate as binding. Never counts/sorts beyond the bounded page. */
-  page(client: Client, route: number, accountId: string, query: ShelfQuery, after: ShelfSeek | null): Promise<ShelfRows>;
+  page(
+    client: Client,
+    route: number,
+    accountId: string,
+    query: ShelfQuery,
+    after: ShelfSeek | null,
+  ): Promise<ShelfRows>;
 }
 export interface ShelfSummaryReader {
   summary(client: Client, route: number, accountId: string, typeId: string | null): Promise<ShelfSummary>;
@@ -238,8 +263,14 @@ export interface ShelfSummaryReader {
 export type ShelfFacetRows = { types: ShelfTypeCount[]; more: boolean; after: string | null };
 export interface ShelfFacetReader {
   /** Discover keys/counts/lengths first; fetch full values only for the byte-budgeted emitted prefix. */
-  types(client: Client, route: number, accountId: string, after: string | null, limit: number,
-    byteBudget: number): Promise<ShelfFacetRows>;
+  types(
+    client: Client,
+    route: number,
+    accountId: string,
+    after: string | null,
+    limit: number,
+    byteBudget: number,
+  ): Promise<ShelfFacetRows>;
 }
 export interface ShelfReader extends ShelfPageReader, ShelfSummaryReader, ShelfFacetReader {}
 
@@ -290,8 +321,17 @@ export function createShelfCounters(): ShelfCounters {
   };
 }
 
-/** Maintenance only: recomputes one account's counters from its entries under the counter lock. */
-export function rebuildShelfCounters(_write: ShelfWrite): Promise<{ rows: number }> {
+/** Maintenance only; the caller holds a writer fence across every batch and the final counter-generation swap. */
+export type ShelfRebuildBatch = {
+  fenceId: string;
+  generationId: string;
+  afterSubjectId: string | null;
+  limit: number;
+};
+export function rebuildShelfCounters(
+  _write: ShelfWrite,
+  _batch: ShelfRebuildBatch,
+): Promise<{ rows: number; next: string | null }> {
   return notImplemented('rebuildShelfCounters');
 }
 
@@ -312,10 +352,15 @@ export function shelfTypeVerifyWorkflowId(eventId: string): string {
   return `shelf-type-verify:${eventId}`;
 }
 
-/** Comparable only within one source partition; position is never rounded through number. */
+/**
+ * Comparable only within one source partition: epoch then position (bigint, never number).
+ * Crossing a source owner requires a freshly validated binding, not comparison of unrelated positions.
+ */
 export type ShelfSourceStamp = { partition: number; epoch: number; position: bigint };
 export type ShelfTypeObservation = { sourceId: string; type: string; stamp: ShelfSourceStamp };
 export type ShelfSourceSnapshot = {
+  /** Present even when a merged/invisible source has no visible type observation. */
+  binding: { sourceId: string; stamp: ShelfSourceStamp };
   source: ShelfTypeObservation | null;
   /** Checked one-hop redirect in the SAME source snapshot, never trusted merely from an event payload. */
   survivorId: string | null;
@@ -323,6 +368,7 @@ export type ShelfSourceSnapshot = {
 export interface ShelfTypeSource {
   /** Both methods receive the SAME RR client in one authoritative source partition. */
   readPartition(client: Client, partition: number): Promise<Partition | null>;
+  /** Authoritative semantic readItemTypes adapter; pass this client, never the pool. */
   readItemTypes(client: Client, ids: readonly string[]): Promise<Map<string, string>>;
   readSurvivor(client: Client, subjectId: string): Promise<string | null>;
 }
@@ -341,7 +387,7 @@ export type ShelfEntryTypeVersion = {
 };
 export type ShelfTypeApply = {
   expected: ShelfEntryTypeVersion;
-  observed: ShelfTypeObservation;
+  observed: ShelfSourceSnapshot;
   /** Required on a source switch: separately observed at the survivor's owner, with its own stamp. */
   survivor: ShelfTypeObservation | null;
   typeId: string;
@@ -355,12 +401,17 @@ export type ShelfProjectionDependencies = {
 };
 
 /** Opens a fenced RR source snapshot, captures partition+type+merge together; moved owners are followed normally. */
-export function observeShelfType(_dependencies: Pick<ShelfProjectionDependencies, 'pool' | 'source'>,
-  _subjectId: string): Promise<ShelfSourceSnapshot> {
+export function observeShelfType(
+  _dependencies: Pick<ShelfProjectionDependencies, 'pool' | 'source'>,
+  _subjectId: string,
+): Promise<ShelfSourceSnapshot> {
   return notImplemented('observeShelfType');
 }
 
-/** Metadata CAS: current incarnation/transaction/source/stamp must match; stale stamps never lower state. */
+/**
+ * Metadata CAS: current incarnation/transaction/source/stamp must match; stale stamps never lower state.
+ * On false, a bounded retry rereads entry AND source binding. No entry revision/time/event mutation.
+ */
 export function applyShelfEntryType(_write: ShelfWrite, _subjectId: string, _input: ShelfTypeApply): Promise<boolean> {
   return notImplemented('applyShelfEntryType');
 }
@@ -377,13 +428,20 @@ export function retypeShelfEntries(
 }
 
 /** Bounded existing-partition visits plus holder pages. Retries revalidate source binding and source truth. */
-export function syncShelfSubjectType(_change: ShelfTypeChange, _dependencies: ShelfProjectionDependencies): Promise<void> {
+export function syncShelfSubjectType(
+  _change: ShelfTypeChange,
+  _dependencies: ShelfProjectionDependencies,
+): Promise<void> {
   return notImplemented('syncShelfSubjectType');
 }
 
 /** Event-keyed work verifies current incarnation even after state changes or recreation, with bounded CAS/retry. */
-export function verifyShelfEntryType(_eventId: string, _accountId: string, _subjectId: string,
-  _dependencies: ShelfProjectionDependencies): Promise<void> {
+export function verifyShelfEntryType(
+  _eventId: string,
+  _accountId: string,
+  _subjectId: string,
+  _dependencies: ShelfProjectionDependencies,
+): Promise<void> {
   return notImplemented('verifyShelfEntryType');
 }
 
@@ -400,7 +458,11 @@ export const SHELF_PROGRESS_GATE = 'reading_progress';
  * is the route's own and is not repeated here.
  */
 export type ShelfAdmissionDependencies = Pick<ShelfReadDependencies, 'pool' | 'access' | 'clock'>;
-export function admitShelfRead(_dependencies: ShelfAdmissionDependencies, _actor: Actor, _deadline: number): Promise<void> {
+export function admitShelfRead(
+  _dependencies: ShelfAdmissionDependencies,
+  _actor: Actor,
+  _deadline: number,
+): Promise<void> {
   return notImplemented('admitShelfRead');
 }
 

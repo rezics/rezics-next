@@ -4,24 +4,26 @@ The private shelf reads of one account: status tab counts, the per-tab sorted en
 the type filter and the type facets. `shelf-contract.ts` holds the types and the stubs; this file holds the decisions.
 Evidence: [shelf layouts](../../../../docs/research/library-shelves.md) (3.1 structure, 3.3 controls, 3.4 selection),
 [shelf activity](../../../../docs/research/library-shelf-activity.md) (Recommended bounded design, Keyset precision, Authorization),
+[type identity](../../../../docs/research/library-type-keys.md),
 and the Shelves section of [`packages/ui/README.md`](../../../../packages/ui/README.md). They are evidence, not code to copy.
 Bulk selection and execution are a separate contract; these reads do not wait for it.
 
 ## HTTP
 
 `GET /v1/libraryEntries` gains a shelf mode that is on exactly when `orderBy` is present. Without `orderBy` the route,
-its payload, its order (`updated_at DESC, subject_id ASC`) and its cursors are unchanged. `direction` and `type` without
+its payload and order (`updated_at DESC, subject_id ASC`) stay unchanged. Its cursors also migrate to the shared opaque
+helper; old readable HMAC tokens are refused. `direction` and `type` without
 `orderBy` are `400 invalid_request`.
 
-| Parameter   | Values                                        |
-| ----------- | --------------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`     |
-| `direction` | `desc` (default), `asc`                       |
-| `state`     | the five entry states, optional               |
-| `type`      | a primary type, 1 to 256 characters, optional |
-| `view`      | `BASIC` (default), `FULL`                     |
-| `limit`     | 1 to 100, default 20. The web asks 48.        |
-| `cursor`    | opaque, at most 4096 characters               |
+| Parameter   | Values                                    |
+| ----------- | ----------------------------------------- |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt` |
+| `direction` | `desc` (default), `asc`                   |
+| `state`     | the five entry states, optional           |
+| `type`      | exact full primary-type CURIE, optional   |
+| `view`      | `BASIC` (default), `FULL`                 |
+| `limit`     | 1 to 100, default 20. The web asks 48.    |
+| `cursor`    | opaque, at most 4096 characters           |
 
 The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (`subjectId`, `state`, `revision`,
 `createdAt`, `updatedAt`) and three additions. FULL adds only `subject`, as it does today; the embedded session never gains
@@ -42,8 +44,8 @@ The Continue row is `state=in_progress&orderBy=lastActivity`. Defaults are the w
 `type` they are equal. `all` is the entry count. `collections` is the account's active Collections and ignores `type`.
 The web hides empty overview sections from these counts.
 
-`GET /v1/libraryShelfTypes?limit=&cursor=` returns `{types: [{type, count}], next}` ordered by `type` bytewise ascending
-(`COLLATE "C"`). Counts are the account's entries of the type in any state. Limit 1 to 100, default 20.
+`GET /v1/libraryShelfTypes?limit=&cursor=` returns `{types: [{type, count}], next}` in stable private UUID order
+(the UUID is not returned). Counts are the account's entries of the type in any state. Limit 1 to 100, default 20.
 
 Every new path is `x-exposure: gate:personal_library` and `x-action: library_entry:list`; the summary and the facets
 need no progress authority because they carry no progress.
@@ -61,12 +63,24 @@ shared module changes: that function already exists and is the interface this re
 
 ### Cursors
 
-The shelf and facet cursors use the account-owned opaque helper (`ShelfCursorCodec`): AES-256-GCM through the existing key
-ring with route, viewer and query as associated data, current and previous keys accepted. The module adds no readable
-signed position and no encryption of its own. The scope is `shelfCursorScope` (account, state, type, order, direction) and
-`shelfTypeCursorScope` (account). A cursor from another owner, state, type, order or direction, from the old list or the
-facets, a malformed, tampered or expired one, is `400 invalid_cursor`. A partition-epoch mismatch stays `409 stale_cursor`.
-The position is `ShelfSeek`: the stored timestamp text with microseconds, `''` for a null finished date, and the subject id.
+All touched entry lists and facets use the async shared opaque helper through `ShelfCursorCodec`, structurally identical
+to `encodeListCursor`/`decodeListCursor`: existing `KeyRing`, `{route, viewer, query}`, `{epoch, after}`, and required
+`now: Date`, returning promises of string / existing `CursorResult`. It uses the kernel's tokens and clock, accepts current
+and previous keys and supplies no local cryptography or wall-clock default. Abstract types do not import its runtime.
+
+`shelfCursorBinding(accountId, query)` returns route `GET /v1/libraryEntries`, viewer account id and the effective
+`{state, typeId, orderBy, direction, limit}`. `normalizeShelfQuery` gives missing state/typeId `null`, direction `desc`,
+limit `20`; orderBy is required for shelf mode. Normalize once and use the SAME resolved predicate for SQL and binding.
+Resolve the public full type exactly in the owner's dictionary before decode. Never put raw type text in AAD or after.
+`shelfTypeCursorBinding(accountId, limit)` uses route `GET /v1/libraryShelfTypes` and query `{limit}`. The caller supplies
+the validated effective limit, including its default. Neither binding contains cursor or presentation view.
+
+The old-mode entry list uses the same route/viewer but query `{state: state ?? null, orderBy: 'updatedAt',
+direction: 'desc', limit}`. This distinct order prevents an old-list token from becoming a shelf position. Do not accept
+old HMAC tokens on either mode. Changing owner, state, resolved type, order, direction or page size, using another list's
+token, tampering or expiry gives `400 invalid_cursor`; a partition-epoch mismatch gives `409 stale_cursor`.
+Shelf after-keys are exact stored timestamp text (microseconds kept, `''` for null finished date) and subject UUID;
+facet after is only the last emitted private type UUID. No timestamp passes through `Date`.
 
 Walking is a live traversal: every entry appears exactly once while the data does not change. Under concurrent writes a
 continuation resumes from its key. An unseen entry whose key moves before the boundary is not returned until the next first
@@ -95,289 +109,300 @@ snapshot retention and no transaction held across pages. A client deduplicates b
   `(last_changed_at DESC, session_id ASC)`, or `null`. Several active sessions stay legal. Completing or abandoning the
   shown one reveals the next. A reread is a new session id and never borrows a finished one. The choice is unrelated to
   which session set `lastActivityAt`.
-- Type. `type` is the subject's primary type from `semantic.subject.type`. Each entry stores it with the subject that is
-  its source (`type_source_id`, the entry's own subject until a merge). Private state never enters a semantic, search or
-  public table.
+- Type. `type` is the subject's primary type from `semantic.subject.type`. Each entry stores its private `type_id`, source
+  subject (`type_source_id`, its own subject until a merge), and the observed source stamp. Private state never enters
+  a semantic, search or public table.
 
 ## Storage
 
-One additive migration in the owner's partition; nothing is written on a subject partition. `route` leads every key.
+This is a storage plan, not an applied migration. Every private primary key begins with `(route, account_id)` and is checked
+against the account route. No new private directory, holder hint or Library row lives on subject partitions.
 
-```sql
-ALTER TABLE library.entry
-  ADD COLUMN activity_at timestamptz,        -- = GREATEST(updated_at, progress_head.last_changed_at); NOT NULL after backfill
-  ADD COLUMN finished_at timestamptz,        -- nullable, see Semantics
-  ADD COLUMN subject_type text COLLATE "C",  -- NOT NULL after backfill, CHECK char_length BETWEEN 1 AND 256
-  ADD COLUMN type_source_id uuid;            -- NOT NULL after backfill
+- `library.entry` adds `activity_at timestamptz`, nullable `finished_at`, `type_id uuid`, `type_source_id uuid`,
+  `type_source_partition integer`, `type_source_epoch integer`, `type_source_position bigint`, and immutable
+  `incarnation_id uuid` (the creation transaction id). Existing `transaction_id` remains the last user command identity.
+  Type metadata correction changes neither that identity nor revision/update/activity time. Required new columns become
+  NOT NULL only after cutover/backfill. Full type text is not an entry index key.
+- `progress_session.last_changed_at timestamptz` becomes NOT NULL after backfill.
+- `progress_head(route, account_id, subject_id)` has nullable `last_changed_at` and `last_completed_at`. `ensure` creates
+  and locks an empty head, even without any progress. Deleting an entry retains it.
+- `shelf_count(route, account_id, bucket, type_id)` has nonnegative integer `n`. The reserved nil UUID is the all-types
+  rollup and the only Collection key; it is never allocated as a type. Buckets are the five states, `all`, `collections`.
+  One entry in state s/type y contributes `(s,nil)`, `(s,y)`, `(all,nil)`, `(all,y)`. A Collection contributes
+  `(collections,nil)`. Zero counts may remain. Dictionary identities remain even if counters are rebuilt or removed.
 
-ALTER TABLE library.progress_session
-  ADD COLUMN last_changed_at timestamptz;    -- NOT NULL after backfill
+Twelve entry indexes: for each K in `activity_at`, `created_at`, `finished_at`, use `(route,account_id,K,subject_id)`,
+plus state, plus type_id, plus both state/type_id before K. K is DESC and subject_id ASC; finished is DESC NULLS LAST.
+Backward scans serve the reverse direction. `entry_type_source(type_source_id,route,account_id,subject_id)` seeks holders.
+`progress_session_active(route,account_id,subject_id,last_changed_at DESC,session_id ASC) WHERE state='active'` serves
+one active-session probe. `shelf_count_types(route,account_id,type_id) WHERE bucket='all' AND type_id<>nil AND n>0`
+excludes historical zero counts before pagination. Existing old-list indexes remain.
 
-CREATE TABLE library.progress_head (
-  route integer NOT NULL, account_id uuid NOT NULL, subject_id uuid NOT NULL,
-  last_changed_at timestamptz, last_completed_at timestamptz,   -- null until the first session change
-  PRIMARY KEY (route, account_id, subject_id),
-  CHECK (route = get_byte(uuid_send(account_id), 10) * 256 + get_byte(uuid_send(account_id), 11)));
+### Exact private dictionary
 
-CREATE TABLE library.shelf_count (
-  route integer NOT NULL, account_id uuid NOT NULL,
-  bucket text NOT NULL CHECK (bucket IN ('planned','in_progress','completed','paused','dropped','all','collections')),
-  type text NOT NULL COLLATE "C",            -- '' is the rollup over all types and the only value for 'collections'
-  n integer NOT NULL CHECK (n >= 0),
-  PRIMARY KEY (route, account_id, bucket, type),
-  CHECK (route = get_byte(uuid_send(account_id), 10) * 256 + get_byte(uuid_send(account_id), 11)));
-```
+Adopt the full-value / compact-identity separation recommended by the type-key study. This contract supersedes its
+proposed public UUID interface: only full CURIEs cross HTTP. A private `typeId` is stable, account-scoped, one-to-one,
+immutable, non-reused and not authority. An unknown, foreign or stale full value is `400 invalid_argument`; a retained
+known zero-count value is valid and yields an empty page / zero shown counts. Lookup never allocates on reads.
 
-Indexes. K is `activity_at`, `created_at` or `finished_at`; the order column is `K DESC` (`finished_at DESC NULLS LAST`)
-then `subject_id`. Twelve entry indexes serve every combination of key and filter, named `entry_shelf_<key>[_state][_type]`:
+All text is exact ASCII, without Unicode, case, prefix or IRI normalization. There is no per-identifier limit. The
+release-wide 4 MiB validation bound is not a 256-character limit. Persist every byte in unindexed TOAST-able text.
+The proposed private tables (all account scoped, with route checks and scoped foreign keys) are:
 
-- `(route, account_id, K, subject_id)`
-- `(route, account_id, state, K, subject_id)`
-- `(route, account_id, subject_type, K, subject_id)`
-- `(route, account_id, state, subject_type, K, subject_id)`
+| Relation                 | Keys and values                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `shelf_type_value`       | PK `(route,account_id,type_id)`, unindexed full text, stored byte length and JSON-encoded byte length. Full text has no index, including expression/unique indexes.                  |
+| `shelf_type_root`        | PK `(route,account_id,digest)` with a fixed-size digest, immutable primary type_id and root node UUID. A digest is an accelerator, never proof of identity.                          |
+| `shelf_type_node`        | Unique `(route,account_id,parent_id,chunk bytea)` with chunk at most 256 ASCII bytes; scoped unique node UUID; nullable terminal type_id. A terminal and outgoing edges may coexist. |
+| `shelf_type_reservation` | PK `(route,account_id,reservation_id)`, full input text, digest, progress node/offset, candidate UUID, account fence/generation. No full values in workflow inputs or results.       |
 
-Also: `entry_type_source (type_source_id, route, account_id, subject_id)` for the type sweep;
-`progress_session_active (route, account_id, subject_id, last_changed_at DESC, session_id) WHERE state = 'active'`;
-`shelf_count_types (route, account_id, type) WHERE bucket = 'all' AND type <> '' AND n > 0`. The old `entry_account_*`
-indexes stay for the old list. A counter row at zero may linger and readers ignore it; only a rebuild removes it.
+`ShelfTypeKeys.lookup(client,route,accountId,fullType)` reads one digest root and compares its primary full value for
+exact equality. A match returns its ID. A missing root returns null without allocation. A different value with the same
+digest walks exact fixed-chunk edges from that root, then checks terminal/full equality. No collision bucket scan, digest
+alias, raw-text B-tree key or prefix truncation is permitted. A value and its strict extension are distinct terminals.
+Use a fixed digest (e.g. SHA-256) only to select the root; forced equal digests must preserve correctness.
 
-Counters, for one entry in state `s` with type `y`: `(s,'')`, `(s,y)`, `('all','')`, `('all',y)`. Each Collection create adds
-`('collections','')`, each delete removes it. The counters are written in the command's transaction, so a page and its
-counts agree within a snapshot.
+`reserve(write,fullType)` first follows the same path. A root miss atomically publishes the complete primary mapping
+under the unique root; concurrent losers reread and compare. A collision reserves native text, then walks/inserts edges
+root to leaf by unique point keys. `continue(write,{reservationId})` stages at most 100 edges per maintenance transaction.
+Shared staged nodes may exist without a terminal. Publish the final terminal and complete value mapping atomically;
+never expose a half identity. Concurrent same-value attempts converge through root/terminal uniqueness, not a scan.
+A candidate UUID conflict retries with a fresh non-nil UUID, with bounded attempts per continuation, never aliases or a
+permanent length failure. Published mappings and root/terminal identities remain when counts reach zero. Reads encountering
+unfinished reservations see no known value yet; writers finish resolution before entry/counter mutation. Revalidate the
+account fence and source binding before publishing or using staged results. Observation objects with full values remain inside a native step; save a reservation reference before a step returns.
+Workflow arguments/results contain only
+bounded UUIDs, offsets and canonical decimal position strings; large input and source values stay in native reservations.
+
+Usual digest hit/miss touches constant indexed rows/statements plus O(input bytes) hashing, comparison and storage.
+Forced collisions touch O(ceil(input bytes / 256)) point edges, independent of the number of unrelated identities.
+Lookup may walk those edges in the read snapshot; allocation uses bounded resumable transactions. Eventual completion of
+long valid values is required, including across retries. Input-size work is separate from database-population growth.
+
+Library owns dictionary/lookup/staging and the `shelf-erasure` module contract. It must supply bounded account erasure
+for value/root/node/reservation rows, counts, heads and source metadata, children before parents, fenced against stale
+workers recreating data. The account-erasure orchestration owner must call and await that module contract before declaring
+account purge complete. No account-erasure integration API exists here to assume already wired: that call site and writer
+fencing are real cutover prerequisites, owned by final wiring with the account-erasure owner. Account deletion ends the
+account namespace; normal entry/type deletion never erases retained identities or reuses keys.
 
 ## Helpers and call points
 
-All helpers take `ShelfWrite` (`client`, `route`, `accountId`) and run in the owning command transaction.
+`ShelfWrite` carries the real command client, route and account id. `ShelfHeads.ensure` runs before the entry statement:
+one no-op upsert locks the head and returns both nullable timestamps. `ProgressActivity.touch` runs after a successful
+session statement: first upsert/lock the head with GREATEST(old,T), also completion when appropriate; then a NEW statement
+raises the existing entry's activity/finish maxima. The second statement sees an entry committed while the first waited.
+It never inserts an entry. The head lock serializes entry/progress writes; session lock precedes head then entry then
+sorted counter keys. The all-types `all` counter locks first. Negative counters abort.
 
-| Helper                     | Statements | Called by                                                         |
-| -------------------------- | ---------- | ----------------------------------------------------------------- |
-| `ShelfHeads.ensure`        | 1          | `putEntry`, before its entry statement                            |
-| `ProgressActivity.touch`   | 2          | every session command, after its session statement succeeds       |
-| `ShelfCounters.transition` | 1          | `putEntry` (when placement changes), `deleteEntry`, type retyping |
-| `ShelfCounters.collection` | 1          | Collection create and delete                                      |
+Entry create resolves source and exact private identity before the command, outside receipt input; it records source
+stamp and immutable creation identity. Under the head lock, activity is max(T,head change), finish is max(head completion,
+T when completed). State changes retain type/source, raise activity and raise finish only on entering completed. Counter
+transition runs only for changed placement. Delete removes entry/counters, retaining sessions/head/dictionary. Every
+session start/record/complete/abandon raises its own last_changed_at with max(old,T), then touches head/entry. Complete
+also raises completion/finish. An accepted no-net-effect record counts; a CAS miss throws before touch, rollback restores
+all state, and receipt replay skips the body. No `now()` or `Date.now()` supplies domain time.
 
-- `ensure` upserts the head with a no-op update and returns its two timestamps. The row is the serialization point between
-  entry and progress writes on one subject.
-- `touch` is two statements on purpose. The first upserts the head with `GREATEST` of its columns and T (and
-  `last_completed_at` when `completed`) and takes its lock. The second, in a new statement so it sees entries committed
-  while it waited, runs `UPDATE library.entry SET activity_at = GREATEST(activity_at, T)` (and `finished_at` when
-  `completed`) for the exact key and does nothing when there is no entry.
-- `putEntry` insert: `ensure`, then one insert that sets `activity_at = GREATEST(T, head.last_changed_at)`, `finished_at =
-  GREATEST(head.last_completed_at, T if the state is completed)`, `subject_type` and `type_source_id`, then `transition`.
-  `putEntry` update: `ensure`, then the existing compare-and-swap with `activity_at = GREATEST(T, head.last_changed_at)` and
-  `finished_at = GREATEST(finished_at, T)` only when the state moves into completed. `transition` runs only if the state
-  changed. `deleteEntry`: the existing delete, then `transition`.
-- The type is read before the command by `readItemTypes(pool, [subjectId])` (at most 256 ids, visible rows only) next to
-  the existing subject resolve. It is not part of the receipt input, so a replay with a changed type is not an idempotency
-  conflict. An update keeps the stored type.
-- Session commands: `updateSession`/`insertSession` write `last_changed_at = GREATEST(old, T)`, then `touch`. A start has no
-  session lock. Record, complete and abandon keep their `FOR UPDATE` first, so the lock order is session, head, entry,
-  counters. A compare-and-swap miss throws before `touch`, so the rollback leaves everything as it was. A receipt replay
-  skips the body.
-- `transition` upserts at most eight counter rows in one statement with keys sorted, so `('all','')` is always locked
-  first. A rebuild takes the same row first. A delta that would make a count negative aborts the command.
+`ShelfReadDependencies` supplies actual pool, resolved Access, existing tokens, KernelClock, separately injectable
+page/summary/facet readers, exact type lookup and async codec. `admitShelfRead` takes pool/access/clock plus actor/deadline,
+checks progress scope and calls real `admitGroup({pool,access:()=>access,actor,group:'reading_progress',
+clientAction:'progress_session:list',deadline,clock})`. The existing route admits `personal_library` once. No stub returns
+successful invented data. Concrete implementations import contract types; the final wiring owner alone replaces stubs.
 
 ## Queries
 
-Shelf page, one snapshot (`REPEATABLE READ READ ONLY`, as the old list). The statement text is chosen from a closed set of
-fixed shapes (key × direction × state × type); values are always parameters and no shape uses an optional `OR`. Each shape
-fetches at most `limit + 1` rows with two `LIMIT` branches, as the old list does.
+One fenced, owner-admitted `REPEATABLE READ READ ONLY` snapshot covers source-independent dictionary resolution, partition
+epoch, page/summary/facet work and cursor validation. A public type must resolve BEFORE cursor decode. SQL and binding
+receive the same normalized `ShelfQuery`, distinct from public `ShelfListQuery.type`. Retained known-zero filters still
+resolve to their original private ID. FULL retains existing authorized bounded subject enrichment.
 
-- `desc`, key not null: `K < :c`, or `K = :c AND subject_id > :id`. `asc`: `K > :c`, or `K = :c AND subject_id < :id`.
-- `finished_at` adds the null group. `desc` after a date: the two branches above, then `finished_at IS NULL` ordered by
-  `subject_id`; inside the null group only `subject_id > :id`. `asc` is the mirror: inside the null group `subject_id < :id`
-  then every dated row ascending; after a date the two `asc` branches.
-- The timestamp is compared as the stored text cast back to `timestamptz`, never through `Date`.
+All SQL is in its own typed `.sql` file. `ShelfDateReader` supplies candidates, `ShelfActiveReader` supplies the independent session batch and the dispatcher
+returns the complete `ShelfPageReader` result. Six page adapters (three date keys × two directions) each select four fixed
+state/type-id predicate statements; no generated SQL strings and no optional-filter OR. Each branch has LIMIT, producing
+at most O(limit) candidates. A bounded merge sort over branch results is allowed; a population scan/sort is not.
+DESC seeks K < boundary or equal K with subject_id > boundary; ASC mirrors both. Finished dates include the null group
+last in DESC, first in ASC; within it seek by subject id. Compare exact stored timestamp text cast to timestamptz,
+never JavaScript Date. One separate active-session statement probes the partial index once per emitted entry and returns
+only BASIC session fields, never sparse units/history. Summary uses at most thirteen exact counter keys, never COUNT of
+entries, sessions or Collection members.
 
-Active sessions for the page: one statement with a lateral probe per returned entry, at most `limit` probes:
-
-```sql
-SELECT ... FROM unnest(:subject_ids::uuid[]) AS e(subject_id)
-LEFT JOIN LATERAL (
-  SELECT <session columns> FROM library.progress_session s
-  WHERE s.route = :route AND s.account_id = :account_id AND s.subject_id = e.subject_id AND s.state = 'active'
-  ORDER BY s.last_changed_at DESC, s.session_id ASC LIMIT 1) a ON true
-```
-
-The summary reads at most 13 exact counter keys by primary key (`(bucket, '')` for seven buckets, and `(bucket, :type)` for
-six). The facets read `shelf_count_types` with `type > :after ORDER BY type LIMIT :l + 1`.
+Facet discovery first reads at most limit+1 positive private keys, counts and stored encoded lengths. It then chooses the
+emittable prefix and fetches ONLY those full values, by primary key. The serialized response (including escaped values,
+counts, envelope and next token) has an 8 MiB budget, large enough for any one valid release-bounded identifier. Reserve
+space for the maximum token/envelope before choosing the prefix. A page may be shorter than its row limit. If more remain,
+next seeks strictly after the last EMITTED UUID, never after an unreturned discovery row. No empty page with next and no
+truncation. Discovery cannot eagerly transfer a hundred huge values before applying the budget. Store full and encoded
+lengths when allocating; emitting a full release-bounded value always makes progress. Cursor tokens carry only UUIDs.
 
 ## Type projection
 
-`subject.revised` carries no new type, so the library re-reads. Source events enter through the effect registry beside the
-existing `library_member_listing` effect and enqueue `library.shelfTypeSync` with the workflow id `shelfTypeSyncWorkflowId`.
+`subject.revised` identity events enqueue `library.shelfTypeSync` by subject/revision; merge events by old/survivor.
+Payloads are invalidation hints, never authoritative type/redirect truth. `observeShelfType` obtains the current owner,
+opens one RR client at that authoritative source partition and calls `readPartition` AND semantic `readItemTypes` on that
+SAME client. Capture `{partition,epoch,position}` with the type and current merge binding from that snapshot.
+`ShelfSourceSnapshot.binding` remains stamped even when a merged/invisible source has no visible type observation. Position
+is bigint throughout native comparisons/storage; only JSON/DBOS boundaries use canonical decimal strings restored to
+bigint before comparison. Moved/fenced source ownership uses normal partition retry/routing, not a successful miss.
 
-- `com.rezics.subject.revised.v1` with `kind: 'identity'` (other kinds are ignored): `{kind: 'revised', subjectId, revision}`.
-- `com.rezics.subject.merged.v1` (`id`, `survivor`): `{kind: 'merged', subjectId: id, survivorId: survivor}`.
+Resolve/check the merge in that same source snapshot, following only ONE hop. A source switch observes survivor data
+separately in an RR snapshot at its own owner; never label survivor data with the old source's stamp. If the survivor has
+also moved/merged, revalidate the binding through a later bounded retry rather than recursively following a chain in one
+step. An invisible source keeps the last known type; an event without a type cannot invent one.
 
-The workflow reads the current type once through `readItemTypes` (`revised`: the subject; `merged`: the survivor; a miss
-ends the run and keeps the last known type), then walks the partitions that exist. One step is one partition and one page of
-at most 100 entries: `entry_type_source` selects entries with `type_source_id = subjectId` in route order from the cursor,
-the update changes only rows whose type or source differs, and `transition` moves each touched account's counters in the
-same transaction. A merge also sets `type_source_id` to the survivor, so later revisions of the survivor reach those entries
-through the index. Re-running changes nothing, so duplicates, replays and reordered revisions converge on the type current at
-read time; the workflow id also skips a revision already handled. Two accounts holding one subject are two rows of the same
-sweep. The total work is proportional to the entries of the subject, in pages; no step is larger than a page.
+Each entry stores current source id/stamp, immutable incarnation id and last user transaction id. Within the SAME source
+partition compare `(epoch,position)` monotonically; never compare positions from different partitions. Source switches
+require expected current source/incarnation/transaction/stamp equality, a non-older observation of that same current
+source binding, and a revalidated one-hop redirect with a separately observed survivor stamp. An old snapshot paused before apply cannot replace a newer applied stamp, even when event
+workflow IDs differ. A false CAS triggers a bounded retry rereading current entry AND source binding/truth, not reuse of
+an old snapshot against a new expectation. A same-source older/equal stamp is a no-op; equal stamps may repair a proved
+inconsistent value only under exact expected-version CAS. Metadata correction updates private type/source/stamp and
+counter deltas atomically, without entry revision, transaction/update/activity time changes or entry.updated emission.
 
-A new entry can race a type change that finished its sweep first. The effect `library_shelf_type_verify` listens to
-`com.rezics.library.entry.updated.v1`, reads the entry, skips it unless `revision = 1`, and corrects the type if
-`readItemTypes` differs. That is one point read and one batch of one id.
+Sweep all existing partitions in bounded visits, then holder pages through `entry_type_source`, ordered by the FULL
+unique `(route,accountId,subjectId)` tuple. An account may retain several merged-away entries following one source; do
+not drop its unreturned tail at a page boundary. Each candidate uses the expected-version CAS and counter transition.
+A step has O(page size) statements when doing per-account transitions. Total cost includes existing-partition visits as
+well as holders; no private directory/hint is added at the subject. Resume/retry revalidates source binding and stamp.
 
-An entry whose subject becomes invisible keeps its last known type. No type is inferred from an event that lacks it.
+`library_shelf_type_verify` listens to existing entry.updated CloudEvents. Key `library.shelfTypeVerify` by immutable
+`event.id` (`shelfTypeVerifyWorkflowId(eventId)`), not (account,subject). Read the CURRENT entry and observe its
+incarnation/transaction/source/stamp, even when revision is no longer one; use bounded CAS/retry as above. Old work must
+not overwrite a recreated entry or newer stamp. A later state change/recreation has another event id and can verify anew.
+No event schema change is needed to access CloudEvent.id. Verification never emits an entry.updated loop.
 
-## Migration and backfill
+## Migration, backfill and cutover
 
-1. Add the nullable columns, the two tables and the indexes. Deploy writers that fill every new column.
-2. Backfill in bounded batches ordered by `(route, key)`, 1000 rows per statement, each batch under the head lock:
-   sessions get `last_changed_at = GREATEST(started_at, completed_at, latest progress_change.recorded_at)`; heads are
-   inserted per account and subject from those maxima with `last_completed_at = max(completed_at)`; entries get
-   `activity_at = GREATEST(updated_at, head.last_changed_at)`, `finished_at = GREATEST(head.last_completed_at, updated_at if
-   state = 'completed')`, and their type from `readItemTypes` in batches of 256 with `type_source_id = subject_id`; counters
-   are rebuilt per account under the counter lock.
-3. A time that was never stored is not invented. An abandoned session has no stored abandon time, so its change time is its
-   last known start or record. Order among old tied or abandoned sessions is therefore reproducible, not historical.
-4. Set the columns NOT NULL once every row is filled, and switch the shelf mode on.
+Add nullable columns, dictionary and head/count tables and indexes first. Deploy concrete writer hooks before fixtures
+or requests depend on shelf reads. Backfill session change time from max(start,completion,stored change records), then
+heads, entry activity/finish, exact type IDs/source stamps and counters in bounded keyset batches. An abandon time never
+stored is not invented: tied historical ordering is best-known and reproducible. Long identity allocation is staged
+separately, not embedded in one large backfill transaction.
+
+Maintenance rebuild takes an explicit writer fence/quiescence across bounded account batches and final generation swap;
+normal writers, projection and fixture seeding must honor it. `rebuildShelfCounters(write,batch)` has bounded limit,
+continuation, fence and generation identity. No whole growing account scan in one transaction. Retried batches are
+idempotent; partial generations are not served. Validate concurrency/fencing and resume before NOT NULL/read cutover.
+Final wiring owns writer and real-driver fixture cutover, account-erasure integration and the shared contract re-exports.
 
 ## Worker split
 
-Each worker owns the files named and nothing else. One writer per shared file. The only edit any worker makes to
-`shelf-contract.ts` is replacing its own stub with a one-line re-export of its implementation. `after` lists real code
-needs: typed SQL needs the schema. Every worker below except storage can start once the storage migration has merged.
+Every row below is a separate runnable implementation, at most 400 added/changed lines and eight files. Split again if
+that limit cannot hold; do not consolidate readers/resolver/maintenance. All tests start red against the throwing stubs or
+missing concrete modules, never by returning fixture-shaped success. Each acceptance command is
+`bun run --cwd services/kernel check test/library/<test file>`; literal test titles are given below. Reader rows expand
+into six independent tasks/files/tests, one per named key/direction. Typed SQL depends on its actual schema, not a report.
+Only final wiring edits `shelf-contract.ts`; every other worker imports types and tests its concrete module directly.
+No worker imports a cursor runtime until its helper implementation exists. HTTP, old-list and read-service workers that
+import `tokens/list-cursor.ts` declare the shared opaque-helper code prerequisite; abstract specification does not.
 
-| Task                             | Files (at most 8, 400 lines)                                                                                                       | After                                                           |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `library-shelf-storage`          | the migration, regenerated `db/library/schema.sql`, `test/library/shelf-schema.test.ts`                                            |                                                                 |
-| `library-shelf-store`            | `shelf-store.ts`, its five `.sql` statements (ensure, touch, raise, counts apply, counts lock), `test/library/shelf-store.test.ts` | storage                                                         |
-| `library-shelf-entry-writes`     | `entries.ts`, `entry-store.ts`, `entry-store-entry-insert.sql`, `entry-store-entry-update.sql`, one test                           | storage                                                         |
-| `library-shelf-progress-writes`  | `sessions.ts`, `progress-store.ts`, `progress-store-session-insert.sql`, `progress-store-session-update.sql`, one test             | storage                                                         |
-| `library-shelf-collection-count` | `collections.ts` create and delete hooks, one test                                                                                 | storage                                                         |
-| `library-shelf-reader`           | `shelf-reader.ts`, `shelf-reader-sql.ts`, `shelf-reader-active.sql`, `shelf-reads.ts`, two tests                                   | storage                                                         |
-| `library-shelf-summary`          | `shelf-summary.ts`, `shelf-summary-counts.sql`, `shelf-summary-types.sql`, one test                                                | storage                                                         |
-| `library-shelf-type-projection`  | `shelf-type-sync.ts`, `shelf-type-sync-page.sql`, `shelf-type-sync-apply.sql`, `work.ts`, two tests                                | storage                                                         |
-| `library-shelf-backfill`         | `shelf-backfill.ts`, three `.sql` batches, `rebuildShelfCounters`, one test                                                        | storage                                                         |
-| `library-shelf-http`             | `personal-routes.ts` (list shelf mode, summary, facets, `admitShelfRead`), one test                                                | reader, summary                                                 |
-| `library-shelf-driver`           | `test/support/library-shelves-driver.ts` (the real driver), `test/support/shelf-seed.ts`, one driver test                          |                                                                 |
-| `library-shelf-growth`           | `test/library/growth-shelves.test.ts`, `test/library/growth-shelf-writes.test.ts`, the module `README.md` Cost sections            | entry-writes, progress-writes, reader, summary, type-projection |
+| Owner                | Exclusive files / call sites                                                                                                          | Code prerequisites                                               | Failing acceptance: test file — literal title                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Base schema          | one shelf-columns migration, `test/library/shelf-schema.test.ts`                                                                      | none                                                             | `shelf-schema.test.ts` — `shelf heads counts stamps and bounded indexes exist`                                     |
+| Dictionary schema    | one dictionary migration, `test/library/shelf-type-schema.test.ts`                                                                    | base schema                                                      | `shelf-type-schema.test.ts` — `dictionary keys are bounded and owner scoped with retained terminals`               |
+| Heads/activity       | `shelf-heads.ts`, three head/activity `.sql`, `test/library/shelf-heads.test.ts`                                                      | base schema                                                      | `shelf-heads.test.ts` — `empty heads serialize entry create and progress raise in two statements`                  |
+| Counters             | `shelf-counters.ts`, two delta `.sql`, `test/library/shelf-counters.test.ts`                                                          | base schema                                                      | `shelf-counters.test.ts` — `placement and Collection deltas roll back atomically`                                  |
+| Entry store          | `entry-store.ts`, its insert/update/delete `.sql`, `test/library/shelf-entry-store.test.ts`                                           | base schema                                                      | `shelf-entry-store.test.ts` — `entry CAS preserves incarnation and returns shelf placement`                        |
+| Entry hooks          | `entries.ts` write paths, `test/library/shelf-entry-writes.test.ts`                                                                   | heads, counters, entry store, type allocation/source observation | `shelf-entry-writes.test.ts` — `entry writes preserve progress maxima and replay placement`                        |
+| Progress store       | `progress-store.ts`, its insert/update `.sql`, `test/library/shelf-progress-store.test.ts`                                            | base schema                                                      | `shelf-progress-store.test.ts` — `session changes persist monotonic command time`                                  |
+| Progress hooks       | `sessions.ts`, `test/library/shelf-progress-writes.test.ts`                                                                           | heads, progress store                                            | `shelf-progress-writes.test.ts` — `accepted progress raises activity while CAS and replay do not`                  |
+| Collection hooks     | `collections.ts`, `test/library/shelf-collections.test.ts`                                                                            | counters                                                         | `shelf-collections.test.ts` — `active Collection commands maintain only the owner rollup`                          |
+| Date readers         | Six owners: `shelf-page-{activity,finished,created}-{asc,desc}.ts`, four fixed predicate `.sql` each, one matching test each          | base schema                                                      | each `shelf-page-<key>-<direction>.test.ts` — `fixed predicates seek dates nulls and ties without population work` |
+| Active sessions      | `shelf-active.ts`, one lateral `.sql`, `test/library/shelf-active.test.ts`                                                            | base schema                                                      | `shelf-active.test.ts` — `active probes preserve sparse BASIC sessions and activity ties`                          |
+| Closed dispatcher    | `shelf-page.ts`, `test/library/shelf-page.test.ts`                                                                                    | six date readers, active sessions                                | `shelf-page.test.ts` — `every shelf shape dispatches to a bounded fixed reader`                                    |
+| Summary              | `shelf-summary.ts`, one counter `.sql`, `test/library/shelf-summary.test.ts`                                                          | counters                                                         | `shelf-summary.test.ts` — `shown totals use exact private keys including known zero`                               |
+| Facets               | `shelf-facets.ts`, discovery/value `.sql`, `test/library/shelf-facets.test.ts`                                                        | dictionary schema, counters                                      | `shelf-facets.test.ts` — `facets budget bytes before fetching full values and continue by emitted UUID`            |
+| Exact lookup         | `shelf-type-lookup.ts`, root/value/edge `.sql`, `test/library/shelf-type-lookup.test.ts`                                              | dictionary schema                                                | `shelf-type-lookup.test.ts` — `exact full values resolve without allocation across forced collisions`              |
+| Allocation           | `shelf-type-keys.ts`, reserve/root/publish `.sql`, `test/library/shelf-type-keys.test.ts`                                             | dictionary schema, exact lookup, trie staging                    | `shelf-type-keys.test.ts` — `concurrent identities never alias or expose partial terminals`                        |
+| Trie staging         | `shelf-type-stage.ts`, reservation/edges/progress `.sql`, `test/library/shelf-type-stage.test.ts`                                     | dictionary schema                                                | `shelf-type-stage.test.ts` — `long collision paths finish in bounded resumable transactions`                       |
+| Source observation   | `shelf-type-source.ts`, one merge-read `.sql`, `test/library/shelf-type-source.test.ts`                                               | existing partition/semantic reads                                | `shelf-type-source.test.ts` — `source stamp type and one hop binding share the authoritative RR client`            |
+| Projection apply     | `shelf-type-apply.ts`, version-read/apply/page `.sql`, `test/library/shelf-type-apply.test.ts`                                        | counters, allocation, source observation                         | `shelf-type-apply.test.ts` — `paused old source snapshots cannot overwrite a newer apply or incarnation`           |
+| Projection workflows | `shelf-type-sync.ts`, `shelf-type-verify.ts`, `test/library/shelf-type-sync.test.ts`                                                  | projection apply                                                 | `shelf-type-sync.test.ts` — `tuple continuations and event keyed verification converge without entry events`       |
+| Dictionary erasure   | `shelf-erasure.ts`, three bounded purge `.sql`, `test/library/shelf-erasure.test.ts`                                                  | dictionary schema, base schema                                   | `shelf-erasure.test.ts` — `account purge fences reservations and removes private dictionary state in batches`      |
+| Dictionary backfill  | `shelf-type-backfill.ts`, two `.sql`, `test/library/shelf-type-backfill.test.ts`                                                      | allocation, source observation                                   | `shelf-type-backfill.test.ts` — `type backfill resumes long identities without publishing partial entries`         |
+| Activity backfill    | `shelf-backfill.ts`, three batch `.sql`, `test/library/shelf-backfill.test.ts`                                                        | heads, writer hooks                                              | `shelf-backfill.test.ts` — `backfill resumes bounded historical maxima under writer fencing`                       |
+| Counter rebuild      | `shelf-rebuild.ts`, three generation `.sql`, `test/library/shelf-rebuild.test.ts`                                                     | counters, writer hooks                                           | `shelf-rebuild.test.ts` — `fenced counter generations rebuild in bounded batches before atomic cutover`            |
+| Read service         | `shelf-reads.ts`, `test/library/shelf-reads.test.ts`                                                                                  | dispatcher, summary, facets, exact lookup, opaque helper         | `shelf-reads.test.ts` — `read dependencies bind the normalized owner predicate and effective page size`            |
+| HTTP                 | `personal-routes.ts`, `shelf-admission.ts`, `test/library/shelf-http.test.ts`                                                         | read service                                                     | `shelf-http.test.ts` — `shelf HTTP preserves full CURIEs and requires progress admission`                          |
+| Old-list cursors     | `shelf-old-cursors.ts`, `test/library/shelf-old-cursors.test.ts`                                                                      | opaque helper                                                    | `shelf-old-cursors.test.ts` — `old mode keeps payload and order but rejects readable and shelf tokens`             |
+| Real driver          | `test/support/library-shelves-driver.ts`, `test/support/shelf-seed.ts`, `test/library/shelf-driver.test.ts`                           | production commands/Access, hooks, releases, projection          | `shelf-driver.test.ts` — `driver transports real commands and pauses production boundaries without policy`         |
+| Final wiring         | `shelf-contract.ts`, `work.ts`, `shelf-wiring.ts`, composition `../http/kernel.ts`, account-erasure orchestration adapter, `test/library/shelf-wiring.test.ts` | all concrete modules, account-erasure call site                  | `shelf-wiring.test.ts` — `production wiring and fixtures use the concrete shelf services and purge lifecycle`      |
+| Growth reads         | `test/library/growth-shelves.test.ts`                                                                                                 | readers, summary, facets, real driver                            | `growth-shelves.test.ts` — `shelf reads stay bounded as private populations grow`                                  |
+| Growth writes        | `test/library/growth-shelf-writes.test.ts`                                                                                            | hooks, projection, maintenance                                   | `growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`       |
+| Type input costs     | `test/library/growth-shelf-type-keys.test.ts`                                                                                         | exact lookup, staging, facets                                    | `growth-shelf-type-keys.test.ts` — `type work follows input bytes and forced collision path length`                |
 
-Nine workers (store, entry, progress, collection, reader, summary, type projection, backfill, driver) run in parallel after
-storage, and the driver does not even wait for it. The wiring changes outside the files above are limited to
-`collections.ts`, `work.ts` and `personal-routes.ts`, each owned by exactly one task. The outcome suite
-`specs/library-shelves-outcomes.test.ts` passes when all of them have landed.
+Entry hooks own `entries.ts` exclusively, including importing the old-mode adapter once available; the old-list owner
+supplies that adapter and its test without editing entries.ts. HTTP owns personal-routes; final wiring owns work.ts and
+shelf-wiring.ts, the kernel composition call site and the shared stubs. No six readers touch one shared dispatcher. Reader tests grow entries and session
+populations at geometric scales `[256,1024,4096]`, fixed page sizes 1 and 48, all four predicates, null/tie boundaries,
+and EXPLAIN classification allowing bounded branch Sorts. Growth acceptance uses those same geometric populations for
+heads/counters/Collections/holder pages/retained zero identities independently, warmups and the shared classifier, no
+planner pins. Input acceptance separately grows byte lengths `[512,8192,131072]` under forced equal digests with a strict
+extension and same-prefix siblings; a near-release-sized identifier must finish staging and serialize intact. These are
+required future checks, not measured passing results. Production acceptance also runs the complete real-driver outcome
+suite after all workers land. A green no-driver red-suite verifier proves only executable specification integrity.
 
-Outside this contract, each needing its own data contract with the owning module: sort by title (subject label and
-collation, per reader language), by rating (the rating module's per-account value), by release date (a semantic fact of
-the subject) and by progress (mode-dependent; a cursor position has no total). None is implemented here.
-
-Open questions for the manager: (1) the accounts task ID and the API of the opaque cursor helper; (2) whether a coarse
-"partitions holding this subject" hint may live outside the owner's partitions to skip empty partitions in the type sweep;
-without it the sweep visits every existing partition once per source event, at one bounded step each.
+Title/rating/release/progress sorting and bulk execution remain separate owning contracts. No semantic assertion or
+existing shelf/sitemap/bulk research adoption is removed by this specification.
 
 ## Cost
 
-These are derivations from the SQL above and the existing schema, not measurements. `N` is the rows of the relevant
-relation, `s` the page size (at most 100), `L(N) = O(log(2+N))` blocks for a B-tree probe. Rows (`R`), blocks (`B`) and
-statements (`S`) are bounded separately. Every Growth check is a `checkGrowth` case at scales `[256, 1024, 4096]` with
-`warmups >= 1`, constant rows and statements, logarithmic blocks and the shared catalog classifier, and no planner pins.
+These are planned derivations, not measurements or passing growth results. N is relation population, s the bounded page
+size, L(N)=O(log(2+N)), V existing source partitions, H matching holders and b input bytes. Input bytes, response bytes,
+examined rows, blocks and statements are separate dimensions. Growth check citations below are required implementation
+tests; they name file and literal test title only. Their geometric scales belong in test code/acceptance above.
 
 ### Shelf page
 
-- Touches: One account partition. A snapshot, the account admit, the partition epoch, then one keyset statement on the
-  index for the chosen key, direction, state and type: at most `s + 1` entry rows, then one statement with at most `s`
-  lateral probes of `progress_session_active`. FULL adds the existing per-subject summary reads, at most `s`. No whole-library
-  or whole-session sort and no per-card request.
-- Bound: `R` `O(s)`, `B` `O(s L(N))`, `S` constant (admit, epoch, page, probes, begin and commit). Independent of library
-  size, sessions per subject, sparse unit history and other accounts.
-- Growth check: `test/library/growth-shelves.test.ts` grows the owner's entries and its active and inactive sessions
-  independently, plus unrelated accounts, at `[256, 1024, 4096]` with page 48 and measures the first page, a continuation,
-  a state-filtered page and a type-filtered page for each key and direction (the 24 shapes are also checked for a Sort node).
+- Touches: owner admission/epoch, one fixed keyset shape, then bounded active-session probes; FULL adds existing subject reads.
+- Bound: R O(s), B O(s L(N)), S constant for BASIC; no account/session population sort, sparse-unit or history scan.
+- Growth check: `test/library/growth-shelves.test.ts` — `shelf reads stay bounded as private populations grow`.
 
-### Shelf summary
+### Summary
 
-- Touches: A snapshot, the admit and at most 13 counter primary-key probes in one statement.
-- Bound: `R` at most 13, `B` `O(L(N))`, `S` constant. It never counts entries, members or sessions.
-- Growth check: `growth-shelves.test.ts` measures the summary with and without `type` while entries, types and Collections
-  grow at `[256, 1024, 4096]`.
+- Touches: exact rollup and resolved type counter keys; Collection rollup ignores type.
+- Bound: R O(1), B O(L(N)), S constant. Public full-type resolution adds the separate input-size cost below.
+- Growth check: `test/library/growth-shelves.test.ts` — `shelf reads stay bounded as private populations grow`.
 
 ### Type facet page
 
-- Touches: A snapshot, the admit, the epoch and one range scan of `shelf_count_types` for at most `s + 1` rows.
-- Bound: `R` `O(s)`, `B` `O(L(N) + s)`, `S` constant, independent of zero-count rows and of the account's entries.
-- Growth check: `growth-shelves.test.ts` grows distinct types per account at `[256, 1024, 4096]` with page 100, a first and
-  a continuation page, and also leaves many zero-count rows.
+- Touches: positive key/count/length discovery, then only emitted dictionary values; retained zero keys are excluded by index.
+- Bound: R O(s), B O(L(N)+s) for discovery plus emitted TOAST bytes; S constant. Transfer/serialization O(emitted bytes),
+  bounded by the response byte budget independently of row count. Never fetch all discovered large values eagerly.
+- Growth check: `test/library/growth-shelves.test.ts` — `shelf reads stay bounded as private populations grow`.
+- Growth check: `test/library/growth-shelf-type-keys.test.ts` — `type work follows input bytes and forced collision path length`.
 
-### Entry put
+### Exact identity lookup and allocation
 
-- Touches: The subject resolve and the type read before the command. In the command: one `ensure` (head upsert), the entry
-  insert or compare-and-swap, one `transition` of at most eight counter rows when placement changes, and the existing follow
-  upsert. At most the entry's twelve shelf indexes and the head row change; no other entry and no other partition.
-- Bound: `R` `O(1)`, `B` `O(L(N))` with the constant 12 indexes, `S` 3 (4 with the follow), plus the envelope. No
-  projection, count or search write.
-- Growth check: `test/library/growth-shelf-writes.test.ts`: a fresh create and a state-changing update at `[256, 1024, 4096]`
-  while the account's entries and heads, other accounts' entries and the subject's history grow; a conflict rollback keeps
-  the original row, head and counters.
+- Touches: one digest root and full-value comparison; on collision only the input's own trie edges and terminal.
+- Bound: ordinary path constant indexed rows/statements plus O(b) bytes; collision R and S O(ceil(b/chunk)), B that times
+  L(N), plus O(b) hashing/comparison/storage. Staging bounds each transaction's edges; total input work is not constant.
+- Growth check: `test/library/growth-shelf-type-keys.test.ts` — `type work follows input bytes and forced collision path length`.
 
-### Entry delete
+### Entry and Collection writes
 
-- Touches: The existing delete and one `transition`. The head and sessions stay.
-- Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus the envelope.
-- Growth check: `growth-shelf-writes.test.ts` deletes a fresh entry at `[256, 1024, 4096]` while entries and sessions grow.
+- Touches: entry head lock, entry CAS/delete and sorted counter deltas; Collection command adds one counter delta.
+- Bound: command body R O(1), B O(L(N)), S constant, plus existing envelope/source read and separate identity input cost.
+  Delete retains head/sessions/dictionary. CAS/replay cannot advance maxima or counters.
+- Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.
 
-### Session start
+### Progress start, record, complete and abandon
 
-- Touches: The session insert (`last_changed_at = T`), then `touch`: one head upsert and one entry update by primary key
-  that does nothing when the entry is absent. No scan for another session.
-- Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus the envelope. Independent of the subject's session history.
-- Growth check: `growth-shelf-writes.test.ts` starts a session on a fresh subject and on a subject with 256, 1024 and 4096
-  existing sessions, with and without an entry, while unrelated subjects grow.
+- Touches: existing session operation, then head lock and a second entry-raise statement. Complete also raises finish.
+- Bound: existing operation plus R O(1), B O(L(N)), S constant; unit intent remains independently input-bounded.
+- Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.
 
-### Session record
+### Type sweep and verification
 
-- Touches: The existing lock, read, unit statements, compare-and-swap and change append, with `last_changed_at` in the
-  update, then `touch`. A miss throws before `touch`.
-- Bound: As today plus `S` 2 and `R` `O(1)`. The unit statements keep their existing bound of 100 ids.
-- Growth check: `growth-shelf-writes.test.ts` records a scalar value at `[256, 1024, 4096]` while the session's history and
-  the subject's sessions grow separately; a stale revision leaves heads and entries unchanged.
+- Touches: authoritative source snapshot, bounded existing-partition visits, holder tuple pages, per-account CAS/counters.
+  Event-keyed verification reads current entry/source and retries a bounded number of times per step.
+- Bound: sweep R O(s), B O(s L(N)), S O(s) per holder page, plus dictionary input work. Total steps O(V+H/s), including
+  empty partition visits. Source/survivor observations are separate when owners differ. Verification has constant row work
+  per attempt, plus source/value bytes; no stale worker can lower a stamp across retries.
+- Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.
 
-### Session complete
+### Backfill, erasure and counter rebuild
 
-- Touches: The same as record without a change row; `touch` also raises `last_completed_at` and `finished_at`.
-- Bound: As today plus `S` 2, `R` `O(1)`, `B` `O(L(N))`. The next active session is chosen at read time, never here.
-- Growth check: `growth-shelf-writes.test.ts` completes a fresh session at `[256, 1024, 4096]` while the subject's inactive
-  and active sessions grow.
-
-### Session abandon
-
-- Touches: The same as complete; `touch` does not raise the completion columns.
-- Bound: As complete.
-- Growth check: `growth-shelf-writes.test.ts` abandons a fresh session at `[256, 1024, 4096]` while the subject's sessions grow.
-
-### Collection create and delete
-
-- Touches: The existing Collection statements and one `transition`-style counter upsert of `('collections','')`.
-- Bound: As today plus `S` 1, `R` 1, `B` `O(L(N))`.
-- Growth check: `growth-shelf-writes.test.ts` creates and deletes a Collection at `[256, 1024, 4096]` while the account's
-  Collections grow.
-
-### Type sync step
-
-- Touches: One partition and at most 100 entries: a range scan of `entry_type_source` for the subject, an update of rows
-  whose type or source differs, and one `transition` per touched account in the same transaction. The type itself is read once
-  per run, not per step.
-- Bound: `R` `O(s)`, `B` `O(s L(N))`, `S` constant per step. A run is `O(partitions + holders / 100)` steps and no step grows
-  with unrelated entries or sessions.
-- Growth check: `test/library/shelf-type-sync.test.ts` runs a step for a subject held by 256, 1024 and 4096 accounts' entries
-  while unrelated entries grow; a repeated run changes no row and no counter.
-
-### Entry type verify
-
-- Touches: One entry point read, then (revision 1 only) one `readItemTypes` batch of one id and at most one correction step.
-- Bound: `R` `O(1)`, `B` `O(L(N))`, `S` constant.
-- Growth check: `shelf-type-sync.test.ts` verifies one entry at `[256, 1024, 4096]` while the account's entries grow.
-
-### Backfill and counter rebuild
-
-- Touches: Maintenance only, never a request. A batch updates at most 1000 rows of one relation in one route range under the
-  head or counter lock; a rebuild reads one account's entries and rewrites its counter rows.
-- Bound: `R` `O(batch)`, `S` constant per batch; the whole run is linear in stored rows, once.
-- Growth check: `test/library/shelf-backfill.test.ts` runs a batch at `[256, 1024, 4096]` unfilled rows and shows constant
-  statements per batch; it is not a request-path check.
+- Touches: bounded maintenance batches and dictionary continuations under explicit writer/account fences; generation swap.
+- Bound: per-batch R O(batch), S O(batch) where per-owner transitions are needed, with separate O(input bytes) work.
+  Whole runs are linear in relevant stored rows/bytes; no growing account is scanned in one transaction.
+- Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.

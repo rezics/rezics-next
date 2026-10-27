@@ -42,6 +42,9 @@ afterEach(async () => {
 const BASE = Date.parse('2030-01-02T00:00:00.000Z');
 /** The instant this many minutes after the scenario origin, as the RFC 3339 text the API returns. */
 const T = (minutes: number) => new Date(BASE + minutes * 60_000).toISOString();
+const NIL_TYPE_ID = '00000000-0000-0000-0000-000000000000';
+const sortFacets = (rows: { type: string; count: number }[]) =>
+  [...rows].sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
 const atMinute = (minutes: number) => driver.setTime(T(minutes));
 const STATES: readonly EntryState[] = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
 const ORDERS: readonly ShelfOrder[] = ['lastActivity', 'finishedAt', 'createdAt'];
@@ -223,6 +226,11 @@ async function typeFacets(as: Persona = 'owner', limit = 100) {
     const result = await body<{ types: { type: string; count: number }[]; next: string | null }>(await get(path, as));
     expect(Object.keys(result).sort()).toEqual(['next', 'types']);
     expect(result.types.length).toBeLessThanOrEqual(limit);
+    for (const bucket of result.types) {
+      expect(Object.keys(bucket).sort()).toEqual(['count', 'type']);
+      expect(bucket.count).toBeGreaterThan(0);
+      expect(found.some((previous) => previous.type === bucket.type)).toBe(false);
+    }
     found.push(...result.types);
     if (result.next === null) return found;
     cursor = result.next;
@@ -239,11 +247,11 @@ function expectedCounts(inspection: ShelvesInspection) {
   };
   for (const stored of inspection.entries) {
     for (const bucket of [stored.state, 'all']) {
-      bump(stored.accountId, bucket, '');
-      bump(stored.accountId, bucket, stored.subjectType);
+      bump(stored.accountId, bucket, NIL_TYPE_ID);
+      bump(stored.accountId, bucket, stored.typeId);
     }
   }
-  for (const collection of inspection.collections) bump(collection.accountId, 'collections', '');
+  for (const collection of inspection.collections) bump(collection.accountId, 'collections', NIL_TYPE_ID);
   return [...rows].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
 }
 async function expectCountersMatch() {
@@ -251,7 +259,7 @@ async function expectCountersMatch() {
   const inspection = await driver.inspect();
   const stored = inspection.counts
     .filter((row) => row.count > 0)
-    .map((row) => ({ name: JSON.stringify([row.accountId, row.bucket, row.type]), count: row.count }))
+    .map((row) => ({ name: JSON.stringify([row.accountId, row.bucket, row.typeId]), count: row.count }))
     .sort((a, b) => a.name.localeCompare(b.name));
   expect(stored).toEqual(expectedCounts(inspection));
 }
@@ -896,7 +904,6 @@ test('shelf requests with unknown values are refused as invalid requests', async
     'orderBy=lastActivity&limit=0',
     'orderBy=lastActivity&limit=101',
     'orderBy=lastActivity&state=bogus',
-    `orderBy=lastActivity&type=${'x'.repeat(257)}`,
     'orderBy=lastActivity&unknown=1',
   ])
     await problem(await get(`/v1/libraryEntries?${query}`), 400, 'invalid_request');
@@ -924,6 +931,7 @@ test('shelf cursors are bound to account state type order and direction and reje
     [{ ...base, type: driver.types.anime, cursor: token }, 'owner'],
     [{ ...base, orderBy: 'createdAt', cursor: token }, 'owner'],
     [{ ...base, direction: 'asc', cursor: token }, 'owner'],
+    [{ ...base, limit: 2, cursor: token }, 'owner'],
   ];
   for (const [parameters, as] of rejected) await problem(await get(shelfPath(parameters), as), 400, 'invalid_cursor');
   const middle = Math.floor(token.length / 2);
@@ -1107,13 +1115,13 @@ test('the type filter returns every matching entry with shown and total counts a
   expect(tabs.collections).toEqual({ total: 0, shown: 0 });
   const plain = await summary();
   for (const tab of TABS) expect(plain[tab].shown).toBe(plain[tab].total);
-  expect((await summary('com.example.Unknown')).all).toEqual({ total: 6, shown: 0 });
+  await problem(await get('/v1/libraryShelfSummary?type=shelf:Unknown'), 400, 'invalid_argument');
 
   const items = await shelf({ type: anime });
   expect(ids(items)).toEqual([animes[1]!.id, animes[0]!.id]);
   expect(ids(await shelf({ type: anime, state: 'planned' }))).toEqual([animes[1]!.id, animes[0]!.id]);
   expect(ids(await shelf({ type: book, state: 'in_progress' }))).toEqual([books[1]!.id]);
-  expect(await shelf({ type: 'com.example.Unknown' })).toEqual([]);
+  await problem(await get(shelfPath({ type: 'shelf:Unknown' })), 400, 'invalid_argument');
   expect(ids(await walk({ type: book, orderBy: 'createdAt' }, 1)).sort()).toEqual(
     books.map((subject) => subject.id).sort(),
   );
@@ -1124,8 +1132,8 @@ test('the type filter returns every matching entry with shown and total counts a
     { type: anime, count: 2 },
     { type: game, count: 1 },
   ].sort((x, y) => (x.type < y.type ? -1 : 1));
-  expect(await typeFacets()).toEqual(expected);
-  expect(await typeFacets('owner', 1)).toEqual(expected);
+  expect(sortFacets(await typeFacets())).toEqual(expected);
+  expect(sortFacets(await typeFacets('owner', 1))).toEqual(expected);
   expect(await typeFacets('other')).toEqual([]);
   const facetPage = await body<{ next: string }>(await get('/v1/libraryShelfTypes?limit=1'));
   await problem(
@@ -1154,7 +1162,7 @@ test('a subject type change moves every holder between type filters and counts',
   expect((await summary(anime)).in_progress).toEqual({ total: 1, shown: 1 });
   expect((await summary(book)).in_progress).toEqual({ total: 1, shown: 0 });
   expect((await summary(anime, 'other')).completed).toEqual({ total: 1, shown: 1 });
-  expect(await typeFacets()).toEqual(
+  expect(sortFacets(await typeFacets())).toEqual(
     [
       { type: book, count: 1 },
       { type: anime, count: 1 },
@@ -1290,4 +1298,256 @@ test('shelf order and active progress have a bounded same-account contract', asy
       expect(sample.buffers).toBeLessThanOrEqual(small!.buffers * 2 + 16);
     }
   }
+});
+
+// --- Exact type identity and real concurrent boundaries -----------------------------------------------------------
+
+test('empty entry heads have nullable progress timestamps', async () => {
+  const subject = await driver.provisionSubject();
+  await entry(subject.id);
+  const head = (await driver.inspect()).heads.find((row) => row.subjectId === subject.id)!;
+  expect(head).toMatchObject({ lastChangedAt: null, lastCompletedAt: null });
+});
+
+test('facet continuation uses stable private keys while public buckets keep exact type and count', async () => {
+  for (const type of Object.values(driver.types)) {
+    const subject = await driver.provisionSubject({ type });
+    await entry(subject.id);
+  }
+  await driver.settle();
+  const keys = (await driver.inspect()).typeKeys
+    .filter((row) => row.accountId === driver.accounts.owner.id)
+    .sort((a, b) => a.typeId.localeCompare(b.typeId));
+  expect(keys).toHaveLength(3);
+  let cursor: string | undefined;
+  for (let index = 0; index < keys.length; index++) {
+    const page = await body<{ types: { type: string; count: number }[]; next: string | null }>(
+      await get(`/v1/libraryShelfTypes?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+    );
+    expect(page.types).toEqual([{ type: keys[index]!.type, count: 1 }]);
+    if (index === keys.length - 1) expect(page.next).toBeNull();
+    else {
+      expect(page.next).toBeTruthy();
+      await problem(
+        await get(`/v1/libraryShelfTypes?limit=2&cursor=${encodeURIComponent(page.next!)}`),
+        400,
+        'invalid_cursor',
+      );
+      cursor = page.next!;
+    }
+  }
+  const previous = keys[0]!;
+  const subjectId = (await driver.inspect()).entries.find((row) => row.typeId === previous.typeId)!.subjectId;
+  const current = (await shelf({ type: previous.type }))[0]!;
+  await removeEntry(current);
+  expect(await shelf({ type: previous.type })).toEqual([]);
+  expect((await summary(previous.type)).all).toEqual({ total: 2, shown: 0 });
+  expect((await driver.inspect()).typeKeys).toContainEqual(previous);
+  await entry(subjectId);
+  expect((await driver.inspect()).entries.find((row) => row.subjectId === subjectId)!.typeId).toBe(previous.typeId);
+  await expectCountersMatch();
+});
+
+test('unknown and foreign full CURIE filters are invalid without allocating private keys', async () => {
+  const subject = await driver.provisionSubject({ type: driver.types.anime });
+  await entry(subject.id, 'planned', 'other');
+  await driver.settle();
+  const before = (await driver.inspect()).typeKeys;
+  for (const type of ['shelf:Unknown', driver.types.anime]) {
+    await problem(await get(shelfPath({ type })), 400, 'invalid_argument');
+    await problem(await get(`/v1/libraryShelfSummary?type=${encodeURIComponent(type)}`), 400, 'invalid_argument');
+  }
+  expect((await driver.inspect()).typeKeys).toEqual(before);
+  expect(await typeFacets()).toEqual([]);
+  expect(await typeFacets('other')).toEqual([{ type: driver.types.anime, count: 1 }]);
+});
+
+/** Deterministic incompressible-looking ASCII, valid in a CURIE local part, without a repeated huge prefix. */
+function typeText(bytes: number, salt: number) {
+  let state = salt;
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars = new Array<string>(bytes);
+  for (let index = 0; index < bytes; index++) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    chars[index] = alphabet[(state >>> 0) % alphabet.length]!;
+  }
+  return `shelf:${chars.join('')}`;
+}
+
+test('long source CURIEs and same-prefix collisions retain every byte and distinct private identities', async () => {
+  await driver.forceTypeDigestCollision();
+  const prefix = typeText(40_000, 73);
+  const types = [prefix, `${prefix}A`, `${prefix}B`];
+  await driver.installTypes(types);
+  const subjects = [];
+  for (const type of types) {
+    const pair = await driver.provisionSubjects(2, { type });
+    subjects.push(pair);
+    for (const subject of pair) await entry(subject.id);
+  }
+  await driver.settle();
+  const keys = (await driver.inspect()).typeKeys.filter((row) => row.accountId === driver.accounts.owner.id);
+  expect(new Set(keys.map((row) => row.typeId)).size).toBe(3);
+  expect(keys.map((row) => row.type).sort()).toEqual([...types].sort());
+  for (let index = 0; index < types.length; index++) {
+    expect(ids(await walk({ type: types[index]! }, 1)).sort()).toEqual(subjects[index]!.map((row) => row.id).sort());
+    expect((await summary(types[index]!)).all).toEqual({ total: 6, shown: 2 });
+    expect(keys.find((row) => row.type === types[index])!.byteLength).toBe(Buffer.byteLength(types[index]!));
+  }
+  expect(sortFacets(await typeFacets('owner', 1))).toEqual(sortFacets(types.map((type) => ({ type, count: 2 }))));
+  await expectCountersMatch();
+});
+
+test('facet byte budgets emit a complete prefix of large values and resume after the last emitted key', async () => {
+  const types = [11, 13, 17, 19, 23, 29].map((salt) => typeText(1536 * 1024, salt));
+  // Separate valid releases keep each release under its source bound. Existing subjects retain their stored type.
+  for (const type of types) {
+    await driver.installTypes([type]);
+    const subject = await driver.provisionSubject({ type });
+    await entry(subject.id);
+    await driver.settle();
+  }
+  const keys = (await driver.inspect()).typeKeys
+    .filter((row) => row.accountId === driver.accounts.owner.id)
+    .sort((a, b) => a.typeId.localeCompare(b.typeId));
+  const response = await get('/v1/libraryShelfTypes?limit=100');
+  expect(response.status).toBe(200);
+  const raw = await response.text();
+  expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(8 * 1024 * 1024);
+  const first = JSON.parse(raw) as { types: { type: string; count: number }[]; next: string | null };
+  expect(first.types.length).toBeGreaterThan(0);
+  expect(first.types.length).toBeLessThan(types.length);
+  expect(first.types).toEqual(keys.slice(0, first.types.length).map((row) => ({ type: row.type, count: 1 })));
+  expect(first.next).toBeTruthy();
+  const found = [...first.types];
+  let cursor = first.next;
+  for (let page = 0; cursor !== null && page < keys.length; page++) {
+    const response = await get(`/v1/libraryShelfTypes?limit=100&cursor=${encodeURIComponent(cursor)}`);
+    expect(response.status).toBe(200);
+    const bytes = await response.text();
+    expect(Buffer.byteLength(bytes)).toBeLessThanOrEqual(8 * 1024 * 1024);
+    const rest = JSON.parse(bytes) as { types: { type: string; count: number }[]; next: string | null };
+    expect(rest.types.length).toBeGreaterThan(0);
+    found.push(...rest.types);
+    cursor = rest.next;
+  }
+  expect(cursor).toBeNull();
+  expect(found).toEqual(keys.map((row) => ({ type: row.type, count: 1 })));
+});
+
+test('a paused old source snapshot cannot overwrite a newer applied type stamp', async () => {
+  const subject = await driver.provisionSubject();
+  await entry(subject.id);
+  await driver.settle();
+  const original = (await driver.inspect()).entries[0]!;
+  const pause = await driver.pauseTypeWork({ workflow: 'sync', boundary: 'sourceObserved', subjectId: subject.id });
+  await driver.changeSubjectType(subject.id, driver.types.anime);
+  const old = await pause.reached;
+  await driver.changeSubjectType(subject.id, driver.types.game);
+  await driver.settle({ exceptPaused: true });
+  const newer = (await driver.inspect()).entries[0]!;
+  expect(newer.subjectType).toBe(driver.types.game);
+  expect(newer.sourceStamp.partition).toBe(old.stamp.partition);
+  expect(
+    newer.sourceStamp.epoch > old.stamp.epoch ||
+      (newer.sourceStamp.epoch === old.stamp.epoch && newer.sourceStamp.position > old.stamp.position),
+  ).toBe(true);
+  await pause.resume();
+  await driver.settle();
+  const after = (await driver.inspect()).entries[0]!;
+  expect(after.subjectType).toBe(driver.types.game);
+  expect(after.sourceStamp).toEqual(newer.sourceStamp);
+  expect(after.revision).toBe(original.revision);
+  expect(after.updatedAt).toBe(original.updatedAt);
+  expect(after.transactionId).toBe(original.transactionId);
+  await expectCountersMatch();
+});
+
+test('retype pages preserve several same-owner merged entries across a continuation boundary', async () => {
+  const survivor = await driver.provisionSubject();
+  const retained = await driver.provisionSubjects(103);
+  for (const subject of retained) await entry(subject.id);
+  for (const subject of retained) await driver.mergeSubjects({ from: subject.id, into: survivor.id });
+  await driver.settle();
+  expect((await driver.inspect()).entries.every((row) => row.typeSourceId === survivor.id)).toBe(true);
+  await driver.changeSubjectType(survivor.id, driver.types.anime);
+  await driver.settle();
+  expect(ids(await walk({ type: driver.types.anime }, 48)).sort()).toEqual(retained.map((row) => row.id).sort());
+  expect((await summary(driver.types.anime)).all).toEqual({ total: 103, shown: 103 });
+  expect((await driver.inspect()).entries.every((row) => row.subjectType === driver.types.anime)).toBe(true);
+  await expectCountersMatch();
+});
+
+test('entry verification survives a state change before the first verification applies', async () => {
+  const subject = await driver.provisionSubject();
+  const createPause = await driver.pauseTypeWork({
+    workflow: 'entry',
+    boundary: 'sourceObserved',
+    subjectId: subject.id,
+  });
+  const creating = entry(subject.id);
+  await createPause.reached;
+  await driver.changeSubjectType(subject.id, driver.types.anime);
+  await driver.settle({ exceptPaused: true }); // Sweep finishes before the stale create commits.
+  const verifyPause = await driver.pauseTypeWork({
+    workflow: 'verify',
+    boundary: 'entryObserved',
+    subjectId: subject.id,
+  });
+  await createPause.resume();
+  const created = await creating;
+  await verifyPause.reached;
+  const changed = await setState(created, 'paused');
+  await driver.settle({ exceptPaused: true }); // A distinct entry.updated event must verify revision two.
+  expect(ids(await shelf({ type: driver.types.anime, state: 'paused' }))).toEqual([subject.id]);
+  await verifyPause.resume();
+  await driver.settle();
+  const stored = (await driver.inspect()).entries[0]!;
+  expect(stored).toMatchObject({
+    revision: changed.revision,
+    updatedAt: changed.updatedAt,
+    subjectType: driver.types.anime,
+  });
+  const events = (await driver.inspect()).events.filter(
+    (event) => event.type === 'com.rezics.library.entry.updated.v1',
+  );
+  expect(events).toHaveLength(2);
+  expect(new Set(events.map((event) => event.id)).size).toBe(2);
+  await expectCountersMatch();
+});
+
+test('old verification cannot overwrite a recreated entry incarnation or suppress its new event verification', async () => {
+  const subject = await driver.provisionSubject();
+  const pause = await driver.pauseTypeWork({ workflow: 'verify', boundary: 'sourceObserved', subjectId: subject.id });
+  const first = await entry(subject.id);
+  const observed = await pause.reached;
+  const old = (await driver.inspect()).entries[0]!;
+  await removeEntry(first);
+  const createPause = await driver.pauseTypeWork({
+    workflow: 'entry',
+    boundary: 'sourceObserved',
+    subjectId: subject.id,
+  });
+  const recreating = entry(subject.id, 'paused');
+  await createPause.reached;
+  await driver.changeSubjectType(subject.id, driver.types.game);
+  await driver.settle({ exceptPaused: true }); // New source sweep finishes while the entry is absent.
+  await createPause.resume();
+  const recreated = await recreating;
+  await driver.settle({ exceptPaused: true }); // Only the new event's verification can repair this stale create.
+  const current = (await driver.inspect()).entries[0]!;
+  expect(current.subjectType).toBe(driver.types.game);
+  expect(current.incarnationId).not.toBe(old.incarnationId);
+  expect(observed.sourceId).toBe(subject.id);
+  await pause.resume();
+  await driver.settle();
+  const final = (await driver.inspect()).entries[0]!;
+  expect(final.subjectType).toBe(driver.types.game);
+  expect(final.incarnationId).toBe(current.incarnationId);
+  expect(final.sourceStamp).toEqual(current.sourceStamp);
+  expect(final.revision).toBe(recreated.revision);
+  expect(final.updatedAt).toBe(recreated.updatedAt);
+  await expectCountersMatch();
 });
