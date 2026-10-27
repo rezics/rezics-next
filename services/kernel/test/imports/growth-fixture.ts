@@ -359,7 +359,9 @@ function normalizedPlanSql(sql: string): string {
 function executionHistogram(sql: readonly string[]) {
   const counts = new Map<string, number>();
   for (const statement of sql) counts.set(statement, (counts.get(statement) ?? 0) + 1);
-  return [...counts].map(([statement, executions]) => ({ statement, executions })).sort((a, b) => a.statement.localeCompare(b.statement));
+  return [...counts]
+    .map(([statement, executions]) => ({ statement, executions }))
+    .sort((a, b) => a.statement.localeCompare(b.statement));
 }
 
 function planTexts(plans: readonly unknown[]): string[] {
@@ -540,7 +542,44 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
     // The kernel caps a bulk envelope at 100 commands; use the limiter's maximum startup budget for this test identity.
     { maximum: 1_000_000, seconds: 86_400 },
   );
-  await runtime.rateLimit({ requests: 1000, windowMs: 60000, nowMs: Date.now() });
+  // Complete the first native create on a spare tuple before importing any
+  // baseline. Cold query analysis can consume the command's two-second deadline;
+  // a per-command 503 is a result, so the transport's HTTP retry does not replay it.
+  // Only a proved not-applied overload may retry this exact warm-up envelope.
+  let bootstrapWarmed = false;
+  async function warmBootstrap() {
+    if (bootstrapWarmed) return;
+    const warmRegistration = createSourceRegistration('bangumi', {
+      source: 'warm-spare',
+      converterRevision: 'growth-warm-v1',
+    });
+    const warmConversion = warmRegistration.convert(
+      { external_id: '1', record_revision: null, record: { id: 1, type: 1, name: 'Growth warm spare' } },
+      { source: 'warm-spare' },
+    );
+    const warmCreate = warmConversion.proposals.find((command) => command.op === 'create');
+    if (!warmCreate) throw new Error('Warm-up converter did not produce a bootstrap');
+    await runtime.time('bootstrap query warm-up', async () => {
+      for (let attempt = 0; ; attempt++) {
+        const response = await runtime.importTransport.batch({ commands: [warmCreate] });
+        const result = response.results[0];
+        if (result && (result.status === 200 || result.status === 201)) return;
+        if (
+          attempt >= 2 ||
+          !result ||
+          result.status !== 503 ||
+          !('problem' in result) ||
+          !('retryable' in result.problem) ||
+          result.problem.retryable !== true ||
+          !('effect_status' in result.problem) ||
+          result.problem.effect_status !== 'not_applied'
+        )
+          throw new Error(`Bootstrap warm-up did not complete: ${JSON.stringify(response)}`);
+        await Bun.sleep(1000);
+      }
+    });
+    bootstrapWarmed = true;
+  }
   const population = createApiPopulation(runtime);
   let state: GrowthState | undefined;
   let reader: { counters: DumpCounters; bytes: number; fields: number; peakBytes: number } | undefined;
@@ -604,7 +643,9 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
         throw new Error(`Import setup did not commit: ${result.status}; transport=${evidence()}`);
       return result;
     } catch (error) {
-      throw new Error(`Import setup failed for ${source}/${converterRevision}; transport=${evidence()}`, { cause: error });
+      throw new Error(`Import setup failed for ${source}/${converterRevision}; transport=${evidence()}`, {
+        cause: error,
+      });
     }
   }
 
@@ -1180,6 +1221,7 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
     async seed(options: Readonly<Seed>): Promise<Fixture> {
       if (options.source !== 'growth-source' || options.key !== 'fixed-record')
         throw new Error('Unexpected growth seed');
+      await warmBootstrap();
       const scenarioSequence = seedSequence++;
       const scenarioSource = options.scenario === 'vanished-page' ? 'vanished' : options.scenario;
       ownedSource =
@@ -1260,12 +1302,15 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       const outcome = resultValue as unknown as Partial<Outcome> | undefined;
       if (state?.seed.scenario === 'revision') {
         const seed = state.seed;
-        const axis = seed.n !== 32 ? 'n' : seed.history !== 32 ? 'history' : seed.fields !== 1 ? 'fields' : 'baseline-shared';
+        const axis =
+          seed.n !== 32 ? 'n' : seed.history !== 32 ? 'history' : seed.fields !== 1 ? 'fields' : 'baseline-shared';
         const record = {
           kind: 'revision-sql-histogram',
           axis,
           seed: { n: seed.n, history: seed.history, fields: seed.fields },
-          sqlite: executionHistogram(captured.statements.filter((statement) => statement.engine === 'sqlite').map((s) => s.sql)),
+          sqlite: executionHistogram(
+            captured.statements.filter((statement) => statement.engine === 'sqlite').map((s) => s.sql),
+          ),
           postgres: {
             foreground: executionHistogram(postgres.statements),
             background: executionHistogram(postgres.backgroundStatements ?? []),
@@ -1276,7 +1321,13 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
           tokenRenewals: runtime.tokenRenewals.slice(renewalStart),
           retryWaits: runtime.retryWaits.slice(retryWaitStart),
         };
-        appendFileSync(resolve(import.meta.dir, '../../../../.temp/import-growth-revision-sql.jsonl'), `${JSON.stringify(record)}\n`);
+        const diagnostic = JSON.stringify(record);
+        appendFileSync(
+          resolve(import.meta.dir, '../../../../.temp/import-growth-revision-sql.jsonl'),
+          `${diagnostic}\n`,
+        );
+        // Remote checks retain stdout/stderr; their isolated filesystem is removed afterwards.
+        console.error(`IMPORT_GROWTH_REVISION_SQL ${diagnostic}`);
       }
       if (outcome && typeof outcome.serverFenceChecks === 'number')
         outcome.serverFenceChecks = postgres.statements.filter((sql) => /fence/i.test(sql)).length;

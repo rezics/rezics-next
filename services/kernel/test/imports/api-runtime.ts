@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateIdentity } from '../../src/access/write-rate-identity.ts';
-import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import { Importer } from '../../../importer/src/importer.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
@@ -69,6 +69,7 @@ type HttpEvent = {
   tokenRemainingMs?: number;
   status?: number;
   problem?: string;
+  commandProblems?: BatchWriteResult['results'];
   error?: string;
   abortedAtMs?: number;
   abortReason?: string;
@@ -492,12 +493,8 @@ export async function openApiRuntime(
             bodyBytes: Buffer.byteLength(bytes),
             commandKeys,
             startedAtMs: atMs,
-            ...(deadline === undefined
-              ? {}
-              : { deadlineAtMs: deadline.deadlineAtMs, deadlineMs: deadline.durationMs }),
-            ...(tokenExpiresAtMs === undefined
-              ? {}
-              : { tokenExpiresAtMs, tokenRemainingMs: tokenExpiresAtMs - atMs }),
+            ...(deadline === undefined ? {} : { deadlineAtMs: deadline.deadlineAtMs, deadlineMs: deadline.durationMs }),
+            ...(tokenExpiresAtMs === undefined ? {} : { tokenExpiresAtMs, tokenRemainingMs: tokenExpiresAtMs - atMs }),
           };
           req.signal.addEventListener('abort', onAbort, { once: true });
           if (bulk) {
@@ -514,6 +511,11 @@ export async function openApiRuntime(
           });
           event.status = response.status;
           if (response.status >= 400) event.problem = await captured.clone().text();
+          if (bulk && response.status === 200) {
+            const body = (await captured.clone().json()) as BatchWriteResult;
+            const problems = body.results.filter((result) => result.status >= 400);
+            if (problems.length) event.commandProblems = problems;
+          }
           captures.push({ request: req, body: bytes, response: captured });
           if (bulk && current) {
             const body = JSON.parse(bytes) as BatchWriteRequest;
