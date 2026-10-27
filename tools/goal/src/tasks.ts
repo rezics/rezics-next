@@ -344,14 +344,17 @@ export class WorkerTasks {
     return worker;
   }
   /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
-  /** Whether a retry only records a held contract, which needs no worker, and whether its start goes first. */
+  /** Whether a retry can skip the capacity wait (it only holds, or replaces a running worker) and whether it goes first. */
   private retryPlan(taskId: string, options: RetryOptions): { hold: boolean; first: boolean } {
     try {
       const task = this.store.task(taskId);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
       const hold = (reshaped !== undefined || task.state === 'held') && !this.dependenciesMet({ brief: next.brief });
-      return { hold, first: startsFirst(next) };
+      // Replacing a running worker adds none, so it never waits behind the worker it replaces.
+      const replaces =
+        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
+      return { hold: hold || replaces, first: startsFirst(next) };
     } catch {
       // The retry itself reports the error under the task's lease.
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
