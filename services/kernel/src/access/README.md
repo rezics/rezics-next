@@ -598,7 +598,8 @@ An authenticated account with `account:assign_reserved_handle` on the Global Con
 may use the ordinary workflow to reserve a name for itself or an account it currently
 manages (`account:manage`). Authority and token scopes are checked on every command
 attempt and receipt replay. The reservation and publication receipts record
-`reservedHandleException: true` when this exception is used. Auth supplies the verified
+`reservedHandleException: true` when this exception is used; their handle events carry
+the same optional audit fact. Auth supplies the verified
 workflow context only for protected operations; public sign-up cannot use the exception.
 
 The registry check is an in-memory set lookup with fewer than 64 entries: constant

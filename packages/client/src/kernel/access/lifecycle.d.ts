@@ -23,6 +23,7 @@ export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
 export declare const LIFECYCLE_ACTIONS: ActionCatalogue;
 export declare function normalizeHandle(handle: string): string;
+export declare function normalizeLookupHandle(handle: string): string;
 type Boundary = {
     pool: Pool;
     clock?: () => Date;
@@ -132,6 +133,7 @@ export type RecoveryEvidence = {
  */
 export declare function createLifecycleInternals(config: Boundary & {
     routeKey: Uint8Array;
+    access?: Access;
     provisioningEvidence: (evidence: unknown) => Promise<ProvisioningEvidence | null>;
     recoveryEvidence: (evidence: unknown) => Promise<RecoveryEvidence | null>;
 }): {
@@ -156,6 +158,7 @@ export declare function createLifecycleInternals(config: Boundary & {
         accountId: string;
         handle: string;
         operationId: string;
+        reservedHandleException?: boolean;
     }>>;
     finalizeHandleTransition(value: HandleTransition): Promise<import("../command/command.ts").CommandOutcome<{
         accountId: string;
@@ -193,11 +196,12 @@ export declare function createLifecycleInternals(config: Boundary & {
         handle: string;
         accountId: string;
         key: string;
-    }): Promise<import("../command/command.ts").CommandOutcome<{
+    }, request?: LifecycleRequest): Promise<import("../command/command.ts").CommandOutcome<{
         handle: string;
         accountId: string;
         reservationId: string;
         expiresAt: string;
+        reservedHandleException?: boolean;
     }>>;
     createPending(input: LifecycleCommand & {
         handle: string;
@@ -230,6 +234,7 @@ export declare function createLifecycleInternals(config: Boundary & {
     }): Promise<import("../command/command.ts").CommandOutcome<{
         handle: string;
         accountId: string;
+        reservedHandleException?: boolean;
     }>>;
     redirectHandle(input: LifecycleCommand & {
         handle: string;
@@ -369,6 +374,7 @@ export declare function createLifecycleCommands(config: Boundary & {
         accountId: string;
         handle: string;
         operationId: string;
+        reservedHandleException?: boolean;
     }>>;
     updateAccount(context: LifecycleRequest, input: LifecycleCommand & {
         patch: unknown;

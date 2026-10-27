@@ -72,7 +72,8 @@ const fenceReceipt = (kind: 'fence' | 'tombstone', prior: 'null' | 'optional') =
     { additionalProperties: false },
   );
 const membershipHold = { accountId: identity, principal, reservationId: identity };
-const handlePublication = { accountId: identity, handle, operationId: text };
+const reservedHandleException = Type.Optional(Type.Literal(true));
+const handlePublication = { accountId: identity, handle, operationId: text, reservedHandleException };
 const opening = Type.Object(
   {
     ...operatorIds,
@@ -223,7 +224,7 @@ export const ACCESS_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.access.handle-reserved.v1': Type.Object(
-    { handle, accountId: identity, reservationId: identity, expiresAt: iso },
+    { handle, accountId: identity, reservationId: identity, expiresAt: iso, reservedHandleException },
     { additionalProperties: false },
   ),
   'com.rezics.access.actor-pending.v1': Type.Object(
@@ -235,7 +236,10 @@ export const ACCESS_EVENTS = {
     { accountId: identity, installed: Type.Integer({ minimum: 0 }) },
     { additionalProperties: false },
   ),
-  'com.rezics.access.handle-claimed.v1': Type.Object({ handle, accountId: identity }, { additionalProperties: false }),
+  'com.rezics.access.handle-claimed.v1': Type.Object(
+    { handle, accountId: identity, reservedHandleException },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.handle-redirected.v1': Type.Object(
     { handle, accountId: identity, reservedUntil: iso },
     { additionalProperties: false },

@@ -221,11 +221,13 @@ declare const productEventTypes: {
         accountId: Type.TString;
         handle: Type.TString;
         operationId: Type.TString;
+        reservedHandleException: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly 'com.rezics.access.account-handle-published.v1': Type.TObject<{
         accountId: Type.TString;
         handle: Type.TString;
         operationId: Type.TString;
+        reservedHandleException: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly 'com.rezics.access.transition-handle-claimed.v1': Type.TObject<{
         accountId: Type.TString;
@@ -264,6 +266,7 @@ declare const productEventTypes: {
         accountId: Type.TString;
         reservationId: Type.TString;
         expiresAt: Type.TString;
+        reservedHandleException: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly 'com.rezics.access.actor-pending.v1': Type.TObject<{
         accountId: Type.TString;
@@ -280,6 +283,7 @@ declare const productEventTypes: {
     readonly 'com.rezics.access.handle-claimed.v1': Type.TObject<{
         handle: Type.TString;
         accountId: Type.TString;
+        reservedHandleException: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly 'com.rezics.access.handle-redirected.v1': Type.TObject<{
         handle: Type.TString;

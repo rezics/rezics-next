@@ -781,7 +781,7 @@ export function createLifecycleInternals(
           kind: 'handle-reserved',
           key: input.key,
           input: { handle, accountId: input.accountId },
-          ...(exception ? { actor: context!.actor, deadline: context!.deadline, authorization } : {}),
+          ...(authorization ? { actor: context!.actor, deadline: context!.deadline, authorization } : {}),
         },
         async (tx, transactionId) => {
           const at = authoritativeTimeValue(currentCommand(tx).time);
