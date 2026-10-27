@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { DropdownMenuItem } from '../shadcn/dropdown-menu.tsx';
@@ -77,5 +78,101 @@ export const Row: Story = {
     const third = cards[2]!.getBoundingClientRect();
     await expect(region.getBoundingClientRect().right - third.left).toBeGreaterThan(third.width / 2);
     region.style.width = '';
+  },
+};
+
+export const Shelf: Story = {
+  render: () => (
+    <div className="space-y-6">
+      {(['small', 'medium', 'large'] as const).map((density) => (
+        <CoverGrid key={density} ratio="2:3" density={density}>
+          {subjects.map((subject, index) => (
+            <CoverCard
+              key={subject.id}
+              href={`/${subject.id}`}
+              title={subject.title}
+              cover={{ subject, cover: null, src: () => '' }}
+              status={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">Reading</span>}
+              badge={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">2</span>}
+              meta="Finished yesterday"
+              state={<ProgressRow value={0.42} label="42%" />}
+              selectable={index === 1}
+              selected={index === 1}
+              onSelectedChange={() => {}}
+              onSelect={() => {}}
+            />
+          ))}
+        </CoverGrid>
+      ))}
+    </div>
+  ),
+};
+
+function SelectionExample() {
+  const [selectable, setSelectable] = useState(false);
+  const [selected, setSelected] = useState(false);
+  return (
+    <CoverGrid ratio="2:3" density="medium">
+      <CoverCard
+        href="/book"
+        title="A book"
+        cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
+        status="Reading"
+        selectable={selectable}
+        selected={selected}
+        onSelect={() => {
+          setSelectable(true);
+          setSelected(true);
+        }}
+        onSelectedChange={setSelected}
+      />
+    </CoverGrid>
+  );
+}
+export const Selection: Story = {
+  render: () => <SelectionExample />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const article = canvasElement.querySelector('article')!;
+    await userEvent.hover(article);
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'A book' }));
+    const control = canvas.getByRole('button', { name: 'A book' });
+    await expect(control).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.keyboard('{Tab}');
+    control.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(control).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(control);
+    await expect(control).toHaveAttribute('aria-pressed', 'true');
+  },
+};
+
+export const DensityWidths: Story = {
+  render: () => (
+    <div>
+      {(['small', 'medium', 'large'] as const).map((density) => (
+        <CoverGrid key={density} ratio="2:3" density={density}>
+          {Array.from({ length: 12 }, (_, index) => (
+            <div key={index} />
+          ))}
+        </CoverGrid>
+      ))}
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const widths = [390, 800, 1100, 1400, 1600];
+    const counts = [
+      [4, 6, 8, 10, 12],
+      [3, 4, 6, 7, 8],
+      [2, 3, 4, 5, 6],
+    ];
+    const containers = canvasElement.querySelectorAll<HTMLElement>('.\\@container');
+    for (let density = 0; density < containers.length; density++) {
+      for (let index = 0; index < widths.length; index++) {
+        containers[density]!.style.width = `${widths[index]}px`;
+        const grid = containers[density]!.firstElementChild!;
+        await expect(getComputedStyle(grid).gridTemplateColumns.split(' ').length).toBe(counts[density]![index]);
+      }
+    }
   },
 };

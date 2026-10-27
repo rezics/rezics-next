@@ -39,13 +39,13 @@ test('small cards retain an accessible title and progress without visible value'
     }),
   );
   expect(html).toContain('title="A book"');
-  expect(html).toContain('A book</a>');
+  expect(html).toContain('A book</span></a>');
   expect(html).toContain('role="progressbar"');
   expect(html).toContain('aria-valuenow="50"');
   expect(html).toContain('Reading');
   expect(html).toContain('2 new');
   expect(html).not.toContain('Author');
-  expect(html).toContain('[&_.tabular-nums]:sr-only');
+  expect(html).toContain('[&amp;_.tabular-nums]:sr-only');
 });
 
 test('selection controls replace status and announce checked state', () => {

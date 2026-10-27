@@ -83,6 +83,7 @@ export function Cover({
   const frameRatio = ratio ?? coverRatio(subject.types);
   const image = cover && cover.variants.length > 0 ? cover : null;
   const [status, setStatus] = useState<Status | null>(null);
+  const [backdrop, setBackdrop] = useState<{ media: string; src: string } | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
 
   const withheld = image?.withheld === 'suitability' && suitability !== 'show' && revealed !== image.media;
@@ -95,6 +96,7 @@ export function Cover({
     (element: HTMLImageElement | null) => {
       if (!element || !image || !element.complete) return;
       setStatus({ media: image.media, value: element.naturalWidth > 0 ? 'loaded' : 'failed' });
+      if (element.naturalWidth > 0) setBackdrop({ media: image.media, src: element.currentSrc });
     },
     [image?.media],
   );
@@ -133,45 +135,64 @@ export function Cover({
             {state === 'withheld' ? (
               <Withheld text={text} />
             ) : (
-              <picture>
-                {(['avif', 'webp'] as const).map((format) =>
-                  image!.variants.some((variant) => variant.format === format) ? (
-                    <source
-                      key={format}
-                      type={`image/${format}`}
-                      srcSet={coverSrcSet(image!.media, image!.variants, format, src)}
-                      sizes={coverSizes(size)}
-                    />
-                  ) : null,
+              <>
+                <picture>
+                  {(['avif', 'webp'] as const).map((format) =>
+                    image!.variants.some((variant) => variant.format === format) ? (
+                      <source
+                        key={format}
+                        type={`image/${format}`}
+                        srcSet={coverSrcSet(image!.media, image!.variants, format, src)}
+                        sizes={coverSizes(size)}
+                      />
+                    ) : null,
+                  )}
+                  <img
+                    ref={track}
+                    className={cn(
+                      'absolute inset-0 z-[1] size-full',
+                      fit === 'cover' ? 'object-cover' : 'object-contain',
+                    )}
+                    style={{ objectPosition: objectPosition(subject.types, image!.focalPoint) }}
+                    src={coverFallback(
+                      image!.media,
+                      image!.variants,
+                      image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
+                      size,
+                      src,
+                    )}
+                    srcSet={coverSrcSet(
+                      image!.media,
+                      image!.variants,
+                      image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
+                      src,
+                    )}
+                    sizes={coverSizes(size)}
+                    width={dimensions.width}
+                    height={dimensions.height}
+                    alt={decorative ? '' : subject.title}
+                    loading={priority ? 'eager' : 'lazy'}
+                    fetchPriority={priority ? 'high' : undefined}
+                    decoding="async"
+                    onLoad={(event) => {
+                      setStatus({ media: image!.media, value: 'loaded' });
+                      setBackdrop({ media: image!.media, src: event.currentTarget.currentSrc });
+                    }}
+                    onError={() => setStatus({ media: image!.media, value: 'failed' })}
+                  />
+                </picture>
+                {fit === 'contain' && (
+                  <div
+                    aria-hidden="true"
+                    data-slot="cover-backdrop"
+                    className="absolute inset-0 scale-110 bg-cover bg-center blur-xl brightness-50"
+                    style={{
+                      backgroundImage:
+                        backdrop?.media === image!.media ? `url(${JSON.stringify(backdrop.src)})` : undefined,
+                    }}
+                  />
                 )}
-                <img
-                  ref={track}
-                  className={cn('absolute inset-0 size-full', fit === 'cover' ? 'object-cover' : 'object-contain')}
-                  style={{ objectPosition: objectPosition(subject.types, image!.focalPoint) }}
-                  src={coverFallback(
-                    image!.media,
-                    image!.variants,
-                    image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
-                    size,
-                    src,
-                  )}
-                  srcSet={coverSrcSet(
-                    image!.media,
-                    image!.variants,
-                    image!.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif',
-                    src,
-                  )}
-                  sizes={coverSizes(size)}
-                  width={dimensions.width}
-                  height={dimensions.height}
-                  alt={decorative ? '' : subject.title}
-                  loading={priority ? 'eager' : 'lazy'}
-                  fetchPriority={priority ? 'high' : undefined}
-                  decoding="async"
-                  onLoad={() => setStatus({ media: image!.media, value: 'loaded' })}
-                  onError={() => setStatus({ media: image!.media, value: 'failed' })}
-                />
-              </picture>
+              </>
             )}
           </>
         )}
