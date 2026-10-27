@@ -1,6 +1,7 @@
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { listSubjectThreads } from './subject-threads.ts';
+import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { parseItem } from 'structured-headers';
@@ -66,6 +67,9 @@ import {
   BoardViewSchema,
   BoardThreadsQuerySchema,
   BoardThreadsResponseSchema,
+  SitemapBoardPageSchema,
+  SitemapQuerySchema,
+  SitemapThreadPageSchema,
   ContentPageQuerySchema,
   PostPageResponseSchema,
   RevisionPageResponseSchema,
@@ -119,6 +123,12 @@ const writeFailures = {
   413: problemSchema('content_too_large'),
   422: problemSchema('idempotency_conflict', 'too_many_events'),
 };
+const SITEMAP_DESCRIPTION = (kind: 'boards' | 'threads') =>
+  `Keyset feed of the public ${kind} for sitemaps, the same for every caller: it lists exactly what an anonymous ` +
+  `reader can open, whatever bearer the request carries. Each page examines a bounded number of candidates, so it ` +
+  `may return fewer than \`limit\` items, even none, with a non-null \`next\`. Follow \`next\` until it is ` +
+  `\`null\`. \`lastModified\` is the last significant change of what the page shows; a post edit or removal does ` +
+  `not advance it.`;
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const reviseHeaders = t.Object(
@@ -163,6 +173,10 @@ const boardCreateInput = t.Object(
 const boardCreateBody = strictContentSchema(boardCreateInput);
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
+const sitemapQuery = strictContentSchema(SitemapQuerySchema);
+const sitemapBoardPage = strictContentSchema(SitemapBoardPageSchema);
+const sitemapThreadPage = strictContentSchema(SitemapThreadPageSchema);
+const sitemapFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
 const subjectThreadsQuery = strictContentSchema(SubjectThreadsQuerySchema);
 const subjectThreadsResponse = strictContentSchema(SubjectThreadsResponseSchema);
 const authorThreadsQuery = strictContentSchema(AuthorThreadsQuerySchema);
@@ -222,6 +236,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
       throw new ProblemError('forbidden');
+    if (error instanceof InvalidSitemapCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
     if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
@@ -858,6 +873,46 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           }),
         );
       },
+    )
+    .get(
+      '/v1/sitemap/boards',
+      {
+        query: SitemapQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: { 200: sitemapBoardPage, ...sitemapFailures },
+        detail: {
+          operationId: 'sitemap_boards.list',
+          description: SITEMAP_DESCRIPTION('boards'),
+          'x-exposure': 'public',
+          'x-action': 'board:read',
+          security: readSecurity,
+        },
+      },
+      async ({ query, admission, job }) =>
+        contentOperation(() => admission.run('normal', job, () => listSitemapBoards(dependencies, job.deadline, query))),
+    )
+    .get(
+      '/v1/sitemap/threads',
+      {
+        query: SitemapQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: { 200: sitemapThreadPage, ...sitemapFailures },
+        detail: {
+          operationId: 'sitemap_threads.list',
+          description: SITEMAP_DESCRIPTION('threads'),
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
+      },
+      async ({ query, admission, job }) =>
+        contentOperation(() =>
+          admission.run('normal', job, () => listSitemapThreads(dependencies, job.deadline, query)),
+        ),
     )
     .get(
       '/v1/boards/:id',

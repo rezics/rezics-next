@@ -325,6 +325,25 @@ export const BoardThreadsResponseSchema = t.Object(
   },
   closed,
 );
+/** The shared sitemap feed shape: every feed pages with an opaque cursor and lists items that carry `lastModified`. */
+export const SitemapQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 1000, multipleOf: 1 })),
+  },
+  closed,
+);
+export const sitemapLastModified = t.String({ format: 'date-time' });
+export function sitemapPageSchema<Item extends TSchema>(item: Item) {
+  return t.Object({ items: t.Array(item, { maxItems: 1000 }), next: t.Union([t.String(), t.Null()]) }, closed);
+}
+export const SitemapBoardItemSchema = t.Object({ id: ContentIdSchema, lastModified: sitemapLastModified }, closed);
+export const SitemapThreadItemSchema = t.Object(
+  { id: ContentIdSchema, title: t.Union([t.String(), t.Null()]), lastModified: sitemapLastModified },
+  closed,
+);
+export const SitemapBoardPageSchema = sitemapPageSchema(SitemapBoardItemSchema);
+export const SitemapThreadPageSchema = sitemapPageSchema(SitemapThreadItemSchema);
 export const SubjectThreadsQuerySchema = t.Object(
   {
     place: ContentIdSchema,

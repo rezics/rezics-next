@@ -139,7 +139,7 @@ async function pageHotBoardCandidates(
   });
 }
 
-function indexedReadAccess(access: Access): Access {
+export function indexedReadAccess(access: Access): Access {
   if (indexedAccesses.has(access)) return access;
   const indexed = deriveAccess(access, {
     async authorize(client, actor, action, resource, evidence, time) {
