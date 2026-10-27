@@ -91,6 +91,68 @@ complete, I/O eventually succeeds and durable cursors progress fairly. The real-
 composition proof remains pending; the [outcome harness contract](../../test/search/README.md) defines the required
 verification and does not claim it has passed.
 
+## Scope source
+
+`scope-source.ts` exports the additive `createSearchScopeSource` admission scaffold. Public Search behavior is
+unchanged. This commit delivers interfaces and permanent negative admission/reservation tests, **not runtime
+prefix or point execution**. After valid admission and one call to the existing `compileFilter`, preparation
+currently throws retryable `semantic_not_ready`; no prepared handle is issued. Valid input is not specified to
+always throw: native positive acceptance is separate work. No Collection dependency, cursor codec, route,
+lifecycle operation or generation SQL is introduced.
+
+The factory takes `{pool: Pool, client: OpenSearch, prefix: string, source: SubjectSource,
+release?: () => Promise<FilterRelease | null>, native?: SearchScopeNative}`. The default release reader is the same
+`activeRelease(pool)` used by Search. Caller composition must bind the actual viewer-current Semantic source and
+native evidence; an account ID is not Access. The exported signatures are:
+
+- `prepare(filter: FilterDocument): Promise<PreparedSearchScope>` parses the closed filter, expands saved filters
+  against the actual active release, admits supported predicates with `admitFilter`, requires a positive anchor,
+  and compiles once with existing relation-overflow handling. Arbitrary query, script, text and sort are rejected.
+- `prefix(prepared, {afterSubject: string | null, quota: number, budget: number}): Promise<SearchScopePrefix>`.
+- `evaluate(prepared, subjects: readonly string[], budget: ScopeNativeBudget): Promise<SearchScopeEvaluation>`.
+
+`PreparedSearchScope` is opaque factory-local state with explicit `readiness: 'ready'` and `basis: ScopeBasis`;
+no handle is a bearer allow claim. `ScopeBasis` records release/query/profile/canonical identity plus concrete
+physical index name and generation. Preparation must pin that generation even with zero hits. Missing canonical
+identity or index readiness is explicit `semantic_not_ready` or `index_not_ready`; changed generation or basis is
+`search_restart_required`, never silent repinning. Release/query/profile identity describes the admitted expanded
+plan, not caller claims. Ordinary partition positions are not structural identity generations.
+
+`SearchScopeNative` specifies required ports, without supplying or invoking a pretend ready implementation:
+`basis(budget)` reads readiness and a fixed-home digest of native partition-local structural generations;
+`identity(subject, afterAlias, budget)` supplies current terminal identity, original/terminal authority and a
+resumable alias window; `leaves(subjects, clauses, budget)` supplies aligned current `FactClause` evidence with
+truthful absence, qualifiers, current source fences and full relation witnesses. All return charged native usage;
+leaf evidence includes references for final revalidation. Semantic owns the actual evidence and structural basis,
+including merge/unmerge/repoint invalidation. Resumable alias groups, original/terminal authority and canonical
+basis are native prerequisites, never a bounded representative assumption. No raw stored IDs are canonically
+rewritten or normalized after fetch. This contract adds no permission/holder engine.
+
+`SearchScopePrefix.hits` reuses engine `SearchHit` from `query.ts`, including genuine `matched` query names, index,
+partition, security revision and sort; it is not the projected public DTO from `hits.ts`. Prefix is ascending stored
+canonical subject UUID order strictly above `afterSubject`, **before** residual/current filtering. It returns the
+pinned basis, contiguous `coveredThrough`, truthful `exhausted`, and `usage.candidates`. At most quota raw entries
+are covered; any returned lookahead remains unused and cannot advance the boundary. All returned lookahead,
+duplicates, rejected/reread and internal fact-driver keys are charged. No hidden refill, synthesized hits or raw-ID
+normalization. Partial shards, timeouts and query failures are errors, never empty/exhausted or false. Empty
+nonexhausted output without covered progress is readiness/error. Raw private candidates remain service-internal;
+this seam exposes no public DTO or cursor.
+
+`SearchScopeEvaluation.values` aligns `true | false | 'not_proven'` with every explicit ID, including duplicates
+and IDs having no engine hit; it includes basis, usage and evidence for final current revalidation. Never fabricate
+a Hit, partition, security revision or matched query to call `checkHits`. Runtime implementation must extract and
+share the complete admitted Boolean evaluator in `disclosure/check.ts`, not introduce another interpreter.
+AND/OR/NOT preserve unknown; genuine matched queries only prioritize work. No index-only negative, ordinary sampled
+absence, `not_proven => false`, full subject renderer or hidden 8192-probe expansion. Existing `SubjectSource`
+snapshots/unqualified facet probes lack this admitted native budget/evidence surface; missing capability is readiness
+or `not_proven`, never guessed false. Zone must stop before an essential unresolved group unless another source
+settles true; public Search retains its existing skip/refill policy.
+
+Small implementation split: `scope-source.ts` owns admission, opaque preparation and raw-prefix orchestration;
+`filter.ts`/`query.ts` remain the compiler/engine path; `disclosure/check.ts` remains the shared current Boolean
+evaluator home. Native source/facet/identity providers remain Semantic-owned. None of those runtime extractions or
+providers is claimed delivered here.
+
 ## Cost
 
 These are derivations from `src/search/`, `src/events/`, the called Access SQL, `db/search/` and the core/semantic
@@ -471,6 +533,29 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Growth check: [test/search/expansion.test.ts](../../test/search/expansion.test.ts): “indexing every vertical adds
   no mapping field”; [test/search/relation-overflow-mapping.test.ts](../../test/search/relation-overflow-mapping.test.ts):
   “overflow markers are fixed keyword fields and declared relation values retain statement and qualifier matching”.
+
+### Scope raw prefix
+
+- Touches: currently admission only, zero engine/source reads after an injected release. Future preparation reads
+  the active release, native fixed-home basis and physical index metadata, including on zero hits; one prefix
+  dispatch reads the pinned engine generation, with no refill. Grow indexed subjects/history with quota fixed.
+- Bound: integer `1 <= quota <= 100`, aggregate caller candidate reservation `<= 256`; reserve `quota + 1 <= budget`
+  before dispatch. Charge every examined raw key including lookahead, duplicates, rejects, rereads and internal
+  keys. The caller reserves across sources; per-call validation cannot enforce aggregate accounting. Candidate
+  bounds do not prove physical postings, latency or native SQL bounds.
+- Growth check: `test/search/scope-source-contract.test.ts` permanently checks negative admission and reservations;
+  native prefix/generation/partial-response positive and growth proofs are separate specification tasks, pending.
+
+### Scope current points
+
+- Touches: currently no native point reads. Future evaluation reads only admitted native identity/leaf evidence
+  for explicit IDs and final revalidation; alias groups resume bounded windows. Grow aliases/witness history with
+  the independent reservation fixed; no whole-subject render or enumeration hidden behind point calls.
+- Bound: `ScopeNativeBudget` independently admits nonnegative safe-integer points, witnesses, rows, bytes and
+  emptySeeks; returned usage uses those units. Every explicit ID, including duplicates, reserves a point. It does
+  not multiply or borrow candidate256. Exhaustion yields unknown/readiness unless definitive evidence settles truth.
+- Growth check: `test/search/scope-source-contract.test.ts` checks invalid native budgets and duplicate charging
+  admission. Native witness/absence, alias-window and EXPLAIN/growth evidence remain required, not delivered.
 
 ### Hit label choice
 
