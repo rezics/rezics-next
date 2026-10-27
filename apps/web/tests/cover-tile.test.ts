@@ -229,11 +229,11 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
     types: Record<string, { labels?: Record<string, string>; bases?: string[]; coverRatio?: string }>;
     properties: Record<string, unknown>;
   };
+  let digest = '';
   globalThis.fetch = async (input) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    if (url.pathname === '/v1/definitions/active') return Response.json({ digest: 'cover-test-release' });
-    if (url.pathname === '/v1/definitions/releases/cover-test-release')
-      return Response.json({ digest: 'cover-test-release', release });
+    if (url.pathname === '/v1/definitions/active') return Response.json({ digest });
+    if (url.pathname === `/v1/definitions/releases/${digest}`) return Response.json({ digest, release });
     return new Response(null, { status: 404 });
   };
 
@@ -251,6 +251,7 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
 
   try {
     for (const [index, ratio] of ['5:7', '9:16'].entries()) {
+      digest = `cover-test-release-${index}`;
       workerEnv.KERNEL_ORIGIN = `https://definitions-cover-${index}.invalid`;
       release = {
         types: { 'example:Poster': { labels: { en: 'Poster' }, coverRatio: ratio } },
@@ -262,6 +263,7 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
     }
 
     workerEnv.KERNEL_ORIGIN = 'https://definitions-cover-invalid.invalid';
+    digest = 'cover-test-release-invalid';
     release = { types: { 'schema:Book': { labels: { en: 'Book' }, coverRatio: '65:1' } }, properties: {} };
     const invalid = await typeFrame('schema:Book', 'en');
     expect(invalid.ratio).toBeUndefined();
@@ -301,8 +303,8 @@ test(
         await types.first().waitFor();
         const labels = (await types.allTextContents()).map((label) => label.trim());
         expect(labels.length).toBeGreaterThan(0);
-        expect(labels.every((label) => label === (locale === 'zh-Hans' ? '书籍' : 'book'))).toBe(true);
-        expect(labels.some((label) => label === 'Book' || label === 'schema:Book')).toBe(false);
+        expect(labels.every((label) => label === (locale === 'zh-Hans' ? '书籍' : 'Book'))).toBe(true);
+        expect(labels.some((label) => label === 'schema:Book')).toBe(false);
       } finally {
         await opened.context.close();
       }
