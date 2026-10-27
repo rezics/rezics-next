@@ -91,13 +91,19 @@ type LibraryProfile = {
     states: (Named & { role?: 'planned' | 'active' | 'completed' | 'paused' | 'dropped' })[];
   };
   units: {
-    id: UnitId; labels: Labels; dimension: 'count' | 'duration' | 'ratio';
-    precision: number; minimum: number; maximum: number;
+    id: UnitId;
+    labels: Labels;
+    dimension: 'count' | 'duration' | 'ratio';
+    precision: number;
+    minimum: number;
+    maximum: number;
   }[];
   progress: { mode: ProgressMode; units: UnitId[]; totalPolicy: 'optional' | 'forbidden' | 'fixed_100' }[];
   copies: (Named & { statuses: Named[] })[];
   importSources: {
-    id: ScopedId; labels: Labels; mappingVersion: LocalId;
+    id: ScopedId;
+    labels: Labels;
+    mappingVersion: LocalId;
     types: string[]; // exact accepting type CURIEs in this release
     recordKinds: ('entry_state' | 'progress' | 'holding' | 'observation')[];
   }[];
@@ -130,32 +136,48 @@ Source validation uses the same structure with `labels` removed, then attaches p
     "libraryLocalId": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$(?![\\s\\S])" },
     "libraryScopedId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}\\.[a-z][a-z0-9-]{0,31}$(?![\\s\\S])" },
     "libraryLabels": {
-      "type": "object", "required": ["en"], "additionalProperties": false, "maxProperties": 8,
-      "patternProperties": { "^(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)$(?![\\s\\S])": { "type": "string", "minLength": 1, "maxLength": 80 } }
+      "type": "object",
+      "required": ["en"],
+      "additionalProperties": false,
+      "maxProperties": 8,
+      "patternProperties": {
+        "^(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)$(?![\\s\\S])": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
     },
     "libraryUnitId": { "enum": ["page", "chapter", "episode", "volume", "minute", "percent"] },
     "libraryNamed": {
-      "type": "object", "required": ["id", "labels"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels"],
+      "additionalProperties": false,
       "properties": { "id": { "$ref": "#/$defs/libraryLocalId" }, "labels": { "$ref": "#/$defs/libraryLabels" } }
     },
     "libraryState": {
-      "type": "object", "required": ["id", "labels"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" }, "labels": { "$ref": "#/$defs/libraryLabels" },
+        "id": { "$ref": "#/$defs/libraryLocalId" },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
         "role": { "enum": ["planned", "active", "completed", "paused", "dropped"] }
       }
     },
     "libraryStateSet": {
-      "type": "object", "required": ["id", "labels", "states"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels", "states"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" }, "labels": { "$ref": "#/$defs/libraryLabels" },
+        "id": { "$ref": "#/$defs/libraryLocalId" },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
         "states": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/libraryState" } }
       }
     },
     "libraryUnit": {
-      "type": "object", "required": ["id", "labels", "dimension", "precision", "minimum", "maximum"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels", "dimension", "precision", "minimum", "maximum"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryUnitId" }, "labels": { "$ref": "#/$defs/libraryLabels" },
+        "id": { "$ref": "#/$defs/libraryUnitId" },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
         "dimension": { "enum": ["count", "duration", "ratio"] },
         "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
         "minimum": { "type": "number", "minimum": 0, "maximum": 999999999999 },
@@ -163,34 +185,64 @@ Source validation uses the same structure with `labels` removed, then attaches p
       }
     },
     "libraryProgress": {
-      "type": "object", "required": ["mode", "units", "totalPolicy"], "additionalProperties": false,
+      "type": "object",
+      "required": ["mode", "units", "totalPolicy"],
+      "additionalProperties": false,
       "properties": {
         "mode": { "enum": ["scalar_amount", "cursor_position", "completed_units"] },
-        "units": { "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": { "$ref": "#/$defs/libraryUnitId" } },
+        "units": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/libraryUnitId" }
+        },
         "totalPolicy": { "enum": ["optional", "forbidden", "fixed_100"] }
       }
     },
     "libraryCopyKind": {
-      "type": "object", "required": ["id", "labels", "statuses"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels", "statuses"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryLocalId" }, "labels": { "$ref": "#/$defs/libraryLabels" },
+        "id": { "$ref": "#/$defs/libraryLocalId" },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
         "statuses": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/libraryNamed" } }
       }
     },
     "libraryImportSource": {
-      "type": "object", "required": ["id", "labels", "mappingVersion", "types", "recordKinds"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "labels", "mappingVersion", "types", "recordKinds"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryScopedId" }, "labels": { "$ref": "#/$defs/libraryLabels" },
+        "id": { "$ref": "#/$defs/libraryScopedId" },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
         "mappingVersion": { "$ref": "#/$defs/libraryLocalId" },
-        "types": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "$ref": "#/$defs/curie" } },
-        "recordKinds": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["entry_state", "progress", "holding", "observation"] } }
+        "types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/curie" }
+        },
+        "recordKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["entry_state", "progress", "holding", "observation"] }
+        }
       }
     },
     "libraryProfile": {
-      "type": "object", "required": ["id", "revision", "labels", "entryStateSet", "units", "progress", "copies", "importSources"], "additionalProperties": false,
+      "type": "object",
+      "required": ["id", "revision", "labels", "entryStateSet", "units", "progress", "copies", "importSources"],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/libraryScopedId" }, "revision": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "labels": { "$ref": "#/$defs/libraryLabels" }, "entryStateSet": { "$ref": "#/$defs/libraryStateSet" },
+        "id": { "$ref": "#/$defs/libraryScopedId" },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "labels": { "$ref": "#/$defs/libraryLabels" },
+        "entryStateSet": { "$ref": "#/$defs/libraryStateSet" },
         "units": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/libraryUnit" } },
         "progress": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/libraryProgress" } },
         "copies": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/libraryCopyKind" } },
@@ -259,19 +311,19 @@ with private assertion meaning. A printed recipe copy is a personal holding asse
 remain distinct accepting types, not implicit redirects. A future profile can use different IDs and omit roles;
 independent labels and wishlist membership coexist through Commerce's generic capability, outside this ABI.
 
-| Source | Declaring class | Accepting type | Profile ID | Scalar unit |
-| --- | --- | --- | --- | --- |
-| book.yaml | Work | schema:Book | book.reading | page |
-| book.yaml | Edition | bf:Instance | book.edition | page |
-| anime.yaml | TVSeries | schema:TVSeries | anime.series | episode |
-| anime.yaml | TVSeason | schema:TVSeason | anime.season | episode |
-| anime.yaml | Episode | schema:Episode | anime.episode | minute |
-| anime.yaml | Movie | schema:Movie | anime.film | minute |
-| game.yaml | VideoGame | schema:VideoGame (via BangumiVideoGame) | game.playing | minute |
-| game.yaml | VideoGameRelease | wd:Q20631656 | game.release | minute |
-| game.yaml | GameAddOn | wd:Q209163 | game.addon | minute |
-| visual-novel.yaml | VisualNovel | wd:Q689445 | visual-novel.reading | percent |
-| recipe.yaml | Recipe | schema:Recipe | recipe.cooking | minute |
+| Source            | Declaring class  | Accepting type                          | Profile ID           | Scalar unit |
+| ----------------- | ---------------- | --------------------------------------- | -------------------- | ----------- |
+| book.yaml         | Work             | schema:Book                             | book.reading         | page        |
+| book.yaml         | Edition          | bf:Instance                             | book.edition         | page        |
+| anime.yaml        | TVSeries         | schema:TVSeries                         | anime.series         | episode     |
+| anime.yaml        | TVSeason         | schema:TVSeason                         | anime.season         | episode     |
+| anime.yaml        | Episode          | schema:Episode                          | anime.episode        | minute      |
+| anime.yaml        | Movie            | schema:Movie                            | anime.film           | minute      |
+| game.yaml         | VideoGame        | schema:VideoGame (via BangumiVideoGame) | game.playing         | minute      |
+| game.yaml         | VideoGameRelease | wd:Q20631656                            | game.release         | minute      |
+| game.yaml         | GameAddOn        | wd:Q209163                              | game.addon           | minute      |
+| visual-novel.yaml | VisualNovel      | wd:Q689445                              | visual-novel.reading | percent     |
+| recipe.yaml       | Recipe           | schema:Recipe                           | recipe.cooking       | minute      |
 
 Persist the complete `LibraryProfilePin` with each accepted fact/session/copy or its immutable accepting revision.
 Resolve exactly `release.types[pin.type].library`; verify profile ID and revision match. No cross-release search,

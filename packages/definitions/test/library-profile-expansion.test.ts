@@ -20,7 +20,8 @@ function sourcesFor(count: number, profiles: boolean) {
       // An abstract structural node with no CURIE exercises compile-time inheritance.
       schema.classes[`V${i}LibraryBase`] = { annotations: { library: p } };
       Object.assign(schema.classes[`V${i}LibraryBase`]!, { abstract: true, is_a: 'CreativeWork' });
-      for (const suffix of ['Work', 'Edition']) Object.assign(schema.classes[`V${i}${suffix}`]!, { is_a: `V${i}LibraryBase` });
+      for (const suffix of ['Work', 'Edition'])
+        Object.assign(schema.classes[`V${i}${suffix}`]!, { is_a: `V${i}LibraryBase` });
       (extra.schemas as Record<string, string>)[vertical.schema] = JSON.stringify(schema);
       for (const locale of LIBRARY_LOCALES) {
         const key = `${vertical.name}/${locale}`;
@@ -32,8 +33,11 @@ function sourcesFor(count: number, profiles: boolean) {
   }
   return {
     ...bundled,
-    schemas: { ...bundled.schemas, ...extra.schemas,
-      'rezics.yaml': `${bundled.schemas['rezics.yaml']!.trimEnd()}\n${Array.from({ length: count }, (_, i) => `  - v${i}`).join('\n')}\n` },
+    schemas: {
+      ...bundled.schemas,
+      ...extra.schemas,
+      'rezics.yaml': `${bundled.schemas['rezics.yaml']!.trimEnd()}\n${Array.from({ length: count }, (_, i) => `  - v${i}`).join('\n')}\n`,
+    },
     presentation: { ...bundled.presentation, ...extra.presentation },
   };
 }
