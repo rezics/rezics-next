@@ -26,7 +26,15 @@
             }
           ],
           "focalPoint": null,
-          "credit": null
+          "credit": {
+            "rightsHolder": "Rezics fixture art",
+            "via": {
+              "name": "Rezics",
+              "url": "https://rezics.com"
+            },
+            "license": "CC0-1.0",
+            "obligations": []
+          }
         }
       }
     },
