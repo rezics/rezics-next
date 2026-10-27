@@ -7,6 +7,7 @@ import type { FilterDocument } from '@rezics/filter';
 import type { AuthoritativeTime } from '../../src/command/command.ts';
 import { accessCheck, accessCommandAuthorization, type Access, type Actor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { relationSlotForApi } from '../../src/semantic/item.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { adoptCandidates, decideCandidate, proposeStatement } from '../../src/semantic/candidates.ts';
 import { moderateStatement, moderateSubject } from '../../src/semantic/moderation.ts';
@@ -150,6 +151,13 @@ release.properties['ex:credit'] = property('ex:credit', {
   qualifiers: ['ex:key'],
   relation: { group: 'credit', inverse: 'none', order: 'name', slotKey: 'ex:key' },
 });
+release.types['schema:Person']!.facets = [
+  ...new Set([...(release.types['schema:Person']!.facets ?? []), 'rezics:penNameOf']),
+];
+release.properties['schema:recipeYield']!.qualifiers = ['ex:key'];
+release.types['schema:Recipe']!.facets = [
+  ...new Set([...release.types['schema:Recipe']!.facets!, 'schema:recipeYield', 'schema:datePublished']),
+];
 release.types['schema:Book']!.properties = [...release.types['schema:Book']!.properties, 'ex:credit'];
 release.types['schema:Book']!.facets = [...new Set([...release.types['schema:Book']!.facets!, 'ex:credit'])];
 export const nativeRelease = { digest: releaseDigest(release), release };
@@ -243,9 +251,10 @@ export async function leafFixture(pool: Pool, admin: Pool) {
     property: string,
     candidates: string[],
     expectedHead: number | null,
-    extra: { target?: string; key?: string; mode?: 'replace' | 'suppress'; rank?: 'normal' | 'preferred' } = {},
+    extra: { target?: string; key?: string; rank?: 'normal' | 'preferred' } = {},
   ) {
     const { rank = 'normal', ...rest } = extra;
+    const slot = relationSlotForApi(subject, property, release.properties[property]?.relation, rest);
     return (
       await adoptCandidates(pool, {
         ...(await command('context:adopt')),
@@ -254,7 +263,7 @@ export async function leafFixture(pool: Pool, admin: Pool) {
         release: nativeRelease,
         context: GLOBAL_CONTEXT,
         mode: 'replace',
-        ...rest,
+        slot,
         selection: candidates.map((candidate) => ({ candidate, rank })),
         expectedHead,
       })

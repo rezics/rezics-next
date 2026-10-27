@@ -336,10 +336,12 @@ Search deterministic leaf ordinal u8 (0..31), phase u8, value ordinal u8, decima
 u64, witness UUID16 (zero for no UUID). Unused sequence/UUID fields must be zero. Null progress uses empty string.
 It is not a nested token, JSON, leaf vector, prior result, witness receipt or allow/deny claim. Native progress.basis
 maps to ownerBasisDigest; that digest also binds current Search source/query/release/profile/generation. Search
-reconstructs the deterministic leaf from the admitted plan and recomputes/checks the composite basis before reuse.
+reconstructs the deterministic leaf from the admitted plan. A fresh bounded leaf probe supplies the native basis
+needed to recompute/check the composite owner digest before resuming; that probe and its rereads are charged,
+not an extra unrecorded basis callback. A mismatch restarts preparation before consuming old progress.
 The original being evaluated is the independent native aliasAfter raw key, groupId is its canonical group,
-sourceOrdinal selects the owner and basisDigest is actual structural identity. While a leaf is pending, retain
-that original in aliasAfter; resume the actual native alias cursor only after settling it. Never overwrite it
+sourceOrdinal selects the owner and basisDigest is actual structural identity. When a leaf can become pending, request a one-original native alias window and retain its ACTUAL returned
+after in aliasAfter (the original under evaluation); resume that same native alias cursor after settling it. Never overwrite it
 with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
 are request-local, not serialized. This scalar mapping needs manager/Search review before production; if an owner
 also needs independent unresolved prefix state at this boundary, that is a shared-protocol decision, NOT permission

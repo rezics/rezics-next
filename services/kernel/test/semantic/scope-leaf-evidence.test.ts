@@ -1,4 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { proposeStatement } from '../../src/semantic/candidates.ts';
+import { batchCommand } from '../../src/semantic/bulk.ts';
+import { takedownSourceFence } from '../../src/content/source-fence-command.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { changeStatementDisclosure } from '../../src/semantic/statement-disclosure.ts';
 import type { FactClause } from '../../src/search/disclosure/check.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
@@ -18,6 +24,9 @@ import {
   nativeRelease,
   requiredExport,
   stepBudget,
+  statement,
+  snak,
+  routeKey,
   typeLeaf,
   type AliasReader,
   type BasisReader,
@@ -72,7 +81,7 @@ test('admitted point leaves read only current selected property evidence with ex
   expect(adopted.facts.map((fact) => [fact.statement.value, fact.rank])).toEqual([['en', 'preferred']]);
   expect(evaluate(filter, [adopted])).toBe(false);
   expect(evaluate({ not: filter }, [adopted])).toBe(true);
-  head = await f.adopt(book, 'schema:inLanguage', [], head, { mode: 'suppress' });
+  head = await f.adopt(book, 'schema:inLanguage', [], head);
   const suppressed = current(await read(db.pool, f.request(book, languageLeaf), f.options()));
   expect(suppressed.facts).toEqual([]);
   expect(suppressed.coverage?.kind).toBe('selection');
@@ -230,10 +239,16 @@ test('leaf reservations reject before SQL and deadline and unavailable errors re
   const previous = (await db.admin.query('SELECT write_state FROM core.partition WHERE partition_no=$1', [partition]))
     .rows[0].write_state;
   try {
-    await db.admin.query("UPDATE core.partition SET write_state='moved' WHERE partition_no=$1", [partition]);
+    await db.admin.query(
+      "UPDATE core.partition SET write_state='moved', moved_to='https://unavailable.example.test' WHERE partition_no=$1",
+      [partition],
+    );
     await expect(read(db.pool, f.request(book, languageLeaf), f.options())).rejects.toThrow();
   } finally {
-    await db.admin.query('UPDATE core.partition SET write_state=$2 WHERE partition_no=$1', [partition, previous]);
+    await db.admin.query('UPDATE core.partition SET write_state=$2, moved_to=NULL WHERE partition_no=$1', [
+      partition,
+      previous,
+    ]);
   }
 }, 120_000);
 
@@ -378,3 +393,169 @@ test('last native alias remains discoverable through actual bounded group mainte
     expect(found).toBe(true);
   }
 }, 1_800_000);
+
+test('current normalized range unit and same-statement qualifier evidence uses the shared Search matcher', async () => {
+  await f.baseline();
+  const read = await leafReader();
+  const evaluate = await currentEvaluator();
+  const key = await f.create();
+  const otherKey = await f.create();
+  const recipe = await f.create('schema:Recipe', {
+    'schema:datePublished': [
+      statement('schema:datePublished', {
+        time: '-0500-00-00T00:00:00Z',
+        precision: 9,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+      }),
+    ],
+    'schema:recipeYield': [statement('schema:recipeYield', { amount: '+4', unit: '1' }, [snak('ex:key', key)])],
+  });
+  const timeLeaf: FactClause = {
+    facet: 'statement',
+    property: 'schema:datePublished',
+    range: { gte: -500, lte: -500 },
+  };
+  const quantityLeaf: FactClause = {
+    facet: 'statement',
+    property: 'schema:recipeYield',
+    range: { gte: 4, lte: 4, unit: '1' },
+    qualifiers: [{ property: 'ex:key', in: [key] }],
+  };
+  const time = current(await read(db.pool, f.request(recipe, timeLeaf), f.options()));
+  const quantity = current(await read(db.pool, f.request(recipe, quantityLeaf), f.options()));
+  expect(time.facts[0]!.statement.facet).toEqual({ kind: 'time', year: -500 });
+  expect(quantity.facts[0]!.statement).toEqual({
+    property: 'schema:recipeYield',
+    value: '+4',
+    facet: { kind: 'quantity', amount: 4, unit: '1' },
+    qualifiers: [{ property: 'ex:key', value: key }],
+  });
+  const timeFilter = { statement: { property: 'schema:datePublished', range: { gte: -500, lte: -500 } } };
+  const quantityFilter = {
+    statement: {
+      property: 'schema:recipeYield',
+      range: { gte: 4, lte: 4, unit: '1' },
+      qualifiers: [{ property: 'ex:key', in: [key] }],
+    },
+  };
+  expect(evaluate(timeFilter, [time])).toBe(true);
+  expect(evaluate(quantityFilter, [quantity])).toBe(true);
+  expect(evaluate({ and: [timeFilter, quantityFilter] }, [time, quantity])).toBe(true);
+  expect(evaluate({ or: [timeFilter, quantityFilter] }, [time, quantity])).toBe(true);
+  const wrongUnit = {
+    statement: { ...quantityFilter.statement, range: { gte: 4, lte: 4, unit: 'https://example.test/other-unit' } },
+  };
+  expect(evaluate(wrongUnit, [quantity])).toBe(false);
+  const wrongQualifier = {
+    statement: { ...quantityFilter.statement, qualifiers: [{ property: 'ex:key', in: [otherKey] }] },
+  };
+  expect(evaluate(wrongQualifier, [quantity])).toBe(false);
+  expect(evaluate({ not: { and: [timeFilter, wrongQualifier] } }, [time, quantity])).toBe(true);
+}, 120_000);
+
+test('native imported source fences invalidate leaf progress and a final recorded witness without a relay', async () => {
+  const book = await f.baseline();
+  const read = await leafReader();
+  const source = {
+    source: 'openlibrary',
+    external_id: randomUUID(),
+    field_group: 'facts' as const,
+    record_revision: 'unversioned',
+    digest: 'e'.repeat(64),
+    converter_revision: 'openlibrary@1',
+  };
+  const command = await f.command('statement:propose');
+  const imported = await batchCommand(db.pool, {
+    actor: f.editor,
+    authorization: command.authorization,
+    route: routeOf(book)!,
+    release: nativeRelease,
+    deadline: deadline(),
+    clock: () => new Date(),
+    command: {
+      op: 'propose',
+      key: randomUUID(),
+      source,
+      subject: book,
+      statement: {
+        property: { id: 'schema:inLanguage' },
+        value: { type: 'value', content: 'en' },
+        references: [
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/import' } },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  expect(imported.status).toBe(201);
+  if (!('candidate' in imported.value)) throw new Error('Expected native imported candidate');
+  const candidate = imported.value.candidate;
+  await f.accept(book, candidate);
+  const row = await db.admin.query('SELECT max(head) AS head FROM semantic.adoption WHERE route=$1 AND subject_id=$2', [
+    routeOf(book),
+    book,
+  ]);
+  await f.adopt(book, 'schema:inLanguage', [candidate], Number(row.rows[0].head));
+  const before = current(await read(db.pool, f.request(book, languageLeaf), f.options()));
+  expect(before.facts[0]!.statement.value).toBe('en');
+  await takedownSourceFence(
+    { pool: db.pool, access: f.access, routeKey },
+    f.editor,
+    {
+      source: source.source,
+      external_id: source.external_id,
+      field_group: 'facts',
+      reason: 'Native final evidence fence',
+    },
+    { idempotencyKey: randomUUID(), deadline: deadline(), requestId: randomUUID() },
+  );
+  const final = await read(
+    db.pool,
+    { ...f.request(book, languageLeaf), revalidate: before.facts[0]!.witness },
+    f.options(),
+  );
+  expect(final.state !== 'current' || final.facts.length === 0).toBe(true);
+  expect(JSON.stringify(final)).not.toContain(source.external_id);
+  const oldProgress: LeafProgress = { basis: before.basis, phase: 'selection', valueOrdinal: 0, after: '0' };
+  expect((await read(db.pool, f.request(book, languageLeaf, oldProgress), f.options())).state).toBe('basis_changed');
+}, 120_000);
+
+test('public consent and terminal retraction cannot disclose a private body through internal leaf keys', async () => {
+  await f.baseline();
+  const read = await leafReader();
+  const agent = await ensureAccountAgent(db.pool, { account: f.editor, kind: 'person', name: 'Consent authority' });
+  const pen = await f.create();
+  const proposed = await proposeStatement(db.pool, {
+    ...(await f.command('statement:propose')),
+    actor: f.editor,
+    subject: pen,
+    release: nativeRelease,
+    statement: { ...statement('rezics:penNameOf', agent.subject.id), references: [] },
+  });
+  const leaf: FactClause = { facet: 'statement', property: 'rezics:penNameOf', values: [agent.subject.id] };
+  const privateRead = await read(db.pool, f.request(pen, leaf), f.options());
+  expect(privateRead.state !== 'current' || privateRead.facts.length === 0).toBe(true);
+  // Even the owner/moderator cannot accidentally opt this internal public evidence read into a private overlay.
+  const ownerRead = await read(db.pool, f.request(pen, leaf), { ...f.options(), actor: f.editor });
+  expect(ownerRead.state !== 'current' || ownerRead.facts.length === 0).toBe(true);
+  expect(JSON.stringify(privateRead)).not.toContain(agent.subject.id);
+  await changeStatementDisclosure(db.pool, {
+    ...(await f.command('statement:propose')),
+    actor: f.editor,
+    candidate: proposed.candidate,
+  });
+  await finishWitnessRepair(db.pool, pen);
+  const publicRead = current(await read(db.pool, f.request(pen, leaf), f.options()));
+  expect(publicRead.facts[0]!.statement.value).toBe(agent.subject.id);
+  await changeStatementDisclosure(db.pool, {
+    ...(await f.command('statement:propose')),
+    actor: f.editor,
+    candidate: proposed.candidate,
+    retract: true,
+  });
+  const final = await read(db.pool, { ...f.request(pen, leaf), revalidate: publicRead.facts[0]!.witness }, f.options());
+  expect(final.state !== 'current' || final.facts.length === 0).toBe(true);
+}, 120_000);
