@@ -301,14 +301,13 @@ test('restoring a private fact fences its parked stale purge before private stat
 test('account retention freezes completed public A discards pending B and erases unlisted private deleted and log payload', async () => {
   const f = await driver.retentionFixture();
   expect(f.erased.length).toBeGreaterThanOrEqual(5);
-  const deletion = await driver.accountDelete();
+  await driver.accountDelete();
   for (const erased of f.erased) await hidden(erased);
   const retained = await driver.retained(f.public);
   expect(retained.subjectIds).toEqual(f.generationA);
   expect(retained.subjectIds).not.toContain(f.pendingOnlyId);
   expect(Object.keys(retained.attribution).sort()).toEqual(['id', 'kind', 'state']);
   expect(retained.attribution.state).toBe('deleted');
-  await driver.setTime(at(deletion.deletedAt, 30));
   await driver.drain();
   for (const erased of f.erased) {
     const state = await driver.inspect(erased);
@@ -325,9 +324,8 @@ test('account retention freezes completed public A discards pending B and erases
 test('child before parent pages recover rollback and commit before enqueue without duplicate effects or broad scans', async () => {
   for (const point of ['before-commit', 'after-commit-before-enqueue'] as const) {
     const f = await driver.seed('log', { historyRows: 257 });
-    const deletion = await driver.accountDelete();
     await driver.crashNext(point);
-    await driver.setTime(at(deletion.deletedAt, 30));
+    await driver.accountDelete();
     await driver.restart();
     await driver.drain();
     const trace = await driver.trace();
