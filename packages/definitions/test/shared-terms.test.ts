@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease, bundledSources } from '../src/bundled.ts';
 import { compileCatalogue } from '../src/compile.ts';
+import type { Release } from '../src/index.ts';
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
 const roles = {
@@ -38,8 +39,16 @@ type Source = {
 };
 const source = (name: string) => Bun.YAML.parse(bundledSources().schemas[`${name}.yaml`]!) as Source;
 
+function freeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    for (const child of Object.values(value as object)) freeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 // Future verticals must extend the anchors without editing the shared ranges.
-async function extendedRelease() {
+function extendedSources() {
   const sources = bundledSources();
   sources.schemas['fixture.yaml'] = JSON.stringify({
     id: 'https://rezics.com/catalogue/shared-fixture',
@@ -57,7 +66,16 @@ async function extendedRelease() {
   sources.presentation['fixture/en'] = JSON.stringify({
     types: { 'ex:Work': 'fixture work', 'ex:Character': 'fixture character', 'ex:Series': 'fixture series' },
   });
-  return compileCatalogue(sources);
+  return sources;
+}
+
+let extendedReleaseCompilation: Promise<Release> | undefined;
+function compileExtendedRelease(): Promise<Release> {
+  extendedReleaseCompilation ??= compileCatalogue(freeze(extendedSources())).then(freeze);
+  return extendedReleaseCompilation;
+}
+async function extendedRelease(): Promise<Release> {
+  return structuredClone(await compileExtendedRelease());
 }
 
 test('a credit is a role statement qualified by credited-as, order and detailed role', () => {
@@ -123,6 +141,16 @@ test('an appearance is a character statement qualified by its role and a voice a
     maximum: 2,
     units: ['1'],
   });
+});
+
+test('shared fixture results are isolated from one another', async () => {
+  const compilation = compileExtendedRelease();
+  expect(compileExtendedRelease()).toBe(compilation);
+  const result = await compilation;
+  expect(Object.isFrozen(result.types['ex:Work']!.properties)).toBe(true);
+  const [first, second] = await Promise.all([extendedRelease(), extendedRelease()]);
+  first.types['ex:Work']!.properties.push('ex:localChange');
+  expect(second.types['ex:Work']!.properties).not.toContain('ex:localChange');
 });
 
 test('genres, tags and detailed roles are SKOS concepts and a concept focuses on any subject', async () => {
