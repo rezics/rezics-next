@@ -1150,6 +1150,44 @@ Cost:
   measures a profile update against the same account populations at scales [256, 1024, 4096]
   with one warm-up per scale.
 
+## Deletion
+
+Access follows the [platform deletion policy](../../../../docs/deletion.md). It owns no user-authored content,
+so nothing in Access is soft-deleted in that policy's sense; its records describe identity and authority
+([schema](../../db/access/schema.sql)).
+
+- **Records.** Person deletion, automated-account deletion by its operator's manager and organization close all
+  cross the terminal account barrier in [lifecycle.ts](lifecycle.ts) and [lifecycle-fence.sql](lifecycle-fence.sql).
+  Grant and role-grant revocation and membership removal change authority rather than delete a user-owned record
+  under the policy, even where SQL physically removes a row ([grant-revoke.sql](grant-revoke.sql),
+  [role-grant-mutate.sql](role-grant-mutate.sql), [lifecycle-membership.sql](lifecycle-membership.sql) and
+  [`close_membership_authority` in the schema](../../db/access/schema.sql)). A new grant or membership restores
+  authority, subject to current authorization ([grant-commands.ts](grant-commands.ts), [grant-create.sql](grant-create.sql),
+  [role-grant-mutate.sql](role-grant-mutate.sql), [lifecycle-member-insert.sql](lifecycle-member-insert.sql) and
+  [lifecycle.ts](lifecycle.ts)). A former handle redirects for 30 days: `HANDLE_REDIRECT_TTL_MS` in
+  [lifecycle.ts](lifecycle.ts) sets the reservation deadline, and [handle-holder.sql](handle-holder.sql) excludes
+  expired redirects; expiry does not itself purge the claim.
+- **Restore.** There is no restore after the barrier: [lifecycle.ts](lifecycle.ts) requires an active account for
+  tombstone, and [lifecycle-fence.sql](lifecycle-fence.sql) makes it deleted and fenced. As
+  [Account deletion policy](#account-deletion-policy) states, fresh confirmation before the barrier replaces the
+  policy's restore window for accounts. The policy bounds private-data purge by the end of the 30-day window;
+  Access starts purging identity fields at the barrier, meeting that bound for those fields, while the unresolved
+  stores and deadlines remain in [Known retention gaps](#known-retention-gaps).
+  A restorable 30-day scheduled deletion before the barrier is not built, a known gap.
+- **Minimal purge.** [lifecycle-fence.sql](lifecycle-fence.sql) clears the identity/profile group and retains the
+  account skeleton plus the residual fields listed in the [retention inventory](#retention-inventory), rather
+  than deleting the account row. The public skeleton is `{ id, state, kind }` under
+  [Account deletion policy](#account-deletion-policy); [account-data.ts](account-data.ts) and
+  [public-identity-page.sql](public-identity-page.sql) withhold the former identity, with the extra null/false
+  projection fields recorded in [Known retention gaps](#known-retention-gaps). Clearing personal fields while
+  retaining the skeleton is the policy's minimal purge; it does not settle the residual retention gaps.
+- **Purge bounds.** The barrier statement clears a constant number of fields in one account row
+  ([lifecycle-fence.sql](lifecycle-fence.sql)). Consumers of `com.rezics.access.account-tombstoned.v1` purge in
+  idempotent bounded steps, as described in [Erasure consumers](#erasure-consumers); for example,
+  [organization-close-work.ts](organization-close-work.ts) records page receipts and schedules stable workflow
+  identities. A per-step bound is not a completion deadline; open retention and deadline items remain in
+  [Known retention gaps](#known-retention-gaps).
+
 ## Account deletion policy
 
 Deletion is terminal. Before the deletion barrier, the person must confirm freshly after being told the
@@ -1226,6 +1264,7 @@ commands is covered by the shared receipt, write-basis and outbox rows above.
 
 ### Known retention gaps
 
+- Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
 - `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
 - The deleted handle projection in [account-data.ts](account-data.ts) still returns extra null/false fields, including `automated`; convergence to the policy's exact three-field identity is separate implementation work.
 - Semantic can clear an account-agent label, but [the Access synchronization effect](account-agent-effect.ts) skips deleted accounts and has no deletion event binding; cross-owner label erasure is not demonstrated here.
