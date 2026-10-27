@@ -2,18 +2,29 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { accountAgentId } from '../../src/semantic/agents.ts';
+import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
+const editor = {
+  kind: 'account' as const,
+  accountId: accounts.editor,
+  clientId: 'web',
+  scopes: ['subject:create'],
+  requestedBy: null,
+  authnEpoch: 1,
+};
 const routeKey = new Uint8Array(32).fill(7);
 const body = Buffer.from(JSON.stringify(fromPlainText('Agent profile reply')));
 const bodyHash = new Uint8Array(new Bun.CryptoHasher('sha256').update(body).digest());
@@ -43,19 +54,29 @@ let postGrowthAccount: Account;
 let collectionGrowthAccount: Account;
 let identityGrowthAccount: Account;
 let activityBaselineAccount: Account;
+let pageGrowthAccount: Account;
+let verifiedAccount: Account;
+let organizationAccount: Account;
+let deletedAccount: Account;
+let catalogueSubject: string;
+let organizationAgent: string;
 let profile: PresentationProfile;
 
 const node = (type: string, id: string, props: Record<string, unknown> = {}) => ({ type, props: { id, ...props } });
 const document = (...content: ReturnType<typeof node>[]) => ({ root: { props: {} }, content });
 
-async function ensureAccount(handle: string, displayName = 'Public agent'): Promise<Account> {
+async function ensureAccount(
+  handle: string,
+  displayName = 'Public agent',
+  { kind = 'actor', state = 'active' }: { kind?: 'actor' | 'organization'; state?: 'active' | 'deleted' } = {},
+): Promise<Account> {
   const route = 0x5210;
   const id = newId(route);
   await admin.query(
     `INSERT INTO access.account
        (route,account_id,kind,state,handle,display_name,biography,links,transaction_id)
-     VALUES ($1,$2,'actor','active',$3,$4,'A public agent biography','[{"label":"Site","url":"https://example.test"}]'::jsonb,$2)`,
-    [route, id, handle, displayName],
+     VALUES ($1,$2,$4,$5,$3,$6,'A public agent biography','[{"label":"Site","url":"https://example.test"}]'::jsonb,$2)`,
+    [route, id, handle, kind, state, displayName],
   );
   await admin.query(
     `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
@@ -65,13 +86,14 @@ async function ensureAccount(handle: string, displayName = 'Public agent'): Prom
   return { id, handle };
 }
 
-function accountNodes(handle: string, includeCollections = true) {
+function accountNodes() {
   return [
-    node('AccountIdentity', 'identity', { handle }),
+    node('SubjectHeader', 'header'),
+    node('AccountIdentity', 'identity'),
     node('AccountThreads', 'discussions', { threadKind: 'discussion', limit: 1 }),
     node('AccountThreads', 'reviews', { threadKind: 'review', limit: 1 }),
     node('AccountPosts', 'posts', { limit: 1 }),
-    ...(includeCollections ? [node('AccountCollections', 'collections', { limit: 1 })] : []),
+    node('AccountCollections', 'collections', { limit: 1 }),
   ];
 }
 
@@ -240,8 +262,22 @@ async function call(method: string, path: string, body?: unknown) {
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-async function readPage(route: string) {
-  return call('POST', '/v1/pages:read', { target: { route } });
+async function readPage(target: Record<string, unknown>) {
+  return call('POST', '/v1/pages:read', { target });
+}
+
+async function createCatalogueSubject(type: string, label: string): Promise<string> {
+  const idempotencyKey = randomUUID();
+  const created = await createSubject(pool, {
+    actor: editor,
+    target: subjectTarget(routeKey, editor.accountId, idempotencyKey),
+    idempotencyKey,
+    digest: createHash('sha256').update(idempotencyKey).digest(),
+    item: { type, labels: { en: label } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: async () => true,
+  });
+  return created.subject.id;
 }
 
 async function getJson(path: string): Promise<Record<string, any>> {
@@ -279,6 +315,15 @@ beforeAll(async () => {
   collectionGrowthAccount = await ensureAccount(`collections_${randomUUID().replaceAll('-', '')}`);
   identityGrowthAccount = await ensureAccount(`identity_${randomUUID().replaceAll('-', '')}`);
   activityBaselineAccount = await ensureAccount(`baseline_${randomUUID().replaceAll('-', '')}`);
+  pageGrowthAccount = await ensureAccount(`pagegrowth_${randomUUID().replaceAll('-', '')}`);
+  verifiedAccount = await ensureAccount(`verified_${randomUUID().replaceAll('-', '')}`, 'Verified agent');
+  organizationAccount = await ensureAccount(`organization_${randomUUID().replaceAll('-', '')}`, 'Agent organization', {
+    kind: 'organization',
+  });
+  deletedAccount = await ensureAccount(`deleted_${randomUUID().replaceAll('-', '')}`, 'Deleted agent', {
+    kind: 'actor',
+    state: 'deleted',
+  });
   await seedUnrelatedAccounts(4_096);
   await seedAgentItems(
     activityBaselineAccount.id,
@@ -293,16 +338,45 @@ beforeAll(async () => {
   );
   await seedAgentCollections(pageAccount.id, 2);
 
-  const missingHandle = `missing_${randomUUID().replaceAll('-', '')}`;
+  // The organization is unverified: its page is its own graph agent's page, resolved by the agent's type.
+  organizationAgent = accountAgentId(organizationAccount.id);
+  await ensureAccountAgent(pool, {
+    account: organizationAccount.id,
+    kind: 'organization',
+    name: 'Agent organization',
+    language: 'en',
+  });
+
+  // The verified account's agent is merged into a catalogue subject; accounts stores the verification on the row.
+  await ensureAccountAgent(pool, {
+    account: verifiedAccount.id,
+    kind: 'person',
+    name: 'Verified agent',
+    language: 'en',
+  });
+  catalogueSubject = await createCatalogueSubject('schema:Person', 'Catalogue Person');
+  const receipt = randomUUID();
+  await verifyAccountAgent(pool, { account: verifiedAccount.id, catalogue: catalogueSubject, receipt });
+  await admin.query(
+    `UPDATE access.account
+     SET agent_verified = true, agent_subject_id = $3, agent_verification_receipt_id = $4
+     WHERE route = $1 AND account_id = $2`,
+    [routeOf(verifiedAccount.id), verifiedAccount.id, catalogueSubject, receipt],
+  );
+
+  const accountDocument = document(...accountNodes());
   profile = {
     format: PROFILE_FORMAT,
     generic: document(node('Heading', 'generic', { text: 'Agent', level: 1 })),
     bases: [],
-    types: [],
-    routes: [
-      { route: '/agent', document: document(...accountNodes(pageAccount.handle)) },
-      { route: '/missing', document: document(...accountNodes(missingHandle)) },
+    types: [
+      {
+        type: 'schema:Organization',
+        document: document(node('SubjectHeader', 'header'), node('AccountIdentity', 'identity')),
+      },
+      { type: 'schema:Person', document: accountDocument },
     ],
+    routes: [],
   };
   await bootstrapProfile(pool, profile);
 });
@@ -311,70 +385,156 @@ afterAll(async () => {
   await growth?.close();
 });
 
+test.serial('an account page read resolves the account by handle and plans its lists in one pass', async () => {
+  // This account has no graph agent, so the page resolves by the account's kind.
+  const answer = await readPage({ account: pageAccount.handle });
+  expect(answer.response.status).toBe(200);
+  expect(answer.body.profile).toBe(profileDigest(profile));
+  expect(answer.body.account).toBe(pageAccount.id);
+  expect(answer.body).not.toHaveProperty('subject');
+  expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Person' });
+  expect(Object.keys(answer.body.reads)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+  const accountRead = answer.body.reads.r0;
+  expect(accountRead.status).toBe(200);
+  expect(accountRead.body.accounts).toHaveLength(1);
+  expect(accountRead.body.accounts[0]).toMatchObject({
+    id: pageAccount.id,
+    handle: pageAccount.handle,
+    displayName: 'Page agent',
+    state: 'active',
+    bio: 'A public agent biography',
+    links: [{ label: 'Site', url: 'https://example.test' }],
+    avatar: null,
+    publicViews: { posts: true, reviews: true, collections: true },
+  });
+
+  // Each list is the standalone read with a continuation for the reader to follow.
+  const discussions = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=discussion&limit=1`);
+  const reviews = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=review&limit=1`);
+  const posts = await getJson(`/v1/accounts/${pageAccount.id}/posts?limit=1`);
+  const collections = await getJson(`/v1/accounts/${pageAccount.id}/collections?view=BASIC&limit=1`);
+  expect(answer.body.reads.r1.body).toEqual(discussions);
+  expect(answer.body.reads.r2.body).toEqual(reviews);
+  expect(answer.body.reads.r3.body).toEqual(posts);
+  expect(answer.body.reads.r4.body).toEqual(collections);
+  for (const list of [discussions, reviews, posts, collections]) expect(list.next).toBeString();
+  expect(discussions.threads).toHaveLength(1);
+  expect(reviews.threads).toHaveLength(1);
+  expect(posts.posts).toHaveLength(1);
+  expect(posts.posts[0].thread).toHaveProperty('id');
+  expect(posts.posts[0].thread).toHaveProperty('title');
+  expect(collections.collections).toHaveLength(1);
+});
+
+test.serial('an unknown or deleted handle answers the same 404 as an unknown subject', async () => {
+  const unknownSubject = await readPage({ subject: newId(contentRoute) });
+  expect(unknownSubject.response.status).toBe(404);
+  const unknown = await readPage({ account: `missing_${randomUUID().replaceAll('-', '')}` });
+  const deleted = await readPage({ account: deletedAccount.handle });
+  for (const answer of [unknown, deleted]) {
+    expect(answer.response.status).toBe(404);
+    expect(answer.response.headers.get('content-type')).toBe(unknownSubject.response.headers.get('content-type'));
+    expect(answer.body.type).toBe(unknownSubject.body.type);
+    expect(answer.body.title).toBe(unknownSubject.body.title);
+    expect(answer.body.status).toBe(404);
+    expect(answer.body).not.toHaveProperty('reads');
+  }
+});
+
 test.serial(
-  'a page read plans and answers an account by handle, and an unknown handle answers an empty result',
+  "an account verified as a catalogue subject answers that subject's page with the account's reads",
   async () => {
-    const answer = await readPage('/agent');
+    const answer = await readPage({ account: verifiedAccount.handle });
     expect(answer.response.status).toBe(200);
-    expect(answer.body.profile).toBe(profileDigest(profile));
-    expect(Object.keys(answer.body.reads)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
-    const accountRead = answer.body.reads.r0;
-    expect(accountRead.status).toBe(200);
-    expect(accountRead.body.accounts).toHaveLength(1);
-    expect(accountRead.body.accounts[0]).toMatchObject({
-      id: pageAccount.id,
-      handle: pageAccount.handle,
-      displayName: 'Page agent',
-      state: 'active',
-      bio: 'A public agent biography',
-      links: [{ label: 'Site', url: 'https://example.test' }],
-      avatar: null,
-      publicViews: { posts: true, reviews: true, collections: true },
+    expect(answer.body.account).toBe(verifiedAccount.id);
+    expect(answer.body.subject).toBe(catalogueSubject);
+    expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Person' });
+    expect(Object.keys(answer.body.reads)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+    const subject = await getJson(`/v1/subjects/${catalogueSubject}`);
+    expect(answer.body.reads.r0).toEqual({ status: 200, body: subject });
+    expect(answer.body.reads.r0.body.subject.type).toBe('schema:Person');
+    expect(answer.body.reads.r1.body.accounts[0]).toMatchObject({
+      id: verifiedAccount.id,
+      verified: true,
+      subject: { id: catalogueSubject, type: 'schema:Person' },
     });
-
-    const unknown = await readPage('/missing');
-    expect(unknown.response.status).toBe(200);
-    expect(unknown.body.reads).toEqual({ r0: { status: 200, body: { accounts: [], next: null } } });
+    expect(answer.body.reads.r2.body).toHaveProperty('threads');
+    expect(answer.body.reads.r3.body).toHaveProperty('threads');
+    expect(answer.body.reads.r4.body).toHaveProperty('posts');
+    expect(answer.body.reads.r5.body).toHaveProperty('collections');
   },
 );
 
 test.serial(
-  "a page read answers an account's discussions, reviews and replies as bounded pages with continuations",
+  "an unverified organization account answers its agent subject's page with the organization template",
   async () => {
-    const answer = await readPage('/agent');
+    const answer = await readPage({ account: organizationAccount.handle });
     expect(answer.response.status).toBe(200);
-    const discussions = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=discussion&limit=1`);
-    const reviews = await getJson(`/v1/accounts/${pageAccount.id}/threads?kind=review&limit=1`);
-    const posts = await getJson(`/v1/accounts/${pageAccount.id}/posts?limit=1`);
-    expect(answer.body.reads.r1.body.threads).toEqual(discussions.threads);
-    expect(answer.body.reads.r2.body.threads).toEqual(reviews.threads);
-    expect(answer.body.reads.r3.body.posts).toEqual(posts.posts);
-    expect(answer.body.reads.r1.body.next).toBeString();
-    expect(answer.body.reads.r2.body.next).toBeString();
-    expect(answer.body.reads.r3.body.next).toBeString();
-    expect(discussions.threads).toHaveLength(1);
-    expect(discussions.next).toBeString();
-    expect(reviews.threads).toHaveLength(1);
-    expect(reviews.next).toBeString();
-    expect(posts.posts).toHaveLength(1);
-    expect(posts.posts[0].thread).toHaveProperty('id');
-    expect(posts.posts[0].thread).toHaveProperty('title');
-    expect(posts.next).toBeString();
+    expect(answer.body.account).toBe(organizationAccount.id);
+    expect(answer.body.subject).toBe(organizationAgent);
+    expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Organization' });
+    expect(Object.keys(answer.body.reads)).toEqual(['r0', 'r1']);
+    expect(answer.body.reads.r0.body.subject).toMatchObject({ id: organizationAgent, type: 'schema:Organization' });
+    expect(answer.body.reads.r1.body.accounts[0]).toMatchObject({
+      id: organizationAccount.id,
+      kind: 'organization',
+      verified: false,
+      subject: { id: organizationAgent, type: 'schema:Organization' },
+    });
   },
 );
 
-test.serial(
-  "a page read answers an account's public collections as a bounded BASIC page with a continuation",
-  async () => {
-    const answer = await readPage('/agent');
-    expect(answer.response.status).toBe(200);
-    const collections = await getJson(`/v1/accounts/${pageAccount.id}/collections?view=BASIC&limit=1`);
-    expect(answer.body.reads.r4.body.collections).toEqual(collections.collections);
-    expect(answer.body.reads.r4.body.next).toBeString();
-    expect(collections.collections).toHaveLength(1);
-    expect(collections.next).toBeString();
-  },
-);
+test.serial('a malformed account target answers 400 at /target/account', async () => {
+  for (const [account, code] of [
+    ['', 'invalid_format'],
+    ['-leading', 'invalid_format'],
+    ['has space', 'invalid_format'],
+    ['x'.repeat(65), 'invalid_format'],
+    [7, 'invalid_type'],
+    [null, 'invalid_type'],
+  ] as const) {
+    const answer = await readPage({ account });
+    expect(answer.response.status).toBe(400);
+    expect(answer.body.errors).toEqual([{ pointer: '/target/account', code }]);
+  }
+  const both = await readPage({ account: pageAccount.handle, route: '/agent' });
+  expect(both.response.status).toBe(400);
+  expect(both.body.errors).toEqual([{ pointer: '/target', code: 'invalid_type' }]);
+});
+
+test.serial('account page read stays within its bound at 1, 10 and 100 threads', async () => {
+  const report = await checkGrowth(growth, {
+    name: 'Account page read',
+    scales: [1, 10, 100],
+    repetitions: 1,
+    warmups: 1,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(_database, scale, previous) {
+      await seedAgentItems(
+        pageGrowthAccount.id,
+        Array.from({ length: scale - previous }, () => ({ kind: 'discussion' as const })),
+        'account-page-growth',
+      );
+    },
+    async operation(_database, scale) {
+      const answer = await readPage({ account: pageGrowthAccount.handle });
+      expect(answer.response.status).toBe(200);
+      expect(answer.body.account).toBe(pageGrowthAccount.id);
+      expect(answer.body.reads.r1.body.threads).toHaveLength(1);
+      if (scale > 1) expect(answer.body.reads.r1.body.next).toBeString();
+      return answer.body;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 10, 100]);
+  assertConstantStatements(report.samples);
+  const within = (relation: string, limit: number) =>
+    report.samples.every(({ cost }) => (cost.relations[relation]?.rows ?? 0) <= limit);
+  expect(within('access.handle_claim', 1)).toBe(true);
+  expect(within('access.account', 2)).toBe(true);
+  expect(within('content.author_item', 16)).toBe(true);
+  expect(within('content.thread', 24)).toBe(true);
+  expect(within('library.collection', 4)).toBe(true);
+});
 
 test.serial('account identity read stays within its bound at 1, 10 and 100 unrelated accounts', async () => {
   const report = await checkGrowth(growth, {
