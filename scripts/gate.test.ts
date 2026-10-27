@@ -179,7 +179,7 @@ test('with KERNEL_CHECK_REMOTE set the root gate runs whole on one check host an
   expect(seen.map((event) => event.kind).slice(-4)).toEqual(['cleanup', 'release', 'release', 'release']);
 });
 
-test('the gate retries its remote run once after a transport failure and exits with the second run\'s code', async () => {
+test("the gate retries its remote run once after a transport failure and exits with the second run's code", async () => {
   const { env, events } = scenario(1);
   const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_EXIT: '7', GATE_REMOTE_SLOTS: '1' });
 
