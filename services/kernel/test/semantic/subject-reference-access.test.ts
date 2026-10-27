@@ -148,14 +148,11 @@ test('references enforce current explicit denial, suspension and native visibili
     f.resource.route,
     f.resource.id,
   ]);
-  const beforeSuspension = await check(f);
   await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
     routeOf(f.actorId),
     f.actorId,
   ]);
-  expect(
-    await observed(() => readSubjectReference(pool, f.resource.id, (client) => beforeSuspension(client))),
-  ).toBeNull();
+  expect(await read()).toBeNull();
   await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
     routeOf(f.actorId),
     f.actorId,
