@@ -49,6 +49,11 @@ export const Grid: Story = {
     container.style.width = '';
     const frames = articles.map((article) => article.querySelector('[data-slot=cover]')!.getBoundingClientRect());
     await expect(frames.every((frame) => Math.abs(frame.height - frames[0]!.height) < 1)).toBe(true);
+    const titleLink = within(articles[0]!).getByRole('link');
+    for (const slot of ['cover', 'cover-card-secondary']) {
+      const box = articles[0]!.querySelector(`[data-slot=${slot}]`)!.getBoundingClientRect();
+      await expect(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)).toBe(titleLink);
+    }
     const button = canvas.getByRole('button', { name: /More actions for/ });
     await userEvent.click(button);
     await expect(
