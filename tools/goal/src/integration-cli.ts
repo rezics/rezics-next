@@ -6,6 +6,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, re
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { AttemptFence, GateOutcomeSink, LandingRequest, ManagerEventKind } from './contracts.ts';
+import { reapContainers } from './containers.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -220,7 +221,14 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       promotion.once('exit', () => closeSync(log));
       promotion.unref();
     };
-    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); promote(); }, 60_000);
+    // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
+    let reapedAt = 0;
+    const reap = () => {
+      if (Date.now() - reapedAt < 600_000) return;
+      reapedAt = Date.now();
+      try { reapContainers(runtime.db, runtime.stateDirectory); } catch (error) { console.error(error); }
+    };
+    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); remind(); promote(); reap(); }, 60_000);
     recoveryTimer.unref();
     await new Promise<void>(resolve => {
       stopServer = resolve;
