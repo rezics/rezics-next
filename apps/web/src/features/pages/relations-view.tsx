@@ -1,9 +1,12 @@
+import type { KernelClient } from '@rezics/client';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { RELATION_GROUPS, type RelationDefinition } from '../../subject/relations';
 import { countText, dateText, GROUP_TITLES, holderItems, Items, type Item, type RowValue } from './overview';
-import { linkClass, linkColor } from './shared';
+import { ViewHeading } from './subject-frame';
+import { loadSubjectPage } from './subject';
 
 /** One page of the subject's relations: one property when `property` is given, otherwise every property. */
 export type RelationsViewData = {
@@ -13,6 +16,27 @@ export type RelationsViewData = {
 };
 
 const PAGE_LIMIT = 100;
+
+/**
+ * The reads of the Relations view: the subject's overview page, which carries the subject for the frame and the
+ * previews that count the tabs, and one page of the inverse read.
+ */
+export async function readRelationsPage(
+  client: KernelClient,
+  input: { id: string; property?: string | undefined; cursor?: string | undefined },
+) {
+  const [overview, links] = await Promise.all([
+    loadSubjectPage(client, input.id),
+    client.subjects({ id: input.id }).links.get({
+      query: {
+        limit: PAGE_LIMIT,
+        ...(input.property ? { property: input.property } : {}),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+      },
+    }),
+  ]);
+  return { overview, links };
+}
 
 function viewHref(locale: string, subject: string, property: string | null, cursor?: string): string {
   const params = new URLSearchParams();
@@ -29,14 +53,15 @@ function viewHref(locale: string, subject: string, property: string | null, curs
 export function RelationsView({
   locale,
   subject,
-  title,
+  frame,
   data,
   relations,
   value,
 }: {
   locale: string;
   subject: string;
-  title: string;
+  /** The subject's compact header and the view tabs. */
+  frame: ReactNode;
   data: RelationsViewData;
   relations: Record<string, RelationDefinition>;
   value: RowValue;
@@ -49,7 +74,6 @@ export function RelationsView({
   const heading = data.property
     ? (definition(data.property)?.label ?? m.subject_relations({}, options))
     : m.subject_relations({}, options);
-  const Link = value.link;
   const items: Item[] = (listed?.items ?? []).map((item) => {
     const entry = definition(item.property);
     const date = dateText(item.date, locale);
@@ -61,21 +85,17 @@ export function RelationsView({
   });
   return (
     <section data-slot="relations-view" className="mx-auto w-full max-w-5xl min-w-0 space-y-6">
-      <header className="space-y-2">
-        <p className="text-sm">
-          <span className={`${linkClass} ${linkColor} font-medium`}>
-            <Link href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}`}>{title}</Link>
-          </span>
-        </p>
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-4xl font-semibold tracking-tight text-balance">{heading}</h1>
-          {listed && (
+      {frame}
+      <ViewHeading
+        label={heading}
+        count={
+          listed && (
             <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
               {countText(listed.count, locale)}
             </span>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
       {!listed ? (
         <Empty className="border" role="alert" data-state="failed">
           <EmptyHeader>

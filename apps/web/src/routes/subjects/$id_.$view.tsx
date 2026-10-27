@@ -3,7 +3,8 @@ import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader, getRequest } from '@tanstack/react-start/server';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
-import { loadSubjectPage, SubjectPage, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
+import { subjectPageType } from '../../features/pages/subject';
+import { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
 import { subjectTabs } from '../../features/pages/views';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
@@ -30,7 +31,7 @@ const viewLabel = {
   details: () => m.subject_details(),
 } satisfies Record<View, () => string>;
 
-// The view page is the view's own document; the tab bar needs the overview's previews, so both are read together.
+// The view page is the view's own document; the tab bar and the frame need the overview's page, so both are read together.
 const readView = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
     if (
@@ -51,24 +52,24 @@ const readView = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
     const request = getRequest();
-    const [result, overview, reader] = await Promise.all([
-      loadSubjectPage(client, data.id, data.view),
-      loadSubjectPage(client, data.id),
+    const [loaded, reader] = await Promise.all([
+      loadViewPages(client, data.id, data.view),
       loadReader(client, request, env as Partial<SessionEnv>),
     ]);
-    if (result.kind === 'missing' || overview.kind === 'missing') throw notFound();
-    if (result.kind === 'redirect')
-      throw redirect({ href: `/${data.locale}/subjects/${result.id}/${data.view}`, statusCode: 308 });
-    if (overview.kind === 'redirect') throw notFound();
-    const type = subjectPageType(overview.page);
-    const frame = type ? await typeFrame(type, data.locale) : {};
+    if (loaded.kind === 'missing') throw notFound();
+    if (loaded.kind === 'redirect')
+      throw redirect({ href: `/${data.locale}/subjects/${loaded.id}/${data.view}`, statusCode: 308 });
+    const frame = subjectFrame(loaded.overview, data.locale);
+    if (!frame) throw notFound();
+    const type = subjectPageType(loaded.overview);
     return {
       view: data.view,
-      page: result.page,
+      page: loaded.page,
       reader,
+      type: type ? await typeFrame(type, data.locale) : {},
       frame,
-      tabs: subjectTabs(overview.page),
-      title: subjectPageTitle(overview.page, data.locale),
+      tabs: subjectTabs(loaded.overview),
+      title: frame.title.text,
     };
   });
 
@@ -91,27 +92,40 @@ export const Route = createFileRoute('/subjects/$id_/$view')({
 });
 
 function SubjectViewRoute() {
-  const { page, reader, frame, tabs, title, view } = Route.useLoaderData();
-  const { id } = Route.useParams();
+  const { page, reader, type, frame, tabs, view } = Route.useLoaderData();
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
   return (
-    <SubjectPage
+    <SubjectViewPage
       page={page}
       locale={locale}
       messages={subjectPageMessages()}
       reader={reader}
-      {...(frame.label ? { typeLabel: frame.label } : {})}
-      {...(frame.ratio ? { ratio: frame.ratio } : {})}
+      {...(type.label ? { typeLabel: type.label } : {})}
+      {...(type.ratio ? { ratio: type.ratio } : {})}
       link={SubjectLink}
       view={view}
-      tabs={tabs}
-      tabLabels={viewTabLabels()}
-      heading={{
-        title: title || m.subject_value_unlabelled(),
-        label: viewLabel[view](),
-        href: `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}`,
-      }}
+      label={viewLabel[view]()}
+      frame={
+        <SubjectFrame
+          frame={frame}
+          locale={locale}
+          link={SubjectLink}
+          reader={reader}
+          coverLabels={{
+            withheld: m.subject_cover_withheld(),
+            reveal: m.subject_cover_reveal(),
+            credit: m.subject_cover_credit(),
+            via: m.subject_cover_via(),
+          }}
+          unlabelled={m.subject_value_unlabelled()}
+          {...(type.label ? { typeLabel: type.label } : {})}
+          {...(type.ratio ? { ratio: type.ratio } : {})}
+          tabs={tabs}
+          tabLabels={viewTabLabels()}
+          view={view}
+        />
+      }
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
     />

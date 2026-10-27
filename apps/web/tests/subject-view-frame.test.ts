@@ -7,8 +7,8 @@ import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { readRelationsPage, RelationsView } from '../src/features/pages/relations-view.tsx';
 import { PlainLink } from '../src/features/pages/shared.tsx';
-import { loadViewPages, SubjectFrame, subjectFrame } from '../src/features/pages/subject-frame.tsx';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage } from '../src/features/pages/subject-frame.tsx';
+import type { SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import { defaultReader } from '../src/subject/reader.ts';
@@ -140,15 +140,13 @@ async function viewHtml(overview: SubjectPageData, view: Parameters<typeof Subje
   const result = await client.pages.$read.post({ target: { subject: kokoro, view: view as never } });
   const page = result.data as unknown as SubjectPageData;
   return renderToString(
-    createElement(SubjectPage, {
+    createElement(SubjectViewPage, {
       page,
       locale: 'en',
       messages,
       view,
-      tabs: subjectTabs(overview),
-      tabLabels: labels,
       frame: frameFor(overview, view),
-      heading: { title: 'The Little Prince', label: labels.names[view], href: overviewHref },
+      label: labels.names[view],
       renderJsonLd: false,
     } as never),
   );
@@ -208,7 +206,7 @@ test('the compact header and tabs render without JavaScript and add no kernel re
   sent.length = 0;
   const loaded = await loadViewPages(client, kokoro, 'details');
   expect(loaded.kind).toBe('page');
-  expect(sent).toEqual(['POST /v1/pages/read', 'POST /v1/pages/read']);
+  expect(sent).toEqual(['POST /v1/pages:read', 'POST /v1/pages:read']);
 
   // The relations view swaps its subject read for the overview page read: the same two requests as before.
   sent.length = 0;
@@ -218,7 +216,7 @@ test('the compact header and tabs render without JavaScript and add no kernel re
   expect(sent.filter((request) => request.startsWith('GET /v1/subjects/') && request.endsWith('/links'))).toHaveLength(
     1,
   );
-  expect(sent.filter((request) => request.startsWith('POST /v1/pages/read'))).toHaveLength(1);
+  expect(sent.filter((request) => request.startsWith('POST /v1/pages:read'))).toHaveLength(1);
 
   // Building the frame and drawing it reads nothing more, and the server-rendered markup holds all of it.
   sent.length = 0;

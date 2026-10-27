@@ -1,16 +1,17 @@
-import { createFileRoute, Link, notFound } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import type { ReactNode } from 'react';
 import { env } from 'cloudflare:workers';
-import { RELATIONS_PAGE_LIMIT, RelationsView } from '../../features/pages/relations-view';
-import { pageText } from '../../features/pages/shared';
+import { readRelationsPage, RelationsView } from '../../features/pages/relations-view';
+import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
+import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
+import { subjectPageType } from '../../features/pages/subject';
+import { subjectTabs } from '../../features/pages/views';
 import { kernelClient } from '../../kernel/client';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { SessionEnv } from '../../session/client';
-import { relationLabels } from '../../subject/definitions';
-import { originalLanguage } from '../../subject/language';
+import { relationLabels, typeFrame } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -33,25 +34,25 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
-    const [subject, links, reader] = await Promise.all([
-      client.subjects({ id: data.id }).get(),
-      client.subjects({ id: data.id }).links.get({
-        query: {
-          limit: RELATIONS_PAGE_LIMIT,
-          ...(data.property ? { property: data.property } : {}),
-          ...(data.cursor ? { cursor: data.cursor } : {}),
-        },
-      }),
+    const [{ overview, links }, reader] = await Promise.all([
+      readRelationsPage(client, data),
       loadReader(client, getRequest(), env as Partial<SessionEnv>),
     ]);
-    if (subject.error || !subject.data?.subject) throw notFound();
-    const found = subject.data.subject;
+    if (overview.kind === 'missing') throw notFound();
+    if (overview.kind === 'redirect')
+      throw redirect({ href: `/${data.locale}/subjects/${overview.id}/relations`, statusCode: 308 });
+    const frame = subjectFrame(overview.page, data.locale);
+    if (!frame) throw notFound();
+    const type = subjectPageType(overview.page);
     const body: Record<string, unknown> = links.error ? {} : (links.data as unknown as Record<string, unknown>);
     const properties = new Set<string>(data.property ? [data.property] : []);
     if (Array.isArray(body.links))
       for (const link of body.links) if (typeof link?.property === 'string') properties.add(link.property);
     return {
-      title: pageText(found.labels, data.locale, originalLanguage(found as never)).text,
+      title: frame.title.text,
+      frame,
+      tabs: subjectTabs(overview.page),
+      type: type ? await typeFrame(type, data.locale) : {},
       relations: await relationLabels(properties, data.locale),
       body,
       reader,
@@ -68,34 +69,41 @@ export const Route = createFileRoute('/subjects/$id_/relations')({
     readRelations({
       data: { id: params.id, locale: getLocale(), property: deps.property, cursor: deps.cursor },
     }),
-  head: ({ loaderData }) => ({ meta: [{ title: loaderData?.title || m.subject_relations() }] }),
+  head: ({ loaderData }) => ({
+    meta: [{ title: [loaderData?.title, m.subject_relations()].filter(Boolean).join(' · ') }],
+  }),
   component: RelationsRoute,
 });
 
-function SubjectLink({ href, lang, children }: { href: string; lang?: string; children: ReactNode }) {
-  const id = /^\/[^/]+\/subjects\/([^/?#]+)$/.exec(href)?.[1];
-  if (!id)
-    return (
-      <a href={href} lang={lang}>
-        {children}
-      </a>
-    );
-  return (
-    <Link to="/subjects/$id" params={{ id: decodeURIComponent(id) }} lang={lang}>
-      {children}
-    </Link>
-  );
-}
-
 function RelationsRoute() {
-  const { title, relations, body, reader } = Route.useLoaderData();
+  const coverLabels = {
+    withheld: m.subject_cover_withheld(),
+    reveal: m.subject_cover_reveal(),
+    credit: m.subject_cover_credit(),
+    via: m.subject_cover_via(),
+  };
+  const { frame, tabs, type, relations, body, reader } = Route.useLoaderData();
   const { id } = Route.useParams();
   const { property } = Route.useSearch();
   return (
     <RelationsView
       locale={getLocale()}
       subject={id}
-      title={title || m.subject_value_unlabelled()}
+      frame={
+        <SubjectFrame
+          frame={frame}
+          locale={getLocale()}
+          link={SubjectLink}
+          reader={reader}
+          coverLabels={coverLabels}
+          unlabelled={m.subject_value_unlabelled()}
+          {...(type.label ? { typeLabel: type.label } : {})}
+          {...(type.ratio ? { ratio: type.ratio } : {})}
+          tabs={tabs}
+          tabLabels={viewTabLabels()}
+          view="relations"
+        />
+      }
       data={{ body, property: property ?? null }}
       relations={relations}
       value={{
@@ -107,12 +115,7 @@ function RelationsRoute() {
         labels: {
           spoilerShow: m.subject_spoiler_show(),
           documentSpoiler: m.thread_reveal_spoiler(),
-          cover: {
-            withheld: m.subject_cover_withheld(),
-            reveal: m.subject_cover_reveal(),
-            credit: m.subject_cover_credit(),
-            via: m.subject_cover_via(),
-          },
+          cover: coverLabels,
         },
       }}
     />

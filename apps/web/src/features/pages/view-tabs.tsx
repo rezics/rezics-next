@@ -48,6 +48,7 @@ export function ViewTabs({
                 nativeButton={false}
                 className={triggerClass}
                 data-view={view}
+                aria-current={view === active ? 'page' : undefined}
                 render={<a href={view === 'overview' ? base : `${base}/${view}`} />}
               >
                 {labels.names[view]}
