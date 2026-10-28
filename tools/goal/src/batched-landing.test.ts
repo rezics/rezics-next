@@ -9,6 +9,126 @@ function setChecks(h: ReturnType<typeof integrationHarness>, checks: Integration
   (h.settings as typeof h.settings & { integrationChecks: IntegrationCheck[] }).integrationChecks = checks;
 }
 
+function markTask(
+  h: ReturnType<typeof integrationHarness>,
+  taskId: string,
+  values: { goal?: string; target?: string },
+): void {
+  h.store.updateTask({ taskId, attempt: 0 }, (task) => {
+    if (values.goal) task.brief.goal = values.goal;
+    if (values.target === 'stabilize') task.brief.target = 'stabilize';
+  });
+}
+
+function markAffectedFailure(h: ReturnType<typeof integrationHarness>, taskId: string): void {
+  const row = h.store.db.query('SELECT id, request FROM landing_queue WHERE task=?').get(taskId) as {
+    id: number;
+    request: string;
+  };
+  const request = JSON.parse(row.request);
+  request.affectedTests = [
+    { command: ['false'], status: 'failed', failingFiles: [], durationMs: 1, output: 'failed affected check' },
+  ];
+  h.store.db.query('UPDATE landing_queue SET request=? WHERE id=?').run(JSON.stringify(request), row.id);
+}
+
+test('the dev lane batches eligible entries across control-plane, stabilize, and affected-failure entries', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    git(h.root, 'branch', 'stabilize', 'main');
+    h.settings.integration.batchSize = 2;
+    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
+    const first = h.dispatch('dev-a.ts');
+    const affected = h.dispatch('affected.ts');
+    const second = h.dispatch('dev-b.ts');
+    const controlPlane = h.dispatch('cp.ts');
+    const stabilize = h.dispatch('stabilize.ts');
+    markTask(h, controlPlane.id, { goal: 'control-plane' });
+    markTask(h, stabilize.id, { target: 'stabilize' });
+    await h.start(first);
+    await h.start(affected);
+    markAffectedFailure(h, affected.id);
+    await h.start(second);
+    await h.start(controlPlane);
+    await h.start(stabilize);
+    await h.train();
+
+    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
+    expect(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)?.passed).toBe(true);
+    expect(h.outcomes.find(({ taskId }) => taskId === stabilize.id)?.passed).toBe(true);
+    expect(
+      h.outcomes.filter(({ taskId }) => [first.id, second.id].includes(taskId)).map(({ passed }) => passed),
+    ).toEqual([true, true]);
+    const controlPlaneLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)!.logPath, 'utf8');
+    const stabilizeLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === stabilize.id)!.logPath, 'utf8');
+    const affectedLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === affected.id)!.logPath, 'utf8');
+    const devLogs = h.outcomes
+      .filter(({ taskId }) => [first.id, second.id].includes(taskId))
+      .map(({ logPath }) => readFileSync(logPath, 'utf8'));
+    expect(controlPlaneLog).toContain('Integration check on');
+    expect(controlPlaneLog).not.toContain('Batch integration check on');
+    expect(stabilizeLog).not.toContain('Batch integration check on');
+    expect(affectedLog).not.toContain('Batch integration check on');
+    expect(devLogs.every((log) => log.includes('Batch integration check on'))).toBe(true);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('the dev batch fills to its limit in eligible queue order when prioritized entries lead the queue', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    git(h.root, 'branch', 'stabilize', 'main');
+    h.settings.integration.batchSize = 3;
+    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
+
+    const controlPlane = h.dispatch('cp-leading.ts');
+    const stabilize = h.dispatch('stabilize-leading.ts');
+    const first = h.dispatch('dev-first.ts');
+    const affected = h.dispatch('affected-middle.ts');
+    const second = h.dispatch('dev-second.ts');
+    const third = h.dispatch('dev-third.ts');
+    const fourth = h.dispatch('dev-fourth.ts');
+    markTask(h, controlPlane.id, { goal: 'control-plane' });
+    markTask(h, stabilize.id, { target: 'stabilize' });
+    await h.start(controlPlane);
+    await h.start(stabilize);
+    await h.start(first);
+    await h.start(affected);
+    markAffectedFailure(h, affected.id);
+    await h.start(second);
+    await h.start(third);
+    await h.start(fourth);
+
+    await h.train();
+
+    const dev = [first, second, third, fourth];
+    expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId)).toEqual(
+      dev.map(({ id }) => id),
+    );
+    expect(dev.map(({ id }) => h.outcomes.find(({ taskId }) => taskId === id)?.passed)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
+    const logs = dev.map(({ id }) => readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8'));
+    expect(logs.slice(0, 3).every((log) => log.includes('Batch integration check on'))).toBe(true);
+    expect(logs[3]).toContain('Integration check on');
+    expect(logs[3]).not.toContain('Batch integration check on');
+    for (const entry of [controlPlane, stabilize]) {
+      const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
+      expect(log).toContain('Integration check on');
+      expect(log).not.toContain('Batch integration check on');
+    }
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
 test('up to the batch size of queued landings rebase in order, check once, and fast-forward with one outcome each', async () => {
   const h = integrationHarness();
   try {
