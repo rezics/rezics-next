@@ -72,7 +72,11 @@ export const CHECK_SLOT_PROCESSORS = 2;
 const MAX_WAIT_RECORD_MS = 60_000;
 
 /** Shell guard for installed package files changed in place after installation. */
-export function installedPackageCacheCheck(directory: string, hostName: string, cacheRoot = `${ROOT}/bun-cache`): string {
+export function installedPackageCacheCheck(
+  directory: string,
+  hostName: string,
+  cacheRoot = `${ROOT}/bun-cache`,
+): string {
   const marker = `${directory}/.bun-install-complete`;
   const packageTree = `${directory}/node_modules/.bun`;
   return `
