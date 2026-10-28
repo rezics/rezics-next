@@ -1,4 +1,3 @@
-import { localeChain } from '@rezics/composition';
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
@@ -24,6 +23,7 @@ import { useEffect, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
+import { requestLanguages } from '../kernel/languages.ts';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
 import { subjectHref } from '../subject/subject-href';
@@ -196,7 +196,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const selected = release && type ? selectedFilters(release, type, data.facetValues) : undefined;
     const filter = selected?.filter;
     const hasSearch = data.query.length > 0 || type !== undefined;
-    const languages = localeChain(data.locale);
+    const languages = requestLanguages(data.locale);
     const years = release ? yearProperties(release, type) : [];
     const properties = release ? [...new Set([...(type ? factProperties(release, type) : []), ...years])] : [];
     const searchPromise: Promise<SearchResult | undefined> = hasSearch
@@ -244,24 +244,25 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       : [];
     const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
     // The count of each type among the matches, when the facets read has one; without it the types are listed by name.
-    const typeCountsPromise: Promise<Map<string, number>> =
+    const typeFacetPromise: Promise<Map<string, { count: number; labels: Record<string, string> }> | null> =
       release && !type && data.query && typeChoices.length > 0
         ? kernelClient(data.locale)
             .subjects.$facets.post(typeBody)
-            .then(
-              (response) =>
-                new Map(
-                  response.error
-                    ? []
-                    : ((response.data as FacetResult).facets
-                        .find((facet) => facet.property === 'type')
-                        ?.values.map((entry): [string, number] => [entry.value, entry.count]) ?? []),
-                ),
-            )
-            .catch(() => new Map<string, number>())
-        : Promise.resolve(new Map<string, number>());
+            .then((response) => {
+              if (response.error) return null;
+              return new Map(
+                (response.data as FacetResult).facets
+                  .find((facet) => facet.property === 'type')
+                  ?.values.map((entry): [string, { count: number; labels: Record<string, string> }] => [
+                    entry.value,
+                    { count: entry.count, labels: entry.labels },
+                  ]) ?? [],
+              );
+            })
+            .catch(() => null)
+        : Promise.resolve(null);
 
-    const [result, facetResult, typeCounts] = await Promise.all([searchPromise, facetsPromise, typeCountsPromise]);
+    const [result, facetResult, typeFacets] = await Promise.all([searchPromise, facetsPromise, typeFacetPromise]);
     const facetsAvailable = !release || !type || facetResult !== null;
     const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
     const groups =
@@ -278,8 +279,14 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
     // One entry per type term, never merged by name: the most matches first, then by name in the reader's language.
     const collator = new Intl.Collator(data.locale);
-    const orderedTypes = typeChoices
-      .map((choice) => ({ ...choice, ...(typeCounts.has(choice.id) ? { count: typeCounts.get(choice.id)! } : {}) }))
+    const typesWithCounts =
+      typeFacets === null ? typeChoices : typeChoices.filter((choice) => typeFacets.has(choice.id));
+    const orderedTypes = typesWithCounts
+      .map((choice) => {
+        const facet = typeFacets?.get(choice.id);
+        const labels = facet && Object.keys(facet.labels).length > 0 ? facet.labels : choice.labels;
+        return { ...choice, labels, ...(facet ? { count: facet.count } : {}) };
+      })
       .sort(
         (left, right) =>
           (right.count ?? 0) - (left.count ?? 0) ||
@@ -287,7 +294,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             localizedLabel(left.labels, data.locale).text || left.id,
             localizedLabel(right.labels, data.locale).text || right.id,
           ) ||
-          (left.id < right.id ? -1 : 1),
+          (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
       );
 
     return {
@@ -548,7 +555,12 @@ function readSearch({ data }: { data: Omit<SearchParams, 'locale'> }): Promise<S
 
 export { readSearch };
 
-type SuggestionItem = { value: string; label: string; suggestion: SuggestionResult['subjects'][number] };
+type SuggestionItem = {
+  value: string;
+  label: string;
+  lang: string | undefined;
+  suggestion: SuggestionResult['subjects'][number];
+};
 
 export function ShellSearch() {
   const locale = getLocale();
@@ -581,11 +593,10 @@ export function ShellSearch() {
         const result = (await response.json()) as SuggestionResult;
         setTypes(result.types ?? {});
         setItems(
-          result.subjects.map((suggestion) => ({
-            value: suggestion.id,
-            label: localizedLabel(suggestion.labels, locale).text,
-            suggestion,
-          })),
+          result.subjects.map((suggestion) => {
+            const label = localizedLabel(suggestion.labels, locale);
+            return { value: suggestion.id, label: label.text, lang: label.lang, suggestion };
+          }),
         );
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -662,7 +673,9 @@ export function ShellSearch() {
                     decorative
                   />
                   <span className="flex min-w-0 flex-col">
-                    <span className="font-medium">{item.label}</span>
+                    <span className="font-medium" lang={item.lang}>
+                      {item.label}
+                    </span>
                     <SubjectMeta
                       type={typeName}
                       year={hitYear(suggestion.facts)}

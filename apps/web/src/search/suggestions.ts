@@ -1,6 +1,6 @@
-import { localeChain } from '@rezics/composition';
 import type { KernelClient } from '@rezics/client';
 import { kernelClient, requestLocale } from '../kernel/client.ts';
+import { requestLanguages } from '../kernel/languages.ts';
 import { readRelease } from '../subject/definitions.ts';
 import type { SubjectHit } from './results.tsx';
 
@@ -18,7 +18,7 @@ export type SuggestionResult = Omit<Suggested, 'subjects'> & {
 
 export async function suggestSubjects(query: string, request: Request): Promise<SuggestionResult> {
   const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
-  const languages = localeChain(locale ?? 'en');
+  const languages = requestLanguages(locale ?? 'en');
   // The release is cached by digest; a failed read leaves the suggestions without type names.
   const [result, release] = await Promise.all([
     kernelClient(locale).subjects.$suggest.get({

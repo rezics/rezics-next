@@ -172,7 +172,7 @@ test("/@handle renders the agent's subject page, with the account's display name
   sent.length = 0;
   const page = await loaded('mira');
   // One page read holds the handle read and the previews; nothing else is asked.
-  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { account: 'mira' } })}`]);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { account: 'mira' }, languages: ['en'] })}`]);
   expect(page.account).toEqual({ id: id(0x7001), handle: 'mira' });
   // An unverified account still answers a subject page: its own agent node.
   expect(page.subject).toBe(id(0x7001));
@@ -230,7 +230,9 @@ test('an agent with an account offers Posts, Reviews and Collections views besid
   ] as const) {
     sent.length = 0;
     const first = await loaded('prolific', view);
-    expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { account: 'prolific', view } })}`]);
+    expect(sent).toEqual([
+      `POST /v1/pages:read ${JSON.stringify({ target: { account: 'prolific', view }, languages: ['en'] })}`,
+    ]);
     const firstHtml = render(first, 'prolific', view, prolificTabs);
     expect(items(firstHtml, slot)).toBe(limit);
     expect(firstHtml).toMatch(new RegExp(`<h1[^>]*>${names[view]}</h1>`));
@@ -326,7 +328,7 @@ test('an agent page is never routed inside a Realm or Zone', async () => {
   // own address space: the agent's views, subjects, threads and collections.
   sent.length = 0;
   const page = await loaded('haruka');
-  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { account: 'haruka' } })}`]);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { account: 'haruka' }, languages: ['en'] })}`]);
   const html = render(page, 'haruka');
   const links = [...html.matchAll(/href="(\/[^"]*)"/g)].map((match) => match[1]!);
   expect(links.length).toBeGreaterThan(8);

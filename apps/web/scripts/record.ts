@@ -33,12 +33,15 @@ const threadTitle = 'Letters from B-612';
 const ownedThreadTitle = 'Baobab seedlings: a watering schedule';
 const searchPrefix = 'webrec';
 const pagePrefix = 'webrecpage';
-const matchingQuery = 'Prince';
+const matchingQuery = 'The';
+const typedQuery = 'Prince';
 const emptyQuery = 'zzzznotasubject';
 // Two subjects per vertical list of the home. They exist only in the search index and its in-process source.
 const homeSubjects = [
   { id: '01a1773a-f6ff-7684-8e44-1a013af60d4b', type: 'schema:Book', en: 'Kokoro', ja: 'こころ' },
   { id: '01a1773a-f700-7071-b5ef-2b02f7d0e8c6', type: 'schema:Book', en: 'I Am a Cat', ja: '吾輩は猫である' },
+  { id: '01a1773a-f700-7078-8000-000000000001', type: 'schema:Book', en: 'The Tale of Genji', ja: '源氏物語' },
+  { id: '01a1773a-f700-7078-8000-000000000003', type: 'schema:Book', en: 'Norwegian Wood', ja: 'ノルウェイの森' },
   { id: '01a1773a-f700-7072-b9eb-3c03e51c0440', type: 'schema:TVSeries', en: 'Mushishi', ja: '蟲師' },
   {
     id: '01a1773a-f700-7073-bcc1-4d04f35ff67a',
@@ -1556,7 +1559,7 @@ async function main(): Promise<void> {
     ),
     aliases: [],
     descriptions: [],
-    statements: [],
+    statements: [{ property: 'schema:inLanguage', value: 'ja' }],
   });
   // The recorded subject is indexed and answered from the real source, with its descriptions and statements. The home
   // subjects exist only here, with labels alone.
@@ -1598,7 +1601,20 @@ async function main(): Promise<void> {
     routeKey: Buffer.from(kernelRouteKey, 'base64url'),
     search,
   });
-  // The page always asks for descriptions and picks its own language from the answer, so no `languages` is sent.
+  const facetsResponse = await retryOverloaded(() =>
+    appHandle.handle(
+      new Request('http://kernel.test/v1/subjects:facets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: matchingQuery, facets: [{ property: 'type', size: 20 }] }),
+      }),
+    ),
+  );
+  const facets = objectBody(await facetsResponse.json(), 'search-facets');
+  if (facetsResponse.status !== 200)
+    throw new Error(`search-facets returned ${facetsResponse.status}: ${JSON.stringify(facets)}`);
+  recorded.set('search-facets', { ...facets, status: facetsResponse.status, query: matchingQuery });
+  // Keep full label maps in recordings; replay projects them to the language list requested by each story.
   const searchFor = async (name: string, text: string, extra: JsonObject = {}, request: JsonObject = {}) => {
     const response = await retryOverloaded(async () =>
       appHandle.handle(
@@ -1618,7 +1634,7 @@ async function main(): Promise<void> {
   const unmatched = await searchFor('search-empty', emptyQuery);
   const typed = await searchFor(
     'search-typed',
-    matchingQuery,
+    typedQuery,
     { filter: { and: [{ type: { in: [subjectType] } }] }, properties },
     { filterType: subjectType },
   );
@@ -1629,7 +1645,9 @@ async function main(): Promise<void> {
     ? typed.subjects.map((hit) => objectBody(hit, 'typed search hit')).find((hit) => hit.id === subjectId)
     : undefined;
   if (!typedHit || Object.keys(objectBody(typedHit.facts, 'typed search facts')).length === 0)
-    throw new Error(`The typed search did not return facts for the recorded subject: ${JSON.stringify(typed)}`);
+    throw new Error(
+      `The typed search for ${typedQuery} did not return facts for the recorded subject: ${JSON.stringify(typed)}`,
+    );
   if (
     !hits.some(
       (hit) =>

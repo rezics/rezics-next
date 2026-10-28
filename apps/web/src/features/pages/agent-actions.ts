@@ -27,8 +27,8 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     const client = kernelClient(data.locale);
     const view = data.view && data.view !== 'overview' ? data.view : undefined;
     const [result, overview, reader] = await Promise.all([
-      loadAgentPage(client, data.handle, view),
-      view ? loadAgentPage(client, data.handle) : undefined,
+      loadAgentPage(client, data.handle, view, data.locale),
+      view ? loadAgentPage(client, data.handle, undefined, data.locale) : undefined,
       loadReader(client, getRequest(), env as Partial<SessionEnv>),
     ]);
     // The same not-found page for every handle the kernel does not answer, whatever the reason.

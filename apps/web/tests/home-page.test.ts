@@ -26,7 +26,7 @@ test('the home is the platform route template from one page read', async () => {
     return fake(input, init);
   }) as typeof fetch;
   const client = createKernelClient('https://kernel.invalid', { fetch: counting });
-  const loaded = await loadRoutePage(client, '/');
+  const loaded = await loadRoutePage(client, '/', 'ja');
   expect(calls).toEqual(['POST /v1/pages:read']);
   if (loaded.kind !== 'page') throw new Error('expected the home page');
   expect(loaded.page.template).toEqual({ scope: 'route', key: '/' });

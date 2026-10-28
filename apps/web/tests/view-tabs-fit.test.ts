@@ -225,7 +225,7 @@ test('Overview, Reviews, Discussion and Details remain tabbed, and loading a vie
   };
   const loaded = await loadSubjectPage(client as never, subject, 'editions');
   expect(loaded.kind).toBe('page');
-  expect(requests).toEqual([{ target: { subject, view: 'editions' } }]);
+  expect(requests).toEqual([{ target: { subject, view: 'editions' }, languages: ['en'] }]);
 
   if (loaded.kind !== 'page') throw new Error('expected the view page');
   const html = render(loaded.page, 'editions', tabs);

@@ -253,7 +253,7 @@ export async function editReady(context: { canvasElement: HTMLElement }) {
 function searchLabel(recording: typeof searchRecording | typeof searchTypedRecording) {
   const labels = recording.subjects[0]?.labels;
   if (!labels) throw new Error('The recorded search has no subject.');
-  return labels[getLocale()] ?? labels.en;
+  return labels[getLocale()] ?? labels.ja ?? labels.en;
 }
 
 export async function searchReady(context: { canvasElement: HTMLElement }) {

@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ComponentProps, ReactNode } from 'react';
+import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
@@ -80,9 +81,17 @@ function subjectBody(page: SubjectPageData): { subject: Subject; related: Relate
 }
 
 /** One `pages.read` of the overview, or of the named view. A merged subject names its survivor; an unknown one is missing. */
-export async function loadSubjectPage(client: KernelClient, id: string, view?: View): Promise<SubjectPageLoad> {
+export async function loadSubjectPage(
+  client: KernelClient,
+  id: string,
+  view?: View,
+  locale = 'en',
+): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
-  const result = await client.pages.$read.post({ target: { subject: id, ...(view ? { view } : {}) } });
+  const result = await client.pages.$read.post({
+    target: { subject: id, ...(view ? { view } : {}) },
+    languages: requestLanguages(locale),
+  });
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 200 && result.data) {
     const survivor = result.data.subject;

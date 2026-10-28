@@ -41,13 +41,13 @@ const chains: Record<string, string[]> = {
 };
 const headers: Record<string, string> = {
   en: 'en',
-  'zh-Hans': 'zh-Hans, zh;q=0.9, zh-Hant;q=0.8, en;q=0.7',
-  'zh-Hant': 'zh-Hant, zh;q=0.9, zh-Hans;q=0.8, en;q=0.7',
-  ja: 'ja, en;q=0.9',
-  ko: 'ko, en;q=0.9',
-  de: 'de, en;q=0.9',
-  fr: 'fr, en;q=0.9',
-  es: 'es, en;q=0.9',
+  'zh-Hans': 'zh-Hans, zh;q=0.9, zh-Hant;q=0.8',
+  'zh-Hant': 'zh-Hant, zh;q=0.9, zh-Hans;q=0.8',
+  ja: 'ja',
+  ko: 'ko',
+  de: 'de',
+  fr: 'fr',
+  es: 'es',
 };
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;

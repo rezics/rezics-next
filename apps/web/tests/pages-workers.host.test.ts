@@ -23,7 +23,7 @@ function aggregateSince(start: number, id: string) {
   const calls = worker!.calls.slice(start);
   const aggregate = calls.filter(({ path }) => path === '/v1/pages:read');
   expect(aggregate.map(({ method, body }) => ({ method, body }))).toEqual([
-    { method: 'POST', body: { target: { subject: id } } },
+    { method: 'POST', body: { target: { subject: id }, languages: ['en'] } },
   ]);
   expect(aggregate[0]!.language).toBe('en');
   // Reaction counts and public collections are normal separate reads; standalone subjects/facts must never fill in the page.

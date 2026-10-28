@@ -25,10 +25,10 @@ const PAGE_LIMIT = 100;
  */
 export async function readRelationsPage(
   client: KernelClient,
-  input: { id: string; property?: string | undefined; cursor?: string | undefined },
+  input: { id: string; locale?: string | undefined; property?: string | undefined; cursor?: string | undefined },
 ) {
   const [overview, links] = await Promise.all([
-    loadSubjectPage(client, input.id),
+    loadSubjectPage(client, input.id, undefined, input.locale ?? 'en'),
     client.subjects({ id: input.id }).links.get({
       query: {
         limit: PAGE_LIMIT,

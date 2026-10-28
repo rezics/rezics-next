@@ -65,7 +65,8 @@ export async function startPagesWorker() {
         });
         if (request.method === 'POST' && path === '/v1/pages:read') {
           // Preserve the default overview target; never invent named-view documents.
-          if (JSON.stringify(body) === JSON.stringify({ target: { subject: page.subject } })) return json(page);
+          if (JSON.stringify(body) === JSON.stringify({ target: { subject: page.subject }, languages: ['en'] }))
+            return json(page);
           return json(missing);
         }
         if (request.method === 'GET') {

@@ -1,13 +1,8 @@
 {
   "profile": "sha256:b9a457a7cd6195a54db485961e8645d47f85e49c58531280f2e8cf00d6ccb184",
-  "template": {
-    "scope": "route",
-    "key": "/"
-  },
+  "template": { "scope": "route", "key": "/" },
   "document": {
-    "root": {
-      "props": {}
-    },
+    "root": { "props": {} },
     "content": [
       {
         "type": "Heading",
@@ -42,14 +37,7 @@
           }
         }
       },
-      {
-        "type": "Slot",
-        "props": {
-          "id": "personal",
-          "name": "personal",
-          "children": []
-        }
-      },
+      { "type": "Slot", "props": { "id": "personal", "name": "personal", "children": [] } },
       {
         "type": "TypeList",
         "props": {
@@ -134,7 +122,7 @@
       "body": {
         "subjects": [
           {
-            "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+            "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
             "type": "schema:Book",
             "labels": {
               "de": "Der kleine Prinz",
@@ -147,35 +135,21 @@
               "zh-Hant": "小王子"
             },
             "summary": {
-              "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+              "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "The Little Prince",
-                "language": "en"
-              },
+              "label": { "value": "The Little Prince", "language": "en" },
               "cover": {
                 "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0001",
                 "width": 640,
                 "height": 960,
-                "placeholder": {
-                  "thumbhash": "",
-                  "color": "#2f5d50"
-                },
-                "variants": [
-                  {
-                    "format": "webp",
-                    "width": 320
-                  }
-                ],
+                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
+                "variants": [{ "format": "webp", "width": 320 }],
                 "focalPoint": null,
                 "credit": {
                   "rightsHolder": "Rezics fixture art",
-                  "via": {
-                    "name": "Rezics",
-                    "url": "https://rezics.com"
-                  },
+                  "via": { "name": "Rezics", "url": "https://rezics.com" },
                   "license": "CC0-1.0",
                   "obligations": []
                 }
@@ -185,59 +159,36 @@
           {
             "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
             "type": "schema:Book",
-            "labels": {
-              "en": "I Am a Cat",
-              "ja": "吾輩は猫である"
-            },
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である" },
             "summary": {
               "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "I Am a Cat",
-                "language": "en"
-              },
+              "label": { "value": "I Am a Cat", "language": "en" },
               "cover": null
             }
           },
           {
             "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
             "type": "schema:Book",
-            "labels": {
-              "en": "Kokoro",
-              "ja": "こころ"
-            },
+            "labels": { "en": "Kokoro", "ja": "こころ" },
             "summary": {
               "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Kokoro",
-                "language": "en"
-              },
+              "label": { "value": "Kokoro", "language": "en" },
               "cover": {
                 "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003",
                 "width": 640,
                 "height": 960,
-                "placeholder": {
-                  "thumbhash": "",
-                  "color": "#5d4a2f"
-                },
-                "variants": [
-                  {
-                    "format": "webp",
-                    "width": 320
-                  }
-                ],
+                "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
+                "variants": [{ "format": "webp", "width": 320 }],
                 "focalPoint": null,
                 "credit": {
                   "rightsHolder": "Rezics fixture art",
-                  "via": {
-                    "name": "Rezics",
-                    "url": "https://rezics.com"
-                  },
+                  "via": { "name": "Rezics", "url": "https://rezics.com" },
                   "license": "CC0-1.0",
                   "obligations": []
                 }
@@ -245,10 +196,7 @@
             }
           }
         ],
-        "total": {
-          "value": 3,
-          "relation": "exact"
-        },
+        "total": { "value": 3, "relation": "exact" },
         "next": null,
         "as_of": "2026-10-26T18:21:56.818Z"
       }
@@ -260,59 +208,36 @@
           {
             "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
             "type": "schema:TVSeries",
-            "labels": {
-              "en": "Frieren: Beyond Journey's End",
-              "ja": "葬送のフリーレン"
-            },
+            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン" },
             "summary": {
               "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
               "type": "schema:TVSeries",
               "types": ["schema:TVSeries", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Frieren: Beyond Journey's End",
-                "language": "en"
-              },
+              "label": { "value": "Frieren: Beyond Journey's End", "language": "en" },
               "cover": null
             }
           },
           {
             "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
             "type": "schema:TVSeries",
-            "labels": {
-              "en": "Mushishi",
-              "ja": "蟲師"
-            },
+            "labels": { "en": "Mushishi", "ja": "蟲師" },
             "summary": {
               "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
               "type": "schema:TVSeries",
               "types": ["schema:TVSeries", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Mushishi",
-                "language": "en"
-              },
+              "label": { "value": "Mushishi", "language": "en" },
               "cover": {
                 "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0005",
                 "width": 640,
                 "height": 960,
-                "placeholder": {
-                  "thumbhash": "",
-                  "color": "#2f5d50"
-                },
-                "variants": [
-                  {
-                    "format": "webp",
-                    "width": 320
-                  }
-                ],
+                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
+                "variants": [{ "format": "webp", "width": 320 }],
                 "focalPoint": null,
                 "credit": {
                   "rightsHolder": "Rezics fixture art",
-                  "via": {
-                    "name": "Rezics",
-                    "url": "https://rezics.com"
-                  },
+                  "via": { "name": "Rezics", "url": "https://rezics.com" },
                   "license": "CC0-1.0",
                   "obligations": []
                 }
@@ -320,10 +245,7 @@
             }
           }
         ],
-        "total": {
-          "value": 2,
-          "relation": "exact"
-        },
+        "total": { "value": 2, "relation": "exact" },
         "next": null,
         "as_of": "2026-10-26T18:21:56.818Z"
       }
@@ -335,59 +257,36 @@
           {
             "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
             "type": "wd:Q689445",
-            "labels": {
-              "en": "Clannad",
-              "ja": "クラナド"
-            },
+            "labels": { "en": "Clannad", "ja": "クラナド" },
             "summary": {
               "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
               "type": "wd:Q689445",
               "types": ["wd:Q689445", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Clannad",
-                "language": "en"
-              },
+              "label": { "value": "Clannad", "language": "en" },
               "cover": null
             }
           },
           {
             "id": "01a1773a-f700-7075-8008-6f06740bee6d",
             "type": "wd:Q689445",
-            "labels": {
-              "en": "Steins Gate",
-              "ja": "シュタインズ・ゲート"
-            },
+            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート" },
             "summary": {
               "id": "01a1773a-f700-7075-8008-6f06740bee6d",
               "type": "wd:Q689445",
               "types": ["wd:Q689445", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Steins Gate",
-                "language": "en"
-              },
+              "label": { "value": "Steins Gate", "language": "en" },
               "cover": {
                 "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0007",
                 "width": 600,
                 "height": 800,
-                "placeholder": {
-                  "thumbhash": "",
-                  "color": "#5d4a2f"
-                },
-                "variants": [
-                  {
-                    "format": "webp",
-                    "width": 320
-                  }
-                ],
+                "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
+                "variants": [{ "format": "webp", "width": 320 }],
                 "focalPoint": null,
                 "credit": {
                   "rightsHolder": "Rezics fixture art",
-                  "via": {
-                    "name": "Rezics",
-                    "url": "https://rezics.com"
-                  },
+                  "via": { "name": "Rezics", "url": "https://rezics.com" },
                   "license": "CC0-1.0",
                   "obligations": []
                 }
@@ -395,10 +294,7 @@
             }
           }
         ],
-        "total": {
-          "value": 2,
-          "relation": "exact"
-        },
+        "total": { "value": 2, "relation": "exact" },
         "next": null,
         "as_of": "2026-10-26T18:21:56.818Z"
       }
@@ -410,59 +306,36 @@
           {
             "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
             "type": "schema:Recipe",
-            "labels": {
-              "en": "Nikujaga",
-              "ja": "肉じゃが"
-            },
+            "labels": { "en": "Nikujaga", "ja": "肉じゃが" },
             "summary": {
               "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
               "type": "schema:Recipe",
               "types": ["schema:Recipe", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Nikujaga",
-                "language": "en"
-              },
+              "label": { "value": "Nikujaga", "language": "en" },
               "cover": null
             }
           },
           {
             "id": "01a1773a-f700-7077-883e-8b0879393d7d",
             "type": "schema:Recipe",
-            "labels": {
-              "en": "Shakshuka",
-              "ja": "シャクシュカ"
-            },
+            "labels": { "en": "Shakshuka", "ja": "シャクシュカ" },
             "summary": {
               "id": "01a1773a-f700-7077-883e-8b0879393d7d",
               "type": "schema:Recipe",
               "types": ["schema:Recipe", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": {
-                "value": "Shakshuka",
-                "language": "en"
-              },
+              "label": { "value": "Shakshuka", "language": "en" },
               "cover": {
                 "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0009",
                 "width": 800,
                 "height": 600,
-                "placeholder": {
-                  "thumbhash": "",
-                  "color": "#2f5d50"
-                },
-                "variants": [
-                  {
-                    "format": "webp",
-                    "width": 320
-                  }
-                ],
+                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
+                "variants": [{ "format": "webp", "width": 320 }],
                 "focalPoint": null,
                 "credit": {
                   "rightsHolder": "Rezics fixture art",
-                  "via": {
-                    "name": "Rezics",
-                    "url": "https://rezics.com"
-                  },
+                  "via": { "name": "Rezics", "url": "https://rezics.com" },
                   "license": "CC0-1.0",
                   "obligations": []
                 }
@@ -470,10 +343,7 @@
             }
           }
         ],
-        "total": {
-          "value": 2,
-          "relation": "exact"
-        },
+        "total": { "value": 2, "relation": "exact" },
         "next": null,
         "as_of": "2026-10-26T18:21:56.818Z"
       }

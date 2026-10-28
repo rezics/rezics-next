@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import { requestLanguages } from '../../kernel/languages.ts';
 import { accountOf } from './account-read';
 import { pageContext, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
@@ -27,8 +28,16 @@ export function agentPath(locale: string, handle: string, view?: View): string {
  * it is, so the page is a subject page whichever agent it is. An unknown, reserved, deleted or invisible handle is
  * the same 404, and a handle the kernel refuses to read is the same missing page; neither echoes the handle.
  */
-export async function loadAgentPage(client: KernelClient, handle: string, view?: View): Promise<AgentPageLoad> {
-  const result = await client.pages.$read.post({ target: { account: handle, ...(view ? { view } : {}) } });
+export async function loadAgentPage(
+  client: KernelClient,
+  handle: string,
+  view?: View,
+  locale = 'en',
+): Promise<AgentPageLoad> {
+  const result = await client.pages.$read.post({
+    target: { account: handle, ...(view ? { view } : {}) },
+    languages: requestLanguages(locale),
+  });
   if (result.status === 404 || result.status === 400) return { kind: 'missing' };
   if (result.status === 200 && result.data) {
     const data = result.data as unknown as Omit<SubjectPageData, 'subject' | 'account'> & {

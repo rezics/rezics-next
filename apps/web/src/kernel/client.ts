@@ -1,13 +1,13 @@
-import { localeChain } from '@rezics/composition';
 import { createKernelClient } from '@rezics/client';
 import { getRequest } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { locales } from '../paraglide/runtime.js';
+import { requestLanguages } from './languages.ts';
 import { withPlatformClosedRecognition } from './platform-closed.ts';
 
-/** The chain in order with descending q-values: `zh-Hans, zh;q=0.9, zh-Hant;q=0.8, en;q=0.7`. */
+/** The reader's request languages, with descending q-values for sibling scripts. */
 export function acceptLanguage(locale: string): string {
-  return localeChain(locale)
+  return requestLanguages(locale)
     .map((tag, index) => (index === 0 ? tag : `${tag};q=${Math.max(1 - index / 10, 0.1).toFixed(1)}`))
     .join(', ');
 }

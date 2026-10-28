@@ -81,8 +81,16 @@ export type ViewPagesLoad =
   | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData };
 
 /** One `pages.read` of the view and one of the overview, whose previews give the tab bar its counts and the frame its subject. */
-export async function loadViewPages(client: KernelClient, id: string, view: View): Promise<ViewPagesLoad> {
-  const [result, overview] = await Promise.all([loadSubjectPage(client, id, view), loadSubjectPage(client, id)]);
+export async function loadViewPages(
+  client: KernelClient,
+  id: string,
+  view: View,
+  locale = 'en',
+): Promise<ViewPagesLoad> {
+  const [result, overview] = await Promise.all([
+    loadSubjectPage(client, id, view, locale),
+    loadSubjectPage(client, id, undefined, locale),
+  ]);
   if (result.kind === 'missing' || overview.kind === 'missing') return { kind: 'missing' };
   if (result.kind === 'redirect') return { kind: 'redirect', id: result.id };
   if (overview.kind === 'redirect') return { kind: 'missing' };

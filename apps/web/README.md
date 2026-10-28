@@ -461,17 +461,21 @@ Each server render and browser session has its own query cache. Public reads sta
   at most two facet properties; the facets read of a single-type search asks for the type's facet properties, and that
   of a search across types asks for the type counts, so the types are listed by count; active definitions digest
   cached for 60 s and release cached by digest without expiry
+- Non-English requests send the locale and its related scripts without English; English requests send `en` alone, so the kernel can choose a Japanese original title before falling back to English.
 - **Bound:** 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10
   values; the response stays O(page size), with each description at most 200 grapheme clusters in at most four languages
   and at most 3 properties × 3 values per hit, one cover summary per hit and no media call; 0 R/A
 - **Growth check:** `tests/search-facets.test.ts`:
   `searches read the definitions release once per digest and make two kernel reads each`
+- **Growth check:** `tests/request-languages.test.ts` keeps search and home request counts fixed at 1, 10 and 100
+  matching subjects
 
 ### Suggestions (shell typeahead)
 
 - **Touches:** One site GET route calls `subjects:suggest` with a constant cap and the reader's language chain, and
   names the suggested types from the cached definitions release; browser waits 200 ms after typing pauses and cancels
   stale requests
+- Suggestions use the same locale and related-script list as search and carry the chosen title's language on the row.
 - **Bound:** 1 K per request with a constant result cap, plus the definitions reads that the digest and release caches
   absorb, 0 D, 0 R and 0 A; each suggestion carries one cover summary and no media call. The browser sends at most one
   request per pause
@@ -498,6 +502,7 @@ Each server render and browser session has its own query cache. Public reads sta
 
 - **Touches:** One anonymous `POST /v1/pages:read` for route `/`, including platform search and type lists.
   The personal Continue row starts its separate browser read after the session is known
+- The page read sends the reader's language list once; the kernel applies it to each planned search read inside the page.
 - **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read, each hit with its cover summary),
   0 D/R/A for the server render; O(document + read results) rendering, bounded by composition limits;
   no result, label or media calls per item

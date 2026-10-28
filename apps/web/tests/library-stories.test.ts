@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import fixturesJson from '../src/kernel/fixtures.json' with { type: 'json' };
 
 const app = join(import.meta.dir, '..');
 const recorded = join(app, 'src/kernel/recorded');
@@ -22,15 +23,21 @@ type LibraryPage = {
   route: { file: string; id: string };
   heading: (own: Messages, library: Library) => string;
   /** Texts of seeded items; the page shows the first one. */
-  items: (library: Library) => string[];
+  items: (library: Library, locale: string) => string[];
 };
+const fixtureSubjects = (fixturesJson as { subjects: { id: string; labels: Record<string, string> }[] }).subjects;
 
 const pages: LibraryPage[] = [
   {
     story: 'library-entries',
     route: { file: 'library/index.tsx', id: '/library/' },
     heading: (own) => own.library_heading!,
-    items: (library) => library['library-entries']!.libraryEntries.map((entry: Recording) => entry.subject.label),
+    items: (library, locale) =>
+      library['library-entries']!.libraryEntries.map((entry: Recording) => {
+        const subjectId = entry.subject.id as string;
+        const labels = fixtureSubjects.find((subject) => subject.id === subjectId)?.labels;
+        return labels?.[locale] ?? entry.subject.label;
+      }),
   },
   {
     story: 'library-collections',
@@ -192,7 +199,7 @@ test(
         const own = await readMessages(locale);
         const opened = await openStory(spec.story, 'Signed In', locale);
         try {
-          await expectRendered(opened.page, own, spec.heading(own, library), spec.items(library)[0]!);
+          await expectRendered(opened.page, own, spec.heading(own, library), spec.items(library, locale)[0]!);
           const main = opened.page.getByRole('main');
           if (spec.story === 'library-collection')
             expect(await main.locator('[data-visibility]').count(), 'the owner sees visibility').toBe(1);
@@ -217,7 +224,7 @@ test(
         const own = await readMessages(locale);
         const opened = await openStory(spec.story, 'Signed Out', locale);
         try {
-          await expectRendered(opened.page, own, spec.heading(own, library), spec.items(library)[0]!);
+          await expectRendered(opened.page, own, spec.heading(own, library), spec.items(library, locale)[0]!);
           expect(
             await opened.page
               .getByRole('banner')

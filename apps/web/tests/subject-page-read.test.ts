@@ -42,14 +42,14 @@ const loaded = async (id: string) => {
 test('a subject page is one page read rendered from its template', async () => {
   sent.length = 0;
   const page = await loaded(kokoro);
-  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro } })}`]);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro }, languages: ['en'] })}`]);
   expect(page.subject).toBe(kokoro);
   expect(page.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
   expect(page.document).toEqual(
     (platform.bases.find(({ base }) => base === 'schema:CreativeWork') as { views: { overview: unknown } }).views
       .overview,
   );
-  expect(subjectPageTitle(page, 'ja')).toBe('こころ');
+  expect(subjectPageTitle(page, 'en')).toBe('Kokoro');
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   expect(html).toMatch(/<h1[^>]*>Kokoro<\/h1>/);
   expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}/${slug('Natsume Sōseki')}"[^>]*>Natsume Sōseki</a>`));
@@ -61,6 +61,16 @@ test('a subject page is one page read rendered from its template', async () => {
   expect(tale).not.toContain(`/subjects/${mergedGenre}`);
   const person = await loaded(soseki);
   expect(person.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
+});
+
+test('a subject page requests and renders the reader language before English', async () => {
+  sent.length = 0;
+  const page = await loadSubjectPage(client, kokoro, undefined, 'ja');
+  if (page.kind !== 'page') throw new Error(`expected a page, got ${page.kind}`);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro }, languages: ['ja'] })}`]);
+  expect(subjectPageTitle(page.page, 'ja')).toBe('こころ');
+  const html = renderToString(createElement(SubjectPage, { page: page.page, locale: 'ja', messages }));
+  expect(html).toMatch(/<h1[^>]*>こころ<\/h1>/);
 });
 
 test('merged and missing subjects are told apart', async () => {

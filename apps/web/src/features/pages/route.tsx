@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { ComponentProps, ReactNode } from 'react';
+import { requestLanguages } from '../../kernel/languages.ts';
 import { dataComponents, PageData, type PageMessages } from './data';
 import { homeJsonLd, serializeJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -40,8 +41,11 @@ function problemError(value: unknown): Error {
 }
 
 /** One `pages.read` for a route. Missing or not-yet-published pages use the site's static fallback. */
-export async function loadRoutePage(client: KernelClient, route: string): Promise<RoutePageLoad> {
-  const result = await client.pages.$read.post({ target: { route } });
+export async function loadRoutePage(client: KernelClient, route: string, locale = 'en'): Promise<RoutePageLoad> {
+  const result = await client.pages.$read.post({
+    target: { route },
+    languages: requestLanguages(locale),
+  });
   if (result.status === 404) return { kind: 'missing' };
   if (
     result.status === 503 &&

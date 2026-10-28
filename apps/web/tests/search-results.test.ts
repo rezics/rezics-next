@@ -249,7 +249,7 @@ const cases = [
   {
     locale: 'ja',
     language: 'ja',
-    languages: ['ja', 'en'],
+    languages: ['ja'],
     title: 'こころ',
     type: '本',
     description: '学生が隠遁する先生と出会う小説。',

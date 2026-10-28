@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { localeChain } from '@rezics/composition';
+import { requestLanguages } from '../src/kernel/languages.ts';
 import platform from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import { chromium, type Browser, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -733,7 +733,9 @@ test(
         expect(await lists.count(), `${locale} sections`).toBe(sections.length);
         for (const [index, section] of sections.entries()) {
           const list = lists.nth(index);
-          const subjects = fixtureSubjects.filter((subject) => section.types.includes(subject.type));
+          const subjects = fixtureSubjects.filter(
+            (subject) => subject.searchable !== false && section.types.includes(subject.type),
+          );
           expect(subjects.length).toBeGreaterThan(0);
           expect(squash(await list.locator('h2').innerText())).toBe(section.title[locale]);
           // The count is the read's total, in the reader's language.
@@ -827,12 +829,12 @@ test(
           expect(await row.getByText(typeName, { exact: true }).count()).toBe(1);
           expect(await row.locator('[data-slot="year"]').innerText()).toBe(String(hit.year));
         }
-        // The reader's language chain goes with every search read.
-        const chain = localeChain(locale);
-        expect(calledPaths('/v1/subjects:search')[0]!.body).toMatchObject({ languages: chain });
+        // The reader's request language list goes with every search read.
+        const languages = requestLanguages(locale);
+        expect(calledPaths('/v1/subjects:search')[0]!.body).toMatchObject({ languages });
         expect(
           calledPaths('/v1/subjects:facets').every(
-            (call) => (call.body as { languages?: string[] }).languages?.join() === chain.join(),
+            (call) => (call.body as { languages?: string[] }).languages?.join() === languages.join(),
           ),
         ).toBe(true);
 
@@ -864,7 +866,7 @@ test(
       expect(new URL(library.headers.get('location')!, origin).pathname).toBe('/auth/sign-in');
       const other = await openLive(`/${locale}`);
       try {
-        const chain = localeChain(locale);
+        const languages = requestLanguages(locale);
         const input = other.getByRole('combobox').and(other.locator('input'));
         await input.fill('Kok');
         const options = other.getByRole('option');
@@ -881,7 +883,7 @@ test(
           expect(await option.locator('[data-slot="year"]').innerText()).toBe(String(hit.year));
         }
         const suggest = calledPaths('/v1/subjects:suggest').at(-1)!;
-        expect(suggest.search.getAll('languages')).toEqual(chain);
+        expect(suggest.search.getAll('languages')).toEqual(languages);
       } finally {
         await other.context().close();
       }
