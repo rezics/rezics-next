@@ -73,8 +73,10 @@ export interface Citation {
   units: number;
   revision: number;
 }
-export interface Vote extends Citation {
-  subjectId: string;
+export interface Vote {
+  units: number;
+  revision: number;
+  at: string;
 }
 export interface Post {
   id: string;
@@ -112,6 +114,7 @@ export interface Page<T> {
   summary?: unknown;
   sources?: unknown[];
 }
+/** Prospective consumer DTO: see the missing behaviour audit in content.capabilities.md. */
 export interface Figure {
   questionId: string;
   populationId: string;
@@ -123,6 +126,15 @@ export interface Figure {
   mean?: number | null;
   score?: number | null;
 }
+/** One figures[] entry from GET ratings; stored units, not the display projection. */
+export interface RealmFigure {
+  population: string;
+  count: number;
+  freshness: { asOf: string | null; updating: boolean };
+  mean?: number;
+  histogram?: number[];
+  remaining?: number;
+}
 export type Sort = 'hot' | 'active' | 'newest';
 export type PageRequest =
   | { kind: 'board'; boardId: string; sort: Sort; actor: Persona; limit: number; cursor?: string }
@@ -132,6 +144,33 @@ export interface HeldPage {
   response: Promise<ApiResult<Page<{ id: string }>>>;
   release(): Promise<void>;
 }
+/**
+ * HTTP mapping (all successful reads are 200):
+ * putVote/ownVote: PUT/GET /v1/subjects/{id}/ratings/{questionId}/vote,
+ * { units } on PUT (200). GET always selects the authenticated caller.
+ * createThread: POST /v1/threads, ThreadInput as JSON, unwrap thread (201).
+ * createPost: POST /v1/threads/{threadId}/posts, remaining input as JSON,
+ * unwrap post (201). revise: POST /v1/posts/{id}/revisions, input as JSON,
+ * unwrap post (200); omitted metadata is preserved by the command.
+ * readPost/readRevision: GET /v1/posts/{id}[/revisions/{revisionId}], unwrap post.
+ * subjectReviews: GET /v1/subjects/{id}/threads?place=&kind=review&limit=&cursor=,
+ * map threads to items and preserve next. page: GET /v1/boards/{id}/threads
+ * with sort/limit/cursor, or /v1/threads/{id}/posts with limit/cursor;
+ * map threads/posts to items without dropping other returned page metadata.
+ * realmFigure: GET /v1/subjects/{id}/ratings?question={standard}&population={realm},
+ * unwrap the single figures entry. Never add question, scale, score or state.
+ * joinPrivateRealm: POST /v1/realms/{realmId}/members, { accountId: member.id }
+ * (202, workflowId). suspend: POST /v1/accounts/{id}:suspend, { reason } (200).
+ * takedown: POST /v1/boards/{id}:takeDown or /v1/posts/{id}:takeDown,
+ * { reason } (200). revokeBoardRead: POST /v1/grants:revoke, the exact fixture
+ * grant's resource, subject, actions and valid interval (200, grant).
+ * createBoard: POST /v1/realms/{realmId}/boards, fixture-owned conceptId,
+ * title, purpose discussion and requested visibility, unwrap board (201).
+ * Controlled titles/reasons and request-only fixture IDs are permitted inputs.
+ * provision/subjectFigure/searchCard have unresolved HTTP gaps documented in
+ * content.capabilities.md; a binding must not fill those gaps with invented data.
+ * effects and close are native test-harness controls, not public HTTP routes.
+ */
 export interface ContentUserCasesDriver {
   close(): Promise<void>;
   /**
@@ -145,7 +184,7 @@ export interface ContentUserCasesDriver {
    */
   provision(): Promise<Fixture>;
   putVote(subjectId: string, questionId: string, units: number, options: WriteOptions): Promise<ApiResult<Vote>>;
-  ownVote(subjectId: string, questionId: string, owner: Persona, viewer: Persona | null): Promise<ApiResult<Vote>>;
+  ownVote(subjectId: string, questionId: string, viewer: Persona | null): Promise<ApiResult<Vote>>;
   createThread(input: ThreadInput, options: WriteOptions): Promise<ApiResult<Thread>>;
   createPost(
     input: { threadId: string; body: unknown; licence: string },
@@ -161,7 +200,7 @@ export interface ContentUserCasesDriver {
   ): Promise<ApiResult<Page<Thread>>>;
   subjectFigure(subjectId: string, actor: Persona | null): Promise<ApiResult<Figure>>;
   searchCard(subjectId: string, actor: Persona | null): Promise<ApiResult<{ subjectId: string; figure: Figure }>>;
-  realmFigure(subjectId: string, realmId: string, actor: Persona | null): Promise<ApiResult<Figure>>;
+  realmFigure(subjectId: string, realmId: string, actor: Persona | null): Promise<ApiResult<RealmFigure>>;
   /** Change membership via real HTTP; same votes count in Global and the Realm. */
   joinPrivateRealm(member: Persona, options: WriteOptions): Promise<ApiResult<unknown>>;
   /** Make a vote ineligible via the native account lifecycle, not by editing it. */

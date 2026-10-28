@@ -140,8 +140,9 @@ Scenarios:
   DTO, including `kind`, `subjectIds` and `voteCitation` with question, integer units and vote revision.
 - `subject-rating-context`, stage **specified red**, has four literal cases: subject page/search card agree on
   standard question, Global population, units and count with a real prior; below-threshold/pending/ineligible votes
-  give honest insufficient-data/updating without a number; only the reader obtains their own vote; an extreme private
-  Realm population never substitutes for or moves Global. Native vote, aggregate, prior and figure workers produce
+  give honest insufficient-data/updating without a number; only the authenticated caller obtains their own vote; an extreme private
+  Realm population never substitutes for or moves Global, and unreadable Realm figures return 200 with zero count
+  and neutral freshness, indistinguishable from an empty population. Native vote, aggregate, prior and figure workers produce
   every figure. Numeric count remains allowed below threshold; mean and score do not.
 
 Native acceptance commands:
@@ -153,6 +154,62 @@ CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/cont
 
 The second command awaits a real registered binding. Realm rating sorts remain deferred. Private Realm votes are
 not a separate copy of Global votes; changing only membership is the discriminating isolation control.
+
+## User-case contract audit
+
+This audit uses [OpenAPI](../../contracts/openapi.json) operation schemas and the owning README sections below.
+Success codes are exact; errors remain the original RFC 9457 response. Unwrapping an envelope or renaming a list
+array does not permit adding response fields. Request paths and fixture IDs may supply request inputs only.
+
+| Driver methods                  | Landed HTTP contract and source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `putVote`, `ownVote`            | `rating.vote_put/get`: PUT/GET `/v1/subjects/{id}/ratings/{questionId}/vote`, PUT body `{ units }`, 200 `{ units, revision, at }`. GET selects the authenticated caller, with 401 for anonymous and 404 for the fixture outsider with no vote. [Rating, HTTP](../../services/kernel/src/rating/README.md#http).                                                                                                                                                                                                                                                        |
+| `createThread`                  | `thread.create`: POST `/v1/threads`, 201 `{ thread }`; request `boardId`, `title`, `kind`, `subjectIds`, `body`, `licence`, `visibility`, optional `voteCitation`. Review kind and citation are already landed, including immutable publication-time units/revision. [Content, Reviews](../../services/kernel/src/content/README.md#reviews).                                                                                                                                                                                                                          |
+| `createPost`, `revise`          | `post.create/revise`: POST `/v1/threads/{id}/posts` (201 `{ post }`) and `/v1/posts/{id}/revisions` (200 `{ post }`). Send body/licence; thread/post IDs select the path, and omitted metadata is preserved. OpenAPI request/response schemas; [Content](../../services/kernel/src/content/README.md).                                                                                                                                                                                                                                                                 |
+| `readPost`, `readRevision`      | `post.get/revision`: GET `/v1/posts/{id}` or `/v1/posts/{id}/revisions/{revisionId}`, 200 `{ post }`. Returned id, threadId, revisionId, boardId, subjectIds, licence, body and voteCitation supply the asserted Post subset. Unreadable draft/protected/taken-down posts and exact revisions stay 404. [Content, Subject threads](../../services/kernel/src/content/README.md#subject-threads).                                                                                                                                                                       |
+| `subjectReviews`                | `subject_threads.list`: GET `/v1/subjects/{id}/threads?place=&kind=review&limit=&cursor=`, 200 `{ threads, next }`; map threads to items, preserve next. Current target/place/disclosure filtering, relays and replay remain required. [Content, Subject threads](../../services/kernel/src/content/README.md#subject-threads).                                                                                                                                                                                                                                        |
+| `realmFigure`                   | `rating.aggregate_get`: GET `/v1/subjects/{id}/ratings?question=&population=`, 200 `{ subject, question, figures }`; unwrap one entry with population, count, freshness and optional mean/histogram/remaining. Mean is stored units, so ten votes of 20 produce mean 20, not 10. No score or readiness state is returned. [Rating, HTTP](../../services/kernel/src/rating/README.md#http).                                                                                                                                                                             |
+| `joinPrivateRealm`              | `realm.add_member`: POST `/v1/realms/{realmId}/members`, `{ accountId }`, 202 `{ workflowId }`, then native drain. The same vote counts in both populations; membership alone cannot change Global. [Community, Durable initiators](../../services/kernel/src/community/README.md#durable-initiators), [Rating, Voter Realm membership](../../services/kernel/src/rating/README.md#voter-realm-membership).                                                                                                                                                            |
+| `suspend`                       | `account.suspend`: POST `/v1/accounts/{accountId}:suspend`, `{ reason }`, 200 `{ suspension }`. Provision platform governance authority separately from Realm moderation; drain the native eligibility transition. [Access, suspension policy](../../services/kernel/src/access/README.md), [Rating, Voter eligibility](../../services/kernel/src/rating/README.md#voter-eligibility).                                                                                                                                                                                 |
+| `createBoard`                   | `board.create`: POST `/v1/realms/{realmId}/boards`, `{ conceptId, title, purpose: discussion, visibility }`, 201 `{ board }`; fixture provides a real Realm and its scheme/concept. [Community, board scheme](../../services/kernel/src/community/README.md), OpenAPI. Global review-board provisioning has the gap below.                                                                                                                                                                                                                                             |
+| `takedown`, `revokeBoardRead`   | `board.takedown/post.takedown`: POST `/v1/boards/{id}:takeDown` or `/v1/posts/{id}:takeDown`, `{ reason }`, 200. `grant.revoke`: POST `/v1/grants:revoke`, exact resource/subject/actions/valid grant tuple, 200 `{ grant }`. Fixture grants must cover board and post takedown independently, and the protected reader must have no alternative board-read grant. [Content, Subject threads](../../services/kernel/src/content/README.md#subject-threads), [Access, Grant create/change/revoke](../../services/kernel/src/access/README.md#grant-createchangerevoke). |
+| `page`, `holdPage`              | `board_threads.list` / `post.list`: GET `/v1/boards/{id}/threads?sort=&limit=&cursor=` or `/v1/threads/{id}/posts?limit=&cursor=`, 200 `{ threads, next, rankRefreshedAt }` or `{ posts, next, reactionsAsOf }`. Preserve metadata; map the array to items. All literal sort/post, first/continuation, takedown/grant and unchanged-control scenarios stay intact. `holdPage` remains a timing-only native test barrier; its implementation belongs to the binding.                                                                                                    |
+| `provision`, `effects`, `close` | Isolated native test lifecycle, not public endpoints. Subjects/Realms/boards use production creation APIs; accounts/grants and delivery controls are permitted fixture setup. Effects drain/replay production events and workers; cleanup joins held requests. No manufactured votes, figures or relay rows. Global boards remain a provisioning gap below.                                                                                                                                                                                                            |
+| `subjectFigure`, `searchCard`   | Intended consumers are GET `/v1/subjects/{id}` (`subject.get`) and POST `/v1/subjects:search` (`subject.search`), both 200. Their OpenAPI schemas have no rating figure. Keep the assertions as missing product behaviour below; the driver cannot build consumer cards from aggregate reads.                                                                                                                                                                                                                                                                          |
+
+The suite composes vote target/question identifiers from its own request arguments solely for citations; the driver's
+Vote contains only units, revision and at. Citation comparisons and own-vote comparisons therefore use different
+shapes. Anonymous and outsider Realm reads assert the original envelope and exactly `{ population, count: 0, freshness: { asOf: null,
+updating: false } }` at 200, with no mean, histogram, remaining, score or actual update state. This is the neutral
+empty figure specified by Rating HTTP, not evidence about the hidden population. Moderator aggregate assertions,
+unchanged Global figures and absence of private Realm IDs from both public consumers remain intact.
+
+The remaining rating expectations keep the [public figure](../../services/kernel/src/rating/README.md#public-figure)
+contract: five work votes reveal display mean 4 for stored units 8; fifty real prior votes of stored units 12 yield
+a Bayesian score strictly between 4 and 6. Fifteen votes (five at 8, ten at 20) yield display mean 8. Four eligible
+votes disclose count but no mean/score; paused delivery never fabricates a published number; suspension removes
+ineligible votes on drain. Public figures and aggregate HTTP means use different units and must not be substituted.
+Fixture counts, independent controllers, document bodies, licences, page sizes, cursor progress/uniqueness and
+replay checks remain unchanged. No literal scenario or title is removed.
+
+Missing product behaviours retained by this suite:
+
+- **Rating and semantic/presentation:** `subject.get` has no public rating figure or explicit readiness field.
+  `subjectFigure` still requires the standard-question Global figure, count, display mean/Bayesian score,
+  question/population identifiers, units metadata and `ready` / `insufficient_data` / `updating` states. These names
+  are prospective consumer requirements, not landed HTTP readiness names. The internal figure producer is not an
+  HTTP consumer DTO. Do not synthesize states from nulls or rescale aggregate HTTP means in the driver.
+- **Search with rating:** `subject.search` has no figure on hits. `searchCard` still requires the same current public
+  figure and explicit readiness as the subject consumer, preserving private-vote and private-Realm non-disclosure.
+  [Search, Global rating order](../../services/kernel/src/search/README.md#global-rating-order) documents the public
+  producer boundary and pending runtime composition; indexed score alone cannot supply the asserted figure.
+- **Content with community:** `provision` requires Global review boards (including a protected board) created over
+  HTTP. OpenAPI exposes only Realm-owned board creation. The native creator requires a Realm and its board scheme;
+  a Realm-owned board is indexed under that Realm, not Global. There is no landed Global-board creation route.
+  Keep the Global-place review assertions; do not seed boards or silently change the place to a Realm.
+
+Review vote citations are **not missing**: both `thread.create` and `post.revise` accept voteCitation, and post and
+revision responses expose it. Late-page disclosure/barrier acceptance remains the binding's concern, unchanged.
 
 ## moderation-reports-appeals
 

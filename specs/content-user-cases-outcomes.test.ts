@@ -60,9 +60,8 @@ function ok<T>(result: ApiResult<T>, status = 200): T {
   expect(result.value).not.toBeNull();
   return result.value!;
 }
-function written<T>(result: ApiResult<T>): T {
-  expect([200, 201, 204]).toContain(result.response.status);
-  return result.value!;
+function written<T>(result: ApiResult<T>, status = 200): T {
+  return ok(result, status);
 }
 async function concealed(result: ApiResult<unknown>) {
   expect(result.response.status).toBe(404);
@@ -72,9 +71,10 @@ async function concealed(result: ApiResult<unknown>) {
 }
 async function vote(actor: Persona, subjectId = fixture.subjectId, units = data.rating.thresholdVoteUnits) {
   const result = written(await driver.putVote(subjectId, fixture.standardQuestionId, units, options(actor)));
-  expect(result).toMatchObject({ subjectId, questionId: fixture.standardQuestionId, units });
+  expect(result.units).toBe(units);
+  expect(typeof result.at).toBe('string');
   expect(result.revision).toBeGreaterThan(0);
-  return result;
+  return { ...result, subjectId, questionId: fixture.standardQuestionId };
 }
 const citation = (value: Citation): Citation => ({
   questionId: value.questionId,
@@ -165,9 +165,11 @@ describe('review-from-vote', () => {
     expect(listed.firstPost.voteCitation).toEqual(citation(originalVote));
     const exact = ok(await driver.readRevision(first.firstPost.id, first.firstPost.revisionId, null));
     expect(exact.voteCitation).toEqual(citation(originalVote));
-    expect(
-      ok(await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, fixture.reader, fixture.reader)),
-    ).toMatchObject(changedVote);
+    expect(ok(await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, fixture.reader))).toEqual({
+      units: changedVote.units,
+      revision: changedVote.revision,
+      at: changedVote.at,
+    });
   });
 
   test('review-from-vote: hidden and protected posts stay out of public pages while immutable revisions and licences survive', async () => {
@@ -273,12 +275,14 @@ describe('subject-rating-context', () => {
 
   test('subject-rating-context: only the reader can obtain their own vote and public consumers expose no individual vote', async () => {
     const own = await vote(fixture.reader);
-    expect(
-      ok(await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, fixture.reader, fixture.reader)),
-    ).toEqual(own);
+    expect(ok(await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, fixture.reader))).toEqual({
+      units: own.units,
+      revision: own.revision,
+      at: own.at,
+    });
     for (const viewer of [null, fixture.outsider]) {
-      const result = await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, fixture.reader, viewer);
-      expect([401, 403, 404]).toContain(result.response.status);
+      const result = await driver.ownVote(fixture.subjectId, fixture.standardQuestionId, viewer);
+      expect(result.response.status).toBe(viewer === null ? 401 : 404);
       expect(result.value).toBeNull();
       expect(result.response.headers.get('content-type')).toContain('application/problem+json');
       expect(await result.response.clone().text()).not.toContain(fixture.reader.id);
@@ -304,14 +308,32 @@ describe('subject-rating-context', () => {
     const before = await matchingFigures(fixture.subjectId, 15);
     expect(before.mean).toBe(8);
     for (const actor of fixture.privateVoters) {
-      written(await driver.joinPrivateRealm(actor, options(fixture.moderator)));
+      written(await driver.joinPrivateRealm(actor, options(fixture.moderator)), 202);
     }
     await driver.effects('drain');
     const privateFigure = ok(await driver.realmFigure(fixture.subjectId, fixture.privateRealmId, fixture.moderator));
-    expect(privateFigure).toMatchObject({ populationId: fixture.privateRealmId, count: 10, mean: 10, state: 'ready' });
+    expect(privateFigure).toMatchObject({
+      population: fixture.privateRealmId,
+      count: 10,
+      mean: 20,
+      freshness: { updating: false },
+    });
+    expect(privateFigure.histogram?.[20]).toBe(10);
     expect(await matchingFigures(fixture.subjectId, 15)).toEqual(before);
-    await concealed(await driver.realmFigure(fixture.subjectId, fixture.privateRealmId, null));
-    await concealed(await driver.realmFigure(fixture.subjectId, fixture.privateRealmId, fixture.outsider));
+    for (const viewer of [null, fixture.outsider]) {
+      const result = await driver.realmFigure(fixture.subjectId, fixture.privateRealmId, viewer);
+      const empty = {
+        population: fixture.privateRealmId,
+        count: 0,
+        freshness: { asOf: null, updating: false },
+      };
+      expect(ok(result)).toEqual(empty);
+      expect(await result.response.clone().json()).toEqual({
+        subject: fixture.subjectId,
+        question: fixture.standardQuestionId,
+        figures: [empty],
+      });
+    }
     for (const result of [
       await driver.subjectFigure(fixture.subjectId, null),
       await driver.searchCard(fixture.subjectId, null),
