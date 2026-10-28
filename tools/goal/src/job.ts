@@ -31,7 +31,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityAvailable, capacityWaiters, checkWaitMs } from './launch.ts';
+import { capacityWaiters, checkWaitMs } from './launch.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -159,13 +159,6 @@ export class WorkerJob implements GateOutcomeSink {
     } finally {
       this.retryIntentsInProgress.delete(key);
     }
-  }
-  private async resumeRetryIntents(): Promise<void> {
-    // A command settles retries only while the host has room; otherwise it would wait for capacity, and the host's
-    // sweep starts them anyway (a status command waited over two minutes).
-    if (!capacityAvailable(this.tasks.store, this.tasks.settings.stateDirectory)) return;
-    for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
-      await this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt });
   }
   resumePendingRetries(): void {
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
@@ -638,9 +631,10 @@ export class WorkerJob implements GateOutcomeSink {
       }
     }
     await Promise.all(follows);
-    // The host keeps sweeping while retried workers run; a command settles its retries before it returns.
+    // The host resumes pending retries and keeps sweeping while their workers run. A command leaves them to the host, as
+    // it leaves released tasks: a retry command ran other tasks' pending retries first, waited for capacity on their
+    // behalf and followed their workers, and started its own task 25 minutes later.
     if (adoptRunning) this.resumePendingRetries();
-    else await this.resumeRetryIntents();
   }
   reportPromotionEnvironment(taskId: string, failure: NonNullable<GateOutcome['firstFailure']>): void {
     const store = this.tasks.store,
