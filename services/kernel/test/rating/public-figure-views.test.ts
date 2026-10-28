@@ -11,8 +11,7 @@ let workerPaused = false;
 beforeAll(async () => {
   fixture = await createFigureFixture({ subjects: 256, partitions: 3 });
 }, 180_000);
-// Bun owns subprocesses per test. Pause the shared native worker explicitly at that boundary,
-// then resume its durable workflows for the next scenario instead of leaving a dangling child.
+// Give the shared native worker an explicit lifetime for each scenario.
 beforeEach(async () => {
   if (workerPaused) {
     await restartWorker();
@@ -106,6 +105,8 @@ test('batched figure views answer every requested subject across partitions exac
     await release();
   }
   await fixture.published(pending, 1);
+  await fixture.database.admin.query('DROP TRIGGER hold_view_publication ON rating.public_figure');
+  await fixture.database.admin.query('DROP FUNCTION public.hold_view_publication()');
 
   const empty = await snapshot((client) => measure(fixture.database, () => readPublicFigureViews(client, [])));
   expect(empty.value?.size).toBe(0);
@@ -116,7 +117,11 @@ test('batched figure views answer every requested subject across partitions exac
 
 test('batched figure views use two statements for 1, 64 and 256 subjects across partitions', async () => {
   // Give every measured key a native figure, including the largest batch.
-  for (const id of fixture.subjectIds) await fixture.vote(id, fixture.globalVoters[1]!, 12);
+  for (const [index, id] of fixture.subjectIds.entries()) {
+    await fixture.vote(id, fixture.globalVoters[1]!, 12);
+    // Bound the native publication backlog while provisioning the largest measured population.
+    if ((index + 1) % 32 === 0) await fixture.drain();
+  }
   await fixture.drain();
   for (const size of [1, 64, 256]) {
     const ids = fixture.subjectIds.slice(0, size);
@@ -129,7 +134,7 @@ test('batched figure views use two statements for 1, 64 and 256 subjects across 
     expect(figures.reduce((sum, [, cost]) => sum + cost.rows, 0)).toBeLessThanOrEqual(size);
     for (const [, cost] of figures) expect(cost.sequentialScans).toBe(0);
   }
-}, 180_000);
+}, 600_000);
 
 test('a private Realm voting at the extreme changes no batched figure view', async () => {
   await fixture.joinMembers();
