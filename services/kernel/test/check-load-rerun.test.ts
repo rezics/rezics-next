@@ -19,7 +19,10 @@ function testFailure(title: string, message: string): string {
 }
 
 function expectRerunSummary(log: string[], files: number, passed: number): void {
-  const lines = log.join('').split('\n').filter((line) => line.startsWith('Load reruns:'));
+  const lines = log
+    .join('')
+    .split('\n')
+    .filter((line) => line.startsWith('Load reruns:'));
   expect(lines).toHaveLength(1);
   expect(lines[0]).toMatch(
     new RegExp(`^Load reruns: ${files} files, \\d+\\.\\d{2} s alone \\(${passed} passed alone\\)$`),
@@ -183,9 +186,7 @@ test('wrapped overload messages qualify mixed failures and mark the unrelated fa
   const result = await rerunGrowthFailures([outcome], runner, lease, write);
 
   expect(result.failed).toEqual([]);
-  expect(events.filter((event) => event.startsWith('run '))).toEqual([
-    'run test/mixed.test.ts held=true slot=0/1',
-  ]);
+  expect(events.filter((event) => event.startsWith('run '))).toEqual(['run test/mixed.test.ts held=true slot=0/1']);
   expect(log.join('')).toContain('Load-sensitive tests (passed alone): 4\n');
   expect(log.join('')).toContain(':: retry exhaustion ::');
   expect(log.join('')).toContain(':: problem response ::');
@@ -207,9 +208,7 @@ test('an unhandled error with a load signal makes the file eligible', async () =
   const result = await rerunGrowthFailures([unhandled], runner, lease, write);
 
   expect(result.failed).toEqual([]);
-  expect(events.filter((event) => event.startsWith('run '))).toEqual([
-    'run test/unhandled.test.ts held=true slot=0/1',
-  ]);
+  expect(events.filter((event) => event.startsWith('run '))).toEqual(['run test/unhandled.test.ts held=true slot=0/1']);
   expect(log.join('')).toContain(':: assertion (cascade) ::');
   expect(log.join('')).toContain(':: unhandled error :: error: Access unavailable: overloaded');
   expectRerunSummary(log, 1, 1);
@@ -231,9 +230,7 @@ test('a Received value carrying a load signal makes its assertion failure eligib
   const result = await rerunGrowthFailures([outcome], runner, lease, write);
 
   expect(result.failed).toEqual([]);
-  expect(events.filter((event) => event.startsWith('run '))).toEqual([
-    'run test/received.test.ts held=true slot=0/1',
-  ]);
+  expect(events.filter((event) => event.startsWith('run '))).toEqual(['run test/received.test.ts held=true slot=0/1']);
   expect(log.join('')).toContain('Load-sensitive tests (passed alone): 1\n');
   expectRerunSummary(log, 1, 1);
 });
@@ -252,9 +249,7 @@ test('a timeout printed after the failed test line makes the file eligible', asy
   const result = await rerunGrowthFailures([outcome], runner, lease, write);
 
   expect(result.failed).toEqual([]);
-  expect(events.filter((event) => event.startsWith('run '))).toEqual([
-    'run test/timeout.test.ts held=true slot=0/1',
-  ]);
+  expect(events.filter((event) => event.startsWith('run '))).toEqual(['run test/timeout.test.ts held=true slot=0/1']);
   expect(log.join('')).toContain(':: this test timed out after 180000ms.');
   expectRerunSummary(log, 1, 1);
 });

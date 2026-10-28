@@ -280,7 +280,7 @@ export function growthFailures(output: string): GrowthFailure[] | null {
     const kind = growth ? 'growth' : load ? 'load' : 'cascade';
     const message = growth
       ? growth.slice('GrowthBoundError:'.length).trim()
-      : load ?? messages[0] ?? 'unhandled error';
+      : (load ?? messages[0] ?? 'unhandled error');
     return { title, message, kind } satisfies GrowthFailure;
   });
   return failures.some((failure) => failure.kind !== 'cascade') ? failures : null;

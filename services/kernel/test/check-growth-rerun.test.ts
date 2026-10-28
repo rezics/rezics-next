@@ -170,9 +170,15 @@ test('growth failures keep a file eligible despite cascades while files without 
     'test/cleanup.test.ts',
     'test/create.test.ts',
   ]);
-  expect(log.join('')).toContain('load-sensitive test: test/mixed.test.ts :: second (cascade) :: error: expect(received).toBe(expected)');
-  expect(log.join('')).toContain('load-sensitive test: test/unhandled.test.ts :: late (cascade) :: error: unhandled late');
-  expect(log.join('')).toContain('load-sensitive test: test/timeout.test.ts :: slow :: this test timed out after 60000ms.');
+  expect(log.join('')).toContain(
+    'load-sensitive test: test/mixed.test.ts :: second (cascade) :: error: expect(received).toBe(expected)',
+  );
+  expect(log.join('')).toContain(
+    'load-sensitive test: test/unhandled.test.ts :: late (cascade) :: error: unhandled late',
+  );
+  expect(log.join('')).toContain(
+    'load-sensitive test: test/timeout.test.ts :: slow :: this test timed out after 60000ms.',
+  );
   expect(log.join('')).toContain('Load-sensitive growth checks (passed alone):');
   expect(log.join('')).toContain('Load reruns: 3 files, ');
   expect(log.join('')).toContain('(3 passed alone)');
