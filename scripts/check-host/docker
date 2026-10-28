@@ -7,14 +7,18 @@
 # one) put itself there and calls this wrapper, so looking only further along keeps a shim from being called back.
 self=$(cd "$(dirname "$0")" && pwd)
 rest=
+found_self=
 old_ifs=$IFS
 IFS=:
 for entry in $PATH; do
   if [ -n "$entry" ] && [ "$(cd "$entry" 2>/dev/null && pwd)" = "$self" ]; then
-    rest=
+    if [ -z "$found_self" ]; then
+      found_self=1
+      rest=
+    fi
     continue
   fi
-  rest=${rest:+$rest:}$entry
+  if [ -n "$found_self" ]; then rest=${rest:+$rest:}$entry; fi
 done
 IFS=$old_ifs
 PATH=$rest

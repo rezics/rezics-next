@@ -1341,7 +1341,7 @@ async function baseState(host: Host): Promise<{ base: string | null; zstd: boole
     stderr: 'ignore',
   });
   const [code, output] = await Promise.all([probe.exited, new Response(probe.stdout).text()]);
-  if (code !== 0) throw new RemoteTransportError(host.name, 'base lookup');
+  if (code !== 0) throw new RemoteTransportError(host.name, 'base lookup', 255);
   const base = output.match(/^BASE (.+)$/m)?.[1];
   const age = output.match(/^AGE (.+)$/m)?.[1];
   const zstd = output.match(/^ZSTD ([01])$/m)?.[1];
