@@ -1924,7 +1924,7 @@ CREATE TRIGGER copy_fact_source_rows AFTER INSERT OR DELETE ON library.copy FOR 
 -- Name: copy copy_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER copy_fact_source_update AFTER UPDATE ON library.copy FOR EACH ROW WHEN (((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER copy_fact_source_update AFTER UPDATE ON library.copy FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
@@ -1938,7 +1938,7 @@ CREATE TRIGGER entry_fact_source_rows AFTER INSERT OR DELETE ON library.entry FO
 -- Name: entry entry_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.state IS DISTINCT FROM new.state)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
@@ -1959,7 +1959,7 @@ CREATE TRIGGER label_assignment_fact_source_rows AFTER INSERT OR DELETE ON libra
 -- Name: label_assignment label_assignment_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((((((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.label_id IS DISTINCT FROM new.label_id)) OR (old.assignment_id IS DISTINCT FROM new.assignment_id)) OR (old.slot_no IS DISTINCT FROM new.slot_no)) OR (old.deleted_at IS DISTINCT FROM new.deleted_at))) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
@@ -1973,7 +1973,7 @@ CREATE TRIGGER personal_label_fact_source_delete AFTER DELETE ON library.persona
 -- Name: personal_label personal_label_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER personal_label_fact_source_update AFTER UPDATE ON library.personal_label FOR EACH ROW WHEN ((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.deleted_at IS DISTINCT FROM new.deleted_at))) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER personal_label_fact_source_update AFTER UPDATE ON library.personal_label FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
@@ -1987,7 +1987,7 @@ CREATE TRIGGER progress_session_fact_source_rows AFTER INSERT OR DELETE ON libra
 -- Name: progress_session progress_session_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progress_session FOR EACH ROW WHEN (((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progress_session FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
