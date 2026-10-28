@@ -116,9 +116,12 @@ fields listed below; the empty policy object deliberately provides no account po
 | `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                  |
 | `policy.maxBurnPerHour` | Optional positive limit on recent same-window percentage consumption per hour.           |
 
-Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool; a native
-quota failure excludes all aliases of that allowance before selecting another permitted pool. There is no credit
-purchase or reset-card redemption path.
+Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool. When a
+CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: a used-up window or a reading older
+than `maxAgeMs` excludes that allowance. A fresh reading with allowance left retries the same pool after three
+minutes; the attempt records the refusal and the primary and secondary windows it read. Three usage-limit refusals on
+one pool within an hour temporarily exclude its allowance for one hour. Other native quota failures exclude all
+aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`, `silenceMs`,
@@ -314,7 +317,9 @@ returns promotion to gating dev.
 When a rebase conflicts only in derived files, the train restores their upstream versions, regenerates them with the commands in `defaults.json`, stages them and continues; any other conflict fails at the rebase stage.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
-native CLI failure, and stored on the attempt. A CLI failure before a session or commit is rerun once; a second
+native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
+is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
+different allowed pool. A CLI failure before a session or commit is rerun once; a second
 consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Integration
 does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly. Quota
 exhaustion chooses another allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;

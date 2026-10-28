@@ -12,10 +12,16 @@ export function parseCodexUsage(text: string, pool: Pool, now = Date.now()): Poo
       const event = JSON.parse(line);
       const limits = event.payload?.rate_limits ?? event.rate_limits;
       if (!limits) continue;
-      const windows: PoolReading['windows'] = [limits.primary, limits.secondary].filter(w => typeof w?.used_percent === 'number' && Number.isFinite(w.used_percent)).map(w => ({
-        usedPercent: w.resets_at != null && Number(w.resets_at) * 1000 <= now ? 0 : w.used_percent,
-        resetsAt: w.resets_at == null ? null : Number(w.resets_at) * 1000, minutes: w.window_minutes ?? null,
-      }));
+      const windows: PoolReading['windows'] = ([['primary', limits.primary], ['secondary', limits.secondary]] as const)
+        .flatMap(([window, value]) => {
+          if (typeof value?.used_percent !== 'number' || !Number.isFinite(value.used_percent)) return [];
+          return [{
+            window,
+            usedPercent: value.resets_at != null && Number(value.resets_at) * 1000 <= now ? 0 : value.used_percent,
+            resetsAt: value.resets_at == null ? null : Number(value.resets_at) * 1000,
+            minutes: value.window_minutes ?? null,
+          }];
+        });
       if (!windows.length) continue;
       const observedAt = typeof event.timestamp === 'string' && Number.isFinite(Date.parse(event.timestamp)) ? event.timestamp : null;
       return { pool: pool.name, allowanceKey: pool.allowanceKey, at: new Date(now).toISOString(), observedAt, windows,
@@ -56,6 +62,42 @@ export function readPool(pool: Pool, now = Date.now()): PoolReading {
   } catch { return unknownReading(pool, now, 'quota observation unavailable'); }
 }
 export type PoolReader = (pool: Pool) => PoolReading;
+
+export type UsageLimitAssessment = {
+  confirmedExhaustion: boolean;
+  reason: 'window-used-up' | 'reading-stale' | 'reading-unavailable' | 'allowance-left';
+  reading: PoolReading | null;
+};
+
+/**
+ * A provider's usage-limit refusal only confirms exhaustion when a quota window is spent or its last reading is stale
+ * beyond the pool's local freshness policy. Keep a recently unavailable reading retryable while it recovers.
+ */
+export function assessUsageLimitRefusal(
+  after: PoolReading | null,
+  before: PoolReading | null,
+  pool: Pool,
+  now = Date.now(),
+): UsageLimitAssessment {
+  const readings = [after, before].filter(
+    (reading): reading is PoolReading =>
+      !!reading && reading.windows.length > 0 && !!reading.observedAt && Number.isFinite(Date.parse(reading.observedAt)),
+  ).sort((left, right) => Date.parse(right.observedAt!) - Date.parse(left.observedAt!));
+  const reading = readings[0] ?? null;
+  if (reading) {
+    if (reading.exhausted || reading.windows.some((window) => window.usedPercent >= 100))
+      return { confirmedExhaustion: true, reason: 'window-used-up', reading };
+    const observedAt = Date.parse(reading.observedAt!);
+    if (observedAt > now + 60_000 || now - observedAt > pool.policy.maxAgeMs)
+      return { confirmedExhaustion: true, reason: 'reading-stale', reading };
+    return { confirmedExhaustion: false, reason: 'allowance-left', reading };
+  }
+
+  const unavailableFor = after && before ? Date.parse(after.at) - Date.parse(before.at) : 0;
+  if (Number.isFinite(unavailableFor) && unavailableFor > pool.policy.maxAgeMs)
+    return { confirmedExhaustion: true, reason: 'reading-stale', reading: after ?? before };
+  return { confirmedExhaustion: false, reason: 'reading-unavailable', reading: after ?? before };
+}
 
 /** Parse the plan windows of Claude's OAuth usage endpoint, the one Claude Code's /usage reads. */
 export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): PoolReading {
@@ -127,15 +169,23 @@ function readClaudeUsage(pool: Pool, now: number): PoolReading {
 function exhaustionPath(stateDirectory: string, allowanceKey: string): string {
   return join(stateDirectory, 'exhausted', `${allowanceKey.replace(/[^\w.-]/g, '_')}.json`);
 }
-export function markExhausted(stateDirectory: string, allowanceKey: string, now = Date.now()): void {
+/** Remember an exhausted allowance, optionally with an explicit lifetime instead of the pool's normal maxAgeMs. */
+export function markExhausted(stateDirectory: string, allowanceKey: string, now = Date.now(), durationMs?: number): void {
   const path = exhaustionPath(stateDirectory, allowanceKey);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify({ observedAt: new Date(now).toISOString() }));
+  writeFileSync(path, JSON.stringify({
+    observedAt: new Date(now).toISOString(),
+    ...(durationMs === undefined ? {} : { expiresAt: new Date(now + durationMs).toISOString() }),
+  }));
 }
 export function withObservedExhaustion(reading: PoolReading, pool: Pool, stateDirectory: string, now = Date.now()): PoolReading {
   try {
-    const { observedAt } = JSON.parse(readFileSync(exhaustionPath(stateDirectory, pool.allowanceKey), 'utf8')) as { observedAt: string };
-    if (now - Date.parse(observedAt) > pool.policy.maxAgeMs) return reading;
+    const { observedAt, expiresAt } = JSON.parse(readFileSync(exhaustionPath(stateDirectory, pool.allowanceKey), 'utf8')) as {
+      observedAt: string;
+      expiresAt?: string;
+    };
+    const expires = expiresAt ? Date.parse(expiresAt) : Date.parse(observedAt) + pool.policy.maxAgeMs;
+    if (!Number.isFinite(expires) || now >= expires) return reading;
     return { ...reading, observedAt, exhausted: true };
   } catch { return reading; }
 }

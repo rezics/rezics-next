@@ -6,8 +6,8 @@ import { spawn } from 'node:child_process';
 import { createRuntime } from './config.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { runWorkerCommand } from './worker-commands.ts';
-import { harness, markdown } from './test-support.ts';
-import { git } from './tasks.ts';
+import { harness, markdown, reading } from './test-support.ts';
+import { git, WorkerTasks } from './tasks.ts';
 import { settle } from './settle.ts';
 
 function simpleBrief(path: string): void { writeFileSync(path, markdown.replace('command: [bun, test]', 'command: ["true"]')); }
@@ -156,8 +156,12 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
 `); h.settings.gate = ['true']; simpleBrief(h.briefFile);
   h.settings.pools.push({ ...h.settings.pools[0]!, name: 'alternate', allowanceKey: 'alternate' });
   try {
-    const runtime = createRuntime({ tasks: h.tasks });
-    const task = h.tasks.dispatch(h.briefFile);
+    let fixtureReads = 0;
+    const tasks = new WorkerTasks(h.settings, h.store, (pool) =>
+      reading(pool, pool.name === 'fixture' ? (++fixtureReads > 1 ? 100 : 0) : 20),
+    );
+    const runtime = createRuntime({ tasks });
+    const task = tasks.dispatch(h.briefFile);
     await runtime.job.start(task.id); await runtime.job.drain();
     const attempts = h.store.attempts(task.id);
     expect(attempts[0]!.failureKind).toBe('pool-exhausted'); expect(attempts[0]!.pool).not.toBe(attempts[1]!.pool);

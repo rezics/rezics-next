@@ -12,14 +12,21 @@ import {
   waitForWorkerExit,
   processIdentity,
 } from './process.ts';
-import { markExhausted } from './usage.ts';
+import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
 import { matchesPath } from './briefs.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import { makeRecord, readMeasurement, reportedApproaches, CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY } from './records.ts';
+import {
+  isUsageLimitRefusal,
+  makeRecord,
+  readMeasurement,
+  reportedApproaches,
+  CHECK_HOST_TRANSPORT,
+  MODEL_AT_CAPACITY,
+} from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import {
@@ -49,6 +56,11 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 
 /** How long a capacity refusal waits before the attempt continues. */
 export const CAPACITY_PAUSE_MS = 10_000;
+/** A usage-limit refusal with recent allowance left is retried on the same pool after a brief recovery window. */
+export const USAGE_LIMIT_RETRY_PAUSE_MS = 3 * 60_000;
+/** Repeated ambiguous refusals temporarily route work away from one pool. */
+export const USAGE_LIMIT_REFUSAL_WINDOW_MS = 60 * 60_000;
+export const REPEATED_USAGE_LIMIT_EXHAUSTION_MS = 60 * 60_000;
 /** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
 export const START_GRACE_MS = 10 * 60_000;
 /** A running worker with no run-log activity for this long is stopped and retried. */
@@ -716,7 +728,8 @@ export class WorkerJob implements GateOutcomeSink {
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
     let retry = false,
-      capacity = false;
+      capacity = false,
+      retryDelayMs = 0;
     const queueRetry = (options: RetryOptions) => {
       store.updateTask(ref, (t) => {
         t.state = 'ready';
@@ -729,6 +742,15 @@ export class WorkerJob implements GateOutcomeSink {
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
       if (!kind) return;
+      const existingRefusal = store
+        .events(task.id)
+        .find((event) => event.attempt === ref.attempt && event.kind === 'usage-limit-refusal');
+      let retrySamePool = false;
+      if (existingRefusal) {
+        const body = JSON.parse(existingRefusal.body) as { disposition?: string; pauseMs?: number };
+        retrySamePool = body.disposition === 'retry-same-pool';
+        retryDelayMs = body.pauseMs ?? 0;
+      }
       if (
         store.events(task.id).some((event) => event.attempt === ref.attempt && event.kind === 'attempt-exit-classified')
       ) {
@@ -737,7 +759,70 @@ export class WorkerJob implements GateOutcomeSink {
           queueRetry(this.exitRetryOptions(attempt, attempt.evidencePath));
         return;
       }
-      const failureClass = kind === 'tool' ? 'environment' : kind;
+      let usageLimitRefusal = false;
+      let usageLimitExhausted = false;
+      if (kind === 'pool-exhausted') {
+        const measurement = readMeasurement(attempt, {
+          configDirectory: this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.configDirectory,
+        });
+        usageLimitRefusal =
+          measurement.usageLimitRefusal || isUsageLimitRefusal(`${attempt.result}\n${attempt.blocker ?? ''}`);
+        if (usageLimitRefusal && !existingRefusal) {
+          const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
+          const now = Date.now();
+          const assessment = pool
+            ? assessUsageLimitRefusal(attempt.after, attempt.before, pool, now)
+            : { confirmedExhaustion: true, reason: 'reading-unavailable' as const, reading: attempt.after };
+          const priorRefusals = store
+            .events()
+            .filter(
+              (event) =>
+                event.kind === 'usage-limit-refusal' && Date.parse(event.at) >= now - USAGE_LIMIT_REFUSAL_WINDOW_MS,
+            )
+            .filter((event) => {
+              try {
+                return (JSON.parse(event.body) as { pool?: string }).pool === attempt.pool;
+              } catch {
+                return false;
+              }
+            }).length;
+          const refusalCount = priorRefusals + 1;
+          const repeatedRefusalThresholdReached = refusalCount >= 3;
+          usageLimitExhausted = assessment.confirmedExhaustion || repeatedRefusalThresholdReached;
+          retrySamePool = !usageLimitExhausted;
+          retryDelayMs = retrySamePool ? USAGE_LIMIT_RETRY_PAUSE_MS : 0;
+          const windowEvidence = (assessment.reading?.windows ?? []).map((window, index) => ({
+            window:
+              window.window ??
+              (window.minutes === 300 ? 'primary' : window.minutes === 10080 ? 'secondary' : `window-${index + 1}`),
+            usedPercent: window.usedPercent,
+            remainingPercent: Math.max(0, 100 - window.usedPercent),
+            resetsAt: window.resetsAt,
+          }));
+          if (usageLimitExhausted && pool) {
+            markExhausted(
+              this.tasks.settings.stateDirectory,
+              pool.allowanceKey,
+              now,
+              repeatedRefusalThresholdReached ? REPEATED_USAGE_LIMIT_EXHAUSTION_MS : undefined,
+            );
+          }
+          store.event(ref, 'usage-limit-refusal', {
+            pool: attempt.pool,
+            allowanceKey: pool?.allowanceKey ?? null,
+            detail: `${attempt.result}\n${attempt.blocker ?? ''}`.trim().slice(0, 1000),
+            assessment: assessment.reason,
+            observedAt: assessment.reading?.observedAt ?? null,
+            windows: windowEvidence,
+            refusalCount,
+            disposition: usageLimitExhausted ? 'exclude-pool' : 'retry-same-pool',
+            pauseMs: retryDelayMs,
+          });
+        } else if (existingRefusal) {
+          usageLimitExhausted = !retrySamePool;
+        }
+      }
+      const failureClass = kind === 'tool' || (usageLimitRefusal && retrySamePool) ? 'environment' : kind;
       const record = store.record(ref)!;
       record.outcome = 'stopped';
       const stalledForSilence = attempt.result.startsWith('stalled: no output for ');
@@ -793,9 +878,17 @@ export class WorkerJob implements GateOutcomeSink {
           this.inbox.deliver(event);
           return;
         }
-        if (kind === 'pool-exhausted') {
+        if (kind === 'pool-exhausted' && !usageLimitRefusal) {
           const key = this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.allowanceKey;
           if (key) markExhausted(this.tasks.settings.stateDirectory, key);
+        }
+        if (usageLimitRefusal) {
+          store.updateAttempt(ref, (value) => {
+            value.failureKind = retrySamePool ? 'tool' : 'pool-exhausted';
+            value.escalation = retrySamePool ? 'environment' : 'pool-exhausted';
+          });
+          record.escalation = retrySamePool ? 'environment' : 'pool-exhausted';
+          store.putRecord(record);
         }
         queueRetry(this.exitRetryOptions(attempt, evidencePath));
       }
@@ -803,9 +896,11 @@ export class WorkerJob implements GateOutcomeSink {
     // The recovery sweep calls this while it holds the task's lease, which the retry takes: start after it is released.
     if (retry)
       this.track(
-        new Promise<void>((done) => (capacity ? setTimeout(done, CAPACITY_PAUSE_MS) : setImmediate(done))).then(() =>
-          this.runRetryIntent(ref),
-        ),
+        new Promise<void>((done) => {
+          const delay = retryDelayMs || (capacity ? CAPACITY_PAUSE_MS : 0);
+          if (delay) setTimeout(done, delay);
+          else setImmediate(done);
+        }).then(() => this.runRetryIntent(ref)),
       );
   }
   private exitRetryOptions(attempt: Attempt, evidencePath: string): RetryOptions {
@@ -815,7 +910,14 @@ export class WorkerJob implements GateOutcomeSink {
       escalation: kind === 'tool' ? 'environment' : kind,
       fixRound: attempt.fixRound,
     };
-    if (kind === 'pool-exhausted') {
+    const refusal = this.tasks.store
+      .events(attempt.taskId)
+      .find((event) => event.attempt === attempt.attempt && event.kind === 'usage-limit-refusal');
+    const retrySamePool = refusal
+      ? (JSON.parse(refusal.body) as { disposition?: string }).disposition === 'retry-same-pool'
+      : false;
+    if (retrySamePool) options.escalation = 'environment';
+    if (kind === 'pool-exhausted' && !retrySamePool) {
       const key = this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.allowanceKey;
       options.excludePools = this.tasks.settings.pools
         .filter((pool) => pool.allowanceKey === key)
