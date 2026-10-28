@@ -158,7 +158,7 @@ export async function instrumentNativeCollectionWork<T>(
             bound: WorkDimensions;
           }
         | undefined;
-      client.query = function (...args: unknown[]) {
+      client.query = function (this: PoolClient, ...args: unknown[]) {
         const active = observing.getStore();
         const invoke = original as unknown as (...args: unknown[]) => unknown;
         if (!active) return invoke.apply(this, args);

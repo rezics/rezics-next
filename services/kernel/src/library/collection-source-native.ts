@@ -137,7 +137,7 @@ for (const query of [candidates, permissions])
       Array.isArray(value)
         ? value.length
         : typeof value === 'string'
-          ? (types.getTypeParser(1009)(value) as unknown[]).length
+          ? (types.getTypeParser(1009 as Parameters<typeof types.getTypeParser>[0])(value) as unknown[]).length
           : 0;
     const grantRoles = arrayLength(params.grant_roles);
     const targets = arrayLength(params.resource_ids) + (params.include_global === true ? 1 : 0);
@@ -192,10 +192,11 @@ async function call<T extends object>(
 }
 async function readOnly<T>(pool: Pool, deadline: number, operation: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
-    await client.query({
+    const begin = {
       text: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
       query_timeout: Math.max(1, deadline - Date.now()),
-    });
+    };
+    await client.query(begin);
     try {
       const value = await operation(deadlineClient(client, deadline) as PoolClient);
       await client.query('COMMIT');
