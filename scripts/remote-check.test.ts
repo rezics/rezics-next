@@ -85,7 +85,7 @@ if (script.includes('/proc/loadavg')) {
   const lock = dir + '/' + hostKey + '.gate-marker';
   if (existsSync(lock)) process.exit(75);
   mkdirSync(lock);
-  log({ kind: 'gate-marker' });
+  log({ kind: 'gate-marker', fakeStartedAt: Number(readFileSync(dir + '/clock', 'utf8')) });
   console.log('GATE_MARKER');
   const release = () => {
     rmSync(lock, { recursive: true, force: true });
@@ -115,6 +115,9 @@ if (script.includes('/proc/loadavg')) {
   const ordinaryCapacity = Number(
     script.match(/# REMOTE_CHECK_ORDINARY_COUNT (\\d+)/)?.[1] ?? Math.max(0, capacity - 1),
   );
+  const ordinaryAdmissionLimit = Number(
+    script.match(/# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity,
+  );
   const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity);
   const occupied = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
   const expressOccupied = existsSync(dir + '/' + hostKey + '.slot.express');
@@ -124,7 +127,10 @@ if (script.includes('/proc/loadavg')) {
     process.exit(75);
   }
   mkdirSync(taking);
-  const freeOrdinary = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => !occupied.includes(index));
+  const ordinaryAdmissionAllowed = occupied.length + requested <= ordinaryAdmissionLimit;
+  const freeOrdinary = ordinaryAdmissionAllowed
+    ? Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => !occupied.includes(index))
+    : [];
   const free = slotClass === 'short' ? [...freeOrdinary, ...(expressOccupied ? [] : ['express' as const])] : freeOrdinary;
   const limitedOccupied = occupied.length + (slotClass === 'short' && expressOccupied ? 1 : 0);
   if (limitedOccupied + requested > slotLimit || free.length < requested) {
@@ -163,7 +169,8 @@ if (script.includes('/proc/loadavg')) {
   const runNumber = count('run');
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
   if (hang && config.loadOnHang !== undefined) updateConfig({ load: config.loadOnHang });
-  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1] });
+  const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
+  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
   if (runNumber < (config.transportFailures ?? 0)) {
@@ -185,6 +192,11 @@ if (script.includes('/proc/loadavg')) {
       process.exit(143);
     });
     setInterval(() => {}, 1000);
+  } else if (config.runDurationMs !== undefined) {
+    const clock = dir + '/clock';
+    const finishAt = fakeStartedAt! + config.runDurationMs;
+    while (Number(readFileSync(clock, 'utf8')) < finishAt) await Bun.sleep(2);
+    process.exit(result);
   } else process.exit(result);
 } else {
   log({ kind: 'cleanup', script });
@@ -245,6 +257,7 @@ type HostConfig = {
   stderr?: string;
   hang?: boolean;
   hangRuns?: number;
+  runDurationMs?: number;
   present?: string[];
 };
 
@@ -271,6 +284,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 function scenario(hosts: Record<string, HostConfig>): { env: Record<string, string>; events: () => Event[] } {
   const dir = join(root, `scenario-${counter++}`);
   mkdirSync(dir);
+  writeFileSync(join(dir, 'clock'), '0');
   writeFileSync(
     join(dir, 'config.json'),
     JSON.stringify(Object.fromEntries(Object.entries(hosts).map(([name, config]) => [`ops@${name}.test`, config]))),
@@ -307,13 +321,14 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     env,
     events: () => {
       const file = join(dir, 'log.jsonl');
-      return existsSync(file)
-        ? readFileSync(file, 'utf8')
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as Event)
-        : [];
+      if (!existsSync(file)) return [];
+      const contents = readFileSync(file, 'utf8');
+      const completeContents = contents.endsWith('\n') ? contents : contents.slice(0, contents.lastIndexOf('\n') + 1);
+      return completeContents
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Event);
     },
   };
 }
@@ -369,8 +384,8 @@ function startRemote(
   };
 }
 
-async function waitFor(condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2_000;
+async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
   while (!condition() && Date.now() < deadline) await Bun.sleep(10);
   expect(condition()).toBe(true);
 }
@@ -1268,28 +1283,137 @@ test('a multi-slot waiter takes all slots or none and holds no slot or reservati
   }
 });
 
-test('while a gate waits for a host, an ordinary run takes no slot there and waits for another host', async () => {
-  const { env, events } = scenario({
-    a: { available: 20e9, slots: 2, cpuQuotaPercent: 800 },
-    b: { available: 20e9, slots: 4, cpuQuotaPercent: 800 },
-  });
-  // A gate waits on b, which has free slots, and a's one ordinary slot is busy.
+test('while a gate waits for a host, runs there use only the slots the gate leaves free', async () => {
+  const { env, events } = scenario({ b: { available: 20e9, slots: 4, hang: true, hangRuns: 1 } });
   mkdirSync(join(env.FAKE_DIR!, 'ops_b_test.gate-marker'));
-  mkdirSync(join(env.FAKE_DIR!, 'ops_a_test.slot.0'));
-  const single = startRemote(env, workspace(), ['true']);
+  const workspaceDirectory = workspace();
+  const multi = startRemote(env, workspaceDirectory, ['true'], ['--slots', '2']);
+  let remainder: ReturnType<typeof startRemote> | undefined;
   try {
-    await waitFor(() => events().filter((event) => event.kind === 'probe').length >= 4);
-    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@b.test')).toBe(false);
-    rmSync(join(env.FAKE_DIR!, 'ops_a_test.slot.0'), { recursive: true, force: true });
-    expect(await single.child.exited).toBe(0);
-    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@a.test')).toBe(true);
-    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@b.test')).toBe(false);
+    await waitFor(() => events().some((event) => event.kind === 'probe'));
+    expect(events().some((event) => event.kind === 'run')).toBe(false);
+
+    remainder = startRemote(env, workspaceDirectory, ['true']);
+    await waitFor(() => events().some((event) => event.kind === 'run'));
+    await waitFor(() => events().filter((event) => event.kind === 'probe').length >= 5);
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+    expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
+    expect(remainder.child.exitCode).toBeNull();
+    expect(multi.child.exitCode).toBeNull();
   } finally {
+    for (const run of [remainder, multi]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+});
+
+test('while a gate waits for a host, a short run may take its express slot', async () => {
+  const { env, events } = scenario({ b: { available: 20e9, slots: 4, ordinaryBusy: 1 } });
+  mkdirSync(join(env.FAKE_DIR!, 'ops_b_test.gate-marker'));
+  const result = await remote(env, workspace(), ['true'], ['--estimate-ms', '120000']);
+  expect(result.code).toBe(0);
+  const admitted = events().find((event) => event.kind === 'slot' && event.granted)!;
+  expect(admitted.slotClass).toBe('short');
+  expect(admitted.slot).toBe('express');
+});
+
+test('gates waiting on every host still drain their hosts', async () => {
+  const { env, events } = scenario({
+    a: { available: 20e9, slots: 4, hang: true, hangRuns: 1 },
+    b: { available: 20e9, slots: 4, hang: true, hangRuns: 1 },
+  });
+  for (const host of ['a', 'b']) mkdirSync(join(env.FAKE_DIR!, `ops_${host}_test.gate-marker`));
+  const runs = Array.from({ length: 4 }, () => startRemote(env, workspace(), ['true']));
+  try {
+    await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
+    await waitFor(() => events().filter((event) => event.kind === 'probe').length >= 12);
+    const started = events().filter((event) => event.kind === 'run');
+    expect(started.map((event) => event.address).sort()).toEqual(['ops@a.test', 'ops@b.test']);
+    expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(2);
+  } finally {
+    for (const run of runs) {
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+    }
+    for (const run of runs) {
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+});
+
+test('a gate wait is bounded by its original slot holders with 1, 10 and 100 queued runs', async () => {
+  const durationMs = 10;
+  for (const queueLength of [1, 10, 100]) {
+    const { env, events } = scenario({
+      b: { available: 20e9, slots: 4, runDurationMs: durationMs },
+    });
+    const workspaceDirectory = workspace();
+    const holders = Array.from({ length: 2 }, () =>
+      startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']),
+    );
+    let gate: ReturnType<typeof startRemote> | undefined;
+    const queued: ReturnType<typeof startRemote>[] = [];
     try {
-      single.child.kill('SIGTERM');
-    } catch {}
-    await single.child.exited;
-    await Promise.all([single.stdout, single.stderr]);
+      await waitFor(
+        () => events().filter((event) => event.kind === 'run' && String(event.script).includes('echo holder')).length === 2,
+        15_000,
+      );
+      const originalHolders = events().filter(
+        (event) => event.kind === 'run' && String(event.script).includes('echo holder'),
+      );
+      const latestOriginalFinish = Math.max(...originalHolders.map((event) => Number(event.fakeStartedAt) + durationMs));
+
+      gate = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo gate-run'], ['--gate', '--slots', '2']);
+      await waitFor(() => events().some((event) => event.kind === 'gate-marker' && event.address === 'ops@b.test'));
+      const marker = events().find((event) => event.kind === 'gate-marker')!;
+      const gateWaitingBeganAt = Number(marker.fakeStartedAt);
+      await waitFor(
+        () => events().some((event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.gateWaiting),
+      );
+
+      for (let index = 0; index < queueLength; index += 1) {
+        const queueEnv = {
+          ...env,
+          GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `queued-${index}-wait-ms`),
+        };
+        queued.push(startRemote(queueEnv, workspaceDirectory, ['sh', '-c', 'echo queued']));
+      }
+      await waitFor(
+        () => queued.every((_, index) => existsSync(join(env.FAKE_DIR!, `queued-${index}-wait-ms`))),
+        30_000,
+      );
+      expect(events().filter((event) => event.kind === 'run')).toHaveLength(2);
+
+      writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestOriginalFinish));
+      await waitFor(
+        () => events().some((event) => event.kind === 'run' && String(event.script).includes('echo gate-run')),
+        15_000,
+      );
+      const gateStart = events().find(
+        (event) => event.kind === 'run' && String(event.script).includes('echo gate-run'),
+      )!;
+      expect(Number(gateStart.fakeStartedAt)).toBeLessThanOrEqual(latestOriginalFinish);
+      expect(Number(gateStart.fakeStartedAt) - gateWaitingBeganAt).toBeLessThanOrEqual(durationMs);
+    } finally {
+      for (const run of [...queued, gate, ...holders]) {
+        if (!run) continue;
+        try {
+          run.child.kill('SIGTERM');
+        } catch {}
+      }
+      for (const run of [...queued, gate, ...holders]) {
+        if (!run) continue;
+        await run.child.exited;
+        await Promise.all([run.stdout, run.stderr]);
+      }
+    }
   }
 });
 

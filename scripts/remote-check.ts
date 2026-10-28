@@ -4,6 +4,9 @@
 //
 // A short run (one slot, estimated at no more than 120,000 ms, and not a gate) waits at most one short run per host.
 // Each host keeps one slot as express capacity, so its ordinary capacity is one slot lower.
+// While a gate waits, non-gate runs may use at most ordinaryCapacity - gateCapacity ordinary slots; short runs may
+// also use the express slot. The gate starts once the runs holding its slots when it began waiting have ended,
+// whatever queue forms behind it.
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--gate] <workspace> -- <command...>
 //
@@ -236,6 +239,7 @@ function slotScript(
   count: number,
   slotLimit: number,
   ordinaryCapacity: number,
+  ordinaryAdmissionLimit: number,
   shortRun: boolean,
   estimateMs: number | undefined,
 ): string {
@@ -248,8 +252,9 @@ function slotScript(
 if flock -n ${fd}; then
   ${
     take
-      ? `if [ "$acquired" -lt ${count} ]; then
+      ? `if [ "$acquired" -lt ${count} ] && [ "$ordinary_used" -lt ${ordinaryAdmissionLimit} ]; then
     acquired=$((acquired + 1))
+    ordinary_used=$((ordinary_used + 1))
   else
     flock -u ${fd}
     exec ${fd}>&-
@@ -259,6 +264,7 @@ if flock -n ${fd}; then
   }
 else
   occupied=$((occupied + 1))
+  ordinary_used=$((ordinary_used + 1))
   exec ${fd}>&-
 fi`;
     }).join('\n');
@@ -288,10 +294,12 @@ REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_SLOT_CLASS ${shortRun ? 'short' : 'ordinary'}
 # REMOTE_CHECK_ESTIMATE_MS ${estimateMs ?? 'none'}
 # REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
+# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT ${ordinaryAdmissionLimit}
 exec 8>"${ROOT}/slots/reserve.lock"
 flock -x -n 8 || exit ${SLOT_BUSY}
 occupied=0
 acquired=0
+ordinary_used=0
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
@@ -462,6 +470,7 @@ type RankedHost = {
   host: Host;
   capacity: number;
   ordinaryCapacity: number;
+  ordinaryAdmissionLimit: number;
   gateCapacity: number;
   resourceSlots: number;
   freeSlots: number;
@@ -500,19 +509,31 @@ function rankHost(
   const capacity = hostCapacity(host, probe);
   const ordinaryCapacity = Math.max(0, capacity - 1);
   const gateCapacity = Math.max(0, ordinaryCapacity - 1);
+  const ordinaryAdmissionLimit = gate
+    ? ordinaryCapacity
+    : probe.gateWaiting
+      ? ordinaryCapacity - gateCapacity
+      : ordinaryCapacity;
   const resourceSlots = probeCapacity(probe, capacity);
   const shortRun = isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
   let slotLimit: number;
   if (shortRun) {
-    const ordinaryFreeSlots = Math.min(resourceSlots, Math.max(0, ordinaryCapacity - probe.ordinarySlotsUsed));
+    const ordinaryFreeSlots = Math.min(
+      resourceSlots,
+      Math.max(0, ordinaryAdmissionLimit - probe.ordinarySlotsUsed),
+    );
     const expressFree = !probe.expressSlotUsed && resourceSlots > 0;
     const selected = selectSlotClass(ordinaryFreeSlots, expressFree, slots, estimateMs, gate);
     const occupied = probe.ordinarySlotsUsed + Number(probe.expressSlotUsed);
     freeSlots = selected === null ? 0 : Math.min(resourceSlots, Math.max(0, capacity - occupied));
     slotLimit = Math.min(capacity, occupied + resourceSlots);
   } else {
-    const admissionLimit = gate ? gateCapacity : ordinaryCapacity;
+    const admissionLimit = gate
+      ? probe.gateWaiting
+        ? ordinaryCapacity
+        : gateCapacity
+      : ordinaryAdmissionLimit;
     freeSlots = Math.min(resourceSlots, Math.max(0, admissionLimit - probe.ordinarySlotsUsed));
     slotLimit = Math.min(admissionLimit, probe.ordinarySlotsUsed + resourceSlots);
   }
@@ -520,6 +541,7 @@ function rankHost(
     host,
     capacity,
     ordinaryCapacity,
+    ordinaryAdmissionLimit,
     gateCapacity,
     resourceSlots,
     freeSlots,
@@ -708,13 +730,14 @@ async function takeSlots(
   count: number,
   slotLimit: number,
   ordinaryCapacity: number,
+  ordinaryAdmissionLimit: number,
   shortRun: boolean,
   estimateMs: number | undefined,
   signal: AbortSignal,
 ): Promise<Lease | null> {
   return takeSession(
     host,
-    slotScript(host, count, slotLimit, ordinaryCapacity, shortRun, estimateMs),
+    slotScript(host, count, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit, shortRun, estimateMs),
     /^SLOTS \d+$/m,
     signal,
   );
@@ -722,15 +745,6 @@ async function takeSlots(
 
 async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionLease | null> {
   return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal);
-}
-
-/**
- * A gate waiting on a host reserves it: an ordinary run takes no slot there while another host answers, so the host's
- * slots drain to the gate. Preferring other hosts alone let single-slot runs refill it when those were full, and a
- * promotion gate needing six slots at once waited an hour.
- */
-function reservedForGate(entry: RankedHost, ranked: readonly RankedHost[], gate: boolean): boolean {
-  return !gate && entry.gateWaiting && ranked.some((other) => !other.gateWaiting);
 }
 
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
@@ -790,13 +804,14 @@ async function acquireOnce(
     }
   }
   for (const entry of ranked) {
-    const { host, freeSlots, slotLimit, ordinaryCapacity } = entry;
-    if (freeSlots < slots || reservedForGate(entry, ranked, gate)) continue;
+    const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
+    if (freeSlots < slots) continue;
     const lease = await takeSlots(
       host,
       slots,
       slotLimit,
       ordinaryCapacity,
+      ordinaryAdmissionLimit,
       isShortRun(slots, estimateMs, gate),
       estimateMs,
       signal,
@@ -864,13 +879,14 @@ async function acquire(
         }
       } else if (giveUpIfUnanswered && !answered) return null;
       for (const entry of ranked) {
-        const { host, freeSlots, slotLimit, ordinaryCapacity } = entry;
-        if (freeSlots < slots || reservedForGate(entry, ranked, gate)) continue;
+        const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
+        if (freeSlots < slots) continue;
         const lease = await takeSlots(
           host,
           slots,
           slotLimit,
           ordinaryCapacity,
+          ordinaryAdmissionLimit,
           isShortRun(slots, estimateMs, gate),
           estimateMs,
           signal,
