@@ -60,11 +60,6 @@ function useful(visit: Visit) {
   expect(visit.page.preparing).toBe(false);
   expect(visit.page.heading.length).toBeGreaterThan(0);
 }
-async function problem(response: Response, status: number, code: string) {
-  expect(response.status).toBe(status);
-  expect(response.headers.get('content-type')).toContain('application/problem+json');
-  expect(await response.clone().json()).toMatchObject({ status, code, effect_status: 'not_applied' });
-}
 function authReturn(result: AuthVisit, accountId: string | null) {
   useful(result);
   expect(new URL(result.page.url).origin).toBe(driver.origins.web);
@@ -351,17 +346,32 @@ describe('session-transport', () => {
     for (const request of (await driver.transport()).requests) expect(request.authorized).toBe(false);
   });
 
-  test('a valid suspended session gets 403 account_suspended on the next personal read and write', async () => {
+  test('suspension signs out at the next BFF request and refuses correct-password sign-in with 403 ACCOUNT_SUSPENDED', async () => {
     await personal();
     const before = await driver.facts('alice');
     success(await driver.suspend('alice'));
-    await problem((await driver.visit('alice', target('library'))).response, 403, 'account_suspended');
-    await problem(
-      (await driver.act('alice', { kind: 'label', subjectId: book(), name: 'suspended write' })).response,
-      403,
-      'account_suspended',
-    );
+    await driver.transport();
+    const page = await driver.visit('alice', target('library'));
+    expect(page.page.signedInAccountId).toBeNull();
+    expect(page.page.memberSubjectIds).toEqual([]);
+    expect([200, 302, 303, 401]).toContain(page.response.status);
+    if (page.response.status === 200) expect(page.page.text).toMatch(/sign in/i);
+    const write = await driver.act('alice', { kind: 'label', subjectId: book(), name: 'suspended write' });
+    expect([302, 303, 401]).toContain(write.response.status);
     expect(await driver.facts('alice')).toEqual(before);
+    for (const request of (await driver.transport()).requests) expect(request.authorized).toBe(false);
+
+    const signIn = await driver.auth('alice', 'sign-in', target('library'));
+    expect(signIn.visitedUrls.some((url) => new URL(url).origin === driver.origins.auth)).toBe(true);
+    const refused = signIn.responses.filter((response) => new URL(response.url).pathname === '/signin');
+    expect(refused).toHaveLength(1);
+    expect(refused[0]!.status).toBe(403);
+    const body = await refused[0]!.clone().json();
+    expect(body.code ?? body.error).toBe('ACCOUNT_SUSPENDED');
+    expect(signIn.session.accountId).toBeNull();
+    expect(signIn.session.freshAuthentication).toBe(false);
+    expect(signIn.session.websiteConsent).toBe(false);
+    expect(signIn.page.signedInAccountId).toBeNull();
   });
 
   test('an image upload completes through the BFF and is attached to the native thread', async () => {

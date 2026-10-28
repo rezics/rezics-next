@@ -17,6 +17,10 @@
  * Logical keys map to created IDs and URLs, not driver-selected expected results.
  * Dates, order, classifications and privacy controls come from the JSON fixture.
  * Accounts receive actual consented scopes and independent API resource grants.
+ * The suspended persona is the native `suspended` from
+ * services/kernel/test/support/personas.ts: its bearer was issued before suspension
+ * and now gets 401 invalid_token. No SQL-made token or fake persona is permitted.
+ * Correct-password sign-in gets 403 ACCOUNT_SUSPENDED and creates no session.
  *
  * Every request() is real HTTP to that production web Worker, including documents,
  * hydration, robots and compressed sitemaps. Send actual session cookies/bearers

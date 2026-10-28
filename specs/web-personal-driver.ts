@@ -24,6 +24,11 @@
  * provisioned during setup; personal facts start empty and are created by UI actions.
  * Alice and Bob have consented website scopes but no grant to each other's facts.
  * Governance and seller accounts have only fixture-scoped setup authority.
+ * The suspended persona follows native `suspended` from
+ * services/kernel/test/support/personas.ts: suspend('alice') retains her pre-suspension
+ * credentials, now revoked (401 invalid_token), and cookies. No SQL-made token or
+ * fake persona is permitted; correct-password sign-in is 403 ACCOUNT_SUSPENDED
+ * and creates no session.
  *
  * facts is independent read-only authoritative database observation, not a cache of
  * requested actions or a replacement for served-page assertions. transport is
@@ -121,7 +126,7 @@ export interface TransportObservation {
   requests: { method: string; path: string; actorId: string | null; authenticated: boolean; authorized: boolean }[];
 }
 export interface AuthVisit extends Visit {
-  /** Browser-observed Auth page URLs in chronological order, then the web return. */
+  /** Browser-observed Auth page URLs in order, then the web return when successful. */
   visitedUrls: string[];
   /** Actual HTTP responses for forms and redirects, unchanged, in network order. */
   responses: Response[];
@@ -142,6 +147,10 @@ export interface WebPersonalDriver {
    * client (including its standing first-party consent); step-up confirms the
    * stale session at Auth; sign-out ends both the website and Auth sessions.
    * Preserve the exact requested web return target through the redirect chain.
+   * A refused sign-in still submits the correct fixture password through the served
+   * Auth form. Return its /signin response in responses, the current Auth page and
+   * observed session state (accountId null, freshAuthentication/websiteConsent false
+   * when no session exists); do not follow a success return or fabricate a session.
    * The security target opens the security setting from web, via Auth as needed.
    */
   auth(

@@ -464,11 +464,13 @@ describe('page-states', () => {
     expect(page.visible).not.toContain(data.states.unavailable);
     expect(page.visible).not.toContain(data.states.preparing);
   });
-  test('page-states: valid suspended bearer personal read is 403 account_suspended', async () => {
+  test('page-states: native suspended persona personal read is 401 invalid_token without personal content', async () => {
     const response = await driver.request(fixture.personalRead, 'suspended');
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     expect(response.headers.get('content-type')).toContain('application/problem+json');
-    expect(await response.json()).toMatchObject({ status: 403, code: 'account_suspended' });
+    const body = await response.text();
+    expect(JSON.parse(body)).toMatchObject({ status: 401, code: 'invalid_token' });
+    for (const value of Object.values(data.personal)) expect(body).not.toContain(value);
   });
 });
 

@@ -79,9 +79,11 @@ a served-page binding marked pending does not become covered merely by linking a
 
 - **User job**: Distinguish preparation, outage, denial, hidden resources and a genuinely empty list, with useful
   retry guidance. A successful filtered page is useful or exhausted; empty nonterminal success is unacceptable.
-- **Personas**: Anonymous, Alice, valid suspended bearer; real dependency outage and projection barrier.
+- **Personas**: Anonymous, Alice, native suspended persona; real dependency outage and projection barrier.
 - **Fixture data**: Cold subject view held behind its real worker, unavailable owner, private/unknown Collection,
-  empty public list, suspended account retaining an otherwise valid personal-read grant and credential.
+  empty public list, native `suspended` persona from `services/kernel/test/support/personas.ts` with a
+  pre-suspension bearer revoked by suspension (401 invalid_token); correct-password sign-in is refused with
+  403 ACCOUNT_SUSPENDED and creates no session.
 - **Surfaces**:
   catalogue — preparing/unavailable cases below.  
   curated — private Collection 404 and empty public list cases below.  
@@ -94,7 +96,7 @@ a served-page binding marked pending does not become covered merely by linking a
   `page-states: unavailable owner read serves an unavailable page with Retry-After`;
   `page-states: private Collection is indistinguishable from missing to anonymous`;
   `page-states: empty public list explicitly says it is empty`;
-  `page-states: valid suspended bearer personal read is 403 account_suspended`.
+  `page-states: native suspended persona personal read is 401 invalid_token without personal content`.
 - **Acceptance command**: `bun specs/support/verify-outcome-suite.ts specs/web-publication-outcomes.test.ts WEB_PUBLICATION_DRIVER "Web publication driver is required"`.
 
 ## Search page
@@ -207,7 +209,7 @@ a served-page binding marked pending does not become covered merely by linking a
   population, join Realms/Spaces, report and resolve moderation with minimal appeals, and receive in-app reply,
   mention and moderation notices with per-kind preferences and send-time access checks.
 - **Personas**: Anonymous, author/member, moderator, banned member with independent read grant, outsider,
-  valid suspended bearer and notification recipient.
+  native suspended persona and notification recipient.
 - **Fixture data**: Public/protected Realm and Space, paged boards/threads, revision history, licences, Global
   privacy-threshold votes and private Realm controls, reports/appeals, reply/mention notices, revoked read access.
   Articles/hosted works remain closed behind grants until polished; email notices remain out of scope.
@@ -224,8 +226,10 @@ a served-page binding marked pending does not become covered merely by linking a
   `protected Realm non-member sees unknown-equivalent 404 and owner addition enables reading and posting`),
   `specs/content-thread-outcomes.test.ts` (`anonymous reads published thread post and reply but cannot create or revise`),
   `specs/content-notification-outcomes.test.ts` and native rating/moderation cases. Their full web bindings remain pending.
-  New served cases follow the ruling `403 account_suspended` for valid suspended bearers and ban precedence;
-  older contradictory owner assertions are not silently edited or adopted here.
+  New served cases use the native `suspended` persona from `services/kernel/test/support/personas.ts`:
+  its pre-suspension bearer gets `401 invalid_token`, and correct-password sign-in gets
+  `403 ACCOUNT_SUSPENDED` with no session; ban precedence still applies.
+  Older contradictory owner assertions are not silently edited or adopted here.
 - **Acceptance command**: Publication verifier above for discovery/cache cells. Owner acceptance:
   `bun test specs/community-outcomes.test.ts specs/content-thread-outcomes.test.ts specs/content-notification-outcomes.test.ts`
   with their native drivers; this does not establish the pending web interaction bindings.
