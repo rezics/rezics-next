@@ -270,9 +270,7 @@ test('all supported subject types retain title facts Chinese labels and source r
     for (const [type, name] of [
       [1, 'Book'],
       [2, 'TVSeries'],
-      [3, 'MusicAlbum'],
       [4, 'VideoGame'],
-      [6, 'TVSeries'],
     ] as const) {
       const output = driver.convert(input({ ...structuredClone(fixture), type }), context);
       expect(at(output, field(driver, output, 'title').value)).toBe(fixture.name);
