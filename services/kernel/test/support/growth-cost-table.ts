@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { expect } from "bun:test";
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { expect } from 'bun:test';
 
 export type CostTableOptions = { testRoot: string; repositoryRoot: string };
 export type CostRow = { operation: string; touches: string; bound: string; check: string };
@@ -10,26 +10,26 @@ type CostTable = { rows: TableRow[] };
 type TemplatePattern = { fixedParts: string[] };
 type TemplateScan = { pattern: TemplatePattern; end: number };
 
-const COST_HEADER = ["Operation", "Touches", "Bound", "Growth check"];
-const TABLE_CONTEXT = "<table>";
+const COST_HEADER = ['Operation', 'Touches', 'Bound', 'Growth check'];
+const TABLE_CONTEXT = '<table>';
 
 export function readCostTable(readmePath: string): CostRow[] {
-  const markdown = readFileSync(readmePath, "utf8");
+  const markdown = readFileSync(readmePath, 'utf8');
   const tables = findCostTables(markdown);
   if (tables.headings.length !== 1 || tables.tables.length !== 1) return [];
 
   return tables.tables[0]!.rows.map(({ cells }) => ({
-    operation: cells[0]?.trim() ?? "",
-    touches: cells[1]?.trim() ?? "",
-    bound: cells[2]?.trim() ?? "",
-    check: cells[3]?.trim() ?? "",
+    operation: cells[0]?.trim() ?? '',
+    touches: cells[1]?.trim() ?? '',
+    bound: cells[2]?.trim() ?? '',
+    check: cells[3]?.trim() ?? '',
   }));
 }
 
 export function costTableProblems(readmePath: string, options: CostTableOptions): string[] {
   let markdown: string;
   try {
-    markdown = readFileSync(readmePath, "utf8");
+    markdown = readFileSync(readmePath, 'utf8');
   } catch (error) {
     return [problem(readmePath, TABLE_CONTEXT, `could not read README: ${errorMessage(error)}`)];
   }
@@ -38,11 +38,7 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
   const problems: string[] = [];
   if (parsed.headings.length !== 1) {
     problems.push(
-      problem(
-        readmePath,
-        TABLE_CONTEXT,
-        `expected exactly one "## Cost" heading, found ${parsed.headings.length}`,
-      ),
+      problem(readmePath, TABLE_CONTEXT, `expected exactly one "## Cost" heading, found ${parsed.headings.length}`),
     );
     return problems;
   }
@@ -50,7 +46,7 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
   if (parsed.tables.length !== 1) {
     const reason =
       parsed.tables.length === 0
-        ? parsed.tableFailure ?? `expected a table headed by ${formatHeader()}`
+        ? (parsed.tableFailure ?? `expected a table headed by ${formatHeader()}`)
         : `expected one Cost table headed by ${formatHeader()}, found ${parsed.tables.length}`;
     problems.push(problem(readmePath, TABLE_CONTEXT, reason));
     return problems;
@@ -60,7 +56,7 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
   const seenOperations = new Set<string>();
   for (let index = 0; index < rows.length; index++) {
     const { cells, line } = rows[index]!;
-    const operation = cells[0]?.trim() ?? "";
+    const operation = cells[0]?.trim() ?? '';
     const operationLabel = operation || `row ${line} (empty operation)`;
     const rowProblems: string[] = [];
 
@@ -68,21 +64,21 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
       rowProblems.push(`expected four cells, found ${cells.length}`);
     }
     if (cells.length === 4 && cells.some((cell) => cell.trim().length === 0)) {
-      rowProblems.push("every cell must be non-empty");
+      rowProblems.push('every cell must be non-empty');
     }
 
     const operationKey = normalizeWhitespace(operation);
     if (operationKey.length > 0) {
-      if (seenOperations.has(operationKey)) rowProblems.push("operation is duplicated in the Cost table");
+      if (seenOperations.has(operationKey)) rowProblems.push('operation is duplicated in the Cost table');
       seenOperations.add(operationKey);
     }
 
-    const bound = cells.length === 4 ? cells[2]?.trim() ?? "" : "";
+    const bound = cells.length === 4 ? (cells[2]?.trim() ?? '') : '';
     if (bound && !/\b(?:constant|logarithmic|linear)\b/i.test(bound)) {
       rowProblems.push('bound must contain "constant", "logarithmic" or "linear"');
     }
 
-    const check = cells.length === 4 ? cells[3]?.trim() ?? "" : "";
+    const check = cells.length === 4 ? (cells[3]?.trim() ?? '') : '';
     if (check) rowProblems.push(...checkProblems(check, options));
 
     for (const reason of rowProblems) problems.push(problem(readmePath, operationLabel, reason));
@@ -158,22 +154,22 @@ function findCostTables(markdown: string): {
 
 function hideFencedCode(lines: string[]): string[] {
   const visible: string[] = [];
-  let fence: { marker: "`" | "~"; length: number } | undefined;
+  let fence: { marker: '`' | '~'; length: number } | undefined;
 
   for (const line of lines) {
     if (fence) {
       const close = new RegExp(`^ {0,3}${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`);
       if (close.test(line)) fence = undefined;
-      visible.push("");
+      visible.push('');
       continue;
     }
 
     const opening = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (opening) {
       const openingFence = opening[1]!;
-      const marker = openingFence[0] as "`" | "~";
+      const marker = openingFence[0] as '`' | '~';
       fence = { marker, length: openingFence.length };
-      visible.push("");
+      visible.push('');
     } else {
       visible.push(line);
     }
@@ -193,36 +189,39 @@ function headingLevel(line: string): number | undefined {
 
 function parseMarkdownRow(line: string): string[] | null {
   const trimmed = line.trim();
-  if (!trimmed.includes("|")) return null;
+  if (!trimmed.includes('|')) return null;
 
   const cells: string[] = [];
-  let current = "";
+  let current = '';
   let backslashes = 0;
   for (let index = 0; index < trimmed.length; index++) {
     const character = trimmed[index];
-    if (character === "|" && backslashes % 2 === 0) {
+    if (character === '|' && backslashes % 2 === 0) {
       cells.push(current);
-      current = "";
+      current = '';
     } else {
       current += character;
     }
-    backslashes = character === "\\" ? backslashes + 1 : 0;
+    backslashes = character === '\\' ? backslashes + 1 : 0;
   }
   cells.push(current);
 
-  if (trimmed.startsWith("|")) cells.shift();
-  if (trimmed.endsWith("|") && !isEscaped(trimmed, trimmed.length - 1)) cells.pop();
+  if (trimmed.startsWith('|')) cells.shift();
+  if (trimmed.endsWith('|') && !isEscaped(trimmed, trimmed.length - 1)) cells.pop();
   return cells;
 }
 
 function isEscaped(value: string, index: number): boolean {
   let backslashes = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor--) backslashes++;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor--) backslashes++;
   return backslashes % 2 === 1;
 }
 
 function isCostHeader(cells: string[]): boolean {
-  return cells.length === COST_HEADER.length && cells.every((cell, index) => normalizeWhitespace(cell) === COST_HEADER[index]!);
+  return (
+    cells.length === COST_HEADER.length &&
+    cells.every((cell, index) => normalizeWhitespace(cell) === COST_HEADER[index]!)
+  );
 }
 
 function isSeparator(cells: string[]): boolean {
@@ -230,7 +229,7 @@ function isSeparator(cells: string[]): boolean {
 }
 
 function formatHeader(): string {
-  return `| ${COST_HEADER.join(" | ")} |`;
+  return `| ${COST_HEADER.join(' | ')} |`;
 }
 
 function checkProblems(check: string, options: CostTableOptions): string[] {
@@ -252,7 +251,7 @@ function checkProblems(check: string, options: CostTableOptions): string[] {
       problems.push(citation.problem);
       continue;
     }
-    const base = citation.path.startsWith("services/") ? options.repositoryRoot : options.testRoot;
+    const base = citation.path.startsWith('services/') ? options.repositoryRoot : options.testRoot;
     const testPath = resolve(base, citation.path);
     let source: string;
     try {
@@ -260,7 +259,7 @@ function checkProblems(check: string, options: CostTableOptions): string[] {
         problems.push(`growth check file "${citation.path}" does not exist`);
         continue;
       }
-      source = readFileSync(testPath, "utf8");
+      source = readFileSync(testPath, 'utf8');
     } catch (error) {
       problems.push(`growth check file "${citation.path}" could not be read: ${errorMessage(error)}`);
       continue;
@@ -296,9 +295,7 @@ function findCitations(value: string): Citation[] {
     return {
       path: match.path,
       names: parsed.names,
-      ...(parsed.invalid
-        ? { problem: `growth check citation for "${match.path}" must name one or more checks` }
-        : {}),
+      ...(parsed.invalid ? { problem: `growth check citation for "${match.path}" must name one or more checks` } : {}),
     };
   });
 }
@@ -309,24 +306,24 @@ function readCitationNames(value: string): { names: string[]; invalid: boolean }
   let requiresName = true;
 
   while (cursor < value.length) {
-    while (/\s/.test(value[cursor] ?? "") && cursor < value.length) cursor++;
-    if (value[cursor] !== "“" && value[cursor] !== "`") {
+    while (/\s/.test(value[cursor] ?? '') && cursor < value.length) cursor++;
+    if (value[cursor] !== '“' && value[cursor] !== '`') {
       if (requiresName && names.length === 0) return { names, invalid: true };
       break;
     }
 
-    const quote = value[cursor] as "“" | "`";
-    const close = quote === "“" ? "”" : "`";
+    const quote = value[cursor] as '“' | '`';
+    const close = quote === '“' ? '”' : '`';
     const contentStart = cursor + 1;
-    const closeIndex = quote === "“" ? value.indexOf(close, contentStart) : findClosingBacktick(value, contentStart);
+    const closeIndex = quote === '“' ? value.indexOf(close, contentStart) : findClosingBacktick(value, contentStart);
     if (closeIndex < 0) return { names, invalid: true };
     const name = value.slice(contentStart, closeIndex).trim();
     if (name.length === 0) return { names, invalid: true };
     names.push(name);
     cursor = closeIndex + 1;
-    while (/\s/.test(value[cursor] ?? "") && cursor < value.length) cursor++;
+    while (/\s/.test(value[cursor] ?? '') && cursor < value.length) cursor++;
 
-    if (value[cursor] === ";") {
+    if (value[cursor] === ';') {
       cursor++;
       requiresName = true;
       continue;
@@ -342,7 +339,7 @@ function readCitationNames(value: string): { names: string[]; invalid: boolean }
 
 function findClosingBacktick(value: string, start: number): number {
   for (let index = start; index < value.length; index++) {
-    if (value[index] === "`" && !isEscaped(value, index)) return index;
+    if (value[index] === '`' && !isEscaped(value, index)) return index;
   }
   return -1;
 }
@@ -356,13 +353,13 @@ function scanTemplatePatterns(source: string): TemplatePattern[] {
   let cursor = 0;
   while (cursor < source.length) {
     const character = source[cursor];
-    if (character === "/" && source[cursor + 1] === "/") {
+    if (character === '/' && source[cursor + 1] === '/') {
       cursor = skipLineComment(source, cursor + 2);
-    } else if (character === "/" && source[cursor + 1] === "*") {
+    } else if (character === '/' && source[cursor + 1] === '*') {
       cursor = skipBlockComment(source, cursor + 2);
     } else if (character === "'" || character === '"') {
       cursor = skipQuotedString(source, cursor, character);
-    } else if (character === "`") {
+    } else if (character === '`') {
       const parsed = parseTemplate(source, cursor, patterns);
       if (!parsed) cursor++;
       else {
@@ -378,22 +375,22 @@ function scanTemplatePatterns(source: string): TemplatePattern[] {
 
 function parseTemplate(source: string, start: number, nested: TemplatePattern[]): TemplateScan | undefined {
   const fixedParts: string[] = [];
-  let fixed = "";
+  let fixed = '';
   let cursor = start + 1;
 
   while (cursor < source.length) {
     const character = source[cursor];
-    if (character === "\\") {
+    if (character === '\\') {
       const escaped = source[cursor + 1];
       if (escaped === undefined) return undefined;
       fixed += decodeTemplateEscape(escaped);
       cursor += 2;
-    } else if (character === "`") {
+    } else if (character === '`') {
       fixedParts.push(fixed);
       return { pattern: { fixedParts }, end: cursor + 1 };
-    } else if (character === "$" && source[cursor + 1] === "{") {
+    } else if (character === '$' && source[cursor + 1] === '{') {
       fixedParts.push(fixed);
-      fixed = "";
+      fixed = '';
       cursor = skipTemplateExpression(source, cursor + 2, nested);
       if (cursor < 0) return undefined;
     } else {
@@ -409,21 +406,21 @@ function skipTemplateExpression(source: string, start: number, patterns: Templat
   let cursor = start;
   while (cursor < source.length) {
     const character = source[cursor];
-    if (character === "/" && source[cursor + 1] === "/") {
+    if (character === '/' && source[cursor + 1] === '/') {
       cursor = skipLineComment(source, cursor + 2);
-    } else if (character === "/" && source[cursor + 1] === "*") {
+    } else if (character === '/' && source[cursor + 1] === '*') {
       cursor = skipBlockComment(source, cursor + 2);
     } else if (character === "'" || character === '"') {
       cursor = skipQuotedString(source, cursor, character);
-    } else if (character === "`") {
+    } else if (character === '`') {
       const parsed = parseTemplate(source, cursor, patterns);
       if (!parsed) return -1;
       patterns.push(parsed.pattern);
       cursor = parsed.end;
-    } else if (character === "{") {
+    } else if (character === '{') {
       depth++;
       cursor++;
-    } else if (character === "}") {
+    } else if (character === '}') {
       depth--;
       if (depth === 0) return cursor + 1;
       cursor++;
@@ -435,19 +432,19 @@ function skipTemplateExpression(source: string, start: number, patterns: Templat
 }
 
 function skipLineComment(source: string, start: number): number {
-  const end = source.indexOf("\n", start);
+  const end = source.indexOf('\n', start);
   return end < 0 ? source.length : end + 1;
 }
 
 function skipBlockComment(source: string, start: number): number {
-  const end = source.indexOf("*/", start);
+  const end = source.indexOf('*/', start);
   return end < 0 ? source.length : end + 2;
 }
 
 function skipQuotedString(source: string, start: number, quote: string): number {
   let cursor = start + 1;
   while (cursor < source.length) {
-    if (source[cursor] === "\\") cursor += 2;
+    if (source[cursor] === '\\') cursor += 2;
     else if (source[cursor] === quote) return cursor + 1;
     else cursor++;
   }
@@ -456,18 +453,18 @@ function skipQuotedString(source: string, start: number, quote: string): number 
 
 function decodeTemplateEscape(value: string): string {
   switch (value) {
-    case "n":
-      return "\n";
-    case "r":
-      return "\r";
-    case "t":
-      return "\t";
-    case "b":
-      return "\b";
-    case "f":
-      return "\f";
-    case "v":
-      return "\v";
+    case 'n':
+      return '\n';
+    case 'r':
+      return '\r';
+    case 't':
+      return '\t';
+    case 'b':
+      return '\b';
+    case 'f':
+      return '\f';
+    case 'v':
+      return '\v';
     default:
       return value;
   }
@@ -509,7 +506,7 @@ function matchTemplateParts(parts: string[], name: string, index: number, positi
 }
 
 function normalizeWhitespace(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 function problem(readmePath: string, operation: string, reason: string): string {
@@ -521,5 +518,5 @@ function errorMessage(error: unknown): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
