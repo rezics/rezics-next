@@ -91,13 +91,15 @@ research is needed.
   reimports (which acquire every input again) and recovery (which must not read
   replacement input). Pass it to the CLI summary as `skipped=N`, including zero.
   No source-wide SQL COUNT, historical scan, retained skipped-ID Set, new kernel
-  contract, or additional source pass is needed. The scalar and seal/read seam
-  are a design brief only; they are not implemented here.
+  contract, or additional source pass is needed. The scalar is stored in an
+  additive `skipped` column on `run_generations`, written only by a successful
+  seal and read by exact `(source,id)` identity before finalization. Existing
+  databases migrate with default zero.
 - The existing no-effect authority remains responsible for acknowledging ignored
-  rows. A small additive native outcome and any corresponding local shared types
-  may be required. The implementation brief must enumerate actual shared-type
-  callsites after this acceptance exists; this report does not preauthorize
-  unrelated API or kernel changes.
+  rows. `ImportRunResult` is declared and constructed in
+  `services/importer/src/importer.ts`; the CLI consumes that result. The pipeline
+  driver only references the type. No old local `RunResult` literal or kernel/API
+  type changes are part of this seam.
 
 ## Local execution and evidence limits
 

@@ -2,6 +2,11 @@
 
 The importer owns source dump ingestion, durable SQLite run and record state, and replayable requests for platform writes through the kernel API.
 
+Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. A recognized Bangumi
+input outside launch scope remains a present source member and increments `skipped` once during acquisition; it creates
+no subject, proposal, or media effect. The sealed run stores this bounded count so recovery reports it without reading
+replacement input. CLI summaries always include `skipped=N`, including zero.
+
 ## Command line
 
 Run the importer with a decompressed native dump and an automated account key:
@@ -146,6 +151,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Touches: per record, its conversion, its journal rows and its request bodies, each once. Every SQL text is prepared once per connection, the cover intent, batch and result bodies are validated once however many modules they cross (a small memory of accepted bodies, bounded in entries and bytes), a record's journals are written in one commit and its receipts in one commit, and a page of staged records shares one commit. Per record: at most five converter calls, 165 statements and 3 commits; no statement is prepared per call.
 - Bound: processor time per record constant in the dump size and in history; the only per-run work is schema, ownership and the first preparation of each statement.
 - Growth check: `tests/record-cpu-growth.test.ts` at 16, 64 and 256 records through the pipeline driver with zero latency, counting converter calls, statements prepared and executed, and commits instead of wall time.
+
+### Skipped input accounting
+
+- Touches: one in-memory scalar increment for each ignored conversion during the existing acquisition; successful seal writes that scalar to the exact run-generation row. Resume makes one exact `(source,id)` metadata read before finalization, including when acknowledgements are already durable. Existing databases add the column with default zero, preserving prepared work and receipts.
+- Bound: O(1) retained state and one indexed point write/read per run; no source-wide count, history enumeration, ignored-key set, or second acquisition pass. Invalid or duplicate acquisition cannot publish a successful partial count. The scalar is a nonnegative safe integer.
+- Growth check: `tests/bangumi-scope.test.ts`, `mixed complete dump counts both exclusions on initial, unchanged and changed runs without false disappearance`, both durable-resume scenarios, and the directly executed CLI scenario assert exact accounting and no skipped-record effects at real SQLite state boundaries.
 
 These bounds follow `src/` and `../../packages/conversion/src/`: R is stored records (including retained run history), B is binding/journal rows, M is one record/request/response's bytes, r is one page/batch's records, and k is rows changed; H is records already seen in a dump, C is a supplied chunk's backing bytes, S is supplied table/snapshot rows, D is disappearances, and q is commands for one record.
 An indexed point operation examines at most one matching row plus O(log R) or O(log B) B-tree navigation; a keyset range examines its bounded results plus that navigation, without OFFSET, history enumeration, or COUNT scans.

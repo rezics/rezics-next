@@ -486,10 +486,14 @@ function converterModule(source: SourceKind): string {
   return import.meta.resolve(modules[source]);
 }
 
-function diagnostic(message: string, counts?: { new: number; changed: number; unchanged: number; vanished: number }) {
+function diagnostic(
+  message: string,
+  counts?: { new: number; changed: number; unchanged: number; vanished: number },
+  skipped = 0,
+) {
   const summary = counts
-    ? `\nnew=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished}`
-    : '';
+    ? `\nnew=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished} skipped=${skipped}`
+    : `\nskipped=${skipped}`;
   return `${message}${summary}\n`;
 }
 
@@ -800,33 +804,33 @@ function resultFor(
   signal: AbortSignal,
 ): ImportCliResult {
   const counts = run.counts;
-  const summary = `new=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished}`;
+  const summary = `new=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished} skipped=${run.skipped}`;
   if (run.status === 'committed')
     return { code: 0, stdout: `Import complete: ${summary}\n`, stderr: '', openHandles: 0 };
   if (run.status === 'invalid-dump')
-    return { code: 2, stdout: '', stderr: diagnostic('Input is incomplete or invalid.', counts), openHandles: 0 };
+    return { code: 2, stdout: '', stderr: diagnostic('Input is incomplete or invalid.', counts, run.skipped), openHandles: 0 };
   if (run.status === 'mass-disappearance')
-    return { code: 3, stdout: '', stderr: diagnostic('Disappearance threshold exceeded.', counts), openHandles: 0 };
+    return { code: 3, stdout: '', stderr: diagnostic('Disappearance threshold exceeded.', counts, run.skipped), openHandles: 0 };
   if (run.status === 'busy')
     return {
       code: 5,
       stdout: '',
-      stderr: diagnostic('This source already has an active import.', counts),
+      stderr: diagnostic('This source already has an active import.', counts, run.skipped),
       openHandles: 0,
     };
   if (run.status === 'interrupted' || signal.aborted)
     return {
       code: 130,
       stdout: '',
-      stderr: diagnostic('Import interrupted; durable state is retained for resume.', counts),
+      stderr: diagnostic('Import interrupted; durable state is retained for resume.', counts, run.skipped),
       openHandles: 0,
     };
   if (httpStatus === 401 || httpStatus === 403)
-    return { code: 4, stdout: '', stderr: diagnostic('Import authorization was denied.', counts), openHandles: 0 };
+    return { code: 4, stdout: '', stderr: diagnostic('Import authorization was denied.', counts, run.skipped), openHandles: 0 };
   return {
     code: 1,
     stdout: '',
-    stderr: diagnostic('Import failed; durable state is retained for resume.', counts),
+    stderr: diagnostic('Import failed; durable state is retained for resume.', counts, run.skipped),
     openHandles: 0,
   };
 }

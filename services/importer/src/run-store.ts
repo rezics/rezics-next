@@ -52,6 +52,7 @@ type Generation = {
   changed: number;
   prepared: number;
   cursor: string;
+  skipped?: number;
 };
 type Entry = {
   source: string;
@@ -317,7 +318,12 @@ export class RunStore<Projection = BatchStatement[]> {
         invalid INTEGER NOT NULL DEFAULT 0, classified INTEGER NOT NULL DEFAULT 0,
         resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
         changed INTEGER NOT NULL DEFAULT 0, prepared INTEGER NOT NULL DEFAULT 0,
-        cursor TEXT NOT NULL DEFAULT '', PRIMARY KEY(source,id)) WITHOUT ROWID`);
+        cursor TEXT NOT NULL DEFAULT '', skipped INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(source,id)) WITHOUT ROWID`);
+      // Additive migration leaves existing run journals and immutable prepared work intact.
+      const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
+      if (!generationColumns.some(({ name }) => name === 'skipped'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_entries (
         source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
         row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
@@ -456,6 +462,11 @@ export class RunStore<Projection = BatchStatement[]> {
     );
     return active ? { source, id: active.id, lease: active.lease } : null;
   }
+  /** Exact identity lookup for the bounded count sealed with this acquisition. */
+  skipped(run: Run): number {
+    const g = this.generation(run, true);
+    return g.skipped ?? 0;
+  }
   pageStaged(run: Run, options: { after?: string; limit: number }): Staged<Projection>[] {
     exact(options, ['limit'], ['after']);
     pageLimit(options.limit);
@@ -582,8 +593,15 @@ export class RunStore<Projection = BatchStatement[]> {
     });
     if (duplicate) throw new Error('Duplicate staged key invalidates input');
   }
-  seal(run: Run, input: { complete: true } | { complete: false; reason: 'malformed' | 'truncated' }): Seal {
-    if (input.complete === true) exact(input, ['complete']);
+  seal(
+    run: Run,
+    input: { complete: true; skipped?: number } | { complete: false; reason: 'malformed' | 'truncated' },
+  ): Seal {
+    if (input.complete === true) {
+      exact(input, ['complete'], ['skipped']);
+      const skipped = input.skipped ?? 0;
+      if (!Number.isSafeInteger(skipped) || skipped < 0) fail();
+    }
     else {
       exact(input, ['complete', 'reason']);
       if (input.complete !== false || !['malformed', 'truncated'].includes(input.reason)) fail();
@@ -591,6 +609,7 @@ export class RunStore<Projection = BatchStatement[]> {
     return this.transaction(() => {
       const g = this.generation(run);
       if (g.status !== 'staging') throw new Error('Run is already sealed');
+      const skippedCount = input.complete === true ? (input.skipped ?? 0) : 0;
       const missing = g.prior - g.survivors;
       const status =
         !input.complete || g.invalid
@@ -601,9 +620,10 @@ export class RunStore<Projection = BatchStatement[]> {
       if (status !== 'ready') this.release(run, status);
       else
         this.write(
-          'UPDATE run_generations SET status=?,expected=? WHERE source=? AND id=?',
+          'UPDATE run_generations SET status=?,expected=?,skipped=? WHERE source=? AND id=?',
           'ready',
           g.supplied + missing,
+          skippedCount,
           run.source,
           run.id,
         );

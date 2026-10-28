@@ -50,6 +50,7 @@ export interface ImportIdentifierLookup {
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportRunResult = {
   status: RunStatus;
+  skipped: number;
   counts: Record<Kind, number>;
   new: string[];
   changed: string[];
@@ -841,6 +842,7 @@ export class Importer {
   ): Promise<ImportRunResult> {
     const result: ImportRunResult = {
       status: 'interrupted',
+      skipped: 0,
       counts: { new: 0, changed: 0, unchanged: 0, vanished: 0 },
       new: [],
       changed: [],
@@ -880,7 +882,11 @@ export class Importer {
     try {
       let run = this.session.reopen(ownership);
       let resumed = !!run;
+      let skipped = 0;
       if (run) {
+        // Capture sealed accounting before finalization can mark or otherwise retire the run.
+        skipped = store.skipped(run);
+        result.skipped = skipped;
         // A staging run has no permitted effects and can be discarded. A sealed
         // or finalizing run must finish its durable payload before newer input.
         let final: 'incomplete' | 'more' | 'complete' | null = null;
@@ -933,6 +939,10 @@ export class Importer {
               { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
               { source: registration.source },
             );
+            if ('outcome' in conversion && conversion.outcome === 'ignored') {
+              if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
+              skipped++;
+            }
             buffered.push({
               row: {
                 source: registration.source,
@@ -954,10 +964,12 @@ export class Importer {
             'Input is incomplete or invalid',
           );
         }
-        const seal = store.seal(run, { complete: true });
+        const seal = store.seal(run, { complete: true, skipped });
         if (seal.status !== 'ready')
           return finish(seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump', seal.diagnostic);
+        result.skipped = skipped;
       }
+      result.skipped = skipped;
       if (resumed && !(await this.drain(run, signal, 'resumed')))
         return finish('bulk-failed', 'Durable operations remain unresolved');
       let failed = false;
