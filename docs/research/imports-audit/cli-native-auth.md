@@ -48,7 +48,9 @@ no external provider plaintext. There is no new discovery/word fixture or crypto
 ## Verification
 
 Base revision: `fb7ffaca82ead9baaa84e18992aae8644aa9ae78`.
-The final revision is the commit containing this report; check logs identify the tested working tree over that base.
+Retry starting revision: `a5996dd528b886896a31f8cbc91da5e701c6de8e` (the carried test and report).
+The test is unchanged from that revision. The delivery commit changes only this evidence report; the native test
+source tested below is therefore identical in the delivery commit.
 
 Commands from the worktree root:
 
@@ -61,8 +63,16 @@ bun scripts/worker-check.ts -- test -s docs/research/imports-audit/cli-native-au
 The first focused execution failed: **0 pass, 1 fail, 10 expectations**. Log:
 `.temp/goal/checks/worker-check-2026-10-28T18-55-32.902Z-cf4bd470.log`.
 Its first outcome failure was `expect(first.code).toBe(0)`: received `4` at line 175 of the initially tested file.
-No token or kernel write was reached. A diagnostic-only addition now records unsuccessful native Auth status and
-body without altering the request or response; the final focused execution is recorded below.
+No token or kernel write was reached. The carried diagnostic records unsuccessful native Auth status and body
+without altering the request or response.
+
+The retry's single focused execution also exited **1: 0 pass, 1 fail, 10 expectations, one file**. Log:
+`.temp/goal/checks/worker-check-2026-10-28T19-04-03.942Z-fbdf37e6.log`.
+Its first assertion is `expect(first.code).toBe(0)` at line 185, received `4`. The actual native response is
+**POST `/signin/key`: HTTP 403, `{"error":"authentication_denied"}`**. Real stage/approve/apply key provisioning
+completed before this request. No token was issued and no kernel write was attempted. The slot was queued for
+182.647 seconds and ran once, with no load rerun. The remote runner also warned that Git timing metadata was
+unavailable (`fatal: not a git repository`); it continued and reached the native outcome assertion above.
 
 The unchanged base explains the failure: `services/importer/src/credentials.ts:192` builds Auth request headers with
 only `content-type` (and a cookie on token requests), while `services/auth/src/service.ts:1576` requires an exact
@@ -72,6 +82,10 @@ previously hidden boundary. No Origin is added by the test transport. The produc
 
 - Auth service: `01ac55b6ce81c54c3e00eb6ce46832cbdc7d9932`.
 - CLI credentials: `ee93d1788e54323f86a668eb64a459d78c5eab84`.
+
+No separate base execution was needed: the rejecting Origin guard and the CLI header construction have identical
+blobs on the contract base and the tested revision, and neither file changed in this attempt. This establishes the
+same failure path on the base by source comparison, rather than claiming a second test run.
 
 This is a pre-existing product integration defect, rather than a missing legitimate key-provisioning seam. The
 stage/approve/apply path completed. The contract explicitly excludes product/helper/identity-fixture edits, so this
@@ -83,6 +97,12 @@ printed when that transition can run. The expected 403 on bulk revocation is pro
 The native test does not pass on this base; the artifact acceptance can pass independently. The artifact command is specification delivery;
 the focused native command establishes whether the actual journey passed. An actual pass is retained, rather than
 manufacturing a red test for the contract's initial `failing: true` label.
+
+The required root typecheck exited **0**, covering all **13 workspaces** (no test cases). Log:
+`.temp/goal/checks/worker-check-2026-10-28T19-05-29.712Z-399ff617.log`.
+The artifact acceptance is **one nonempty-file predicate**, exit **0**; it does not execute native cases.
+Only the listed focused file, root typecheck and artifact predicate were run in this retry. No full kernel, root
+or web gate was run. The test was preserved exactly as carried; the only retry edit records this evidence.
 
 ## Sources read
 
