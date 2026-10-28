@@ -3,7 +3,8 @@
 [The executor](command.ts) owns native command transactions, principal-scoped idempotency receipts and the
 atomic domain/receipt/outbox envelope. [Access](../access/README.md) owns authorization; this module does not
 duplicate its permission formula. [Commerce](../commerce/README.md#receipt-aware-native-refresh-admission-implementation-pending)
-owns payment refresh composition. Its admission and the helper below are adopted contracts, not implemented exports.
+owns payment refresh composition. The metadata-only helper below is implemented in this core; Commerce refresh
+admission remains an adopted contract with implementation and native schedule gaps.
 
 ## Existing execution and receipts
 
@@ -28,9 +29,9 @@ The approved additive interface is:
 hasOwnCommandCompletion(tx, { kind, key, digest }): Promise<boolean>
 ```
 
-This helper does not exist yet. Its implementation belongs in the command core, reusing the native
-[receipt reader](read-receipt.sql) and [executor rules](command.ts). It answers only whether a matching command
-completion exists: `true` for matching completion, `false` for absence. Digest mismatch remains the native
+The command core implements this helper with a narrow [digest projection](read-own-completion.sql) of the same
+receipt authority/key as the native [receipt reader](read-receipt.sql), using the [executor rules](command.ts).
+It answers only whether a matching command completion exists: `true` for matching completion, `false` for absence. Digest mismatch remains the native
 idempotency conflict, not `false`. It never returns a stored response, historical domain snapshot, receipt object
 or payload-derived digest. It must work when response payload has been minimized but completion metadata is
 legitimately retained; payload availability is not a completion requirement.
@@ -39,6 +40,10 @@ Use it only inside a live authorized native transaction. Validate the executor's
 native key and digest with its existing rules. Callers cannot supply a different principal or partition.
 Reject calls outside that authorized live phase, including preparation, before authorization and after commit;
 a pooled client, live-but-not-authorized transaction or copied/expired context is not a receipt capability.
+The executor holds the normalized owner in a private WeakMap keyed by the exact transaction object, installed
+only after execute authorization succeeds and removed before commit/rollback and on every attempt exit. A passed deadline
+also expires the capability. Neither the public command context nor copied transaction descriptors convey it.
+Commands without identity or explicit completed authorization have no receipt owner capability.
 There is no public endpoint, module-local receipt SQL, anonymous/staff bypass, new permission or receipt oracle.
 
 Retain the original apply authorization policy for the queried intent. Being authorized for some admission
@@ -56,12 +61,16 @@ refresh authority or cancellation-to-commit exclusion.
 
 ## Required native scope proof
 
-Core implementation and native scope tests follow separately; this document reports no runtime pass. Require
-actual executor/SQL tests for same principal/partition/kind/key matching completion and absence, changed-digest
-conflict, native key/digest validation, different principal/partition isolation, authorization denial before any
-lookup, original apply action/resource policy, and no response payload exposure. Verify matching completion
-with minimized response payload. Reject prepare/before-authorization/after-commit and expired/copied contexts;
-preserve existing replay and receipt-only semantics without an anonymous or staff bypass.
+[Native own-completion tests](../../test/command/own-completion.test.ts) use real `runCommand`, PostgreSQL,
+Auth/JWKS, installed Access grants and anonymous resource eligibility. They cover same principal/partition/kind/key
+completion and absence, digest conflict, native syntax validation, principal/home isolation, the original apply
+policy's denial before lookup, minimized responses, and rejection of pooled/preparation/before-authorization,
+expired/copied/rolled-back/committed and identity-free contexts. Actual captured SQL selects only `request_digest`
+with the full receipt key; large and minimized stored responses return the same metadata bytes. Read-only helper
+commands use `noEffect` without a receipt and leave the partition head, receipts, events and write basis unchanged.
+Legacy account writers and principal callers share the receipt namespace, and ordinary replay retains its response
+and original transaction identity. Existing native replay, receipt-only and `noEffect` suites remain required.
+These core tests establish no Commerce claim, combined routing or cancellation-to-commit exclusion.
 
 Commerce's native default-worker/HTTP fixture proof must also cover completed A retry while newer B is admitted,
 checking the same locked order and unchanged revision/provider-read count, plus crash-after-commit replay.
@@ -78,4 +87,8 @@ Test barriers observe and control timing; they never replace native receipt, que
   retain their own costs; this helper does not establish their bounds or shared dispatcher cost.
 - Growth check: require real native matching/absent/conflicting and minimized-payload lookups at three legal
   unrelated-receipt/history scales, holding the selected key and metadata size fixed. Include denied and expired
-  context cases and measure examined rows, buffers, statements and bytes. These measurements are missing.
+  context cases and measure examined rows, buffers, statements and bytes. The native own-completion growth test
+  seeds 512/4,096/32,768 legal same-owner, same-partition unrelated receipts with the selected keys fixed. It captures
+  actual plans, rows, buffers, statements and wire bytes for matching/absent/conflicting/minimized cases and a denied
+  zero-lookup path. It requires constant rows/statements/bytes, logarithmic blocks and no receipt sequential scan.
+  The separate expired-context test requires zero receipt statements. The check log records the measured samples.

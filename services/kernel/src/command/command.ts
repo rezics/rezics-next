@@ -7,6 +7,7 @@ export { CommandUnavailableError } from '../access/unavailable.ts';
 import fenceStatement from './fence.sql';
 import noEffectFenceStatement from './no-effect-fence.sql';
 import readReceipt from './read-receipt.sql';
+import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
@@ -183,6 +184,41 @@ type CommandContext = { transactionId: string; time: AuthoritativeTime };
 const times = new WeakMap<AuthoritativeTime, string>();
 const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
 const commands = new WeakMap<CommandTransaction, CurrentCommand>();
+// Exact executor object only: copying a query or callback capability conveys no receipt authority.
+const receiptOwners = new WeakMap<
+  CommandTransaction,
+  Readonly<{ principal: Readonly<CommandPrincipal>; partition: number; deadline: number }>
+>();
+
+function assertReceipt(receipt: PrincipalCommandReceipt): void {
+  // Native command kinds are strings, with no catalogue or additional syntax restriction.
+  if (typeof receipt.kind !== 'string') throw new TypeError('A command kind must be a string');
+  if (!(receipt.digest instanceof Uint8Array) || receipt.digest.byteLength !== 32)
+    throw new TypeError('A command receipt digest must be exactly 32 bytes');
+}
+
+/** Completion metadata only. The caller must retain the queried intent's action/resource policy. */
+export async function hasOwnCommandCompletion(
+  tx: CommandTransaction,
+  receipt: PrincipalCommandReceipt,
+): Promise<boolean> {
+  const owner = receiptOwners.get(tx);
+  if (!owner || Date.now() >= owner.deadline) throw new TypeError('No authorized live receipt owner transaction');
+  assertPrincipal(owner.principal);
+  const key = normalizeCommandKey(owner.principal, receipt.key);
+  assertReceipt(receipt);
+  const digest = Buffer.from(receipt.digest);
+  const row = await readOwnCompletion.run(tx, {
+    partition_no: owner.partition,
+    principal_kind: owner.principal.kind,
+    principal_id: owner.principal.id,
+    command_kind: receipt.kind,
+    idempotency_key: key,
+  });
+  if (!row) return false;
+  if (!Buffer.from(row.requestDigest).equals(digest)) throw new IdempotencyConflictError(owner.partition);
+  return true;
+}
 
 export function authoritativeTimeValue(time: AuthoritativeTime): string {
   const at = times.get(time);
@@ -409,8 +445,7 @@ export async function runCommand<T>(
 ): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
   const { partition } = options;
-  if (options.receipt && (!(options.receipt.digest instanceof Uint8Array) || options.receipt.digest.byteLength !== 32))
-    throw new TypeError('A command receipt digest must be exactly 32 bytes');
+  if (options.receipt) assertReceipt(options.receipt);
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
@@ -455,6 +490,8 @@ export async function runCommand<T>(
               }) as CompletedCommandAuthorization)
             : null;
           commands.set(tx, Object.freeze({ ...attempt, authorization: capability }));
+          if (capability && mode === 'execute' && options.principal)
+            receiptOwners.set(tx, Object.freeze({ principal: options.principal, partition, deadline }));
           if (options.receipt && receiptDigest) {
             const row = await readReceipt.run(client, {
               partition_no: partition,
@@ -465,6 +502,7 @@ export async function runCommand<T>(
             });
             if (row) {
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
+              receiptOwners.delete(tx);
               await client.query('COMMIT');
               sealEventTypes();
               return {
@@ -541,6 +579,7 @@ export async function runCommand<T>(
                 receipt,
               });
           if (row.length === 0) {
+            receiptOwners.delete(tx);
             try {
               await client.query('ROLLBACK');
             } catch (rollbackError) {
@@ -557,6 +596,7 @@ export async function runCommand<T>(
             }
             throw new CommandUnavailableError('deadline', partition);
           }
+          receiptOwners.delete(tx);
           await client.query('COMMIT');
           sealEventTypes();
           return {
@@ -568,6 +608,7 @@ export async function runCommand<T>(
             replayed: false,
           };
         } catch (error) {
+          receiptOwners.delete(tx);
           if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
@@ -584,6 +625,7 @@ export async function runCommand<T>(
           }
           throw error;
         } finally {
+          receiptOwners.delete(tx);
           callbackState.active = false;
           callbackState.callbacks.length = 0;
           attempts.delete(tx);
