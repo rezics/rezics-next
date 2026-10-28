@@ -342,9 +342,11 @@ pass. If a gate fails, the promoter compares its first failure with `main`, then
 reverts the culprit and its `after:` dependents in the batch in one forward commit on `dev`, sends the culprit through
 the normal fix-round handling, holds those dependents, and promotes the remaining tasks.
 
-While the stabilize branch exists, promotion gates its head and does not bisect, because only fixes reach it. A passing
-gate publishes `main` from that head and moves the branch to the dev head, starting the next window. Deleting the branch
-returns promotion to gating dev.
+While the stabilize branch exists, promotion gates its head and does not bisect, because only fixes reach it. An
+infrastructure-only failure (process timeout, Docker setup/run failure, or SSH/rsync transport failure) reruns the
+failing workspace checks on the same candidate up to twice; each rerun is recorded in the promotion run. Assertion
+failures block immediately. A passing gate publishes `main` from that head and moves the branch to the dev head,
+starting the next window. Deleting the branch returns promotion to gating dev.
 
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. During a rebase, if every conflict is a declared generated path, the train keeps the integration side, runs each matching command in the train worktree, stages its generated outputs and continues through the ordinary landing checks. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed generated and non-generated rebase conflict stays with the worker; non-generated-only conflicts keep the existing resolution behavior. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 
