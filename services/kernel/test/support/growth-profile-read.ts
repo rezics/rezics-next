@@ -266,14 +266,14 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
   };
   for (const metric of GROWTH_PROFILE_METRICS) {
     series[metric] = complete.map((group) => ({
-        check: growthProfileCheckId(group[0]!.file, group[0]!.check, group[0]!.occurrence),
-        runs: group.map(({ scales, repetitions }) =>
-          scales.map((scale, scaleIndex): CalibrationRunPoint => ({
-            scale,
-            repetitions: repetitions[scaleIndex]!.map((repetition) => repetition[metric]),
-          })),
-        ),
-      }));
+      check: growthProfileCheckId(group[0]!.file, group[0]!.check, group[0]!.occurrence),
+      runs: group.map(({ scales, repetitions }) =>
+        scales.map((scale, scaleIndex): CalibrationRunPoint => ({
+          scale,
+          repetitions: repetitions[scaleIndex]!.map((repetition) => repetition[metric]),
+        })),
+      ),
+    }));
   }
 
   const shadowOutcomes = entries.map(({ file, check, occurrence, run, shadow }) => ({
