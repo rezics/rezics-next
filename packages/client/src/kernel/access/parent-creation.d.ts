@@ -30,6 +30,11 @@ export type ParentCreationContext = AccessContext & {
     /** Opaque bounded declaration; every tuple must finish initialization before commit. */
     manifest?: ResourceCreationManifest;
 };
+/** Only binds module data written in the same command to a resource that command
+ * is creating. This read-only in-memory predicate reads no database row and issues
+ * no statement; it grants nothing and is not a permission check.
+ */
+export declare function creationDeclares(tx: CommandTransaction, resource: Readonly<Resource>): boolean;
 /** Internal exact-tuple reservation. A pending entry becomes complete only when
  * the native initializer confirms successful grant writes. Any failed, concurrent
  * or repeated use poisons the attempt, even if the body catches the exception.

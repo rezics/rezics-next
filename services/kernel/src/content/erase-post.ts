@@ -5,6 +5,8 @@ import type { DurableOperationAnchor, InitiatorRestorer } from '../access/durabl
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   principalCommandIdentity,
+  commandTime,
+  authoritativeTimeValue,
   runCommand,
   type CommandAuthorization,
   type CommandAttempt,
@@ -15,11 +17,12 @@ import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
 import { accessCommandAuthorization, type Access, type AccessClient, type Actor } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import boardRealm from './realm-of-board.sql';
 import erase from './erase-content.sql';
 import takedown from './takedown.sql';
+import insertDecision from './insert-moderation-decision.sql';
 import countRevisions from './erase-post-revisions.sql';
 import validatePage from './validate-erasure-page.sql';
 
@@ -229,7 +232,19 @@ async function prepareAuthorizedPoint(
       if (!changed) throw new GrantDeniedError();
       const securityRevision = changed.security_revision;
       const value = { targetId: point.id, securityRevision };
-      if (point.action === 'moderation:takedown')
+      if (point.action === 'moderation:takedown') {
+        if (point.kind === 'thread' || point.kind === 'post') {
+          await insertDecision.run(tx, {
+            route,
+            decision_id: newId(route),
+            target_kind: point.kind,
+            target_id: point.id,
+            statement: point.reason,
+            decider_account_id: identity.principal.id,
+            security_revision: securityRevision,
+            decided_at: authoritativeTimeValue(commandTime(tx)!),
+          });
+        }
         return {
           value,
           events: [
@@ -243,6 +258,7 @@ async function prepareAuthorizedPoint(
             },
           ],
         };
+      }
       if (point.kind === 'post')
         return {
           value,

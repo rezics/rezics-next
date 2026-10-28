@@ -737,6 +737,30 @@ CREATE TABLE content.media_variant (
 
 
 --
+-- Name: moderation_decision; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.moderation_decision (
+    route integer NOT NULL,
+    decision_id uuid NOT NULL,
+    target_kind text NOT NULL,
+    target_id uuid NOT NULL,
+    action text NOT NULL,
+    statement text NOT NULL,
+    decider_account_id uuid NOT NULL,
+    decided_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    security_revision bigint NOT NULL,
+    CONSTRAINT moderation_decision_action_check CHECK ((action = 'takedown'::text)),
+    CONSTRAINT moderation_decision_check CHECK ((route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
+    CONSTRAINT moderation_decision_check1 CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT moderation_decision_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT moderation_decision_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT moderation_decision_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 1024))),
+    CONSTRAINT moderation_decision_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text])))
+);
+
+
+--
 -- Name: notice; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1204,6 +1228,22 @@ ALTER TABLE ONLY content.media_variant
 
 ALTER TABLE ONLY content.media_variant
     ADD CONSTRAINT media_variant_route_key_key UNIQUE (route, key);
+
+
+--
+-- Name: moderation_decision moderation_decision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_decision
+    ADD CONSTRAINT moderation_decision_pkey PRIMARY KEY (route, decision_id);
+
+
+--
+-- Name: moderation_decision moderation_decision_route_target_kind_target_id_security_re_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_decision
+    ADD CONSTRAINT moderation_decision_route_target_kind_target_id_security_re_key UNIQUE (route, target_kind, target_id, security_revision);
 
 
 --

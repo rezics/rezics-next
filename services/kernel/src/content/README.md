@@ -560,6 +560,12 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 - **Bound:** O(1) rows and statements; O(log M) blocks, where M is total media.
 - **Growth check:** `test/content/growth-media-erase.test.ts`, `Erase media stays within its bound as M grows`: as media across other accounts grow with the probe fixed, constant rows and statements.
 
+### Moderation decision
+
+- **Touches:** One additional row in the takedown transaction. The effect reads one decision by its unique target and security revision, one author, one `notificationAllowed` result and writes one notice. The read route reads one decision by primary key and the author, with one current Access check for a moderator.
+- **Bound:** O(1) rows and statements per takedown, effect and read; O(log D) blocks for D decisions on the target. A replay adds no decision or notice; board takedowns are unchanged.
+- **Growth check:** `test/content/moderation-decisions-http.test.ts`, `moderation decision takedown` and `moderation decision read`, at 16, 64 and 256 decisions per target; rows and statements remain constant.
+
 ### Reaction count
 
 - **Reaction count change:** Touches one contribution upsert and at most two `content.reaction_total` upserts (`-1` on the previous kind and `+1` on the new kind), in the target partition and one transaction. The source watermark changes only when its contribution row changes. Bound: O(log R) per event; concurrent changes to one target serialize on its total rows, which is acceptable for this asynchronous projection. Growth check: `test/content/reaction-totals.test.ts`, `reaction totals stay equal to contributions after actual log events are replayed, stale and reordered`; per-event rows and statements stay constant as prior contributions on the target grow.

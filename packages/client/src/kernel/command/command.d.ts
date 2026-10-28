@@ -9,10 +9,17 @@ export type CommandEvent = {
 };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
-type CommandResult<T> = {
+export type CommandResult<T> = Readonly<{
     value: T;
-    events: CommandEvent[];
-};
+    events: readonly CommandEvent[];
+}>;
+/**
+ * Return a successful command result without domain events. The body must make
+ * no domain write; this result asserts that it did not. Its observed position
+ * can be 0. Callers whose consumers require a positive position must not use
+ * noEffect.
+ */
+export declare function noEffect<T>(value: T): CommandResult<T>;
 export declare const MAX_COMMAND_EVENTS = 1000;
 /** Principal kind marker only; never an account ID. */
 export declare const ANONYMOUS_PRINCIPAL_ID = "00000000-0000-0000-0000-000000000000";

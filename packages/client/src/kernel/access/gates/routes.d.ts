@@ -1,9 +1,11 @@
 import type { TSchema } from 'typebox';
 import type { Pool } from 'pg';
+import { type Access } from '../../request/access.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: {
     pool: Pool;
     clock: () => Date;
+    access: () => Access;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

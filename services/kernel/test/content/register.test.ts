@@ -192,6 +192,7 @@ if (process.argv.includes('--content-registration')) {
       'content_author_item',
       'content_board_thread',
       'content_report_target',
+      'content_moderation_decision',
       'content_media_image',
       'content_media_purge',
       'content_author_erasure',

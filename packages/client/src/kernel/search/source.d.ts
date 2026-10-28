@@ -1,3 +1,4 @@
+import type { PublicRatingFigure } from './rating-source.ts';
 export type LanguageValue = {
     language: string;
     value: string;
@@ -45,6 +46,8 @@ export type IndexedStatement = {
 };
 export type IndexedSubject = {
     id: string;
+    /** Current native standard-question Global figure, when one is published. */
+    publicRating?: PublicRatingFigure;
     type: string;
     /** Only visible subjects are indexed. */
     visibility: 'visible' | 'hidden' | 'taken_down';

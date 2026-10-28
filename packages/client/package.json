@@ -15,6 +15,7 @@
     "@dbos-inc/dbos-sdk": "5.4.6-preview",
     "@elysia/eden": "2.0.0-rc.0",
     "@rezics/auth-contract": "workspace:*",
+    "@rezics/composition": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
     "@rezics/filter": "workspace:*",

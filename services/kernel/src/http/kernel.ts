@@ -408,7 +408,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   return zones as Kernel;
 }
 
-type KernelComposition = ReturnType<typeof zoneRoutes> &
+// The module inherits definition routes. Keep their existing schemas only once: intersecting
+// another copy expands their response unions beyond the compiler's representable type size.
+type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
+  '~Routes': { v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'> };
+};
+
+type KernelComposition = ZoneComposition &
   ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof ratingRoutes> &
   ReturnType<typeof collectionRoutes> &

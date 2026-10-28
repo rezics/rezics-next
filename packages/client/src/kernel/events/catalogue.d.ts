@@ -91,6 +91,26 @@ declare const productEventTypes: {
     readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{
         subjects: Type.TArray<Type.TString>;
     }>;
+    readonly 'com.rezics.zone.created.v1': Type.TObject<{
+        id: Type.TString;
+        revision: Type.TString;
+    }>;
+    readonly 'com.rezics.zone.configured.v1': Type.TObject<{
+        id: Type.TString;
+        revision: Type.TString;
+    }>;
+    readonly 'com.rezics.zone.published.v1': Type.TObject<{
+        id: Type.TString;
+        revision: Type.TString;
+    }>;
+    readonly 'com.rezics.zone.deleted.v1': Type.TObject<{
+        id: Type.TString;
+        revision: Type.TString;
+    }>;
+    readonly 'com.rezics.zone.restored.v1': Type.TObject<{
+        id: Type.TString;
+        revision: Type.TString;
+    }>;
     readonly 'com.rezics.access.organization-close.page.v1': Type.TObject<{
         count: Type.TInteger;
         members: Type.TArray<Type.TString>;
@@ -815,6 +835,11 @@ declare const productEventTypes: {
         targetId: Type.TString;
         securityRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.moderation.restored.v1': Type.TObject<{
+        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
     readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
         postId: Type.TString;
         securityRevision: Type.TString;
@@ -846,6 +871,8 @@ declare const productEventTypes: {
         external_id: Type.TString;
         field_group: Type.TUnion<[Type.TLiteral<"facts">, Type.TLiteral<"summary">, Type.TLiteral<"cover">]>;
         securityRevision: Type.TString;
+        takenDownAt: Type.TOptional<Type.TString>;
+        takedownId: Type.TOptional<Type.TString>;
     }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
         placeId: Type.TString;
@@ -915,6 +942,12 @@ declare const productEventTypes: {
         sourceEpoch: Type.TInteger;
         sourcePosition: Type.TString;
     }>;
+    readonly 'com.rezics.library.account-facts.purged.v1': Type.TObject<{
+        accountId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"entry">, Type.TLiteral<"copy">, Type.TLiteral<"follow">]>;
+        examined: Type.TInteger;
+        removed: Type.TInteger;
+    }>;
     readonly 'com.rezics.library.subject.listed.v1': Type.TObject<{
         subjectId: Type.TString;
     }>;
@@ -972,6 +1005,13 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.rating.aggregate.applied.v1': Type.TObject<{
         applied: Type.TInteger;
+    }>;
+    readonly 'com.rezics.rating.prior_epoch.work.v1': Type.TObject<{
+        action: Type.TUnion<[Type.TLiteral<"check">, Type.TLiteral<"mark">, Type.TLiteral<"advance">]>;
+        questionId: Type.TString;
+        populationId: Type.TString;
+        generation: Type.TString;
+        subjects: Type.TInteger;
     }>;
     readonly 'com.rezics.rating.public_figure.changed.v1': Type.TObject<{
         questionId: Type.TString;

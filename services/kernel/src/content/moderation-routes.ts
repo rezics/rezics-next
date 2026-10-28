@@ -6,6 +6,7 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
+import { ModerationDecisionSchema, readModerationDecision } from './moderation-decisions.ts';
 import { erasePost, takedown } from './moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import { beginAuthorErasure, postEraseReceiptAccess, readOperation } from './operations.ts';
@@ -130,6 +131,31 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     response: { 200: withHeaders(response, sessionHeader), ...writeFailures },
   };
   return app
+    .get(
+      '/v1/moderation-decisions/:id',
+      {
+        params,
+        response: {
+          200: withHeaders(ModerationDecisionSchema, { ...sessionHeader, 'cache-control': t.String() }),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'moderation_decision.get',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () => {
+          const result = await readModerationDecision(deps, id, { actor, deadline: job.deadline });
+          if (!result || !result.value) throw new ProblemError('not_found');
+          session.record(result.anchor);
+          return result.value;
+        });
+      },
+    )
     .post(
       customMethod('/v1/boards/:id', 'takeDown'),
       { ...pointOptions, detail: detail('board.takedown', 'moderation:takedown') },

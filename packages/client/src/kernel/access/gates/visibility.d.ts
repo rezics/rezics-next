@@ -16,7 +16,7 @@ type DiscoveryInput = {
     deadline: number;
     clock: () => Date;
 };
-/** Mounted gate groups admitted by the same snapshot and rule as operation discovery. */
+/** Mounted groups that are open or have at least one visible operation for this viewer. */
 export declare function admittedGroups(input: DiscoveryInput): Promise<readonly string[]>;
 /** The mounted operations this viewer may use at the kernel clock. */
 export declare function visibleOperations(input: DiscoveryInput): Promise<readonly VisibleOperation[]>;

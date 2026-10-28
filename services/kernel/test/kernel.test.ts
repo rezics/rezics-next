@@ -164,6 +164,7 @@ const typed = [
   'GET /v1/sitemap/collections',
   'GET /v1/boards/:id',
   'GET /v1/boards/:id/reports',
+  'GET /v1/moderation-decisions/:id',
   'GET /v1/threads/:id/reports',
   'GET /v1/posts/:id/reports',
   'POST /v1/boards/:id/$takeDown',

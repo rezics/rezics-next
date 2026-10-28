@@ -51,6 +51,11 @@ export declare const CONTENT_EVENTS: {
         targetId: Type.TString;
         securityRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.moderation.restored.v1': Type.TObject<{
+        targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+        securityRevision: Type.TString;
+    }>;
     readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
         postId: Type.TString;
         securityRevision: Type.TString;
@@ -82,6 +87,8 @@ export declare const CONTENT_EVENTS: {
         external_id: Type.TString;
         field_group: Type.TUnion<[Type.TLiteral<"facts">, Type.TLiteral<"summary">, Type.TLiteral<"cover">]>;
         securityRevision: Type.TString;
+        takenDownAt: Type.TOptional<Type.TString>;
+        takedownId: Type.TOptional<Type.TString>;
     }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
         placeId: Type.TString;
