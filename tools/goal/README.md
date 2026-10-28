@@ -340,6 +340,14 @@ changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` 
 kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
 dependency installation never run in the main checkout or the worker's checkout.
 
+Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
+(default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
+links; only `.bun` points at the shared store. The key covers the Bun version, root and workspace manifests, `bun.lock`
+and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
+`bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison
+created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
+0.016 s), after building one shared store.
+
 The `affectedTests` setting independently lists `{ paths: string[], command: string[] }` checks, overridable in
 local settings (use `[]` to disable them). After a successful worker report, settlement commits any remaining work
 and runs matching commands in that attempt's worktree before requesting landing. Commands and other attempts run
