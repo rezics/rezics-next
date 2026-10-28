@@ -18,6 +18,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { setupPresentation } from './presentation/setup.ts';
 import { subjectSource } from './semantic/search-source.ts';
 import { setupSemantic } from './semantic/setup.ts';
+import { setupContent } from './content/setup.ts';
 import { createOpenSearch } from './search/opensearch.ts';
 import { createSearchService } from './search/service.ts';
 import { readSearchConfig, type SearchConfig } from './search/work.ts';
@@ -217,6 +218,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const boot = (async () => {
     await fillPool(pool);
     await setupSemantic(pool, bundledRelease);
+    await setupContent(pool);
     await setupPresentation(pool);
     workClient = createWorkClient(config.databaseUrl);
     // Observe startup rejection immediately; the webhook and stop still receive it.

@@ -17,6 +17,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { REACTION_KINDS } from './events.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import readSubjectRedirect from '../semantic/read-redirect.sql';
 import {
   mediaParentBoard,
@@ -90,7 +91,7 @@ async function mutate(
     actor,
     action: 'reaction:set',
     anchor: {
-      resource,
+      resource: body.targetKind === 'subject' ? { route: 0, id: GLOBAL_CONTEXT } : resource,
       async validate(client, time) {
         if (body.targetKind === 'subject') {
           if ((await readSubjectRedirect.run(client, { route: targetRoute, subject_id: targetId }))?.target)

@@ -23,6 +23,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
+import { setupContent } from '../../src/content/setup.ts';
 import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
@@ -313,6 +314,7 @@ async function startDriver(
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
 
     await setupSemantic(pool, bundledRelease);
+    await setupContent(pool);
     await setupPresentation(pool);
 
     const bootstrap = Bun.spawn(

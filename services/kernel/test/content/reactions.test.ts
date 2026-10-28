@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { Value } from 'typebox/value';
@@ -7,6 +8,8 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { setupContent } from '../../src/content/setup.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
@@ -23,6 +26,8 @@ export const kinds = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful
 export async function reactionFixture() {
   const db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  await bootstrapRelease(db.pool, bundledRelease);
+  await setupContent(db.pool);
   const home = 0x7131,
     targetRoute = 0x4231,
     boardRoute = 0x5231;
@@ -132,6 +137,15 @@ export async function reactionFixture() {
   const manager = await verified(managerId);
   const grants = createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' });
   async function grant(resourceId: string, actionsToGrant: string[]) {
+    // Subject reactions use the Global standing installed above; keep target grants for threads and posts.
+    if (actionsToGrant.includes('reaction:set')) {
+      const subject = await db.admin.query('SELECT 1 FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
+        routeOf(resourceId),
+        resourceId,
+      ]);
+      if (subject.rowCount) actionsToGrant = actionsToGrant.filter((action) => action !== 'reaction:set');
+    }
+    if (actionsToGrant.length === 0) return;
     // Only bootstrap the fixture administrator; the reacting account receives real grant commands.
     for (const action of ['access:grant', ...actionsToGrant])
       await db.admin.query(

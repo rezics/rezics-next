@@ -15,8 +15,9 @@
  * Initial state: bundled release published and active; public subject:read for
  * anonymous and all active accounts. Semantic setup installs a standing grant
  * of subject:create and statement:propose on Global for every active account;
- * no other actions are standing. Creation is authorized on the parent, and the
- * Global Context is the parent of the global catalogue. On Global, editor still
+ * content setup also installs reaction:set standing on Global. Creation is
+ * authorized on the parent, and the Global Context is the parent of the global
+ * catalogue. On Global, editor still
  * has explicit subject:create, statement:propose and context:create grants;
  * acceptor has context:accept, context:adopt and subject:merge; steward has
  * definitions:publish and
