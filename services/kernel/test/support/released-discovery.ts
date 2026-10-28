@@ -109,6 +109,8 @@ export interface ReleasedDiscoveryFixture {
     dietTime: Filter;
   }>;
   catchUp(subjects: readonly CreatedSubject[]): Promise<void>;
+  /** Existing native grant administration, for current-disclosure acceptance controls. */
+  grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -301,6 +303,7 @@ export async function createReleasedDiscoveryFixture(
         'Adopt released same-statement platform/language/date qualifier grammar: inLanguage currently string, not a Concept or credit role.',
       ),
       request,
+      grant: (persona, actions, resourceId) => driver.grant(persona, actions, resourceId),
       createSubject,
       adopt,
       read: (subject, persona = 'anonymous') => request(persona, 'GET', `/v1/subjects/${subject.id}`),
