@@ -108,39 +108,22 @@ test('a train finishes its landing after its code changes and the next train tak
   }
 }, 15_000);
 
-test('a train waiting for the lease exits when its code becomes stale', async () => {
+test('a detached train that finds the lease held exits at once, leaving the request to the owner', async () => {
   const s = setup();
   const request = s.repo.branch('waiting', 'waiting-result');
   s.queue.enqueue(request);
   const lease = acquireDirectoryLease(join(s.options.stateDirectory, 'train.lease'));
-  let current = true;
-  let checks = 0;
-  let reachedWaitCheck!: () => void;
-  const waitCheck = new Promise<void>((resolve) => {
-    reachedWaitCheck = resolve;
-  });
-  let handoffs = 0;
   try {
-    const running = new MergeTrain({
+    const started = Date.now();
+    // Every settle spawns a detached train; waiting for the owner piled up 304 polling trains.
+    await new MergeTrain({
       ...s.options,
-      codeIsCurrent() {
-        checks++;
-        if (checks === 2) reachedWaitCheck();
-        return current;
-      },
-      handOff() {
-        handoffs++;
-      },
+      codeIsCurrent: () => true,
       async runGate() {
-        throw new Error('A stale process must not take the lease or run a landing');
+        throw new Error('A train without the lease must not run a landing');
       },
     }).runWaiting();
-
-    await waitCheck;
-    current = false;
-    await running;
-
-    expect(handoffs).toBe(1);
+    expect(Date.now() - started).toBeLessThan(2_000);
     expect(s.outcomes).toEqual([]);
     expect(s.queue.next()?.request.taskId).toBe('waiting');
   } finally {
