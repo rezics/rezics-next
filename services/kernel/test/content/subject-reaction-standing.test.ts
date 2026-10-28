@@ -59,8 +59,7 @@ test('an active account without any subject grant sets and clears a reaction on 
     expect(own.body).toEqual({ kind });
   }
   const cleared = await driver.fixtures.send(person, 'DELETE', path, undefined, key());
-  status(cleared, 200);
-  expect(cleared.body).toEqual({ kind: null });
+  status(cleared, 204);
   const own = await driver.fixtures.send(person, 'GET', path);
   status(own, 200);
   expect(own.body).toEqual({ kind: null });
