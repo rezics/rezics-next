@@ -15,7 +15,8 @@ const pageSize = 3;
 const candidateLimit = 200;
 const scales = [256, 1024, 4096] as const;
 const text = 'A fixed board page growth body';
-const body = Buffer.from(serializeDocument(fromPlainText(text)));
+const document = fromPlainText(text);
+const body = Buffer.from(serializeDocument(document));
 const bodyHash = createHash('sha256').update(body).digest();
 const title =
   'board pages under new active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow';
@@ -50,7 +51,8 @@ test(
         hotShare: 1,
         rows: ({ ordinal, route }) => {
           const onBoard = ordinal < candidateLimit || ordinal % 2 === 0;
-          const targetBoard = onBoard ? boardId : newId(boardRoute);
+          const otherBoard = newId(boardRoute);
+          const targetBoard = onBoard ? boardId : otherBoard;
           const threadId = newId(route);
           const postId = newId(route);
           const revisionId = newId(route);
@@ -60,19 +62,17 @@ test(
           const visibility = hidden ? (ordinal % 2 === 0 ? 'protected' : 'taken_down') : 'published';
           if (ordinal >= candidateLimit - pageSize - 1 && ordinal < candidateLimit) visible.push(threadId);
           return {
-            'content.board': onBoard
-              ? []
-              : [
-                  {
-                    route: boardRoute,
-                    board_id: targetBoard,
-                    subject_id: newId(boardRoute),
-                    title: 'Other board',
-                    visibility: 'published',
-                    security_revision: 1,
-                    recorded_transaction_id: transactionId,
-                  },
-                ],
+            'content.board': [
+              {
+                route: boardRoute,
+                board_id: otherBoard,
+                subject_id: newId(boardRoute),
+                title: 'Other board',
+                visibility: 'published',
+                security_revision: 1,
+                recorded_transaction_id: transactionId,
+              },
+            ],
             'content.thread': [
               {
                 route,
@@ -158,7 +158,7 @@ test(
           for (const thread of page.threads) {
             expect(thread.boardId).toBe(boardId);
             expect(thread.visibility).toBe('published');
-            expect(thread.firstPost.body).toEqual(fromPlainText(text));
+            expect(thread.firstPost.body).toEqual(document);
           }
           expect(page.next).toEqual(expect.any(String));
           if (sort === 'newest') expect(page.rankRefreshedAt).toBeNull();
