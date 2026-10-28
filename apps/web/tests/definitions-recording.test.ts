@@ -23,6 +23,7 @@ test('recorded definitions match the bundled release served by the kernel', () =
 
 test('recorded release frames work descendants, people, music and recipes through typeFrame', async () => {
   const release = recorded.release as RecordedRelease & { types: Record<string, TypeDefinition> };
+  // schema:CreativeWork is abstract and omitted from release.types; its concrete descendants carry its frame.
   const workDescendants = Object.entries(release.types).filter(
     ([type, definition]) => type !== 'schema:MusicAlbum' && definition.bases?.includes('schema:CreativeWork'),
   );
@@ -33,7 +34,6 @@ test('recorded release frames work descendants, people, music and recipes throug
   }
 
   const expectedFrames = new Map<string, string>([
-    ['schema:CreativeWork', '5:7'],
     ['schema:Book', '5:7'],
     ['schema:TVSeries', '5:7'],
     ['schema:Movie', '5:7'],
