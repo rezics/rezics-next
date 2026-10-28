@@ -462,7 +462,7 @@ export async function probeNativeCollectionOriginal(
             return done('present', { driver: 'entry', storedSubjectId: input.originalId, factId: input.originalId });
           if (row?.matches && current.builtinKind === 'state') {
             // A compressed datum's wire expansion has no small bound. Admit the native maximum, rather than cap type IDs.
-            const bytes = row.compressed ? 1024 * 1024 * 1024 : 6 * (row.bytes ?? 0) + 256;
+            const bytes = 6 * (row.compressed ? 1024 * 1024 * 1024 : (row.bytes ?? 0)) + 256;
             {
               const pin = (
                 await client.query<{
