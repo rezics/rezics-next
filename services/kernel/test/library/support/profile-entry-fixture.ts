@@ -23,7 +23,7 @@ import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { accountToken, admittedAccess } from '../../support/admitted-access.ts';
+import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
@@ -134,22 +134,6 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock; 
         typeof proof === 'object' && proof !== null ? (proofs.get(proof) ?? null) : null,
       recoveryEvidence: async () => null,
     });
-    type Principal = { actor: AccountActor; bearer: string };
-    const identities = new WeakMap<Principal, Parameters<typeof accountToken>[0]>();
-    async function credentials(claims: Parameters<typeof accountToken>[0]) {
-      const bearer = await accountToken(claims, options.clock);
-      const actor = await access.authenticate(bearer, { pool, deadline: deadlineFor(30_000) });
-      return { actor, bearer };
-    }
-    // Reissue only the originally provisioned claims, through the original Access/pool.
-    async function refresh(principal: Principal): Promise<AccountActor> {
-      const claims = identities.get(principal);
-      if (!claims) throw new TypeError('Unknown fixture principal');
-      const fresh = await credentials(claims);
-      principal.actor = fresh.actor;
-      principal.bearer = fresh.bearer;
-      return fresh.actor;
-    }
     async function identity(scopes: readonly string[]) {
       const key = entryKey();
       const accountId = lifecycle.registrationTarget(key);
@@ -167,16 +151,9 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock; 
       });
       await lifecycle.claimHandle({ ...input, key: entryKey(), evidence: proof });
       await lifecycle.activate({ accountId, key: entryKey(), evidence: proof });
-      const claims = Object.freeze({
-        accountId,
-        clientId,
-        scopes: Object.freeze([...scopes]),
-        authnEpoch: 1,
-        requestedBy: null,
-      });
-      const principal = await credentials(claims);
-      identities.set(principal, claims);
-      return principal;
+      const claims = { accountId, clientId, scopes };
+      const actor = await authenticateAccount(access, { pool, deadline: deadlineFor(30_000) }, claims);
+      return { actor, bearer: await accountToken(claims) };
     }
     const steward = await identity([
       'access:grant',
@@ -363,7 +340,6 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock; 
       originalDigest,
       replacementDigest,
       identity,
-      refresh,
       send,
       createSubject,
       publish,

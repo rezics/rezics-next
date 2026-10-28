@@ -5,7 +5,7 @@ import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { IdempotencyConflictError, type CommandOutcome } from '../../src/command/command.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
-import { AuthenticationError, type Actor } from '../../src/request/access.ts';
+import type { Actor } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
@@ -25,7 +25,6 @@ beforeAll(async () => {
 }, 120_000);
 beforeEach(async () => {
   time = undefined;
-  await Promise.all([f.refresh(f.owner), f.refresh(f.other), f.refresh(f.steward)]);
   await f.activate(f.originalDigest);
 });
 afterAll(async () => {
@@ -187,41 +186,6 @@ test('native lifecycle baseline creates and reads a legal planned entry before l
   expect((await f.commands.readEntry(f.owner.actor, subjectId)).revision).toBe(row.revision);
 });
 
-test('native credential refresh preserves the principal after kernel-clock expiry and admits an ordinary read', async () => {
-  const { subjectId, row } = await create();
-  const originalToken = f.owner.bearer;
-  const originalActor = f.owner.actor;
-  try {
-    time = Date.now() + windowMs;
-    await expect(
-      f.access.authenticate(originalToken, { pool: f.pool, deadline: deadlineFor(30_000) }),
-    ).rejects.toBeInstanceOf(AuthenticationError);
-    const actor = await f.refresh(f.owner);
-    const claims = decodeJwt(f.owner.bearer);
-    const issuedAt = Math.floor(time / 1000);
-    expect(claims.iat).toBe(issuedAt);
-    expect(claims.auth_time).toBe(issuedAt);
-    expect(claims.exp).toBe(issuedAt + 300);
-    expect(claims.exp! - claims.iat!).toBe(300);
-    expect(claims).toMatchObject({
-      sub: originalActor.accountId,
-      client_id: originalActor.clientId,
-      scope: originalActor.scopes.join(' '),
-      authn_epoch: originalActor.authnEpoch,
-    });
-    expect(actor).not.toBe(originalActor);
-    expect(actor).toEqual(originalActor);
-    expect(actor).toBe(f.owner.actor);
-    expect(Object.isFrozen(actor)).toBe(true);
-    expect(f.owner.bearer).not.toBe(originalToken);
-    expect((await f.commands.readEntry(actor, subjectId)).revision).toBe(row.revision);
-    expect((await f.send('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(200);
-  } finally {
-    time = undefined;
-    await Promise.all([f.refresh(f.owner), f.refresh(f.other), f.refresh(f.steward)]);
-  }
-});
-
 test('native entry factory exposes restoreEntry after a successful native create and read', async () => {
   await create();
   expect(
@@ -333,7 +297,6 @@ test('native delete and restore receipts require current owner scope active acco
           clientId: who.actor.clientId,
           scopes: ['subject:read'],
         },
-        clock,
       );
     if (denial === 'suspended') await f.suspend(who.actor.accountId);
     if (denial === 'fence') await f.revokeIdentity(who.actor.accountId);
@@ -369,33 +332,37 @@ test('native delete and restore receipts require current owner scope active acco
   }
 });
 
-test('strict entry undo deadlines use new native credentials from the same principal after advancing the single kernel clock', async () => {
+test('native strict720hour undo and replay retain a wall-time-valid admitted actor while the domain clock governs the original restore window', async () => {
   const a = await create(),
     b = await create();
   time = Date.now();
   const deletedAt = time;
+  const { actor, bearer } = f.owner;
+  const claims = decodeJwt(bearer);
+  expect(claims.iat!).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
   const da = await remove(f.owner.actor, a.row),
     db = await remove(f.owner.actor, b.row);
   const { d: d1 } = await snapshot(a.row, da);
-  const { d: d2 } = await snapshot(b.row, db);
+  const { d: d2, archive } = await snapshot(b.row, db);
   const restoreKey = entryKey();
   time = deletedAt + windowMs - 1;
-  // The principal and original deletion window stay unchanged; credentials are newly verified at T.
-  await f.refresh(f.owner);
-  const beforeBoundary = await restore(f.owner.actor, a.subjectId, d1, restoreKey);
+  // Only domain time advances; native admission keeps the original wall-time-valid actor.
+  const beforeBoundary = await restore(actor, a.subjectId, d1, restoreKey);
   await restored(a.row, beforeBoundary);
   time = deletedAt + windowMs;
-  await f.refresh(f.owner);
   // No worker runs in this command fixture: prove expiry while the original archive still exists.
   const boundary = await observed(b.subjectId);
-  expect(boundary.archived).toHaveLength(1);
+  expect(boundary.archived).toEqual([archive]);
   expect(Date.parse(String(boundary.archived[0]!.restore_until))).toBe(time);
-  await conflict(() => restore(f.owner.actor, b.subjectId, d2), 'expired');
+  await conflict(() => restore(actor, b.subjectId, d2), 'expired');
   expect(await observed(b.subjectId)).toEqual(boundary);
   const oldReceipt = await observed(a.subjectId);
-  expect(await restore(f.owner.actor, a.subjectId, d1, restoreKey)).toEqual({ ...beforeBoundary, replayed: true });
+  expect(await restore(actor, a.subjectId, d1, restoreKey)).toEqual({ ...beforeBoundary, replayed: true });
   expect(await observed(a.subjectId)).toEqual(oldReceipt);
   expect(await rows(b.subjectId)).toEqual([]);
+  expect(f.owner.actor).toBe(actor);
+  expect(f.owner.bearer).toBe(bearer);
+  expect(claims.exp!).toBeGreaterThan(Date.now() / 1000);
 });
 
 test('native pinned custom entry clear and exact undo preserve all eighteen source fields when the current profile disappears', async () => {

@@ -1,6 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
-import { systemClock, type KernelClock } from '../../src/clock.ts';
 import type { Access, AccessContext, AccountActor } from '../../src/request/access.ts';
 
 const issuer = 'https://admitted-access.example.test';
@@ -31,18 +30,15 @@ export function admittedAccess(config: Omit<AccessConfig, 'auth'>): Access {
 }
 
 /** Sign an access token this factory's Access will accept once the account exists. */
-export async function accountToken(
-  account: {
-    accountId: string;
-    clientId: string;
-    scopes: readonly string[];
-    authnEpoch?: number;
-    requestedBy?: string | null;
-  },
-  clock: KernelClock = systemClock,
-): Promise<string> {
+export async function accountToken(account: {
+  accountId: string;
+  clientId: string;
+  scopes: readonly string[];
+  authnEpoch?: number;
+  requestedBy?: string | null;
+}): Promise<string> {
   const keys = await signing();
-  const now = Math.floor(clock().getTime() / 1000);
+  const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
     iss: issuer,
     aud: audience,
@@ -71,7 +67,6 @@ export async function authenticateAccount(
     authnEpoch?: number;
     requestedBy?: string | null;
   },
-  clock: KernelClock = systemClock,
 ): Promise<AccountActor> {
-  return access.authenticate(await accountToken(account, clock), context);
+  return access.authenticate(await accountToken(account), context);
 }

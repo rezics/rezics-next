@@ -64,27 +64,21 @@ Restore keeps saved created/updated/activity/finish times, requested/source IDs,
 pin, with only revision r+2 and a new real command transaction identity. Custom profile admission has its own
 baseline so its known absent-writer failure is distinguishable from planned-state lifecycle failures.
 
-The shared fixture accepts optional `{clock?: KernelClock}` plumbing. The existing kernel, native entry,
-lifecycle, grant and suspension compositions receive the same supplied clock; absent options retain their defaults.
-The test signer uses that clock for bearer `iat`, `exp` and `auth_time`, with exactly 300 seconds between issuance
-and expiry. Kernel T governs bearer validity, approvals, openings and grant validity. Only request and evidence
-execution deadlines use wall time. Passing `config.clock` to the native authenticator and command admission is
-correct; native undo needs no Access production change or additional clock dependency.
+The fixture retains optional domain-clock plumbing and defaults for kernel, entries, lifecycle, grants and suspension.
+Bearer issuance keeps its wall-time 300-second lifetime; request and evidence budgets also remain wall time.
 
-After resetting the clock between cases, the fixture re-authenticates its existing default identities before
-operations. At just-before/exact 720 hours, it issues and actually verifies fresh credentials for the SAME owner,
-client, scopes, authentication epoch and requested-by principal against the original Access/pool. It replaces the
-Actor reference with the newly verified immutable Actor; it does not copy an Actor, read a newer epoch, create
-accounts/grants/fences or cache an allow verdict. Unknown, suspended or fenced identities still fail normal
-authentication. Token issuance changes neither the original deletion timestamps/window nor the receipt's
-principal/input. Current authorization still precedes returning the original stored replay result.
+The inspected revision coupled bearer expiry to domain T: `createKernel` passed its clock through `access/index.ts`
+to `createAuthenticator`/`createCommandAdmission`, contradicting `clock.ts` during a 720-hour domain advance.
+Current `services/kernel/src/access/authenticate.ts` verifies bearers at actual wall time and records wall-clock
+identity expiry; `identity-expiry.ts`, `command-admission.ts` and `index.ts` preserve that clock for subsequent
+bearer-expiry checks. Permission T, grant/assignment/membership validity, approvals, openings, registration proofs,
+capabilities and cursors retain domain time. `services/kernel/test/access/permission-kernel-clock.test.ts` proves
+wall-time bearer admission two domain years ahead.
 
-A separate native credential control advances only the supplied kernel clock, proves the original token is
-rejected by actual `Access.authenticate`, then verifies a newly issued 300-second credential at T for the same
-principal and performs ordinary command and HTTP reads. It resets the clock and refreshes the existing identities
-in cleanup. This control runs without restore runtime. The precedent is
-`test/access/permission-kernel-clock.test.ts`, which rejects a wall-time token at a future kernel T and accepts
-credentials issued at that T. No global Date patch, altered deadline or expired credential is used for Undo.
+At just-before/exact 720 hours, `services/kernel/test/library/entry-lifecycle-command.test.ts` keeps the same actual
+admitted actor, bearer and principal across the domain-only advance. It checks original deletion/archive deadlines,
+strict expiry, unchanged native replay identity/outcome and no effects, within the original wall-time request budget.
+Lifecycle/profile gaps remain native RED; this audit establishes neither runtime nor automatic purge success.
 
 ## Exact preparation bridge before runtime dispatch
 
@@ -123,9 +117,9 @@ owner integration question before runtime dispatch is: which existing native adm
 inside `ownAccountPrepared.prepare` before its short owner archive checkout, and how is that same proof fenced at
 final authorization? Deliver the already specified prepared-owner and owner-barrier exports and an actual
 max-one-connection native example of this ordering. Do not invent a new core port, trust `trustedAccount`, copy an
-account authorization formula, or nest owner/Global checkouts to answer it. At an advanced T, native admission
-uses newly verified credentials for the unchanged principal. A stale archive witness refreshes/retries through
-existing native attempt rules.
+account authorization formula, or nest owner/Global checkouts to answer it. At an advanced domain T, native
+admission retains the same wall-time-valid actor. A stale archive witness refreshes/retries through existing native
+attempt rules.
 
 Legacy null incarnations may be stamped only by bounded owner migration or the actual fresh-delete transaction's
 exact legacy revision/transaction/null CAS. They cannot be stamped by GET or treated as one identity. Existing null
@@ -206,7 +200,7 @@ Root `bun scripts/typecheck.ts` completed on check host `b`: all 13 workspaces p
 The unchanged `profile-entry-command.test.ts`, run through the same kernel check on host `a` with the fixture's
 default options, had **3 passed and 6 failed**. Its three native authorization/concealment cases passed; its six
 profile-writer/HTTP cases still expose the absent profile-aware writer and validation. No existing assertion,
-case or scale was changed to make these baseline gaps pass. That validation predates the native credential control and fresh-credential boundary correction above.
+case or scale was changed to make these baseline gaps pass.
 
 Two local test runs used the check harness's default shared timing sink. It wrote three files outside the requested
 worktree, under `/home/edge/projects/rezics/rezics-next/.temp/kernel-check/timings/`:
