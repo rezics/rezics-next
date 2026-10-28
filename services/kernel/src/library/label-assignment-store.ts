@@ -23,7 +23,7 @@ export type SetLabelAssignmentResult =
 
 type Observed = Awaited<ReturnType<typeof reservations.run>>[number];
 
-function liveRecord(row: Observed): Assignment {
+function liveRecord(row: Omit<Observed, 'desired'>): Assignment {
   if (
     row.id === null ||
     row.slotNo === null ||
@@ -34,8 +34,10 @@ function liveRecord(row: Observed): Assignment {
   )
     throw new Error('Expected an identified live label reservation');
   return {
-    ...row,
     id: row.id,
+    labelId: row.labelId,
+    subjectId: row.subjectId,
+    revision: row.revision,
     slotNo: row.slotNo,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
@@ -67,7 +69,9 @@ export async function setLabelAssignment(
   const labelId = guarded.labelId;
   if (!labelId) throw new Error('Label assignment guard returned no canonical label identity');
   const rows = await reservations.run(db, tuple);
-  const desired = rows.find((row) => row.labelId === labelId);
+  // Reservation witnesses use only the covering source index; response dates come from the exact tuple point.
+  const sources = rows.filter((row) => !row.desired);
+  const desired = rows.find((row) => row.desired);
   const locked = await parents.run(db, {
     route: input.route,
     account_id: input.accountId,
@@ -82,11 +86,11 @@ export async function setLabelAssignment(
   if (desired && desired.deletedAt === null && desired.slotNo !== null)
     return { kind: 'existing', assignment: liveRecord(desired) };
 
-  const occupied = new Set(rows.flatMap((row) => (row.slotNo === null ? [] : [row.slotNo])));
+  const occupied = new Set(sources.flatMap((row) => (row.slotNo === null ? [] : [row.slotNo])));
   let slot = Array.from({ length: 32 }, (_, n) => n).find((n) => !occupied.has(n));
   const victim =
     slot === undefined
-      ? rows.find((row) => row.slotNo !== null && current.get(row.labelId)?.deletedAt != null)
+      ? sources.find((row) => row.slotNo !== null && current.get(row.labelId)?.deletedAt != null)
       : undefined;
   if (slot === undefined && !victim) return { kind: 'capacity' };
   // Check both increments before any maintenance: exhaustion must leave even a caught error effect-free.

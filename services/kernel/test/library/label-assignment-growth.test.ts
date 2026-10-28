@@ -236,10 +236,16 @@ function assertPlans(raw: Capture) {
   const plans = raw.plans.flatMap(nodes);
   for (const node of plans.filter((node) => node.Schema === 'library' && node['Relation Name'])) {
     expect(['Seq Scan', 'Bitmap Heap Scan']).not.toContain(node['Node Type']);
+    // An owner-wide identity scan can hide arbitrary inactive history behind a LIMIT.
+    if (node['Index Name'] === 'label_assignment_identity')
+      expect(String(node['Index Cond'])).toContain('assignment_id');
   }
   const source = plans.filter((node) => node['Index Name'] === 'label_assignment_reserved_source');
   expect(source.length).toBeGreaterThan(0);
-  for (const node of source) expect(Number(node['Actual Rows']) * Number(node['Actual Loops'])).toBeLessThanOrEqual(32);
+  for (const node of source)
+    expect(
+      (Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)) * Number(node['Actual Loops']),
+    ).toBeLessThanOrEqual(32);
   const parent = plans.filter(
     (node) => node['Relation Name'] === 'personal_label' && typeof node['Index Name'] === 'string',
   );
