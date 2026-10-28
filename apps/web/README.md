@@ -20,6 +20,8 @@ without the isolated wrapper or a slot, in a wider ten-lane pool configurable wi
 pools schedule files by their latest recorded wall time, longest first, and update
 [`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
 Durable Object state, so parallel servers do not share SQLite data.
+The wrapper generates Paraglide messages when they are missing or older than the message files; branches do not change
+`scripts/isolated.ts` to add their own generation step.
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 

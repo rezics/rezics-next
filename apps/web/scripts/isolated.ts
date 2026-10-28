@@ -1,5 +1,6 @@
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
 const rawCommand = process.argv.slice(2);
@@ -33,14 +34,9 @@ if (command.length === 0) {
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },
     async (slotEnvironment) => {
-      if (!existsSync(join(app, 'src/paraglide/runtime.js'))) {
-        const generation = Bun.spawn(['bun', 'run', 'generate'], {
-          cwd: app,
-          stdout: 'inherit',
-          stderr: 'inherit',
-        });
-        const status = await generation.exited;
-        if (status !== 0) return status;
+      if (appCommand[0] === 'bun' && appCommand[1] === 'test') {
+        const messageCode = ensureMessagesReady(app);
+        if (messageCode !== 0) return messageCode;
       }
       const linux = process.platform === 'linux';
       let isolated = false;
