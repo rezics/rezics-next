@@ -33,6 +33,7 @@ export type PublishedSubject = {
 export type RealmHome = {
   id: string;
   title: string;
+  summary?: string;
   visibility: 'public' | 'protected';
   boards: RealmBoard[];
   published: PublishedSubject[];
@@ -207,7 +208,7 @@ export async function loadSpacePage(
   if (!realm) return { space: base, realm: null };
   return {
     space: base,
-    realm: { ...home, title: realm.realm.title, visibility: realm.realm.visibility },
+    realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
   };
 }
 

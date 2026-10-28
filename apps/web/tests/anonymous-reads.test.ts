@@ -253,7 +253,7 @@ test(
 );
 
 test(
-  'the signed-in browser rereads a marked public route once and receives its member state',
+  'the signed-in Space browser reads membership after hydration without rereading the page',
   async () => {
     const origin = await site();
     reset();
@@ -265,20 +265,20 @@ test(
     await page.getByRole('button', { name: 'Join' }).waitFor();
     await page.waitForLoadState('networkidle');
     const spaceReads = kernelCalls.filter((call) => call.path === `/v1/spaces/${spaceId}`);
-    expect(spaceReads).toHaveLength(2);
-    expect(spaceReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+    expect(spaceReads).toHaveLength(1);
+    expect(spaceReads.map((call) => call.authorization)).toEqual([null]);
     const memberReads = kernelCalls.filter((call) => call.path === `/v1/realms/${realmId}/members/me`);
     expect(memberReads).toHaveLength(1);
     expect(memberReads[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
-    expect(credentialReads).toBe(1);
+    expect(credentialReads).toBe(0);
     await page.context().close();
   },
   timeout,
 );
 
 test(
-  'a signed-in Realm page rereads once after hydration and receives its membership state',
+  'a signed-in Realm page reads membership after hydration without rereading its page',
   async () => {
     const origin = await site();
     reset();
@@ -290,13 +290,13 @@ test(
     await page.getByRole('button', { name: 'Join' }).waitFor();
     await page.waitForLoadState('networkidle');
     const realmReads = kernelCalls.filter((call) => call.path === `/v1/realms/${realmId}`);
-    expect(realmReads).toHaveLength(2);
-    expect(realmReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+    expect(realmReads).toHaveLength(1);
+    expect(realmReads.map((call) => call.authorization)).toEqual([null]);
     const memberReads = kernelCalls.filter((call) => call.path === `/v1/realms/${realmId}/members/me`);
     expect(memberReads).toHaveLength(1);
     expect(memberReads[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
-    expect(credentialReads).toBe(1);
+    expect(credentialReads).toBe(0);
     realmHasNoAddress = false;
     await page.context().close();
   },
@@ -485,8 +485,12 @@ test('closed and not-found pages return their real status and robots noindex', a
   expect(await missing.text()).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
 });
 
-test('the five page routes declare session rereads in route metadata', async () => {
-  for (const path of ['spaces/$address', 'realms/$id', 'boards/$id', 'threads/$id_.$slug', 'collections/$id']) {
+test('public community routes omit session rereads while personalized routes retain them', async () => {
+  for (const path of ['spaces/$address', 'realms/$id']) {
+    const source = await Bun.file(join(app, `src/routes/${path}.tsx`)).text();
+    expect(source).not.toContain('sessionReread: true');
+  }
+  for (const path of ['boards/$id', 'threads/$id_.$slug', 'collections/$id']) {
     const source = await Bun.file(join(app, `src/routes/${path}.tsx`)).text();
     expect(source).toContain('sessionReread: true');
   }

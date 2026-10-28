@@ -138,35 +138,34 @@ test('the Realm page reads its fixed set once, however many boards, publications
   for (const signedIn of [false, true])
     for (const size of scales) {
       const { client, env, request, counts, paths } = setup(size, signedIn);
-      const page = await loadSpacePage(client, request('spaces/atlas'), env, { address: 'atlas' });
+      const page = await loadSpacePage(client, request('spaces/atlas'), env, { address: 'atlas' }, 'anonymous');
       expect(page.realm?.boards).toHaveLength(Math.min(size, BOARD_ROW_LIMIT));
       expect(page.realm?.published).toHaveLength(Math.min(size, COVER_ROW_LIMIT));
-      // The address, the Space, then the Realm, boards, publications and, signed in, membership and participation
-      // together; then one subject summary per subject in the cover row, at most COVER_ROW_LIMIT.
-      const bound = (signedIn ? 7 : 5) + Math.min(size, COVER_ROW_LIMIT);
+      // The page is always anonymous; personal membership reads belong to the browser after hydration.
+      const bound = 5 + Math.min(size, COVER_ROW_LIMIT);
       expect({ size, signedIn, reads: paths.length }).toEqual({ size, signedIn, reads: bound });
-      expect(counts).toEqual({ D: signedIn ? 1 : 0, K: bound });
+      expect(counts).toEqual({ D: 0, K: bound });
     }
 });
 
 test('the Realm page of a Space without an address is read from the same fixed set', async () => {
   for (const size of scales) {
     const { client, env, request, counts } = setup(size, true, null);
-    const located = await locateRealm(client, request(`realms/${realm}`), env, { realmId: realm });
+    const located = await locateRealm(client, request(`realms/${realm}`), env, { realmId: realm }, 'anonymous');
     expect(located.kind).toBe('page');
     // The Realm and the Space, then boards, publications, membership and participation, then the cover row.
-    expect(counts).toEqual({ D: 1, K: 6 + Math.min(size, COVER_ROW_LIMIT) });
+    expect(counts).toEqual({ D: 0, K: 4 + Math.min(size, COVER_ROW_LIMIT) });
   }
 });
 
 test('a Realm link of a Space with an address costs two reads', async () => {
   for (const size of scales) {
     const { client, env, request, counts } = setup(size, true);
-    expect(await locateRealm(client, request(`realms/${realm}`), env, { realmId: realm })).toEqual({
+    expect(await locateRealm(client, request(`realms/${realm}`), env, { realmId: realm }, 'anonymous')).toEqual({
       kind: 'redirect',
       address: 'atlas',
     });
-    expect(counts).toEqual({ D: 1, K: 2 });
+    expect(counts).toEqual({ D: 0, K: 2 });
   }
 });
 

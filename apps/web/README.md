@@ -261,6 +261,8 @@ then the total, and stops the server when it exits.
 
 The home route reads its page through the public `homePageQuery`. Its server render reads no session; after hydration, a signed-in visitor starts the personal Continue query, which reserves its section height while it loads. Signed-out visitors see no Continue section or personal read.
 
+Space and Realm pages render from anonymous public reads on the server. A signed-in visitor loads Realm membership and participation in the browser after hydration; these routes do not reread the page with a session.
+
 **Search params**: Every route that reads search params declares a Valibot schema in `validateSearch`, with defaults for missing or invalid values. A loader that depends on them declares `loaderDeps`.
 
 **Head**: Every route's `head()` builds tags with `pageHead()` from `apps/web/src/shell/head.ts`: title, description, card, robots and JSON-LD. Canonical and `hreflang` alternates are emitted once for the page by the root, from the leaf route's locale paths.
@@ -619,7 +621,7 @@ language through the client's `accept-language`.
 
 ### Community page head
 
-- **Touches:** Builds title, localized description, default share card, robots and one JSON-LD graph from the Space and
+- **Touches:** Builds title, description, the first available published cover (or default share card), robots and one JSON-LD graph from the Space and
   public Realm data already rendered by the page. A protected Realm marks the page `noindex, follow`.
 - **Bound:** 0 additional K, D, R or A; constant local work per page.
 - **Growth check:** `tests/community-seo.test.ts`: unique localized metadata, public visibility, one WebPage and
