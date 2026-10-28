@@ -467,6 +467,7 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
   256, 1024 and 4096 reviews, seeded set-based at their authors' routes, with a spare review for each scale's warm-up.
 
 ### Notice inbox
+
 - **Touches:** List reads one recipient index range of at most `4 × limit` rows and checks candidate post readability in one batch. Count reads at most 101 unread index rows. Mark seen reads and writes one marker row.
 - **Bound:** List examines at most 200 notices per call, count at most 101, and mark seen one marker, independent of inbox size.
 - **Growth check:** `test/content/growth-notice-inbox.test.ts`, notices per recipient at 256, 1024 and 4096, with constant rows per call.
