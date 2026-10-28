@@ -171,7 +171,7 @@ async function contents(id: string) {
   const client = await reader.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const args = { route: routeOf(owner.actor.accountId)!, session_id: id, has_cursor: false, limit: 20_001 };
+    const args = { route: routeOf(id)!, session_id: id, has_cursor: false, limit: 20_001 };
     const units = await unitPage.run(client, { ...args, after_unit_id: '' });
     const changes = await changePage.run(client, { ...args, after_change_no: 0 });
     await client.query('COMMIT');
@@ -491,21 +491,29 @@ test('native guards conceal sessions and source failures and fence old receipts 
       await problem(await send('POST', '/v1/progressSessions', create(source)), 404, 'not_found');
     });
   for (const suffix of ['', '/completedUnits', '/changes']) {
-    await noEffects(async () => {
-      const read = await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer);
-      await problem(read, 404, 'not_found', 'not_applicable');
-    }, other.actor.accountId);
+    await noEffects(
+      async () => {
+        const read = await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer);
+        await problem(read, 404, 'not_found', 'not_applicable');
+      },
+      other.actor.accountId,
+      s.id,
+    );
     const anonymous = await native.send('anonymous', 'GET', path(s.id) + suffix);
     expect([401, 404]).toContain(anonymous.status);
     privateFree(await anonymous.json());
   }
-  await noEffects(async () => {
-    await problem(
-      await send('POST', `${path(s.id)}:record`, { revision: 1, amount: '1' }, entryKey(), other.bearer),
-      404,
-      'not_found',
-    );
-  }, other.actor.accountId);
+  await noEffects(
+    async () => {
+      await problem(
+        await send('POST', `${path(s.id)}:record`, { revision: 1, amount: '1' }, entryKey(), other.bearer),
+        404,
+        'not_found',
+      );
+    },
+    other.actor.accountId,
+    s.id,
+  );
   await expect(commands.listUnits(other.actor, s.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
   for (const fence of ['scope', 'suspension', 'authn'] as const) {
     const actor = await native.identity(scopes);
@@ -525,18 +533,22 @@ test('native guards conceal sessions and source failures and fence old receipts 
       });
     if (fence === 'suspension') await native.suspend(actor.actor.accountId);
     if (fence === 'authn') await native.revokeIdentity(actor.actor.accountId);
-    await noEffects(async () => {
-      for (const [url, body, receipt] of [
-        ['/v1/progressSessions', input, key],
-        [`${path(id)}:record`, value, recordKey],
-      ] as const) {
-        const denied = await send('POST', url, body, receipt, bearer);
-        expect([401, 403, 404]).toContain(denied.status);
-        const bodyDenied = await denied.json();
-        privateFree(bodyDenied);
-        expect(bodyDenied).not.toHaveProperty('progressSession');
-      }
-    }, actor.actor.accountId);
+    await noEffects(
+      async () => {
+        for (const [url, body, receipt] of [
+          ['/v1/progressSessions', input, key],
+          [`${path(id)}:record`, value, recordKey],
+        ] as const) {
+          const denied = await send('POST', url, body, receipt, bearer);
+          expect([401, 403, 404]).toContain(denied.status);
+          const bodyDenied = await denied.json();
+          privateFree(bodyDenied);
+          expect(bodyDenied).not.toHaveProperty('progressSession');
+        }
+      },
+      actor.actor.accountId,
+      id,
+    );
     if (fence === 'suspension')
       await expect(commands.readSession(actor.actor, id)).rejects.toBeInstanceOf(GrantDeniedError);
   }
