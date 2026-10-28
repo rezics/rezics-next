@@ -145,6 +145,7 @@ async function stored(
     id: reference.document,
     digest: reference.digest,
     subject,
+    anchor: null,
     candidate,
     revision,
     authorAccountId: accounts.editor,
