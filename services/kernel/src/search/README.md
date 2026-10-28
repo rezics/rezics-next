@@ -33,7 +33,8 @@ current filter evidence in the existing partial implementation; hit data is proj
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
 subject to the pending real-source/composition proof in [Indexed membership, current disclosure and convergence](#indexed-membership-current-disclosure-and-convergence).
 It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include
-stale source subjects despite current hit/value checks. This is an implementation gap: unsafe engine totals and facet counts must be omitted under [Filtered lists](../../../../docs/filtered-lists.md), without approximate/as_of, zero or row-length fallback. The immediate suppression authority remains
+stale source subjects despite current hit/value checks. The initial Search public response omits all totals,
+including verified rating lower bounds. Unsafe engine totals and facet counts must be omitted under [Filtered lists](../../../../docs/filtered-lists.md), without approximate/as_of, zero or row-length fallback. The immediate suppression authority remains
 [Deletion](../../../../docs/deletion.md), whose immediate suppression requirement remains authoritative. The existing
 relation-facet lower-bound behavior does not resolve general totals or bucket counts.
 
@@ -196,7 +197,10 @@ order or exhaustion. OpenSearch checks tuple arity against the selected sort and
 Current-source rejection consumes and drops an unsafe hit; Search never exposes its old score, relabels it as
 unscored in place or reranks it. This phase behavior alone does not establish query-level privacy or complete
 current-native order; the required safety observation and acknowledgement govern disclosure. This existing phase implementation does not prove current top-N or complete canonical traversal. Adopted lists require canonical cross-page uniqueness and epoch restart, with preparation where the direct plan cannot establish useful pages. A/B phase totals are internal indexed observations under a
-fixed-state theorem only. Unsafe rating totals must be omitted under the shared aggregate rule; neither live phase counts nor a disclosed-hit row-length fallback supplies a safe aggregate. A subject can move between phases between searches even when epoch and generation are unchanged.
+fixed-state theorem only. The initial public response has no rating total, including `lower_bound`; neither live
+phase counts nor a disclosed-hit row-length fallback supplies a safe aggregate. A future separately proved safe
+aggregate contract may admit counts. A subject can move between phases between searches even when epoch and
+generation are unchanged.
 
 Keep released `subjects-search-v2` source and ID unchanged. Reuse it if the fixed server-built phase filters, sorts,
 physical target and zero-size count request fit its existing template contract; introduce a new template version
@@ -226,8 +230,9 @@ to B only after a B hit is consumed.
 For native name ordering, Search stores the full normalized name key only when it is at most 512 UTF-16 code units;
 missing and oversized keys use null with native missing-last behavior and unique `id` ties. Do not truncate or hash
 the key. Full names and `names.exact` remain unchanged. The index's `name_key` normalizer is applied to the complete visible name in a
-bounded write-side `_analyze` pass before bulk indexing: deduplicate raw names and analyze at most 256 names per
-request. Do not send hidden or deleted action names to analysis. Keep one bulk action and its anchor external version
+bounded write-side `_analyze` pass before bulk indexing: deduplicate distinct nonnull raw names and send one
+`_analyze` request per name, with at most 16 requests in flight. Do not send hidden or deleted action names to
+analysis. Keep one bulk action and its anchor external version
 per subject; if normalization fails, do not partially bulk or advance the checkpoint. Mapping `ignore_above: 512`
 is only a defense: OpenSearch checks raw string length before applying the normalizer, so a short input can expand
 past the normalized bound. See the pinned OpenSearch 3.9.0
@@ -319,8 +324,11 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Source snapshot
 
-- Touches: Indexing calls `SubjectSource.read(partition, ids)` at most once for up to b distinct IDs; disclosure
-  reads once per candidate partition per round. The snapshot pairs the partition position with subject state, labels,
+- Touches: Indexing calls `SubjectSource.read(partition, ids)` in chunks of at most 256 deduplicated IDs in one
+  partition. For `u` requested anchors, `c = ceil(u/256)` calls are made, with zero calls for `u = 0`; the ordinary
+  64-envelope/1,000-event command bounds give at most 64,000 event anchors and 250 source calls per batch. Every
+  call is its own native repeatable-read snapshot and returns that chunk's partition position. The snapshot pairs
+  the partition position with subject state, labels,
   aliases, descriptions, adopted Global descriptive statements and relation facets. Only outgoing relation
   properties declared as facets for the subject's current type contribute to the existing `statements` and nested
   `facts` fields; nonfacets and incoming edges do not. Each declared relation property contributes at most 128
@@ -329,8 +337,13 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   predicates; a qualified relation filter is invalid, while descriptive qualifiers keep their existing meaning.
   Semantic's visible-at-build witness pointer stays internal and is not a Search field. Semantic's source, witness,
   fence and SQL costs are owned by the linked design rather than restated here.
-- Bound: Search snapshots and source calls are grouped by anchor partition; relation membership probes are capped
-  at 256 per call. The relation projection is bounded by 128 distinct values per declared property, not the source's
+- Bound: For `u` distinct requested anchors in one partition, indexing makes `c = ceil(u/256)` source calls,
+  at most `c` listing reads and at most `c` actual bulks; all are zero when `u = 0`. Every index/delete action uses
+  exactly the partition position from its own chunk snapshot as its external version. Chunks are processed so each
+  bulk is refresh-visible before checkpoint advance; no DB client or transaction spans engine HTTP. A later chunk
+  failure prevents checkpoint advance, and normal replay handles any visible prefix. The separate shared
+  visibility-409-winner proof is not implemented by this chunking. Counts and native facts retain their input and
+  history costs. Relation membership probes are capped at 256 per call. The relation projection is bounded by 128 distinct values per declared property, not the source's
   full relation degree; a missing value from a truncated sample never proves absence. A temporarily underfilled
   snapshot is also not evidence of complete absence. Treating nonoverflow snapshot absence as complete requires the
   integration proof described above. Semantic source and durable rebuild work still require their real-source
@@ -346,23 +359,26 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   [test/semantic/growth-search-source.test.ts](../../test/semantic/growth-search-source.test.ts): “Source snapshot
   stays within its bound as P grows” and “Source snapshot stays within its bound as a subject's history grows”,
   both at `[8, 64, 512]` with three repetitions; [test/search/indexing.test.ts](../../test/search/indexing.test.ts):
-  “cost per batch is one snapshot read and one bulk request at every batch size” proves calls only.
+  “cost per batch is one snapshot read and one bulk request at every batch size” describes the existing <=256 case
+  and proves request counts only. The ControlledSource/provider-boundary suite is [test/search/indexer-source-batches.test.ts](../../test/search/indexer-source-batches.test.ts): “one admitted event envelope with more than256 subjects converges through bounded source chunks and checkpoints only after every visible write” and its “later transport failure and genuine retry” case. The real Semantic source regression is [test/search/source-batching-native.test.ts](../../test/search/source-batching-native.test.ts): “native event anchors use exact chunk snapshots through later transport failure and replay”. Control-plane acceptance recorded all eight tests in that native file passing, including the six target-size cases. These call-count assertions are not end-to-end growth measurements; Semantic native SQL growth checks remain separately scoped.
 
 ### Document build, bulk and erasure
 
 - Touches: `documentActions` builds one action per requested ID in its anchor partition; visible nonredirected
   subjects index into `subjects-g<generation>` by `_id`; missing, hidden, taken-down or redirected subjects delete by
   `_id`. External version is the snapshot partition position. After the subject snapshot, indexing reads public
-  collection counts once for visible, nonredirected subjects it will index (one primary-key statement, at most b
-  rows; no read when none will be indexed). At most one `_bulk?refresh=wait_for` request (none without relevant IDs),
+  collection counts once per chunk for visible, nonredirected subjects it will index (one primary-key statement, at
+  most 256 rows; no read when none will be indexed). At most one `_bulk?refresh=wait_for` request per nonempty chunk
+  (none without relevant IDs),
   at most 2b NDJSON lines; no target traversal or SQL write. Grow N/P/H with b and subject payloads fixed.
 - Bound: At most b root documents written/deleted. Each indexed subject costs 1 + F Lucene documents: the root
   plus one nested document per facet-capable statement. A relation property's contribution is at most 128 distinct
   values plus its overflow marker; repeated relation witnesses for the same pair do not multiply indexed facts.
   Bulk size still includes each fact's Q qualifiers, existing descriptive/name payloads and the subject's declared
-  property set. Each indexing batch adds one listing read: one primary-key statement for at most b rows, constant in
-  N stored subjects and number of Collections. There is no listing read when no documents will be indexed. Requests
-  stay one snapshot read, one listing read when indexing documents, and one bulk request whatever F. No SQL writes.
+  property set. For `c` nonempty source chunks, each indexing batch adds at most `c` listing reads, each one
+  primary-key statement for at most 256 rows, constant in N stored subjects and number of Collections. There is no
+  listing read when no documents will be indexed. Requests stay `c` snapshot reads, at most `c` listing reads and
+  at most `c` bulks whatever F. No SQL writes.
   Kernel work is linear in selected fact/value bytes except sorting each subject's labels; there is no document byte
   cap, so growth checks fix payload sizes. Bulk item validation is `O(b)`; failure prevents checkpoint advance. The
   document adds an overflow property list only when needed and one integer listing-count field.
@@ -431,10 +447,16 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Touches: The hit subjects the final check already returned (no new read for them); the request's single
   active-release lookup, shared with filter admission; and item targets of the page's kept values: at most
   `s × P × 3` distinct ids (`s <= 100`, `P <= 4` requested properties, at most 1,200 ids). `discloseFacetValues`
-  reads them once, one `subjectSource.read` per target partition with concurrency <= 8. No target read when no kept
+  deduplicates by anchor, then chunks each home to at most 256 IDs. For home `p` with `u_p` targets, it makes
+  `sum_p ceil(u_p/256)` source calls; homes run with concurrency <= 8 and chunks within each home are sequential.
+  No target read when no kept
   value is an item.
 - Bound: Rows and statements are constant in N and P (partition rows) at fixed s and property count. Each source
-  read has the Source snapshot bound at fixed ids; blocks are logarithmic. Per hit, one scan of its statements.
+  read has the Source snapshot bound at fixed ids; blocks are logarithmic. A same-home 320-target label operation
+  makes two source calls; 1,200 hit-property targets in one home make five when admitted by the product. Multi-home
+  input uses the sum of per-home ceilings, not a ceiling over the total. Empty input makes no calls; a later source
+  failure rejects the operation. Chunking creates neither a privacy/absence certificate nor a cross-chunk
+  transaction. Per hit, one scan of its statements.
 - Growth check: [test/search/growth-facets.test.ts](../../test/search/growth-facets.test.ts): “Search hit facts stay
   within their bound as N grows” at scale units `[1, 4, 16]`.
 
@@ -442,9 +464,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 - Touches: existing aggregation machinery samples matching subjects and reads item value labels through the native
   source. Those label checks do not check every contributing subject or fact.
-- Bound: omit unsafe engine totals and facet counts over unchecked populations. Existing sample/overflow lower-bound
-  behavior describes partial implementation, not a privacy-safe aggregate; approximate/as_of and zero/row-length
-  substitutes are not permitted. Future safe aggregates require separately admitted complete disclosure dependencies
+- Bound: the initial public Search wire omits all totals, including verified rating lower bounds. Omit unsafe engine
+  totals and facet counts over unchecked populations. Existing sample/overflow lower-bound behavior describes
+  partial implementation, not a privacy-safe aggregate; approximate/as_of and zero/row-length substitutes are not
+  permitted. Future safe aggregates require separately admitted complete disclosure dependencies
   and query-level privacy acknowledgement. No new response schema is selected here.
 - Growth check: existing facet/overflow tests retain their scoped evidence. Native paused-indexer local/foreign
   reduction, NOT and order/count cases and three-scale engine/native captures remain required before safe aggregate
@@ -485,7 +508,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Touches: Each page resolves one physical generation and brackets its native epoch context; each refill round sends
   at most two phase searches, including count-only work, then checks current figures in bounded source batches.
 - Bound: At most 200 combined raw hits per round and 600 per three-round response; current-figure reads are batched
-  by anchor partition, at most 256 figure IDs per source call. OpenSearch sort and count work is match-dependent;
+  by anchor partition, at most 256 figure IDs per source call. The initial public response omits totals, including
+  verified `lower_bound` ratings. OpenSearch sort and count work is match-dependent;
   no SQL, latency or O(1) engine-work claim follows from these request bounds.
 - Growth check: [test/search/growth-rating-query.test.ts](../../test/search/growth-rating-query.test.ts): “native rating
   candidate delivery remains within shared phase quotas as the real indexed matching population grows”. The test is
