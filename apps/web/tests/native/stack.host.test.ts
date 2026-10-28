@@ -107,3 +107,49 @@ describe('native web stack', () => {
     if (databaseUrlBefore) expect(await semanticDatabases(databaseUrlBefore)).toEqual(databasesBefore);
   }, 300_000);
 });
+
+// Observe the transport boundary while still using native fetch and the served Worker.
+// The returned object must be that exact HTTP Response, with its body still unread.
+test('returns the original HTTP response and confines absolute URLs, credentials and redirects to the stack', async () => {
+  const stack = await startNativeWebStack();
+  stacks.push(stack);
+  let escaped = 0;
+  const canary = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch() {
+      escaped++;
+      return new Response('escaped');
+    },
+  });
+  const nativeFetch = globalThis.fetch;
+  const calls: { url: string; init?: RequestInit; response: Response }[] = [];
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const response = await nativeFetch(input, init);
+    calls.push({ url: String(input), init, response });
+    return response;
+  }) as typeof fetch;
+  try {
+    const path = '/en/subjects/00000000-0000-4000-8000-000000000000?transport=kept';
+    const response = await stack.request(`${canary.url.origin}${path}`, 'anonymous', { 'accept-language': 'zh-Hans' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${stack.web}${path}`);
+    expect(calls[0]!.init?.redirect).toBe('manual');
+    const sent = new Headers(calls[0]!.init?.headers);
+    expect(sent.get('accept-language')).toBe('zh-Hans');
+    expect(sent.has('authorization')).toBe(false);
+    expect(response).toBe(calls[0]!.response);
+    expect(response.status).toBe(404);
+    expect(response.bodyUsed).toBe(false);
+    expect(response.redirected).toBe(false);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(await response.text()).toContain('<html');
+    await expect(stack.kernel(canary.url.href)).rejects.toThrow('owned listener');
+    await expect(stack.kernel(`${stack.kernelOrigin}@127.0.0.1:${canary.port}/`)).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+    expect(escaped).toBe(0);
+  } finally {
+    globalThis.fetch = nativeFetch;
+    await canary.stop(true);
+  }
+}, 300_000);
