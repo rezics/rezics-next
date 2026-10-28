@@ -70,6 +70,7 @@ export type Settings = {
     compactTokens: { sol: number; luna: number };
     solContextWindow: number;
     toolOutputTokens: number;
+    backgroundTerminalMaxTimeoutMs: number;
   };
   integration: {
     batchSize: number;

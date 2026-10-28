@@ -103,7 +103,8 @@
       "luna": 200000
     },
     "solContextWindow": 500000,
-    "toolOutputTokens": 4000
+    "toolOutputTokens": 4000,
+    "backgroundTerminalMaxTimeoutMs": 7200000
   },
   "gate": ["bun", "scripts/gate.ts"]
 }

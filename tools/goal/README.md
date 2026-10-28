@@ -4,6 +4,12 @@ One Bun control plane owns worker dispatch, attempt records, the landing train a
 one local SQLite file, independent of the product database. `config.ts` composes the real worker fence, outcome sink,
 landing queue, manager inbox, train and completion checker. Production commands need no runtime module or plugin.
 
+Each worker attempt runs its detached process tree in its own transient `rezics-workers.slice` scope under the user's
+systemd manager. The slice uses CPUWeight 50 and IOWeight 50 so workers yield processor time and disk to checks,
+managers and the control plane when the host is busy, without a hard quota on worker width. IOWeight affects only
+devices whose scheduler honours weights, such as the BFQ-scheduled SATA member on host c. When a user systemd manager
+is unavailable, workers start in the existing detached process group and the launch logs the fallback reason.
+
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
 bun run --cwd tools/goal check
@@ -160,7 +166,14 @@ decode attempt bodies. The existing 15-second polling interval and ticket orderi
 | `GOAL_WORKTREE_ROOT`      | Worktree parent; defaults to `<main checkout>/.temp/worktrees`. |
 | `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation.                          |
 
-The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
+The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow`, `toolOutputTokens` and
+`backgroundTerminalMaxTimeoutMs`. Codex worker launches enable unified exec and pass this timeout as
+`background_terminal_max_timeout`, the maximum empty `write_stdin` wait; its default is 7,200,000 ms, matching the
+two-hour limit of the longest worker class. Workers run checks with `bun scripts/worker-check.ts -- <command...>`.
+It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
+then prints the exit status, a short failure summary when needed, and the log path. See the
+[Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) for unified exec and
+`background_terminal_max_timeout` behavior.
 The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
 `managerDirectory`, `inboxDirectory`, `managerSocket`, `tmuxSocket`, `tmuxCommand`, `termspacesCommand`, `tmuxSession`,
 `batchSize`, `managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
@@ -305,6 +318,10 @@ outside `tools/goal/`, as well as tasks from other Goals, continue to integrate 
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
+Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
+cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
+20 (hosts without that file do not wait); a retry recreates a missing worktree from its task branch and installs its
+dependencies before launch.
 At dispatch, a task is also held after the earliest running task or landing task with an unacknowledged landing request
 from any Goal that declares the same concrete, non-derived file. The controller records that task in `after:` and reports
 the shared file. Directory and glob patterns, and files matched by `defaults.json` `derivedFiles`, do not trigger this
@@ -347,6 +364,15 @@ Rebase-stage conflicts with the integration branch receive one same-profile reso
 the task worktree; a second conflict goes to the manager as a specification conflict.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
+
+At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
+Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
+
+### Worker container cleanup
+
+- Touches: one label-filtered Docker listing and removal of that attempt's returned container IDs.
+- Bound: only containers created by the exact task attempt are examined or removed; the work grows with that attempt's containers.
+- Growth check: `bun test tools/goal/src/worker-containers.test.ts` records wrapper arguments and attempt cleanup.
 
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the

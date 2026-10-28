@@ -8,6 +8,7 @@ import { attemptEnvironment, workerEnvironment, type RunningWorker } from './lau
 import { matchesPath } from './briefs.ts';
 import { changedFiles } from './merge.ts';
 import { runAffectedTest } from './merge-train.ts';
+import { removeAttemptContainers } from './worker-containers.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
@@ -27,7 +28,6 @@ export async function settle(
     code = -1;
   }
   const store = tasks.store;
-  store.assertCurrent(ref);
   let lease;
   try {
     lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`);
@@ -36,6 +36,10 @@ export async function settle(
     throw error;
   }
   try {
+    // This is the common completion path for normal exits, stops, timeouts and orphan recovery.
+    removeAttemptContainers(ref.taskId, ref.attempt);
+    // Stopped or superseded attempts still need Docker cleanup even though they no longer settle records.
+    store.assertCurrent(ref);
     await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
     await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
     let queued = false;
@@ -122,10 +126,15 @@ export async function settle(
             check.command,
             task.worktree,
             `${store.attempt(ref).logPath}.affected-${index}.log`,
-            workerEnvironment(pool, {
-              ...attemptEnvironment(task, ref, tasks.settings.stateDirectory),
-              KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
-            }),
+            workerEnvironment(
+              pool,
+              {
+                ...attemptEnvironment(task, ref, tasks.settings.stateDirectory),
+                KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
+              },
+              process.env,
+              task.worktree,
+            ),
           );
           store.updateAttempt(ref, (attempt) => {
             (attempt.affectedTests ??= []).push(result);
