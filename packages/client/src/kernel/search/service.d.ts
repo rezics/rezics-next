@@ -5,6 +5,7 @@ import { type FacetRequest, type FacetValue } from './facets.ts';
 import { type SearchHit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
+import { type PublicRatingSource } from './rating-source.ts';
 import type { SubjectSource } from './source.ts';
 export type SearchRequest = {
     text?: string;
@@ -21,21 +22,18 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
-export declare function createSearchService({ pool, client, prefix, source, cursors, facetSample, release, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, facetSample, release, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
+    ratings?: PublicRatingSource;
     cursors: KeyRing;
     release?: () => Promise<FilterRelease | null>;
     facetSample?: number;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
         subjects: SearchHit[];
-        total: {
-            value: number;
-            relation: 'exact' | 'lower_bound';
-        };
         next: string | null;
         as_of: string;
     }>;
@@ -44,13 +42,8 @@ export declare function createSearchService({ pool, client, prefix, source, curs
     }, now?: number): Promise<{
         facets: {
             property: string;
-            relation: "exact" | "lower_bound";
-            values: FacetValue[];
+            values: Omit<FacetValue, "count">[];
         }[];
-        total: {
-            value: number;
-            relation: 'exact' | 'lower_bound';
-        };
         as_of: string;
     }>;
     suggest(q: string, limit?: number, languages?: string[]): Promise<{

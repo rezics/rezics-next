@@ -145698,20 +145698,10 @@
                           "property": {
                             "type": "string"
                           },
-                          "relation": {
-                            "enum": [
-                              "exact",
-                              "lower_bound"
-                            ],
-                            "type": "string"
-                          },
                           "values": {
                             "items": {
                               "additionalProperties": false,
                               "properties": {
-                                "count": {
-                                  "type": "integer"
-                                },
                                 "labels": {
                                   "patternProperties": {
                                     "^.*$": {
@@ -145726,7 +145716,6 @@
                               },
                               "required": [
                                 "value",
-                                "count",
                                 "labels"
                               ],
                               "type": "object"
@@ -145736,37 +145725,15 @@
                         },
                         "required": [
                           "property",
-                          "relation",
                           "values"
                         ],
                         "type": "object"
                       },
                       "type": "array"
-                    },
-                    "total": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "relation": {
-                          "enum": [
-                            "exact",
-                            "lower_bound"
-                          ],
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "relation"
-                      ],
-                      "type": "object"
                     }
                   },
                   "required": [
                     "facets",
-                    "total",
                     "as_of"
                   ],
                   "type": "object"
@@ -147008,7 +146975,8 @@
                       "relevance",
                       "name",
                       "id",
-                      "collections"
+                      "collections",
+                      "rating"
                     ],
                     "type": "string"
                   },
@@ -147352,31 +147320,10 @@
                         "type": "object"
                       },
                       "type": "array"
-                    },
-                    "total": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "relation": {
-                          "enum": [
-                            "exact",
-                            "lower_bound"
-                          ],
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "relation"
-                      ],
-                      "type": "object"
                     }
                   },
                   "required": [
                     "subjects",
-                    "total",
                     "next",
                     "as_of"
                   ],

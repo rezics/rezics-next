@@ -47,7 +47,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                     body: {
                         text?: string;
                         filter?: any;
-                        sort?: "collections" | "id" | "name" | "relevance";
+                        sort?: "collections" | "id" | "name" | "rating" | "relevance";
                         limit?: number;
                         cursor?: string;
                         descriptions?: boolean;
@@ -116,10 +116,6 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                                     value: string;
                                 })[]>;
                             }[];
-                            total: {
-                                value: number;
-                                relation: "exact" | "lower_bound";
-                            };
                             next: string | null;
                             as_of: string;
                         };
@@ -234,17 +230,11 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                         200: {
                             facets: {
                                 property: string;
-                                relation: "exact" | "lower_bound";
                                 values: {
                                     value: string;
-                                    count: number;
                                     labels: Record<string, string>;
                                 }[];
                             }[];
-                            total: {
-                                value: number;
-                                relation: "exact" | "lower_bound";
-                            };
                             as_of: string;
                         };
                         400: {
