@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { git as repositoryGit } from './merge.ts';
 
 import { loadSettings } from './config.ts';
@@ -218,6 +218,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     const tree = join(h.settings.stateDirectory, `dev-${crypto.randomUUID()}`);
     repositoryGit(h.root, 'worktree', 'add', '--detach', tree, 'dev');
     try {
+      mkdirSync(dirname(join(tree, file)), { recursive: true });
       writeFileSync(join(tree, file), content);
       repositoryGit(tree, 'add', '--', file);
       repositoryGit(tree, 'commit', '-qm', `Change ${file}`);
