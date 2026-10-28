@@ -15,7 +15,7 @@ export function readRouting(file: string): RoutingTable {
   const profile = (p: Profile) => {
     if (!p || !['codex', 'grok', 'cursor', 'claude'].includes(p.cli) || !p.model || !p.poolClass
       || !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)) throw new Error('invalid routing profile');
-    if (p.serviceTier !== undefined && !['default', 'fast'].includes(p.serviceTier)) throw new Error('invalid routing profile service tier');
+    if (p.serviceTier !== undefined && p.serviceTier !== 'default') throw new Error('routing profiles cannot choose a service tier other than default; the tier is a setting');
   };
   for (const key of ['implementation', 'interface', 'bulk-text', 'claim', 'specification', 'critical-path', 'research'] as const) {
     const route = table.classes[key];

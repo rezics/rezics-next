@@ -97,7 +97,7 @@
     "termspacesCommand": "termspaces"
   },
   "codex": {
-    "serviceTier": "fast",
+    "serviceTier": "default",
     "compactTokens": {
       "sol": 160000,
       "luna": 200000
