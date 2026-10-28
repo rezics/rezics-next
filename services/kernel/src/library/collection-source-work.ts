@@ -25,6 +25,17 @@ export class NativeCollectionWork {
   private readonly held = zero();
   private readonly remaining: WorkDimensions;
   failure: Error | undefined;
+  private readonly resultBytes = new Map<string, number>();
+
+  /** A same-snapshot size point admits an otherwise unbounded native projection. */
+  admitResultBytes(key: string, bytes: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) throw new TypeError('Invalid native byte admission');
+    this.resultBytes.set(key, bytes);
+  }
+
+  resultByteBound(key: string): number | undefined {
+    return this.resultBytes.get(key);
+  }
 
   constructor(
     private readonly allowance: WorkAllowance,

@@ -50,13 +50,16 @@ export type NativeCollectionMetadata = Readonly<
     authority: 'curated' | 'private_builtin' | 'unavailable_output';
   }
 >;
-export type NativeCollectionProbe = {
-  result: 'present' | 'absent' | 'not_proven';
-  key: CanonicalRangeKey | null;
-  progress: CanonicalRangeKey | null;
-  witness: { incarnation: string; sourceGeneration: string; factFence: string | null } | null;
-  work: WorkReceipt;
-};
+export type NativeCollectionWitness = Readonly<{
+  incarnation: string;
+  sourceGeneration: string;
+  factFence: string | null;
+}>;
+type ProbeEvidence =
+  | { result: 'present'; key: CanonicalRangeKey; progress: null; witness: NativeCollectionWitness }
+  | { result: 'absent'; key: null; progress: null; witness: null }
+  | { result: 'not_proven'; key: null; progress: CanonicalRangeKey | null; witness: null };
+export type NativeCollectionProbe = ProbeEvidence & { work: WorkReceipt };
 import headerQuery from './collection-source-native-header.sql';
 const headerSQL = headerQuery.sql;
 import membersQuery from './collection-source-native-members.sql';
@@ -65,6 +68,8 @@ import probeQuery from './collection-source-native-probe.sql';
 const probeSQL = probeQuery.sql;
 const bind = (query: { params: readonly string[] }, values: Record<string, unknown>) =>
   query.params.map((name) => values[name]);
+const partitionSizeSQL =
+  'SELECT octet_length(node)::bigint + COALESCE(octet_length(moved_to),0)::bigint AS bytes FROM core.partition WHERE partition_no=$1';
 const fenceSQL = 'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2';
 const referenceSQL =
   'SELECT collection_id FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2';
@@ -95,7 +100,8 @@ const fixed = (rows: number, points: number, bytes: number) => () => ({
 });
 // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
 // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
-for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL, partitionRead.sql]) register(sql, fixed(4, 1, 2048));
+for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
+register(partitionSizeSQL, fixed(4, 1, 128));
 register(entrySQL, () => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: 256 }));
 register(pinSQL, (v) => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: Number(v[3]) }));
 for (const sql of [probeSQL, copySQL, sessionSQL])
@@ -142,9 +148,16 @@ for (const query of [candidates, permissions])
       points = targets * branches * keys * (grantRoles + 4) + 1;
     return { nativeRows: 32 * points + 64, nativePoints: points, bytes: 256 * keys };
   });
-function footprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
+function footprint(sql: string, values: readonly unknown[], work: NativeCollectionWork): WorkDimensions | undefined {
   const control = /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(sql);
-  const cost = control ? { nativeRows: 0, nativePoints: 0, bytes: 0 } : costs.get(normal(sql))?.(values);
+  const partitionBytes = work.resultByteBound('partition:' + values[0]);
+  const cost = control
+    ? { nativeRows: 0, nativePoints: 0, bytes: 0 }
+    : normal(sql) === normal(partitionRead.sql)
+      ? partitionBytes === undefined
+        ? undefined
+        : { nativeRows: 4, nativePoints: 1, bytes: partitionBytes }
+      : costs.get(normal(sql))?.(values);
   if (!cost) return undefined; // Includes unproved cold catalogue/schema checks and unknown owner ports.
   return {
     candidateKeys: 0,
@@ -164,10 +177,15 @@ async function call<T extends object>(
   operation: (work: NativeCollectionWork) => Promise<T>,
 ) {
   const work = new NativeCollectionWork(options.allowance, options.deadline);
-  return instrumentNativeCollectionWork(pool, work, footprint, async () => ({
-    ...(await operation(work)),
-    work: work.receipt(),
-  }));
+  return instrumentNativeCollectionWork(
+    pool,
+    work,
+    (sql, values) => footprint(sql, values, work),
+    async () => ({
+      ...(await operation(work)),
+      work: work.receipt(),
+    }),
+  );
 }
 async function readOnly<T>(pool: Pool, deadline: number, operation: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
@@ -193,7 +211,11 @@ async function readOnly<T>(pool: Pool, deadline: number, operation: (client: Poo
 function validate(ref: Ref) {
   if (routeOf(ref.collectionId) !== ref.route) throw new TypeError('Invalid native Collection reference');
 }
-async function observe(client: PoolClient, ref: Ref): Promise<NativeCollectionMetadata | null> {
+async function observe(
+  client: PoolClient,
+  ref: Ref,
+  work: NativeCollectionWork,
+): Promise<NativeCollectionMetadata | null> {
   validate(ref);
   const row = (
     await client.query<Header>(headerSQL, bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
@@ -203,7 +225,11 @@ async function observe(client: PoolClient, ref: Ref): Promise<NativeCollectionMe
       throw new ProblemError('dependency_unavailable');
     return null;
   }
-  const partition = await readPartition(client, partitionOf(ref.route));
+  const home = partitionOf(ref.route);
+  const size = (await client.query<{ bytes: string }>(partitionSizeSQL, [home])).rows[0];
+  if (!size) throw new ProblemError('partition_unavailable');
+  work.admitResultBytes('partition:' + home, 6 * Number(size.bytes) + 256);
+  const partition = await readPartition(client, home);
   if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
   const authority =
     row.membershipKind === 'curated'
@@ -225,8 +251,8 @@ async function observe(client: PoolClient, ref: Ref): Promise<NativeCollectionMe
   });
 }
 export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
-  return call(pool, options, async () => ({
-    metadata: await readOnly(pool, options.deadline, (client) => observe(client, ref)),
+  return call(pool, options, async (work) => ({
+    metadata: await readOnly(pool, options.deadline, (client) => observe(client, ref, work)),
   }));
 }
 export function authorizeNativeCollectionMetadata(
@@ -235,7 +261,7 @@ export function authorizeNativeCollectionMetadata(
   context: Options & { access: Access; actor: Actor; at: AuthoritativeTime },
 ) {
   authoritativeTimeValue(context.at);
-  return call(pool, context, async () => {
+  return call(pool, context, async (work) => {
     const access = accessRoot(context.access);
     try {
       await admitGroup({
@@ -261,7 +287,7 @@ export function authorizeNativeCollectionMetadata(
       },
       async verify({ client }) {
         try {
-          current = await observe(client as PoolClient, metadata);
+          current = await observe(client as PoolClient, metadata, work);
           return current?.state === 'active' && current.visibility !== 'private';
         } catch (error) {
           failure = error;
@@ -279,7 +305,7 @@ export function authorizeNativeCollectionMetadata(
     return readOnly(pool, context.deadline, async (client) => {
       const allowed = await check(client, context.at);
       if (failure) throw failure;
-      current ??= await observe(client, metadata);
+      current ??= await observe(client, metadata, work);
       if (!allowed || !current || current.state !== 'active' || current.incarnation !== metadata.incarnation)
         return { authorized: false };
       if (current.visibility !== 'private') return { authorized: true };
@@ -308,8 +334,8 @@ export function authorizeNativeCollectionMetadata(
     });
   });
 }
-async function currentSource(client: PoolClient, metadata: NativeCollectionMetadata) {
-  const current = await observe(client, metadata);
+async function currentSource(client: PoolClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
+  const current = await observe(client, metadata, work);
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
     current.incarnation !== metadata.incarnation ||
@@ -344,9 +370,9 @@ export function readNativeCollectionRawPage(
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new RangeError('Native source limit must be 1..100');
   keyInput(input.after, input.driver);
-  return call(pool, input, async () =>
+  return call(pool, input, async (work) =>
     readOnly(pool, input.deadline, async (client) => {
-      const current = await currentSource(client, metadata);
+      const current = await currentSource(client, metadata, work);
       if ((current.authority === 'curated') !== (input.driver === 'member') || input.driver === 'output')
         throw new ProblemError('dependency_unavailable');
       const query = input.driver === 'member' ? membersQuery : factsQuery;
@@ -390,20 +416,25 @@ export async function probeNativeCollectionOriginal(
   try {
     return await call(pool, input, async (work) =>
       readOnly(pool, input.deadline, async (client) => {
-        const current = await currentSource(client, metadata);
-        const done = (result: NativeCollectionProbe['result'], key: CanonicalRangeKey | null = null) => ({
-          result,
-          key,
-          progress: result === 'not_proven' ? progress : null,
-          witness:
-            result === 'present'
-              ? {
-                  incarnation: current.incarnation,
-                  sourceGeneration: current.sourceGeneration,
-                  factFence: current.factFence,
-                }
-              : null,
-        });
+        const current = await currentSource(client, metadata, work);
+        const done = (result: NativeCollectionProbe['result'], key: CanonicalRangeKey | null = null): ProbeEvidence => {
+          if (result === 'present') {
+            if (!key) throw new TypeError('Missing native source witness key');
+            return {
+              result,
+              key,
+              progress: null,
+              witness: {
+                incarnation: current.incarnation,
+                sourceGeneration: current.sourceGeneration,
+                factFence: current.factFence,
+              },
+            };
+          }
+          return result === 'absent'
+            ? { result, key: null, progress: null, witness: null }
+            : { result, key: null, progress, witness: null };
+        };
         if (current.authority === 'curated') {
           const row = (
             await client.query<{ storedSubjectId: string; factId: string }>(
@@ -434,12 +465,16 @@ export async function probeNativeCollectionOriginal(
             const bytes = row.compressed ? 1024 * 1024 * 1024 : 6 * (row.bytes ?? 0) + 256;
             {
               const pin = (
-                await client.query<{ library_profile_pin: { releaseDigest?: string; profileId?: string } | null }>(
-                  pinSQL,
-                  [...params, bytes],
-                )
+                await client.query<{
+                  library_profile_pin: { provenance?: string; releaseDigest?: string; profileId?: string } | null;
+                }>(pinSQL, [...params, bytes])
               ).rows[0]?.library_profile_pin;
-              if (!pin || pin.releaseDigest !== current.releaseDigest || pin.profileId !== current.profileId)
+              if (
+                !pin ||
+                pin.provenance !== 'profile' ||
+                pin.releaseDigest !== current.releaseDigest ||
+                pin.profileId !== current.profileId
+              )
                 return done('not_proven');
               return done('present', { driver: 'entry', storedSubjectId: input.originalId, factId: input.originalId });
             }
