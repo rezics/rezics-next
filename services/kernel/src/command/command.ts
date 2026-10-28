@@ -597,14 +597,21 @@ export async function runCommand<T>(
     } catch (error) {
       if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
-      if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError) throw error;
+      if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
+      if (error instanceof AccessUnavailableError && reason !== 'contention') throw error;
       if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
       if (reason === 'contention') {
-        if (Date.now() >= deadline) throw new CommandUnavailableError('contention', partition);
+        if (Date.now() >= deadline) {
+          if (error instanceof AccessUnavailableError) throw error;
+          throw new CommandUnavailableError('contention', partition);
+        }
         const maximum = Math.min(100, 5 * 2 ** contentionAttempts++);
         await pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now())));
-        if (Date.now() >= deadline) throw new CommandUnavailableError('contention', partition);
+        if (Date.now() >= deadline) {
+          if (error instanceof AccessUnavailableError) throw error;
+          throw new CommandUnavailableError('contention', partition);
+        }
         continue;
       }
       if (Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);

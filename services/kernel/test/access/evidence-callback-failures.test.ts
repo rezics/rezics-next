@@ -28,7 +28,8 @@ let realm: ActorFixture;
 let durable: Awaited<ReturnType<typeof nativeModule>>;
 let operation: Awaited<ReturnType<typeof durable.fixture>>;
 let account: Awaited<ReturnType<(typeof import('../../src/access/account-data.ts'))['readAccount']>>;
-const context = () => ({ pool, deadline: Date.now() + 5000 });
+let requestDeadlineMs = 5000;
+const context = () => ({ pool, deadline: Date.now() + requestDeadlineMs });
 const actions = new Map([
   ['subject:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
@@ -137,11 +138,12 @@ async function effects(client: Pool = pool) {
 }
 
 async function execute(authorization: CommandAuthorization, child?: string, type?: string) {
+  const deadline = context().deadline;
   return runCommand(
     pool,
     {
       partition: partitionOf(f.resource.route),
-      deadline: Date.now() + 5000,
+      deadline,
       basis: { actorAccountId: f.actorId, clientId: f.actor.clientId, requestedBy: null },
       authorization,
       receipt: { actorAccountId: f.actorId, kind: 'callback.test', key: crypto.randomUUID(), digest: Buffer.alloc(32) },
@@ -335,6 +337,7 @@ const faults = [
 for (const [site, invoke] of Object.entries(sites)) {
   for (const [name, error, reason] of faults) {
     test(`${site}: ${name} closes the request without effects`, async () => {
+      requestDeadlineMs = reason === 'contention' ? 35 : 5000;
       const cause = error();
       let calls = 0;
       const before = await effects(site.startsWith('durable') ? durable.db.pool : pool);
@@ -354,6 +357,7 @@ for (const [site, invoke] of Object.entries(sites)) {
         caught = error;
       } finally {
         log.mockRestore();
+        requestDeadlineMs = 5000;
       }
       expect(calls).toBeGreaterThan(0);
       if (reason) {
