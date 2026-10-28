@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MergeTrain } from './merge-train.ts';
 import { git, type GateRunner } from './merge.ts';
@@ -102,6 +102,9 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
     );
     expect(h.store.task(task.id).state).toBe('merged');
     expect(h.outcomes[0]?.mergedCommit).toBe(main);
+    // The control plane runs from the main checkout's files, so they must be the landed tree, not just the ref.
+    expect(readFileSync(join(h.root, 'tools/goal/src/hotfix.ts'), 'utf8')).toBe('tools/goal/src/hotfix.ts');
+    expect(git(h.root, 'status', '--porcelain', '--untracked-files=no')).toBe('');
   } finally {
     h.dispose();
   }

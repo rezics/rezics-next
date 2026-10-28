@@ -781,12 +781,21 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
-            if (conflicts.length) {
+            // Deferral is for a conflict with an earlier member of this batch. First in its batch, the landing
+            // conflicts with dev itself and only its worker can resolve that: deferred again every round, a busy
+            // queue kept one landing waiting 3 h 41 min with no outcome.
+            if (conflicts.length && previous !== base) {
               appendFileSync(
                 logPath,
                 `Deferred until a later batch round; rebase conflicts: ${conflicts.join(', ')}\n`,
               );
               deferred.add(entry.id);
+            } else if (conflicts.length) {
+              result.stage = 'rebase';
+              result.conflictedFiles = conflicts;
+              result.firstFailure = firstFailure(String(error));
+              appendFileSync(logPath, `Rebase conflicts with dev: ${conflicts.join(', ')}\n`);
+              localOutcomes.set(entry.id, result);
             } else {
               result.stage = 'rebase';
               result.firstFailure = firstFailure(String(error));
@@ -1533,7 +1542,13 @@ export class MergeTrain {
           if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
             throw new Error('Main checkout HEAD changed');
-          if (integratesIntoDev || controlPlane) {
+          if (controlPlane) {
+            o.beforeIntegrationAdvance?.();
+            if (target() !== base) return '';
+            // main is checked out in the main checkout, and the control plane runs from its files. Moving only the ref
+            // left the files at an older tree: four landed control-plane fixes were not running for an hour and a half.
+            git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
+          } else if (integratesIntoDev) {
             o.beforeIntegrationAdvance?.();
             try {
               git(o.mainCheckout, 'update-ref', targetRef, candidate, base);
