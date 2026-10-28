@@ -28,34 +28,61 @@ beforeAll(async () => {
   system = await createNativeContentSystem({ databaseUrl });
   db = await openGrowthDatabase(system.database.pool.options.connectionString);
   await bootstrapRelease(system.database.pool, bundledRelease);
-  const command = async <T>(method: string, path: string, body: unknown, bearer = system.actors.moderator.bearer,
-    extraHeaders: Record<string, string> = {}) => {
-    const { response } = await system.transport.capture(new Request(`https://content.test${path}`, {
-      method,
-      headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'idempotency-key': randomUUID(), ...extraHeaders },
-      body: JSON.stringify(body),
-    }));
+  const command = async <T>(
+    method: string,
+    path: string,
+    body: unknown,
+    bearer = system.actors.moderator.bearer,
+    extraHeaders: Record<string, string> = {},
+  ) => {
+    const { response } = await system.transport.capture(
+      new Request(`https://content.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': randomUUID(),
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      }),
+    );
     if (!response.ok) throw new Error(`Fixture command ${method} ${path}: ${response.status} ${await response.text()}`);
-    return await response.json() as T;
+    return (await response.json()) as T;
   };
   const scheme = await command<{ subject: { id: string } }>('POST', '/v1/subjects', {
-    type: 'skos:ConceptScheme', labels: { en: 'Report effect fixture scheme' },
+    type: 'skos:ConceptScheme',
+    labels: { en: 'Report effect fixture scheme' },
   });
   const concept = await command<{ subject: { id: string } }>('POST', '/v1/subjects', {
-    type: 'skos:Concept', labels: { en: 'Report effect fixture concept' },
-    statements: { 'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.subject.id } }] },
+    type: 'skos:Concept',
+    labels: { en: 'Report effect fixture concept' },
+    statements: {
+      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.subject.id } }],
+    },
   });
   const space = await command<{ space: { spaceId: string } }>('POST', '/v1/spaces', {
-    title: 'Report effect fixture space', summary: 'Report effect fixture space',
+    title: 'Report effect fixture space',
+    summary: 'Report effect fixture space',
   });
   const realm = await command<{ realm: { realmId: string; headRevisionId: string } }>('POST', '/v1/realms', {
-    spaceId: space.space.spaceId, title: 'Report effect fixture realm', summary: 'Report effect fixture realm',
-    visibility: 'public', contextId: GLOBAL_CONTEXT,
+    spaceId: space.space.spaceId,
+    title: 'Report effect fixture realm',
+    summary: 'Report effect fixture realm',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
   });
-  await command('PUT', `/v1/realms/${realm.realm.realmId}/boardScheme`, { schemeId: scheme.subject.id }, system.actors.moderator.bearer,
-    { 'if-match': JSON.stringify(realm.realm.headRevisionId) });
+  await command(
+    'PUT',
+    `/v1/realms/${realm.realm.realmId}/boardScheme`,
+    { schemeId: scheme.subject.id },
+    system.actors.moderator.bearer,
+    { 'if-match': JSON.stringify(realm.realm.headRevisionId) },
+  );
   const board = await command<{ board: { id: string } }>('POST', `/v1/realms/${realm.realm.realmId}/boards`, {
-    conceptId: concept.subject.id, title: 'Report effect fixture board', visibility: 'published',
+    conceptId: concept.subject.id,
+    title: 'Report effect fixture board',
+    visibility: 'published',
   });
   target = { kind: 'board', id: board.board.id };
 }, 120_000);
@@ -69,26 +96,56 @@ function growthRows(population: Population, placement: { ordinal: number; route:
   const reportId = newId(placement.route);
   const targetRoute = routeOf(target.id)!;
   return {
-    'content.report': [{ route: placement.route, report_id: reportId, target_kind: target.kind,
-      target_id: target.id, revision_id: null, reason: 'spam', evidence: null, reporter_account_id: null,
-      created_at: new Date('2026-10-27T00:00:00.000Z'), recorded_transaction_id: randomUUID() }],
-    ...(population.name.endsWith('reverse') ? {
-      'content.report_target': [{ route: targetRoute, target_kind: target.kind, target_id: target.id,
-        report_route: placement.route, report_id: reportId, created_at: new Date('2026-10-27T00:00:00.000Z') }],
-    } : {}),
+    'content.report': [
+      {
+        route: placement.route,
+        report_id: reportId,
+        target_kind: target.kind,
+        target_id: target.id,
+        revision_id: null,
+        reason: 'spam',
+        evidence: null,
+        reporter_account_id: null,
+        created_at: new Date('2026-10-27T00:00:00.000Z'),
+        recorded_transaction_id: randomUUID(),
+      },
+    ],
+    ...(population.name.endsWith('reverse')
+      ? {
+          'content.report_target': [
+            {
+              route: targetRoute,
+              target_kind: target.kind,
+              target_id: target.id,
+              report_route: placement.route,
+              report_id: reportId,
+              created_at: new Date('2026-10-27T00:00:00.000Z'),
+            },
+          ],
+        }
+      : {}),
   };
 }
 
-async function createReportEvents(db: GrowthDatabase, requiredPartition?: number): Promise<{ events: CloudEvent[]; partition: number }> {
-  const actor = await system.access.authenticate(system.actors.author.bearer, { pool: db.pool, deadline: Date.now() + 30_000 });
+async function createReportEvents(
+  db: GrowthDatabase,
+  requiredPartition?: number,
+): Promise<{ events: CloudEvent[]; partition: number }> {
+  const actor = await system.access.authenticate(system.actors.author.bearer, {
+    pool: db.pool,
+    deadline: Date.now() + 30_000,
+  });
   const events: CloudEvent[] = [];
   let attempts = 0;
   let sourcePartition = requiredPartition;
   while (events.length < runsPerScale && attempts < 4096) {
     attempts++;
-    const outcome = await createReport({ pool: db.pool, access: system.access, routeKey: system.routeKey }, actor,
+    const outcome = await createReport(
+      { pool: db.pool, access: system.access, routeKey: system.routeKey },
+      actor,
       { target, reason: 'other', evidence: 'Growth report evidence' },
-      { idempotencyKey: randomUUID(), requestId: randomUUID(), deadline: Date.now() + 30_000 });
+      { idempotencyKey: randomUUID(), requestId: randomUUID(), deadline: Date.now() + 30_000 },
+    );
     const reportId = outcome.value.reportId;
     const reportPartition = partitionOf(routeOf(reportId)!);
     if (sourcePartition === undefined) {
@@ -100,16 +157,23 @@ async function createReportEvents(db: GrowthDatabase, requiredPartition?: number
     const consumer = `growth_report_effect_${partition}`;
     let found: CloudEvent | undefined;
     for (let batch = 0; batch < 100 && !found; batch++) {
-      const result = await readBatch(db.pool, { consumer, partition, envelopes: 64, apply: async (envelopes) => {
-        for (const envelope of envelopes) for (const event of envelope.events)
-          if (event.type === sourceType && event.subject === reportId) found = event;
-      } });
+      const result = await readBatch(db.pool, {
+        consumer,
+        partition,
+        envelopes: 64,
+        apply: async (envelopes) => {
+          for (const envelope of envelopes)
+            for (const event of envelope.events)
+              if (event.type === sourceType && event.subject === reportId) found = event;
+        },
+      });
       if (result.status !== 'read' || result.envelopes === 0) break;
     }
     if (!found) throw new Error(`Kernel event reader did not return report ${reportId}`);
     events.push(found);
   }
-  if (events.length !== runsPerScale) throw new Error(`Could not create enough reports in partition ${sourcePartition}`);
+  if (events.length !== runsPerScale)
+    throw new Error(`Could not create enough reports in partition ${sourcePartition}`);
   return { events, partition: sourcePartition! };
 }
 
@@ -118,16 +182,23 @@ test('Report effect projection stays within its bound as source reports and targ
   let runOffset = 0;
   let sourcePartition: number | undefined;
   const sourcePopulation = (partition: number): Population => ({
-    name: `report-effect-source-${partition}`, hotPartition: partition, hotShare: 1,
+    name: `report-effect-source-${partition}`,
+    hotPartition: partition,
+    hotShare: 1,
     rows: (place) => growthRows(sourcePopulation(partition), place),
   });
   const reversePopulation = (partition: number): Population => ({
-    name: `report-effect-reverse-${partition}`, hotPartition: partition, hotShare: 0,
+    name: `report-effect-reverse-${partition}`,
+    hotPartition: partition,
+    hotShare: 0,
     rows: (place) => growthRows(reversePopulation(partition), place),
   });
   const report = await checkGrowth(db, {
     name: 'Report effect projection stays within its bound as source reports and target reverse-index history grow',
-    scales, repetitions, warmups, bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    scales,
+    repetitions,
+    warmups,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(observed, scale, previous) {
       if (sourcePartition === undefined) {
         const created = await createReportEvents(observed);
@@ -149,12 +220,22 @@ test('Report effect projection stays within its bound as source reports and targ
       await applyReportEffect(observed.pool, event);
       const reportId = event.subject!;
       const reportTime = await observed.admin.query<{ created_at: string }>(
-        'SELECT created_at::text FROM content.report WHERE route=$1 AND report_id=$2', [routeOf(reportId), reportId]);
+        'SELECT created_at::text FROM content.report WHERE route=$1 AND report_id=$2',
+        [routeOf(reportId), reportId],
+      );
       const result = await observed.admin.query<{ rows: number; events: number; created_at: string }>(
         `SELECT (SELECT count(*)::int FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS rows,
                 (SELECT count(*)::int FROM core.outbox WHERE partition_no=$6 AND type=$7 AND data->>'reportId'=$5) AS events,
                 (SELECT created_at::text FROM content.report_target WHERE route=$1 AND target_kind=$2 AND target_id=$3 AND report_route=$4 AND report_id=$5) AS created_at`,
-        [routeOf(target.id), target.kind, target.id, routeOf(reportId), reportId, partitionOf(routeOf(target.id)!), projectedType],
+        [
+          routeOf(target.id),
+          target.kind,
+          target.id,
+          routeOf(reportId),
+          reportId,
+          partitionOf(routeOf(target.id)!),
+          projectedType,
+        ],
       );
       expect(result.rows[0]).toEqual({ rows: 1, events: 1, created_at: reportTime.rows[0]!.created_at });
     },
@@ -165,8 +246,9 @@ test('Report effect projection stays within its bound as source reports and targ
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  for (const sample of report.samples) for (const relation of ['content.report', 'content.report_target'])
-    expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
+  for (const sample of report.samples)
+    for (const relation of ['content.report', 'content.report_target'])
+      expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
 });
 
 test('Report effect replay stays within its bound and changes nothing as history grows', async () => {
@@ -176,7 +258,10 @@ test('Report effect replay stays within its bound and changes nothing as history
   let ordinal = 0;
   const report = await checkGrowth(db, {
     name: 'Report effect replay stays within its bound and changes nothing as history grows',
-    scales, repetitions, warmups, bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    scales,
+    repetitions,
+    warmups,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(observed, scale, previous) {
       const created = await createReportEvents(observed, sourcePartition);
       sourcePartition = created.partition;
@@ -185,8 +270,12 @@ test('Report effect replay stays within its bound and changes nothing as history
         eventsByRun.set(runOffset++, event);
       }
       const amount = scale - previous;
-      const population: Population = { name: `report-effect-replay-${sourcePartition}`, hotPartition: sourcePartition, hotShare: 1,
-        rows: (place) => growthRows(population, place) };
+      const population: Population = {
+        name: `report-effect-replay-${sourcePartition}`,
+        hotPartition: sourcePartition,
+        hotShare: 1,
+        rows: (place) => growthRows(population, place),
+      };
       await seed(observed, population, { from: ordinal, to: ordinal + amount });
       ordinal += amount;
     },
@@ -217,6 +306,7 @@ test('Report effect replay stays within its bound and changes nothing as history
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  for (const sample of report.samples) for (const relation of ['content.report', 'content.report_target'])
-    expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
+  for (const sample of report.samples)
+    for (const relation of ['content.report', 'content.report_target'])
+      expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
 });
