@@ -297,6 +297,37 @@ function boardRealmRead(
   return undefined;
 }
 
+/** The local sitemap endpoints expose only recorded public items and stop after their single demo page. */
+function sitemapRecording(
+  method: string,
+  pathname: string,
+  recordings: Record<string, KernelRecording>,
+): KernelRecording | undefined {
+  if (method !== 'GET') return undefined;
+  const match = /^\/v1\/sitemap\/(boards|threads|realms|spaces)$/.exec(pathname);
+  const type = match?.[1] as 'boards' | 'threads' | 'realms' | 'spaces' | undefined;
+  if (!type) return undefined;
+  const sourceName = { boards: 'board', threads: 'thread', realms: 'realm', spaces: 'space' } as const;
+  const sourceKey = { boards: 'board', threads: 'thread', realms: 'realm', spaces: 'space' } as const;
+  const source = recordings[sourceName[type]]?.[sourceKey[type]];
+  if (!isRecord(source)) return { status: 200, items: [], next: null };
+  const id = type === 'realms' ? source.realmId : type === 'spaces' ? source.spaceId : source.id;
+  if (typeof id !== 'string') return { status: 200, items: [], next: null };
+  const modified =
+    type === 'realms' || type === 'spaces'
+      ? (source.revisionCreatedAt ?? source.createdAt)
+      : (source.lastActivityAt ?? source.createdAt);
+  const lastModified = typeof modified === 'string' ? modified : undefined;
+  const item = {
+    id,
+    ...(type === 'threads' ? { title: typeof source.title === 'string' ? source.title : null } : {}),
+    ...(type === 'spaces' && typeof source.address === 'string' ? { address: source.address } : {}),
+    ...(lastModified === undefined ? {} : { lastModified }),
+  };
+  if (type === 'spaces' && typeof item.address !== 'string') return { status: 200, items: [], next: null };
+  return { status: 200, items: [item], next: null };
+}
+
 async function selectRecording(
   request: Request,
   pathname: string,
@@ -304,6 +335,8 @@ async function selectRecording(
 ): Promise<KernelRecording | undefined> {
   const moduleRecording = await answerFakeRoute('story', request, recordings);
   if (moduleRecording) return moduleRecording;
+  const sitemap = sitemapRecording(request.method, pathname, recordings);
+  if (sitemap) return sitemap;
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     const url = new URL(request.url);
     const continueEntries = recordings['library-continue-entries'];
@@ -865,6 +898,13 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
     const url = new URL(request.url);
     const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
     if (moduleRecording) return recordedResponse(moduleRecording);
+    const sitemap = sitemapRecording(request.method, url.pathname, {
+      board: boardRecording,
+      thread: threadRecording,
+      realm: realmRecording,
+      space: spaceRecording,
+    });
+    if (sitemap) return recordedResponse(sitemap);
     if (request.method === 'GET' && url.pathname === '/v1/subjects:suggest')
       return recordedResponse(
         suggestionRead(

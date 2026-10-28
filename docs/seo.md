@@ -98,8 +98,9 @@ The sitemap export runs outside the request path once a day from paged keyset re
 server-to-server feed may return up to 1,000 entries per page, above the usual list limit. The export reads each
 feed to its end: only `next: null` ends a feed; a short or empty page may still carry `next`. It writes changed
 files to object storage under their content digest and replaces the index only after every feed and file succeeds.
-A failed export leaves the previous index public. A request never starts a scan. Feed and export implementation,
-including bounded-cost tests, remain required pending work.
+A failed export leaves the previous index public. A request never starts a scan.
+
+The export detects a stalled feed by item order, not by cursor tokens.
 
 A page's `lastmod` is its separate public publication metadata for the last meaningful change to what the page
 shows. A page whose feed does not know its last change is listed without `lastmod`, and the export never fills

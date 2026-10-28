@@ -1010,3 +1010,5 @@ language through the client's `accept-language`.
   limit cannot run these steps; the export requires Paid Workers.
 - **Growth check:** `tests/sitemap-export.test.ts` runs 3,000, 30,000 and 300,000 synthetic families and checks linear
   feed reads, R2 operations and steps, plus the maximum families held by one step.
+- **Feeds:** Boards, threads, Realms and Spaces use their typed kernel sitemap feeds; stalled pages are detected by
+  item order rather than cursor tokens.

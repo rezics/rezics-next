@@ -4,6 +4,7 @@ export type SitemapExportFeed<Item> = {
   type: string;
   read(cursor: string | null): Promise<{ items: Item[]; next: string | null }>;
   family(item: Item): SitemapFamily | null;
+  key?(item: Item): string;
 };
 
 export type SitemapObject = { key?: string; etag: string; uploaded: string };
@@ -99,7 +100,13 @@ export type SitemapWorkflowBinding = SitemapWorkflowStarter & {
 
 export type SitemapExportFile = { key: string; uploaded: string };
 type ExportFile = SitemapExportFile;
-type PageBatch = { next: string | null; files: ExportFile[]; seenCursors: string[]; cursorRejected: boolean };
+type PageBatch = {
+  next: string | null;
+  files: ExportFile[];
+  lastKey: string | undefined;
+  previousIds: string[];
+  cursorRejected: boolean;
+};
 
 const indexKey = 'index.xml';
 const defaultPack = packShards;
@@ -110,10 +117,10 @@ const retryBaseMs = 10_000;
 const retentionMs = 7 * 24 * 60 * 60 * 1000;
 const fileName = /^shards\/([a-z]+)-([0-9a-f]{24})\.xml\.gz$/;
 
-class RepeatedCursorError extends Error {
+class NoProgressError extends Error {
   constructor(feed: string) {
-    super(`Feed ${feed} returned a repeated cursor`);
-    this.name = 'RepeatedCursorError';
+    super(`Feed ${feed} made no progress in item order`);
+    this.name = 'NoProgressError';
   }
 }
 
@@ -172,11 +179,7 @@ export function sitemapRetryDelay(error: unknown, retry: number): number {
 }
 
 export function shouldRetrySitemapStep(error: unknown): boolean {
-  return !(
-    error instanceof RepeatedCursorError ||
-    error instanceof CursorRestartError ||
-    error instanceof StaleIndexError
-  );
+  return !(error instanceof NoProgressError || error instanceof CursorRestartError || error instanceof StaleIndexError);
 }
 
 export function sitemapStepRetryPolicy(): SitemapRetryPolicy {
@@ -208,18 +211,25 @@ async function saveShard(store: SitemapStore, type: string, shard: SitemapShard)
   return { key, uploaded: parseUploaded(raced.uploaded, key) };
 }
 
+function itemId<Item>(feed: SitemapExportFeed<Item>, item: Item): string {
+  if (typeof item === 'string' || typeof item === 'number') return String(item);
+  if (typeof item === 'object' && item !== null && 'id' in item && typeof item.id === 'string') return item.id;
+  throw new Error(`Feed ${feed.type} returned an item without an id`);
+}
+
 async function readBatch<Item>(
   feed: SitemapExportFeed<Item>,
   cursor: string | null,
-  cursors: Set<string>,
+  lastKey: string | undefined,
+  previousIds: readonly string[],
   store: SitemapStore,
   origin: string,
   pack: (origin: string, families: readonly SitemapFamily[]) => Promise<SitemapShard[]>,
 ): Promise<PageBatch> {
   const families: SitemapFamily[] = [];
   const files = new Map<string, ExportFile>();
-  const seenCursors = new Set(cursors);
-  const addedCursors: string[] = [];
+  let lastPageKey = lastKey;
+  let lastPageIds = [...previousIds];
   let next = cursor;
   let requests = 0;
   while ((requests === 0 || next !== null) && requests < batchRequestLimit && families.length < batchFamilyLimit) {
@@ -227,18 +237,27 @@ async function readBatch<Item>(
     try {
       page = await feed.read(next);
     } catch (error) {
-      if (isCursorRejection(error)) return { next: null, files: [], seenCursors: [], cursorRejected: true };
+      if (isCursorRejection(error))
+        return { next: null, files: [], lastKey: undefined, previousIds: [], cursorRejected: true };
       throw error;
     }
     requests += 1;
+    if (feed.key) {
+      if (page.items.length > 0) {
+        const firstKey = feed.key(page.items[0]!);
+        if (lastPageKey !== undefined && firstKey <= lastPageKey) throw new NoProgressError(feed.type);
+        lastPageKey = feed.key(page.items.at(-1)!);
+      }
+      lastPageIds = [];
+    } else {
+      const ids = page.items.map((item) => itemId(feed, item));
+      const previous = new Set(lastPageIds);
+      if (ids.some((id) => previous.has(id))) throw new NoProgressError(feed.type);
+      lastPageIds = ids;
+    }
     for (const item of page.items) {
       const value = feed.family(item);
       if (value) families.push(value);
-    }
-    if (page.next !== null) {
-      if (seenCursors.has(page.next)) throw new RepeatedCursorError(feed.type);
-      seenCursors.add(page.next);
-      addedCursors.push(page.next);
     }
     next = page.next;
   }
@@ -246,7 +265,7 @@ async function readBatch<Item>(
     const file = await saveShard(store, feed.type, shard);
     files.set(file.key, file);
   }
-  return { next, files: [...files.values()], seenCursors: addedCursors, cursorRejected: false };
+  return { next, files: [...files.values()], lastKey: lastPageKey, previousIds: lastPageIds, cursorRejected: false };
 }
 
 export async function exportSitemapFeed<Item>(
@@ -255,9 +274,10 @@ export async function exportSitemapFeed<Item>(
   options: SitemapExportOptions,
 ): Promise<ExportFile[]> {
   const files = new Map<string, ExportFile>();
-  const cursors = new Set<string>();
   const pack = options.pack ?? defaultPack;
   let cursor: string | null = null;
+  let lastKey: string | undefined;
+  let previousIds: string[] = [];
   let restarted = false;
   let stepNumber = 0;
   let lastStep = `${feed.type}:0`;
@@ -268,7 +288,7 @@ export async function exportSitemapFeed<Item>(
     try {
       result = await options.runner.do(
         name,
-        () => readBatch(feed, cursor, cursors, options.store, options.origin, pack),
+        () => readBatch(feed, cursor, lastKey, previousIds, options.store, options.origin, pack),
         sitemapStepRetryPolicy(),
       );
     } catch (error) {
@@ -283,14 +303,16 @@ export async function exportSitemapFeed<Item>(
       }
       restarted = true;
       cursor = null;
-      cursors.clear();
+      lastKey = undefined;
+      previousIds = [];
       files.clear();
       stepNumber += 1;
       continue;
     }
-    for (const seenCursor of result.seenCursors) cursors.add(seenCursor);
     for (const file of result.files) files.set(file.key, file);
     cursor = result.next;
+    lastKey = result.lastKey;
+    previousIds = result.previousIds;
     stepNumber += 1;
     if (cursor === null) break;
   }
@@ -305,10 +327,11 @@ export async function exportSitemapFeed<Item>(
 }
 
 export type SitemapFeedSegmentState = {
-  segment: number;
+  segment: number | string;
   cursor: string | null;
-  cursors: string[];
   restarted: boolean;
+  lastKey?: string;
+  previousIds?: string[];
 };
 
 /** Runs no more than 4,990 feed steps, leaving room for checkpoint and continuation steps in the Workflow instance. */
@@ -321,14 +344,17 @@ export async function exportSitemapFeedSegment<Item>(
 ): Promise<boolean> {
   const stateKey = `runs/${runId}/state/${feed.type}.json`;
   const partPrefix = `runs/${runId}/parts/${feed.type}/`;
-  let state: SitemapFeedSegmentState = { segment, cursor: null, cursors: [], restarted: false };
+  let state: SitemapFeedSegmentState = { segment, cursor: null, restarted: false };
   if (segment > 0) {
     state = jsonValue<SitemapFeedSegmentState>(await options.store.get(stateKey), stateKey);
-    if (state.segment !== segment) throw new Error(`Sitemap feed ${feed.type} has an unexpected segment state`);
+    if (Number(state.segment) !== segment) throw new Error(`Sitemap feed ${feed.type} has an unexpected segment state`);
   }
   let cursor = state.cursor;
+  let lastKey = typeof state.lastKey === 'string' ? state.lastKey : undefined;
+  let previousIds = Array.isArray(state.previousIds)
+    ? state.previousIds.filter((id): id is string => typeof id === 'string')
+    : [];
   let restarted = state.restarted;
-  const cursors = new Set(state.cursors);
   const files = new Map<string, ExportFile>();
   let stepNumber = 0;
   while (stepNumber < maxSteps) {
@@ -337,7 +363,7 @@ export async function exportSitemapFeedSegment<Item>(
     try {
       result = await options.runner.do(
         name,
-        () => readBatch(feed, cursor, cursors, options.store, options.origin, options.pack ?? defaultPack),
+        () => readBatch(feed, cursor, lastKey, previousIds, options.store, options.origin, options.pack ?? defaultPack),
         sitemapStepRetryPolicy(),
       );
     } catch (error) {
@@ -353,14 +379,16 @@ export async function exportSitemapFeedSegment<Item>(
       }
       restarted = true;
       cursor = null;
-      cursors.clear();
+      lastKey = undefined;
+      previousIds = [];
       files.clear();
       for (const part of await options.store.list(partPrefix)) await options.store.delete(part.key!);
       continue;
     }
-    for (const seenCursor of result.seenCursors) cursors.add(seenCursor);
     for (const file of result.files) files.set(file.key, file);
     cursor = result.next;
+    lastKey = result.lastKey;
+    previousIds = result.previousIds;
     if (cursor === null) {
       const completed = new Map<string, ExportFile>();
       for (const part of await options.store.list(partPrefix)) {
@@ -383,10 +411,11 @@ export async function exportSitemapFeedSegment<Item>(
   await options.store.put(
     stateKey,
     JSON.stringify({
-      segment: segment + 1,
+      segment: String(segment + 1).padStart(16, '0'),
       cursor,
-      cursors: [...cursors],
       restarted,
+      ...(lastKey === undefined ? {} : { lastKey }),
+      ...(previousIds.length === 0 ? {} : { previousIds }),
     } satisfies SitemapFeedSegmentState),
   );
   return false;
