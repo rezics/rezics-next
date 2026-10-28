@@ -291,7 +291,23 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
     await mkdir(join(repositoryRoot, '.temp'), { recursive: true });
     runtimeDirectory = await mkdtemp(join(repositoryRoot, '.temp', 'native-kernel-runtime-'));
     const { writeReyloProject } = await import('../../../../services/kernel/scripts/check.ts');
-    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, process.env.DATABASE_URL!);
+    // PostgreSQL cannot clone a template while Reylo is connected to it. The
+    // kernel runner also gives SQL analysis its own copy, separate from fixtures.
+    const source = new URL(process.env.DATABASE_URL!);
+    const template = decodeURIComponent(source.pathname.slice(1));
+    const analysisDatabase = `native_web_analysis_${randomBytes(16).toString('hex')}`;
+    const adminUrl = new URL(source);
+    adminUrl.pathname = '/postgres';
+    const admin = new Pool({ connectionString: adminUrl.href, max: 1 });
+    try {
+      // Inform the supervisor before allocation, so even failed setup is cleaned.
+      process.send?.({ analysisDatabase } satisfies HostReply);
+      await admin.query(`CREATE DATABASE "${analysisDatabase}" TEMPLATE "${template.replaceAll('"', '""')}"`);
+    } finally {
+      await admin.end();
+    }
+    source.pathname = `/${analysisDatabase}`;
+    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
@@ -379,11 +395,13 @@ type Observation = { requests: NativeKernelRequest[]; peakMemory: number };
 type HostReply =
   | { ready: { kernelOrigin: string; web: string; databaseUrl: string }; observation: Observation }
   | { id: number; value?: unknown; error?: string; observation: Observation }
-  | { startupError: string };
+  | { startupError: string }
+  | { analysisDatabase: string };
 type HostCall = { id: number; method: 'credentials' | 'restartWeb' | 'observe' | 'stop'; argument?: string };
 
 export async function startNativeWebStack(): Promise<NativeWebStack> {
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  let analysisDatabase: string | undefined;
   const host = fork(import.meta.filename, [], {
     execPath: process.execPath,
     execArgv: [],
@@ -400,6 +418,19 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   const terminate = async () => {
     if (host.exitCode === null && host.signalCode === null) host.kill('SIGTERM');
     await exited;
+    // Reylo's connection lives until its host exits. A borrowed cluster must
+    // retain all of its other databases; an owned container was already removed.
+    if (analysisDatabase && originalDatabaseUrl) {
+      const adminUrl = new URL(originalDatabaseUrl);
+      adminUrl.pathname = '/postgres';
+      const admin = new Pool({ connectionString: adminUrl.href, max: 1 });
+      try {
+        await admin.query(`DROP DATABASE IF EXISTS "${analysisDatabase}" WITH (FORCE)`);
+      } finally {
+        await admin.end();
+      }
+      analysisDatabase = undefined;
+    }
   };
   let serial = 0;
   let observation: Observation = { requests: [], peakMemory: 0 };
@@ -419,6 +450,10 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     pending.clear();
   };
   host.on('message', (reply: HostReply) => {
+    if ('analysisDatabase' in reply) {
+      analysisDatabase = reply.analysisDatabase;
+      return;
+    }
     if ('startupError' in reply) return fail(new Error(reply.startupError));
     observation.requests.push(...reply.observation.requests);
     observation.peakMemory = reply.observation.peakMemory;
