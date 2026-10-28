@@ -194,7 +194,7 @@ test('portable subject statement nested Snak and bulk validation reject either o
     const content = { amount: '+1', unit: '1', ...bounds };
     const errors = Object.keys(bounds).map((name) => ({
       pointer: `/statement/value/content/${name}`,
-      code: 'unknown_field',
+      code: 'unknown_field' as const,
     }));
     const entry = statement(content);
     expect(checkStatementInput(entry, release).violations).toEqual(errors);

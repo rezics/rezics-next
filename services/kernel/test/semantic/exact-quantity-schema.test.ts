@@ -12,7 +12,7 @@ import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driv
 // or the shared released-discovery fixture. Every operation uses the native driver.
 const schema = `id: https://example.org/exact-quantity/conformance
 name: quantity_conformance
-version: 1
+version: '1'
 prefixes:
   linkml: https://w3id.org/linkml/
   ex: https://example.org/exact-quantity/
@@ -78,8 +78,8 @@ function bodySubject(response: HttpResponse): Subject {
   expect(response.status, JSON.stringify(response.body)).toBe(200);
   return response.body.subject as Subject;
 }
-async function create(body: unknown, headers = key()): Promise<Subject> {
-  const response = await write('editor', '/v1/subjects', body, headers);
+async function create(body: unknown, headers = key(), persona: Persona = 'editor'): Promise<Subject> {
+  const response = await write(persona, '/v1/subjects', body, headers);
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   const subject = response.body.subject as Subject;
   expect(subject.id).toEqual(expect.any(String));
@@ -201,7 +201,7 @@ test('an explicitly exact quantity rejects both uncertainty bounds through porta
     const entry = statement({ amount: '+2', unit: '1', ...bounds });
     const errors = Object.keys(bounds).map((bound) => ({
       pointer: `/statement/value/content/${bound}`,
-      code: 'unknown_field',
+      code: 'unknown_field' as const,
     }));
     expect(checkStatementInput(entry, release).violations).toEqual(errors);
     const subjectErrors = errors.map((error) => ({
@@ -266,6 +266,9 @@ test('an explicitly exact quantity rejects both uncertainty bounds through porta
 }, 120_000);
 
 test('generic compiled exact quantity uses the same native routes with no vertical handler and preserves arbitrary exact amount strings', async () => {
+  // A separately granted native writer keeps the scenarios within the unchanged
+  // real account request budgets. Auth, its clock and rate policy stay native.
+  await driver.grant('steward', ['subject:create', 'statement:propose'], driver.globalContext);
   for (const amount of [
     '+9007199254740993',
     `+${'9'.repeat(126)}`,
@@ -273,7 +276,7 @@ test('generic compiled exact quantity uses the same native routes with no vertic
     '+0.00000000000000000001',
   ]) {
     const content = { amount, unit: 'https://units.example/arbitrary' };
-    const created = await create(input(statement(content)));
+    const created = await create(input(statement(content)), key(), 'steward');
     const publicSubject = bodySubject(await get(`/v1/subjects/${created.id}`));
     expect(publicSubject.statements['ex:exact']![0]!).toMatchObject({
       property: { id: 'ex:exact', data_type: 'quantity' },
@@ -287,15 +290,21 @@ test('generic compiled exact quantity uses the same native routes with no vertic
     expect(stored.rows.map((row) => row.body.value)).toEqual([{ type: 'value', content }]);
   }
   for (const type of ['somevalue', 'novalue']) {
-    const created = await create(input({ property: { id: 'ex:exact' }, value: { type }, references }));
-    expect(bodySubject(await get(`/v1/subjects/${created.id}`)).statements['ex:exact']![0]!.value).toEqual({ type });
+    const created = await create(
+      input({ property: { id: 'ex:exact' }, value: { type }, references }),
+      key(),
+      'steward',
+    );
+    expect(bodySubject(await get(`/v1/subjects/${created.id}`)).statements['ex:exact']![0]!.value as unknown).toEqual({
+      type,
+    });
   }
-  const holder = await create({ type: 'ex:Sample', labels: { en: 'Expanded exact quantity' } });
+  const holder = await create({ type: 'ex:Sample', labels: { en: 'Expanded exact quantity' } }, key(), 'steward');
   const content = { amount: '+9007199254740993.000000000000001', unit: '1' };
   const proposal = { statement: statement(content) };
   const proposalKey = key();
   const path = `/v1/subjects/${holder.id}/candidates`;
-  const proposed = await write('editor', path, proposal, proposalKey);
+  const proposed = await write('steward', path, proposal, proposalKey);
   expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
   const candidate = proposed.body.candidate as string;
   expect(candidate).toEqual(expect.any(String));
@@ -323,7 +332,7 @@ test('generic compiled exact quantity uses the same native routes with no vertic
   });
   const before = await snapshot();
   for (const [persona, endpoint, body, headers, original] of [
-    ['editor', path, proposal, proposalKey, proposed],
+    ['steward', path, proposal, proposalKey, proposed],
     ['acceptor', `/v1/subjects/${holder.id}:adopt`, adoptionBody, adoptionKey, adopted],
     ['steward', '/v1/definitions/releases', { release }, publishKey, published],
     ['steward', `/v1/definitions/releases/${digest}:activate`, activation, activateKey, activated],
@@ -334,7 +343,7 @@ test('generic compiled exact quantity uses the same native routes with no vertic
     expect(replay.body).toEqual(original.body);
   }
   const conflict = await write(
-    'editor',
+    'steward',
     path,
     { statement: statement({ ...content, lowerBound: content.amount }) },
     proposalKey,

@@ -164,10 +164,13 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, `datatype units qualifiers disclosure ${relationAnnotationKeys.join(' ')}`, {
+      allowed(slot.annotations, `datatype units exact qualifiers disclosure ${relationAnnotationKeys.join(' ')}`, {
         ...location,
         pointer: at(location.pointer, 'annotations'),
       });
+    const annotations = object(slot.annotations);
+    if (Object.hasOwn(annotations, 'exact') && annotations.exact !== true)
+      add({ ...location, pointer: at(at(location.pointer, 'annotations'), 'exact') }, 'invalid', 'Exact must be true');
     if (slot.any_of !== undefined) {
       if (!Array.isArray(slot.any_of))
         add({ ...location, pointer: at(location.pointer, 'any_of') }, 'invalid', 'Expected a list');
@@ -556,6 +559,8 @@ export async function compileCatalogue(input: {
     const annotation = (key: string) => ({ ...location, pointer: at(at(location.pointer, 'annotations'), key) });
     const annotations = object(slot.annotations);
     const datatype = annotations.datatype as DataType;
+    if (Object.hasOwn(annotations, 'exact') && datatype !== 'quantity')
+      add(annotation('exact'), 'invalid', 'Exact is only allowed for quantity');
     const range = slot.range ?? parsed[location.file]?.default_range ?? 'string';
     const ranges = Array.isArray(slot.any_of) ? slot.any_of.map((entry) => object(entry).range) : [range];
     const declaredClasses = ranges.flatMap((candidate) =>
@@ -721,6 +726,7 @@ export async function compileCatalogue(input: {
         ? { pattern: slot.pattern }
         : {}),
       ...(property.units ? { units: property.units, integer: range === 'integer' } : {}),
+      ...(datatype === 'quantity' && annotations.exact === true ? { exact: true } : {}),
     });
     release.properties[term.key] = property;
   }

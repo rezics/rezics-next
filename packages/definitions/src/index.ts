@@ -117,7 +117,7 @@ const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const subjectIdPattern = new RegExp(UUID);
 const INTEGER = '^[+-](?:0|[1-9][0-9]*)$';
 const DECIMAL = '^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$';
-type ValueOptions = { pattern?: string; units?: string[]; integer?: boolean };
+type ValueOptions = { pattern?: string; units?: string[]; integer?: boolean; exact?: true };
 
 export function valueSchema(
   datatype: 'monolingualtext',
@@ -129,6 +129,8 @@ export function valueSchema(datatype: DataType, options: ValueOptions = {}) {
 }
 
 function buildValueSchema(datatype: DataType, options: ValueOptions) {
+  if (Object.hasOwn(options, 'exact') && (datatype !== 'quantity' || options.exact !== true))
+    throw new TypeError('Exact must be true and is only supported for quantity');
   if (
     (datatype === 'document' || datatype === 'media') &&
     (options.units !== undefined || options.integer !== undefined)
@@ -176,8 +178,12 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
         additionalProperties: false,
         properties: {
           amount: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
-          lowerBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
-          upperBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
+          ...(options.exact
+            ? {}
+            : {
+                lowerBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
+                upperBound: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
+              }),
           unit: options.units?.includes('*')
             ? { type: 'string', pattern: `^(?:1|${schema.$defs.iri.pattern})$` }
             : { enum: [...(options.units ?? [])] },
@@ -439,6 +445,9 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     if (property.datatype === 'quantity') {
       if (property.units) options.units = property.units;
       options.integer = amount.pattern === INTEGER;
+      // Exactness is serialized solely by the two absent bound fields. The
+      // canonical comparison below still requires the entire supported shape.
+      if (!own(fields, 'lowerBound') && !own(fields, 'upperBound')) options.exact = true;
     }
     if (canonicalize(value) !== canonicalize(valueSchema(property.datatype, options))) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));
