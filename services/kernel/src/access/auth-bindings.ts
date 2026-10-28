@@ -92,19 +92,24 @@ function scopes(left: string[], right: string[]): boolean {
     JSON.stringify([...left].sort()) === JSON.stringify([...right].sort())
   );
 }
-/** `open` is the ordinary read and denies a fence; `recovery` admits a fenced human without an operator;
- * `fenced` admits only a fenced account of either kind, automated accounts included. */
-type ReadMode = 'open' | 'recovery' | 'fenced';
+/** `open` denies a fence; `recovery` admits a fenced human without an operator;
+ * `fenced` admits only a fenced account; `signin` additionally reports suspended humans privately. */
+type ReadMode = 'open' | 'recovery' | 'fenced' | 'signin';
 function admitted(account: Account, mode: ReadMode): boolean {
   if (mode === 'recovery') return account.kind === 'actor' && account.operatorAccountId === null;
   return mode === 'fenced' ? account.fenced : !account.fenced;
 }
 function translate(account: Account | null, mode: ReadMode = 'open'): AccessAccount | null {
+  const suspendedHuman =
+    mode === 'signin' &&
+    account?.state === 'suspended' &&
+    account.kind === 'actor' &&
+    account.operatorAccountId === null;
   if (
     !account ||
-    account.state !== 'active' ||
+    (!suspendedHuman && account.state !== 'active') ||
     (account.kind !== 'actor' && account.kind !== 'organization') ||
-    !admitted(account, mode)
+    (!suspendedHuman && !admitted(account, mode))
   )
     return null;
   return {
@@ -310,7 +315,7 @@ export function createAuthBindings(
       if (!config.confirmBarrier) throw new AuthBindingUnavailableError('confirmBarrier');
       return config.confirmBarrier(input);
     },
-    readAccount: (id) => read(id),
+    readAccount: (id, purpose) => read(id, purpose === 'signin' ? 'signin' : 'open'),
     readErasureAccount: async (id) => {
       try {
         return await erasure(id);

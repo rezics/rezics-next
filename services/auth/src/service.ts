@@ -56,6 +56,16 @@ class Denied extends Error {
     super('Authentication denied');
   }
 }
+class AccountSuspended extends Denied {
+  constructor(readonly account: AccessAccount) {
+    super();
+  }
+}
+class SuspendedSignIn extends APIError {
+  constructor() {
+    super('FORBIDDEN', { code: 'ACCOUNT_SUSPENDED', message: 'Account suspended' });
+  }
+}
 interface Binding {
   clientId: string;
   scopes: string[];
@@ -64,6 +74,7 @@ interface Binding {
   epoch?: number;
   opening?: EffectAuthorization;
   authTime?: number;
+  refusal?: SuspendedSignIn;
 }
 interface Client {
   client_id: string;
@@ -225,21 +236,37 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
 
   // A barrier fences its account, so only the steps that finish a committed barrier may read it fenced.
-  async function activeActor(accountId: string, barrier = false): Promise<AccessAccount> {
+  async function activeActor(accountId: string, barrier = false, signIn = false): Promise<AccessAccount> {
     const account =
-      (await trustedAccess.readAccount(accountId)) ??
+      (await trustedAccess.readAccount(accountId, signIn ? 'signin' : undefined)) ??
       (barrier ? await trustedAccess.readFencedAccount(accountId) : null);
     if (
       !account ||
       account.accountId !== accountId ||
       account.kind !== 'actor' ||
-      account.state !== 'active' ||
-      (account.fenced === true && !barrier) ||
       !Number.isSafeInteger(account.authnEpoch) ||
       account.authnEpoch < 0
     )
       throw new Denied();
+    if (account.state === 'suspended') throw new AccountSuspended(account);
+    if (account.state !== 'active' || (account.fenced === true && !barrier)) throw new Denied();
     return account;
+  }
+  // A suspended human may still prove a credential, but only the session hook can disclose the refusal.
+  async function credentialActor(accountId: string): Promise<AccessAccount> {
+    try {
+      return await activeActor(accountId, false, true);
+    } catch (error) {
+      if (error instanceof AccountSuspended && !error.account.automated) return error.account;
+      throw error;
+    }
+  }
+  async function sessionBinding<T>(selected: Binding, callback: () => Promise<T>): Promise<T> {
+    const context = { ...selected };
+    // Better Auth serializes APIError into its response; retain the typed refusal for our public aliases.
+    const result = await binding.run(context, callback);
+    if (context.refusal) throw context.refusal;
+    return result;
   }
   async function provisioningAccount(
     accountId: string,
@@ -401,7 +428,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               const selected = binding.getStore();
               if (!selected) throw new APIError('UNAUTHORIZED', { message: 'Trusted session establishment required' });
               try {
-                const account = await activeActor(session.userId);
+                const account = await activeActor(session.userId, false, !selected.opening);
                 await allowed(account.accountId, selected);
                 if (
                   (selected.subjectId && selected.subjectId !== session.userId) ||
@@ -424,6 +451,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   },
                 };
               } catch (error) {
+                if (error instanceof AccountSuspended && !error.account.automated && !selected.opening) {
+                  selected.refusal = new SuspendedSignIn();
+                  throw selected.refusal;
+                }
                 if (error instanceof Denied) throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
                 throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
               }
@@ -660,7 +691,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function establish(selected: Binding, headers: Headers): Promise<Response> {
     return await withIssuance(selected.clientId, async () =>
       established(
-        await binding.run(selected, () =>
+        await sessionBinding(selected, () =>
           getAuth().api.establish({
             headers: new Headers({
               origin: options.issuer,
@@ -1837,10 +1868,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const previous = await presentedSession(request.headers);
           const selected: Binding = { clientId: text(body.client_id), scopes: scopes(body.scope), method: 'pop' };
           await clientFor(selected.clientId);
-          const response = await withIssuance(selected.clientId, () =>
-            binding.run(selected, async () =>
-              established(
-                await getAuth().api.verifyPasskeyAuthentication({
+          const response = await withIssuance(selected.clientId, async () =>
+            established(
+              await sessionBinding(selected, () =>
+                getAuth().api.verifyPasskeyAuthentication({
                   headers: request.headers,
                   body: { response: body.response as PasskeyAssertion },
                   asResponse: true,
@@ -1923,7 +1954,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         if (url.pathname === '/signin/key') {
           fields(body, ['account_id', 'assertion', 'client_id', 'scope']);
-          const account = await activeActor(text(body.account_id));
+          const account = await credentialActor(text(body.account_id));
           const selected: Binding = {
             clientId: text(body.client_id),
             scopes: scopes(body.scope),
@@ -1949,7 +1980,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           let response: Response;
           if (body.account_id !== undefined) {
             if (body.email !== undefined) throw new Denied(400);
-            const account = await activeActor(text(body.account_id));
+            const account = await credentialActor(text(body.account_id));
             const password = text(body.password);
             if (password.length > (await getContext()).password.config.maxPasswordLength) throw new Denied(400);
             const credential = await (await getContext()).internalAdapter.findCredentialAccount(account.accountId);
@@ -1972,7 +2003,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
             await clientFor(selected.clientId);
             response = await withIssuance(selected.clientId, async () => {
-              const signed = await binding.run(selected, () =>
+              const signed = await sessionBinding(selected, () =>
                 getAuth().api.signInEmail({
                   headers: request.headers,
                   body: { email: text(body.email), password: text(body.password) },
@@ -2177,6 +2208,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());
       } catch (error) {
+        if (error instanceof SuspendedSignIn) return json({ error: 'account_suspended' }, 403);
         if (error instanceof StepUpRequired)
           return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
         const status =

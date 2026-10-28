@@ -202,7 +202,8 @@ export type BarrierReceipt = {
 
 /** Internal application ports. Never construct these results from HTTP fields. */
 interface SharedAccessPorts {
-  readAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
+  readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
   readErasureAccount?(accountId: string): Promise<AccessAccount | null>;
   /** Private pending read bound to the exact verified native registration command. */

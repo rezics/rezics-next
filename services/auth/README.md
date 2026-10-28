@@ -408,6 +408,7 @@ Unrecognized routes, including `/api/auth/*`, signup and raw password recovery,
 are unavailable. `POST /recovery/start` accepts an email and does not disclose
 whether delivery occurred; automated accounts receive no mail. Failure responses
 expose only `authentication_denied`, never credential or Access details.
+After a human's sign-in credential verifies, suspension instead returns 403 `account_suspended` (Better Auth `ACCOUNT_SUSPENDED`) without its reason, a session, cookie or token; unverified credentials retain the generic refusal.
 
 `internal.registerClient` accepts an optional `displayName`, trimmed to 1–100
 characters (invalid values fail with status 400). It is stored as nullable
