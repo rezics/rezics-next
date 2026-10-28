@@ -48,10 +48,25 @@ import type { AccountActor, Resource } from '../../src/request/access.ts';
 import type { PublicGrantSubject } from '../../src/access/grant-subject.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
 import type { FixtureResources } from '../content/support/erasure-operation-fixtures.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 
 const barrierTable = 'content.erasure_operation_test_barrier';
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 15));
 let workerBundle: Promise<string> | undefined;
+
+async function buildErasureBoard(resources: FixtureResources): Promise<Awaited<ReturnType<typeof buildBoardAndThreads>>> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await buildBoardAndThreads(resources, 101, 1, randomUUID());
+    } catch (error) {
+      const retryable =
+        error instanceof AccessUnavailableError ||
+        (error instanceof Error && /\b503\b.*"code":"deadline_exceeded"/s.test(error.message));
+      if (!retryable || attempt > 0) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+  }
+}
 
 /** IPC preserves the executor's opaque time identities separately from values.
  * Different native time objects must remain different after transport.
@@ -594,7 +609,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           mode === 'delegated' && preparedTargets?.authorId === native.accountIds.author
             ? await finishPublishing()
             : undefined;
-        const board = retained?.board ?? prepared ?? (await buildBoardAndThreads(native, 101, 1, randomUUID()));
+        const board = retained?.board ?? prepared ?? (await buildErasureBoard(native));
         if (!retained || preparedTargets?.authorId !== native.accountIds.author || mode !== 'delegated')
           preparedTargets = undefined;
         sentinelByThread.set(board.thread, board.sentinelThread);
@@ -1005,7 +1020,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           };
           preparedTargets = {
             authorId: actorId,
-            result: buildBoardAndThreads(publishing, 101, 1, randomUUID()).then(
+            result: buildErasureBoard(publishing).then(
               (board) => ({ board }),
               (error: unknown) => ({ error }),
             ),
@@ -1758,11 +1773,15 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
                 'UPDATE access.principal_assignment SET assigned_actor_id=$3 WHERE principal_id=$1 AND request_id=$2',
                 [principalId, requestId, newId(routeOf(fixture.tuple.actor)!)],
               );
-            else
+            else {
+              const changedPrincipal = newId(routeOf(principalId)!);
               await connection.query(
-                'UPDATE access.principal_assignment SET principal_id=$3 WHERE principal_id=$1 AND request_id=$2',
-                [principalId, requestId, newId(routeOf(principalId)!)],
+                `UPDATE access.principal_assignment
+                 SET principal_id=$3, creator_principal_id=$3
+                 WHERE route=$1 AND principal_id=$2 AND request_id=$4`,
+                [routeOf(principalId), principalId, changedPrincipal, requestId],
               );
+            }
           });
         }
         if (mutation === 'account-missing') {
