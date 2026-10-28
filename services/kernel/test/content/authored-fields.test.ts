@@ -1,13 +1,24 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { appendAuthoredField, readAuthoredField, type AuthoredFieldInput } from '../../src/content/authored-fields.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,
+  authoritativeTimeValue,
+  currentCommand,
+  type CommandAuthorization,
   runCommand,
   type CommandEvent,
   type CommandTransaction,
 } from '../../src/command/command.ts';
+import {
+  createResourceCreationManifest,
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  type ResourceCreationEntry,
+} from '../../src/access/index.ts';
+import { globalContextAnchor } from '../../src/semantic/context.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -334,4 +345,165 @@ test('authored document append and read', async () => {
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
   }
+});
+
+let creationAccess: ReturnType<typeof admittedAccess>;
+let creationActor: AccountActor;
+const global = { route: 0, id: GLOBAL_CONTEXT };
+const propose = 'statement:propose';
+beforeAll(async () => {
+  await db.admin.query(`CREATE TABLE public.authored_anchor_fixture (
+    route integer NOT NULL, id uuid NOT NULL, command_id uuid NOT NULL, created_at timestamptz NOT NULL,
+    creation_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), PRIMARY KEY(route,id));
+    CREATE FUNCTION public.freeze_authored_anchor() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'immutable creation provenance'; END $$;
+    CREATE TRIGGER immutable_provenance BEFORE UPDATE ON public.authored_anchor_fixture
+    FOR EACH ROW EXECUTE FUNCTION public.freeze_authored_anchor()`);
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES (0,$1,$2,$3,'(,)',$2)`,
+    [GLOBAL_CONTEXT, actorId, propose],
+  );
+  creationAccess = admittedAccess({
+    actions: new Map([
+      [propose, { anonymous: false, 'x-resource-types': ['semantic.communal'] }],
+      ['document:erase', { anonymous: false }],
+    ]),
+    resourceRoles: { roles: {}, types: { 'semantic.communal': { standing: [] } } },
+  });
+  creationActor = await authenticateAccount(
+    creationAccess,
+    { pool: db.pool, deadline: Date.now() + 10_000 },
+    { ...actor, scopes: [propose, 'document:erase'] },
+  );
+});
+
+async function creationCommand<T>(anchor: string, work: (tx: CommandTransaction) => Promise<T>, receiptOnly = false) {
+  const resource = { route: routeOf(anchor)!, id: anchor };
+  const provenance = new WeakMap<CommandTransaction, string>();
+  const entry: ResourceCreationEntry = {
+    resource,
+    type: 'semantic.communal',
+    creator: actorId,
+    creation: {
+      async validate(tx, target, time) {
+        expect(time).toBe(currentCommand(tx).time);
+        return (
+          (
+            await tx.query(
+              `SELECT 1 FROM public.authored_anchor_fixture
+          WHERE route=$1 AND id=$2 AND creation_xid=pg_current_xact_id()
+          AND command_id=$3 AND created_at=$4::timestamptz`,
+              [target.route, target.id, provenance.get(tx), authoritativeTimeValue(time)],
+            )
+          ).rowCount === 1
+        );
+      },
+    },
+  };
+  const authorization = parentCreationAuthorization({
+    access: creationAccess,
+    actor: creationActor,
+    action: propose,
+    parent: globalContextAnchor,
+    context: {
+      pool: db.pool,
+      deadline: Date.now() + 10_000,
+      resource,
+      creation: entry.creation,
+      manifest: createResourceCreationManifest([entry]),
+    },
+  });
+  const binding: CommandAuthorization = receiptOnly
+    ? {
+        ...authorization,
+        async authorize(tx, attempt, evidence) {
+          await authorization.authorize(tx, attempt, evidence);
+          return 'receipt-only';
+        },
+      }
+    : authorization;
+  return runCommand(
+    db.pool,
+    {
+      partition: partitionOf(route),
+      deadline: Date.now() + 10_000,
+      authorization: binding,
+      basis: { actorAccountId: actorId, clientId: creationActor.clientId, requestedBy: null },
+    },
+    async (tx, command) => {
+      expect(currentCommand(tx).authorization).toMatchObject({ action: propose, resource: global, mode: 'execute' });
+      provenance.set(tx, command.transactionId);
+      await tx.query(
+        `INSERT INTO public.authored_anchor_fixture(route,id,command_id,created_at) VALUES ($1,$2,$3,$4)`,
+        [resource.route, anchor, command.transactionId, authoritativeTimeValue(command.time)],
+      );
+      await initializeResourceGrants(tx, { resource, type: entry.type, creator: actorId });
+      const value = await work(tx);
+      expect(currentCommand(tx).authorization?.resource).toEqual(global);
+      return { value, events: [{ type: 'com.rezics.test.imported.v1', data: {} }] };
+    },
+  );
+}
+
+test("an authored field is admitted under a Global Context authorization when the command's live creation declares its anchor, and stores the anchor", async () => {
+  const anchor = newId(route);
+  const value = { ...input(), anchor };
+  const stored = (await creationCommand(anchor, (tx) => appendAuthoredField(tx, value))).value;
+  expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
+    ...stored,
+    anchor,
+    availability: 'available',
+  });
+  await rejectSql(
+    `UPDATE content.authored_field SET anchor=$3,body=NULL,availability='erased' WHERE route=$1 AND id=$2`,
+    [route, stored.id, newId(route)],
+  );
+  await rejectSql(
+    `INSERT INTO content.authored_field
+    SELECT (jsonb_populate_record(NULL::content.authored_field, to_jsonb(f) || jsonb_build_object('id',$3::uuid,'anchor',$4::uuid))).*
+    FROM content.authored_field f WHERE route=$1 AND id=$2`,
+    [route, stored.id, newId(route), newId(route + 1)],
+  );
+  const { eraseAuthoredField } = await import('../../src/content/authored-fields.ts');
+  await eraseAuthoredField({ pool: db.pool, access: creationAccess }, creationActor, stored.id, {
+    deadline: Date.now() + 10_000,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
+    anchor,
+    availability: 'erased',
+    body: null,
+  });
+});
+
+test('an authored field anchor that the command does not declare, or that is off the subject route, is refused and writes nothing', async () => {
+  const before = (await db.admin.query('SELECT count(*) FROM content.authored_field')).rows;
+  async function refused(tx: CommandTransaction, anchor: string) {
+    const queries = spyOn(tx, 'query');
+    try {
+      await expect(appendAuthoredField(tx, { ...input(), anchor })).rejects.toBeInstanceOf(TypeError);
+      expect(queries).not.toHaveBeenCalled();
+    } finally {
+      queries.mockRestore();
+    }
+  }
+  // Subject authorization alone cannot admit an explicitly supplied anchor.
+  await command((tx) => refused(tx, newId(route)));
+  const declared = newId(route);
+  await creationCommand(declared, (tx) => refused(tx, newId(route)));
+  const offRoute = newId(route + 1);
+  await creationCommand(offRoute, (tx) => refused(tx, offRoute));
+  let executed = false;
+  await expect(
+    creationCommand(
+      newId(route),
+      async () => {
+        executed = true;
+      },
+      true,
+    ),
+  ).rejects.toThrow();
+  expect(executed).toBe(false);
+  expect((await db.admin.query('SELECT count(*) FROM content.authored_field')).rows).toEqual(before);
 });
