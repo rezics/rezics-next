@@ -166,8 +166,46 @@ checks, then resume the alias group strictly after it only once settled. No nint
 Fixed-home identity basis work is separately charged at preparation, continuation and final phases: each
 basis read pays two4096-home sweeps (8192 metadata rows plus core observations), never a per-subject free sweep or
 hidden leaf usage. The canonical coverage reader below additionally charges its bracketing reads and home comparisons. Physical captures must identify actual operation phases when measuring these separately; no statement
-exclusion or slack change may disguise the work. Actual producer/composition positives remain separate red
-acceptance until native exports, shared leaf matching/Boolean extraction and identity composition land.
+exclusion or slack change may disguise the work.
+
+### Final-proof status and cost evidence
+
+The current Scope and leaf scaffolds remain unavailable, and production liveness for a worst admitted positive is
+unproved. The independent analysis in
+[`search-multileaf-final-proof-independent.md`](../../../../docs/research/search-multileaf-final-proof-independent.md)
+validated a legal example with nine distinct material properties, 32 selected statements per property, nine
+facets, and 289 total facts including one label. Each property's only matching statement is last in native
+forward traversal. Fresh replay therefore has a conservative lower bound of 288 raw selected keys. Even granting
+one ideally retained positive identity and one exact current reread, the other eight properties plus that reread
+cost at least 257 keys, before candidate, alias, lookahead, or other final work. These are strategy lower bounds
+for the specified access paths, not measured Scope SQL costs or an impossibility proof for every future access
+layout. Request-local reuse and fused final reads are valid, but cannot share facts across these nine distinct
+properties.
+
+The owner has committed an actual coalesced relation-repair implementation, reviewed in the independent report;
+it is absent from this development checkout. It maintains relation-pair hints, not material, range, code, or
+qualifier matching hints, and does not provide universal final proof. A repaired relation hint or finite progress
+through one leaf therefore does not establish finite composed proof. Foreign source/target authority, fences,
+the original and terminal identities, and every earlier positive still require current checks; a native basis is
+not a foreign-authority snapshot. Unknown remains unknown under NOT.
+
+No source, storage, or policy remedy is adopted here. A production universal-liveness claim requires agreement on
+a source-owned bounded-final-evidence capability and an actual cost proof for it. Any durable source-row or access
+design remains a proposal until its native writes, rebuild/completeness behavior, foreign-proof obligations, and
+all cost axes are implemented and measured. A batch wrapping 32 point reads still charges each key. Preserve the
+256 shared-key ledger, full current admission, one 18-byte pending-leaf progress record, no serialized truth,
+witness vector, allow cache, or PIT, and Search's sole Boolean/filter matcher. Do not exempt ledger work, reduce
+admission, or treat readiness as successful completion.
+
+Required native acceptance must prove a legal worst-admitted multi-leaf final `true` within 256 actual keys,
+including points, witnesses, rows, bytes, and empty seeks, under finite quiescence, repair, and advancing
+continuations. It must also cover 257- and 4096-alias groups with only the last original readable, current
+revocation, and all source/target and original/terminal rechecks. Existing lower-level cases in
+[`scope-leaf-evidence.test.ts`](../../test/semantic/scope-leaf-evidence.test.ts) cover relation witness bounds,
+last-survivor discovery, current fences, typed range/qualifier matching, and candidate adoption; they do not
+measure the multi-leaf composed 256-key proof. The supplemental analysis
+[`search-multileaf-final-proof-deep.md`](../../../../docs/research/search-multileaf-final-proof-deep.md) is
+additional evidence only. These native owner acceptance cases remain required; neither report claims they pass.
 
 ## Global rating order
 
