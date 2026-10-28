@@ -1,3 +1,4 @@
+import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import type { AccessClient, Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import statement from './resource-role-held.sql';
@@ -10,7 +11,7 @@ const roleName = /^[a-z][a-z0-9_.-]*$/;
  */
 export async function resourceRoleHeld(
   client: AccessClient,
-  input: { resource: Resource; role: string; accountId: string; at: Date },
+  input: { resource: Resource; role: string; accountId: string; at: AuthoritativeTime },
 ): Promise<boolean> {
   const { resource, role, accountId, at } = input;
   if (
@@ -20,9 +21,7 @@ export async function resourceRoleHeld(
     routeOf(accountId) === null ||
     typeof role !== 'string' ||
     role.length > 128 ||
-    roleName.exec(role)?.[0] !== role ||
-    !(at instanceof Date) ||
-    !Number.isFinite(at.getTime())
+    roleName.exec(role)?.[0] !== role
   )
     throw new TypeError('Invalid resource role read input');
   const row = await statement.run(client, {
@@ -30,7 +29,7 @@ export async function resourceRoleHeld(
     resource_id: resource.id,
     grant_role: role,
     account_id: accountId,
-    at: at.toISOString(),
+    at: authoritativeTimeValue(at),
   });
   return row.held;
 }

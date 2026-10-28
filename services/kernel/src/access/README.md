@@ -1231,14 +1231,15 @@ grow`, seeding every optional kind overridden at the same scales with the shared
 
 `resourceRoleHeld(client, { resource: { route, id }, role, accountId, at }): Promise<boolean>`, exported from
 Access, reports whether the account has a direct identity `resource_role_grant` for that exact resource and role
-whose temporal range contains the finite `Date` at T. The start is inclusive and the end is exclusive; revocation
+whose temporal range contains the `AuthoritativeTime` at T, minted by a command attempt or `mintReadTime`.
+The exact PostgreSQL timestamp text preserves microsecond precision. The start is inclusive and the end is exclusive; revocation
 ends the range. Group-held grants (owner or member), `active_accounts` grants and account state are ignored, so
 deletion consumers can read grants belonging to a tombstoned account.
 
 This data-only port is not a permission check. The caller must already have authorized the read and must not
 disclose the answer to anyone else. It uses the caller's open query client and snapshot, opening no connection or
 transaction. Invalid resource routes, unroutable account UUIDs, malformed roles or roles longer than 128 characters,
-and invalid dates throw `TypeError` before any read.
+and times that were not minted throw `TypeError` before any read. `Date` and string times are rejected.
 
 The one `SELECT EXISTS` statement probes the temporal primary key's equality columns plus `valid @> at` in the
 resource's partition: constant rows and statements, logarithmic blocks in role grants.

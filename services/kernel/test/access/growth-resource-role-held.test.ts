@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resourceRoleHeld } from '../../src/access/resource-role-held.ts';
+import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -7,10 +8,11 @@ const route = 0x4567;
 const resource = { route, id: newId(route) };
 const accountId = newId(0xabcd);
 const role = 'semantic.context.owner';
-const at = new Date('2026-10-01T12:00:00Z');
+let at: AuthoritativeTime;
 let db: GrowthDatabase;
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  at = await mintReadTime(db.pool);
 });
 afterAll(async () => db?.close());
 
@@ -24,14 +26,14 @@ test('resourceRoleHeld stays constant as role grants grow', async () => {
         await database.admin.query(
           `INSERT INTO access.resource_role_grant
            (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-           VALUES ($1,$2,'identity',$3,'',$4,'[2026-10-01,)',$2)`,
-          [route, resource.id, accountId, role],
+           VALUES ($1,$2,'identity',$3,'',$4,tstzrange($5::timestamptz,NULL,'[)'),$2)`,
+          [route, resource.id, accountId, role, authoritativeTimeValue(at)],
         );
       // Thousands of rows in each competing neighborhood even at the smallest scale.
       await database.admin.query(
         `INSERT INTO access.resource_role_grant
          (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-         SELECT $1,$2,'identity',gen_random_uuid(),'',$4,'(,)',$2
+         SELECT $1::integer,$2::uuid,'identity',gen_random_uuid(),'',$4::text,'(,)'::tstzrange,$2
          FROM generate_series(1,$5::integer)
          UNION ALL
          SELECT $1,$2,'identity',$3,'','other.role.' || n,'(,)',$2
