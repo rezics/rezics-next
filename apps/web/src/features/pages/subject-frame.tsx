@@ -175,15 +175,20 @@ export function ViewHeading({ label, count }: { label: string; count?: ReactNode
 }
 
 /** A view served by the view route: the frame, the view's heading, then the view's own document. */
-export function SubjectViewPage({
-  frame,
-  label,
-  ...page
-}: Omit<ComponentProps<typeof SubjectPage>, 'heading' | 'tabs' | 'tabLabels'> & { frame: ReactNode; label: string }) {
+type SubjectViewPageProps = Omit<ComponentProps<typeof SubjectPage>, 'heading' | 'tabs' | 'tabLabels' | 'actions'> & {
+  frame: ReactNode;
+  label: string;
+  actions?: ReactNode;
+};
+
+export function SubjectViewPage({ frame, label, actions, ...page }: SubjectViewPageProps) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-8">
       {frame}
-      <ViewHeading label={label} />
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <ViewHeading label={label} />
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
       <SubjectPage {...page} />
     </div>
   );

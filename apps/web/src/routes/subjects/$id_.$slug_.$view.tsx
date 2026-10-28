@@ -1,5 +1,5 @@
 import { isView, type View } from '@rezics/composition';
-import { createFileRoute, notFound, redirect, useLoaderData, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
@@ -11,6 +11,7 @@ import { keepSearch, loadSubject, subjectUrlForView, subjectViewPaths } from '..
 import type { SessionEnv } from '../../session/client';
 import { typeFrame } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
+import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
@@ -115,7 +116,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
 
 function SubjectViewRoute() {
   const { page, reader, type, frame, tabs, view } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
+  const reviewSession = session === 'unknown' ? 'unavailable' : session;
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
   return (
@@ -131,8 +133,13 @@ function SubjectViewRoute() {
       label={viewLabel[view]()}
       {...(view === 'reviews'
         ? {
-            actions: ({ id }: { id: string }) => (
-              <WriteReviewAction subjectId={id} subjectTitle={frame.title.text} session={session} locale={locale} />
+            actions: (
+              <WriteReviewAction
+                subjectId={frame.id}
+                subjectTitle={frame.title.text}
+                session={reviewSession}
+                locale={locale}
+              />
             ),
           }
         : {})}
