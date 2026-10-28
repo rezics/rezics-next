@@ -50,8 +50,7 @@ function account(actor: Actor, action: string): AccountActor {
 }
 
 function state(value: unknown): EntryState {
-  if (typeof value !== 'string' || !ENTRY_STATES.has(value))
-    throw new LibraryEntryInvalidError();
+  if (typeof value !== 'string' || !ENTRY_STATES.has(value)) throw new LibraryEntryInvalidError();
   return value;
 }
 

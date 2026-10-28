@@ -67,11 +67,7 @@ export function createShelfCreatedAscReader(): ShelfDateReader {
             ? await stateOnly.run(connection, { ...parameters, state: query.state })
             : await stateType.run(connection, { ...parameters, state: query.state, type_id: query.typeId });
       const entries = rows.slice(0, query.limit).map((row) => {
-        if (
-          row.state === null ||
-          row.createdAt === null ||
-          row.lastActivityAt === null
-        )
+        if (row.state === null || row.createdAt === null || row.lastActivityAt === null)
           throw new Error('Shelf rollout invariant violated');
         return {
           ...row,

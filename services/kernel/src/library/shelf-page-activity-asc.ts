@@ -75,13 +75,7 @@ export function createShelfActivityAscReader(): ShelfDateReader {
             : await stateTypePage.run(client, { ...parameters, state: query.state, type_id: query.typeId });
       const entries: ShelfDateRows['entries'] = rows.slice(0, query.limit).map((row) => {
         const { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt } = row;
-        if (
-          createdAt === null ||
-          updatedAt === null ||
-          lastActivityAt === null ||
-          revision === null ||
-          state === null
-        )
+        if (createdAt === null || updatedAt === null || lastActivityAt === null || revision === null || state === null)
           throw new Error('Shelf activity backfill is incomplete');
         return { subjectId, state, revision, createdAt, updatedAt, lastActivityAt, finishedAt };
       });

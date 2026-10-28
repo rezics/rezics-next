@@ -2,12 +2,7 @@ import all from './shelf-page-finished-desc.sql';
 import state from './shelf-page-finished-desc-state.sql';
 import type from './shelf-page-finished-desc-type.sql';
 import stateType from './shelf-page-finished-desc-state-type.sql';
-import {
-  isLegacyEntryState,
-  MAX_SHELF_PAGE_SIZE,
-  type ShelfDateReader,
-  type ShelfDateRows,
-} from './shelf-contract.ts';
+import { isLegacyEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader, type ShelfDateRows } from './shelf-contract.ts';
 import { routeOf } from '../route/route.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,8 +76,7 @@ export function createShelfFinishedDescReader(): ShelfDateReader {
       const entries: ShelfDateRows['entries'] = rows.slice(0, query.limit).map((row) => {
         if (row.createdAt === null || row.updatedAt === null || row.lastActivityAt === null)
           throw new Error('Shelf dates must be backfilled before serving');
-        if (row.state === null)
-          throw new Error('Unknown library entry state');
+        if (row.state === null) throw new Error('Unknown library entry state');
         return {
           ...row,
           state: row.state,

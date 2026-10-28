@@ -65,12 +65,7 @@ export function createShelfActivityDescReader(): ShelfDateReader {
         },
       );
       const entries = rows.slice(0, query.limit).map((row) => {
-        if (
-          row.state === null ||
-          row.createdAt === null ||
-          row.updatedAt === null ||
-          row.lastActivityAt === null
-        )
+        if (row.state === null || row.createdAt === null || row.updatedAt === null || row.lastActivityAt === null)
           throw new Error('Shelf date storage is not ready');
         return {
           ...row,

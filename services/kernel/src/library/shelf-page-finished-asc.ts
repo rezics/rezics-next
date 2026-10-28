@@ -68,12 +68,7 @@ export function createShelfFinishedAscReader(): ShelfDateReader {
             : byStateType;
       const rows = await statement.run({ query: client.query.bind(client) }, parameters);
       const entries = rows.slice(0, query.limit).map((row) => {
-        if (
-          row.state === null ||
-          row.createdAt === null ||
-          row.updatedAt === null ||
-          row.lastActivityAt === null
-        )
+        if (row.state === null || row.createdAt === null || row.updatedAt === null || row.lastActivityAt === null)
           throw new Error('Shelf rollout invariant violated');
         return {
           ...row,
