@@ -249,3 +249,62 @@ definition changes for text/order/size/keyset, full OR
 narrowing, explicit refresh and real wait_for visibility while its native response remains withheld. Transport
 control documents are owned fixture inputs, never a synthetic privacy event or repair receipt. The existing tuple
 case still requires automatic FOREIGN repair with no unrelated subject edit, injected event or checkpoint advance.
+
+## Native feasibility evidence and conditional growth measurement
+
+The [current native-cut report](../../../../docs/research/public-filter-native-cut-current.md) and
+[deep native-cut report](../../../../docs/research/public-filter-native-cut-deep.md) are integrated evidence for
+this boundary. Both inspected pinned source and ran **no native experiment**. Source-inspected behavior is
+proven only at that scope; candidate layouts/schedules are proposed, and native plans, maintenance costs and
+runtime feasibility remain unknown. The deep report's table-whitespace formatting adds no substantive finding.
+The reports reject specific shortcuts, not every native representation. Native producer, registration, cut and
+custody runtime remain **missing**, not impossible; this adoption runs no existing native case.
+
+Snapshot membership can distinguish a lower allocated XID committing after start when final uses a fresh
+statement snapshot. The demonstrated indexed split still enumerates/probes active XIDs. A snapshot token,
+packed array or server retention does not erase that native work. Latest-key-only state loses an earlier relevant
+change followed by an irrelevant one. Key/history indexes must account for multiplicity and retained history;
+per-definition/home summaries must account for atomic registration maintenance and fanout. Neither report
+delivers a complete native narrowed changed/behind path or bounded maintenance.
+
+A same-row global transactional stamp is a conditional one-database serialization proposal: its common lock must
+survive to commit. It is not adopted command placement or an approved shortcut. No new serializer, quota,
+service, storage or engine is selected. It does not independently close narrowing, registration or custody.
+
+Current pending/ACK cannot protect reduce-then-ACK before final or a new query on an old observation. The actual
+canonical PIT or immutable prepared observation, its covered cut and execution start, full admitted AST/key
+closure and native registration remain required. No latest-live branch, caller keys/returned-ID permission or
+revival of `subject-coverage-v1` follows. Returned original/terminal own-row checks remain independent of narrowing.
+
+Native write-block verification drains admitted shard operations while blocked, not delayed requests arriving
+after unblock. Finite `gc_deletes` and checkpoint CAS cannot prevent late resurrection. All-writer/retained-copy
+custody, dependent source-own anchored advancement and actual LOCAL plus all FOREIGN refresh remain missing
+prerequisites. A refreshed same-version conflict winner alone cannot establish the required repaired body.
+
+Cold internal subject-key traversal still needs its actual creation/change bridge and retained-log gap/epoch
+handling before publication. All-role erasure locators and minimized-source completion remain owner obligations;
+`accountAgentId` identifies a stable node, not erasure truth. Unknown custody cannot become none/erased.
+No unbounded scan, cached permission, universal 256-list budget, old certificate/witness/replay ABI, permanent
+soft tombstone, new export/factory/table name or permanent preparing is authorized here.
+
+Alongside the existing native growth requirements, **if the chosen future layout reads/probes per active XID**,
+hold **1, 8 and 64 open native transactions**, each with allocated `pg_current_xact_id()`, across the measured
+read at fixed data scale. Judge actual examined rows, blocks and statements by the series. A quiet data-only
+fixture cannot detect that cost. The existing ceiling contains **no active-XID term**, so growth on this axis
+**fails**. This is no new allowance or test harness, and requires no artificial transactions for an unrelated
+layout. No Performance policy decision is pending; the numbers remain decided.
+
+The existing 64/512/4096 data, keys, history, aliases, depth, privacy-rate and served-share growth requirements
+and whole-page checks remain required. Preserve exact Decision17 attribution: role SQL starts with
+`/* semantic.privacy-start */` or `/* semantic.privacy-final */`; separate keyed own-row SQL starts with
+`/* semantic.own-rows */`. A merged own-row final charges its full population coverage work. Native capture is
+inclusive across `query` plus `readStatus`, with capture/metadata and all other page work also charged; isolating
+final/status alone cannot establish the budget. The privacy subset remains at most **2 statements** and
+`64 + 2*(behind homes + changed homes)` examined rows, shared once per page. Separate own-row work stays inside
+whole-page limits and cannot replace population coverage, including for zero returned rows.
+
+Whole-read statements remain at most **12 per backend**, composed-page statements **8 + 4R**. Native
+plan/backend/byte evidence must include actual examined/removed rows, blocks, nested statements, connections,
+request/response bytes and engine iterator work, including failed/replayed work and registration maintenance.
+All direct/prepared/composed limits and actual repair latency/served-share checks above remain unchanged.
+No native feasibility, budget or public capability pass follows from this owner-text adoption.
