@@ -196,7 +196,9 @@ test('a root bun test routed to a check host records its slot wait in the attemp
     () =>
       run.output.stderr.includes('remote-check: every check slot is busy; waiting for a free one') &&
       existsSync(waitFile) &&
-      readFileSync(waitFile, 'utf8').split('\n').some((line) => /^\d+$/.test(line) && Number(line) > 0),
+      readFileSync(waitFile, 'utf8')
+        .split('\n')
+        .some((line) => /^\d+$/.test(line) && Number(line) > 0),
     20_000,
   ).catch((error) => {
     throw new Error(`${error}\nstdout: ${run.output.stdout}\nstderr: ${run.output.stderr}`);
@@ -219,7 +221,9 @@ test("a root bun test waiting for a stack slot records its wait in the attempt's
     () =>
       run.output.stderr.includes('stack-lease: root bun test waiting (1/1 held, 0 ahead)') &&
       existsSync(waitFile) &&
-      readFileSync(waitFile, 'utf8').split('\n').some((line) => /^\d+$/.test(line) && Number(line) > 0),
+      readFileSync(waitFile, 'utf8')
+        .split('\n')
+        .some((line) => /^\d+$/.test(line) && Number(line) > 0),
     20_000,
   ).catch((error) => {
     throw new Error(`${error}\nstdout: ${run.output.stdout}\nstderr: ${run.output.stderr}`);
