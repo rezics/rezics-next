@@ -300,6 +300,8 @@ test('actual native subject relation events converge through registered Semantic
     await until(async () => (await blocked()).length > 0);
     await Bun.sleep(250);
     expect(await blocked()).toHaveLength(1); // A duplicate projector would also wait on the native checkpoint update.
+    // The worker's signal handler starts shutdown; explicit repeated stops must join the same drain.
+    child.child.kill('SIGTERM');
     child.child.stdin.write('stop\n');
     await child.until('semantic-stopping');
     await Bun.sleep(200);
