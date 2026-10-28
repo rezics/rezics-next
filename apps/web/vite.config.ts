@@ -29,7 +29,10 @@ export default defineConfig({
   // Fonts must stay on the site origin; the page policy does not allow data: fonts.
   build: { assetsInlineLimit: 0 },
   optimizeDeps: {
+    // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
+    // after the first page has loaded.
     entries: ['src/routes/**/*.tsx'],
+    holdUntilCrawlEnd: true,
   },
   ssr: {
     optimizeDeps: {

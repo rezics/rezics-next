@@ -10,7 +10,17 @@ import {
   type FileOutcome,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stackRun } from '../../../scripts/stack-run.ts';
@@ -314,12 +324,45 @@ async function runCommand(label: string, command: string, args: string[], env: N
   if (status !== 0) throw new Error(`${label} failed with status ${status}`);
 }
 
+/** Give Wrangler's local Worker a test-only signing key without replacing developer configuration. */
+export function ensureLocalWorkerVars(directory = app): void {
+  const destination = join(directory, '.dev.vars');
+  if (existsSync(destination)) return;
+  try {
+    copyFileSync(join(directory, '.dev.vars.example'), destination, constants.COPYFILE_EXCL);
+  } catch (error) {
+    // Another process may have created local vars after the existence check.
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+}
+
+async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
+  ensureLocalWorkerVars();
+  await runCommand('generate', 'bun', ['run', 'generate'], env);
+  await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
+  await runCommand('dependency optimization', 'bunx', ['vite', 'optimize', '--config', 'vite.config.ts'], env);
+}
+
 function testScriptArgument(args: string[]): string {
   const index = args.indexOf('--test-command');
   const command = index < 0 ? 'bun run test' : args[index + 1];
   if (command !== 'bun run test')
     throw new Error('Usage: bun scripts/check.ts [--stories] --test-command "bun run test"');
   return command;
+}
+
+function requestedTestFiles(args: string[]): string[] {
+  const files: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === '--skip-format') continue;
+    if (argument === '--test-command') {
+      index += 1;
+      continue;
+    }
+    if (!argument.startsWith('--')) files.push(argument);
+  }
+  return files;
 }
 
 async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: string): Promise<void> {
@@ -353,8 +396,13 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 async function main(args: string[]): Promise<void> {
+  if (args.includes('--prepare-only')) {
+    await prepare(process.env);
+    return;
+  }
   const worker = browserWorkerRequest(args);
   if (worker) {
+    await prepare(process.env);
     const code = await runBrowserWorker(worker);
     if (code !== 0) {
       const fragment = readReportFragment(resolve(root, worker.report));
@@ -373,12 +421,18 @@ async function main(args: string[]): Promise<void> {
 
   if (!args.includes('--skip-format'))
     await runCommand('format', 'oxfmt', ['--check', '.', '!src/kernel/recorded/*.json'], env);
-  await runCommand('generate', 'bun', ['run', 'generate'], env);
-  await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
+  await prepare(env);
 
-  const files = [...new Bun.Glob('tests/*.test.ts').scanSync({ cwd: app })]
-    .filter((file) => !file.endsWith('.host.test.ts'))
-    .sort();
+  const requestedFiles = requestedTestFiles(args);
+  const files = (
+    requestedFiles.length > 0
+      ? requestedFiles
+      : [...new Bun.Glob('tests/*.test.ts').scanSync({ cwd: app })].filter((file) => !file.endsWith('.host.test.ts'))
+  ).sort();
+  if (requestedFiles.length > 0) {
+    await runTests(files, env, testScript);
+    return;
+  }
   const results = await Promise.allSettled([
     runCommand('typecheck', 'tsc', ['--noEmit', '-p', 'tsconfig.json'], env),
     runTests(files, env, testScript),

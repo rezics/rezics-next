@@ -1,0 +1,10 @@
+AUTH_ISSUER=http://127.0.0.1:3100
+PUBLIC_ORIGIN=http://127.0.0.1:3000
+SITE_ORIGINS=http://127.0.0.1:3000
+API_RESOURCE=https://api.rezics.test
+WEBSITE_SCOPES=openid offline_access
+WEBSITE_CLIENT_ID=rezics-web-test
+WEBSITE_CLIENT_KEY={"crv":"P-256","d":"uuV9eSZglraDYFZDqdtJ2X1AeiKAYfXS3FRcYs37uws","ext":true,"key_ops":["sign"],"kty":"EC","x":"Dx2ucB5iT8oOcS7HswXZxXWP0DAL5kElLsh0AN-joq0","y":"yGdxw8ztJNCNUpFP1ZKewYgh3Qzw4cuxBNorz65bXso","kid":"rezics-web-test-p256","alg":"ES256","use":"sig"}
+KERNEL_ORIGIN=http://127.0.0.1:3200
+TURNSTILE_SITE_KEY=
+TURNSTILE_SCRIPT_URL=
