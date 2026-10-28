@@ -1,7 +1,7 @@
 # Independent personal labels
 
-This document specifies private owner-created labels as independent personal facts in the generic Library. It does not
-add production storage, routes, workers, a definitions compiler feature, or a second Collection implementation.
+This document owns the accepted private label model, HTTP contract and cost obligations in the generic Library.
+Native storage is partially implemented; the implementation boundary below distinguishes it from absent producers.
 Collection query runtime and saved-query semantics remain with the dynamic Collections contract.
 
 ## Model
@@ -50,7 +50,7 @@ plus the target parent in sorted order `FOR SHARE`, then applies exact row CAS a
 Hash collisions cause contention only. An effective duplicate returns unchanged ID/revision before capacity checks.
 If necessary, reclaim ONE deleted-parent reservation: atomically soft-delete that child at the parent's ORIGINAL
 `deleted_at`/`purge_after`, advance its revision and clear its slot before reuse. Retain its identity/payload for its
-remaining window, without renewing undo. All 32 live parents means `409 conflict`. Reads never reclaim, repair,
+remaining window, without renewing undo. All 32 live parents means `409 library_label_capacity`. Reads never reclaim, repair,
 stamp expiry or enqueue work. Retry snapshot/unique races through the whole native command, not aborted SQL.
 
 Definition undo within 720 hours restores metadata and ONLY unchanged, independently live reservations. Reclaimed
@@ -78,19 +78,53 @@ The additive command action names are:
 | `library_label.list`            | `library_entry:list`   |
 | `library_label.assignment_list` | `library_entry:read`   |
 
-These names reuse the current personal-library gate, owner partitioning, Access admission, and scopes. They add no
-scope, change no Collection action, and do not select a transport path. The implementation agreement must bind them
-to the existing personal-library command surface; do not add `/libraryShelfLabels`, another Collection route, or a
-private route that computes Collection-like counts. Existing Collection routes and scopes retain their current
-contracts.
+These actions reuse `personal_library`, owner partitioning, native Access admission and the existing `library_entry`
+scopes. They add no resource type or scope and change no Collection action. The accepted HTTP paths are:
 
-Creation returns `201 {label:{id,revision}}`; rename returns `200 {label:{id,revision}}`; delete and unassign return
-`200 {deleted:true}`; assignment returns `200 {assignment:{id,revision}}`. A duplicate assignment returns the same
-assignment ID and revision. Catalogue pages return `200 {labels:[{id,name,revision}],next}`; one-label assignment
-pages return `200 {assignments:[{id,labelId,subjectId,revision}],next}`. `library_label.assignment_list` requires
-exactly one of `labelId` (subjects for a label, ordered by subject ID) or `subjectId` (labels on a subject, ordered by
-label ID); the latter also performs subject-read admission. Reads contain only active rows whose definition is live.
-Mutation receipts store only these minimal outcomes, not display names.
+- `GET /v1/libraryLabels`: optional `q`, `cursor`, `limit`; returns `200 {labels:[{id,name,revision}],next}`.
+- `POST /v1/libraryLabels`: `{name}`; returns `201 {label:{id,revision}}`.
+- `PATCH /v1/libraryLabels/{id}`: `{name,revision}`; returns `200 {label:{id,revision}}`.
+- `DELETE /v1/libraryLabels/{id}`: query `revision`; returns `200 {deleted:true}`.
+- `POST /v1/libraryLabels/{id}:restore`: `{revision}`; returns `200 {label:{id,revision}}`.
+- `POST /v1/libraryLabels/{id}:assign`: `{subjectId}`; returns `200 {assignment:{id,revision}}`.
+- `POST /v1/libraryLabels/{id}:unassign`: `{subjectId,assignmentId,revision}`; returns `200 {deleted:true}`.
+- `POST /v1/libraryLabels/{id}:restoreAssignment`: `{subjectId,assignmentId,revision}`;
+  returns `200 {assignment:{id,revision}}`.
+- `GET /v1/libraryLabelAssignments`: exactly one of `labelId` or `subjectId`, optional `cursor`, `limit`, `view`;
+  returns `200 {assignments:[{id,labelId,subjectId,revision}],next}` in default `BASIC` view. Row `id` is `assignmentId`.
+
+Both lists use signed, authenticated/encrypted cursors and `limit` 1..100, default 20. Assignments by label are ordered
+by subject ID; assignments by subject are ordered by label ID and also require subject-read admission. Reads contain
+only effective assignments with live same-owner parents. Duplicate assignment returns the unchanged ID/revision.
+Mutation receipts retain minimal outcomes and undo revisions, never names or private display fields.
+All catalogue and assignment mutations, including both restores, require `library_entry:update`.
+
+Delete declares `Library-Label-Revision` and unassign declares `Library-Label-Assignment-Revision` in OpenAPI success
+headers. Each is the actual post-delete revision from the native command receipt. Exact old-key replay returns the
+SAME original header even after restore or replacement. Undo submits the known opaque ID and that revision; it needs
+no expiry header, hidden-record lookup, inferred revision or transport pre-read. Fresh capacity failure is
+`409 library_label_capacity`. Restore has distinct stable `409` codes: `library_label_restore_stale`,
+`library_label_restore_expired`, `library_label_restore_occupied`, `library_label_restore_capacity`.
+Ordinary stale/name conflicts retain `conflict`; foreign and unknown resources retain the same `404 not_found`.
+
+`q` is a normalized LITERAL name prefix using the version-1 NFC/whitespace/case-preserving rules; empty normalized
+`q` is unfiltered. Seek the existing `C`-collated partial live-name B-tree with a Unicode-scalar prefix upper bound
+(no upper bound when none exists), skipping the surrogate range. `%`, `_` and backslash are literal, never wildcards.
+Bind normalized `q` into the cursor. There is no catalogue cap, arbitrary full scan or shorter Unicode-name limit.
+The continuation carries opaque ID plus bounded position evidence, with a keyed name reread under the cursor basis;
+never place a legal long Unicode name in the shared cursor's 256-byte after-key.
+
+`FULL` by subject adds only `label:{name}` to each BASIC row through <=32 current parent points; it fetches no progress
+or subject display data and adds no progress gate. `FULL` by label adds `subject` (the standard viewer-authorized
+summary or null) and `libraryEntry` (the [safe current shelf entry](../services/kernel/src/library/shelf-contract.md) or null). Only an existing entry carries its `state` and
+`activeProgressSession`; a session alone never manufactures an entry tile. The page includes `label:{id,name,revision}`
+even when empty, without a new `GET /:id` or catalogue walk.
+
+`FULL` by label additionally requires `library_entry:list`, `progress_session:list`, `personal_library` and
+`reading_progress` before private SQL. Parent metadata, assignment candidates and the <=100 subject-ID entry/session
+batch share one owner-partition repeatable-read snapshot. Release that checkout before the existing per-partition
+standard subject summaries. Use normal native authorization before receipt lookup, without transport pre-reads,
+cross-partition SQL, per-item HTTP, profile lookup/acceptance or a second list engine.
 
 Every request first validates strict JSON against a closed, typed schema. Unknown fields, duplicate JSON object keys,
 string-to-number/boolean coercion, malformed IDs, and out-of-range revisions are rejected. Mutations require the
@@ -109,8 +143,8 @@ route, or requested identity cannot expand that admission. A missing or foreign 
 owner-visible label fact.
 
 Rename and delete require the current label revision. Assignment removal requires its actual assignment ID and revision.
-A stale revision returns `409 conflict` and changes no label, assignment, fact-index row, receipt outcome, or outbox
-effect; stale conflicts are not committed as command receipts. Assignment create is set-idempotent, including
+A stale ordinary revision returns `409 conflict` (restore uses its distinct codes) and changes no label, assignment,
+fact-index row, receipt outcome, or outbox effect; stale conflicts are not committed as command receipts. Assignment create is set-idempotent, including
 concurrent duplicate calls; competing mutations serialize under the transaction advisory subject guard. Receipt contents contain
 only the committed action result and opaque IDs/revisions, not
 label display names or private subject facts. A delete receipt replay therefore cannot restore a retired label or
@@ -151,6 +185,11 @@ semantics and the shared members page; its Everything result consumes live label
 access path. This contract adds no custom label predicate or saved-query runtime. A private label fact is never exposed as a
 public member field.
 
+Labels alone establish no profile binding or lookup. Only surviving live entry, retained-session and copy facts with
+actual accepted pins establish in-use state sets and sibling state Collections. Soft-deleted/trash snapshots are exact
+undo evidence, not in-use sets. A profiled label-only subject gets no current or historical profile guess. The Collection
+contract owns that meaning; this contract adds no label-profile pin, label-only state-view binding or saved-query scope.
+
 ## Privacy and disclosure
 
 Label definitions, names, assignments, revisions, cursors, and receipts are private owner data. They never enter
@@ -172,6 +211,84 @@ it does not change the owner's label facts.
 
 ## Mutation and cleanup cost
 
+The following are policy bounds, not claims of passing native measurements. Charge raw source keys BEFORE filters,
+including rejected, internal, lookahead and reread work across every Access, source, catalogue and summary pool.
+Necessary parent/cursor/fence metadata points, statements, retries, bytes and physical heap/buffer work are additional
+measured dimensions. Shrink raw windows to fit owner<=100 and aggregate caller<=256, retaining the existing separate
+semantic identity allowance. No emitted-row count can substitute for these charges.
+
+### Catalogue list and literal prefix search
+
+- Touches: owner admission, live-name B-tree range, cursor basis and exact continuation-name reread.
+- Bound: <=100 raw candidates, O(P) memory, fixed metadata points; long legal names require no linear catalogue work.
+- Growth check: native q/continuation plans at growing catalogue sizes and long Unicode boundaries are unimplemented.
+
+### Create label
+
+- Touches: owner admission, exact definition/name uniqueness, shared receipt/outbox and source metadata as needed.
+- Bound: fixed keys/statements; unrelated catalogue growth adds at most logarithmic index work, with no catalogue cap.
+- Growth check: end-to-end native create growth remains unimplemented; [catalogue tests][catalogue-tests] cover the DAO.
+
+### Rename label
+
+- Touches: exact label CAS, old/new name keys, receipt/outbox and source evidence; never child rows.
+- Bound: fixed keys/statements independent of assignment population; unchanged canonical name has no domain effect.
+- Growth check: [outcome acceptance][outcomes] requires unrelated-data traces; a production driver remains unimplemented.
+
+### Delete label
+
+- Touches: exact parent CAS/tombstone, source fence and shared receipt/outbox/durable cleanup intent.
+- Bound: fixed keys/statements with no assignment fanout; child count affects only eventual paged cleanup.
+- Growth check: [outcome acceptance][outcomes] requires delete growth/crash/replay; integrated execution is unimplemented.
+
+### Restore label
+
+- Touches: exact historic parent CAS/deadline/name uniqueness, source fence and minimal receipt/outbox.
+- Bound: fixed keys/statements; restore unchanged reservations implicitly, never enumerate or revive reclaimed children.
+- Growth check: [catalogue tests][catalogue-tests] cover DAO undo/name collision; integrated restore growth is unimplemented.
+
+### Assign label
+
+- Touches: admitted subject/owner, guard, reserved-source seek, exact desired tuple, sorted current parents, optional reclaim.
+- Bound: <=32 reservations, <=33 parent locks, one reclaim and fixed command metadata; duplicates precede capacity work.
+- Growth check: [native admission plans][admission-plans] measure 64/512/4096 inactive histories, including rejected paths.
+
+### Unassign label
+
+- Touches: owner/subject admission, guard, current parent, exact assignment-ID/tuple/revision CAS, fence and receipt/outbox.
+- Bound: fixed points/statements; clear one reservation and retain only that episode for 720 hours.
+- Growth check: integrated native unassign growth is unimplemented; [outcome acceptance][outcomes] defines required behavior.
+
+### Restore assignment
+
+- Touches: historic assignment-ID/tuple/revision/deadline, guard, <=32 reservations/current parents and shared command keys.
+- Bound: <=33 parent locks and one reclaim to reacquire capacity; no history scan or renewal of the original undo deadline.
+- Growth check: explicit native undo/admission integration remains unimplemented; reassignment evidence is not undo proof.
+
+### BASIC assignment list
+
+- Touches: owner/subject admission, exact parent metadata and indexed label or reserved-subject source candidates.
+- Bound: <=100 raw page candidates; subject source <=32 plus necessary current-parent/metapoints, charged separately.
+- Growth check: native read-driver plans and deep-cursor measurements remain unimplemented; DAO admission is not read proof.
+
+### FULL assignments by subject
+
+- Touches: BASIC sources and <=32 exact current-parent name points; no progress or display-summary reads.
+- Bound: same bounded reservation window plus separately charged metadata points; no retained-history or catalogue scan.
+- Growth check: native FULL-by-subject producer and all-pool measurements remain unimplemented.
+
+### FULL assignments by label
+
+- Touches: admission/gates, parent/page and owner entry/session batch in one RR snapshot, then standard subject summaries.
+- Bound: raw page<=100 and native subject-ID batch<=100; fixed per-subject points, finite summary concurrency, all pools charged.
+- Growth check: native batch/FULL producers and end-to-end all-pool measurements remain unimplemented.
+
+### Automatic purge and terminal account cleanup
+
+- Touches: bounded raw due/owner-label keys, account barrier, episode CAS/locks, child then parent and owned private payload.
+- Bound: <=100 raw keys per durable page, O(P) memory/O(N) total; effects/checkpoint/next intent commit together.
+- Growth check: [outcome acceptance][outcomes] requires crash/replay/terminal traces; runnable integration is unimplemented.
+
 An ordinary create, rename, assignment, or unassignment touches a fixed set of keys in one owner partition: the
 exact label or assignment key, its bounded reservation/parent keys, the generic owner fact-source fence,
 and the common command receipt/outbox keys. Reservations are capped at 32 per subject, not retained rows. Rename and logical
@@ -185,8 +302,9 @@ generic source, and prevents future writes or dynamic-query use. It does not syn
 assignment rows. Recreating the same name makes a new ID; cleanup for the old ID cannot match or
 delete the new label's assignments.
 
-For a label deleted by its owner, physical assignment purge begins only after the 30-day undo window,
-through shared bounded cleanup. Before that deadline, an admitted assignment may reclaim one inactive reservation
+Individual unassign schedules automatic bounded purge at its own 720-hour deadline.
+For a label deleted by its owner, automatic physical assignment purge begins only after the 720-hour undo window,
+through shared bounded durable cleanup, without a later owner request. Before that deadline, an admitted assignment may reclaim one inactive reservation
 by soft-deleting its child as specified above; this neither purges payload nor renews undo. Purge pages the owner/label/subject assignment index in keyset order, processing no more
 than 100 candidates per page with `O(P)` memory and `O(N)` total work. Page effects, checkpoint, terminal fence, and
 replay receipt commit together. A crash or lost acknowledgement may replay a page without deleting later rows or
@@ -201,7 +319,7 @@ assignment facts are personal, so their payload and skeleton are erased as that 
 is deferred from first scope; no new hold/custody engine is required. The handoff is durable and does not wait for projection consumers; the delete response may precede
 physical purge completion. Ordinary label deletion still permits owner undo within 30 days. Restore uses current
 `deleted_at`/`purge_after`/CAS and the historic
-fact and pin. Individual-record early purge needs separate platform permission; business transitions never establish undo authority or
+fact; labels carry no profile pin. Individual-record early purge needs separate platform permission; business transitions never establish undo authority or
 purge timing. Takedown withholds the least affected field/record and never schedules purge solely for the notice;
 a legal-order purge is a separate platform-authorized operation.
 
@@ -263,14 +381,27 @@ No default state, legacy fallback, profile synthesis or new presence/hide primit
 unique subjects with any surviving state, live label assignment, retained session or holding; follow/curated-only
 subjects and soft-deleted facts do not count. Clearing state preserves other facts; the last live fact removes membership.
 
-The applied `20261027190250_personal_labels.sql` and native schema test supply the catalogue/assignment tuple
-tables, name uniqueness and due/owner-label indexes. The separately committed catalogue DAO
-`services/kernel/src/library/label-store.ts` and `label-store-lifecycle.sql` provide header CAS/undo in this checkout.
-They do not provide assignment IDs/slots, admission, a ready generic source or purge adapters.
+The [catalogue schema](../services/kernel/db/library/migrations/20261027190250_personal_labels.sql) supplies tuple,
+live-name and due indexes. The [reservation migration](../services/kernel/db/library/migrations/20261027234813_label_reservation_source.sql)
+adds same-row IDs/slots, covering reserved-source indexes and a shared fact-source head, not producer readiness.
+The [catalogue DAO](../services/kernel/src/library/label-store.ts) and [lifecycle SQL](../services/kernel/src/library/label-store-lifecycle.sql)
+provide metadata CAS/undo. The [assignment DAO](../services/kernel/src/library/label-assignment-store.ts),
+[reservation seek](../services/kernel/src/library/label-assignment-reservations.sql) and
+[reclaim CAS](../services/kernel/src/library/label-assignment-reclaim.sql) implement native set admission and original-deadline reclaim.
+[Native admission tests][admission-tests] and [plan tests][admission-plans] exist; they do not prove shipped HTTP or purge.
 
-The implementation handoff needs separate storage/cutover, assignment DAO, parent/source integration, command/receipt
-and durable-cleanup slices, each <=400 production lines/eight files plus native acceptance. Add IDs/slots/indexes
-additively, backfill <=100 raw keys before filtering with same-transaction checkpoints, preserve logical keys,
+Label HTTP routes, native command/receipt integration, assignment unassign/undo/pages, q seek, FULL owner tile batch,
+source cutover/fence producers and automatic whole-purge/private receipt/outbox/workflow payload cleanup remain unimplemented.
+The [current personal routes](../services/kernel/src/library/personal-routes.ts), [OpenAPI](../contracts/openapi.json) and
+[generated client](../packages/client/src/kernel/library/personal-routes.d.ts) do not publish these label endpoints.
+The [restore problem definitions](../services/kernel/src/http/problem.ts) and their
+[schema test](../services/kernel/test/http/library-label-restore-problems.test.ts) establish error shapes only.
+The [standard summary reader](../services/kernel/src/library/views.ts) and [shared cursor](../services/kernel/src/tokens/list-cursor.ts)
+are existing integration surfaces. Implementation briefs are requirements, not evidence of shipped producers.
+
+The remaining implementation needs separate storage/cutover, assignment lifecycle/pages, parent/source integration, command/receipt
+and durable-cleanup slices, each <=400 production lines/eight files plus native acceptance. Use the existing IDs/slots/indexes;
+backfill <=100 raw keys before filtering with same-transaction checkpoints, preserve logical keys,
 values/times/revisions, and block activation on 33 live facts. Fence writers/parent changes and prove source
 completeness before enabling the one source; incomplete is unavailable. No copied parent-generation catalogue.
 Reuse generic Library command/receipt/admission, shared encrypted cursors, existing Collections and shared cleanup/account barrier. Do not add a second list engine,
@@ -296,4 +427,9 @@ inform the distinction only; their model and field limits are not copied.
 The live-cap reconciliation adopts [both](research/library-label-cap-independent-current.md)
 [independent reports](research/library-label-cap-independent-deep.md): same-row reservations, unchanged-claim parent
 undo and finite assignment identity with ID-bound CAS. Alternative revision allocators, extra visibility generations
-and duplicated source tables are not adopted. Native runtime/plan validation remains outstanding.
+and duplicated source tables are not adopted. Native admission plan tests exist; complete source/HTTP/cleanup proof remains outstanding.
+
+[catalogue-tests]: ../services/kernel/test/library/label-store.test.ts
+[admission-tests]: ../services/kernel/test/library/label-assignment-store.test.ts
+[admission-plans]: ../services/kernel/test/library/label-assignment-growth.test.ts
+[outcomes]: ../specs/library-labels-outcomes.test.ts
