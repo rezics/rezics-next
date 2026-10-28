@@ -46,6 +46,9 @@
     }
   },
   "mappings": {
+    "_meta": {
+      "name_sort_format": 1
+    },
     "dynamic": "strict",
     "properties": {
       "id": {

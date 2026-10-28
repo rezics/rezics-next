@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
+
+export const SUBJECT_SORT_FORMAT = 1;
 
 type SubjectIndexDefinition = Record<string, unknown>;
 type ResolveIndexResponse = {
@@ -46,6 +48,36 @@ export async function createSubjectIndex(search: OpenSearch, prefix: string, gen
     if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') return;
     throw error;
   }
+}
+
+/** Read the bounded name-sort writer format from one physical generation's native mapping metadata. */
+export async function readSubjectSortFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number | null> {
+  const index = subjectIndexName(prefix, generation);
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/${index}/_mapping`);
+  } catch (error) {
+    if (error instanceof OpenSearchError && error.type === 'index_not_found_exception')
+      throw new SearchUnavailableError('Subject generation mapping is unavailable', { cause: error });
+    throw error;
+  }
+
+  const record = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+  const unavailable = () => new SearchUnavailableError('Subject generation mapping is missing or malformed');
+  if (response.status !== 200 || !record(response.body)) throw unavailable();
+  const indexMapping = response.body[index];
+  if (!record(indexMapping) || !record(indexMapping.mappings)) throw unavailable();
+  const mappings = indexMapping.mappings;
+  if (!Object.hasOwn(mappings, '_meta')) return null;
+  const meta = mappings._meta;
+  if (!record(meta)) throw unavailable();
+  const format = meta.name_sort_format;
+  return format === SUBJECT_SORT_FORMAT ? SUBJECT_SORT_FORMAT : null;
 }
 
 /** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
