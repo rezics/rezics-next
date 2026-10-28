@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
+import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { bulkLines, documentActions } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
@@ -64,7 +65,11 @@ export function createSubjectIndexer(options: {
               return subject?.visibility === 'visible' && subject.redirect === null;
             });
             const counts = indexIds.length === 0 ? undefined : await options.listing.read(partition, indexIds);
-            const actions = documentActions(snapshot, ids, counts);
+            const actions = await prepareBoundedSortKeys(
+              options.search,
+              options.index,
+              documentActions(snapshot, ids, counts),
+            );
             const response = await options.search.bulk<BulkResponse>(bulkLines(options.index, actions), {
               query: { refresh: 'wait_for' },
             });

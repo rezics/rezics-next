@@ -156,9 +156,10 @@ test('a batch indexes each named subject once from one snapshot at the partition
   const snapshot = await fake.read(101, [a.id]);
   const stored = await search.request<{ _version: number; _source: unknown }>('GET', `/${index}/_doc/${a.id}`);
   expect(stored.body._version).toBe(Number(snapshot.position));
-  expect(stored.body._source).toEqual(
-    (documentActions(snapshot, [a.id], new Map())[0] as { document: unknown }).document,
-  );
+  expect(stored.body._source).toEqual({
+    ...(documentActions(snapshot, [a.id], new Map())[0] as { document: Record<string, unknown> }).document,
+    name_sort: 'book 1',
+  });
   expect(await checkpoint('search_one', 101)).toBe('3');
   expect(await relay.run(101)).toMatchObject({ status: 'read', envelopes: 0 });
   expect(reads.reads).toHaveLength(1);
