@@ -723,8 +723,28 @@ export class Importer {
       return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
     }
     conversion = this.convert(registration, deferred, { ...context, mediaIds: resolution.mediaIds });
+    const proposals: BatchCommand[] = [];
+    for (const command of conversion.proposals) {
+      if (command.op === 'create' || command.source.field_group !== 'cover') continue;
+      if (command.op !== 'propose' || command.subject !== claim.subject)
+        throw new Error('Converter did not produce bound cover proposals');
+      proposals.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
+    }
+    const proposalsByKey = new Map(proposals.map((command) => [command.key, command]));
+    if (proposalsByKey.size !== proposals.length) throw new Error('Cover proposals contain duplicate command keys');
+    const acknowledgedProposals = new Set<string>();
     const commands: BatchCommand[] = [];
     for (const candidate of this.current(owner).filter((value) => value.field_group === 'cover')) {
+      const proposal = proposalsByKey.get(candidate.key);
+      if (proposal) {
+        const bytes = JSON.stringify({ commands: [proposal] });
+        if (candidate.signature !== hash(`${run.id}:${proposal.key}`) || candidate.bytes !== bytes)
+          throw new Error('Acknowledged cover proposal conflicts with its original request');
+        // A candidate acknowledged from this run is already the result of its immutable
+        // proposal. Keep it and avoid replaying that proposal at the completion boundary.
+        acknowledgedProposals.add(candidate.key);
+        continue;
+      }
       const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
       if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
       commands.push({
@@ -743,12 +763,7 @@ export class Importer {
         references: prior.statement.references,
       });
     }
-    for (const command of conversion.proposals) {
-      if (command.op === 'create' || command.source.field_group !== 'cover') continue;
-      if (command.op !== 'propose' || command.subject !== claim.subject)
-        throw new Error('Converter did not produce bound cover proposals');
-      commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
-    }
+    commands.push(...proposals.filter((command) => !acknowledgedProposals.has(command.key)));
     if (commands.length) {
       const request = { commands };
       this.atomic(() => {
