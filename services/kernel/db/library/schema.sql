@@ -173,6 +173,45 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: builtin_collection_reference; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.builtin_collection_reference (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    profile_id text NOT NULL,
+    state_set_id text NOT NULL,
+    state_id text NOT NULL,
+    CONSTRAINT builtin_collection_reference_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT builtin_collection_reference_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT builtin_collection_reference_profile_id_check CHECK ((((octet_length(profile_id) >= 1) AND (octet_length(profile_id) <= 64)) AND ((profile_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text))),
+    CONSTRAINT builtin_collection_reference_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT builtin_collection_reference_state_id_check CHECK ((((octet_length(state_id) >= 1) AND (octet_length(state_id) <= 64)) AND ((state_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text))),
+    CONSTRAINT builtin_collection_reference_state_set_id_check CHECK ((((octet_length(state_set_id) >= 1) AND (octet_length(state_set_id) <= 64)) AND ((state_set_id COLLATE "C") ~ '\A[a-z][a-z0-9_.-]{0,63}\Z'::text)))
+);
+
+
+--
+-- Name: builtin_state_reference_source; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.builtin_state_reference_source (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    source_revision integer NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    release_digest text NOT NULL,
+    CONSTRAINT builtin_state_reference_source_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT builtin_state_reference_source_release_digest_check CHECK (((octet_length(release_digest) = 71) AND ((release_digest COLLATE "C") ~ '\Asha256:[0-9a-f]{64}\Z'::text))),
+    CONSTRAINT builtin_state_reference_source_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT builtin_state_reference_source_source_revision_check CHECK ((source_revision >= 1))
+);
+
+
+--
 -- Name: bulk_effect; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -1064,6 +1103,30 @@ COMMENT ON TABLE library.type_preparation_slot IS 'Active owner binding slot. Di
 
 
 --
+-- Name: builtin_collection_reference builtin_collection_reference_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_collection_reference
+    ADD CONSTRAINT builtin_collection_reference_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: builtin_collection_reference builtin_collection_reference_route_account_id_profile_id_st_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_collection_reference
+    ADD CONSTRAINT builtin_collection_reference_route_account_id_profile_id_st_key UNIQUE (route, account_id, profile_id, state_set_id, state_id);
+
+
+--
+-- Name: builtin_state_reference_source builtin_state_reference_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_state_reference_source
+    ADD CONSTRAINT builtin_state_reference_source_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: bulk_effect bulk_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1365,6 +1428,13 @@ ALTER TABLE library.type_preparation_progress
 
 ALTER TABLE ONLY library.type_preparation_slot
     ADD CONSTRAINT type_preparation_slot_pkey PRIMARY KEY (route, account_id, binding_digest);
+
+
+--
+-- Name: builtin_state_reference_source_support; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX builtin_state_reference_source_support ON library.builtin_state_reference_source USING btree (route, collection_id, subject_id);
 
 
 --
@@ -1750,6 +1820,14 @@ CREATE TRIGGER subject_collection_version_order BEFORE UPDATE ON library.subject
 --
 
 CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_preparation_header FOR EACH ROW EXECUTE FUNCTION library.guard_type_preparation_header();
+
+
+--
+-- Name: builtin_state_reference_source builtin_state_reference_source_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_state_reference_source
+    ADD CONSTRAINT builtin_state_reference_source_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.builtin_collection_reference(route, collection_id);
 
 
 --
