@@ -816,9 +816,7 @@ test('Everything counts live personal facts once and excludes follow-only curate
   const curated = await createCurated();
   for (const subjectId of [subject.id, curatedOnly.id])
     await okay(await write('owner', 'POST', `/v1/collections/${String(curated.id)}/members`, { subjectId }));
-  await okay(
-    await write('owner', 'PUT', `/v1/follows/${followedOnly.id}`, { targetType: 'subject', state: 'following' }),
-  );
+  await okay(await write('owner', 'PUT', `/v1/follows/${followedOnly.id}`));
   await okay(await driver.addLabel(subject.id, 'label-only'));
   await okay(await driver.addLabel(subject.id, 'second-label'));
   const everything = await builtin({ kind: 'everything' });
@@ -1072,11 +1070,7 @@ test('opaque state lookup uses one native point and terminal deletion defeats de
     }
   }
   expect(await driver.inspect()).toEqual(before);
-  await problem(
-    await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
-    404,
-    'not_found',
-  );
+  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
   expect(await driver.inspect()).toEqual(before);
   const latch = await driver.holdStateReferenceRepair();
   const repair = driver.repairStateReferences();
@@ -1084,25 +1078,15 @@ test('opaque state lookup uses one native point and terminal deletion defeats de
     await latch.reached;
     await okay(await driver.deleteAccount());
     expect((await get('owner', path)).ok).toBe(false);
-    expect(
-      (await write('owner', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' })).ok,
-    ).toBe(false);
+    expect((await write('owner', 'PUT', `/v1/follows/${state.id}`)).ok).toBe(false);
     await problem(await get('other', path), 404, 'not_found');
-    await problem(
-      await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
-      404,
-      'not_found',
-    );
+    await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
   } finally {
     latch.resume();
   }
   await repair;
   await driver.resumeAndSettle();
   await problem(await get('other', path), 404, 'not_found');
-  await problem(
-    await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
-    404,
-    'not_found',
-  );
+  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
   expect((await driver.inspect()).collections.some((row) => row.id === state.id)).toBe(false);
 });
