@@ -220,7 +220,22 @@ test(
           });
           expect(relation.sequentialScans, measurement).toBe(0);
         }
-        expect(cost.relations['content.board_thread']?.rows).toBe(candidateLimit);
+        const candidates = cost.relations['content.board_thread']!;
+        const measurement = JSON.stringify({ sort, scale, ...candidates });
+        // A small board can use a bitmap heap scan and sort; larger boards seek the ordered index.
+        // Both must examine at most 2Q rows, even when the former reads more than the LIMIT.
+        expect(candidates.rows, measurement).toBeGreaterThan(0);
+        expect(candidates.rows, measurement).toBeLessThanOrEqual(2 * candidateLimit);
+        // Charge bitmap index blocks too: the candidate row budget plus two conservative
+        // binary-tree descents over the complete seeded candidate relation.
+        const candidateBlocks =
+          candidates.blocks +
+          Object.entries(cost.relations)
+            .filter(([name]) => name.startsWith('index:board_thread_'))
+            .reduce((blocks, [, relation]) => blocks + relation.blocks, 0);
+        const candidateBlockBound =
+          2 * candidateLimit + 2 * Math.ceil(Math.log2(2 + baseline.to - baseline.from + scale));
+        expect(candidateBlocks, measurement).toBeLessThanOrEqual(candidateBlockBound);
       }
     }
   },
