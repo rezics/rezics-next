@@ -234,7 +234,7 @@ async function main(): Promise<void> {
     if (found) docker(['stop', container]);
   } else if (action === 'reset') {
     const found = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
-    if (found) docker(['rm', '-f', container]);
+    if (found) docker(['rm', '-f', '-v', container]);
     try {
       docker(['volume', 'rm', volume]);
     } catch {

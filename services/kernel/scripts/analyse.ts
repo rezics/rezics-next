@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     console.log(`Analysed ${statements} statements into ${target} in ${seconds} s`);
   } finally {
-    docker(['rm', '-f', container]);
+    docker(['rm', '-f', '-v', container]);
   }
 }
 

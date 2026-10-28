@@ -1763,7 +1763,7 @@ async function executeRecord(): Promise<number> {
     for (const id of [searchContainer, container]) {
       if (!id) continue;
       try {
-        docker(['rm', '-f', id]);
+        docker(['rm', '-f', '-v', id]);
       } catch (error) {
         failures.push(error);
       }

@@ -45,7 +45,7 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     if (removed) return;
     removed = true;
     try {
-      docker(['rm', '-f', container]);
+      docker(['rm', '-f', '-v', container]);
     } catch (error) {
       console.error(error);
     }

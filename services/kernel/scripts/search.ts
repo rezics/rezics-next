@@ -128,7 +128,7 @@ async function up(): Promise<void> {
   const image = buildSearchImage();
   if (containerExists()) {
     const existingImage = docker(['inspect', '-f', '{{.Config.Image}}', container]);
-    if (existingImage !== image) docker(['rm', '-f', container]);
+    if (existingImage !== image) docker(['rm', '-f', '-v', container]);
   }
 
   if (containerExists()) {
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
       docker(['stop', container]);
     }
   } else if (action === 'reset') {
-    if (containerExists()) docker(['rm', '-f', container]);
+    if (containerExists()) docker(['rm', '-f', '-v', container]);
     try {
       docker(['volume', 'rm', volume]);
     } catch {
