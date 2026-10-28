@@ -543,7 +543,15 @@ async function nativeWorker(databaseUrl: string) {
 test('db up writes development secrets once and keeps them across restarts', () => {
   const first = developmentEnv('', 'postgres://rezics:rezics@127.0.0.1:54329/rezics');
   const values = parse(first);
-  expect(Object.keys(values).sort()).toEqual(['DATABASE_URL', 'KERNEL_ROUTE_KEY', 'KERNEL_SESSION_KEYS']);
+  expect(Object.keys(values).sort()).toEqual([
+    'DATABASE_URL',
+    'KERNEL_RATING_COUNTER_SECRET',
+    'KERNEL_ROUTE_KEY',
+    'KERNEL_SESSION_KEYS',
+  ]);
+  expect(values.KERNEL_RATING_COUNTER_SECRET).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  const fresh = parse(developmentEnv('', 'postgres://rezics:rezics@127.0.0.1:54329/rezics'));
+  expect(fresh.KERNEL_RATING_COUNTER_SECRET).not.toBe(values.KERNEL_RATING_COUNTER_SECRET);
   expect(readConfig(values).databaseUrl).toBe('postgres://rezics:rezics@127.0.0.1:54329/rezics');
   expect(developmentEnv('', values.DATABASE_URL!)).not.toBe(first);
 
