@@ -797,13 +797,20 @@ engine deletion or deletes core checkpoints. The lifecycle owner separately owns
 
 Enrollment accepts only an enrolled/pending attempt with null source, a fresh UUID and ordered same-epoch
 checkpoint range; its initial home has null current/fence/verified/coveredThrough. Only populating/live can enroll.
-A completed slot may be replaced; any other slot blocks replacement indefinitely. Enrollment always clears
-verified/coveredThrough conservatively. Outcome records actual post-read source/fence observations and marks
+A completed slot may be replaced; any other slot blocks replacement indefinitely. Enrollment on an existing home
+preserves current/fence and verified/coveredThrough. The durable slot and home/lifecycle revision CAS require
+enrollment before source observation and prevent promotion across an unresolved prior attempt; the coordinator
+must independently ensure that the new snapshot does not predate the verified tuple. Same-basis pending ordinary
+work retains the existing certificate without proving a new basis. The reader still compares CURRENT native
+tuple/pending against verified; a later structural generation invalidates it. Outcome records actual post-read source/fence observations and marks
 enrolled as visible or ambiguous; ambiguous may become visible only on actual resolution, never expiry. A visible
 outcome requires nonnull source/fence, matching partition/epoch/generation; a newer committed fence may exceed this batch through position,
 which blocks promotion until a later completed attempt covers it;
 ambiguous may retain null observations. An already recorded nonnull source/fence cannot be changed on resolution.
-Outcome copies source/fence into current/fence and the attempt source. Complete requires visible and the exact
+Outcome copies source/fence into current/fence and the attempt source. A different source tuple or fence generation
+clears verified/coveredThrough; a same-basis outcome preserves them. An ambiguous/null outcome never creates
+evidence, and neither timeout nor starting another attempt can verify an unknown older attempt.
+Complete requires visible and the exact
 attempt ID; it records advanced/lost/stopped from the real checkpoint operation and marks completed, without
 advancing core itself. Completed attempts with any of those results may promote only after the coordinator has
 independently established catch-up: live revision, matching nonzero source/current/fence generation and epoch,

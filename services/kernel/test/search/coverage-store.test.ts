@@ -146,9 +146,33 @@ test('visibility, actual checkpoint outcomes and promotion require current revis
   expect(durable.rows[0].fence.position).toBe(large.toString());
   expect(durable.rows[0].attempt.through.position).toBe(large.toString());
   const nextGuard = { ...guard, revision: promoted!.revision };
-  const next = await store.enroll(nextGuard, attempt());
-  expect(next!.verified).toBeNull();
-  expect(await store.complete({ ...nextGuard, revision: next!.revision }, slot.id, 'advanced')).toBeNull();
+  const ordinary = attempt();
+  const next = await store.enroll(nextGuard, ordinary);
+  expect(next!.verified).toEqual(tuple);
+  expect(next!.coveredThrough).toEqual(point);
+  expect(next!.current).toEqual(tuple);
+  expect(next!.fence).toEqual(fence);
+  let g = { ...nextGuard, revision: next!.revision };
+  expect(await store.complete(g, slot.id, 'advanced')).toBeNull();
+  expect(await store.promote(g, slot.id, observation)).toBeNull();
+  const same = await store.outcome(g, ordinary.id, { outcome: 'visible', source: tuple, fence });
+  expect(same!.verified).toEqual(tuple);
+  expect(same!.coveredThrough).toEqual(point);
+  g = { ...g, revision: same!.revision };
+  const settled = await store.complete(g, ordinary.id, 'advanced');
+  g = { ...g, revision: settled!.revision };
+  const structural = attempt();
+  const pending = await store.enroll(g, structural);
+  g = { ...g, revision: pending!.revision };
+  const changed = await store.outcome(g, structural.id, {
+    outcome: 'visible',
+    source: { ...tuple, generation: large + 1n },
+    fence: { ...fence, generation: large + 1n },
+  });
+  expect(changed!.verified).toBeNull();
+  expect(changed!.coveredThrough).toBeNull();
+  expect(changed!.current).toEqual({ ...tuple, generation: large + 1n });
+  expect(changed!.fence).toEqual({ ...fence, generation: large + 1n });
   for (const checkpoint of ['advanced', 'stopped'] as const) {
     const other = await completed();
     const fresh = attempt();
