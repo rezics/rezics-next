@@ -338,7 +338,10 @@ afterAll(async () => {
   await admin?.end();
 });
 
-async function captureFailure(failure: Error, options: { deadlineMs?: number; retry?: boolean; persistent?: boolean } = {}) {
+async function captureFailure(
+  failure: Error,
+  options: { deadlineMs?: number; retry?: boolean; persistent?: boolean } = {},
+) {
   const space = await createSpace('Capture failure host');
   const realm = await createRealm(space.spaceId, 'public', 'Capture failure Realm');
   const deadline = Date.now() + (options.deadlineMs ?? 10_000);
@@ -388,14 +391,17 @@ async function captureFailure(failure: Error, options: { deadlineMs?: number; re
   return error;
 }
 
-test.serial('Access deadline and overload during Realm join capture reach the caller unchanged as 503 without writes', async () => {
-  for (const reason of ['deadline', 'overloaded'] as const) {
-    const unavailable = new AccessUnavailableError(reason);
-    const error = await captureFailure(unavailable);
-    expect(error).toBe(unavailable);
-    expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
-  }
-});
+test.serial(
+  'Access deadline and overload during Realm join capture reach the caller unchanged as 503 without writes',
+  async () => {
+    for (const reason of ['deadline', 'overloaded'] as const) {
+      const unavailable = new AccessUnavailableError(reason);
+      const error = await captureFailure(unavailable);
+      expect(error).toBe(unavailable);
+      expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
+    }
+  },
+);
 
 test.serial('Realm join retries one Access contention during capture and admits the join', async () => {
   const unavailable = new AccessUnavailableError('contention');
@@ -403,12 +409,15 @@ test.serial('Realm join retries one Access contention during capture and admits 
   expect(error).toBeUndefined();
 });
 
-test.serial('persistent Access contention during Realm join capture reaches the caller unchanged as 503 without writes', async () => {
-  const unavailable = new AccessUnavailableError('contention');
-  const error = await captureFailure(unavailable, { deadlineMs: 300, persistent: true });
-  expect(error).toBe(unavailable);
-  expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
-});
+test.serial(
+  'persistent Access contention during Realm join capture reaches the caller unchanged as 503 without writes',
+  async () => {
+    const unavailable = new AccessUnavailableError('contention');
+    const error = await captureFailure(unavailable, { deadlineMs: 300, persistent: true });
+    expect(error).toBe(unavailable);
+    expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
+  },
+);
 
 test.serial('every other Realm join capture error still denies', async () => {
   for (const error of [new Error('Capture refused'), new initiatorCapture.DurableInitiatorCaptureUnavailableError()])
