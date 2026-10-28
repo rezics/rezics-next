@@ -22,8 +22,22 @@ The first-scope built-ins are:
 1. Everything, one stable Collection identity for every account, including an empty account.
 2. **One state Collection per state identity** for every library profile whose state set is in use by that account.
 
-Built-ins are logical on reads and private by default; account setup creates no state-view fanout. Every Collection GET uses
-`readOnly(pool)` and creates no header, grant, receipt, event, work intent, or other lazy write.
+Built-ins are logical on reads and private by default; account setup creates no state-view fanout. Collection resource,
+list, detail, and logical built-in discovery reads are pure: they create no Collection header, grant, receipt, domain
+event, or other user-visible resource state. The common members GET is the sole read exception: it may start bounded,
+retained derived preparation as an idempotent cache fill under the existing quotas and budgets. Its key includes the
+actual viewer, Collection, validated filter and sort, and accepted release/meaning. Only the derived preparation
+record and its work intent may be written. This cannot materialize a Collection, grant access, or perform a receipt,
+domain event, rename, follow, or other resource mutation. Authorization, current source eligibility, and privacy are
+checked before disclosure and revalidated by the owning admitted plan; preparation is never cached authority.
+
+When a members GET has retained preparation genuinely underway, it returns HTTP 202 with `Retry-After`. The client
+retries the same validated URL and cursor; a later GET returns the useful prepared page or final 200 page. Owner and
+private preparation and pages use `private, no-store` and never mirror private facts. Preparation cannot manufacture
+a successful empty members or next page, treat permanent 202 as progress, or make a missing or unavailable runtime
+ready; unavailable work remains 503. The exact closed JSON body for this GET response is a separate co-owner wire
+decision and remains pending. Do not define its schema or body, reuse the Zone `202 {next}` wire, or add a polling
+operation. Zone `POST /v1/zones/{id}:readPage` and its existing `202 {next}` wire are unchanged.
 The private owner list `GET /v1/collections?curatorAccountId=...` includes logical Everything and proven in-use state tuples before stored rows exist, without `collection:create` or a write scope. `GET /v1/accounts/:accountId/collections` remains public-profile disclosure and honors `public_views.collections`, even for the curator.
 A state set is in use through live entries or retained session/holding facts with actual accepted pins. Labels and trash do not establish state-set support. Discovery unions the supported sibling state identities; each contributing fact retains its own accepted pin and meaning. Retirement blocks new bindings but retained facts keep old pinned identities resolvable, including for undo.
 Soft-deleted facts can keep identities resolvable for undo but never contribute membership. State listing is paged and creates no fanout.
