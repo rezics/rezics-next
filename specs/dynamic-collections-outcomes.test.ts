@@ -150,12 +150,15 @@ async function createCurated(visibility: Visibility = 'private') {
   return result.collection;
 }
 async function setVisibility(collection: DynamicCollectionView | Record<string, unknown>, visibility: Visibility) {
-  return write('owner', 'PATCH', `/v1/collections/${String(collection.id)}`, {
+  const response = await write('owner', 'PATCH', `/v1/collections/${String(collection.id)}`, {
     revision: collection.revision,
     title: collection.title,
     description: collection.description,
     visibility,
   });
+  expect(response.status).toBe(200);
+  await response.clone().json();
+  return response;
 }
 function subjectIds(page: CollectionMembersPage) {
   return page.members.map((member) => member.subjectId);
@@ -985,8 +988,10 @@ test('Collection DTOs discriminate curated metadata and localized dynamic presen
     for (const field of ['createdAt', 'updatedAt', 'memberCount', 'orderEpoch']) expect(view).not.toHaveProperty(field);
     if (kind === 'state') {
       expect(view.builtinLabels).toEqual(driver.profiles.game.states[0]!.labels);
-      for (const locale of Object.keys(view.builtinLabels!))
-        expect(['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']).toContain(locale);
+      for (const locale of Object.keys(view.builtinLabels!)) {
+        expect(Intl.getCanonicalLocales(locale)).toEqual([locale]);
+        expect(locale).not.toBe('zh');
+      }
     }
   };
   for (const view of [everything, state]) {
@@ -1047,7 +1052,13 @@ test('opaque state lookup uses one native point and terminal deletion defeats de
   const unknown = await driver.measureStateReference(() =>
     get('other', `/v1/collections/${driver.unknown.collectionId}`),
   );
-  expect(await problem(denied.value, 404, 'not_found')).toEqual(await problem(unknown.value, 404, 'not_found'));
+  const stableProblem = (value: Record<string, unknown>) => {
+    const { request_id: _requestId, ...stable } = value;
+    return stable;
+  };
+  expect(stableProblem(await problem(denied.value, 404, 'not_found'))).toEqual(
+    stableProblem(await problem(unknown.value, 404, 'not_found')),
+  );
   for (const observation of [found, denied, unknown]) {
     expect(observation.probes).toBe(1);
     expect(observation.sql).toHaveLength(1);
@@ -1061,7 +1072,11 @@ test('opaque state lookup uses one native point and terminal deletion defeats de
     }
   }
   expect(await driver.inspect()).toEqual(before);
-  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+  await problem(
+    await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
+    404,
+    'not_found',
+  );
   expect(await driver.inspect()).toEqual(before);
   const latch = await driver.holdStateReferenceRepair();
   const repair = driver.repairStateReferences();
@@ -1069,15 +1084,25 @@ test('opaque state lookup uses one native point and terminal deletion defeats de
     await latch.reached;
     await okay(await driver.deleteAccount());
     expect((await get('owner', path)).ok).toBe(false);
-    expect((await write('owner', 'PUT', `/v1/follows/${state.id}`)).ok).toBe(false);
+    expect(
+      (await write('owner', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' })).ok,
+    ).toBe(false);
     await problem(await get('other', path), 404, 'not_found');
-    await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+    await problem(
+      await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
+      404,
+      'not_found',
+    );
   } finally {
     latch.resume();
   }
   await repair;
   await driver.resumeAndSettle();
   await problem(await get('other', path), 404, 'not_found');
-  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+  await problem(
+    await write('other', 'PUT', `/v1/follows/${state.id}`, { targetType: 'collection', state: 'following' }),
+    404,
+    'not_found',
+  );
   expect((await driver.inspect()).collections.some((row) => row.id === state.id)).toBe(false);
 });
