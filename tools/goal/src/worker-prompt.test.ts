@@ -45,6 +45,8 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   expect(prompt).toContain('Never stop or remove containers, databases or processes you did not start in this attempt');
   // A diagnosis patched a hardlinked reylo file in place and every worktree and check host printed its trace.
   expect(prompt).toContain('Never write under node_modules');
+  // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
+  expect(prompt).toContain('Check slots are the scarce shared resource');
 });
 
 test('every worker can ask for research, and a research worker is told how to do it', () => {
