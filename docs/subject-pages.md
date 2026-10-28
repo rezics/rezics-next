@@ -146,11 +146,95 @@ another. See [ratings](../services/kernel/src/rating/README.md#display).
 
 ## Realm context
 
-The same subject page is reachable from the general site and from a Realm or Zone. The subject's facts are the facts
-of the selected Context. On a Realm-routed page, scores, reviews, discussion and lists default to that Realm's
-population and the page says so in one line; the reader can switch to Global or to another of their Realms. A
-Realm-routed address for a subject the Realm has not published says so in one line and links to the general page;
-it never presents general content as the Realm's, and never renders an empty page.
+The same subject page is reachable from the general site and from a Realm or Zone. The facts come from the
+selected Context, inheriting Global except where that Context accepts, replaces or suppresses a value. Current
+Context selection and population labeling use the native contract below. Realm ratings, reviews, discussion and
+lists require their own population bindings before a page can consume them; a label alone does not establish those
+producers. Existing Global output must never be relabeled as Realm output.
 
-A Realm's population changes which figures and threads are shown first, not which facts exist: the facts are those
-of the Realm's Context, which inherits Global except where the Realm accepts, replaces or suppresses a value.
+### Native page request and response freeze
+
+`POST /v1/pages:read` accepts `{target:{subject:<id>,realm?:<RealmUUID>,view?:<existingView>},languages?}`.
+Exactly one existing target family is required. Account and route targets reject `realm`. UUIDs, body types,
+languages, views and unknown fields follow the existing API validation rules. Neither a raw Context id nor a Context
+override is accepted. Realm choice belongs to this request, never to the persisted presentation profile. Existing
+requests without Realm retain their response shape and behavior. Agents retain their canonical Global redirect or
+Global subject read; selecting a Realm never creates an agent Realm page.
+
+A successful subject response to a Realm request adds optional subject-page metadata:
+
+```ts
+context: {
+  id: selectedContextUUID,
+  population: { kind: 'global' } | { kind: 'realm', id: realmUUID, title: actualRealmViewTitle }
+}
+```
+
+The actual subject read's `subject.context` equals `context.id`. A Realm population uses the title returned by the
+current native Realm view. A fallback has exactly `{id:GlobalContextUUID,population:{kind:'global'}}`; it contains no
+Realm id, title, label, reason or guessed publication status. This labels the current facts, not a Realm score,
+review or thread producer. The product can offer a Global switch without disclosing why Realm publication was
+unavailable.
+
+### Current authority and dispatch
+
+Resolve `community/realm.ts`'s actual `readRealm(deps, actor, realmId, {deadline})` first. Its `RealmView` includes
+`contextId` and `headRevisionId`. A null result conceals with 404, including unknown, denied and currently banned
+readers of protected Realms, even when an independent grant exists. The similarly named board-scheme reader is not
+this authority; it lacks the protected-Realm ban check.
+
+Then use `community/publication.ts`'s actual
+`readPublication(deps, realmId, subjectId, {actor,deadline})`. It returns the current adopted `PublicationHead` or
+null and rechecks Realm and subject readability in its own snapshot. Null conflates no slot, withdraw, reject,
+denied, unknown and unreadable. It certifies neither permission nor unpublished status. After a readable Realm and
+null publication, independently authorize a current Global subject read. A denied Global subject remains concealed.
+Never carry Realm labels into that fallback.
+
+A publication pointer and a Realm grant do not authorize the Context. For a Realm result use actual `readContext`,
+`publicContextEligibility` and native Context lifecycle authority. Current subject deletion, hiding, candidate
+moderation and Context deletion remain effective. Apply the selected Context's existing inherit, replace and
+suppress semantics. An operation locator or old Context id supplies no current authority.
+
+These reads use separate snapshots. Before any Realm response, re-read the actual `realm.ts` Realm and compare its
+current Context and head revision. Denial conceals; a change requires bounded retry or readiness failure, never a
+successful stale Context A response after a change to B. Publication withdrawal, rejection and reductions in
+readability must also stay current. Reuse the existing deadline and retry policy without a new numerical allowance
+or a clock bypass.
+
+Internal subject and links descriptors carry only the server-resolved current Context. That Context participates
+in actual probe reuse, descriptor deduplication, dispatched requests and session binding. Subject and links must
+use the same selection. Keep the caller's bearer, Actor, Auth, Access and session throughout. No anonymous
+substitution, special permission header, second client request or profile/cache permission is allowed. Keep the
+existing 16 distinct reads, 128 read-cost slots, concurrency and request deadline bounds; charge actual Realm,
+publication and Context points as well as subject and links work within those bounds.
+
+Use one sticky `withPublicStatementReader` scope from Semantic's public statement audience producer for the whole
+aggregate. Its sole purpose is to exclude publisher-private candidates and related ids from public page output.
+It does not resolve Realm or publication, grant Context access or make protected Realm metadata globally public.
+Standalone permitted private hydration retains the same current caller and its existing behavior. The frozen
+[aggregate authority suite](../services/kernel/test/presentation/aggregate-authority-user-cases.test.ts) remains
+unchanged.
+
+### Native acceptance and remaining bindings
+
+The [native Realm page cases](../services/kernel/test/presentation/realm-context-user-cases.md) use the existing
+Semantic driver and its real composed kernel, Auth and Access. They freeze public subjects, distinct Context A/B
+facts, actual protected readable Realms and publication, Global fallback without Realm disclosure, current bans,
+lifecycle, candidate audience, subject/links/session consistency, validation, agent canonical behavior and the
+Context A-to-B race. A suspended account uses its genuine pre-suspension bearer: 401 `invalid_credentials` with
+`Bearer error="invalid_token"`, never a manufactured bearer.
+
+| Surface                                        | Binding status                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Subject facts, links and current Context label | Request/response and native acceptance frozen here; production Realm wire still required         |
+| Sticky public statement audience               | Required Semantic producer; NOT YET FROZEN until its actual export is available to the aggregate |
+| Realm rating figures                           | NOT YET FROZEN: require Rating's actual question/population binding and current authority        |
+| Realm reviews                                  | NOT YET FROZEN: require Content's actual Context/population read export                          |
+| Realm discussion                               | NOT YET FROZEN: require Content's actual Context/population thread export                        |
+| Realm lists                                    | NOT YET FROZEN: require Library's explicit population binding                                    |
+| Global review/thread previews                  | Independent Content/Search acceptance; no duplicate fixture in this freeze                       |
+
+This specification adds no page, compiler, schema, client, Realm, Context, Source or figure implementation and no
+resolver export. It establishes no Source safety or identity acknowledgment, deployment default or main-branch
+completion. Manager acceptance requires full native check output and Root, Search and Community review of this
+owner contract and its evidence.
