@@ -269,6 +269,8 @@ The home route reads its page through the public `homePageQuery`. Its server ren
 
 **Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.
 
+A route module reads Worker bindings only inside server functions; `head()` and components take those values from loader data.
+
 **Pending and errors**: Routes declare `pendingComponent`, `errorComponent` and `notFoundComponent` where they differ from the router defaults.
 
 ## Security headers

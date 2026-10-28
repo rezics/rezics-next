@@ -4,7 +4,6 @@ import { useSession } from '../session/query';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { kernelClient } from '../kernel/client';
@@ -15,10 +14,10 @@ import { ContinueSection } from '../library/continue';
 import { homeContinueQuery, loadContinue } from '../library/continue-read';
 import type { SessionEnv } from '../session/client';
 import { pageHead } from '../shell/head';
-import { validatePublicOrigin } from '../shell/origin';
 import { PageHeading } from '../shell/page-heading';
 
 const readHomeContinue = createServerFn({ method: 'GET' }).handler(async () => {
+  const { env } = await import('cloudflare:workers');
   setResponseHeader('Cache-Control', 'private, no-store');
   return loadContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
 });
@@ -28,14 +27,11 @@ export const Route = createFileRoute('/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(homePageQuery(getLocale())),
   head: ({ loaderData }) => {
     const locale = getLocale();
-    const origin =
-      typeof window === 'undefined'
-        ? validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN)
-        : new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin;
-    const pageJsonLd = loaderData?.kind === 'page' ? routePageJsonLd(loaderData.page, locale, origin) : undefined;
+    if (!loaderData) return { meta: [{ title: 'REZICS' }] };
+    const origin = loaderData.origin;
+    const pageJsonLd = loaderData.kind === 'page' ? routePageJsonLd(loaderData.page, locale, origin) : undefined;
     const jsonLd = pageJsonLd ? JSON.parse(pageJsonLd) : homeJsonLd({ origin, locale });
-    const context = typeof window === 'undefined' ? { origin, locale, path: '/' } : undefined;
-    return pageHead({ description: m.home_meta_description(), jsonLd }, context);
+    return pageHead({ description: m.home_meta_description(), jsonLd }, { origin, locale, path: '/' });
   },
   component: Home,
 });
