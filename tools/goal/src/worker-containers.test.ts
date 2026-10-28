@@ -10,8 +10,8 @@ import { removeAttemptContainers } from './worker-containers.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const wrapper = join(root, 'scripts/check-host/docker');
-// The worker docker wrapper is dev tooling; on main (where the control plane runs) it arrives with promotion.
-const hasWrapper = existsSync(wrapper);
+// The worker docker wrapper with attempt labels is dev tooling; main and stabilize get it with promotion.
+const hasWrapper = existsSync(wrapper) && readFileSync(wrapper, 'utf8').includes('rezics.worker.attempt');
 
 function sandbox(): { directory: string; close: () => void } {
   const directory = mkdtempSync(join(tmpdir(), 'worker-containers-'));
