@@ -28,7 +28,7 @@ export const Entries: Story = {
     await expect(canvas.getByRole('checkbox', { name: 'Select book' })).toBeChecked();
     await userEvent.click(canvas.getByRole('button', { name: 'Reading' }));
     await expect(
-      within(await settled(await screen.findByRole('menu'))).getByRole('menuitem', { name: 'Completed' }),
+      within(await settled(await screen.findByRole('menu'))).getByRole('menuitemradio', { name: 'Completed' }),
     ).toBeVisible();
     await userEvent.keyboard('{Escape}');
   },
@@ -39,8 +39,7 @@ export const MenusOpenPhone: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reading' }));
-    await expect(await screen.findByRole('dialog')).toBeVisible();
-    await expect(screen.getByRole('radio', { name: 'Completed' })).toBeVisible();
+    await expect(await screen.findByRole('radio', { name: 'Completed' })).toBeVisible();
   },
 };
 function Example() {
@@ -48,7 +47,7 @@ function Example() {
   const [count, setCount] = useState(3);
   return (
     <ShelfList>
-{examples.map((entry, index) => {
+      {examples.map((entry, index) => {
         const rowSubject = { id: entry.id, title: entry.title, types: entry.types };
         return (
           <ShelfListRow

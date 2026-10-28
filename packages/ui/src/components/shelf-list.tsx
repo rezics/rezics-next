@@ -65,7 +65,11 @@ export function ShelfListRow({
     (statusMenu != null || statusMenuEntries != null ? (
       <Menu
         title="Status"
-        trigger={<Button variant="outline" size="sm">{status}</Button>}
+        trigger={
+          <Button variant="outline" size="sm">
+            {status}
+          </Button>
+        }
         content={statusMenu}
         entries={statusMenuEntries}
       />
@@ -142,10 +146,20 @@ export function ShelfListRow({
         <div className="flex justify-end sm:hidden">
           {stepper && (
             <ListRowControl className="flex">
-              <Button variant="ghost" size="icon-xs" aria-label={stepper.decreaseLabel} onClick={() => stepper.onStep(-1)}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.decreaseLabel}
+                onClick={() => stepper.onStep(-1)}
+              >
                 −
               </Button>
-              <Button variant="ghost" size="icon-xs" aria-label={stepper.increaseLabel} onClick={() => stepper.onStep(1)}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={stepper.increaseLabel}
+                onClick={() => stepper.onStep(1)}
+              >
                 +
               </Button>
             </ListRowControl>
@@ -154,10 +168,19 @@ export function ShelfListRow({
       </div>
       <ListRowControl className="hidden items-center gap-3 sm:flex">
         {chip}
-        {progress && <div className="w-24 text-xs"><ProgressRow {...progress} /></div>}
+        {progress && (
+          <div className="w-24 text-xs">
+            <ProgressRow {...progress} />
+          </div>
+        )}
         {stepper && (
           <div className="flex">
-            <Button variant="ghost" size="icon-xs" aria-label={stepper.decreaseLabel} onClick={() => stepper.onStep(-1)}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={stepper.decreaseLabel}
+              onClick={() => stepper.onStep(-1)}
+            >
               −
             </Button>
             <Button variant="ghost" size="icon-xs" aria-label={stepper.increaseLabel} onClick={() => stepper.onStep(1)}>
@@ -171,7 +194,11 @@ export function ShelfListRow({
         <ListRowControl>
           <Menu
             title={labels.menu}
-            trigger={<Button variant="ghost" size="icon-sm" aria-label={labels.menu}><EllipsisIcon aria-hidden /></Button>}
+            trigger={
+              <Button variant="ghost" size="icon-sm" aria-label={labels.menu}>
+                <EllipsisIcon aria-hidden />
+              </Button>
+            }
             content={menu}
             entries={menuEntries}
           />
