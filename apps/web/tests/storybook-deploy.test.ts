@@ -103,9 +103,12 @@ describe('storybook review build', () => {
 describe('deployment sequencing', () => {
   test('uploads only after build and smoke pass, then routes and prints that version preview URL', async () => {
     const calls: string[] = [];
+    const events: string[] = [];
     const outputLines: string[] = [];
+    const expected = 'a'.repeat(40);
     await runDeployment({
       dryRun: false,
+      commit: expected,
       build: async () => {
         calls.push('build');
       },
@@ -114,18 +117,26 @@ describe('deployment sequencing', () => {
       },
       wrangler: async (args) => {
         calls.push(args[1]!);
+        events.push(`${args[0]} ${args[1]}`);
         return args[1] === 'upload'
           ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
           : 'deployed';
       },
+      fetchBuild: async () => {
+        events.push('verify live build');
+        return { commit: expected };
+      },
       print: (line) => outputLines.push(line),
     });
-    expect(calls).toEqual(['build', 'smoke', 'upload', 'deploy']);
+    expect(calls).toEqual(['build', 'smoke', 'upload', 'deploy', 'deploy']);
+    expect(events).toEqual(['versions upload', 'versions deploy', 'triggers deploy', 'verify live build']);
     expect(outputLines.join('\n')).toContain('https://ver-123.storybook.rezics.workers.dev');
   });
 
   test('dry run invokes Wrangler dry run without publishing a version or routing the domain', async () => {
     const calls: string[][] = [];
+    const outputLines: string[] = [];
+    let fetched = false;
     await runDeployment({
       dryRun: true,
       build: async () => {},
@@ -134,11 +145,19 @@ describe('deployment sequencing', () => {
         calls.push(args);
         return 'dry run';
       },
-      print: () => {},
+      fetchBuild: async () => {
+        fetched = true;
+        return {};
+      },
+      print: (line) => outputLines.push(line),
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain('--dry-run');
-    expect(calls[0]).not.toContain('deploy');
+    expect(calls[0]).toContain('deploy');
+    expect(calls[0]).not.toContain('versions');
+    expect(calls[0]).not.toContain('triggers');
+    expect(fetched).toBe(false);
+    expect(outputLines.join('\n')).toContain('no version or domain changes');
   });
 
   test('failed build or smoke test never uploads', async () => {

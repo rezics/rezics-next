@@ -58,13 +58,6 @@ try {
     builtAt: new Date().toISOString(),
   };
   writeFileSync(join(output, 'build.json'), `${JSON.stringify(metadata, null, 2)}\n`);
-  writeFileSync(
-    join(output, 'build-metadata.js'),
-    `fetch(new URL('build.json', location.href)).then(r => r.json()).then(m => { const title = 'REZICS Storybook · ' + m.commit.slice(0, 7) + ' · ' + m.builtAt; const update = () => { if (document.title !== title) document.title = title; }; update(); new MutationObserver(update).observe(document.querySelector('title'), { childList: true, characterData: true, subtree: true }); }).catch(() => {});`,
-  );
-  const htmlPath = join(output, 'index.html');
-  const html = readFileSync(htmlPath, 'utf8');
-  writeFileSync(htmlPath, html.replace('</head>', '<script src="./build-metadata.js"></script></head>'));
   console.log(
     `Storybook build: ${output} (${bytesIn(output)} bytes, ${((Date.now() - startedAt) / 1000).toFixed(1)} s)`,
   );

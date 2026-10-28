@@ -1,13 +1,12 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "rezics-storybook",
+  "account_id": "dcc939f004008f8e36e11456df3f0fe2",
   "compatibility_date": "2026-10-29",
   "workers_dev": true,
   "preview_urls": true,
   "routes": [{ "pattern": "storybook.rezics.com", "custom_domain": true }],
   "assets": {
     "directory": "./storybook-static",
-    "binding": "ASSETS",
-    "run_worker_first": false,
   },
 }
