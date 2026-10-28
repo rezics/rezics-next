@@ -167,7 +167,35 @@ test('new failing files are refused even when the base already fails other tests
     expect(h.outcomes[0]!.firstFailure!.assertion).toContain('test/new.test.ts');
     expect(h.outcomes[0]!.firstFailure!.assertion).not.toContain('test/shared.test.ts');
     expect(h.outcomes[1]!.passed).toBe(true);
-    expect(lines(runs)).toHaveLength(3); // Two attempt checks, one baseline on the unchanged dev head.
+    expect(lines(runs)).toHaveLength(4); // Two attempt checks and one baseline per distinct set of failing files.
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('the base runs only the files that failed on the branch, and the same files reuse its result', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const argv = command(`
+      const fs = require('node:fs');
+      fs.appendFileSync(${JSON.stringify(runs)}, JSON.stringify(process.argv) + '\\n');
+      if (!fs.existsSync('broken')) process.exit(0);
+      console.error('Kernel tests failed for 1 file(s):\\ntest/new.test.ts');
+      process.exit(1);
+    `);
+    h.settings.affectedTests = [{ paths: ['**'], command: argv }];
+    for (let index = 0; index < 2; index++) {
+      const task = h.dispatch('broken');
+      await h.start(task);
+      await h.train(undefined, false);
+    }
+    expect(h.outcomes.map((outcome) => outcome.passed)).toEqual([false, false]);
+    const calls = lines(runs).map((line) => JSON.parse(line) as string[]);
+    // Two attempt checks with no files named, and one baseline on the unchanged dev head naming the failed file.
+    expect(calls.filter((args) => args.includes('test/new.test.ts'))).toHaveLength(1);
+    expect(calls).toHaveLength(3);
   } finally {
     h.dispose();
   }
