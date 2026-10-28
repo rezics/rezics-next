@@ -1,4 +1,5 @@
 import { pickText } from '@rezics/composition';
+import type { LibraryProfile, LibraryProfileReference } from '@rezics/definitions';
 import type { FilterRelease } from '@rezics/filter';
 import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { env } from 'cloudflare:workers';
@@ -6,9 +7,16 @@ import { requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
 
 export type Release = FilterRelease & {
+  libraryProfiles?: Record<string, LibraryProfile>;
   types: Record<
     string,
-    { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[]; coverRatio?: string }
+    {
+      labels?: Record<string, string>;
+      bases?: readonly string[];
+      facets?: readonly string[];
+      coverRatio?: string;
+      library?: LibraryProfileReference;
+    }
   >;
   properties: Record<
     string,
