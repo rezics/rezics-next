@@ -85,7 +85,6 @@ function NewCollectionPage() {
           </button>
         </form>
       </Exposure>
-
     </article>
   );
 }

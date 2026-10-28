@@ -145,93 +145,93 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         <Exposure operation="progress_session.create">
           <section aria-labelledby="start-progress-heading" className="space-y-5">
             <h2 id="start-progress-heading" className="text-xl font-semibold">
-            {m.library_progress_start_heading()}
-          </h2>
-          <form className="max-w-xl space-y-5" onSubmit={onStart}>
-            <input type="hidden" name="idempotencyKey" value={key} />
-            {hydrated ? (
-              <>
-                <input type="hidden" name="subjectId" value={subject} />
-                <div className="space-y-2">
+              {m.library_progress_start_heading()}
+            </h2>
+            <form className="max-w-xl space-y-5" onSubmit={onStart}>
+              <input type="hidden" name="idempotencyKey" value={key} />
+              {hydrated ? (
+                <>
+                  <input type="hidden" name="subjectId" value={subject} />
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium">{m.library_progress_subject()}</span>
+                    <ProgressPicker value={chosen} onValueChange={setChosen} />
+                  </div>
+                </>
+              ) : (
+                <label className="block space-y-2">
                   <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                  <ProgressPicker value={chosen} onValueChange={setChosen} />
-                </div>
-              </>
-            ) : (
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                <Input name="subjectId" defaultValue={page.subjectId} />
-              </label>
-            )}
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
-              <RadioGroup
-                name="progress-mode"
-                value={mode}
-                onValueChange={(value) => setMode(value as ProgressMode)}
-                className="flex flex-wrap gap-x-6 gap-y-3"
-              >
-                {modeChoices.map((choice) => (
-                  <label key={choice.value} className="flex items-center gap-2 text-sm">
-                    <RadioGroupItem value={choice.value} />
-                    {choice.label()}
-                  </label>
-                ))}
-              </RadioGroup>
-            </fieldset>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
-                {hydrated ? (
-                  <Select
-                    value={unit}
-                    onValueChange={(value) => {
-                      if (value) setUnit(value as ProgressUnit);
-                    }}
-                  >
-                    <SelectTrigger id="progress-unit" className="w-full">
-                      <SelectValue>{unitLabel(unit)}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
+                  <Input name="subjectId" defaultValue={page.subjectId} />
+                </label>
+              )}
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
+                <RadioGroup
+                  name="progress-mode"
+                  value={mode}
+                  onValueChange={(value) => setMode(value as ProgressMode)}
+                  className="flex flex-wrap gap-x-6 gap-y-3"
+                >
+                  {modeChoices.map((choice) => (
+                    <label key={choice.value} className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value={choice.value} />
+                      {choice.label()}
+                    </label>
+                  ))}
+                </RadioGroup>
+              </fieldset>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
+                  {hydrated ? (
+                    <Select
+                      value={unit}
+                      onValueChange={(value) => {
+                        if (value) setUnit(value as ProgressUnit);
+                      }}
+                    >
+                      <SelectTrigger id="progress-unit" className="w-full">
+                        <SelectValue>{unitLabel(unit)}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unitChoices.map((choice) => (
+                          <SelectItem key={choice.value} value={choice.value}>
+                            {choice.label()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
                       {unitChoices.map((choice) => (
-                        <SelectItem key={choice.value} value={choice.value}>
+                        <option key={choice.value} value={choice.value}>
                           {choice.label()}
-                        </SelectItem>
+                        </option>
                       ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
-                    {unitChoices.map((choice) => (
-                      <option key={choice.value} value={choice.value}>
-                        {choice.label()}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                    </select>
+                  )}
+                </div>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">{m.library_progress_total()}</span>
+                  <Input
+                    name="total"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={total}
+                    disabled={mode !== 'scalar_amount'}
+                    onChange={(event) => setTotal(event.target.value)}
+                  />
+                </label>
               </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">{m.library_progress_total()}</span>
-                <Input
-                  name="total"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={total}
-                  disabled={mode !== 'scalar_amount'}
-                  onChange={(event) => setTotal(event.target.value)}
-                />
-              </label>
-            </div>
-            {alert ? (
-              <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                {alert}
-              </p>
-            ) : null}
-            <Button type="submit" disabled={pending}>
-              {m.library_progress_start()}
-            </Button>
-          </form>
+              {alert ? (
+                <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                  {alert}
+                </p>
+              ) : null}
+              <Button type="submit" disabled={pending}>
+                {m.library_progress_start()}
+              </Button>
+            </form>
           </section>
         </Exposure>
       </>
