@@ -16,8 +16,10 @@ registerEventTypes({ [eventType]: Type.Object({ attempt: Type.Integer() }, { add
 
 beforeAll(async () => {
   await pool.query('CREATE TABLE public.access_contention_effect (id uuid PRIMARY KEY)');
+  await pool.query('CREATE TABLE public.access_contention_lock (id uuid PRIMARY KEY, value integer NOT NULL)');
 });
 afterAll(async () => {
+  await pool.query('DROP TABLE public.access_contention_lock');
   await pool.query('DROP TABLE public.access_contention_effect');
   await pool.end();
 });
@@ -37,21 +39,37 @@ function authorizationFor(
 
 test('a serialization failure raised through an Access query inside a command transaction is retried and the command commits once', async () => {
   const key = crypto.randomUUID();
+  const lockId = crypto.randomUUID();
+  await pool.query('INSERT INTO public.access_contention_lock VALUES ($1, 0)', [lockId]);
   let attempts = 0;
   let prepared = 0;
-  let accessFailures = 0;
+  let conflictInjected = false;
   const deadline = Date.now() + 5000;
   const authorization = authorizationFor(
     async (tx) => {
       attempts++;
-      if (accessFailures++ === 0) {
-        // This Access query runs on the command transaction's client. PostgreSQL
-        // returns the serialization SQLSTATE and the Access deadline wrapper
-        // turns it into AccessUnavailableError('contention').
-        await deadlineClient(tx, deadline).query(
-          "DO $$ BEGIN RAISE EXCEPTION 'serialization conflict' USING ERRCODE = '40001'; END $$",
-        );
+      const accessQuery = deadlineClient(tx, deadline);
+      // Establish the command transaction's serializable snapshot through an
+      // Access read, then commit a concurrent update before its locking read.
+      await accessQuery.query('SELECT value FROM public.access_contention_lock WHERE id=$1', [lockId]);
+      if (!conflictInjected) {
+        conflictInjected = true;
+        const concurrent = await pool.connect();
+        try {
+          await concurrent.query('BEGIN');
+          await concurrent.query('UPDATE public.access_contention_lock SET value=value+1 WHERE id=$1', [lockId]);
+          await concurrent.query('COMMIT');
+        } catch (error) {
+          await concurrent.query('ROLLBACK');
+          throw error;
+        } finally {
+          concurrent.release();
+        }
       }
+      // The competing commit invalidated this transaction's snapshot. PostgreSQL
+      // raises 40001 here; deadlineClient maps that Access query failure to the
+      // same AccessUnavailableError used by native Access operations.
+      await accessQuery.query('SELECT value FROM public.access_contention_lock WHERE id=$1 FOR UPDATE', [lockId]);
       return 'execute';
     },
     async () => {
@@ -81,7 +99,6 @@ test('a serialization failure raised through an Access query inside a command tr
   expect(result.replayed).toBe(false);
   expect(attempts).toBe(2);
   expect(prepared).toBe(2);
-  expect(accessFailures).toBe(2);
   const { rows } = await pool.query(
     `SELECT
        (SELECT count(*)::int FROM public.access_contention_effect) AS body,
