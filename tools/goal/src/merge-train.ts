@@ -1296,15 +1296,17 @@ export class MergeTrain {
           }
           if (checked.status === 'passed') continue;
           stage = 'gate';
-          const key = `affected-test:${JSON.stringify(checked.command)}`;
+          // A base compared with itself selects no affected tests, so the base runs the files that failed on the
+          // branch by name. The whole suite cost a full kernel run inside the serial train on every landing, because
+          // dev moves with each landing and a full base result was almost never reused.
+          const baselineCommand = [...checked.command, ...checked.failingFiles];
+          const key = `affected-test:${JSON.stringify(baselineCommand)}`;
           let baseline = o.queue.baseline(base, key);
           if (!baseline) {
-            // A base compared with itself selects no affected tests. Run the same command without that selection;
-            // its full result covers every failed file and can be reused by other attempts on this base.
             const baselineTree = resolve(o.worktreeRoot, `affected-base-${randomUUID()}`);
             git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
             try {
-              appendFileSync(logPath, `Affected test baseline on ${base}: ${checked.command.join(' ')}\n`);
+              appendFileSync(logPath, `Affected test baseline on ${base}: ${baselineCommand.join(' ')}\n`);
               const environment = {
                 ...gateEnvironment(process.env, o.stateDirectory),
                 KERNEL_CHECK_AFFECTED: '',
@@ -1321,7 +1323,7 @@ export class MergeTrain {
                 if (installed.status !== 'passed')
                   throw new Error(`Affected-test baseline install failed: ${installed.output}`);
               }
-              const measured = await runAffectedTest(checked.command, baselineTree, logPath, environment);
+              const measured = await runAffectedTest(baselineCommand, baselineTree, logPath, environment);
               if (measured.status === 'unverified') {
                 appendFileSync(logPath, 'Affected test baseline unverified (landing allowed)\n');
                 continue;
