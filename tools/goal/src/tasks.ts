@@ -401,6 +401,7 @@ export class WorkerTasks {
         ? this.settings.pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
       const table = readRouting(this.settings.routingFile);
+      const pinned = nextBrief.model !== undefined;
       // A retry keeps its engine while the routing table still offers it for the class; an engine the table dropped
       // (a failing or disallowed pool) is routed afresh, so table changes reach retries at once.
       const routable = (candidate: Profile) =>
@@ -410,7 +411,7 @@ export class WorkerTasks {
           ...table.experiments.filter((e) => e.open && e.class === nextTaskClass).flatMap((e) => e.profiles),
         ].some((offered) => offered.cli === candidate.cli && offered.model === candidate.model);
       const route =
-        old && routable(old.profile)
+        !pinned && old && routable(old.profile)
           ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
           : routeTask(nextBrief, task.sequence, table);
       const readings = this.settings.pools.map((pool) =>
@@ -421,7 +422,7 @@ export class WorkerTasks {
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
       const routing = readRouting(this.settings.routingFile);
-      let fallbacks = options.profile ? [] : retryFallbacks(routing, nextTaskClass);
+      let fallbacks = options.profile || pinned ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
       // next attempt goes to the route's first other model. Failures no model change can fix do not count.
@@ -432,6 +433,7 @@ export class WorkerTasks {
         : [];
       const sameModelFailures =
         !options.profile &&
+        !pinned &&
         recent.length === 3 &&
         recent.every(
           (attempt) =>
@@ -446,7 +448,7 @@ export class WorkerTasks {
       if (switched)
         fallbacks = fallbacks.filter((candidate) => candidate !== switched && candidate.model !== old!.profile.model);
       const { profile, pool } = choosePoolWithFallback(
-        options.profile ?? switched ?? route.profile,
+        pinned ? route.profile : (options.profile ?? switched ?? route.profile),
         fallbacks,
         this.settings.pools,
         readings,
@@ -457,7 +459,7 @@ export class WorkerTasks {
         },
         // A new task goes to the allowance that would otherwise expire unused first; an explicit profile, a switched
         // engine, or a class routed with paced: false keeps its order.
-        options.profile || switched || !paced
+        pinned || options.profile || switched || !paced
           ? undefined
           : (candidate) => {
               const reading = readings.find((value) => value.pool === candidate.name);
