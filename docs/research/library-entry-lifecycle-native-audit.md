@@ -66,7 +66,8 @@ baseline so its known absent-writer failure is distinguishable from planned-stat
 
 The shared fixture change is optional `{clock?: KernelClock}` plumbing only. The existing kernel, native entry,
 lifecycle, grant and suspension compositions receive the same supplied clock; absent options retain their defaults.
-No deadlines, mounted registries, positive grants or admission setup changed. At just-before/exact 720 hours the
+No deadlines, mounted registries, positive grants or admission setup changed. The supplied clock follows actual wall
+time during fixture provisioning/authentication, then freezes only for explicit lifecycle-time observations. At just-before/exact 720 hours the
 suite advances this native domain clock, calls commands directly with the same admitted actor, and observes the
 original retained deadline. It neither patches global Date nor substitutes an expired HTTP request for Undo.
 
@@ -127,20 +128,24 @@ completion of immediate built-in liveness.
 ## Reviewable runtime slices
 
 These are dispatch boundaries, not changes made by this audit. Prerequisites name actual exports or sole-writer
-changes, never documentation readiness.
+changes, never documentation readiness. Unqualified production filenames below are relative to
+`services/kernel/src/library/`; test filenames are relative to `services/kernel/test/library/`.
 
 | Slice                                                   | Concrete production paths and proof                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Command, at most 400 production lines/eight paths       | Existing `entries.ts`, new focused `entry-lifecycle.ts` helper if needed, real retention DAO and its three typed SQL files, `command-support.ts`, and one native command test path. Reuse existing prepared-owner, owner lock, profile pin codec/source reader, incarnation writer and reference producer; if these are missing land those actual deliveries first. No competing entry writer. The lifecycle helper must obtain original pinned release/state-set evidence as above. Split again if it cannot fit.                                                                                                                                                                                                                                                                                                                                      |
+| Command, at most 400 production lines/eight paths       | Existing `entries.ts`, new focused `entry-lifecycle.ts` helper if needed, `entry-retention-store.ts`, `entry-retention-retain.sql`, `entry-retention-read.sql`, `entry-retention-restore.sql`, `command-support.ts`, and `entry-lifecycle-command.test.ts`. Reuse existing prepared-owner, owner lock, profile pin codec/source reader, incarnation writer and reference producer; if these are missing land those actual deliveries first. No competing entry writer. The lifecycle helper must obtain original pinned release/state-set evidence as above. Split again if it cannot fit.                                                                                                                                                                                                                                                              |
 | HTTP/catalogue/generated callsites, at most eight paths | `services/kernel/src/library/personal-routes.ts`, `services/kernel/src/http/problem.ts`, `contracts/openapi.json`, generated `packages/client/src/kernel/library/personal-routes.d.ts`, `apps/web/src/library/entries-read.ts`, `apps/web/src/library/subject-slot-mutation.ts`, `services/kernel/test/library/personal-http.test.ts`, `apps/web/tests/library-entries-cost.test.ts`. Both actual Web delete callers need the guarded interface. DELETE remains 204/empty with `Library-Entry-Deletion-Id` and `Library-Entry-Deletion-Revision`, no expiry header; POST `:restore` has closed `{deletionId,revision}` and current `library_entry:update` scope. Remove ordinary DELETE pre-read and map distinct occupied/stale/expired 409 codes. Regenerate declarations; if generation changes another path, split the slice again before dispatch. |
-| Ordinary due worker, separate at most eight paths       | Proposed `library/entry-due.ts`, typed `entry-due-page.sql` and `entry-due-delete.sql`, existing `library/work.ts` and `work-module.ts`, and separate native worker/crash/growth test files. Use existing effects/WorkClient/DBOS queue and shared UTC periodic registration. The due index recovers commit-before-enqueue. No local timer, hold API or new custody/checkpoint engine. Parked D1 delivery after restore/reclear D3 must touch only D1 and cannot erase D3 or a live replacement.                                                                                                                                                                                                                                                                                                                                                        |
+| Ordinary due worker, separate at most eight paths       | Proposed `entry-due.ts`, typed `entry-due-page.sql` and `entry-due-delete.sql`, existing `work.ts` and `work-module.ts`, plus `entry-due-worker.test.ts`, `entry-due-crash.test.ts` and `growth-entry-due.test.ts`. Use existing effects/WorkClient/DBOS queue and shared UTC periodic registration. The due index recovers commit-before-enqueue. No local timer, hold API or new custody/checkpoint engine. Parked D1 delivery after restore/reclear D3 must touch only D1 and cannot erase D3 or a live replacement.                                                                                                                                                                                                                                                                                                                                 |
 
 ## Cost obligations
 
 These are derivations and required future measurements; this focused behavioral suite is not a growth result.
 Let E, D and R be unrelated live entry, retained deletion and reference populations; B-tree point work is logarithmic
 in the respective physical index population. Access/source/Global preparation and command envelope are charged,
-including repeated attempt work, catalogue metadata, receipt/outbox/fence rows and all pools.
+including repeated attempt work, catalogue metadata, receipt/outbox/fence rows and all pools. Use the existing
+`test/support/growth.ts` capture/checkGrowth composition and `growth-capture.ts`, `growth-cost.ts`, `growth-model.ts`
+all-pool instrumentation/classifier. The populations below correspond to a legal 256-row seed at its native
+1/4/16 scales; positive domain populations must come from native accepted writers, not raw permission/pin facts.
 
 ### Fresh retained delete
 
@@ -176,3 +181,12 @@ Nextcloud `library-entry-undo-independent-current/nextcloud-server`, `Trashbin.p
 DBOS `search-worker-outcome-harness/dbos-transact-ts/src/dbos.ts` durable `sleepms` workflow context. Pins and licenses
 are recorded in the two adopted reports. These corroborate already adopted separation/collision/materialization/work
 constraints; no source was copied and no new external research or standard is required for this acceptance task.
+
+## Validation evidence
+
+The focused command check completed typechecking, formatting and linting before running all eight native tests.
+The legal planned-entry create/read control passed. Six cases reached the intended lifecycle gaps: one actual-factory
+assertion found no `restoreEntry`; five observed the actual physical delete's Entry result instead of the real
+transaction-addressed deletion descriptor. The separate custom-profile baseline failed at the current writer's
+`Unknown library entry state` for `listening`, before any archival assertion. Thus lifecycle RED and the already absent
+profile writer are reported separately; none is replaced by a fixture outcome or claimed as automatic-purge coverage.
