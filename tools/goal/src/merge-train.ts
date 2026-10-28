@@ -379,6 +379,9 @@ function rebaseWithDerivedFiles(
       if (!conflicts.length) throw rebaseError;
       const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
+      // A generated-file regeneration is safe only when it accounts for every conflict. A mixed conflict
+      // must stay with the worker instead of silently choosing either side for part of the change.
+      if (derivedConflicts.length && textConflicts.length) return rebaseError;
       if (textConflicts.length) {
         if (!resolveMechanicalConflicts(cwd, textConflicts)) return rebaseError;
         appendFileSync(logPath, `Rebase resolved import-only and insert-only conflicts: ${textConflicts.join(', ')}\n`);
@@ -389,7 +392,7 @@ function rebaseWithDerivedFiles(
       const integrationCommands = new Map<string, string[]>();
       for (const path of derivedConflicts)
         for (const file of derivedForPath(path, files)) {
-          if (file.stage === 'integration') integrationCommands.set(JSON.stringify(file.command), file.command);
+          integrationCommands.set(JSON.stringify(file.command), file.command);
         }
       for (const command of integrationCommands.values()) {
         const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
@@ -1841,7 +1844,12 @@ export class MergeTrain {
           git(trainTree, 'merge', '--no-ff', '--no-edit', candidate);
         } catch (error) {
           const files = unmergedFiles(trainTree);
-          if (files.length && this.resolveImportConflicts(trainTree, files)) {
+          if (files.length && this.resolveGeneratedConflicts(trainTree, files, logPath)) {
+            appendFileSync(
+              logPath,
+              `Stabilize ${candidate} merged into ${devBranch} regenerating generated conflicts: ${files.join(', ')}\n`,
+            );
+          } else if (files.length && this.resolveImportConflicts(trainTree, files)) {
             appendFileSync(
               logPath,
               `Stabilize ${candidate} merged into ${devBranch} resolving import-only and insert-only conflicts: ${files.join(', ')}\n`,
@@ -1918,6 +1926,28 @@ export class MergeTrain {
     ];
     if (!resolveMechanicalConflicts(tree, files, formatCommand)) return false;
     git(tree, 'add', '--', ...files);
+    git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
+    return true;
+  }
+
+  /** Resolve a generated-only merge by keeping the target side and regenerating every declared output. */
+  private resolveGeneratedConflicts(tree: string, conflicts: readonly string[], logPath: string): boolean {
+    const files = this.options.derivedFiles ?? defaultDerivedFiles;
+    if (!conflicts.length || conflicts.some((path) => !derivedForPath(path, files).length)) return false;
+
+    const commands = new Map<string, string[]>();
+    for (const path of conflicts) {
+      git(tree, 'checkout', '--ours', '--', path);
+      for (const file of derivedForPath(path, files)) commands.set(JSON.stringify(file.command), file.command);
+    }
+    for (const command of commands.values()) {
+      const result = spawnSync(command[0]!, command.slice(1), { cwd: tree, encoding: 'utf8' });
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+      appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
+      if (result.status !== 0) return false;
+    }
+    const changedGenerated = changedWorkingFiles(tree).filter((path) => derivedForPath(path, files).length > 0);
+    stagePaths(tree, new Set([...conflicts, ...changedGenerated]));
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
   }
