@@ -22,9 +22,9 @@ function addFakeTest(name: string) {
       `const events = ${JSON.stringify(events)};`,
       `const name = ${JSON.stringify(name.split('/').at(-1))};`,
       `test(${JSON.stringify(name)}, async () => {`,
-      "  await Bun.sleep(30);",
+      '  await Bun.sleep(30);',
       '  expect(true).toBe(true);',
-      "  await Bun.write(`${events}/${name}`, String(Date.now()));",
+      '  await Bun.write(`${events}/${name}`, String(Date.now()));',
       '});',
     ].join('\n'),
   );
@@ -83,16 +83,12 @@ test('the local timing cache takes precedence and the tracked seed is used when 
 
   await runWebTestLanes(runOptions);
   expect(readFileSync(slowerEvent, 'utf8')).toBeTruthy();
-  expect(Number(readFileSync(slowerEvent, 'utf8'))).toBeLessThan(
-    Number(readFileSync(fasterEvent, 'utf8')),
-  );
+  expect(Number(readFileSync(slowerEvent, 'utf8'))).toBeLessThan(Number(readFileSync(fasterEvent, 'utf8')));
 
   rmSync(cache);
   rmSync(output);
   rmSync(slowerEvent);
   rmSync(fasterEvent);
   await runWebTestLanes(runOptions);
-  expect(Number(readFileSync(fasterEvent, 'utf8'))).toBeLessThan(
-    Number(readFileSync(slowerEvent, 'utf8')),
-  );
+  expect(Number(readFileSync(fasterEvent, 'utf8'))).toBeLessThan(Number(readFileSync(slowerEvent, 'utf8')));
 });
