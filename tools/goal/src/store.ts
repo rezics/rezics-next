@@ -43,6 +43,13 @@ CREATE INDEX worker_attempts_ended_at ON worker_attempts(json_extract(body, '$.e
   WHERE json_extract(body, '$.endedAt') IS NOT NULL;
 `,
   },
+  {
+    module: 'worker',
+    version: 4,
+    sql: `
+CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.state'));
+`,
+  },
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
@@ -73,6 +80,13 @@ export class WorkerStore implements AttemptFence {
       ? this.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
       : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
     return rows.map((row) => decode<Attempt>(row)!);
+  }
+  /** Counts running attempts through the state index without reading or decoding attempt bodies. */
+  runningAttemptsCount(): number {
+    const row = this.db
+      .query("SELECT count(*) AS count FROM worker_attempts WHERE json_extract(body, '$.state') = 'running'")
+      .get() as { count: number };
+    return row.count;
   }
   /** Attempts that ended within a time window, using an index so older attempt bodies are not read. */
   attemptsEndedBetween(start: string, end: string): Attempt[] {
