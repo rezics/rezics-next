@@ -363,13 +363,49 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
                     target_order_key: labelOrderKey({ en: 'Consent owner' }),
                   },
                 ],
+                // Native consent creation selects its private statement atomically.
+                // Editorial accept/adopt deliberately cannot select undisclosed candidates.
+                'semantic.acceptance': [
+                  {
+                    route,
+                    subject_id: id,
+                    context_id: GLOBAL_CONTEXT,
+                    candidate_id: candidate,
+                    head: 1,
+                    verdict: 'accept',
+                    revision: 1,
+                  },
+                ],
+                'semantic.acceptance_current': [
+                  {
+                    route,
+                    subject_id: id,
+                    context_id: GLOBAL_CONTEXT,
+                    candidate_id: candidate,
+                    slot_id: fact.slot_id,
+                    head: 1,
+                    verdict: 'accept',
+                    revision: 1,
+                  },
+                ],
+                'semantic.adoption': [
+                  {
+                    route,
+                    subject_id: id,
+                    slot_id: fact.slot_id,
+                    context_id: GLOBAL_CONTEXT,
+                    head: 1,
+                    mode: 'replace',
+                    selection: [{ candidate, rank: 'normal' }],
+                    revision: 1,
+                  },
+                ],
               }
             : {}),
         }),
       },
       { from: 0, to: 1 },
     );
-    if (consent) await select(id, candidate, property, consent.target, 'person');
     return { id, candidate };
   }
   async function stored(origin: Source) {
