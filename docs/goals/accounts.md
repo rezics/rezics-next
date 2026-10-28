@@ -41,6 +41,9 @@ before consumers adopt them; use the shared production-default test factories.
 
 ## Acceptance
 
+Use the [accounts capability acceptance manifest](accounts.capabilities.md) to map every scoped capability to its
+personas, released fixtures, surface evidence, frozen scenarios and native acceptance command.
+
 Use the [permission outcomes](../../specs/permission-outcomes.test.ts),
 [account workflow outcomes](../../specs/native-account-workflow-outcomes.test.ts),
 [platform gate outcomes](../../specs/platform-gates-outcomes.test.ts), and native tests under
