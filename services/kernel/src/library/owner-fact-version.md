@@ -49,9 +49,11 @@ witness database or copied fact index is added. Terminal cleanup still removes t
 ## Remaining consumers and evidence
 
 Owner plans must combine the version with actual same-snapshot facts and full AST/order dependencies, current
-source/disclosure/epoch/admission evidence, and complete canonical/index readiness. A version is never a cached
-allow or proof of query completion, including NOT exclusions and ordering. Source2a consumes this actual helper
-only after interface review; it adds no second Filter union or allowOwner flag.
+source/disclosure/epoch/admission evidence, and complete canonical/index readiness. A broad source version does
+not authorize rebuilding every owner result: use indexed leaf/order dependencies to rebuild only affected
+prepared results under filtered-lists. A version is never a cached allow or proof of query completion, including
+NOT exclusions and ordering. Source2a consumes this actual helper only after interface review; it adds no second
+Filter union or allowOwner flag.
 
 Liked's delivered Content adapter is raw only: it provides no source version, epoch or disclosure observation.
 Prepared Liked rows require a separately actually delivered actor-source observation/invalidation interface before
@@ -59,9 +61,11 @@ activation. This slice neither queries Content SQL nor invents a reader/version 
 
 The native suite uses keyed raw storage fixtures solely to probe triggers, snapshots and metadata, including
 bigint values above the safe integer boundary. It supplies no fake Access/source backend or authenticated
-business/API proof, and implements no production state allocator. Legacy source-hook expectations that note,
-amount and parent rename leave the head unchanged conflict with the conservative coverage now required;
-those frozen tests require their owner's scoped amendment and are left untouched.
+business/API proof, and implements no production state allocator. The scoped source-hook amendment changes
+only the former no-bump expectations for copy note, session amount and parent-label rename, plus mechanically
+dependent generation totals. These genuine row changes conservatively advance private metadata without creating
+membership, headers, publication or grants. The genuine same-value updated_at update still leaves the head
+unchanged; native actions, rollback, keys/rows and zero Collection allocation remain intact.
 
 ## Cost
 

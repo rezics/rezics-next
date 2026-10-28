@@ -44,14 +44,14 @@ test('all four native fact drivers and label liveness share one bounded owner so
     );
     expect(await fence()).toBe(3n);
     await c.query("UPDATE library.copy SET note='private note' WHERE route=$1 AND copy_id=$2", [r, id(10)]);
-    expect(await fence()).toBe(3n);
+    expect(await fence()).toBe(4n);
     await c.query(
       "INSERT INTO library.progress_session(route,session_id,account_id,subject_id,mode,unit,completed_unit_count,state,revision,started_at,transaction_id) VALUES($1,$2,$3,$4,'scalar_amount','minute',0,'active',1,$5,$6)",
       [r, id(20), id(1), id(2), at, id(90)],
     );
-    expect(await fence()).toBe(4n);
+    expect(await fence()).toBe(5n);
     await c.query('UPDATE library.progress_session SET amount=3 WHERE route=$1 AND session_id=$2', [r, id(20)]);
-    expect(await fence()).toBe(4n);
+    expect(await fence()).toBe(6n);
     await c.query(
       "INSERT INTO library.personal_label(route,account_id,label_id,normalized_name,revision,created_at,updated_at,transaction_id) VALUES($1,$2,$3,'Label',1,$4,$4,$5)",
       [r, id(1), id(30), at, id(90)],
@@ -60,22 +60,22 @@ test('all four native fact drivers and label liveness share one bounded owner so
       'INSERT INTO library.label_assignment(route,account_id,subject_id,label_id,revision,created_at,updated_at,transaction_id,slot_no) VALUES($1,$2,$3,$4,1,$5,$5,$6,0)',
       [r, id(1), id(2), id(30), at, id(90)],
     );
-    expect(await fence()).toBe(5n);
+    expect(await fence()).toBe(7n);
     await c.query(
       "UPDATE library.personal_label SET normalized_name='Renamed' WHERE route=$1 AND account_id=$2 AND label_id=$3",
       [r, id(1), id(30)],
     );
-    expect(await fence()).toBe(5n);
+    expect(await fence()).toBe(8n);
     await c.query(
       'UPDATE library.personal_label SET deleted_at=$4,purge_after=$5 WHERE route=$1 AND account_id=$2 AND label_id=$3',
       [r, id(1), id(30), at, due],
     );
-    expect(await fence()).toBe(6n);
+    expect(await fence()).toBe(9n);
     await c.query(
       'UPDATE library.personal_label SET deleted_at=NULL,purge_after=NULL WHERE route=$1 AND account_id=$2 AND label_id=$3',
       [r, id(1), id(30)],
     );
-    expect(await fence()).toBe(7n);
+    expect(await fence()).toBe(10n);
     expect(
       (await c.query('SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1', [id(1)])).rows,
     ).toEqual([{ n: 0 }]);
