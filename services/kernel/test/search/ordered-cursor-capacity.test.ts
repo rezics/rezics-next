@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { canonicalParameters } from '../../src/tokens/cursor.ts';
 import {
   decodeListCursor,
   encodeListCursor,
@@ -101,10 +103,15 @@ const vectors: readonly { label: string; sort: string; after: ProposedAfter }[] 
     after: [basis, 'n2147483647', controls512, `s${predecessor}`, pending, lastOrdinal, original, collectionOwner],
   },
 ];
-const binding = (viewer: string | null, sort: string): ListCursorBinding => ({
-  route: 'POST /v1/zones/:zoneId/readPage',
+// This test request's stable body is exactly { sort, limit }; the cursor is excluded.
+// No mutable server basis, configuration, release, index, identity or source enters this digest.
+const binding = (viewer: string | null, sort: string, limit = 32, zoneId = fact): ListCursorBinding => ({
+  route: 'POST /v1/zones/{id}:readPage',
   viewer,
-  query: { zoneId: fact, sort, limit: 32, basis },
+  query: {
+    zoneId,
+    bodyDigest: createHash('sha256').update(canonicalParameters({ sort, limit })).digest('hex'),
+  },
 });
 
 test('proposed eight split-field ordered positions roundtrip through the actual existing encrypted search profile within all byte ceilings', async () => {
@@ -161,13 +168,44 @@ test('proposed eight split-field ordered positions roundtrip through the actual 
       expect(
         await decodeListCursor(ring, { ...bound, viewer: viewer === null ? account : null }, token, now, search),
       ).toEqual({ ok: false, reason: 'invalid' });
-      expect(
-        await decodeListCursor(ring, { ...bound, query: { ...bound.query, basis: ownerBasis } }, token, now, search),
-      ).toEqual({ ok: false, reason: 'invalid' });
     }
   }
   // Observed maxima across the full vectors; the escaping stress determines plaintext/token maxima.
   expect(measured).toEqual({ key: 1537, aggregate: 1884, plaintext: 3490, token: 4699 });
+});
+
+test('actual codec binds only stable readPage route viewer Zone and body shape while encrypted dynamic basis is compared after decode', async () => {
+  const position = { epoch: 1, after: [...vectors[8]!.after] };
+  const freshBasis = ownerBasis;
+  for (const viewer of [null, account]) {
+    const bound = binding(viewer, 'collections');
+    expect(bound).toEqual({
+      route: 'POST /v1/zones/{id}:readPage',
+      viewer,
+      query: {
+        zoneId: fact,
+        bodyDigest: createHash('sha256').update('{"limit":32,"sort":"collections"}').digest('hex'),
+      },
+    });
+    const token = await encodeListCursor(ring, bound, position, now, search);
+    // Rebuild the same stable request after observing a different current basis.
+    const decoded = await decodeListCursor(ring, binding(viewer, 'collections'), token, now, search);
+    expect(decoded).toEqual({ ok: true, ...position });
+    if (!decoded.ok) throw new Error('Actual codec rejected the unchanged stable request');
+    expect(decoded.after[0]).toBe(basis);
+    expect(decoded.after[0] === freshBasis).toBe(false);
+    // Unit comparison evidence only: no implemented Zone route or current authorization/readiness/liveness proof.
+    // Route policy for any unusable valid-shaped cursor requires fresh CURRENT authorization and 202 or 200.
+    for (const changed of [
+      { ...bound, route: 'POST /v1/zones/:zoneId/readPage' },
+      binding(viewer === null ? account : null, 'collections'),
+      binding(viewer, 'collections', 32, pending),
+      binding(viewer, 'name'),
+      binding(viewer, 'collections', 33),
+    ]) {
+      expect(await decodeListCursor(ring, changed, token, now, search)).toEqual({ ok: false, reason: 'invalid' });
+    }
+  }
 });
 
 test('native codec errors remain explicit for overbound keys, aggregate, ninth key and escaped plaintext', async () => {
