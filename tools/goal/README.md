@@ -30,10 +30,12 @@ integration if a worker changes a frozen file.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
-the lease to drain a request that arrived during shutdown; pumps return quietly when another process holds the lease.
+the lease to drain a request that arrived during shutdown. Detached train processes wait for the lease and recheck the
+control-plane version while they wait. Every process records the Git object id for `main:tools/goal` when it starts;
+a stale train finishes its active landing, releases the lease and hands the remaining queue to current code before it
+can take another request. Pumps used by short commands still return quietly when another process holds the lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
-Each process records the Git object id for `main:tools/goal` when it starts. A stale train hands its queue to a detached
-current-code process, while a stale manager host restarts after finishing its active request and recovers persisted sessions.
+A stale manager host restarts after finishing its active request and recovers persisted sessions.
 
 ## Direct check-host routes
 

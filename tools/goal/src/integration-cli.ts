@@ -27,9 +27,11 @@ import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue;
+  train?: Pick<MergeTrain, 'runWaiting'>;
   inbox?: SqliteManagerInbox;
   pump?(): Promise<void>;
   drain?(): Promise<void>;
+  drainJobs?(): Promise<void>;
   hostCommand?: string[];
   hostSweepIntervalMs?: number;
   codeIsCurrent?(): boolean;
@@ -442,10 +444,13 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   }
   if (command === 'train') {
     await recordManagerCommand(runtime);
-    if (runtime.pump) {
-      await runtime.pump();
+    if (runtime.train) {
+      await runtime.train.runWaiting();
+      await runtime.drainJobs?.();
+    } else {
+      await new MergeTrain({ ...runtime, queue }).runWaiting();
       await runtime.drain?.();
-    } else await new MergeTrain({ ...runtime, queue }).run();
+    }
     return 0;
   }
   if (command === '_manager-host') {
