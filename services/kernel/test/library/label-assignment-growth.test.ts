@@ -275,10 +275,15 @@ async function admissionOperation() {
     expect((await setLabelAssignment(c, input(30, 502), context)).kind).toBe('existing');
     expect((await setLabelAssignment(c, input(31, 534), context)).kind).toBe('capacity');
     applied(await setLabelAssignment(c, input(30, 534), { ...context, time: expired }));
+    await c.query('SAVEPOINT retained_reassign');
+    const retained = applied(await setLabelAssignment(c, input(32, 536), context));
+    expect(retained.revision).toBe(3);
+    await c.query('ROLLBACK TO SAVEPOINT retained_reassign');
     const first = applied(await setLabelAssignment(c, input(32, 535), context));
     expect(await setLabelAssignment(c, input(32, 535), context)).toEqual({ kind: 'existing', assignment: first });
     expect((await setLabelAssignment(c, input(30, 500), context)).kind).toBe('not_found');
     expect((await setLabelAssignment(c, input(30, 999), context)).kind).toBe('not_found');
+    expect((await setLabelAssignment(c, input(32, 537), context)).kind).toBe('migration_required');
   });
 }
 
@@ -286,10 +291,19 @@ test('native admission all-pool SQL plans remain bounded at 64 512 4096 inactive
   const c = await db.admin.connect();
   try {
     await c.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-    await labels(c, 500, 37);
+    await labels(c, 500, 38);
     await fill(c, 30, 500, 32);
     await fill(c, 31, 502, 32);
     await fill(c, 32, 502, 31);
+    const retained = applied(await setLabelAssignment(c, input(32, 536), context));
+    await c.query(
+      "UPDATE library.label_assignment SET slot_no=NULL,revision=2,deleted_at=$1,purge_after=$1::timestamptz+interval '720 hours' WHERE route=$2 AND account_id=$3 AND assignment_id=$4",
+      [at, route, id(1), retained.id],
+    );
+    await c.query(
+      'INSERT INTO library.label_assignment(route,account_id,subject_id,label_id,assignment_id,revision,created_at,updated_at,transaction_id) VALUES($1,$2,$3,$4,NULL,1,$5,$5,$6)',
+      [route, id(1), id(32), id(537), at, context.transactionId],
+    );
     await deletePersonalLabel(c, route, id(1), id(500), 1, context);
     await deletePersonalLabel(c, route, id(1), id(501), 1, context);
     await c.query('COMMIT');
