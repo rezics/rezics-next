@@ -14,6 +14,34 @@ Installing command admission or either identity bridge on a derived Access is re
 
 Each use is one WeakMap read plus the derivation walk to the root.
 
+## Internal actions
+
+`createAccess` adds the fixed `INTERNAL_ACTIONS` catalogue to mounted route declarations in every composition,
+including the default kernel and native workflows. These actions have no default mounted route:
+
+| Action                           | Access checks                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gate:any`                       | `gates/admission.ts` and `gates/visibility.ts` check Global exposure; `grant-command.ts` checks gate grant authority.                                                                                                                                                                                                                                                                                     |
+| `account:manage`                 | `agent-verification.ts` checks non-self status, request, withdrawal and release; `index.ts` checks the credential floor bridge; `workflow-approvals.ts` checks credentials, automation and operator changes; `lifecycle.ts` checks automated rename/deletion; `session-revocation.ts` checks own session revocation; `committed-deletion-work.ts` and `operator-fence-work.ts` compose management checks. |
+| `account:delete`                 | `lifecycle.ts` deletion and `workflow-approvals.ts` delete approval. Retains `replay: 'self-account-read'`.                                                                                                                                                                                                                                                                                               |
+| `account:assign_reserved_handle` | `lifecycle.ts` reserved-handle assignment.                                                                                                                                                                                                                                                                                                                                                                |
+| `organization:create`            | `workflow-approvals.ts` organization creation approval.                                                                                                                                                                                                                                                                                                                                                   |
+| `organization:membership`        | `lifecycle.ts` membership changes and `workflow-approvals.ts` membership approval.                                                                                                                                                                                                                                                                                                                        |
+| `client:manage`                  | `workflow-approvals.ts` client reduction approval.                                                                                                                                                                                                                                                                                                                                                        |
+| `access:delegate`                | `native-account-bindings.ts` configures `delegation-commands.ts` principal assignment checks.                                                                                                                                                                                                                                                                                                             |
+| `account:renew_cleanup`          | `committed-continuations.ts` cleanup renewal.                                                                                                                                                                                                                                                                                                                                                             |
+
+Composition is additive: an identical mounted declaration keeps its metadata. A conflicting anonymous, replay or
+resource-type declaration throws an error naming the action. The default kernel validates this at startup even
+though it builds Access lazily. Internal entries do not become HTTP routes or alter the mounted route catalogue.
+
+Registration grants no authority. Ordinary grants, account and principal evidence still apply, and a session's
+consented client scopes must include the checked action. This catalogue neither registers clients nor widens their
+scopes. Auth's trusted `registerClient` and `registerWebsiteClient` inputs own registered scopes; website registration
+also enforces the supplied `siteActions` catalogue (`services/auth/src/website.ts`). A website composition deriving
+those inputs only from mounted routes therefore cannot issue `account:manage` until its owning Auth composition
+explicitly includes that scope. Auth's host creates a missing `login` client with empty scopes (`services/auth/src/host.ts`).
+
 ## Grant rule
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and ordinary revoke use that same check for every new and previous action. An account may renounce its own direct grant without `access:grant` when its acting client's consented scopes cover every action being revoked; organization-role, `active_accounts`, and another account's grants still require `access:grant`.
@@ -613,6 +641,12 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 `shareAccount` inside the owner's command. Enumeration confers no command authority and has no route or action.
 
 ## Cost
+
+### Internal action composition
+
+- Touches: a fixed set of catalogue entries added once at composition, alongside the existing route catalogue snapshot.
+- Bound: O(1) per composition for the internal set; no per-request work.
+- Growth check: not applicable; composition-time constant set.
 
 ### Erasure record at tombstone
 

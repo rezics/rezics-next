@@ -204,7 +204,6 @@ beforeAll(async () => {
     },
   });
   const actions = new Map(actionCatalogue(catalogueKernel));
-  actions.set('account:manage', { anonymous: false });
   access = admittedAccess({ actions });
   kernel = createKernel({
     pool,

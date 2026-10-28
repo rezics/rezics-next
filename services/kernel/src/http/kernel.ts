@@ -3,7 +3,7 @@ import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { createAccess } from '../access/index.ts';
+import { assertInternalActionDeclarations, createAccess } from '../access/index.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -441,6 +441,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     }
   }
   compositionFinished = true;
+  assertInternalActionDeclarations(actionCatalogue(zones));
   assertDeclaredResourceTypes(zones);
   return zones as Kernel;
 }

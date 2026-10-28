@@ -36,6 +36,7 @@ import type {
   Actor,
   Resource,
   ReadDecisions,
+  ActionCatalogue,
 } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
@@ -56,6 +57,42 @@ export {
 } from './eligibility.ts';
 
 export type AccessConfig = KernelAccessConfig & { auth?: AuthenticationConfig };
+
+/** Fixed native checks without mounted routes; call sites are listed in the Access README. */
+export const INTERNAL_ACTIONS: ActionCatalogue = new Map([
+  ['gate:any', { anonymous: false }],
+  ['account:manage', { anonymous: false }],
+  ['account:delete', { anonymous: false, replay: 'self-account-read' }],
+  ['account:assign_reserved_handle', { anonymous: false }],
+  ['organization:create', { anonymous: false }],
+  ['organization:membership', { anonymous: false }],
+  ['client:manage', { anonymous: false }],
+  ['access:delegate', { anonymous: false }],
+  ['account:renew_cleanup', { anonymous: false }],
+]);
+
+/** Also called at kernel startup, before its lazy Access is first used. */
+export function assertInternalActionDeclarations(actions: ActionCatalogue): void {
+  for (const [action, internal] of INTERNAL_ACTIONS) {
+    const mounted = actions.get(action);
+    if (
+      mounted &&
+      (mounted.anonymous !== internal.anonymous ||
+        mounted.replay !== internal.replay ||
+        mounted['x-resource-types'] !== internal['x-resource-types'])
+    )
+      throw new Error(`${action}: declaration conflicts with internal Access action`);
+  }
+}
+
+export function accessActionCatalogue(declared: ActionCatalogue) {
+  assertInternalActionDeclarations(declared);
+  const actions = new Map([...declared].map(([action, metadata]) => [action, { ...metadata }]));
+  for (const [action, metadata] of INTERNAL_ACTIONS) {
+    if (!actions.has(action)) actions.set(action, { ...metadata });
+  }
+  return actions;
+}
 
 type Prepared = IdentityExpiry & {
   actor: Actor;
@@ -111,10 +148,7 @@ function atTimeClient(client: AccessClient, at: string): AccessClient {
  * Only ES256 public keys are accepted; Auth credentials/private keys are never needed.
  */
 export function createAccess(config: AccessConfig): Access {
-  const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
-  // gate:any is an internal Access action used by the Global Context and by the
-  // built-in platform role; it is intentionally absent from the mounted route catalogue.
-  actions.set('gate:any', { anonymous: false });
+  const actions = accessActionCatalogue(config.actions);
   const clock = config.clock ?? (() => new Date(Date.now()));
   const knownScopeCount = new Set(['openid', 'offline_access', 'media:complete', ...config.actions.keys()]).size;
   const authentication = createAuthenticator(config.auth, clock, knownScopeCount);
