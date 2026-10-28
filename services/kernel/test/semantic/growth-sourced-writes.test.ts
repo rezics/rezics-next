@@ -2,7 +2,13 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { releaseDigest, type Release } from '@rezics/definitions';
-import type { BatchCommand, BatchStatement, Rights, Source } from '@rezics/definitions/bulk';
+import {
+  BATCH_LIMIT,
+  type BatchCommand,
+  type BatchStatement,
+  type Rights,
+  type Source,
+} from '@rezics/definitions/bulk';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -67,7 +73,86 @@ const growthWriteRate = createWriteRateLimiter({
 });
 
 type WriteFixture = { externalId: string; route: number; subject: string; media: string };
-const writeFixtures = new Map<number, WriteFixture>();
+const subjectsPerBatch = 16;
+const fixturesPerBatch = subjectsPerBatch + 2;
+const tupleHomes = [batchPartition, batchPartition + 1, batchPartition + 2, batchPartition + 3];
+const writeFixtures = new Map<number, readonly WriteFixture[]>();
+const replayFixtures = new Map<
+  number,
+  {
+    commands: BatchCommand[];
+    results: Record<string, any>[];
+  }
+>();
+let sourcedBatchReport: Awaited<ReturnType<typeof checkGrowth>> | undefined;
+const batchRuns: {
+  scale: number;
+  repetition: number;
+  commands: number;
+  tuples: number;
+  tupleHomes: number[];
+  changed: number;
+  duplicates: number;
+  noEffect: number;
+  replayed: number;
+  requestBytes: number;
+  responseBytes: number;
+}[] = [];
+
+// Sourced bulk write / Active definition lookup / Request authorization Cost rows.
+// These are data statements, as counted by costOf, across ALL pool connections.
+// Control statements and catalog freshness probes keep their existing harness checks.
+// The native actor has no assignment, memberships, role hits or governance reach.
+// Each fresh subject has empty facts/summary/cover slots: no compact candidates to expand.
+const sourcedStatementDerivation = {
+  // Authentication + rate spend + batch Access (time/inverse/candidates/time/formula)
+  // + active pointer and at most one cold release read.
+  request: 1 + 1 + (1 + 1 + 1 + 1 + 1) + 2,
+  // runCommand time; current actor admission; permission time/inverse/candidates;
+  // Global anchor validation; final Access formula. The proof consumption is in memory.
+  admission: 1 + 1 + (1 + 1 + 1) + 1 + 1,
+  // The upstream Command and receipt derivation states counts per attempt and
+  // allows three contention attempts. Own fixture partitions remain writable,
+  // so this workload requires no fence-wait polls or cross-home deferred pass.
+  maximumAttempts: 3,
+  receipt: 1,
+  // Both changed fence (position/outbox/basis/receipt) and noEffect fence
+  // (partition/receipt only) are one statement. No extra finalizer is installed.
+  fence: 1,
+  // visibleSubject + redirect + source dedup; proposal revision + redirect + item
+  // details; empty-slot operation + compact read + expansion fact; proposal revision
+  // insert + subject update + candidate insert; source-candidate insert.
+  changedBody: 2 + 1 + 3 + 3 + 3 + 1,
+  noEffectBody: 2 + 1,
+  changed: subjectsPerBatch * 3,
+  noEffect: subjectsPerBatch * 3,
+  replayed: 4,
+  // One pre-dedup readFences per actual tuple home, shared by all three field groups.
+  tupleHomes: tupleHomes.length,
+  // probeCovers reads its partition once and probes EACH cover, including duplicates/replay.
+  mediaHomes: tupleHomes.length,
+  coverProbes: subjectsPerBatch * 2 + 1,
+  documentInserts: subjectsPerBatch,
+  mediaClaims: subjectsPerBatch,
+};
+const d = sourcedStatementDerivation;
+const sourcedStatementFormula =
+  'request + tupleHomes + mediaHomes + coverProbes + ' +
+  'maximumAttempts * ((changed + noEffect + replayed) * (admission + receipt) + ' +
+  '(changed + noEffect) * fence + changed * changedBody + noEffect * noEffectBody + ' +
+  'documentInserts + mediaClaims)';
+const sourcedStatementCeiling =
+  d.request +
+  d.tupleHomes +
+  d.mediaHomes +
+  d.coverProbes +
+  d.maximumAttempts *
+    ((d.changed + d.noEffect + d.replayed) * (d.admission + d.receipt) +
+      (d.changed + d.noEffect) * d.fence +
+      d.changed * d.changedBody +
+      d.noEffect * d.noEffectBody +
+      d.documentInserts +
+      d.mediaClaims);
 
 function source(externalId: string, field_group: Source['field_group']): Source {
   return {
@@ -107,6 +192,26 @@ function summaryCommand(subjectId: string, externalId: string, key: string, text
   };
 }
 
+function fixtureCommands(fixture: WriteFixture, key: () => string): BatchCommand[] {
+  return [
+    {
+      op: 'propose',
+      key: key(),
+      source: source(fixture.externalId, 'facts'),
+      subject: fixture.subject,
+      statement: cited('schema:inLanguage', 'ja', `https://openlibrary.org/${fixture.externalId}`),
+    },
+    summaryCommand(fixture.subject, fixture.externalId, key(), `Sourced summary ${fixture.subject}`),
+    {
+      op: 'propose',
+      key: key(),
+      source: source(fixture.externalId, 'cover'),
+      subject: fixture.subject,
+      statement: cited('schema:image', fixture.media, `https://openlibrary.org/${fixture.externalId}`),
+    },
+  ];
+}
+
 async function jsonRequest(
   method: string,
   path: string,
@@ -141,13 +246,16 @@ function successfulCommand(
   return result;
 }
 
-async function externalIdInPartition(label: string): Promise<{ externalId: string; route: number }> {
+async function externalIdInPartition(
+  label: string,
+  partition = batchPartition,
+): Promise<{ externalId: string; route: number }> {
   for (let suffix = 0; suffix < 100_000; suffix++) {
     const externalId = `${label}-${suffix}`;
     const route = tupleRoute(routeKey, 'openlibrary', externalId);
-    if (partitionOf(route) === batchPartition) return { externalId, route };
+    if (partitionOf(route) === partition) return { externalId, route };
   }
-  throw new Error(`Could not find an Open Library tuple in partition ${batchPartition}`);
+  throw new Error(`Could not find an Open Library tuple in partition ${partition}`);
 }
 
 function mediaRow(route: number, subjectId: string, mediaId: string, externalId: string): Row {
@@ -724,14 +832,14 @@ function logSamples(report: Awaited<ReturnType<typeof checkGrowth>>): void {
   console.info(
     `GROWTH_SAMPLES ${JSON.stringify({
       check: report.name,
-      samples: report.samples.map(({ scale, cost }) => ({
+      samples: report.samples.map(({ scale, cost, repetitions }) => ({
         scale,
-        rows: cost.rows,
-        blocks: cost.blocks,
-        statements: cost.statements,
-        semanticRelations: Object.fromEntries(
-          Object.entries(cost.relations).filter(([relation]) => relation.startsWith('semantic.')),
-        ),
+        ...cost,
+        rowsIncludingRemoved: cost.rows,
+        repetitions,
+        ...(report.name.startsWith('a sourced bulk write')
+          ? { batches: batchRuns.filter((run) => run.scale === scale) }
+          : {}),
       })),
     })}`,
   );
@@ -911,6 +1019,7 @@ test('a sourced bulk write at a fixed batch has constant rows and statements as 
     name: 'a sourced bulk write at a fixed batch has constant rows and statements as subjects, documents and fences grow',
     scales,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    includeBackends: true,
     grow: async (database, scale, previous) => {
       const population = growthPopulation(populationName);
       await seed({ pool: database.pool, admin: database.admin }, population, {
@@ -921,8 +1030,11 @@ test('a sourced bulk write at a fixed batch has constant rows and statements as 
       const scaleIndex = scales.findIndex((value) => value === scale);
       if (scaleIndex < 0) throw new Error(`Unexpected growth scale ${scale}`);
       const fixtures = await Promise.all(
-        Array.from({ length: warmupsAndRepetitions }, async (_, index) => {
-          const found = await externalIdInPartition(`sourced-bulk-${scale}-${index}-${randomUUID()}`);
+        Array.from({ length: warmupsAndRepetitions * fixturesPerBatch }, async (_, index) => {
+          const found = await externalIdInPartition(
+            `sourced-bulk-${scale}-${index}-${randomUUID()}`,
+            tupleHomes[(index % fixturesPerBatch) % tupleHomes.length]!,
+          );
           return {
             externalId: found.externalId,
             route: found.route,
@@ -935,53 +1047,126 @@ test('a sourced bulk write at a fixed batch has constant rows and statements as 
         from: 0,
         to: fixtures.length,
       });
-      for (let index = 0; index < fixtures.length; index++) {
-        writeFixtures.set(scaleIndex * warmupsAndRepetitions + index, fixtures[index]!);
+      for (let index = 0; index < warmupsAndRepetitions; index++) {
+        const repetition = scaleIndex * warmupsAndRepetitions + index;
+        const ownFixtures = fixtures.slice(index * fixturesPerBatch, (index + 1) * fixturesPerBatch);
+        writeFixtures.set(repetition, ownFixtures);
+        // Exact key/body replay is legal across requests, never twice in one
+        // request (checkBatchWrite rejects duplicate command keys).
+        const commands = [
+          ...fixtureCommands(ownFixtures[subjectsPerBatch]!, randomUUID),
+          fixtureCommands(ownFixtures[subjectsPerBatch + 1]!, randomUUID)[0]!,
+        ];
+        const prepared = await batch(commands);
+        const results = commands.map((_, commandIndex) =>
+          successfulCommand('prepare exact sourced replay', prepared, commandIndex, 201),
+        );
+        replayFixtures.set(repetition, { commands, results });
       }
       await database.admin.query('CHECKPOINT');
     },
     operation: async (_database, scale, repetition) => runSourcedBatch(scale, repetition),
     warmup: async (_database, scale, repetition) => runSourcedBatch(scale, repetition),
   }).then((report) => {
+    sourcedBatchReport = report;
+    logSamples(report);
     assertNoSemanticSequentialScans(report);
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(report.samples.every(({ cost }) => Boolean(cost.relations['content.source_fences']))).toBe(true);
-    logSamples(report);
   });
 }, 120_000);
 
 async function runSourcedBatch(scale: number, repetition: number): Promise<unknown> {
   const scaleIndex = scales.findIndex((value) => value === scale);
-  const fixture = writeFixtures.get(repetition);
+  const fixtures = writeFixtures.get(repetition);
   if (
     scaleIndex < 0 ||
-    fixture === undefined ||
+    fixtures?.length !== fixturesPerBatch ||
     repetition < scaleIndex * warmupsAndRepetitions ||
     repetition >= (scaleIndex + 1) * warmupsAndRepetitions
   )
     throw new Error(`No spare sourced batch fixture for scale ${scale}, run ${repetition}`);
   const key = () => `sourced-${scale}-${repetition}-${randomUUID()}`;
-  const fieldSourceId = fixture.externalId;
-  const sourceCommand: BatchCommand = {
-    op: 'propose',
-    key: key(),
-    source: source(fieldSourceId, 'facts'),
-    subject: fixture.subject,
-    statement: cited('schema:inLanguage', 'ja', `https://openlibrary.org/${fieldSourceId}`),
-  };
-  const summary = summaryCommand(fixture.subject, fieldSourceId, key(), `Sourced summary ${randomUUID()}`);
-  const cover: BatchCommand = {
-    op: 'propose',
-    key: key(),
-    source: source(fieldSourceId, 'cover'),
-    subject: fixture.subject,
-    statement: cited('schema:image', fixture.media, `https://openlibrary.org/${fieldSourceId}`),
-  };
-  const answer = await batch([sourceCommand, summary, cover]);
+  const originals: BatchCommand[] = [];
+  const duplicates: BatchCommand[] = [];
+  for (const fixture of fixtures.slice(0, subjectsPerBatch)) {
+    // Rebuild summary snapshots with identical text and fresh block ids. Dedup must
+    // recognize logical content, with unchanged source/record/converter revisions.
+    originals.push(...fixtureCommands(fixture, key));
+    duplicates.push(...fixtureCommands(fixture, key));
+  }
+  const replay = replayFixtures.get(repetition);
+  if (!replay) throw new Error(`No prepared replay for run ${repetition}`);
+  // 48 changes, 48 fresh-key unchanged contributions, four exact key/body replays.
+  const commands = [...originals, ...duplicates, ...replay.commands];
+  expect(BATCH_LIMIT).toBe(100);
+  expect(commands).toHaveLength(100);
+  const homes = [
+    ...new Set(
+      commands.map((command) => partitionOf(tupleRoute(routeKey, command.source.source, command.source.external_id))),
+    ),
+  ].sort((left, right) => left - right);
+  expect(homes).toEqual(tupleHomes);
+  const tuples = new Set(
+    commands.map(({ source }) => JSON.stringify([source.source, source.external_id, source.field_group])),
+  ).size;
+  expect(tuples).toBe(52);
+  console.info(
+    `SOURCED_STATEMENT_BOUND ${JSON.stringify({
+      formula: sourcedStatementFormula,
+      operands: sourcedStatementDerivation,
+      ceiling: sourcedStatementCeiling,
+    })}`,
+  );
+  const answer = await batch(commands);
+  // Preserve native failures (including every rejected command) for owner diagnosis.
+  console.info(`SOURCED_BATCH_RESULTS ${JSON.stringify({ scale, repetition, body: answer.body })}`);
   if (answer.status !== 200) throw new Error(`sourced batch returned ${answer.status}: ${JSON.stringify(answer.body)}`);
-  for (let index = 0; index < 3; index++) successfulCommand('sourced batch command', answer, index, 201);
+  expect(answer.body.results).toHaveLength(100);
+  for (let index = 0; index < commands.length; index++) {
+    const expectedStatus = index >= 48 && index < 96 ? 200 : 201;
+    const result = successfulCommand('sourced batch command', answer, index, expectedStatus);
+    expect(result.key).toBe(commands[index]!.key);
+    expect(typeof result.value.candidate).toBe('string');
+    if (index < 48) expect(result.value.revision).toBe(2 + (index % 3));
+    else if (index < 96) {
+      expect(result.value.candidate).toBe(answer.body.results[index - 48].value.candidate);
+      expect(result.value.revision).toBe(4);
+      expect(commands[index]!.key).not.toBe(commands[index - 48]!.key);
+    } else expect(result).toEqual(replay.results[index - 96]!);
+  }
+  batchRuns.push({
+    scale,
+    repetition,
+    commands: commands.length,
+    tuples,
+    tupleHomes: homes,
+    changed: 48,
+    duplicates: 48,
+    noEffect: answer.body.results.filter((result: { status: number }) => result.status === 200).length,
+    replayed: 4,
+    requestBytes: Buffer.byteLength(JSON.stringify({ commands })),
+    responseBytes: Buffer.byteLength(JSON.stringify(answer.body)),
+  });
   return answer.body;
 }
+
+test('the actual fixed batch has100 commands with several tuple homes and duplicates and stays within the existing derived statement bound', () => {
+  expect(sourcedBatchReport).toBeDefined();
+  expect(sourcedStatementCeiling).toBe(5138);
+  expect(batchRuns).toHaveLength(scales.length * warmupsAndRepetitions);
+  for (const run of batchRuns) {
+    expect(run.commands).toBe(100);
+    expect(run.tupleHomes).toEqual(tupleHomes);
+    expect(run.duplicates).toBe(48);
+    expect(run.noEffect).toBe(48);
+    expect(run.replayed).toBe(4);
+  }
+  for (const sample of sourcedBatchReport!.samples) {
+    expect(sample.repetitions).toHaveLength(5);
+    for (const cost of sample.repetitions) expect(cost.statements).toBeLessThanOrEqual(sourcedStatementCeiling);
+  }
+});
 
 test("source-fence disclosure on a subject view has constant rows and statements as subjects, fences and the subject's history grow", async () => {
   const fixture = await prepareDisclosureSubject();
