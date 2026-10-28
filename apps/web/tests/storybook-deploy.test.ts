@@ -1,44 +1,74 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { runDeployment } from '../scripts/storybook-deploy.ts';
+import { smokeStorybook } from '../scripts/storybook-smoke.ts';
 
 const root = resolve(import.meta.dir, '../../../');
 const app = resolve(root, 'apps/web');
 const output = resolve(app, 'storybook-static');
 let browser: Browser;
+let previewServer: ReturnType<typeof Bun.serve>;
+let expectedCommit: string;
+
+function countStories(directory: string): number {
+  return readdirSync(directory, { withFileTypes: true }).reduce((count, entry) => {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return count + countStories(path);
+    if (!entry.name.endsWith('.stories.tsx')) return count;
+    return count + (readFileSync(path, 'utf8').match(/^export const \w+\s*:/gm)?.length ?? 0);
+  }, 0);
+}
 
 beforeAll(async () => {
-  const build = Bun.spawnSync(['bun', 'apps/web/scripts/storybook-build.ts'], {
+  const gitCommit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root });
+  expectedCommit = gitCommit.exitCode === 0 ? gitCommit.stdout.toString().trim() : '0'.repeat(40);
+  const build = Bun.spawnSync(['bun', 'run', '--cwd', 'apps/web', 'storybook:build'], {
     cwd: root,
-    env: { ...process.env, STORYBOOK_OUTPUT_DIR: output },
+    env: { ...process.env, STORYBOOK_COMMIT: expectedCommit, STORYBOOK_OUTPUT_DIR: output },
     stdout: 'inherit',
     stderr: 'inherit',
   });
   expect(build.exitCode).toBe(0);
   browser = await chromium.launch({ headless: true });
+  previewServer = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const pathname = decodeURIComponent(new URL(request.url).pathname);
+      const path = resolve(output, pathname === '/' ? 'index.html' : `.${pathname}`);
+      if (!path.startsWith(`${output}/`)) return new Response('not found', { status: 404 });
+      const file = Bun.file(path);
+      return (await file.exists()) ? new Response(file) : new Response('not found', { status: 404 });
+    },
+  });
 }, 600_000);
 
 afterAll(async () => {
   await browser?.close();
+  previewServer?.stop(true);
 });
 
 describe('storybook review build', () => {
   test('builds both catalogues into one site with complete indexes and build metadata', () => {
     const index = JSON.parse(readFileSync(resolve(output, 'index.json'), 'utf8')) as {
-      entries: Record<string, { title: string }>;
+      entries: Record<string, { title: string; type: string }>;
     };
     const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as {
-      entries: Record<string, { title: string }>;
+      entries: Record<string, { title: string; type: string }>;
     };
-    const pages = Object.values(index.entries).filter((entry) => entry.title.startsWith('Pages/'));
-    const uiStories = Object.values(uiIndex.entries).filter((entry) => entry.title.startsWith('Rezics UI/'));
-    expect(pages.length).toBeGreaterThan(0);
-    expect(uiStories.length).toBeGreaterThan(0);
+    const pages = Object.values(index.entries).filter(
+      (entry) => entry.type === 'story' && entry.title.startsWith('Pages/'),
+    );
+    expect(pages.length).toBeGreaterThanOrEqual(countStories(resolve(app, 'src/stories')));
+    expect(Object.values(index.entries).some((entry) => entry.title === 'Shell/Page heading')).toBe(false);
+    expect(Object.values(uiIndex.entries).filter((entry) => entry.type === 'story').length).toBeGreaterThanOrEqual(
+      countStories(resolve(root, 'packages/ui/src')),
+    );
     expect(Object.values(index.entries).some((entry) => /accessibility.?probe/i.test(entry.title))).toBe(false);
     expect(Object.values(uiIndex.entries).some((entry) => /accessibility.?probe/i.test(entry.title))).toBe(false);
-    expect(readFileSync(resolve(output, 'index.html'), 'utf8')).toContain('"ui"');
+    expect(existsSync(resolve(output, 'ui/index.html'))).toBe(true);
 
     const metadata = JSON.parse(readFileSync(resolve(output, 'build.json'), 'utf8')) as {
       commit: string;
@@ -49,28 +79,25 @@ describe('storybook review build', () => {
     expect(metadata.storybookVersion).toMatch(/^11\./);
     expect(Number.isNaN(Date.parse(metadata.builtAt))).toBe(false);
     expect(metadata.builtAt).toMatch(/Z$/);
-    const manager = readFileSync(resolve(output, 'index.html'), 'utf8');
-    expect(manager).toContain(metadata.commit.slice(0, 7));
-    expect(manager).toContain(metadata.builtAt);
+    expect(metadata.commit).toBe(expectedCommit);
   });
 
   test('serves deep links for a page, a composed UI story, a translated dark story, and recorded cover media', async () => {
-    const server = Bun.spawn(['bun', '-e', `Bun.serve({ port: 0, fetch: req => { const p = new URL(req.url).pathname; const f = Bun.file(${JSON.stringify(output)} + (p === '/' ? '/index.html' : p)); return f.exists() ? new Response(f) : new Response('not found', { status: 404 }); } }); console.log('ready')`], {
-      cwd: root,
-      stdout: 'pipe',
-      stderr: 'inherit',
-    });
+    expect(previewServer).toBeDefined();
+    await smokeStorybook(previewServer.url.toString(), browser);
+    const metadata = JSON.parse(readFileSync(resolve(output, 'build.json'), 'utf8')) as {
+      commit: string;
+      builtAt: string;
+    };
+    const page = await browser.newPage();
     try {
-      const reader = server.stdout.getReader();
-      await reader.read();
-      const address = 'http://127.0.0.1:0';
-      // The smoke server uses a fixed ephemeral choice coordinated by Bun's default port output.
-      const response = await fetch(address).catch(() => undefined);
-      expect(response).toBeDefined();
+      await page.goto(previewServer.url.toString());
+      await page.waitForFunction((expected) => document.title.includes(expected), metadata.commit.slice(0, 7));
+      expect(await page.title()).toContain(metadata.builtAt);
     } finally {
-      server.kill();
+      await page.close();
     }
-  });
+  }, 60_000);
 });
 
 describe('deployment sequencing', () => {
@@ -79,8 +106,12 @@ describe('deployment sequencing', () => {
     const outputLines: string[] = [];
     await runDeployment({
       dryRun: false,
-      build: async () => { calls.push('build'); },
-      smoke: async () => { calls.push('smoke'); },
+      build: async () => {
+        calls.push('build');
+      },
+      smoke: async () => {
+        calls.push('smoke');
+      },
       wrangler: async (args) => {
         calls.push(args[1]!);
         return args[1] === 'upload'
@@ -99,7 +130,10 @@ describe('deployment sequencing', () => {
       dryRun: true,
       build: async () => {},
       smoke: async () => {},
-      wrangler: async (args) => { calls.push(args); return 'dry run'; },
+      wrangler: async (args) => {
+        calls.push(args);
+        return 'dry run';
+      },
       print: () => {},
     });
     expect(calls).toHaveLength(1);
@@ -110,13 +144,24 @@ describe('deployment sequencing', () => {
   test('failed build or smoke test never uploads', async () => {
     for (const failure of ['build', 'smoke'] as const) {
       const calls: string[] = [];
-      await expect(runDeployment({
-        dryRun: false,
-        build: async () => { calls.push('build'); if (failure === 'build') throw new Error('build failed'); },
-        smoke: async () => { calls.push('smoke'); if (failure === 'smoke') throw new Error('smoke failed'); },
-        wrangler: async () => { calls.push('upload'); return ''; },
-        print: () => {},
-      })).rejects.toThrow(`${failure} failed`);
+      await expect(
+        runDeployment({
+          dryRun: false,
+          build: async () => {
+            calls.push('build');
+            if (failure === 'build') throw new Error('build failed');
+          },
+          smoke: async () => {
+            calls.push('smoke');
+            if (failure === 'smoke') throw new Error('smoke failed');
+          },
+          wrangler: async () => {
+            calls.push('upload');
+            return '';
+          },
+          print: () => {},
+        }),
+      ).rejects.toThrow(`${failure} failed`);
       expect(calls).not.toContain('upload');
     }
   });
@@ -125,4 +170,17 @@ describe('deployment sequencing', () => {
 test('the build output is ignored by git', () => {
   const ignore = readFileSync(resolve(root, '.gitignore'), 'utf8');
   expect(ignore).toMatch(/storybook-static/);
+  const web = JSON.parse(readFileSync(resolve(app, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+  expect(web.scripts['storybook:build']).toContain('scripts/storybook-build.ts');
+  const configText = readFileSync(resolve(app, 'storybook.wrangler.jsonc'), 'utf8').replace(/,\s*([}\]])/g, '$1');
+  const config = JSON.parse(configText) as {
+    name: string;
+    preview_urls: boolean;
+    routes: { pattern: string; custom_domain: boolean }[];
+    assets: { directory: string };
+  };
+  expect(config.name).toBe('rezics-storybook');
+  expect(config.preview_urls).toBe(true);
+  expect(config.routes).toContainEqual({ pattern: 'storybook.rezics.com', custom_domain: true });
+  expect(config.assets.directory).toBe('./storybook-static');
 });

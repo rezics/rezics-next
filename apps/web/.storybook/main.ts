@@ -27,10 +27,20 @@ if (!existsSync(routeTree) || newestRouteChange(routes) > statSync(routeTree).mt
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
   stories: ['../src/stories/**/*.stories.tsx'],
+  refs: {
+    ui: { title: 'REZICS UI', url: process.env.STORYBOOK_UI_URL ?? 'http://localhost:6007' },
+  },
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
   core: { disableTelemetry: true },
   // Generated cover images for the recorded summaries, served where the site's media route would be.
-  staticDirs: [{ from: './media', to: '/media' }],
+  staticDirs: [
+    { from: '../public', to: '/' },
+    {
+      from: '../node_modules/@fontsource-variable/manrope/files',
+      to: '/node_modules/@fontsource-variable/manrope/files',
+    },
+    { from: './media', to: '/media' },
+  ],
   async viteFinal(config) {
     const storyPlugins = (plugins: typeof config.plugins): typeof config.plugins =>
       plugins?.flatMap((plugin) =>
