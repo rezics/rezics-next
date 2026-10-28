@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { randomInt } from 'node:crypto';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import {
   deleteAccountNoticePage,
@@ -6,14 +7,14 @@ import {
   NOTICE_PAGE_SIZE,
   writeNotices,
 } from '../../src/content/notices.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf, ROUTES } from '../../src/route/route.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
 
 const scales = [256, 1024, 4096] as const;
-const route = 0x4567;
+const route = randomInt(0, ROUTES - 64);
 const forbiddenPlannerSetting = /\b(SET|set_config)\b[^;]*\benable_/is;
 const NOTICE_INDEX_ENTRY_OVERHEAD = NOTICE_PAGE_SIZE + 8;
 const NOTICE_PLAN_ROW_OVERHEAD = NOTICE_PAGE_SIZE * 2 + 8;
