@@ -506,6 +506,48 @@ their ordinary admission check when using the explicit decision to control discl
 its explicit branch only when requested and the authenticated scope permits it. Ordinary single and page
 checks leave that branch disabled and read the same grant and denial keys as before.
 
+## Read decisions
+
+`prepareReadDecisions(access, { actor, actions: ReadonlySet<string>, context })` resolves the optional
+`Access.prepareReadDecisions` port through `accessRoot`. Prepare once outside the page's snapshot for
+1–64 catalogue actions. The frozen handle exposes only
+`decide(client, { action, resourceType, ids, eligibility? }, time?)`, returning a frozen id-keyed record
+of frozen `{ allowed, explicit }` decisions. It confers no command capability or proof.
+
+Call `decide` inside the caller's REPEATABLE READ transaction, for 1–200 distinct routable UUIDs of one
+resource type across routes in the same database. UUIDs encode routes, not resource types: the owning
+reader supplies the homogeneous type and ids; structural mixed-type inputs are refused. Invalid actions,
+empty, oversized, duplicate or malformed ids and invalid type declarations raise `RangeError` before I/O.
+The trusted owner `eligibility(client, ids, at)` returns an id-keyed boolean record using rows already
+read at that snapshot (zero statements) or one statement. It never comes from request input. Access
+passes the formula's authoritative snapshot T to it. Only a catalogue action admitting anonymous
+readers can use this floor. Explicit decisions always exclude the floor and resource grant roles.
+
+One handle serves all prepared actions and batches until min(request deadline, preparation + 1 s),
+using the unchanged evidence deadline policy and the verified identity lifetime. Callers do no waiting
+between preparing and deciding; on retry they prepare afresh. Expiry or any failing dependency throws
+Access unavailability (503 at the edge), with no partial result. Every decide probes current grant,
+denial and delegation keys in that snapshot; preparation never captures resource grants. Global
+governance reach is included without writing use records. Commands keep `resourceAuthorizationPage`.
+
+### Read decisions: prepare
+
+- Touches: actor/principal inverse entries (at most 1,000 per identity), at most one principal assignment,
+  all admitted organization role proofs in one statement, and at most one trusted batched Realm reader
+  call (`realmRoleReader.batch`), installed by the native kernel Realm adapter. A custom Realm adapter
+  without that batch reader is unavailable for these reads.
+- Bound: **E ≤ 6 statements**, a constant for the whole action set. The implementation uses one time
+  statement, at most one inverse, one assignment, one organization batch and one Realm batch (at most 5).
+  Rows O(J), J ≤ 2,000 admitted pairs; blocks O(J log N), logarithmic in stored ACL/history at fixed J.
+
+### Read decisions: decide
+
+- Touches: exact grant, role-grant and denial keys for the ids and prepared identities/role proofs;
+  the owner's eligibility rows. Resource probes run only in `permission-check.sql`.
+- Bound: **at most 2 statements**, a constant: one formula plus zero or one eligibility statement.
+  Rows O(ids × prepared keys) probes and O(ids) results; blocks logarithmic per probe.
+- Growth check: `test/access/growth-read-decisions.test.ts`.
+
 ## Erasure consumers
 
 Every deletion of an active account commits exactly one `com.rezics.access.account-tombstoned.v1` event,

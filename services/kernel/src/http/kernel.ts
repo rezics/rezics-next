@@ -205,20 +205,29 @@ export function createKernelAccessResolver(options: {
   const factory = options.access ?? createAccess;
   let access: Access | undefined;
   let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+  function membershipReader() {
+    if (!realmMembership) {
+      if (!access) throw new Error('Realm membership role reader is not installed');
+      realmMembership = createRealmMembership({
+        pool: options.pool,
+        access,
+        referenceKeys: options.tokens,
+        clock: options.clock,
+      });
+    }
+    return realmMembership.roleReader;
+  }
   const realmRoleReader: AccessRealmRoleReader =
     options.realmRoleReader ??
-    ((client, input) => {
-      if (!realmMembership) {
-        if (!access) throw new Error('Realm membership role reader is not installed');
-        realmMembership = createRealmMembership({
-          pool: options.pool,
-          access,
-          referenceKeys: options.tokens,
-          clock: options.clock,
-        });
-      }
-      return realmMembership.roleReader(client, input);
-    });
+    Object.assign(
+      (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) =>
+        membershipReader()(client, input),
+      {
+        batch: ((client, input) => membershipReader().batch!(client, input)) as NonNullable<
+          AccessRealmRoleReader['batch']
+        >,
+      },
+    );
   const resolveAccess = (config: AccessConfig): Access => {
     if (typeof factory !== 'function') return (access = factory);
     if (access) return access;

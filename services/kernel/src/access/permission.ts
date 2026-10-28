@@ -1,6 +1,6 @@
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { Account } from './account-data.ts';
 import { accessCommandAttempt } from './command-admission.ts';
 import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
@@ -8,6 +8,9 @@ import {
   accessCheck,
   resourcePage,
   type ResourcePage,
+  type AccessRealmRoleReader,
+  type PrepareReadDecisionsInput,
+  type ReadDecisions,
   AuthenticationError,
   type Access,
   type AccessClient,
@@ -22,6 +25,8 @@ import {
 import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
 import { withConnection } from '../database/pool.ts';
 import { MEMBERSHIP_LIMIT, type MembershipPrincipal } from './membership-inverse.ts';
+import { routeOf as readRoute } from '../route/route.ts';
+import { deadlineClient, within } from './authenticate.ts';
 import inverseRead from './permission-inverse.sql';
 import candidatesRead from './permission-candidates.sql';
 import assignmentRead from './permission-assignment.sql';
@@ -61,10 +66,7 @@ export type PermissionConfig = {
   clock?: () => Date;
 };
 export type MembershipRoleProof = { role: 'owner' | 'member'; member: boolean; valid: string };
-export type RealmRoleReader = (
-  client: AccessClient,
-  input: { realmId: string; accountId: string; at: string },
-) => Promise<readonly MembershipRoleProof[] | null>;
+export type RealmRoleReader = AccessRealmRoleReader;
 
 type RoleEvidence = {
   account_id: string;
@@ -448,7 +450,7 @@ export function createAccess(config: PermissionConfig): Access {
               )
                 return false;
               for (const proof of proofs) {
-                if (!proof.valid) return false;
+                if (!proof.valid || typeof proof.member !== 'boolean') return false;
                 const row = entries.find((r) => r.role === proof.role)!;
                 row.member = proof.member;
                 row.valid = proof.valid;
@@ -496,7 +498,223 @@ export function createAccess(config: PermissionConfig): Access {
     }
     return evidence;
   }
+  async function prepareReadDecisions(input: PrepareReadDecisionsInput): Promise<ReadDecisions> {
+    const requested = [...input.actions];
+    if (requested.length < 1 || requested.length > 64 || requested.some((action) => !actions.has(action)))
+      throw new RangeError('Invalid read decision actions');
+    const admitted = new Set(requested);
+    const grantRolesByAction = new Map(
+      requested.map((action) => [
+        action,
+        [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role),
+      ]),
+    );
+    const { actor, context } = input;
+    const deadline = accessEvidenceDeadline(context.deadline);
+    const pool = deadlineClient(context.pool, deadline) as typeof context.pool;
+    try {
+      return await within(deadline, async () => {
+        const account = actor.kind === 'account' ? config.accountEvidence(actor, context) : undefined;
+        if (actor.kind === 'account' && (!account || !eligible(account, actor)))
+          throw new AccessUnavailableError('overloaded');
+        const identity =
+          actor.kind === 'account' ? Object.freeze({ ...actor, scopes: Object.freeze([...actor.scopes]) }) : actor;
+        const recorded = await readPermissionTime(pool, config.clock);
+        if (!recorded?.databaseAt) throw new AccessUnavailableError('overloaded');
+        const at = recorded.at;
+        let principalId: string | null = null;
+        let assignmentRoute: number | null = null;
+        let assignmentRequestId: string | null = null;
+        const members: { route: number; account_id: string }[] = [];
+        if (identity.kind === 'account' && account) {
+          if (account.operatorAccountId === null)
+            members.push({ route: routeOf(identity.accountId), account_id: identity.accountId });
+          if (identity.requestedBy !== null) {
+            const request = requestedByPattern.exec(identity.requestedBy);
+            if (!request) throw new AccessUnavailableError('overloaded');
+            principalId = request[1]!;
+            assignmentRoute = routeOf(principalId);
+            assignmentRequestId = request[2]!;
+            const assignment = await assignmentRead.run(pool, {
+              route: assignmentRoute,
+              principal_id: principalId,
+              request_id: assignmentRequestId,
+              actor_id: identity.accountId,
+              at,
+            });
+            if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active' || assignment.fenced)
+              throw new AccessUnavailableError('overloaded');
+            if (principalId !== identity.accountId && assignment.operatorAccountId === null)
+              members.push({ route: assignmentRoute, account_id: principalId });
+            if (principalId === identity.accountId && assignment.operatorAccountId !== null) members.length = 0;
+          }
+        }
+        const roles: RoleEvidence[] = [];
+        if (members.length) {
+          const inverse = await inverseRead.run(pool, {
+            route: members[0]!.route,
+            account_id: members[0]!.account_id,
+            members,
+          });
+          for (const member of members) {
+            const entries = inverse.filter((row) => row.accountId === member.account_id);
+            if (!entries.length || entries.some((row) => !row.complete)) throw new AccessUnavailableError('overloaded');
+            const groups = entries.filter((row) => row.id !== null || row.kind !== null);
+            if (groups.length > MEMBERSHIP_LIMIT || new Set(groups.map((row) => row.id)).size !== groups.length)
+              throw new AccessUnavailableError('overloaded');
+            for (const group of groups) {
+              if (
+                !group.id ||
+                !uuidPattern.test(group.id) ||
+                group.id === member.account_id ||
+                (group.kind !== 'organization' && group.kind !== 'realm')
+              )
+                throw new AccessUnavailableError('overloaded');
+              for (const role of ['owner', 'member'] as const)
+                roles.push({
+                  account_id: member.account_id,
+                  organization_id: group.id,
+                  group_kind: group.kind,
+                  role,
+                  member: false,
+                  valid: 'empty',
+                });
+            }
+          }
+        }
+        const anchors = roles.filter((row) => row.role === 'owner');
+        const organizations = anchors.filter((row) => row.group_kind === 'organization');
+        if (organizations.length) {
+          const first = organizations[0]!;
+          const proofs = await membershipRead.run(pool, {
+            route: routeOf(first.organization_id),
+            organization_id: first.organization_id,
+            member_id: first.account_id,
+            at,
+            pairs: organizations.map((row) => ({
+              route: routeOf(row.organization_id),
+              organization_id: row.organization_id,
+              member_id: row.account_id,
+            })),
+          });
+          const indexed = new Map(
+            proofs.map((proof) => [`${proof.accountId}/${proof.organizationId}/${proof.role}`, proof]),
+          );
+          if (proofs.length !== organizations.length * 2 || indexed.size !== proofs.length)
+            throw new AccessUnavailableError('overloaded');
+          for (const row of roles.filter((row) => row.group_kind === 'organization')) {
+            const proof = indexed.get(`${row.account_id}/${row.organization_id}/${row.role}`);
+            if (!proof || proof.kind !== 'organization' || typeof proof.member !== 'boolean' || !proof.valid)
+              throw new AccessUnavailableError('overloaded');
+            row.member = proof.member;
+            row.valid = proof.valid;
+          }
+        }
+        const realms = anchors.filter((row) => row.group_kind === 'realm');
+        if (realms.length) {
+          const proofs = await config.realmRoleReader?.batch?.(pool, {
+            pairs: realms.map((row) => ({ realmId: row.organization_id, accountId: row.account_id })),
+            at,
+          });
+          if (!proofs || proofs.length !== realms.length * 2) throw new AccessUnavailableError('overloaded');
+          const indexed = new Map(proofs.map((proof) => [`${proof.accountId}/${proof.realmId}/${proof.role}`, proof]));
+          if (indexed.size !== proofs.length) throw new AccessUnavailableError('overloaded');
+          for (const row of roles.filter((row) => row.group_kind === 'realm')) {
+            const proof = indexed.get(`${row.account_id}/${row.organization_id}/${row.role}`);
+            if (!proof || typeof proof.member !== 'boolean' || !proof.valid)
+              throw new AccessUnavailableError('overloaded');
+            row.member = proof.member;
+            row.valid = proof.valid;
+          }
+        }
+        const origin = Date.parse(recorded.databaseAt);
+        if (!Number.isFinite(origin)) throw new AccessUnavailableError('overloaded');
+        const databaseDeadline = new Date(origin + Math.max(0, deadline - recorded.observedAt)).toISOString();
+        requireAccessDeadline(deadline);
+        return Object.freeze({
+          async decide(client, batch, time) {
+            if (
+              !batch ||
+              !admitted.has(batch.action) ||
+              typeof batch.resourceType !== 'string' ||
+              !batch.resourceType.length ||
+              !Array.isArray(batch.ids) ||
+              batch.ids.length < 1 ||
+              batch.ids.length > 200 ||
+              batch.ids.some((id) => typeof id !== 'string' || readRoute(id) === null) ||
+              new Set(batch.ids).size !== batch.ids.length
+            )
+              throw new RangeError('Invalid read decision batch');
+            const ids = Object.freeze([...batch.ids]);
+            const action = batch.action;
+            const eligibility = batch.eligibility;
+            try {
+              requireAccessDeadline(deadline);
+              return await within(deadline, async () => {
+                const bounded = deadlineClient(client, deadline);
+                const scope = identity.kind === 'account' && identity.scopes.includes(action);
+                const rows = await permissionRead.run(bounded, {
+                  route: 0,
+                  resource_ids: [...ids],
+                  batch: true,
+                  include_explicit: scope,
+                  include_public: actions.get(action)!.anonymous,
+                  include_global: isGlobalReachAction(action),
+                  action,
+                  actor_id: identity.kind === 'account' ? identity.accountId : '',
+                  principal_id: principalId ?? '',
+                  assignment_route: assignmentRoute,
+                  assignment_request_id: assignmentRequestId,
+                  anonymous: !scope,
+                  floor: false,
+                  at: time ? authoritativeTimeValue(time) : '',
+                  roles,
+                  grant_roles: grantRolesByAction.get(action)!,
+                  deadline: databaseDeadline,
+                });
+                requireAccessDeadline(deadline);
+                if (
+                  rows.length !== ids.length ||
+                  new Set(rows.map((row) => row.resourceId)).size !== ids.length ||
+                  rows.some(
+                    (row) =>
+                      !ids.includes(row.resourceId) ||
+                      typeof row.allowed !== 'boolean' ||
+                      typeof row.explicit !== 'boolean' ||
+                      !row.at ||
+                      !row.live,
+                  )
+                )
+                  throw new AccessUnavailableError('overloaded');
+                const floor = eligibility ? await eligibility(bounded, ids, rows[0]!.at!) : undefined;
+                requireAccessDeadline(deadline);
+                if (eligibility && (!floor || typeof floor !== 'object'))
+                  throw new AccessUnavailableError('overloaded');
+                const result: Record<string, AccessDecision> = Object.create(null);
+                for (const row of rows) {
+                  const id = row.resourceId;
+                  if (!id || (floor && typeof floor[id] !== 'boolean')) throw new AccessUnavailableError('overloaded');
+                  result[id] = Object.freeze({
+                    allowed: row.allowed || (floor?.[id] === true && row.publicAllowed === true),
+                    explicit: row.explicit,
+                  });
+                }
+                return Object.freeze(result);
+              });
+            } catch (error) {
+              throwAccessUnavailable(error, deadline);
+              throw new AccessUnavailableError('overloaded');
+            }
+          },
+        } satisfies ReadDecisions);
+      });
+    } catch (error) {
+      throwAccessUnavailable(error, deadline);
+      throw new AccessUnavailableError('overloaded');
+    }
+  }
   const access: Access = {
+    prepareReadDecisions,
     replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:
       config.authenticate ??

@@ -45,6 +45,7 @@ import readTerminalRow from './membership-read-terminal.sql';
 import readChangeRow from './membership-read-change.sql';
 import readCurrent from './membership-current.sql';
 import readRoles from './membership-role.sql';
+import readRoleBatch from './membership-role-batch.sql';
 import readRealmHead from './realm-read.sql';
 import currentBan from './ban-current.sql';
 import readOperationRow from './membership-operation-read.sql';
@@ -386,6 +387,29 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     }
     proofs.sort((left, right) => (left.role === right.role ? 0 : left.role === 'owner' ? -1 : 1));
     if (proofs.length !== 2 || proofs[0]?.role !== 'owner' || proofs[1]?.role !== 'member') return null;
+    return proofs;
+  };
+
+  roleReader.batch = async (client, input) => {
+    const pairs = input.pairs.map(({ realmId, accountId }) => ({
+      route: routeOf(realmId),
+      realm_id: realmId,
+      account_id: accountId,
+    }));
+    if (pairs.some((pair) => pair.route === null || routeOf(pair.account_id) === null)) return null;
+    if (!pairs.length) return [];
+    const rows = await readRoleBatch.run(client, { at: input.at, pairs });
+    const proofs: (MembershipRoleProof & { realmId: string; accountId: string })[] = [];
+    for (const row of asRows(rows)) {
+      const role = row.role === 'owner' || row.role === 'member' ? row.role : null;
+      const member = flag(row, 'member');
+      const valid = text(row, 'valid');
+      const realmId = text(row, 'realmId');
+      const accountId = text(row, 'accountId');
+      if (!role || member === null || !valid || !realmId || !accountId) return null;
+      proofs.push({ realmId, accountId, role, member, valid });
+    }
+    if (proofs.length !== pairs.length * 2) return null;
     return proofs;
   };
 

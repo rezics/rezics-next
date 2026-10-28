@@ -12,7 +12,7 @@ import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { installAccessClock } from './access-clock.ts';
 export { accessClock } from './access-clock.ts';
@@ -33,6 +33,7 @@ import type {
   AccessContext,
   Actor,
   Resource,
+  ReadDecisions,
 } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
@@ -230,6 +231,44 @@ export function createAccess(config: AccessConfig): Access {
     }
   }
   const access: Access = {
+    async prepareReadDecisions(input) {
+      if (
+        input.actions.size < 1 ||
+        input.actions.size > 64 ||
+        [...input.actions].some((action) => !actions.has(action))
+      )
+        throw new RangeError('Invalid read decision actions');
+      const { actor, context } = input;
+      const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
+      if (
+        actor.kind === 'account' &&
+        (!identity || identity.pool !== context.pool || identity.durableTime || identityExpired(identity, clock))
+      )
+        throw new AccessUnavailableError('overloaded');
+      const deadline = Math.min(
+        context.deadline,
+        identity?.deadline ?? Infinity,
+        identity ? identity.observedAt + 180_000 : Infinity,
+      );
+      const handle = await permissions.prepareReadDecisions!({
+        ...input,
+        context: {
+          pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+          deadline,
+        },
+      });
+      return Object.freeze({
+        decide(client, batch, time) {
+          // Validation in the inner port always precedes any dependency access.
+          // Expiry is bounded again here, including the verified token lifetime.
+          return handle.decide(deadlineClient(client, deadline), batch, time).then((decisions) => {
+            requireAccessDeadline(deadline);
+            if (identity && identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+            return decisions;
+          });
+        },
+      } satisfies ReadDecisions);
+    },
     authenticate: authentication.authenticate,
     replayAuthorization: (action) => actions.get(action)?.replay,
     prepare: preparePermission,
