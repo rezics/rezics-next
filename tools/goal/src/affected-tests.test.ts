@@ -93,6 +93,8 @@ test('a landing whose affected tests fail where its base passes is refused with 
     const h = integrationHarness();
     try {
       h.ensureDev();
+      h.advanceDev('test/access.test.ts');
+      h.advanceDev('test/gates.test.ts');
       const { runs, argv } = failureCheck(
         h,
         'broken',
@@ -148,6 +150,8 @@ test('new failing files are refused even when the base already fails other tests
   const h = integrationHarness();
   try {
     h.ensureDev();
+    h.advanceDev('test/shared.test.ts');
+    h.advanceDev('test/new.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       const fs = require('node:fs');
@@ -177,6 +181,7 @@ test('the base runs only the files that failed on the branch, and the same files
   const h = integrationHarness();
   try {
     h.ensureDev();
+    h.advanceDev('test/new.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       const fs = require('node:fs');
@@ -252,6 +257,98 @@ test('a check-host transport failure is retried once, then lands unverified with
     expect(lines(runs)).toHaveLength(2);
     expect(h.outcomes[0]!.passed).toBe(true);
     expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('unverified (landing allowed)');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('kernel database storage exhaustion is recorded unverified without failing files', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const failureLine =
+      'kernel check: environment failure: database storage full (SQLSTATE 53100) on check-host; 0 of 100 bytes free';
+    const checkScript = [
+      `require("node:fs").appendFileSync(${JSON.stringify(runs)}, "run\\n");`,
+      `console.error(${JSON.stringify(failureLine)});`,
+      'process.exit(75);',
+    ].join(' ');
+    const packageJson = JSON.stringify(
+      { name: 'fixture', private: true, scripts: { check: `bun -e '${checkScript}'` } },
+      null,
+      2,
+    );
+    h.settings.affectedTests = [{ paths: ['**'], command: ['bun', 'run', 'check'] }];
+    const task = h.dispatch('package.json', [], ['true']);
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'package.json', content: packageJson }),
+    );
+    await h.start(task);
+    const result = h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!;
+    expect(result.status).toBe('unverified');
+    expect(result.failingFiles).toEqual([]);
+    expect(result.output).toContain(failureLine);
+    expect(result.output).toContain('exited with code 75');
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(true);
+    expect(lines(runs)).toHaveLength(1);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Affected test unverified (landing allowed)');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('the base receives only failing files present there, and branch-added failures are introduced', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.advanceDev('test/shared.test.ts');
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const sharedFailure = 'Kernel tests failed for 1 file(s):\ntest/shared.test.ts';
+    const branchFailures = 'Kernel tests failed for 2 file(s):\ntest/added.test.ts\ntest/shared.test.ts';
+    const argv = command(`
+      const fs = require('node:fs');
+      const files = process.argv.filter((arg) => arg.endsWith('.test.ts'));
+      fs.appendFileSync(${JSON.stringify(runs)}, JSON.stringify({ files, cwd: process.cwd() }) + '\\n');
+      console.error(fs.existsSync('test/added.test.ts') ? ${JSON.stringify(branchFailures)} : ${JSON.stringify(sharedFailure)});
+      process.exit(1);
+    `);
+    h.settings.affectedTests = [{ paths: ['**'], command: argv }];
+    const task = h.dispatch('test/added.test.ts');
+    await h.start(task);
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(false);
+    expect(h.outcomes[0]!.firstFailure!.assertion).toContain('test/added.test.ts');
+    expect(h.outcomes[0]!.firstFailure!.assertion).not.toContain('test/shared.test.ts');
+    const observations = lines(runs).map((line) => JSON.parse(line) as { files: string[]; cwd: string });
+    expect(observations).toHaveLength(2);
+    expect(observations[0]!.files).toEqual([]);
+    expect(observations[1]!.files).toEqual(['test/shared.test.ts']);
+    expect(observations[1]!.cwd).not.toBe(task.worktree);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('when every failing file is absent from the base, no base check runs and the added file is refused', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const argv = command(`
+      require('node:fs').appendFileSync(${JSON.stringify(runs)}, process.cwd() + '\\n');
+      console.error('Kernel tests failed for 1 file(s):\\nadded.test.ts');
+      process.exit(1);
+    `);
+    h.settings.affectedTests = [{ paths: ['**'], command: argv }];
+    const task = h.dispatch('added.test.ts');
+    await h.start(task);
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(false);
+    expect(h.outcomes[0]!.firstFailure!.assertion).toContain('added.test.ts');
+    expect(lines(runs)).toHaveLength(1);
   } finally {
     h.dispose();
   }
@@ -360,6 +457,7 @@ test('an unavailable baseline is retried once and permits landing with a note', 
   const h = integrationHarness();
   try {
     h.ensureDev();
+    h.advanceDev('test/feature.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     h.settings.affectedTests = [
       {
@@ -431,6 +529,7 @@ test('a fresh local baseline installs the tools its check needs', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
+    h.advanceDev('test/feature.test.ts');
     h.advanceDev(
       'package.json',
       JSON.stringify({

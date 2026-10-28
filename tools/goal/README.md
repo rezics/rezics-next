@@ -261,14 +261,17 @@ Each command's status (`passed`, `failed`, or `unverified`), failing test files,
 are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.
 Kernel's final failed-file summaries, lane errors, Bun reporter failures and `FAIL <test-file>` lines identify
 failing files; passing headings and stack frames do not. A check-host transport failure is retried once; a second
-transport failure is unverified and lands with a note in the landing log. Waiting for a check-host slot has no wall timeout.
+transport failure is unverified and lands with a note in the landing log. Kernel's database-storage environment failure
+(`SQLSTATE 53100`) is also unverified and carries no failing files. Waiting for a check-host slot has no wall timeout.
 
-Only recorded failures need a train baseline. The train reuses a cached result for the integration base and command,
-or runs that command in a separate base worktree, installing dependencies there when it has a package manifest.
-The baseline clears `KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the cached baseline reusable across attempts.
-A landing is refused only for newly failing test files, named in its gate failure; failures shared by the base are
-allowed. Errors before any test-file result use diagnostic-line comparison. An unverified baseline also allows
-landing with a log note. The train's existing integration checks are unchanged.
+Only recorded failures need a train baseline. The train sends only failing files present in the integration base,
+reuses a cached result for that base and command, or runs the command in a separate base worktree, installing
+dependencies there when it has a package manifest. Failing files added by the branch are introduced failures by
+definition; if none of the failing files exist in the base, no baseline runs. The baseline clears
+`KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the
+cached baseline reusable across attempts. A landing is refused only for newly failing test files, named in its gate
+failure; failures shared by the base are allowed. Errors before any test-file result use diagnostic-line comparison.
+An unverified baseline also allows landing with a log note. The train's existing integration checks are unchanged.
 
 A `control-plane` task whose actual changed files are all under `tools/goal/` rebases onto `main`, formats its changes,
 then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` before `main` advances. The train compare-and-
