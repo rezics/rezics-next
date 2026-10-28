@@ -213,6 +213,40 @@ $$;
 
 
 --
+-- Name: guard_erasure(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Erasure records are permanent' USING ERRCODE = '23514';
+  END IF;
+  IF NEW.route IS DISTINCT FROM OLD.route OR NEW.account_id IS DISTINCT FROM OLD.account_id
+     OR NEW.version IS DISTINCT FROM OLD.version OR NEW.at IS DISTINCT FROM OLD.at
+     OR (OLD.completed_at IS NOT NULL AND NEW.completed_at IS DISTINCT FROM OLD.completed_at) THEN
+    RAISE EXCEPTION 'Erasure records cannot reopen or change identity' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_erasure_acknowledgement(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_erasure_acknowledgement() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Erasure acknowledgements are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_lifecycle_responsibility(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -615,6 +649,37 @@ CREATE TABLE access.credential_floor_receipt (
     CONSTRAINT credential_floor_receipt_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT credential_floor_receipt_previous_floor_check CHECK ((previous_floor > 0)),
     CONSTRAINT credential_floor_receipt_purpose_check CHECK ((purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'remove-key'::text, 'remove-passkey'::text])))
+);
+
+
+--
+-- Name: erasure; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT erasure_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT erasure_check1 CHECK (((completed_at IS NULL) OR (completed_at >= at))),
+    CONSTRAINT erasure_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT erasure_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: erasure_acknowledgement; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.erasure_acknowledgement (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    participant text NOT NULL,
+    outcome text NOT NULL,
+    CONSTRAINT erasure_acknowledgement_outcome_check CHECK ((outcome = ANY (ARRAY['erased'::text, 'none'::text]))),
+    CONSTRAINT erasure_acknowledgement_participant_check CHECK (((length(participant) >= 1) AND (length(participant) <= 64)))
 );
 
 
@@ -1219,6 +1284,22 @@ ALTER TABLE ONLY access.credential_floor_receipt
 
 
 --
+-- Name: erasure_acknowledgement erasure_acknowledgement_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_acknowledgement
+    ADD CONSTRAINT erasure_acknowledgement_pkey PRIMARY KEY (route, account_id, participant);
+
+
+--
+-- Name: erasure erasure_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure
+    ADD CONSTRAINT erasure_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: exposure_opening exposure_opening_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1631,6 +1712,20 @@ CREATE TRIGGER committed_continuation_immutable BEFORE UPDATE ON access.committe
 
 
 --
+-- Name: erasure_acknowledgement erasure_acknowledgement_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER erasure_acknowledgement_guard BEFORE DELETE OR UPDATE ON access.erasure_acknowledgement FOR EACH ROW EXECUTE FUNCTION access.guard_erasure_acknowledgement();
+
+
+--
+-- Name: erasure erasure_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER erasure_guard BEFORE DELETE OR UPDATE ON access.erasure FOR EACH ROW EXECUTE FUNCTION access.guard_erasure();
+
+
+--
 -- Name: lifecycle_membership_slot lifecycle_membership_terminal_guard; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1692,6 +1787,22 @@ CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_appr
 
 ALTER TABLE ONLY access.committed_continuation
     ADD CONSTRAINT committed_continuation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id);
+
+
+--
+-- Name: erasure_acknowledgement erasure_acknowledgement_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure_acknowledgement
+    ADD CONSTRAINT erasure_acknowledgement_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: erasure erasure_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.erasure
+    ADD CONSTRAINT erasure_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id);
 
 
 --

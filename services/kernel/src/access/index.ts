@@ -1,3 +1,11 @@
+export {
+  ERASURE_PARTICIPANTS,
+  ERASURE_PARTICIPANT_VERSION,
+  acknowledgeErasure,
+  readErasureStatus,
+  type ErasureOutcome,
+  type ErasureStatus,
+} from './erasure.ts';
 export { readPublicViews, type PublicViews } from './public-views.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';

@@ -47,6 +47,8 @@ import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
 import organizationClose from './organization-close-create.sql';
 import fenceStatement from './lifecycle-fence.sql';
+import erasureInsert from './lifecycle-erasure.sql';
+import { ERASURE_PARTICIPANT_VERSION } from './erasure.ts';
 import authBarrier from './auth-barriers-advance.sql';
 import openingRead from './auth-barriers-opening-read.sql';
 import fenceRead from './lifecycle-fence-read.sql';
@@ -1777,6 +1779,12 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           const priorOperatorAccountId = account.operatorAccountId;
           const priorReservationId = account.operatorReservationId;
           const receipt = await fence(tx, account, true, transactionId);
+          await erasureInsert.run(tx, {
+            route,
+            account_id: account.accountId,
+            version: ERASURE_PARTICIPANT_VERSION,
+            at: authoritativeTimeValue(currentCommand(tx).time),
+          });
           if (account.kind === 'organization') {
             await organizationClose.run(tx, {
               route,

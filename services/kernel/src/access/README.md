@@ -517,7 +517,25 @@ Modules that retain per-account data register a durable effect on this event thr
 [`registerEffects`](../events/effects.ts), using the account id to start their own purge. Work modules contribute
 effects through `context.addEffects`. The existing consumers in [Rating eligibility](../rating/eligibility.ts),
 [Library](../library/README.md) and [organization close](organization-close-work.ts) show the pattern: persist progress
-and schedule bounded steps with stable workflow identities. Access does not enumerate consumers or call their purge code.
+and schedule bounded steps with stable workflow identities. Access never calls an owner's purge code.
+
+The barrier also inserts one `access.erasure` row in the account's partition with T and the current participant
+list version. Only the tombstone transaction creates this row. `ERASURE_PARTICIPANTS` is an immutable map of
+versions to participant ids; version 1 contains `access`, `auth`, `library`, `commerce`, `content`, `community`,
+`semantic`, `search`, `imports`, `shared-history` and `delivery`. Add a new entry for a new version; never modify a
+recorded version's list.
+
+Every listed owner registers an effect, including an owner with no per-account data. After its final purge step
+has committed, the owner calls `acknowledgeErasure({ pool }, { accountId, participant, outcome })` in a separate
+command transaction in the account's partition: `erased` attests to actual cleanup and `none` attests that no data
+applies. This mechanical work runs as the platform and restores no initiator. New acknowledgements use the existing
+`account-updated` event; there is no new event type. Dispatch success is not completion.
+
+Each participant's acknowledgement is immutable. Repeating the same outcome does nothing; an unknown participant,
+a missing erasure or a different second outcome is refused. The last acknowledgement sets completion in the same
+transaction. PostgreSQL keeps the minimal record independently of DBOS history and command receipts; completion
+never reopens on event replay. Internal/test-only `readErasureStatus(client, accountId)` returns the recorded version,
+T, every participant's `erased`, `none` or `pending` outcome and `completedAt`, or null. It has no HTTP route.
 
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
@@ -538,6 +556,28 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 `shareAccount` inside the owner's command. Enumeration confers no command authority and has no route or action.
 
 ## Cost
+
+### Erasure record at tombstone
+
+- Touches: one insert in the account's partition inside the existing tombstone transaction.
+- Bound: one statement, one row; the tombstone's existing bound plus O(log A).
+- Growth check: `test/access/growth-commands.test.ts`, "Tombstone erasure stays within its bound as m grows",
+  including the added statement.
+
+### Erasure acknowledgement
+
+- Touches: one point read locking the erasure row, one keyed insert (or lookup of the immutable existing outcome),
+  and at most one completion update in the account's partition, counting at most P acknowledgements.
+- Bound: O(P + log A), P the recorded version's participant count (11 in version 1), independent of accounts,
+  erasures and history. A duplicate uses the command's no-effect fence without advancing history.
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, accounts and completed erasures at three scales;
+  statements and rows per acknowledgement stay constant.
+
+### Erasure status read
+
+- Touches: one point read and one key-range read of at most P acknowledgement rows in one snapshot.
+- Bound: O(P + log A).
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales.
 
 ### Active account page
 
