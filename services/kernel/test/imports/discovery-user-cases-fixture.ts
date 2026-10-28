@@ -1,6 +1,4 @@
 import { expect } from 'bun:test';
-import { mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import type { FilterDocument } from '@rezics/filter';
 import type { Dump, Source } from '../../../../specs/imports-api-driver.ts';
 import type { HttpResponse, Statement, Subject } from '../../../../specs/semantic-driver.ts';
@@ -113,17 +111,7 @@ export async function discoveryDump(source: Source): Promise<Dump> {
 }
 
 export async function openDiscoveryImports() {
-  const temporary = resolve(import.meta.dir, '../../../../.temp/import-discovery');
-  await mkdir(temporary, { recursive: true });
-  const previous = process.env.TMPDIR;
-  process.env.TMPDIR = temporary;
-  let runtime: Awaited<ReturnType<typeof openApiRuntime>>;
-  try {
-    runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
-  } finally {
-    if (previous === undefined) delete process.env.TMPDIR;
-    else process.env.TMPDIR = previous;
-  }
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
     const observer = await openApiObserver(runtime);
     const contextResponse = await observer.http('/v1/contexts', { labels: { en: 'Discovery import review' } });

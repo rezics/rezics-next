@@ -161,12 +161,22 @@ remain open, rather than being credited to the narrow importer read cases above.
 Run the focused native command exactly once after the final relevant test edit:
 
 ```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/discovery-user-cases.test.ts
-bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+# Use the installed pinned runtime on the caller; stack-run selects the check host.
+PATH="$PWD/node_modules/.bin:$PATH"
+bun scripts/worker-check.ts -- bun scripts/stack-run.ts 'native discovery tmpfs evidence' . . -- sh -c '
+  set -eu
+  bun --revision
+  env TMPDIR=/dev/shm bun -e '"'"'import { tmpdir } from "node:os"; import { statfsSync } from "node:fs"; const path = tmpdir(); const type = statfsSync(path).type; console.log({ tmpdir: path, filesystemType: type.toString(16) }); if (type !== 0x01021994) process.exit(1);'"'"'
+  stat -f -c "selected filesystem: %T (%t)" /dev/shm
+  exec env TMPDIR=/dev/shm bun run --cwd services/kernel check test/imports/discovery-user-cases.test.ts
+'
+bun scripts/worker-check.ts -- bun scripts/stack-run.ts 'discovery fixture root typecheck' . . -- env TYPECHECK_CHANGED=services/kernel/test/imports/discovery-user-cases-fixture.ts bun scripts/typecheck.ts
 bun scripts/worker-check.ts -- test -s docs/research/imports-audit/discovery-user-cases.md
 ```
 
-Observed against base `c0c82dea99af6067464fafc403614d6acb43ebac` plus the delivered test/support bytes:
+Historical evidence against base `c0c82dea99af6067464fafc403614d6acb43ebac` plus the original test/support bytes:
+this run forced importer SQLite journals onto worktree `.temp/import-discovery` on Btrfs. It violates the
+adopted tmpfs rule and is retained as environment-qualified history, not storage-correct native evidence.
 
 - Test SHA-256: `98638edc178257c3e012a3ba7fd8d08def2ab4ec81041288801c95b0d8cb1362`.
 - Support SHA-256: `c1e429a477868248b42d724ad639ef689950c91b6c91590ca5b9524ac839c382`.
@@ -185,19 +195,62 @@ Earlier development runs exposed a fixture composition error: the shared Semanti
 released fixture and collided with Imports' host. Native terminal disposal now separates those lifetimes.
 The controlled edition also needed its required native `last_modified`; inspection confirmed pages have no
 current converter mapping, so the final case explicitly requires honest absence rather than invented support.
-No production or frozen-file change was made to obtain these results. Only the final run above describes the
-delivered acceptance bytes. No full-kernel or root gate was run. Red released admission is not native success.
+No production or frozen-file change was made to obtain those historical results. They describe the original
+support bytes, before the temporary-storage correction below. No full-kernel or root gate was run.
+Red released admission is not native success.
+
+Newest storage-correct invocation, 28 October 2026 UTC:
+
+- Actual base revision: `2eb8bf31c4313bccc8ec27b92cf92a6e67d19c4e`; base tree:
+  `248be733e294368217892f29ae054b9db261553b`. Tested tree after the fixture correction, before this
+  evidence-only report update: `0139eaa74da6d09badf4bdc58f67484d9edf4d86`.
+- Check host `a`, run directory `/srv/rezics-check/runs/mvsicotq-ee94cfd1`, runtime
+  `1.4.4-canary.1+a0cc096ce` (pinned build `a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b`).
+  The remote upload excludes Git metadata; the local tree above and remote SHA-256 output identify the bytes.
+- Frozen test SHA-256 remains `98638edc178257c3e012a3ba7fd8d08def2ab4ec81041288801c95b0d8cb1362`;
+  corrected support SHA-256: `ed34051ce1533484f82b2997bb2a3110058207a67164d9ede6bd34bfd5ca9267`.
+- Host inherited `TMPDIR` was unset. The invocation explicitly selected `TMPDIR=/dev/shm`; the pinned
+  runtime reported `os.tmpdir()=/dev/shm`, `statfs` type `0x1021994`, `tmpfs=true`, and `stat -f`
+  reported `tmpfs (1021994)`. This is command-scoped environment selection, not a fixture mutation.
+- Exactly one native focused run reached the suite after the final fixture edit: **13 named cases, 0 pass,
+  13 fail, 0 skips/todos**, plus one unnamed teardown failure (Bun reports 14 failures total), exit 1.
+  Log: `.temp/goal/checks/worker-check-2026-10-28T19-26-21.691Z-0029a0f9.log`.
+- First real failure is now earlier shared setup: `Collection exposure setup failed: 403`, problem
+  `forbidden`, `effect_status:not_applied`, at `test/semantic/outcome-driver.ts:365`, on
+  `POST /v1/platform/exposure/collections:open`. The unchanged released fixture fails before enumeration.
+  The frozen importer group awaits that same rejected released setup before calling `openDiscoveryImports`,
+  so no importer SQLite journal was opened in this run. The selected filesystem is verified; journal I/O
+  and importer outcomes are not newly demonstrated. No permission or lifecycle workaround was made.
+- Missing bundled word data and the historical missing `sourceRecords` remain unresolved reds; neither
+  assertion was reached in the newest run. Registered owner-query and released-library dependencies are not
+  consumed or guessed here. No broader matrix cell is credited as delivered.
+- One earlier wrapper attempt failed before the native command because its shell prelude was placed in
+  excluded `.temp`: `sh: 0: cannot open .temp/import-discovery-evidence/native.sh: No such file`.
+  Log: `.temp/goal/checks/worker-check-2026-10-28T19-23-25.565Z-ee5ae61c.log`. Passing that same prelude
+  inline through the normal placement layer corrected the invocation; the suite itself was not retried.
+- Root typecheck was selected only for the touched fixture with `TYPECHECK_CHANGED` as shown above:
+  **exit 0**, one affected workspace (`@rezics/kernel`) on host `c`; log
+  `.temp/goal/checks/worker-check-2026-10-28T19-25-26.579Z-9bbce6e7.log`.
+
+The fixture now delegates directory creation and cleanup exclusively to `openApiRuntime`'s existing
+`mkdtemp(tmpdir())`. No global environment mutation, second state directory, fixture factory, regression test,
+product change or frozen acceptance change was introduced. The thirteen titles and assertions remain intact.
+The setup failure precedes the corrected function; it is evidence about the inherited shared setup, not a
+failure caused by changing the journal path. Permission changes are outside this correction.
 
 Construction touches one shared bounded released population and one existing native importer runtime; all IDs
 come from real APIs. Search traverses at most eight two-row pages for seven controlled Books; the underlying
-production source/plan/page caps remain unchanged. Temporary importer journals are under the worktree `.temp`.
+production source/plan/page caps remain unchanged. Temporary importer journals use the runtime-owned directory
+on the invocation's tmpfs (`/dev/shm` in the newest check); check logs remain under worktree `.temp/goal/checks`.
 No production query, whole-library scan, client-created large ID vector, alternate preparation engine or cost
 observer is added. Timing/helper counts do not prove native growth; Performance owns composed-cost acceptance.
 
-Reference reading was limited to the read-only `.reference/INDEX.md` and Bangumi server revision
+Original reference reading was limited to the read-only `.reference/INDEX.md` and Bangumi server revision
 `1997713eafc51487cbea705b37011442f35539fa`: `openapi/components/subject_v0.yaml`,
 `internal/model/subject_type.go`, and `cmd/archive/main.go` metadata-tag serialization. These confirm the input
 surface already documented in the pinned provenance; no reference code was copied, built or run. Owning
 Definitions/catalogue, Filter grammar, Source record attribution, Semantic identity, filtered lists, Collection,
 dynamic Collection, Collection source and Zone/page contracts were inspected. No topic was moved from the
 external discussion repository, and no outside-path file or existing/frozen acceptance was edited.
+The storage correction required no additional external reference reading; it follows the existing runtime's
+temporary-directory ownership and the check-host placement and pinned-runtime runbooks.
