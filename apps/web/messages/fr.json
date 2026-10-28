@@ -89,6 +89,7 @@
   "home_continue_volume": "Vol. {amount}",
   "home_continue_volume_of": "Vol. {amount}/{total}",
   "home_heading": "Voir plus clairement l’essentiel",
+  "home_meta_description": "Découvrez des livres, des anime, des visual novels et des recettes. Trouvez les histoires et les idées qui comptent pour vous.",
   "home_section_count": "{count} au total",
   "home_section_row": "Sujets de {title}",
   "home_see_all": "Tout voir",

@@ -22,8 +22,12 @@ export type RoutePageData = {
 
 export type RoutePageLoad = { kind: 'missing' } | { kind: 'page'; page: RoutePageData };
 
-export function routePageJsonLd(page: RoutePageData, locale: string): string | undefined {
-  return page.route === '/' ? serializeJsonLd(homeJsonLd({ origin: 'https://rezics.com', locale })) : undefined;
+export function routePageJsonLd(
+  page: RoutePageData,
+  locale: string,
+  origin = 'https://rezics.com',
+): string | undefined {
+  return page.route === '/' ? serializeJsonLd(homeJsonLd({ origin, locale })) : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

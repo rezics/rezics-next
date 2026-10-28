@@ -111,6 +111,7 @@ type Call = {
   authorization: string | null;
 };
 const calls: Call[] = [];
+const browserReads: { method: string; path: string }[] = [];
 const pageFake = createFakeKernelFetch(fixtures as never);
 
 function problem(status: number, code: string) {
@@ -126,6 +127,7 @@ function problem(status: number, code: string) {
 }
 function reset(next = showcase()) {
   calls.length = 0;
+  browserReads.length = 0;
   entries = next;
   failLibrary = false;
 }
@@ -248,9 +250,17 @@ const fake = Bun.serve({
       return new Response(null, { status: 200 });
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read') return pageFake(request);
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      browserReads.push({ method: request.method, path: url.pathname });
+      return pageFake(request);
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/progressSessions') {
+      browserReads.push({ method: request.method, path: url.pathname });
+      return json({ progressSessions: [], next: null });
+    }
     if (url.pathname !== '/v1/libraryEntries' || request.method !== 'GET')
       return json(problem(404, 'not_found'), 404, true);
+    browserReads.push({ method: request.method, path: url.pathname });
     calls.push({
       method: request.method,
       path: url.pathname,
@@ -415,6 +425,9 @@ async function messageOf(locale: string, key: string): Promise<string> {
 function libraryReads() {
   return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryEntries');
 }
+function readsTo(path: string) {
+  return browserReads.filter((call) => call.path === path);
+}
 
 afterAll(async () => {
   fake.stop(true);
@@ -508,6 +521,28 @@ test(
     expect(page.html).toContain('name="q"');
     expect(personal(page.html)).toBeUndefined();
     expect(page.html).not.toContain('Newest read');
+  },
+  timeout,
+);
+
+test(
+  'a browser home render reads its public page once, then bounds signed-in Continue reads',
+  async () => {
+    await site();
+    reset();
+    const signedOut = await readPage('/en');
+    expect(signedOut.status).toBe(200);
+    expect(browserReads).toEqual([{ method: 'POST', path: '/v1/pages:read' }]);
+
+    const cookie = await alice();
+    reset(crowded());
+    const signedIn = await readPage('/en', cookie);
+    expect(signedIn.status).toBe(200);
+    expect(readsTo('/v1/pages:read')).toHaveLength(1);
+    expect(libraryReads()).toHaveLength(1);
+    expect(libraryReads()[0]).toMatchObject({ limit: '6', state: 'in_progress' });
+    expect(readsTo('/v1/progressSessions')).toHaveLength(6);
+    expect(browserReads).toHaveLength(8);
   },
   timeout,
 );

@@ -89,6 +89,7 @@
   "home_continue_volume": "第{amount}卷",
   "home_continue_volume_of": "{amount}/{total} 卷",
   "home_heading": "看清真正重要的事",
+  "home_meta_description": "发现图书、动画、视觉小说和食谱，找到真正触动你的故事与想法。",
   "home_section_count": "共 {count} 项",
   "home_section_row": "{title}条目",
   "home_see_all": "查看全部",

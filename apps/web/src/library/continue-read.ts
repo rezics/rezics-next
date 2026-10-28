@@ -1,5 +1,6 @@
+import { queryOptions } from '@tanstack/react-query';
 import type { KernelClient } from '@rezics/client';
-import type { RoutePageLoad } from '../features/pages/route';
+import { personalRead } from '../kernel/query';
 import type { SubjectSummary } from '../media/summary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -24,6 +25,15 @@ export type ContinueEntry = {
   summary: SubjectSummary;
   progress: ContinueProgress | null;
 };
+
+export function homeContinueQuery(locale: string, read: () => Promise<ContinueEntry[]>) {
+  return queryOptions({
+    ...personalRead,
+    enabled: personalRead.enabled,
+    queryKey: ['home-continue', locale],
+    queryFn: read,
+  });
+}
 
 type RawSubject = {
   id: string;
@@ -107,15 +117,4 @@ export async function loadContinue(
   } catch {
     return [];
   }
-}
-
-/** The home page read and the library read start together. */
-export async function loadHome(
-  client: KernelClient,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  readPage: () => Promise<RoutePageLoad>,
-): Promise<{ page: RoutePageLoad; continue: ContinueEntry[] }> {
-  const [page, resume] = await Promise.all([readPage(), loadContinue(client, request, sessionEnv)]);
-  return { page, continue: resume };
 }

@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { loadRoutePage } from '../src/features/pages/route.tsx';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadHome } from '../src/library/continue-read.ts';
+import { homeContinueQuery, loadContinue } from '../src/library/continue-read.ts';
 import type { SessionEnv } from '../src/session/client.ts';
 import { newCsrfToken } from '../src/session/csrf.ts';
 import type { SessionStore } from '../src/session/store.ts';
@@ -12,12 +13,8 @@ const sessionId = 'a'.repeat(43);
 const sizes = [1, 10, 100];
 const stamp = '2026-04-02T15:04:05.000Z';
 const csrf = newCsrfToken();
-// The home page's own read is one pages:read. The library row adds one library read and one progress read for each
-// card shown (at most six, whatever the size of the library), and the session read they need.
-const signedOutBound = { D: 0, K: 1, R: 0, A: 0 };
-const signedInBound = (cards: number) => ({ D: 1, K: 2 + cards, R: 0, A: 0 });
 
-test('the home page reads the library once per view whatever the size of the library', async () => {
+test('the public page query and browser Continue query keep their separate read bounds', async () => {
   const counts = { D: 0, K: 0, R: 0, A: 0 };
   let size = 1;
   const reads: URL[] = [];
@@ -120,31 +117,38 @@ test('the home page reads the library once per view whatever the size of the lib
   for (const scale of sizes) {
     size = scale;
     reset();
-    const signedIn = await loadHome(
-      client,
-      new Request('https://site.example.test/en', {
-        headers: { cookie: `__Host-rezics_session=${sessionId}` },
-      }),
-      env,
-      () => loadRoutePage(client, '/'),
-    );
-    expect(signedIn.page.kind).toBe('page');
-    expect(signedIn.continue).toHaveLength(Math.min(scale, 6));
+    const page = await loadRoutePage(client, '/');
+    expect(page.kind).toBe('page');
+    expect(paths).toEqual(['POST /v1/pages:read']);
+    expect(counts).toEqual({ D: 0, K: 1, R: 0, A: 0 });
+
+    reset();
+    const signedInRequest = new Request('https://site.example.test/en', {
+      headers: { cookie: `__Host-rezics_session=${sessionId}` },
+    });
+    const query = homeContinueQuery('en', () => loadContinue(client, signedInRequest, env));
+    const resume = await new QueryClient().fetchQuery(query);
+    expect(resume).toHaveLength(Math.min(scale, 6));
     expect(reads).toHaveLength(1);
     expect(progress).toHaveLength(Math.min(scale, 6));
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeGreaterThan(0);
     expect(Number(reads[0]!.searchParams.get('limit'))).toBeLessThanOrEqual(6);
     expect(reads[0]!.searchParams.get('state')).toBe('in_progress');
-    expect(paths.filter((path) => path === 'POST /v1/pages:read')).toHaveLength(1);
-    expect(counts).toEqual(signedInBound(Math.min(scale, 6)));
+    expect(paths.filter((path) => path === 'POST /v1/pages:read')).toHaveLength(0);
+    expect(counts).toEqual({ D: 1, K: 1 + Math.min(scale, 6), R: 0, A: 0 });
 
     reset();
-    const signedOut = await loadHome(client, new Request('https://site.example.test/en'), env, () =>
-      loadRoutePage(client, '/'),
+    const signedOutPage = await loadRoutePage(client, '/');
+    expect(signedOutPage.kind).toBe('page');
+    expect(paths).toEqual(['POST /v1/pages:read']);
+    expect(counts).toEqual({ D: 0, K: 1, R: 0, A: 0 });
+
+    reset();
+    const signedOutQuery = homeContinueQuery('en', () =>
+      loadContinue(client, new Request('https://site.example.test/en'), env),
     );
-    expect(signedOut.page.kind).toBe('page');
-    expect(signedOut.continue).toEqual([]);
+    expect(await new QueryClient().fetchQuery(signedOutQuery)).toEqual([]);
     expect(reads).toHaveLength(0);
-    expect(counts).toEqual(signedOutBound);
+    expect(counts).toEqual({ D: 0, K: 0, R: 0, A: 0 });
   }
 });

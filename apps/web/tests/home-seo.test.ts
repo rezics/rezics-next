@@ -32,7 +32,7 @@ test('the home page publishes localized site metadata and one WebSite graph', as
       '@type': 'WebSite',
       name: 'REZICS',
       alternateName: 'rezics.com',
-      url: `${origin}/${locale}/`,
+      url: `${origin}/${locale}`,
       inLanguage: locale,
       potentialAction: {
         '@type': 'SearchAction',

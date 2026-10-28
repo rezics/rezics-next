@@ -159,12 +159,17 @@ export function subjectJsonLd({
 
 /** Describe the localized site home and its search entry point. */
 export function homeJsonLd({ origin, locale }: { origin: string; locale: string }): Record<string, JsonValue> {
+  const site = origin.replace(/\/+$/, '');
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
+    name: 'REZICS',
+    alternateName: 'rezics.com',
+    url: `${site}/${encodeURIComponent(locale)}`,
+    inLanguage: locale,
     potentialAction: {
       '@type': 'SearchAction',
-      target: `${origin.replace(/\/+$/, '')}/${encodeURIComponent(locale)}/search?q={search_term_string}`,
+      target: `${site}/${encodeURIComponent(locale)}/search?q={search_term_string}`,
       'query-input': 'required name=search_term_string',
     },
   };
