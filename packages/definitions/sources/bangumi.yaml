@@ -29,7 +29,8 @@ notes:
     keys cover the published templates, not arbitrary user-created wiki keys.
   - A mapping is one decision. Existing means bundled on the named type; proposed includes missing profile bindings and
     qualifiers even where the property is already bundled on another type.
-  - Music and live-action subjects are omitted; real people remain available as credited creators and voice actors.
+  - Initial subject import scope is type 1 (book), type 2 (anime) and type 4 (game); type 3 (music) and type 6 (live-action)
+    are omitted. Real people remain available as credited creators and voice actors.
   - Source strings used as field keys, template names and role labels retain their original spelling. All descriptive
     prose is English.
   - The concept Wikidata mapping describes skos:Concept. No equivalence is asserted between a Bangumi staff role concept
@@ -40,10 +41,13 @@ notes:
     qualifiers come only from a supporting wiki credit, never a fabricated value.
   - Subject-character order is zero-based, not necessarily contiguous, and sorted within role. Convert only the base,
     retaining gaps. Episode sort is a source ordinal and may be fractional.
-  - Raw infobox strings are parsed by template; unsupported custom keys must be reported with an omission reason. Image/cover
-    keys always feed the cover group. No image bytes or cover URL are exported by these eight files.
-  - Summaries and episode descriptions are attributed CC BY-SA 3.0 documents. Source work copyright notices do not override
-    the archive licence. Covers depicting copyrighted works retain the rights described by the primary copyright notice.
+  - Raw infobox strings are parsed by template; unsupported custom keys must be reported with an omission reason.
+    Covers come only from Bangumi's published cover-image field, never raw infobox image/cover keys. The import provider
+    owns obtaining that published field; the eight pinned archive files export neither cover URLs nor image bytes.
+  - Summaries and episode descriptions are attributed CC BY-SA 3.0 documents. CC BY-SA attribution is carried by the
+    subject's source record in its Sources section, never inferred from raw infobox copyright text. Source work copyright
+    notices do not override the archive licence. Covers depicting copyrighted works retain the rights described by the
+    primary copyright notice.
   - Schema to Wikidata mappings marked close preserve source distinctions and do not assert RDF equivalence.
   - Unknown observed association codes are explicitly omitted. The API CharacterType definition takes precedence over
     the abbreviated Archive README example for ships and organizations.
@@ -103,7 +107,8 @@ vocabulary:
     term: schema:image
     'on': schema:Book
     wikidata: wd:P18
-    meaning: Every source image or cover key feeds the cover group; the pinned archive has no top-level image field.
+    meaning: Bangumi's published cover-image field feeds the cover group, never raw infobox image/cover keys; the import
+      provider obtains it outside the eight pinned archive files, which export neither cover URLs nor image bytes.
     licence:
       id: LicenseRef-Source-Image-Rights
       url: https://bgm.tv/about/copyright
