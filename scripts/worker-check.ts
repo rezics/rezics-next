@@ -318,7 +318,6 @@ export async function runWorkerCheck(
     }
   }
   rmSync(peakFile, { force: true });
-  const relativeLogPath = relative(root, file);
   if (reportOutput) {
     process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
     if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
