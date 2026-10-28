@@ -283,3 +283,20 @@ installs lifecycle truth or replaces Access with a callback. All lifecycle outco
 The sole obsolete aggregate expectation is reconciled to the owning omission rule above. The first slice
 changes no roles, grants or action catalogues. Lifecycle authority integration must be explicit before any
 later change to frozen editorial catalogues.
+
+The split-file validation passed root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks.
+The exact four-file managed acceptance command acquired host `b` after 614.882 seconds, uploaded successfully
+in 100.377 seconds and completed in 115.519 seconds with exit 1: two passes and seventeen expected native
+failures across all nineteen tests. No transport failure or 503 response occurred in this corrected run.
+
+All three `lifecycle-state.test.ts` tests reached the absent `readSemanticLifecycle` export after native setup;
+`growth-lifecycle-state.test.ts` independently reached it after 64 native proposals. These are missing-reader
+reds, not missing-route outcomes. Later result, mismatch and role-revocation assertions remain required but
+cannot execute past that first failure. No 512/4096 growth measurement is claimed.
+
+The original files separately reported ten missing-route failures, the missing retention adapter after native
+account confirmation at the unchanged T, and the scoped-field regression (the candidate was omitted instead
+of retaining its uncovered references). Both account-agent invariants passed. The paused-consumer regression
+verified raw internal count 1 and public `links:[]`, then failed because the backend still returned
+`count:{value:1,exact:true}` instead of omitting `count`. These production gaps already exist on the base;
+this specification changes no production behavior and does not certify the unexecuted later outcomes.
