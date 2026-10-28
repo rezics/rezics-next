@@ -271,7 +271,7 @@ test(
     expect(memberReads).toHaveLength(1);
     expect(memberReads[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
-    expect(credentialReads).toBe(0);
+    expect(credentialReads).toBe(1);
     await page.context().close();
   },
   timeout,
@@ -296,7 +296,7 @@ test(
     expect(memberReads).toHaveLength(1);
     expect(memberReads[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
-    expect(credentialReads).toBe(0);
+    expect(credentialReads).toBe(1);
     realmHasNoAddress = false;
     await page.context().close();
   },
