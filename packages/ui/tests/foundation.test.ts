@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -124,7 +124,6 @@ const probe = join(components, 'accessibility-probe.stories.tsx');
 const fixture = join(root, 'tests', 'fixtures', 'accessibility-probe.stories.tsx');
 const output = mkdtempSync(join(tmpdir(), 'rezics-ui-stories-'));
 afterAll(() => {
-  rmSync(probe, { force: true });
   rmSync(output, { recursive: true, force: true });
 });
 
@@ -143,19 +142,9 @@ test('every ported component has stories that pass as accessible browser tests',
   }
 
   // A control without an accessible name must fail its story: accessibility violations are errors.
-  writeFileSync(
-    probe,
-    [
-      "import type { Meta, StoryObj } from '@storybook/react-vite';",
-      '',
-      'const meta = { title: \'Probe/Unnamed control\', render: () => <button type="button" /> } satisfies Meta;',
-      'export default meta;',
-      'export const UnnamedControl: StoryObj<typeof meta> = {};',
-      '',
-    ].join('\n'),
-  );
   const report = join(output, 'stories.json');
-  const status = () => execFileSync('git', ['status', '--porcelain'], { cwd: join(root, '..', '..'), encoding: 'utf8' });
+  const status = () =>
+    execFileSync('git', ['status', '--porcelain'], { cwd: join(root, '..', '..'), encoding: 'utf8' });
   const statusBefore = status();
   const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`], {
     cwd: root,
@@ -168,7 +157,6 @@ test('every ported component has stories that pass as accessible browser tests',
     new Response(run.stderr).text(),
     run.exited,
   ]);
-  rmSync(probe, { force: true });
   expect(status(), 'the story run must not change repository files').toBe(statusBefore);
   expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
 

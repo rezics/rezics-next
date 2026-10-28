@@ -23,7 +23,10 @@ const shadcnEntries = [
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
-  stories: ['../src/**/*.stories.tsx'],
+  stories: [
+    '../src/**/*.stories.tsx',
+    ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),
+  ],
   addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
   core: { disableTelemetry: true },
   async viteFinal(config) {
