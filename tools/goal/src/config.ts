@@ -225,9 +225,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
         ...(policy.reservePerHour === undefined
           ? {}
           : { reservePerHour: positive(policy.reservePerHour, 'reservePerHour') }),
-        ...(policy.maxBurnPerHour === undefined
-          ? {}
-          : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
+        ...(policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
       },
     };
   });
