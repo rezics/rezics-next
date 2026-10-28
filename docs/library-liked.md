@@ -133,7 +133,13 @@ kinds, unprofiled subjects, thread/post controls, fact separation, useful signed
 real revoked suspended bearer. No driver injection, model, permission map, fake gate, successful fallback,
 skip or caught-as-pass path supplies acceptance.
 
-The committed fixture opens Collections through its actual governor. Its current export does **not** expose
+The committed fixture opens Collections through its actual governor. Before any Liked assertion can run,
+that governor's `POST /v1/platform/exposure/collections:open` must return 200 using native authorization.
+A 403 `forbidden` from that setup call is a shared fixture prerequisite failure, not a reached missing-Liked
+assertion or evidence that an owner should be denied. The shared producer must supply effective setup
+authority through its committed fixture; consumers cannot compensate with gate grants or a second bootstrap.
+
+Its current export does **not** expose
 the native pool/read-only inspection capability or a shared opener for other required families. It also has
 no same-owner read-only token factory. Those are shared fixture producer gaps: a native `platform_closed`
 response during required Library/progress setup is a prerequisite failure, not an owner-denial or empty-list
