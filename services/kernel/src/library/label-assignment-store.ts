@@ -63,15 +63,17 @@ export async function setLabelAssignment(
     subject_id: input.subjectId,
     label_id: input.labelId,
   };
-  await guard.run(db, tuple);
+  const guarded = await guard.run(db, tuple);
+  const labelId = guarded[0]?.labelId;
+  if (!labelId) throw new Error('Label assignment guard returned no canonical label identity');
   const rows = await reservations.run(db, tuple);
-  const desired = rows.find((row) => row.labelId === input.labelId.toLowerCase());
+  const desired = rows.find((row) => row.labelId === labelId);
   const locked = await parents.run(db, {
     ...tuple,
-    label_ids: [...new Set([...rows.map((row) => row.labelId), input.labelId.toLowerCase()])],
+    label_ids: [...new Set([...rows.map((row) => row.labelId), labelId])],
   });
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
-  const parent = current.get(input.labelId.toLowerCase());
+  const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
   // Legacy tuples require a separate bounded cutover; reads never stamp identities or claims.
   if (desired && (desired.id === null || (desired.deletedAt === null && desired.slotNo === null)))

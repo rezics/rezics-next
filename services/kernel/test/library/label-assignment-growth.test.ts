@@ -151,6 +151,9 @@ test('retained reassignment keeps identity and creation time; missing and legacy
       context,
     );
     expect(upper.kind).toBe('existing');
+    expect(
+      (await setLabelAssignment(c, { ...input(22, 200), labelId: id(200).replaceAll('-', '') }, context)).kind,
+    ).toBe('existing');
   });
 });
 
