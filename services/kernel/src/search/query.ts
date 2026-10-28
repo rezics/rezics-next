@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
+import { admitFacetPayload, admitSearchPayload, admitSuggestPayload, requireSearchOverflow } from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
@@ -148,6 +149,8 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
     )
     .then(({ body }) => {
       assertCompleteSearch(body);
+      admitSearchPayload(body, plan, prefix);
+      const overflow = hasOverflow ? requireSearchOverflow(body) : false;
       return {
         ...(plan.generation === undefined ? {} : { generation: plan.generation }),
         hits: body.hits.hits.map((hit) => ({
@@ -159,7 +162,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
           value: body.hits.total.value,
           relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact',
         },
-        ...(hasOverflow ? { overflow: body.aggregations!.overflow.doc_count > 0 } : {}),
+        ...(hasOverflow ? { overflow } : {}),
       };
     });
 }
@@ -183,6 +186,7 @@ export function suggestSubjects(
     )
     .then(({ body }) => {
       assertCompleteSearch(body);
+      admitSuggestPayload(body, plan.size, prefix);
       return body.hits.hits.map(subjectHit);
     });
 }
@@ -281,6 +285,7 @@ export async function countFacets(
     { query: { allow_partial_search_results: false } },
   );
   assertCompleteSearch(body);
+  admitFacetPayload(body, plan);
   const unresolved = (body.aggregations.filter_overflow?.doc_count ?? 0) > 0;
   const total: SearchResult['total'] = unresolved
     ? { value: Math.min(TOTAL_LIMIT, body.aggregations.definite!.doc_count), relation: 'lower_bound' }
