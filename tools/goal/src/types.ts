@@ -129,6 +129,8 @@ export type Task = {
   taskClass: TaskClass;
   currentAttempt: number;
   createdAt: string;
+  /** A held contract change is recorded on the next attempt once its dependencies are met. */
+  pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
   integratedBase?: string;
   integratedCommits?: string[];
   integratedCommit?: string;
@@ -195,6 +197,8 @@ export type PromotionRun = {
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
+  previousBriefHash?: string;
+  newBriefHash?: string;
   supersededFinalized?: boolean;
   affectedTests?: AffectedTestResult[];
   failureKind?: AttemptFailure | null;
