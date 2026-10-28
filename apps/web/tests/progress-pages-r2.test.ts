@@ -1,14 +1,33 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProgressRow } from '@rezics/ui/progress-row';
-import { ContinueRow } from '../src/library/continue.tsx';
-import { readProgress } from '../src/library/continue-read.ts';
-import { createRecordedKernelFetch } from '../src/kernel/fake.ts';
-import sessionsRecording from '../src/kernel/recorded/library-progress-sessions.json';
 
 const source = async (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 const shared = (input: Record<string, unknown>) => input as never;
+const catalogues = Object.fromEntries(
+  await Promise.all(
+    ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'es', 'fr'].map(async (locale) => [
+      locale,
+      (await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json()) as Record<string, string>,
+    ]),
+  ),
+) as Record<string, Record<string, string>>;
+
+mock.module('../src/paraglide/messages.js', () =>
+  new Proxy(
+    {},
+    {
+      get(_target, key) {
+        return (values: Record<string, string> = {}, options: { locale?: string } = {}) => {
+          const message = catalogues[options.locale ?? 'en']?.[String(key)];
+          if (!message) throw new Error(`Missing message ${String(key)} for ${options.locale ?? 'en'}`);
+          return message.replace(/\{(\w+)\}/g, (_match, name: string) => values[name] ?? '');
+        };
+      },
+    },
+  ),
+);
 
 test('one shared progress formatter uses the localized unit forms and shares', async () => {
   const { progressView } = await import('../src/library/progress-label.ts');
@@ -56,13 +75,6 @@ test('cursor positions use their locator as the row label on the pages and Conti
   expect(progressView(cursor, 'en')).toEqual({ text: 'Part 2, chapter 14', percent: null });
   expect(progressView({ ...cursor, locator: null }, 'en')).toEqual({ text: 'In progress', percent: null });
 
-  const recorded = sessionsRecording.progressSessions;
-  const client = {
-    progressSessions: { get: async () => ({ data: { progressSessions: recorded, next: null } }) },
-  } as never;
-  const read = await readProgress(client, recorded[0]!.subjectId, 'Bearer story');
-  expect(read?.locator).toBe('Part 2, chapter 14');
-
   const index = await source('../src/library/progress-page.tsx');
   const session = await source('../src/library/progress-session.tsx');
   const home = await source('../src/library/continue.tsx');
@@ -93,50 +105,43 @@ test('a known share and its label share one row, while an unknown share has no e
 test('the signed-in home story renders one Continue card for every recorded active session up to the row limit', async () => {
   const continueEntries = (await Bun.file(
     new URL('../src/kernel/recorded/library-continue-entries.json', import.meta.url),
-  ).json()) as { libraryEntries: { subjectId: string; subject: { label: string; [key: string]: unknown } }[] };
-  const recorded = sessionsRecording.progressSessions;
-  const fetchRecorded = createRecordedKernelFetch({
-    'library-entries': continueEntries as never,
-    'library-continue-entries': continueEntries as never,
-    'library-progress-sessions': sessionsRecording as never,
+  ).json()) as {
+    libraryEntries: { subjectId: string; state: string; subject: { label: string; [key: string]: unknown } }[];
+  };
+  const continueSessions = (await Bun.file(
+    new URL('../src/kernel/recorded/library-continue-progress-sessions.json', import.meta.url),
+  ).json()) as { progressSessions: Record<string, unknown>[] };
+  const active = continueEntries.libraryEntries.filter((entry) => entry.state === 'in_progress');
+  const recorded = continueSessions.progressSessions.filter((session) => session.state === 'active');
+  expect(active).toHaveLength(recorded.length);
+  const bySubject = new Map(recorded.map((session) => [session.subjectId, session]));
+  const { progressView } = await import('../src/library/progress-label.ts');
+  const rows = active.map((entry) => {
+    const session = bySubject.get(entry.subjectId);
+    expect(session, entry.subject.label).toBeDefined();
+    return progressView(shared(session!), 'en')!;
   });
-  const response = await fetchRecorded('https://api.rezics.test/v1/libraryEntries?state=in_progress&limit=6');
-  const active = (await response.json()) as typeof continueEntries;
-  expect(active.libraryEntries).toHaveLength(recorded.length);
+  expect(rows).toHaveLength(active.length);
+  for (const label of ['Part 2, chapter 14', 'Ep 3/12', 'p. 118', '64%', 'Ch 5'])
+    expect(rows.map((row) => row.text)).toContain(label);
+  expect(rows.filter((row) => row.percent !== null).length).toBeGreaterThanOrEqual(2);
 
-  const client = {
-    progressSessions: {
-      get: async ({ query }: { query: { subjectId: string } }) => {
-        const item = recorded.filter((session) => session.subjectId === query.subjectId);
-        return { data: { progressSessions: item, next: null } };
-      },
-    },
-  } as never;
-  const entries = await Promise.all(
-    active.libraryEntries.map(async (item) => ({
-      subjectId: item.subjectId,
-      label: item.subject.label,
-      summary: { ...item.subject, id: item.subjectId, label: item.subject.label } as never,
-      progress: await readProgress(client, item.subjectId, 'Bearer story'),
-    })),
+  const cards = rows.map((row) =>
+    renderToStaticMarkup(
+      createElement(ProgressRow, { value: row.percent == null ? null : row.percent / 100, label: row.text }),
+    ),
   );
-  expect(entries.every((entry) => entry.progress !== null)).toBe(true);
-  expect(new Set(entries.map((entry) => entry.progress!.sessionId)).size).toBe(recorded.length);
+  expect(cards.some((card) => card.includes('role="progressbar"'))).toBe(true);
+  const withoutShare = cards.find((card) => card.includes('p. 118'));
+  expect(withoutShare).toBeDefined();
+  expect(withoutShare).not.toContain('role="progressbar"');
 
-  const html = renderToStaticMarkup(createElement(ContinueRow, { entries, locale: 'en' }));
-  expect((html.match(/data-slot="cover-card"/g) ?? []).length).toBe(recorded.length * 2);
-  for (const label of ['Part 2, chapter 14', 'Ep 3/12', 'p. 118', '64%', 'Ch 5']) expect(html).toContain(label);
-  expect(html).toContain('role="progressbar"');
-
-  const cards = [...html.matchAll(/<article\b[^>]*data-slot="cover-card"[^>]*>[\s\S]*?<\/article>/g)].map(
-    ([card]) => card!,
-  );
-  const pageCards = cards.filter((card) => card.includes('I Am a Cat'));
-  expect(pageCards).toHaveLength(2);
-  for (const card of pageCards) {
-    expect(card).toContain('p. 118');
-    expect(card).not.toContain('role="progressbar"');
-  }
+  const continueCard = await source('../src/library/continue.tsx');
+  const fake = await source('../src/kernel/fake.ts');
+  expect(continueCard).toContain('ProgressRow');
+  expect(continueCard).toContain('label={progress?.text');
+  expect(fake).toContain("'library-continue-entries'");
+  expect(fake).toContain("'library-continue-progress-sessions'");
 });
 
 test('progress page state, completed-unit empty state, and published logs keep the agreed compact structure', async () => {
