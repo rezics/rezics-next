@@ -1305,6 +1305,20 @@ export class MergeTrain {
           }
           if (checked.status === 'passed') continue;
           stage = 'gate';
+          // A failure that names no test file (a setup or migration failure) has nothing bounded to compare on the
+          // base: comparing it ran the whole kernel suite inside the train. Transport, disk and load failures are
+          // already unverified, environment or rerun, so what remains is refused with its output and no base run.
+          if (!checked.failingFiles.length) {
+            const tail = checked.output
+              .split('\n')
+              .filter((line) => line.trim())
+              .slice(-20);
+            affectedFailures.push(
+              `${checked.command.join(' ')} failed without naming a test file:\n${tail.join('\n')}`,
+            );
+            result.failedCommand ??= [...checked.command];
+            continue;
+          }
           // A base compared with itself selects no affected tests, so the base runs the files that failed on the
           // branch by name. The whole suite cost a full kernel run inside the serial train on every landing, because
           // dev moves with each landing and a full base result was almost never reused.
@@ -1347,10 +1361,8 @@ export class MergeTrain {
           if (target() !== base) break;
           const baseFiles = new Set(failingTestFiles(baseline.output));
           const added = checked.failingFiles.filter((file) => baseline.passed || !baseFiles.has(file));
-          // A compiler or setup error may stop the check before the test runner reports any files.
-          const errors = checked.failingFiles.length ? [] : newErrorLines(checked.output, baseline.output);
-          if (added.length || errors.length || (!checked.failingFiles.length && baseline.passed)) {
-            affectedFailures.push(...(added.length ? added : errors.length ? errors : [checked.output]));
+          if (added.length) {
+            affectedFailures.push(...added);
             result.failedCommand ??= [...checked.command];
           } else appendFileSync(logPath, 'Base already shares the affected-test failures\n');
         }

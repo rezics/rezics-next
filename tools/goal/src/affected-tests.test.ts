@@ -201,6 +201,34 @@ test('the base runs only the files that failed on the branch, and the same files
   }
 }, 60_000);
 
+test('a failure that names no test file is refused with its output and runs no baseline on the base', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
+    const argv = command(`
+      const fs = require('node:fs');
+      fs.appendFileSync(${JSON.stringify(runs)}, process.cwd() + '\\n');
+      if (!fs.existsSync('broken')) process.exit(0);
+      console.error('error: the check stopped before any test file ran');
+      process.exit(1);
+    `);
+    h.settings.affectedTests = [{ paths: ['**'], command: argv }];
+    const task = h.dispatch('broken');
+    await h.start(task);
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(false);
+    expect(h.outcomes[0]!.failedCommand).toEqual(argv);
+    expect(h.outcomes[0]!.firstFailure!.assertion + h.outcomes[0]!.firstFailure!.excerpt).toContain(
+      'the check stopped before any test file ran',
+    );
+    // Only the attempt's own check ran: an unbounded baseline once ran the whole kernel suite inside the train.
+    expect(lines(runs)).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
 test('a check-host transport failure is retried once, then lands unverified with a log note', async () => {
   const h = integrationHarness();
   try {
