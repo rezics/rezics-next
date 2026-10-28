@@ -194,7 +194,13 @@ beforeAll(async () => {
     [legacy, bundledDigest, tx],
   );
   for (const fact of facts) {
-    const row = { ...fact, route: 15, subject_id: legacy, recorded_transaction_id: tx };
+    const row = {
+      ...fact,
+      body: JSON.stringify(fact.body),
+      route: 15,
+      subject_id: legacy,
+      recorded_transaction_id: tx,
+    };
     const keys = Object.keys(row);
     await db.admin.query(
       `INSERT INTO semantic.fact (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,

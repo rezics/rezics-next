@@ -125,6 +125,7 @@ async function coldSource() {
   for (const fact of facts) {
     const row = {
       ...fact,
+      body: JSON.stringify(fact.body),
       route: 0,
       subject_id: id,
       recorded_transaction_id: tx,
