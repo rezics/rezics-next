@@ -370,9 +370,10 @@ async function captureFailure(
     ).toHaveLength(1);
     expect(
       (
-        await admin.query("SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1", [
-          actor.accountId,
-        ])
+        await admin.query(
+          "SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1 AND idempotency_key=$2",
+          [actor.accountId, idempotencyKey],
+        )
       ).rows,
     ).toHaveLength(1);
     return error;
@@ -383,9 +384,10 @@ async function captureFailure(
   ).toEqual([]);
   expect(
     (
-      await admin.query("SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1", [
-        actor.accountId,
-      ])
+      await admin.query(
+        "SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1 AND idempotency_key=$2",
+        [actor.accountId, idempotencyKey],
+      )
     ).rows,
   ).toEqual([]);
   return error;
@@ -406,7 +408,7 @@ test.serial(
 test.serial('Realm join retries one Access contention during capture and admits the join', async () => {
   const unavailable = new AccessUnavailableError('contention');
   const error = await captureFailure(unavailable, { retry: true });
-  expect(error).toBeUndefined();
+  expect(error).toMatchObject({ workflowId: expect.stringMatching(/^community\.join:/) });
 });
 
 test.serial(
