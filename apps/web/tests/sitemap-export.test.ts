@@ -271,7 +271,7 @@ test('a feed that fails after retries leaves the previous index and every file i
   for (const [key, body] of previousFiles) expect(store.objects.get(key)?.body).toEqual(body);
 });
 
-test('a rejected cursor restarts that feed once, while a repeated cursor and a second rejection fail', async () => {
+test('a rejected cursor restarts that feed once, while a stalled feed and a second rejection fail', async () => {
   const store = new MemoryStore();
   let rejected = false;
   const restart: SitemapExportFeed<string> = {
@@ -289,11 +289,11 @@ test('a rejected cursor restarts that feed once, while a repeated cursor and a s
   await exportSitemaps(options(store, new MemorySteps(), [restart]));
   expect(await listedFamilies(store, 'subjects')).toEqual(['subject-a']);
 
-  const repeated = pagesFeed('subjects', [
+  const stalled = pagesFeed('subjects', [
     { items: ['once'], next: 'repeat' },
     { items: ['once'], next: null },
   ]);
-  await expect(exportSitemaps(options(new MemoryStore(), new MemorySteps(), [repeated]))).rejects.toThrow(
+  await expect(exportSitemaps(options(new MemoryStore(), new MemorySteps(), [stalled]))).rejects.toThrow(
     /no progress/i,
   );
 

@@ -225,6 +225,35 @@ test('keyed segment state stays bounded as the feed grows', async () => {
   expect(sizes[2]).toBe(sizes[0]);
 });
 
+test('legacy segment state resumes without carrying cursor history into progress checks', async () => {
+  const store = new MemoryStore();
+  await store.put(
+    'runs/legacy-state/state/boards.json',
+    JSON.stringify({ segment: 1, cursor: 'resume-token', cursors: ['remembered-token'], restarted: false }),
+  );
+  const cursors: (string | null)[] = [];
+  const feed: SitemapExportFeed<{ id: string }> & { key(item: { id: string }): string } = {
+    type: 'boards',
+    key: ({ id: itemId }) => `${itemId.slice(24, 28)}${itemId}`,
+    async read(cursor) {
+      cursors.push(cursor);
+      if (cursor === 'resume-token') return { items: [{ id: keyedId(1) }], next: 'remembered-token' };
+      if (cursor === 'remembered-token') return { items: [{ id: keyedId(2) }], next: null };
+      throw new Error(`unexpected cursor ${cursor}`);
+    },
+    family: () => family('/boards/example', lastModified),
+  };
+
+  const completed = await exportSitemapFeedSegment(
+    'legacy-state',
+    feed,
+    exportOptions(store, new MemorySteps(), feed),
+    1,
+  );
+  expect(completed).toBe(true);
+  expect(cursors).toEqual(['resume-token', 'remembered-token']);
+});
+
 test('item-order stalls fail for keyed feeds and repeated thread ids, regardless of cursor tokens', async () => {
   const badKeyedFeed = (
     type: 'boards' | 'realms' | 'spaces',
