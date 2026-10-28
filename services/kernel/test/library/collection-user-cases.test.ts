@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { FilterDocument } from '@rezics/filter';
 import type { CollectionView, DynamicCollectionView } from '../../../../specs/dynamic-collections-driver.ts';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { discoveryKey, type DiscoveryPersona } from '../support/released-discovery.ts';
@@ -789,6 +790,47 @@ describe('released common Collection filters preserve exact public curated Every
     async (f) => {
       const d = await selectedState(f);
       await exactPages(f, d.bookCollection.id, { and: [d.filters.words, { not: d.filters.words }] }, [], 'alice', true);
+    },
+  );
+
+  native(
+    'Own selected-state view vegetarian quick NOT completed session returns exactly quick edge other-cooked and removes cleared quick while Everything retains it',
+    async (f) => {
+      const d = await selectedState(f);
+      const history = await f.recipes();
+      expect(history.released.subjects).toEqual(d.recipes.subjects);
+      expect(history.alice.session).toMatchObject({
+        subjectId: d.recipes.subjects['R-cooked'].id,
+        state: 'completed',
+      });
+      expect(history.bob.session).toMatchObject({
+        subjectId: d.recipes.subjects['R-other-cooked'].id,
+        state: 'completed',
+      });
+      const profileId = f.profile('schema:Recipe').profile.id;
+      expect(history.alice.accepted.pin.profileId).toBe(profileId);
+      expect(history.bob.accepted.pin.profileId).toBe(profileId);
+      // Semantic now exports the actual owner-capable shared type. This is the same catalogue filter and
+      // adopted completed-session leaf, over Alice's separate accepted-state population, without new grammar.
+      const filter: FilterDocument = {
+        and: [
+          d.filters.dietTime,
+          { owner: { presence: true } },
+          { not: { owner: { session: { profileId, lifecycle: 'completed' } } } },
+        ],
+      };
+      await selectedPages(f, d.recipeCollection.id, filter, notCompletedIds(d), d.recipes.subjects['R-quick'].id);
+      // Clearing quick's selected state removes it only from that view: its native independent label still
+      // supplies presence. Neither Alice's retained cooked history nor Bob's completion changes meaning.
+      await exactPages(f, (await everything(f)).id, filter, notCompletedIds(d), 'alice', true);
+      expect(
+        status(await f.request('alice', 'GET', `/v1/progressSessions/${history.alice.session.id}`), 200).body
+          .progressSession,
+      ).toEqual(history.alice.session);
+      expect(
+        status(await f.request('bob', 'GET', `/v1/progressSessions/${history.bob.session.id}`), 200).body
+          .progressSession,
+      ).toEqual(history.bob.session);
     },
   );
 });
