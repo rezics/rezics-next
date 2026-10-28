@@ -775,9 +775,9 @@ prefix prevents generation/name reuse after retired rows are reclaimed; it is bo
 per historical generation.
 
 `coverage-store.ts` exports only `createCoverageStore(pool)`, `CoverageStore`, `CoverageGuard`, `HomeGuard`
-and `CoverageObservation`. The factory currently throws retryable `index_not_ready` from every method; it never
-simulates a DB. The independent storage implementation must satisfy `test/search/coverage-store.test.ts` against
-the actual migrated database. These tests supply storage observations, not native readiness certificates. Native
+and `CoverageObservation`. The factory implements durable current state in PostgreSQL with short transactions,
+closed bigint codecs and conditional lifecycle/home writes. `test/search/coverage-store.test.ts` exercises the
+actual migrated database. These tests supply storage observations, not native readiness certificates. Native
 Scope run/populate/certify remain unavailable until the actual producer lands.
 
 The store methods are `readPrefix`, `allocate`, `readLineage`, `register`, `population`, `transition`, `reclaim`,
@@ -844,11 +844,12 @@ guards return null as identity mismatches. Never bind a new generation to an old
 Population after is a UUID or null. Validate nested shapes,
 range ordering and these bounds on input and decode; malformed stored state fails closed, never coerces.
 
-The follow-up implementation slice targets <=400 lines across <=8 files: one migration, this store module,
-up to four typed SQL modules (allocation/lifecycle, home reads/enrollment, attempt outcomes, promotion/cleanup),
-the owning database schema snapshot if required, and these native tests. Keep only current fixed state; splitting
-SQL does not authorize identity-table SQL, coordinator changes or a second protocol. If typed SQL/schema overhead
-exceeds this budget, report it before expanding the slice.
+The storage implementation uses the owning migration/schema snapshot, `coverage-store.ts`, a closed codec
+module and five typed point SQL modules for allocation, registration, home reads, attempts and promotion. Prefix
+row locks serialize allocation/admission; lifecycle row locks fence home CAS and reclamation. Home reads also
+bracket their point read with the lifecycle lock. Transactions contain database work only and release the
+connection before any caller can perform engine I/O. The coordinator, reader and engine lifecycle remain
+unavailable specification stubs; durable observations alone cannot certify native coverage.
 
 ### Event fence and producer state machine
 
@@ -1055,7 +1056,10 @@ composition passes. Original frozen assertions and the existing thirteen plus si
 ### Cost: coverage writes and lifecycle
 
 - Touches: store allocation/admission serializes bounded prefix controls and at most three retained lifecycle
-  rows; point home mutations touch one current row plus its lifecycle guard, not history. Each real attempt performs enrollment, native source observations, bounded source chunks, actual bulk
+  rows; point home mutations lock/read one lifecycle row and one home, then conditionally write that home.
+  Each mutation includes BEGIN/COMMIT (or rollback); reclamation holds the prefix and lifecycle locks while
+  deleting at most 4096 homes and the lineage. No transaction holds a connection across HTTP. Each real attempt
+  performs enrollment, native source observations, bounded source chunks, actual bulk
   and refresh, checkpoint CAS outcome and conditional completion/promotion. Charge checkpoint, incarnation and
   attempt reads/writes separately, including failed/CAS-lost/ambiguous attempts. Source payload/history and physical
   engine work retain their existing costs.
