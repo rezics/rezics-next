@@ -12,6 +12,8 @@ import platformProfileJson from '@rezics/composition/profiles/platform.json' wit
 import type { Related, Subject, Summary } from '../subject/types';
 import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
 import { answerFakeRoute, mergeFakeFixtures } from './fake-modules.ts';
+import defaultFixtures from './fixtures.json' with { type: 'json' };
+import { languageList, localizeRecording } from './fake/languages.ts';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
@@ -348,6 +350,27 @@ async function selectRecording(
 ): Promise<KernelRecording | undefined> {
   const moduleRecording = await answerFakeRoute('story', request, recordings);
   if (moduleRecording) return moduleRecording;
+  if (request.method === 'POST' && pathname === '/v1/subjects:search') {
+    const body: unknown = await request
+      .clone()
+      .json()
+      .catch(() => undefined);
+    if (isRecord(body) && typeof body.text === 'string') {
+      const type = filterType(body.filter);
+      const recording = Object.values(recordings).find(
+        (candidate) =>
+          candidate.query === body.text &&
+          (candidate.filterType ?? undefined) === type &&
+          Array.isArray(candidate.subjects),
+      );
+      if (recording) {
+        const languages = languageList(body.languages);
+        return languages.length > 0
+          ? localizeRecording(recording, languages, defaultFixtures as unknown as Fixtures)
+          : recording;
+      }
+    }
+  }
   const sitemap = sitemapRecording(request.method, pathname, recordings);
   if (sitemap) return sitemap;
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
@@ -1046,3 +1069,5 @@ function suggestionRead(subjects: readonly unknown[], request: Request): KernelR
   );
   return { status: 200, subjects: matches.slice(0, 8), as_of: new Date().toISOString() };
 }
+
+export { pageRead };

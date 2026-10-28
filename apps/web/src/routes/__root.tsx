@@ -30,7 +30,9 @@ const setClosedResponseStatus = createIsomorphicFn()
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
   .client(() =>
-    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
+    validatePublicOrigin(
+      new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ?? window.location.origin).origin,
+    ),
   );
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;

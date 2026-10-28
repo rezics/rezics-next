@@ -5,16 +5,21 @@ import { publicRead } from '../../kernel/query';
 import { validatePublicOrigin } from '../../shell/origin';
 import { loadRoutePage } from './route';
 
-const readHomePage = createServerFn({ method: 'GET' }).handler(async () => {
-  const { env } = await import('cloudflare:workers');
-  const page = await loadRoutePage(kernelClient(), '/');
-  const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
-  return { ...page, origin };
-});
+const readHomePage = createServerFn({ method: 'GET' })
+  .validator((locale: unknown) => {
+    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
+    return locale;
+  })
+  .handler(async ({ data: locale }) => {
+    const { env } = await import('cloudflare:workers');
+    const page = await loadRoutePage(kernelClient(locale), '/', locale);
+    const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
+    return { ...page, origin };
+  });
 
 export const homePageQuery = (locale: string) =>
   queryOptions({
     ...publicRead,
     queryKey: ['home-page', locale],
-    queryFn: () => readHomePage(),
+    queryFn: () => readHomePage({ data: locale }),
   });

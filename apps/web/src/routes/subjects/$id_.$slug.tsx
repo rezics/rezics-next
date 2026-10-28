@@ -1,7 +1,7 @@
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { isView } from '@rezics/composition';
+import { isView, type View } from '@rezics/composition';
 import {
   loadSubjectPage,
   SubjectPage,
@@ -71,7 +71,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
 
     const request = getRequest();
     const [result, library, reader, reactions] = await Promise.all([
-      loadSubjectPage(client, data.id),
+      loadSubjectPage(client, data.id, data.view as View | undefined, data.locale),
       loadSubjectLibrarySlot(
         client,
         request,

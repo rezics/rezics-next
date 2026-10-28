@@ -65,7 +65,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
       throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
 
     const [loaded, reader] = await Promise.all([
-      loadViewPages(client, data.id, data.view),
+      loadViewPages(client, data.id, data.view, data.locale),
       loadReader(client, getRequest(), env as Partial<SessionEnv>),
     ]);
     if (loaded.kind === 'missing') throw notFound();

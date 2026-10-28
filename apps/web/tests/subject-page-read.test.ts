@@ -49,7 +49,7 @@ test('a subject page is one page read rendered from its template', async () => {
     (platform.bases.find(({ base }) => base === 'schema:CreativeWork') as { views: { overview: unknown } }).views
       .overview,
   );
-  expect(subjectPageTitle(page, 'en')).toBe('Kokoro');
+  expect(subjectPageTitle(page, 'ja')).toBe('こころ');
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   expect(html).toMatch(/<h1[^>]*>Kokoro<\/h1>/);
   expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}/${slug('Natsume Sōseki')}"[^>]*>Natsume Sōseki</a>`));
