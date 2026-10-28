@@ -1533,7 +1533,13 @@ export class MergeTrain {
           if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
             throw new Error('Main checkout HEAD changed');
-          if (integratesIntoDev || controlPlane) {
+          if (controlPlane) {
+            o.beforeIntegrationAdvance?.();
+            if (target() !== base) return '';
+            // main is checked out in the main checkout, and the control plane runs from its files. Moving only the ref
+            // left the files at an older tree: four landed control-plane fixes were not running for an hour and a half.
+            git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
+          } else if (integratesIntoDev) {
             o.beforeIntegrationAdvance?.();
             try {
               git(o.mainCheckout, 'update-ref', targetRef, candidate, base);
