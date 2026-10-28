@@ -59,26 +59,40 @@ export function getOutcomeTimeoutMs(env: Readonly<Record<string, string | undefi
 function requireThat(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
-const xml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
-  .replaceAll("'", '&apos;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const xml = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 
 async function verify() {
   const timeoutMs = getOutcomeTimeoutMs(process.env);
   const args = process.argv.slice(2);
-  requireThat(args.length === 1 || args.length === 3, 'Expected <suite> [DRIVER_ENV_VARIABLE "missing-driver message"]');
+  requireThat(
+    args.length === 1 || args.length === 3,
+    'Expected <suite> [DRIVER_ENV_VARIABLE "missing-driver message"]',
+  );
   const suite = resolve(args[0]!);
   const driverEnv = args[1] ?? 'PERMISSION_DRIVER_MODULE';
   const message = args[2] ?? 'PERMISSION_DRIVER_MODULE is required: bind a real product permission driver';
-  requireThat(/^[A-Z_][A-Z0-9_]*$/.test(driverEnv) && message.trim(), 'Invalid driver variable or empty failure message');
+  requireThat(
+    /^[A-Z_][A-Z0-9_]*$/.test(driverEnv) && message.trim(),
+    'Invalid driver variable or empty failure message',
+  );
   requireThat(await Bun.file(suite).exists(), `Suite file is missing: ${suite}`);
   const source = await Bun.file(suite).text();
   requireThat(source.trim(), `Suite file is empty: ${suite}`);
-  requireThat(!/\b(?:test|it|describe)(?:\s*\.\s*\w+)*\s*\.\s*(?:skip|todo|only|skipIf)\b/.test(source),
-    'Outcome suites cannot contain skipped, todo, or exclusive scenarios');
-  const names = [...source.matchAll(/\b(?:test|it)\s*\(\s*(['"])(.*?)\1\s*,/g)].map(match => match[2]!);
+  requireThat(
+    !/\b(?:test|it|describe)(?:\s*\.\s*\w+)*\s*\.\s*(?:skip|todo|only|skipIf)\b/.test(source),
+    'Outcome suites cannot contain skipped, todo, or exclusive scenarios',
+  );
+  const names = [...source.matchAll(/\b(?:test|it)\s*\(\s*(['"])(.*?)\1\s*,/g)].map((match) => match[2]!);
   requireThat(names.length > 0 && new Set(names).size === names.length, 'Expected unique literal scenario names');
   if (driverEnv === 'PERMISSION_DRIVER_MODULE') {
-    for (const name of permissionScenarios) requireThat(names.includes(name), `Required permission scenario is missing: ${name}`);
+    for (const name of permissionScenarios)
+      requireThat(names.includes(name), `Required permission scenario is missing: ${name}`);
   }
   await mkdir('.temp', { recursive: true });
   const temporary = await mkdtemp(resolve('.temp/verify-outcome-'));
@@ -87,7 +101,10 @@ async function verify() {
     const env: Record<string, string | undefined> = { ...process.env, NO_COLOR: '1' };
     delete env[driverEnv]; // Ignore even a valid driver inherited from the caller.
     const child = Bun.spawn([process.execPath, 'test', suite, '--reporter=junit', `--reporter-outfile=${report}`], {
-      env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+      env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
     let timedOut = false;
     const deadline = performance.now() + timeoutMs;
@@ -103,33 +120,46 @@ async function verify() {
     };
     timer = setTimeout(expireOrContinue, Math.min(timeoutMs, maximumTimerDelayMs));
     const [code, stdout, stderr] = await Promise.all([
-      child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
     ]).finally(() => clearTimeout(timer));
     const output = `${stdout}\n${stderr}`;
     requireThat(!timedOut, `Missing-driver run timed out after ${timeoutMs} ms (VERIFY_OUTCOME_TIMEOUT_MS)`);
     requireThat(code !== 0, 'Expected a red run without a driver, but Bun passed');
     requireThat(output.includes(`error: ${message}`), `Expected clear missing-driver failure was absent:\n${output}`);
-    requireThat(!/^\s*[1-9]\d* errors?\b/m.test(output) &&
-      [...output.matchAll(/^error: (.*)$/gm)].every(match => match[1] === message),
-      `Unexpected syntax, import, or runtime failure:\n${output}`);
+    requireThat(
+      !/^\s*[1-9]\d* errors?\b/m.test(output) &&
+        [...output.matchAll(/^error: (.*)$/gm)].every((match) => match[1] === message),
+      `Unexpected syntax, import, or runtime failure:\n${output}`,
+    );
     requireThat(await Bun.file(report).exists(), `Bun did not produce a scenario report:\n${output}`);
     const junit = await Bun.file(report).text();
     const cases = [...junit.matchAll(/<testcase\b([^>]*)(?:\/>|>([\s\S]*?)<\/testcase>)/g)];
-    requireThat(cases.length === names.length && !/<(?:skipped|error)\b/.test(junit), 'Not every declared scenario executed');
+    requireThat(
+      cases.length === names.length && !/<(?:skipped|error)\b/.test(junit),
+      'Not every declared scenario executed',
+    );
     for (const name of names) {
-      const matches = cases.filter(entry => entry[1]!.includes(`name="${xml(name)}"`));
-      requireThat(matches.length === 1 && matches[0]![2]?.includes(`<failure type="Error" message="${xml(message)}"`),
-        `Scenario did not fail clearly for the missing driver: ${name}`);
+      const matches = cases.filter((entry) => entry[1]!.includes(`name="${xml(name)}"`));
+      requireThat(
+        matches.length === 1 && matches[0]![2]?.includes(`<failure type="Error" message="${xml(message)}"`),
+        `Scenario did not fail clearly for the missing driver: ${name}`,
+      );
     }
     console.log(`RED RUN: ${suite}\n${driverEnv} unset; Bun exited ${code}.`);
-    console.log(`error: ${message}\n${cases.length} scenarios failed for the expected missing driver; zero skips/todos.`);
-    console.log('Specification verifier PASS. Product acceptance remains RED until the suite passes with a real driver.');
+    console.log(
+      `error: ${message}\n${cases.length} scenarios failed for the expected missing driver; zero skips/todos.`,
+    );
+    console.log(
+      'Specification verifier PASS. Product acceptance remains RED until the suite passes with a real driver.',
+    );
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
 }
 if (import.meta.main) {
-  await verify().catch(error => {
+  await verify().catch((error) => {
     console.error(`Specification verifier FAIL: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });

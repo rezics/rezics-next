@@ -56,15 +56,12 @@ test('a red run that outlives its limit fails naming the limit and the variable'
       ].join('\n'),
     );
     const limit = 250;
-    const child = Bun.spawn(
-      [process.execPath, verifier, suite, 'TEST_DRIVER', 'TEST_DRIVER is required'],
-      {
-        env: { ...process.env, VERIFY_OUTCOME_TIMEOUT_MS: String(limit) },
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
+    const child = Bun.spawn([process.execPath, verifier, suite, 'TEST_DRIVER', 'TEST_DRIVER is required'], {
+      env: { ...process.env, VERIFY_OUTCOME_TIMEOUT_MS: String(limit) },
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const [code, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
