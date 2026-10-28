@@ -394,6 +394,7 @@ export {
   type ResourceCreationPort,
 } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
+export { resourceRoleHeld } from './resource-role-held.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
