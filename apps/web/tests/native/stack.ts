@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { resolveBunCommand } from '../../../../scripts/gate.ts';
 import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
 
 export type NativeCredentials = { authorization: string };
@@ -47,12 +48,16 @@ async function startWeb(origin: string, kernelOrigin: string, publicOrigin: stri
   };
   for (const name of ['AUTH_ISSUER', 'WEBSITE_CLIENT_ID', 'WEBSITE_CLIENT_KEY', 'API_RESOURCE', 'WEBSITE_SCOPES'])
     delete env[name];
-  const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'], {
-    cwd: webRoot,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env,
-  });
+  const child = spawn(
+    process.execPath,
+    ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(origin).port, '--strictPort'],
+    {
+      cwd: webRoot,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    },
+  );
   let output = '';
   for (const stream of [child.stdout, child.stderr])
     stream?.on('data', (chunk: Buffer) => {
@@ -237,12 +242,14 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
           errors.push(error);
         }
       };
-      await attempt(() => stopWeb(webProcess));
-      webProcess = undefined;
       clearInterval(memorySampler);
-      await attempt(() => kernelServer?.stop(true));
+      await Promise.all([
+        attempt(() => stopWeb(webProcess)),
+        attempt(() => kernelServer?.stop(true)),
+        attempt(() => durableWorker?.stop()),
+      ]);
+      webProcess = undefined;
       kernelServer = undefined;
-      await attempt(() => durableWorker?.stop());
       durableWorker = undefined;
       await attempt(() => driver?.close());
       await attempt(() => closeAuth?.());
@@ -410,7 +417,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let analysisDatabase: string | undefined;
   const host = fork(import.meta.filename, [], {
-    execPath: process.execPath,
+    execPath: resolveBunCommand(['bun'], repositoryRoot)[0]!,
     execArgv: [],
     cwd: repositoryRoot,
     env: { ...process.env, NATIVE_WEB_STACK_HOST: '1' },
