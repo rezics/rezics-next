@@ -504,6 +504,18 @@ type BatchLandingResult = {
   skippedIds: number[];
 };
 
+type SpawnTextResult = {
+  status: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  error?: Error;
+};
+type SpawnText = (
+  command: string,
+  args: string[],
+  options: { cwd: string; encoding: 'utf8' },
+) => SpawnTextResult;
+
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
@@ -1626,11 +1638,12 @@ export class MergeTrain {
     sourceBranch: string,
     targetBranch: string,
     logPath: string,
+    runSync: SpawnText = spawnSync,
   ): { commit?: string; conflicts?: string[]; error?: string } {
     const checkout = this.options.mainCheckout;
     const targetRef = `refs/heads/${targetBranch}`;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const targetResult = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+      const targetResult = runSync('git', ['rev-parse', '--verify', targetRef], {
         cwd: checkout,
         encoding: 'utf8',
       });
@@ -1640,19 +1653,19 @@ export class MergeTrain {
           error: `branch ${targetBranch} does not exist: ${detail}`,
         };
       }
-      const targetHead = targetResult.stdout.trim();
+      const targetHead = targetResult.stdout?.trim() ?? '';
       if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
 
       const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
       mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
       try {
         git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
-        const merged = spawnSync(
+        const merged = runSync(
           'git',
           ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
           { cwd: tree, encoding: 'utf8' },
         );
-        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}`;
+        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}` || merged.error?.message || '';
         if (merged.status !== 0) {
           const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
           try {
