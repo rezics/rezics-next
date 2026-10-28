@@ -50,6 +50,11 @@ CREATE INDEX worker_attempts_ended_at ON worker_attempts(json_extract(body, '$.e
 CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.state'));
 `,
   },
+  {
+    module: 'worker',
+    version: 5,
+    sql: `CREATE INDEX worker_events_task_attempt_sequence ON worker_events(task_id, attempt, sequence);`,
+  },
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
@@ -80,6 +85,30 @@ export class WorkerStore implements AttemptFence {
       ? this.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
       : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
     return rows.map((row) => decode<Attempt>(row)!);
+  }
+  /** Indexed, unsettled orphan candidates. The state index bounds attempt reads to running/exited rows. */
+  orphanSweepCandidates(): { attempt: Attempt; taskState: string; currentAttempt: number }[] {
+    return this.db
+      .query(`
+        /* worker_attempts_state bounds history reads to running/exited rows; task id is a primary-key lookup. */
+        SELECT a.body AS attempt_body,
+               json_extract(t.body, '$.state') AS task_state,
+               CAST(json_extract(t.body, '$.currentAttempt') AS INTEGER) AS current_attempt
+        FROM worker_attempts AS a
+        JOIN worker_tasks AS t ON t.id = a.task_id
+        WHERE json_extract(a.body, '$.state') IN ('running', 'exited')
+          AND json_extract(t.body, '$.state') = 'running'
+          AND CAST(json_extract(t.body, '$.currentAttempt') AS INTEGER) = a.attempt
+      `)
+      .all()
+      .map((row) => {
+        const value = row as { attempt_body: string; task_state: string; current_attempt: number };
+        return {
+          attempt: JSON.parse(value.attempt_body) as Attempt,
+          taskState: value.task_state,
+          currentAttempt: value.current_attempt,
+        };
+      });
   }
   /** Counts running attempts through the state index without reading or decoding attempt bodies. */
   runningAttemptsCount(): number {
@@ -460,10 +489,15 @@ export class WorkerStore implements AttemptFence {
   }
   events(
     taskId?: string,
+    attempt?: number,
   ): { sequence: number; task_id: string; attempt: number; kind: string; at: string; body: string }[] {
     return (
-      taskId
-        ? this.db.query('SELECT * FROM worker_events WHERE task_id=? ORDER BY sequence').all(taskId)
+      taskId && attempt !== undefined
+        ? this.db
+            .query('SELECT * FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence')
+            .all(taskId, attempt)
+        : taskId
+          ? this.db.query('SELECT * FROM worker_events WHERE task_id=? ORDER BY sequence').all(taskId)
         : this.db.query('SELECT * FROM worker_events ORDER BY sequence').all()
     ) as ReturnType<WorkerStore['events']>;
   }

@@ -78,6 +78,7 @@ export class WorkerJob implements GateOutcomeSink {
     readonly inbox: ManagerInbox,
     readonly consultation: typeof consult = consult,
     readonly afterSettle: () => Promise<void> = async () => {},
+    private readonly acquireOrphanLease: (path: string) => DirectoryLease = acquireDirectoryLease,
   ) {}
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -399,7 +400,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (
         current.state === 'exited' &&
         (current.failureKind ||
-          store.events(ref.taskId).some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested'))
+          store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'landing-requested'))
       )
         return;
       const task = store.task(ref.taskId),
@@ -521,7 +522,7 @@ export class WorkerJob implements GateOutcomeSink {
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.
     if (adoptRunning) this.releaseMetDependents();
-    const tasks = store.tasks();
+    const tasks = adoptRunning ? store.tasks() : [];
     for (const task of !adoptRunning
       ? []
       : tasks.filter(
@@ -548,14 +549,24 @@ export class WorkerJob implements GateOutcomeSink {
         !isAbsolute(path)
       );
     };
-    const candidates = store
-      .attempts()
-      .filter(
-        (attempt) =>
-          ['running', 'exited'].includes(attempt.state) &&
-          (!attempt.driver || !sameProcess(attempt.driver)) &&
-          ownsRunLog(attempt.logPath),
-      );
+    const candidates = adoptRunning
+      ? store.attempts()
+          .filter(
+            (attempt) =>
+              ['running', 'exited'].includes(attempt.state) &&
+              (!attempt.driver || !sameProcess(attempt.driver)) &&
+              ownsRunLog(attempt.logPath),
+          )
+          .flatMap((attempt) => {
+            const task = store.task(attempt.taskId);
+            return task.currentAttempt === attempt.attempt && task.state === 'running'
+              ? [{ attempt, taskState: task.state, currentAttempt: task.currentAttempt }]
+              : [];
+          })
+      : store.orphanSweepCandidates().filter(
+          ({ attempt }) =>
+            (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath),
+        );
     // A pending attempt exists only while a process holds its task's lease to launch it. One that is old and whose
     // lease is free lost its launcher (nine tasks sat pending for three hours): the host retries the task.
     if (adoptRunning) {
@@ -607,12 +618,14 @@ export class WorkerJob implements GateOutcomeSink {
     const live = adoptRunning || !candidates.length ? null : liveGroups();
     // Adopted attempts are followed at once: followed in turn, one long-running worker held back every later settle.
     const follows: Promise<void>[] = [];
-    for (const candidate of candidates) {
+    for (const { attempt: candidate, taskState, currentAttempt } of candidates) {
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
-      if (live && candidate.process && live.has(candidate.process.group)) continue;
+      // Candidate metadata was read from the task/attempt join before touching the per-task lease.
+      if (taskState !== 'running' || currentAttempt !== ref.attempt) continue;
+      if (live && candidate.state === 'running' && candidate.process && live.has(candidate.process.group)) continue;
       let lease: DirectoryLease;
       try {
-        lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+        lease = this.acquireOrphanLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
       } catch (error) {
         if (error instanceof LeaseHeldError) continue;
         throw error;
@@ -628,7 +641,7 @@ export class WorkerJob implements GateOutcomeSink {
         )
           continue;
         const events = store
-          .events(ref.taskId)
+          .events(ref.taskId, ref.attempt)
           .filter((event) => event.attempt === ref.attempt)
           .map((event) => event.kind);
         if (events.includes('landing-requested')) continue;
@@ -745,8 +758,8 @@ export class WorkerJob implements GateOutcomeSink {
         kind = attempt.failureKind;
       if (!kind) return;
       const existingRefusal = store
-        .events(task.id)
-        .find((event) => event.attempt === ref.attempt && event.kind === 'usage-limit-refusal');
+        .events(task.id, ref.attempt)
+        .find((event) => event.kind === 'usage-limit-refusal');
       let retrySamePool = false;
       if (existingRefusal) {
         const body = JSON.parse(existingRefusal.body) as { disposition?: string; pauseMs?: number };
@@ -754,7 +767,7 @@ export class WorkerJob implements GateOutcomeSink {
         retryDelayMs = body.pauseMs ?? 0;
       }
       if (
-        store.events(task.id).some((event) => event.attempt === ref.attempt && event.kind === 'attempt-exit-classified')
+        store.events(task.id, ref.attempt).some((event) => event.kind === 'attempt-exit-classified')
       ) {
         // A retry decided before the retry intent existed, and lost with its process, is queued again.
         if (task.state === 'running' && task.currentAttempt === ref.attempt && !store.retryIntent(ref))
@@ -913,8 +926,8 @@ export class WorkerJob implements GateOutcomeSink {
       fixRound: attempt.fixRound,
     };
     const refusal = this.tasks.store
-      .events(attempt.taskId)
-      .find((event) => event.attempt === attempt.attempt && event.kind === 'usage-limit-refusal');
+      .events(attempt.taskId, attempt.attempt)
+      .find((event) => event.kind === 'usage-limit-refusal');
     const retrySamePool = refusal
       ? (JSON.parse(refusal.body) as { disposition?: string }).disposition === 'retry-same-pool'
       : false;
