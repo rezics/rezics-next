@@ -7,6 +7,12 @@
 // While a gate waits, non-gate runs may use at most ordinaryCapacity - gateCapacity ordinary slots; short runs may
 // also use the express slot. The gate starts once the runs holding its slots when it began waiting have ended,
 // whatever queue forms behind it.
+// A non-gate run requesting more than one slot reserves its slot count on the host where it can start soonest: among
+// hosts with enough ordinary capacity and measured resource headroom to reach its request, it chooses the one with
+// the fewest busy ordinary slots; if none can reach it yet, it chooses the least busy eligible host. Other non-gate
+// runs leave those slots free, except that short runs may still use express. Multi-slot waiters on one host start in
+// order. A waiting multi-slot run starts once the runs that held its slots when it began waiting have ended and the
+// waiters ahead of it have started, when no gate is waiting there.
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--gate] <workspace> -- <command...>
 //
@@ -163,6 +169,7 @@ const sshOptions = (host: Host): string[] => [
 /** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */
 function probeScript(host: Host): string {
   return `set -eu
+mkdir -p ${ROOT}/slots
 processors=$(nproc)
 load=$(awk 'NR == 1 { print $1; exit }' /proc/loadavg)
 available=$(awk 'BEGIN { while ((getline line < "/proc/meminfo") > 0) if (line ~ /^MemAvailable:/) { split(line, field, " "); printf "%.0f\\n", field[2] * 1024; exit } }' 2>/dev/null || true)
@@ -223,7 +230,38 @@ if [ -e "$gate_marker" ]; then
   if flock -n 7; then flock -u 7; else gate_waiting=1; fi
   exec 7<&-
 fi
-printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\n' "$processors" "$slice_processors" "$load" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting"`;
+multi_waiting_slots=0
+multi_waiting_id=-
+multi_waiting_sequence=
+exec 6>"${ROOT}/slots/multi-queue.lock"
+flock -x 6
+for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
+  [ -e "$multi_marker" ] || continue
+  exec 7<>"$multi_marker" || continue
+  if flock -n 7; then
+    rm -f -- "$multi_marker"
+    flock -u 7
+  else
+    marker_slots=
+    marker_started=
+    marker_sequence=
+    read -r marker_slots marker_started marker_sequence <&7 || true
+    case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ]; then
+      marker_id=\${multi_marker##*/multi-wait-}
+      marker_id=\${marker_id%.lock}
+      if [ -z "$multi_waiting_sequence" ] || [ "$marker_sequence" -lt "$multi_waiting_sequence" ]; then
+        multi_waiting_slots=$marker_slots
+        multi_waiting_id=$marker_id
+        multi_waiting_sequence=$marker_sequence
+      fi
+    fi
+  fi
+  exec 7>&-
+done
+flock -u 6
+exec 6>&-
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id"`;
 }
 
 /** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
@@ -236,6 +274,33 @@ echo GATE_MARKER
 exec cat >/dev/null`;
 }
 
+/** Holds a wait marker until a multi-slot run starts, gives up or is aborted. */
+function multiSlotMarkerScript(id: string, slots: number): string {
+  const marker = `${ROOT}/slots/multi-wait-${id}.lock`;
+  return `# REMOTE_CHECK_MULTI_SLOT_MARKER
+# REMOTE_CHECK_MULTI_SLOT_COUNT ${slots}
+# REMOTE_CHECK_MULTI_SLOT_ID ${id}
+set -eu
+mkdir -p ${ROOT}/slots
+exec 6>"${ROOT}/slots/multi-queue.lock"
+flock -x 6
+exec 8>${quote(marker)}
+flock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }
+trap 'rm -f -- ${quote(marker)}; exit 0' HUP INT TERM
+sequence_file=${ROOT}/slots/multi-wait-sequence
+sequence=0
+if [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi
+case "$sequence" in ''|*[!0-9]*) sequence=0 ;; esac
+sequence=$((sequence + 1))
+printf '%s\\n' "$sequence" > "$sequence_file"
+printf '%s %s %s\\n' ${slots} "$(date +%s%N)" "$sequence" >&8
+flock -u 6
+exec 6>&-
+echo MULTI_SLOT_MARKER
+cat >/dev/null
+rm -f -- ${quote(marker)}`;
+}
+
 /** Takes all requested slots together, or none. The host reservation protects only this short take. */
 function slotScript(
   host: Host,
@@ -245,6 +310,8 @@ function slotScript(
   ordinaryAdmissionLimit: number,
   shortRun: boolean,
   estimateMs: number | undefined,
+  gate: boolean,
+  multiWaiterId: string | undefined,
 ): string {
   const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
     Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
@@ -255,7 +322,7 @@ function slotScript(
 if flock -n ${fd}; then
   ${
     action === 'take'
-      ? `if [ "$acquired" -lt ${count} ] && [ "$((ordinary_used + acquired))" -lt ${ordinaryAdmissionLimit} ]; then
+      ? `if [ "$acquired" -lt ${count} ] && [ "$((ordinary_used + acquired))" -lt "$ordinary_admission_limit" ]; then
     acquired=$((acquired + 1))
   else
     flock -u ${fd}
@@ -289,6 +356,64 @@ fi`;
   fi
 fi`
     : '';
+  const gateRemainder = ordinaryCapacity - Math.max(0, ordinaryCapacity - 1);
+  const markerPolicy = `gate_waiting=0
+gate_marker=${ROOT}/slots/gate-wait.lock
+if [ -e "$gate_marker" ]; then
+  exec 7<>"$gate_marker"
+  if flock -n 7; then
+    rm -f -- "$gate_marker"
+    flock -u 7
+  else
+    gate_waiting=1
+  fi
+  exec 7>&-
+fi
+multi_waiting_slots=0
+multi_waiting_id=-
+multi_waiting_sequence=
+exec 6>"${ROOT}/slots/multi-queue.lock"
+flock -x 6
+for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
+  [ -e "$multi_marker" ] || continue
+  exec 7<>"$multi_marker" || continue
+  if flock -n 7; then
+    rm -f -- "$multi_marker"
+    flock -u 7
+  else
+    marker_slots=
+    marker_started=
+    marker_sequence=
+    read -r marker_slots marker_started marker_sequence <&7 || true
+    case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ]; then
+      marker_id=\${multi_marker##*/multi-wait-}
+      marker_id=\${marker_id%.lock}
+      if [ -z "$multi_waiting_sequence" ] || [ "$marker_sequence" -lt "$multi_waiting_sequence" ]; then
+        multi_waiting_slots=$marker_slots
+        multi_waiting_id=$marker_id
+        multi_waiting_sequence=$marker_sequence
+      fi
+    fi
+  fi
+  exec 7>&-
+done
+ordinary_admission_limit=${ordinaryAdmissionLimit}
+wait_behind_older_multi=0
+if [ "$gate_waiting" -eq 1 ]; then
+  if [ ${gate ? 1 : 0} -eq 1 ]; then
+    ordinary_admission_limit=${ordinaryCapacity}
+  else
+    ordinary_admission_limit=${gateRemainder}
+  fi
+elif [ ${gate ? 1 : 0} -eq 0 ] && [ "$multi_waiting_slots" -gt 0 ]; then
+  if [ ${multiWaiterId ? quote(multiWaiterId) : "''"} = "$multi_waiting_id" ]; then
+    ordinary_admission_limit=${ordinaryCapacity}
+  else
+    ordinary_admission_limit=$(( ${ordinaryCapacity} - multi_waiting_slots ))
+    if [ ${count > 1 && multiWaiterId ? 1 : 0} -eq 1 ]; then wait_behind_older_multi=1; fi
+  fi
+fi`;
   return `mkdir -p ${ROOT}/slots ${ROOT}/runs
 REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_SLOT_COUNT ${count}
@@ -297,19 +422,25 @@ REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_ESTIMATE_MS ${estimateMs ?? 'none'}
 # REMOTE_CHECK_SLOT_LIMIT ${slotLimit}
 # REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT ${ordinaryAdmissionLimit}
+# REMOTE_CHECK_GATE_REQUEST ${gate ? 1 : 0}
+# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ${multiWaiterId ?? '-'}
 exec 8>"${ROOT}/slots/reserve.lock"
 flock -x -n 8 || exit ${SLOT_BUSY}
+${markerPolicy}
 occupied=0
 acquired=0
 ordinary_used=0
 # REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
 ${countBusyOrdinary}
+if [ "$wait_behind_older_multi" -eq 1 ]; then exit ${SLOT_BUSY}; fi
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
 if [ "$acquired" -ne ${count} ] || [ "$((occupied + acquired))" -gt ${slotLimit} ]; then exit ${SLOT_BUSY}; fi
 flock -u 8
 exec 8>&-
+flock -u 6
+exec 6>&-
 for run in ${ROOT}/runs/*; do
   [ -d "$run" ] || continue
   if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
@@ -499,6 +630,8 @@ type HostProbe = {
   ordinarySlotsUsed: number;
   expressSlotUsed: boolean;
   gateWaiting: boolean;
+  multiWaitingSlots: number;
+  multiWaitingId: string | null;
 };
 type RankedHost = {
   host: Host;
@@ -511,6 +644,8 @@ type RankedHost = {
   slotLimit: number;
   memoryHeadroom: number;
   gateWaiting: boolean;
+  ordinarySlotsUsed: number;
+  expressSlotUsed: boolean;
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
@@ -535,15 +670,24 @@ function rankHost(
   slots: number,
   estimateMs: number | undefined,
   gate: boolean,
+  multiWaiterId?: string,
 ): RankedHost {
   const capacity = hostCapacity(host, probe);
   const ordinaryCapacity = Math.max(0, capacity - 1);
   const gateCapacity = Math.max(0, ordinaryCapacity - 1);
+  const hasMultiWaiter = !probe.gateWaiting && probe.multiWaitingSlots > 0;
+  const isOldestMultiWaiter = hasMultiWaiter && multiWaiterId !== undefined && probe.multiWaitingId === multiWaiterId;
+  const waitsBehindOlderMulti =
+    hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
   const ordinaryAdmissionLimit = gate
     ? ordinaryCapacity
     : probe.gateWaiting
       ? ordinaryCapacity - gateCapacity
-      : ordinaryCapacity;
+      : hasMultiWaiter
+        ? isOldestMultiWaiter
+          ? ordinaryCapacity
+          : ordinaryCapacity - probe.multiWaitingSlots
+        : ordinaryCapacity;
   const resourceSlots = probeCapacity(probe, capacity);
   const shortRun = isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
@@ -560,6 +704,7 @@ function rankHost(
     freeSlots = Math.min(resourceSlots, Math.max(0, admissionLimit - probe.ordinarySlotsUsed));
     slotLimit = Math.min(admissionLimit, probe.ordinarySlotsUsed + resourceSlots);
   }
+  if (waitsBehindOlderMulti) freeSlots = 0;
   return {
     host,
     capacity,
@@ -571,6 +716,8 @@ function rankHost(
     slotLimit,
     memoryHeadroom: probe.memoryHeadroom,
     gateWaiting: probe.gateWaiting,
+    ordinarySlotsUsed: probe.ordinarySlotsUsed,
+    expressSlotUsed: probe.expressSlotUsed,
   };
 }
 
@@ -621,6 +768,10 @@ function parseProbe(output: string): HostProbe | null {
   const memoryFallback = current === '-' && maximum === '-';
   const gateWaitingValue = value('GATE_WAITING');
   const gateWaiting = gateWaitingValue === '1';
+  const multiWaitingSlotsValue = value('MULTI_SLOT_WAITING_SLOTS');
+  const multiWaitingSlots = Number(multiWaitingSlotsValue);
+  const multiWaitingIdValue = value('MULTI_SLOT_WAITING_ID');
+  const multiWaitingId = multiWaitingIdValue === '-' ? null : multiWaitingIdValue;
   if (
     processorValue === null ||
     sliceProcessorValue === null ||
@@ -640,6 +791,13 @@ function parseProbe(output: string): HostProbe | null {
     ordinarySlotsUsed > 1_000_000 ||
     (expressSlotUsedValue !== '0' && expressSlotUsedValue !== '1') ||
     (gateWaitingValue !== '0' && gateWaitingValue !== '1') ||
+    multiWaitingSlotsValue === null ||
+    !Number.isSafeInteger(multiWaitingSlots) ||
+    multiWaitingSlots < 0 ||
+    multiWaitingSlots > 1_000_000 ||
+    multiWaitingIdValue === null ||
+    (multiWaitingId !== null && !/^[a-zA-Z0-9-]+$/.test(multiWaitingId)) ||
+    (multiWaitingSlots === 0) !== (multiWaitingId === null) ||
     (!sliceMemory && !memoryFallback)
   )
     return null;
@@ -652,6 +810,8 @@ function parseProbe(output: string): HostProbe | null {
     ordinarySlotsUsed,
     expressSlotUsed,
     gateWaiting,
+    multiWaitingSlots,
+    multiWaitingId,
   };
 }
 
@@ -756,11 +916,13 @@ async function takeSlots(
   ordinaryAdmissionLimit: number,
   shortRun: boolean,
   estimateMs: number | undefined,
+  gate: boolean,
+  multiWaiterId: string | undefined,
   signal: AbortSignal,
 ): Promise<Lease | null> {
   return takeSession(
     host,
-    slotScript(host, count, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit, shortRun, estimateMs),
+    slotScript(host, count, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit, shortRun, estimateMs, gate, multiWaiterId),
     /^SLOTS \d+$/m,
     signal,
   );
@@ -768,6 +930,15 @@ async function takeSlots(
 
 async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionLease | null> {
   return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal);
+}
+
+async function takeMultiSlotMarker(
+  host: Host,
+  id: string,
+  slots: number,
+  signal: AbortSignal,
+): Promise<SessionLease | null> {
+  return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal);
 }
 
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
@@ -778,13 +949,14 @@ async function rankedHosts(
   estimateMs: number | undefined,
   gate: boolean,
   preferUngated = false,
+  multiWaiterId?: string,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
   return (
     probes
       .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
-      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate))
+      .map(({ host, probe }) => rankHost(host, probe, slots, estimateMs, gate, multiWaiterId))
       // Equal slot counts prefer the host with more measured slice memory headroom.
       .sort(
         (left, right) =>
@@ -837,6 +1009,8 @@ async function acquireOnce(
       ordinaryAdmissionLimit,
       isShortRun(slots, estimateMs, gate),
       estimateMs,
+      gate,
+      undefined,
       signal,
     );
     if (lease && signal.aborted) {
@@ -864,6 +1038,7 @@ async function acquire(
   let warnedGateReduction = false;
   let marker: SessionLease | undefined;
   let markerHost: string | undefined;
+  const multiWaiterId = !gate && slots > 1 ? randomUUID() : undefined;
   const wait = checkWaitRecorder();
   const announceWait = (): void => {
     wait.begin();
@@ -878,7 +1053,12 @@ async function acquire(
         marker = undefined;
         markerHost = undefined;
       }
-      const ranked = await rankedHosts(hosts, signal, slots, estimateMs, gate, slots === 1);
+      const ranked = await rankedHosts(hosts, signal, slots, estimateMs, gate, slots === 1, multiWaiterId);
+      if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
+        if (marker) await marker.release();
+        marker = undefined;
+        markerHost = undefined;
+      }
       if (ranked.length > 0) {
         answered = true;
         onAnswered?.();
@@ -901,7 +1081,8 @@ async function acquire(
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
         }
       } else if (giveUpIfUnanswered && !answered) return null;
-      for (const entry of ranked) {
+      const acquisitionHosts = multiWaiterId && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
+      for (const entry of acquisitionHosts) {
         const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
         if (freeSlots < slots) continue;
         const lease = await takeSlots(
@@ -912,6 +1093,8 @@ async function acquire(
           ordinaryAdmissionLimit,
           isShortRun(slots, estimateMs, gate),
           estimateMs,
+          gate,
+          multiWaiterId,
           signal,
         );
         if (lease && signal.aborted) {
@@ -931,6 +1114,27 @@ async function acquire(
           marker = undefined;
           markerHost = target.host.name;
           marker = (await takeGateMarker(target.host, signal)) ?? undefined;
+        }
+      }
+      if (multiWaiterId && ranked.length > 0) {
+        const eligible = ranked.filter(({ ordinaryCapacity }) => ordinaryCapacity >= slots);
+        const currentlyReachable = eligible.filter(
+          ({ resourceSlots, ordinarySlotsUsed, expressSlotUsed }) =>
+            resourceSlots + ordinarySlotsUsed + Number(expressSlotUsed) >= slots,
+        );
+        const candidates = (currentlyReachable.length > 0 ? currentlyReachable : eligible).sort(
+          (left, right) =>
+            left.ordinarySlotsUsed - right.ordinarySlotsUsed ||
+            right.resourceSlots - left.resourceSlots ||
+            right.memoryHeadroom - left.memoryHeadroom,
+        );
+        const target = ranked.find(({ host }) => host.name === markerHost) ?? candidates[0];
+        if (target && target.host.name !== markerHost) {
+          if (marker) await marker.release();
+          markerHost = target.host.name;
+          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal)) ?? undefined;
+        } else if (target && !marker) {
+          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal)) ?? undefined;
         }
       }
       announceWait();
@@ -965,7 +1169,7 @@ function assertReturnPath(path: string): void {
 }
 
 /** One remote script lists which declared outputs exist, so a missing path is skipped instead of failing the copy. */
-function returnsProbe(directory: string, paths: string[]): string {
+export function returnsProbe(directory: string, paths: string[]): string {
   const body = paths
     .map((path) => {
       const full = `${directory}/${path}`;
@@ -973,7 +1177,7 @@ function returnsProbe(directory: string, paths: string[]): string {
 if [ -e ${quote(full)} ] || [ -L ${quote(full)} ]; then printf 'PRESENT %s\\n' ${quote(path)}; else printf 'ABSENT %s\\n' ${quote(path)}; fi`;
     })
     .join('\n');
-  return `REMOTE_CHECK_RETURNS
+  return `# REMOTE_CHECK_RETURNS
 ${body}`;
 }
 

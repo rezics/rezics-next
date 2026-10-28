@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -17,6 +18,7 @@ import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
   controlSocketDirectoryPath,
+  returnsProbe,
   selectSlotClass,
 } from './remote-check.ts';
 
@@ -29,7 +31,7 @@ const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
 const fakeSsh = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const script = args.at(-1)!;
@@ -46,6 +48,14 @@ const updateConfig = (updates: Record<string, unknown>) => {
   writeFileSync(file, JSON.stringify(all));
 };
 const hostKey = address.replace(/[^a-z0-9]/gi, '_');
+const multiMarkerPrefix = hostKey + '.multi-marker.';
+const multiMarkerIndex = dir + '/' + hostKey + '.multi-markers-present';
+const readMultiMarkers = () => existsSync(multiMarkerIndex)
+  ? readdirSync(dir)
+      .filter((name) => name.startsWith(multiMarkerPrefix))
+      .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; sequence: number })
+      .sort((left, right) => left.beganAt - right.beganAt || left.sequence - right.sequence)
+  : [];
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
   const seen = existsSync(file) ? Number(readFileSync(file, 'utf8')) : 0;
@@ -81,7 +91,27 @@ if (script.includes('/proc/loadavg')) {
   const ordinarySlotsUsed = Array.from({ length: ordinaryCapacity }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
   const expressSlotUsed = existsSync(dir + '/' + hostKey + '.slot.express');
   const gateWaiting = existsSync(dir + '/' + hostKey + '.gate-marker');
-  log({ kind: 'probe', script, processors, sliceProcessors, load, memoryCurrent, memoryMaximum, memoryHeadroom, ordinarySlotsUsed, expressSlotUsed, gateWaiting });
+  const multiMarkers = readMultiMarkers();
+  const multiWaitingSlots = multiMarkers[0]?.slots ?? 0;
+  const multiWaitingId = multiMarkers[0]?.id ?? '-';
+  const probeScriptFile = dir + '/' + hostKey + '.probe-script-recorded';
+  const probeEvent = {
+    kind: 'probe',
+    ...(existsSync(probeScriptFile) ? {} : { script }),
+    processors,
+    sliceProcessors,
+    load,
+    memoryCurrent,
+    memoryMaximum,
+    memoryHeadroom,
+    ordinarySlotsUsed,
+    expressSlotUsed,
+    gateWaiting,
+    multiWaitingSlots,
+    multiWaitingId,
+  };
+  log(probeEvent);
+  writeFileSync(probeScriptFile, '1');
   console.log('MEMORY_CURRENT ' + memoryCurrent);
   console.log('MEMORY_MAX ' + memoryMaximum);
   console.log('MEMORY_HEADROOM ' + memoryHeadroom);
@@ -91,6 +121,8 @@ if (script.includes('/proc/loadavg')) {
   console.log('ORDINARY_SLOTS_USED ' + ordinarySlotsUsed);
   console.log('EXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0));
   console.log('GATE_WAITING ' + (gateWaiting ? 1 : 0));
+  console.log('MULTI_SLOT_WAITING_SLOTS ' + multiWaitingSlots);
+  console.log('MULTI_SLOT_WAITING_ID ' + multiWaitingId);
 } else if (script.includes('REMOTE_CHECK_GATE_MARKER')) {
   const lock = dir + '/' + hostKey + '.gate-marker';
   if (existsSync(lock)) process.exit(75);
@@ -100,6 +132,27 @@ if (script.includes('/proc/loadavg')) {
   const release = () => {
     rmSync(lock, { recursive: true, force: true });
     log({ kind: 'gate-marker-release' });
+    process.exit(0);
+  };
+  process.stdin.on('end', release);
+  process.on('SIGTERM', release);
+  process.on('SIGHUP', release);
+  process.stdin.resume();
+} else if (script.includes('REMOTE_CHECK_MULTI_SLOT_MARKER')) {
+  const id = script.match(/# REMOTE_CHECK_MULTI_SLOT_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
+  const slots = Number(script.match(/# REMOTE_CHECK_MULTI_SLOT_COUNT (\\d+)/)?.[1] ?? 0);
+  const marker = dir + '/' + hostKey + '.multi-marker.' + id;
+  if (existsSync(marker)) process.exit(75);
+  const sequence = count('multi-marker-sequence');
+  const beganAt = Number(readFileSync(dir + '/clock', 'utf8'));
+  writeFileSync(marker, JSON.stringify({ id, slots, beganAt, sequence }));
+  writeFileSync(multiMarkerIndex, '1');
+  log({ kind: 'multi-marker', id, slots, fakeStartedAt: beganAt, sequence });
+  console.log('MULTI_SLOT_MARKER');
+  const release = () => {
+    rmSync(marker, { force: true });
+    if (!readdirSync(dir).some((name) => name.startsWith(multiMarkerPrefix))) rmSync(multiMarkerIndex, { force: true });
+    log({ kind: 'multi-marker-release', id });
     process.exit(0);
   };
   process.stdin.on('end', release);
@@ -128,6 +181,27 @@ if (script.includes('/proc/loadavg')) {
   const ordinaryAdmissionLimit = Number(
     script.match(/# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity,
   );
+  const isGate = script.includes('# REMOTE_CHECK_GATE_REQUEST 1');
+  const waiterIdValue = script.match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1];
+  const waiterId = waiterIdValue && waiterIdValue !== '-' ? waiterIdValue : undefined;
+  if (waiterId && existsSync(dir + '/' + hostKey + '.hold-multi-grant')) {
+    log({ kind: 'slot', granted: false, reason: 'held-multi-grant', requested, call, slotClass, script });
+    process.exit(75);
+  }
+  const gateWaiting = existsSync(dir + '/' + hostKey + '.gate-marker');
+  const multiMarkers = readMultiMarkers();
+  let actualAdmissionLimit = ordinaryAdmissionLimit;
+  let waitBehindOlderMulti = false;
+  if (gateWaiting) {
+    actualAdmissionLimit = isGate ? ordinaryCapacity : ordinaryCapacity - Math.max(0, ordinaryCapacity - 1);
+  } else if (!isGate && multiMarkers.length > 0) {
+    const oldest = multiMarkers[0]!;
+    if (waiterId === oldest.id) actualAdmissionLimit = ordinaryCapacity;
+    else {
+      actualAdmissionLimit = ordinaryCapacity - oldest.slots;
+      waitBehindOlderMulti = requested > 1 && waiterId !== undefined;
+    }
+  }
   const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity);
   const occupied = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
   const expressOccupied = existsSync(dir + '/' + hostKey + '.slot.express');
@@ -149,7 +223,7 @@ if (script.includes('/proc/loadavg')) {
       }
     } else if (
       selected.length < requested &&
-      (hasBusyCountPass ? ordinaryUsed + selected.length : ordinaryUsed) < ordinaryAdmissionLimit
+      (hasBusyCountPass ? ordinaryUsed + selected.length : ordinaryUsed) < actualAdmissionLimit
     ) {
       selected.push(index);
       if (!hasBusyCountPass) ordinaryUsed += 1;
@@ -159,7 +233,7 @@ if (script.includes('/proc/loadavg')) {
     if (expressOccupied) occupiedCount += 1;
     else selected.push('express');
   }
-  if (occupiedCount + selected.length > slotLimit || selected.length < requested) {
+  if (waitBehindOlderMulti || occupiedCount + selected.length > slotLimit || selected.length < requested) {
     rmSync(taking, { recursive: true, force: true });
     log({ kind: 'slot', granted: false, reason: 'capacity', requested, slotClass, script, occupied: occupiedCount, slotLimit, call });
     process.exit(75);
@@ -1287,7 +1361,7 @@ test('a remote run takes all requested slots in one session on one host and rele
   expect(tooMany.events().some((event) => event.kind === 'slot')).toBe(false);
 });
 
-test('single-slot runs keep starting on a host while a multi-slot run waits for it', async () => {
+test('a multi-slot reservation blocks new runs when existing work already fills its remainder', async () => {
   const { env, events } = scenario({
     a: { available: 0, slots: 4, cpuQuotaPercent: 800 },
     b: {
@@ -1309,23 +1383,24 @@ test('single-slot runs keep starting on a host while a multi-slot run waits for 
     await waitFor(() => events().some((event) => event.kind === 'run' && event.address === 'ops@b.test'));
     multi = startRemote(env, workspace(), ['true'], ['--slots', '2']);
     await waitFor(() => existsSync(waitFile));
-    expect(events().filter((event) => event.kind === 'slot' && event.requested === 2)).toHaveLength(0);
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
+    const multiMarker = events().find((event) => event.kind === 'multi-marker')!;
+    expect(multiMarker.slots).toBe(2);
 
-    laterSingle = startRemote(env, workspace(), ['true']);
-    await waitFor(
-      () => events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test').length === 2,
-    );
-    expect(await laterSingle.child.exited).toBe(0);
-    expect(
-      events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted),
-    ).toHaveLength(2);
+    const singleWaitFile = join(env.FAKE_DIR!, 'single-wait-ms');
+    laterSingle = startRemote({ ...env, GOAL_CHECK_WAIT_FILE: singleWaitFile }, workspace(), ['true']);
+    await waitFor(() => existsSync(singleWaitFile));
+    await waitFor(() => events().some((event) => event.kind === 'probe' && event.multiWaitingId === multiMarker.id));
+    expect(events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test')).toHaveLength(1);
+    expect(events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted)).toHaveLength(1);
 
     first.child.kill('SIGTERM');
     await first.child.exited;
     expect(await multi.child.exited).toBe(0);
+    expect(await laterSingle.child.exited).toBe(0);
     const onB = events().filter((event) => event.address === 'ops@b.test');
     expect(onB.filter((event) => event.kind === 'run')).toHaveLength(3);
-    expect(onB.some((event) => event.kind === 'reservation')).toBe(false);
+    expect(onB.some((event) => event.kind === 'multi-marker-release' && event.id === multiMarker.id)).toBe(true);
   } finally {
     for (const run of [laterSingle, multi, first]) {
       if (!run) continue;
@@ -1338,7 +1413,71 @@ test('single-slot runs keep starting on a host while a multi-slot run waits for 
   }
 });
 
-test('a multi-slot waiter takes all slots or none and holds no slot or reservation while waiting', async () => {
+test('while a multi-slot run waits for a host, runs there use only the slots it leaves free', async () => {
+  const { env, events } = scenario({
+    b: {
+      available: 20e9,
+      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroomOnHang: 20e9,
+      slots: 6,
+      cpuQuotaPercent: 1200,
+      hang: true,
+      hangRuns: 4,
+    },
+  });
+  const workspaceDirectory = workspace();
+  let multi: ReturnType<typeof startRemote> | undefined;
+  const singles: ReturnType<typeof startRemote>[] = [];
+  try {
+    multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
+    const holdMultiGrant = join(env.FAKE_DIR!, 'ops_b_test.hold-multi-grant');
+    // Keep the waiter pending while single-slot runs fill only its unreserved remainder.
+    writeFileSync(holdMultiGrant, 'hold');
+    for (let index = 0; index < 4; index += 1) {
+      singles.push(
+        startRemote(
+          { ...env, GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `remainder-${index}-wait-ms`) },
+          workspaceDirectory,
+          ['sh', '-c', `echo single-${index}`],
+        ),
+      );
+    }
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 3,
+    );
+    await waitFor(() => singles.some((_, index) => existsSync(join(env.FAKE_DIR!, `remainder-${index}-wait-ms`))));
+    const whileWaiting = events();
+    expect(whileWaiting.some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(false);
+    expect(whileWaiting.some((event) => event.kind === 'multi-marker-release')).toBe(false);
+    const admittedSingles = whileWaiting.filter((event) => event.kind === 'slot' && event.granted);
+    expect(admittedSingles).toHaveLength(3);
+    expect(admittedSingles.every((event) => String(event.script).includes('# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT 3'))).toBe(true);
+
+    rmSync(holdMultiGrant, { force: true });
+    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')));
+
+    const started = events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test');
+    expect(started.filter((event) => /echo single-/.test(String(event.script)))).toHaveLength(3);
+    expect(started.filter((event) => String(event.script).includes('echo multi-run'))).toHaveLength(1);
+    expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(5);
+    expect(multi.child.exitCode).toBeNull();
+  } finally {
+    for (const run of [...singles, multi]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+    }
+    for (const run of [...singles, multi]) {
+      if (!run) continue;
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+});
+
+test('a multi-slot waiter that stops waiting releases its reservation', async () => {
   const { env, events } = scenario({
     a: {
       available: 20e9,
@@ -1357,14 +1496,16 @@ test('a multi-slot waiter takes all slots or none and holds no slot or reservati
     await waitFor(() => events().some((event) => event.kind === 'run'));
     multi = startRemote(env, workspace(), ['true'], ['--slots', '2']);
     await waitFor(() => existsSync(waitFile));
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
     const waiting = events();
     expect(waiting.filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
     expect(waiting.filter((event) => event.kind === 'slot' && event.requested === 2)).toHaveLength(0);
-    expect(waiting.some((event) => event.kind === 'reservation')).toBe(false);
+    expect(waiting.filter((event) => event.kind === 'multi-marker')).toHaveLength(1);
     multi.child.kill('SIGTERM');
     expect(await multi.child.exited).toBe(143);
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker-release'));
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
-    expect(events().some((event) => event.kind === 'reservation')).toBe(false);
+    expect(readdirSync(env.FAKE_DIR!).filter((name) => name.includes('.multi-marker.'))).toHaveLength(0);
     first.child.kill('SIGTERM');
     await first.child.exited;
   } finally {
@@ -1378,6 +1519,107 @@ test('a multi-slot waiter takes all slots or none and holds no slot or reservati
     }
   }
 });
+
+test('a waiting gate keeps priority over a waiting multi-slot run on the same host', async () => {
+  const { env, events } = scenario({ b: { available: 20e9, slots: 4, hang: true, hangRuns: 1 } });
+  const workspaceDirectory = workspace();
+  const holder = startRemote(env, workspaceDirectory, ['true'], ['--slots', '2']);
+  let gate: ReturnType<typeof startRemote> | undefined;
+  let multi: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'run'));
+    gate = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo gate-run'], ['--gate', '--slots', '2']);
+    await waitFor(() => events().some((event) => event.kind === 'gate-marker'));
+    multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'probe' && event.gateWaiting && event.multiWaitingSlots === 2),
+    );
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+
+    holder.child.kill('SIGTERM');
+    await holder.child.exited;
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo gate-run')) &&
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+    );
+    const started = events()
+      .filter((event) => event.kind === 'run' && /echo (?:gate|multi)-run/.test(String(event.script)))
+      .map((event) => String(event.script).includes('echo gate-run') ? 'gate' : 'multi');
+    expect(started).toEqual(['gate', 'multi']);
+    expect(await gate.child.exited).toBe(0);
+    expect(await multi.child.exited).toBe(0);
+  } finally {
+    for (const run of [multi, gate, holder]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+});
+
+test('multi-slot waiters on one host start in the order they began waiting', async () => {
+  const durationMs = 10;
+  const { env, events } = scenario({
+    b: { available: 20e9, slots: 6, cpuQuotaPercent: 1200, runDurationMs: durationMs },
+  });
+  const workspaceDirectory = workspace();
+  const holders = [
+    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-one'], ['--slots', '2']),
+    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-two'], ['--slots', '2']),
+  ];
+  let older: ReturnType<typeof startRemote> | undefined;
+  let younger: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script))).length === 2);
+    const holderRuns = events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script)));
+    const latestHolderFinish = Math.max(...holderRuns.map((event) => Number(event.fakeStartedAt) + durationMs));
+
+    older = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo older'], ['--slots', '2']);
+    await waitFor(() => events().filter((event) => event.kind === 'multi-marker').length === 1, 10_000);
+    const olderMarker = events().find((event) => event.kind === 'multi-marker')!;
+    younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2']);
+    await waitFor(() => events().filter((event) => event.kind === 'multi-marker').length === 2, 10_000);
+    const youngerMarker = events().find(
+      (event) => event.kind === 'multi-marker' && event.id !== olderMarker.id,
+    )!;
+    await waitFor(() =>
+      events().some((event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2),
+      10_000,
+    );
+
+    writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo older')) &&
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo younger')),
+      10_000,
+    );
+    const grantedWaiterOrder = events()
+      .filter((event) => event.kind === 'slot' && event.granted && event.requested === 2)
+      .map((event) => String(event.script).match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1])
+      .filter((id): id is string => Boolean(id) && id !== '-');
+    expect(
+      [...new Set(grantedWaiterOrder.filter((id) => id === olderMarker.id || id === youngerMarker.id))],
+    ).toEqual([String(olderMarker.id), String(youngerMarker.id)]);
+    writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish + durationMs));
+    await Promise.all([older.child.exited, younger.child.exited]);
+  } finally {
+    for (const run of [younger, older, ...holders]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+    }
+    for (const run of [younger, older, ...holders]) {
+      if (!run) continue;
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+}, 30_000);
 
 test('while a gate waits for a host, runs there use only the slots the gate leaves free', async () => {
   const { env, events } = scenario({ b: { available: 20e9, slots: 4, hang: true, hangRuns: 1 } });
@@ -1532,6 +1774,79 @@ test('a gate wait is bounded by its original slot holders with 1, 10 and 100 que
     }
   }
 });
+
+test('a multi-slot wait is bounded by its original slot holders with 1, 10 and 100 queued single-slot runs', async () => {
+  const durationMs = 10;
+  for (const queueLength of [1, 10, 100]) {
+    const { env, events } = scenario({
+      b: { available: 20e9, slots: 4, runDurationMs: durationMs },
+    });
+    const workspaceDirectory = workspace();
+    const holders = Array.from({ length: 2 }, () => startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']));
+    let multi: ReturnType<typeof startRemote> | undefined;
+    const queued: ReturnType<typeof startRemote>[] = [];
+    try {
+      await waitFor(
+        () =>
+          events().filter((event) => event.kind === 'run' && String(event.script).includes('echo holder')).length === 2,
+        15_000,
+      );
+      const originalHolders = events().filter(
+        (event) => event.kind === 'run' && String(event.script).includes('echo holder'),
+      );
+      const latestOriginalFinish = Math.max(
+        ...originalHolders.map((event) => Number(event.fakeStartedAt) + durationMs),
+      );
+
+      multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
+      await waitFor(() => events().some((event) => event.kind === 'multi-marker' && event.address === 'ops@b.test'));
+      const marker = events().find((event) => event.kind === 'multi-marker')!;
+      const multiWaitingBeganAt = Number(marker.fakeStartedAt);
+      await waitFor(() =>
+        events().some(
+          (event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.multiWaitingId === marker.id,
+        ),
+      );
+
+      for (let index = 0; index < queueLength; index += 1) {
+        const queueEnv = {
+          ...env,
+          REMOTE_CHECK_POLL_MS: '100',
+          GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `multi-queued-${index}-wait-ms`),
+        };
+        queued.push(startRemote(queueEnv, workspaceDirectory, ['sh', '-c', 'echo queued']));
+      }
+      await waitFor(
+        () => queued.every((_, index) => existsSync(join(env.FAKE_DIR!, `multi-queued-${index}-wait-ms`))),
+        30_000,
+      );
+      expect(events().filter((event) => event.kind === 'run')).toHaveLength(2);
+
+      writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestOriginalFinish));
+      await waitFor(
+        () => events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+        15_000,
+      );
+      const multiStart = events().find(
+        (event) => event.kind === 'run' && String(event.script).includes('echo multi-run'),
+      )!;
+      expect(Number(multiStart.fakeStartedAt)).toBeLessThanOrEqual(latestOriginalFinish);
+      expect(Number(multiStart.fakeStartedAt) - multiWaitingBeganAt).toBeLessThanOrEqual(durationMs);
+    } finally {
+      for (const run of [...queued, multi, ...holders]) {
+        if (!run) continue;
+        try {
+          run.child.kill('SIGTERM');
+        } catch {}
+      }
+      for (const run of [...queued, multi, ...holders]) {
+        if (!run) continue;
+        await run.child.exited;
+        await Promise.all([run.stdout, run.stderr]);
+      }
+    }
+  }
+}, 30_000);
 
 test('while a gate waits for a host, single-slot runs prefer other hosts', async () => {
   const { env, events } = scenario({
@@ -1915,6 +2230,23 @@ test('a remote run copies the declared output paths back after it ends, also whe
   const copied = succeeded.events().filter((event) => event.kind === 'rsync');
   expect(copied).toHaveLength(2);
   expect(copied[1]!.files).toEqual(['.temp/screenshots', 'apps/web/src/kernel/recorded']);
+});
+
+test('the returns probe runs under bash with nothing on stderr and lists present and absent outputs', () => {
+  const temporaryDirectory = join(root, '.temp');
+  mkdirSync(temporaryDirectory, { recursive: true });
+  const directory = mkdtempSync(join(temporaryDirectory, 'returns-probe-'));
+  try {
+    writeFileSync(join(directory, 'present.txt'), 'present');
+    const result = spawnSync('bash', ['-c', returnsProbe(directory, ['present.txt', 'absent.txt'])], {
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toBe('PRESENT present.txt\nABSENT absent.txt\n');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('the docker wrapper calls the docker behind it, not a shim that called the wrapper', () => {
