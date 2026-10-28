@@ -1047,7 +1047,7 @@ async function takeSlots(
       gate,
       multiWaiterId,
     ),
-    /^SLOTS \d+$/m,
+    /^SLOTS? \d+$/m,
     signal,
   );
 }

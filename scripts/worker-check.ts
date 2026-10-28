@@ -1,11 +1,18 @@
 #!/usr/bin/env bun
 import { spawn } from 'node:child_process';
-import { closeSync, fstatSync, mkdirSync, openSync, readSync, writeSync } from 'node:fs';
+import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { checkWaitRecorder } from './remote-check.ts';
 import { acquireStackSlot } from './stack-lease.ts';
-import { checkClass, checkMemoryCapacity, checkMemoryWeight, memoryLeaseDirectory, readPeaks, recordPeak } from './check-memory.ts';
+import {
+  checkClass,
+  checkMemoryCapacity,
+  checkMemoryWeight,
+  memoryLeaseDirectory,
+  readPeaks,
+  recordScopedPeak,
+} from './check-memory.ts';
 
 const SIGNALS = {
   SIGHUP: 1,
@@ -58,40 +65,86 @@ export async function runWorkerCheck(argv: readonly string[], cwd = process.cwd(
   const directory = memoryLeaseDirectory(env);
   const capacity = checkMemoryCapacity(env);
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
-  const lease = await acquireStackSlot(`worker-check: ${commandClass}`, {
-    ...env,
-    REZICS_STACK_SLOTS: String(capacity),
-    REZICS_STACK_LEASE_DIR: directory,
-    ...(env.REZICS_CHECK_MEMORY === 'off' ? { REZICS_STACK_LEASE: 'off' } : {}),
-    ...(env.REZICS_CHECK_MEMORY_LEASE !== undefined ? { REZICS_STACK_SLOT: env.REZICS_CHECK_MEMORY_LEASE } : {}),
-  }, weight);
+  const leaseEnv = { ...env };
+  // The memory lease is independent of any stack lease held by the caller.
+  delete leaseEnv.REZICS_STACK_SLOT;
+  delete leaseEnv.REZICS_STACK_LEASE;
+  if (env.REZICS_CHECK_MEMORY === 'off') leaseEnv.REZICS_STACK_LEASE = 'off';
+  if (env.REZICS_CHECK_MEMORY_LEASE !== undefined) leaseEnv.REZICS_STACK_SLOT = env.REZICS_CHECK_MEMORY_LEASE;
+  const lease = await acquireStackSlot(
+    `worker-check: ${commandClass}`,
+    {
+      ...leaseEnv,
+      REZICS_STACK_SLOTS: String(capacity),
+      REZICS_STACK_LEASE_DIR: directory,
+    },
+    weight,
+  );
   env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
-  let scopeUnit: string | undefined;
-  let peakBytes = 0;
+  let scoped = false;
+  const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
   try {
-    const probe = Bun.spawnSync(['systemd-run', '--user', '--scope', '--collect', '--quiet', 'true'], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' });
-    const scoped = probe.exitCode === 0;
-    scopeUnit = scoped ? `rezics-check-${process.pid}-${randomUUID().slice(0, 8)}.scope` : undefined;
-    child = spawn(scoped ? 'systemd-run' : argv[0]!, scoped
-      ? ['--user', '--scope', '--collect', '--unit', scopeUnit!, '--quiet', '--', ...argv]
-      : argv.slice(1), {
-      cwd: root,
-      env,
-      stdio: ['inherit', 'pipe', 'pipe'],
-    });
+    let callerSlice = '';
+    if (env.REZICS_CHECK_SCOPE !== 'off') {
+      try {
+        const cgroup =
+          readFileSync('/proc/self/cgroup', 'utf8')
+            .split('\n')
+            .find((line) => line.startsWith('0::'))
+            ?.slice(3) ?? '';
+        callerSlice =
+          cgroup
+            .split('/')
+            .filter((part) => part.endsWith('.slice'))
+            .at(-1) ?? '';
+      } catch {
+        /* scope support is optional */
+      }
+    }
+    const scopeProbe =
+      env.REZICS_CHECK_SCOPE !== 'off' && callerSlice
+        ? Bun.spawnSync(
+            ['systemd-run', '--user', '--scope', '--collect', `--slice=${callerSlice}`, '--quiet', 'true'],
+            { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+          )
+        : undefined;
+    scoped = scopeProbe?.exitCode === 0;
+    const scopeUnit = scoped ? `rezics-check-${process.pid}-${randomUUID().slice(0, 8)}.scope` : undefined;
+    // Keep the command as argv, and have the wrapper capture memory.peak while it still belongs to the scope.
+    const capture =
+      '"$@"; status=$?; cgroup=$(sed -n \'s/^0:://p\' /proc/self/cgroup); if [ -n "$cgroup" ] && [ -r "/sys/fs/cgroup$cgroup/memory.peak" ]; then cat "/sys/fs/cgroup$cgroup/memory.peak" > "$REZICS_CHECK_PEAK_FILE"; fi; exit "$status"';
+    child = spawn(
+      scoped ? 'systemd-run' : argv[0]!,
+      scoped
+        ? [
+            '--user',
+            '--scope',
+            '--collect',
+            '--unit',
+            scopeUnit!,
+            `--slice=${callerSlice}`,
+            '--quiet',
+            '--',
+            'sh',
+            '-c',
+            capture,
+            'worker-check-scope',
+            ...argv,
+          ]
+        : argv.slice(1),
+      {
+        cwd: root,
+        env: { ...env, REZICS_CHECK_PEAK_FILE: peakFile },
+        stdio: ['inherit', 'pipe', 'pipe'],
+      },
+    );
   } catch (error) {
     closeSync(descriptor);
     await lease.release();
     throw error;
   }
 
-  const scopePoll = scopeUnit ? setInterval(() => {
-    const shown = Bun.spawnSync(['systemctl', '--user', 'show', scopeUnit!, '-p', 'ControlGroup', '--value'], { stdout: 'pipe', stderr: 'ignore' });
-    const group = shown.exitCode === 0 ? shown.stdout.toString().trim() : '';
-    if (!group || group === '/') return;
-    try { peakBytes = Math.max(peakBytes, Number(readFileSync(`/sys/fs/cgroup${group}/memory.peak`, 'utf8').trim())); } catch { /* scope may be starting or ending */ }
-  }, 100) : undefined;
   const save = (chunk: Buffer): void => {
     writeSync(descriptor, chunk);
   };
@@ -122,15 +175,19 @@ export async function runWorkerCheck(argv: readonly string[], cwd = process.cwd(
   } finally {
     for (const [name, forward] of forwarders) process.off(name, forward);
     wait.stop();
-    if (scopePoll) clearInterval(scopePoll);
     closeSync(descriptor);
     await lease.release();
   }
 
-  if (peakBytes > 0) {
-    recordPeak(directory, commandClass, peakBytes);
-    process.stderr.write(`worker-check: ${commandClass} peak ${(peakBytes / 2 ** 30).toFixed(1)} GiB (weight ${weight})\n`);
+  if (scoped) {
+    const peakBytes = recordScopedPeak(directory, commandClass, peakFile);
+    if (peakBytes !== undefined) {
+      process.stderr.write(
+        `worker-check: ${commandClass} peak ${(peakBytes / 2 ** 30).toFixed(1)} GiB (weight ${weight})\n`,
+      );
+    }
   }
+  rmSync(peakFile, { force: true });
   const relativeLogPath = relative(root, file);
   process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
   if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);

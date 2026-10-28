@@ -21,6 +21,9 @@ function environment(capacity = 1): Record<string, string> {
   directories.push(directory);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    REZICS_CHECK_MEMORY: 'off',
+    REZICS_CHECK_MEMORY_DIR: directory,
+    REZICS_CHECK_SCOPE: 'off',
     REZICS_STACK_SLOTS: String(capacity),
     REZICS_STACK_LEASE_DIR: directory,
   };
