@@ -33,6 +33,7 @@ test('recorded release frames work descendants, people, music and recipes throug
   }
 
   const expectedFrames = new Map<string, string>([
+    ['schema:CreativeWork', '5:7'],
     ['schema:Book', '5:7'],
     ['schema:TVSeries', '5:7'],
     ['schema:Movie', '5:7'],
