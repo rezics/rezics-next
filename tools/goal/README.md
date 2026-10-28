@@ -138,6 +138,20 @@ combined check fails, the train retries the members individually so a passing me
 cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
+### Host-capacity admission
+
+Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
+attempts through the `worker_attempts_state` expression index. Each poll issues one `COUNT(*)` query and does not
+decode attempt bodies. The existing 15-second polling interval and ticket ordering are unchanged.
+
+#### Cost: running-attempt count
+
+- **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
+- **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
+  of non-running attempt history.
+- **Growth check:** `capacity-wait.test.ts` seeds 10, 100 and 1,000 attempts, verifies the indexed query plan and
+  checks the running count at each scale.
+
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |
 | `GOAL_LOCAL_CONFIG`       | Local JSON file.                                                |
