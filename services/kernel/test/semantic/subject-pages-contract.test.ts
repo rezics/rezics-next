@@ -95,10 +95,16 @@ test('the subject page feed has a precise public HTTP contract', () => {
 });
 
 test('the feed refuses limits outside its approved sitemap range', async () => {
+  for (const query of ['', '?limit=1']) {
+    const response = await kernel.handle(new Request(`http://kernel.test/v1/subject-pages${query}`));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { subjectPages: unknown[]; next: string | null };
+    expect(Object.keys(body).sort()).toEqual(['next', 'subjectPages']);
+    expect(body.subjectPages).toEqual([]);
+    expect(body.next).toBeString(); // The empty first partition advances exactly one source step.
+  }
   for (const [query, status, code] of [
-    ['', 503, 'semantic_not_ready'],
-    ['?limit=1', 503, 'semantic_not_ready'],
-    ['?limit=1000&cursor=opaque', 503, 'semantic_not_ready'],
+    ['?limit=1000&cursor=opaque', 400, 'invalid_request'],
     ['?limit=0', 400, 'invalid_request'],
     ['?limit=1001', 400, 'invalid_request'],
     ['?limit=1.5', 400, 'invalid_request'],

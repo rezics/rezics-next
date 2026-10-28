@@ -18,9 +18,12 @@ relays catch up. Finite relay convergence and the next completed repair pass cor
 or rebuild time and private activity never determine freshness. Merged subject reads retain the API 308 and web 301;
 removed and unreadable subjects retain an indistinguishable 404.
 
-The current route is an unavailable stub: valid requests return `semantic_not_ready` (503). It does not verify cursors
-or establish indexability. Validation and the unavailable response cost O(1), with no database read; this makes no
-cost claim for the eventual feed.
+Publication transport, durable Relay delivery and final default composition remain pending on this base.
+Their independent native acceptance is documented in [the slice handoff](subject-pages-slices.md#remaining-transport-relay-and-default-composition-acceptance).
+Valid empty/default requests must return 200 with the closed envelope; malformed cursors use the existing 400
+`invalid_request` contract. The current readiness stub does not satisfy these assertions. The independent HTTP
+fixture needs the native store and candidate source, while default worker and foreign catch-up dependencies belong
+to their separate acceptance. The original full API and growth tests remain mandatory for the complete feature.
 
 ## Item identity metadata
 
@@ -932,6 +935,22 @@ append, with no additional SQL. The API round trips are covered by
 - Touches: `page-subjects.sql` reads s + 1 subjects by `subject_pkey` with a bound limit, then each of those rows probes `fact_label` for its label rows only. The label probe is a per-row read. `readPartition` reads one `core.partition` row. Grow the partition, the total and page depth; the check uses page size 1.
 - Bound: Rows O((s + 1) × labels), blocks O((s + 1) log N), five statements. Independent of P, of d, and of facts other than labels.
 - Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`, scales `[1, 4, 16]`.
+
+### Subject-page feed and publication
+
+The feed's intended per-request budget is one source partition, at most the normalized candidate limit plus one
+unconsumed key-only sentinel, current descriptive labels capped at 512 per subject, at most eight positive identities
+per candidate and owner batches capped at 256. Content fence reads retain their stricter 100-tuple cap. Filtering
+cannot refill from another partition or reset the candidate budget. Native repair and owner fanout share a separate
+32-key step budget plus one sentinel across phases. All publication writes stay in the native store ports.
+
+`subject-page-http.test.ts` checks actual source-window work and transport independently of worker mounting;
+`subject-page-publication-relay.test.ts` checks durable delivery, replay and retained owner evidence;
+`subject-page-default-composition.test.ts` checks the actual mounted object and default worker lifecycle. These are
+behavioral acceptance specifications, not passing cost measurements for the current readiness stub. Full feed and
+repair growth evidence remains in the unchanged `growth-subject-pages.test.ts` and native growth files, with legal
+scales, shared catalog/background accounting and actual owner work. No feed cost bound is claimed until that work
+runs against the production composition.
 
 ### Internal subject-page candidate window
 
