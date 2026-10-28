@@ -46,6 +46,7 @@ beforeEach(async () => {
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname IN ('community', 'content', 'access', 'library', 'core', 'dbos', 'semantic')
       AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+      AND NOT (n.nspname = 'access' AND c.relname LIKE 'write_rate_%')
     ORDER BY n.nspname, c.relname`);
   for (const name of [
     'community.publication',
