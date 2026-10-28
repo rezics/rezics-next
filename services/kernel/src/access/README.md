@@ -681,6 +681,8 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Creator grant initialization
 
+`creationDeclares(tx, resource)` answers whether the live command declares that exact route and id for creation, solely to bind module data written in the same command to that resource; it reads no rows, issues no statements, grants nothing and is not a permission check.
+
 - Touches: `creation-manifest.ts`, `parent-creation.ts`, `resource-initialization.ts/.sql`: one parent P/Q per attempt at T; a manifest binds c distinct new resources and their type/creator/provenance ports to the command. Each entry performs one exact provenance validation, then one SQL statement inserting one `resource_initialization` marker via its B-tree primary key and at most R owner/standing `resource_role_grant` rows via temporal GiST. Finalization checks at most 16 entries in memory; replay reauthorizes without initialization writes.
 - Bound: Parent `P+Q` and validation, then c provenance reads and c initialization statements, O(c(1+R)) written rows. At fixed trusted template and c, integrated checks measure constant rows/statements and logarithmic blocks in S; initialization blocks `O(c L(S)+c R I_Gt(1))`. Work scales with changed resources and trusted template size; no finalization SQL or history enumeration.
 - Growth check: `test/access/growth-creation-manifest.test.ts`: native creation/initialization/replay; background and k=1/8/16.

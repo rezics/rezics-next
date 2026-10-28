@@ -387,6 +387,7 @@ export {
   type ResourceAuthorizationInput,
 } from './resource-authorization.ts';
 export {
+  creationDeclares,
   parentCreationAuthorization,
   type ParentAnchor,
   type ParentCreationContext,
