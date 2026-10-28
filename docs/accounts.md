@@ -42,18 +42,20 @@ mentions across every claim path. Registry changes require a reason. An ordinary
 they currently manage. The [reservation command][lifecycle] checks both that action and management authority,
 including on replay; [Handles][access-handles] defines the registry and exception receipts.
 
-Renaming publishes the new claim and reserves the former spelling for 30 days. Internal resolution points to
-the same account ID rather than chaining aliases; public profile lookup accepts only an active claim and returns
-no profile for a reserved alias. Expiry currently permits another account to claim that spelling without waiting
-for cleanup. These are distinct interfaces in [lifecycle.ts][lifecycle], [reservation SQL][handle-reserve] and
-[account-data.ts][account-data]; the research's permanent retirement, privacy unlinking and dispute/reassignment
-procedures remain proposals, not capabilities provided by these paths.
+Renaming publishes the new claim and reserves the former spelling for 30 days; during that window the old name
+must redirect to the same account, without alias chains. [lifecycle.ts][lifecycle] provides that internal
+resolution, but [public profile lookup][account-data] accepts only active claims and the
+[website page loader][agent-page] treats reserved handles as missing: public forwarding is an implementation gap.
+After the reservation expires, [reservation SQL][handle-reserve] permits another account to claim the spelling
+without waiting for cleanup. The research's permanent retirement, privacy unlinking and dispute/reassignment
+procedures remain proposals; the adopted validation and registry do not adopt those additional policies.
 
 ### Public identity
 
 The public account page is `/@handle`, outside Realms and Zones. `GET /v1/accounts` accepts exactly one selector:
 up to 100 deduplicated IDs, one handle, or one verified catalogue agent ID. Unknown and pending accounts are
 omitted; handle and agent lookups also hide deleted accounts. The ID form preserves attribution tombstones.
+Accounts are public, enumerable identities; the public projection protects private fields rather than concealing that a live account exists.
 [routes.ts][account-routes], [account-data.ts][account-data] and [Public identity read][access-public] define the
 projection and its bounds.
 
@@ -72,8 +74,11 @@ underlying content permissions. See [account-data.ts][account-data], [public-vie
 
 An automated actor has exactly one operator: a human actor without an operator, or an organization. Automation
 cannot operate another account or join an organization; an operator chain cannot grow recursively. Public
-identity and attribution mark automation and identify its operator. The [operator commands][operator],
-[membership inverse][membership-inverse] and [public projection][account-data] carry these rules.
+identity, account pages and attribution must mark automation and identify its operator, for example
+“Automated · operated by @handle”. The [operator commands][operator], [membership inverse][membership-inverse]
+and [public projection][account-data] carry the relation and public fields. The website's
+[profile reader][web-profile-reader] currently drops `automated` and `operatorId`, and its
+[profile header][web-profile-header] does not render that marking; this is a presentation gap.
 
 The operator creates the account and controls whether it has independent credentials. Opening sessions,
 changing credentials and managing it require current management authority: the human operator holds that
@@ -241,8 +246,10 @@ Only the closed governance set `moderation:takedown`, `moderation:read_reports`,
 `access:grant` may use either authority on the target or the same action held on the Global Context. Global
 reach does not imply another action. A command using it records that fact in its own transaction. Grantors need
 `access:grant` and cannot grant actions they do not hold, including when granting on the Global Context.
-See [grant-commands.ts][grants], [platform-governance.json][platform-governance] and
-[Platform governance reach][access-governance].
+An account may renounce its own direct grant without `access:grant` when the client's scopes cover every
+revoked action; that exception cannot revoke group grants or another account's grants. See
+[grant-commands.ts][grants], [platform-governance.json][platform-governance],
+[Grant rule][access-grant-rule] and [Platform governance reach][access-governance].
 
 Every command attempt authorizes before reading an idempotency receipt, including retries and replays. A revoked
 caller receives neither a stored result nor another effect. Catalogue actions that remove their own authority
@@ -273,7 +280,9 @@ after restart, resumption authorizes at its new T. Only self-authority-removing 
 post-workflow result check. Cleanup continuations are narrower: exact allowlisted step, target, key and digest,
 at most five minutes, no user-result authority, and only current governance may renew unfinished cleanup.
 See [workflow-approvals.ts][approvals], [account-workflows.ts][account-workflows],
-[committed-continuations.ts][continuations] and [Workflow approvals][access-approvals].
+[committed-continuations.ts][continuations] and [Workflow approvals][access-approvals]. Auth's
+[workflow binding][workflows] carries native refusals through one status-bearing contract, without matching
+exception class names.
 
 Unavailability is not denial. Missing facts deny, while elapsed deadlines, exhausted pool waits, connection or
 capacity failures and exhausted transaction retries raise Access unavailability and map to retryable HTTP 503
@@ -311,6 +320,13 @@ membership relations, grants, birth dates, content preferences and private accou
 second public user. Email stays in Auth; other services needing delivery use a trusted Auth port, not an address
 copy. See [service.ts][auth-service], [Auth schema][auth-schema], [account schema][schema] and
 [Application boundary and configuration][auth-boundary].
+
+Private preferences are self-service account data: even a grant to another account does not bypass the
+actor/path equality check. An operator-opened session changes the automated account's preferences as that
+account. Spoiler, suitability, shelf and notification settings belong to [preferences.ts][preferences];
+[Viewer preferences][access-preferences] defines their defaults and update contract. Notification delivery
+checks the recipient's current settings as well as content access; mandatory moderation notices cannot be
+turned off, as defined by [notification-kinds.ts][notification-kinds] and [preferences.ts][preferences].
 
 Auth is the configured OIDC issuer at `auth.rezics.com`; signing keys and its database credentials stay out of
 the kernel and clients. Login, consent and security pages belong to Auth, with main-site settings reached
@@ -446,6 +462,9 @@ release a hold, and [Auth consent erasure][consent-erasure] removes consent afte
 [membership-work]: ../services/kernel/src/access/membership-work.ts
 [handle-policy]: ../services/kernel/src/access/handle-policy.ts
 [handle-reserve]: ../services/kernel/src/access/lifecycle-handle-reserve.sql
+[agent-page]: ../apps/web/src/features/pages/agent.tsx
+[web-profile-reader]: ../apps/web/src/features/pages/account-read.ts
+[web-profile-header]: ../apps/web/src/features/pages/account.tsx
 [account-routes]: ../services/kernel/src/access/routes.ts
 [public-views]: ../services/kernel/src/access/public-views.ts
 [operator]: ../services/kernel/src/access/operator.ts
@@ -494,6 +513,8 @@ release a hold, and [Auth consent erasure][consent-erasure] removes consent afte
 [problem]: ../services/kernel/src/http/problem.ts
 [permission-inverse]: ../services/kernel/src/access/permission-inverse.sql
 [auth-schema]: ../services/auth/db/schema.sql
+[preferences]: ../services/kernel/src/access/preferences.ts
+[notification-kinds]: ../services/kernel/src/access/notification-kinds.ts
 [issuer]: ../services/auth/src/issuer.ts
 [registration-proof]: ../services/kernel/src/access/registration-proof.ts
 [workflows]: ../services/auth/src/workflows.ts
@@ -527,6 +548,8 @@ release a hold, and [Auth consent erasure][consent-erasure] removes consent afte
 [recovery-completion]: ../services/kernel/src/access/recovery-completion.ts
 [consent-erasure]: ../services/auth/src/consent-erasure.ts
 [access-handles]: ../services/kernel/src/access/README.md#handles
+[access-grant-rule]: ../services/kernel/src/access/README.md#grant-rule
+[access-preferences]: ../services/kernel/src/access/README.md#viewer-preferences
 [access-public]: ../services/kernel/src/access/README.md#public-identity-read
 [access-profile]: ../services/kernel/src/access/README.md#public-profile-by-handle
 [access-reinstatement]: ../services/kernel/src/access/README.md#operator-reinstatement-fanout
