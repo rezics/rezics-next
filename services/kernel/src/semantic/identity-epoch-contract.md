@@ -95,20 +95,48 @@ Bind job execution to the persisted job, exact scope and native home fences, thr
 composition. This is not a new bypass port or a kernel-wide rule about user authorization after admission.
 Account/follow effects retain their real active/terminal account locks and current nativeT contract.
 
-## Ordinary HTTP response seam requiring a manager decision
+## Ordinary HTTP asynchronous identity operation
 
-`semantic/http/subjects.ts` currently runs `mergeSubjects` under `admission.run('normal', job, ...)`, passes
-`job.deadline`, records its returned component in the session, and returns only the completed merge result.
-`command/command.ts` defaults to 2000ms. `http/problem.ts`'s `effectStatus` and `problemSchema` allow only
-`not_applicable | not_applied`, and a POST error defaults to `not_applied`. A durable admitted pending job can
-continue after that deadline, so reporting its timeout through that existing POST problem would falsely claim
-not_applied. The completed merge DTO cannot truthfully represent that pending state either.
+Ordinary merge keeps `POST /v1/subjects:merge`, body `{subjects: [id, id]}`, the current native Global
+`subject:merge` authorization and quoted structured-field `Idempotency-Key`. After durable admission it answers
+**202** `{operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`. This acknowledges admission only.
+The opaque operation ID identifies the same durable native identity job and receipt, not a separate HTTP scheduler.
+Identical authorized replay returns the same operation and Location, including after publication. Different-body
+reuse remains `422 idempotency_conflict`; authorization precedes receipt lookup. Admission commits the immutable
+intent, pending control/epoch and wakeup atomically before returning the locator. No completed merge DTO is returned
+from this POST. An overflow is `409 identity_group_overflow` before ANY job, control, epoch, revision, redirect,
+mapping, participant, receipt or outbox effect; the cap stays 4096 originals per resulting group.
 
-The manager must select the ordinary request's truthful post-admission deadline/response contract before caller
-binding can land. This document does not authorize 202, partial success, a new pending DTO, an effect-status change,
-a timeout/evidence-TTL increase or cancellation of committed work. Accounts' wait-published decision is already
-settled and does not need to be reopened. STORE, bounded mapping and participant producers can land independently
-of this response decision.
+`GET /v1/subjectIdentityOperations/{id}` uses CURRENT native authorization on every request, including after
+publication. It requires the ordinary merge authority and current disclosure of the original and terminal subjects;
+operation possession and an old admission receipt provide no authority. A hidden original cannot be exposed through
+a public terminal. Unknown and denied operations return the same concealed `404 not_found`, without a session
+component or result disclosure. Authentication remains native: a valid suspended bearer receives
+`403 account_suspended`, while revoked credentials receive `401`; invalid credentials never become anonymous.
+
+An authorized GET answers exactly one of:
+
+- `200 {operation: {id, done: false}}` while the native identity epoch is pending.
+- `200 {operation: {id, done: true, result: {survivor, redirected, revision}}}` ONLY after the epoch is durably published.
+
+The result uses the native completed merge fields. Neither response includes affected-original vectors, private
+participant state, work frontiers or internal receipt details. A committed redirect/revision, mapping step,
+ordinary Search checkpoint or local participant completion is insufficient for `done: true`. Completion requires
+control custody of mapping and BOTH fixed version-1 Search/Library receipts, covering every prior home removal,
+addition and fence installation before publication. Receipt verification binds native `transactionId` together
+with `{partition, epoch, position}` and job/step/version/scope. A native `noEffect` command may reuse a position;
+position alone cannot identify a transaction or certify completion.
+
+The existing request deadline, Access evidence TTL, global problem `effect_status` and its
+`not_applicable | not_applied` values do not change. Do not report a durably admitted operation as `not_applied`
+when a request deadline expires: after admission, recovery is through the same receipt and locator. A lost response
+or process crash leaves the operation pending and replay recovers that same admission; neither failure cancels
+committed work nor declares early success. This response binding is required implementation work, not permission
+to extend deadlines or add a global problem status.
+
+Accounts verify/unverify use this SAME native job and publication boundary. Their callable successful DTO remains
+unchanged. The existing durable DBOS merge/unmerge step waits internally for publication before approval or clearing
+pending; Accounts adds no polling step, pending success DTO or second operation protocol.
 
 ## Native STORE and effect boundary
 
@@ -266,9 +294,59 @@ this matrix rather than pretending passing partial coverage establishes the whol
 | Entries/labels/sessions/copies/Collection originals, order/notes/multiplicity, latest seq conflict, Undo as new write, terminal new writes                                               | actual Commerce ordering + owner APIs                        |
 | Follow support 0/1 transitions, merge/split, >100 rows, crash between withdrawal/addition, stale old-destination first apply, epoch-crossing terminal cleanup no resurrection            | actual Library producer + native source/account fencing      |
 | Accounts same receipt waits pending->published in SAME DBOS merge/unmerge step, crash after effects before journal, no early approval/clear, exact moved-link reversal and unchanged DTO | coordinator + Accounts durable binding + actual participants |
-| Ordinary API post-admission deadline and current replay authority, no false not_applied; native actor/denial/hidden/default worker personas                                              | manager response decision + final caller composition         |
+| Ordinary API durable 202 admission, current authorized polling/replay, no false not_applied; native actor/denial/hidden/default worker personas                                          | async HTTP operation binding + final caller composition      |
 
 No test changes a pre-existing/frozen acceptance or treats missing native ports as successful readiness.
+
+### Mounted HTTP acceptance and unbound schedules
+
+`test/semantic/identity-operations-http.test.ts` uses the actual shared `createSemanticDriver()` with its real
+Accounts registration/token/suspension producer, Access, migrated kernel database and mounted production kernel.
+Its support creates subjects through HTTP, uses actual grant administration for revocation, and writes personal
+follows, entries and repeated Collection occurrences through their native HTTP routes. It creates no second fixture
+database, substitute participant, fabricated runtime option or completion override. The overflow population follows
+the existing native epoch helper's migrated historical rows in that same shared database; it is not a bootstrap ACK.
+Existing native Search 13+6 outcomes and both epoch suites/support remain required and unchanged.
+
+The frozen HTTP scenario titles are:
+
+- `merge admission returns one durable operation with same-key replay and different-body conflict`
+- `currently authorized pending poll exposes only operation id and done false`
+- `polling after current merge grant revocation is concealed and denied replay has no identity effects`
+- `polling a hidden original cannot disclose its public terminal or operation result`
+- `cap4097 rejects before any pending job control epoch revision redirect receipt or outbox effects`
+- `fresh unrelated revision1 creation remains usable without Search while an identity operation is pending`
+- `admission and replay preserve stored follows entries and repeated Collection occurrences`
+- `a valid natively suspended bearer receives403 rather than an authentication or anonymous response`
+- `unknown operation GET is concealed and valid suspended polling receives403`
+
+The first identity assertion is the actual POST status/DTO, before any absent-producer assertion. An absent STORE or
+participant therefore exposes the current HTTP red, rather than failing only on a future export. Effect snapshots
+include installed native identity tables, control partition, revisions, redirects, membership, receipts, outbox and
+stored references. Missing identity tables are NOT evidence that the pending/control/epoch portion has passed.
+The shared driver's own ordinary link relay is paused before effect snapshots so its unrelated commands cannot
+race identity denial assertions; this neither pauses nor acknowledges an identity participant. Personal owner
+authority comes from the production owner formulas, not fabricated Global grants. Receipt replay compares native
+transaction ID AND component. The suite has no skip, todo, permanent throw or
+successful test adapter. Admission preservation is not proof of preservation through completed maintenance.
+
+The following exact integration cells are **NOT YET FROZEN**. They remain required outcomes; their prose is not a
+claim of executable coverage. STORE, mapping, fixed Search/Library adapters and coordinator exports above are still
+missing. Do not invent their schema, participant paths or barrier exports to make this suite green.
+
+| Scenario title                                                              | Required native schedule and missing prerequisite for owner review                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published completed DTO only after actual fixed Search and Library receipts | Hold mapping, Search and Library separately before ACK custody; poll pending with either ACK absent; reconcile both actual receipts, publish once, then assert the exact completed DTO. Requires real adapters, STORE/coordinator and a controlled hold/release at each native ACK reconciliation and immediately before publication. Ordinary projection pause is not this port.                                                                                               |
+| Pending crash restart and same receipt                                      | Kill/restart the actual identity worker after admission commit/before dispatch; before and after each mapping/home-effect commit, frontier commit, local ACK commit, control ACK custody, publication commit and DBOS result journal. Replay the same POST and compare operation, job/epoch and native transaction ID plus component of every retained receipt. Requires worker lifecycle control and durable commit barriers; a lost returned promise is not process recovery. |
+| Completion custody includes every prior removal addition and fence          | Interrupt between withdrawal and addition at different homes, after each gate install and before published fence installation. Deliver duplicate, stale, wrong-transaction/same-position, wrong-component, wrong-job/epoch/version/scope and missing receipts; none may publish or forget a prior half-effect. Requires home effect/fence receipt enumeration and controlled barriers on the actual producers, plus real Search target/incarnation receipts.                    |
+| Fresh creation has exact self mapping independent of Search                 | Hold actual Search unavailable during pending work; create revision 1 and read the exact native self mapping without advancing the structural epoch. Requires STORE creation hooks and actual Search outage control. The frozen HTTP case proves revision/read behavior with the shared driver's absence of a Search worker only.                                                                                                                                               |
+| Completed maintenance preserves personal originals                          | Run the real published merge/split/repoint with nonempty follows, entries and repeated occurrences, retaining stored IDs, notes, order and multiplicity byte for byte. Requires actual participants/publication; the frozen admission case does not certify completion.                                                                                                                                                                                                         |
+| Revoked bearer401 differs from valid suspended bearer403                    | Revoke an actual issued credential through Accounts/Auth, then exercise POST and GET with that credential; separately exercise the still-valid suspended bearer. Requires an exposed actual credential-revocation fixture producer in the shared driver; do not forge authn epochs, account state or tokens. The suspended POST assertion already uses its real suspension producer.                                                                                            |
+| Accounts same native operation waits within its existing DBOS step          | Hold publication, crash after effects before step journalling, redeliver the same verify/unverify receipt and prove no approval/clear pending until publication, with unchanged successful DTO. Requires actual publication barriers and Accounts workflow inspection; no extra polling step.                                                                                                                                                                                   |
+
+These are missing controlled observation/lifecycle prerequisites, not proposed test-only completion APIs. The owning
+STORE/coordinator, Search, Library and Accounts producers must supply actual controls before these schedules can be
+frozen. Do not revive identity-basis, home vectors or per-page replay as a substitute.
 
 ## Cost
 
@@ -280,6 +358,15 @@ No test changes a pre-existing/frozen acceptance or treats missing native ports 
 - Growth check: retain the native 64/512/4096 group axis; independently grow unrelated subjects, owner pools,
   group/history/receipts/outbox and denied/replay paths. Capture actual rows, points, statements, bytes and blocks.
   Existing numbers are not changed; final measured budgets need Performance capture, not this type-only document.
+
+### Poll an ordinary identity operation
+
+- Touches: current native account/Global merge authority and original/terminal disclosure, indexed operation/job,
+  published control epoch and the durable result after publication.
+- Bound: indexed operation/control and current eligibility points; no affected-original response vector, participant
+  enumeration, all-home sweep or reusable allow. Reuse the native Access and publication bounds above.
+- Growth check: pending/completed, unknown/denied, revoked authority and hidden original while unrelated jobs,
+  receipts, groups and history grow independently. Full measured native evidence remains required.
 
 ### Advance mapping or participant step
 
