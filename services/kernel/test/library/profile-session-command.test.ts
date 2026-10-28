@@ -192,19 +192,18 @@ async function noEffects(body: () => Promise<unknown>, accountId = owner.actor.a
   if (id && history) expect(await contents(id)).toEqual(history);
   if (own) expect(await native.inspect(owner.actor.accountId)).toEqual(own);
 }
+function noSessionEffects(id: string, accountId = owner.actor.accountId) {
+  return (body: () => Promise<unknown>) => noEffects(body, accountId, id);
+}
 async function rejectCreate(input: unknown, status = 400, code = 'invalid_request') {
   await noEffects(async () => {
     await problem(await send('POST', '/v1/progressSessions', input), status, code);
   });
 }
 async function rejectRecord(id: string, revision: number, value: object) {
-  await noEffects(
-    async () => {
-      await problem(await send('POST', `${path(id)}:record`, { revision, ...value }), 400, 'invalid_request');
-    },
-    owner.actor.accountId,
-    id,
-  );
+  await noSessionEffects(id)(async () => {
+    await problem(await send('POST', `${path(id)}:record`, { revision, ...value }), 400, 'invalid_request');
+  });
 }
 async function record(id: string, revision: number, value: object, key = entryKey()) {
   return (await json(await send('POST', `${path(id)}:record`, { revision, ...value }, key), 200)).progressSession;
@@ -440,24 +439,20 @@ test('authorized receipts survive profile replacement removal hide and rollback 
   const history = await contents(s.id);
   for (const head of [replacement, removed, digest, replacement]) {
     await native.activate(head);
-    await noEffects(
-      async () => {
-        expect(await json(await send('POST', '/v1/progressSessions', input, startKey), 201)).toEqual(original);
-        expect(await json(await send('POST', `${path(s.id)}:record`, intent, recordKey), 200)).toEqual(recorded);
-        await problem(
-          await send('POST', '/v1/progressSessions', { ...input, total: '8' }, startKey),
-          422,
-          'idempotency_conflict',
-        );
-        await problem(
-          await send('POST', `${path(s.id)}:record`, { ...intent, amount: '1.123457' }, recordKey),
-          422,
-          'idempotency_conflict',
-        );
-      },
-      owner.actor.accountId,
-      s.id,
-    );
+    await noSessionEffects(s.id)(async () => {
+      expect(await json(await send('POST', '/v1/progressSessions', input, startKey), 201)).toEqual(original);
+      expect(await json(await send('POST', `${path(s.id)}:record`, intent, recordKey), 200)).toEqual(recorded);
+      await problem(
+        await send('POST', '/v1/progressSessions', { ...input, total: '8' }, startKey),
+        422,
+        'idempotency_conflict',
+      );
+      await problem(
+        await send('POST', `${path(s.id)}:record`, { ...intent, amount: '1.123457' }, recordKey),
+        422,
+        'idempotency_conflict',
+      );
+    });
     expect(await fact(s.id)).toEqual(stored);
     expect(await contents(s.id)).toEqual(history);
     expect((await json(await send('GET', path(s.id)), 200)).progressSession).toEqual(recorded.progressSession);
@@ -466,16 +461,12 @@ test('authorized receipts survive profile replacement removal hide and rollback 
     await native.send('steward', 'POST', `/v1/subjects/${subject}:hide`, { reason: 'Native receipt concealment' }),
     200,
   );
-  await noEffects(
-    async () => {
-      expect(await json(await send('POST', '/v1/progressSessions', input, startKey), 201)).toEqual(original);
-      expect(await json(await send('POST', `${path(s.id)}:record`, intent, recordKey), 200)).toEqual(recorded);
-      await problem(await send('POST', '/v1/progressSessions', input), 404, 'not_found');
-      expect((await commands.readSession(owner.actor, s.id)).amount).toBe('1.123456');
-    },
-    owner.actor.accountId,
-    s.id,
-  );
+  await noSessionEffects(s.id)(async () => {
+    expect(await json(await send('POST', '/v1/progressSessions', input, startKey), 201)).toEqual(original);
+    expect(await json(await send('POST', `${path(s.id)}:record`, intent, recordKey), 200)).toEqual(recorded);
+    await problem(await send('POST', '/v1/progressSessions', input), 404, 'not_found');
+    expect((await commands.readSession(owner.actor, s.id)).amount).toBe('1.123456');
+  });
 });
 
 test('native guards conceal sessions and source failures and fence old receipts before replay', async () => {
@@ -491,29 +482,27 @@ test('native guards conceal sessions and source failures and fence old receipts 
       await problem(await send('POST', '/v1/progressSessions', create(source)), 404, 'not_found');
     });
   for (const suffix of ['', '/completedUnits', '/changes']) {
-    await noEffects(
-      async () => {
-        const read = await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer);
-        await problem(read, 404, 'not_found', 'not_applicable');
-      },
-      other.actor.accountId,
+    await noSessionEffects(
       s.id,
-    );
+      other.actor.accountId,
+    )(async () => {
+      const read = await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer);
+      await problem(read, 404, 'not_found', 'not_applicable');
+    });
     const anonymous = await native.send('anonymous', 'GET', path(s.id) + suffix);
     expect([401, 404]).toContain(anonymous.status);
     privateFree(await anonymous.json());
   }
-  await noEffects(
-    async () => {
-      await problem(
-        await send('POST', `${path(s.id)}:record`, { revision: 1, amount: '1' }, entryKey(), other.bearer),
-        404,
-        'not_found',
-      );
-    },
-    other.actor.accountId,
+  await noSessionEffects(
     s.id,
-  );
+    other.actor.accountId,
+  )(async () => {
+    await problem(
+      await send('POST', `${path(s.id)}:record`, { revision: 1, amount: '1' }, entryKey(), other.bearer),
+      404,
+      'not_found',
+    );
+  });
   await expect(commands.listUnits(other.actor, s.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
   for (const fence of ['scope', 'suspension', 'authn'] as const) {
     const actor = await native.identity(scopes);
@@ -533,22 +522,21 @@ test('native guards conceal sessions and source failures and fence old receipts 
       });
     if (fence === 'suspension') await native.suspend(actor.actor.accountId);
     if (fence === 'authn') await native.revokeIdentity(actor.actor.accountId);
-    await noEffects(
-      async () => {
-        for (const [url, body, receipt] of [
-          ['/v1/progressSessions', input, key],
-          [`${path(id)}:record`, value, recordKey],
-        ] as const) {
-          const denied = await send('POST', url, body, receipt, bearer);
-          expect([401, 403, 404]).toContain(denied.status);
-          const bodyDenied = await denied.json();
-          privateFree(bodyDenied);
-          expect(bodyDenied).not.toHaveProperty('progressSession');
-        }
-      },
-      actor.actor.accountId,
+    await noSessionEffects(
       id,
-    );
+      actor.actor.accountId,
+    )(async () => {
+      for (const [url, body, receipt] of [
+        ['/v1/progressSessions', input, key],
+        [`${path(id)}:record`, value, recordKey],
+      ] as const) {
+        const denied = await send('POST', url, body, receipt, bearer);
+        expect([401, 403, 404]).toContain(denied.status);
+        const bodyDenied = await denied.json();
+        privateFree(bodyDenied);
+        expect(bodyDenied).not.toHaveProperty('progressSession');
+      }
+    });
     if (fence === 'suspension')
       await expect(commands.readSession(actor.actor, id)).rejects.toBeInstanceOf(GrantDeniedError);
   }
