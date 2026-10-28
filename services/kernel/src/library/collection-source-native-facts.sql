@@ -1,23 +1,30 @@
--- Every gated branch applies its indexed raw limit before UNION/sort. No state or parent filter precedes it.
-SELECT subject_id::text AS "storedSubjectId", fact_id::text AS "factId"
-FROM (
-  (SELECT subject_id, subject_id AS fact_id FROM library.entry
-   WHERE :driver::text = 'entry' AND route = :route AND account_id = :account_id
-     AND subject_id > COALESCE(:after_subject::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-   ORDER BY subject_id LIMIT :limit)
+-- Gates are inside each independently limited indexed branch; no other fact driver is read.
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :account_id::uuid AS account_id,
+         COALESCE(:after_subject::nullable(uuid), '00000000-0000-0000-0000-000000000000'::uuid) AS after_subject,
+         COALESCE(:after_fact::nullable(uuid), '00000000-0000-0000-0000-000000000000'::uuid) AS after_fact,
+         :limit::integer AS batch_limit, :driver::text AS driver
+)
+SELECT raw.subject_id::text AS "storedSubjectId", raw.fact_id::text AS "factId"
+FROM input i CROSS JOIN LATERAL (
+  (SELECT e.subject_id, e.subject_id AS fact_id FROM library.entry e
+   WHERE i.driver = 'entry' AND e.route = i.route AND e.account_id = i.account_id
+     AND e.subject_id > i.after_subject
+   ORDER BY e.subject_id LIMIT i.batch_limit)
   UNION ALL
-  (SELECT subject_id, copy_id FROM library.copy
-   WHERE :driver = 'copy' AND route = :route AND account_id = :account_id
-     AND (subject_id, copy_id) > (COALESCE(:after_subject, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(:after_fact::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
-   ORDER BY subject_id, copy_id LIMIT :limit)
+  (SELECT c.subject_id, c.copy_id FROM library.copy c
+   WHERE i.driver = 'copy' AND c.route = i.route AND c.account_id = i.account_id
+     AND (c.subject_id, c.copy_id) > (i.after_subject, i.after_fact)
+   ORDER BY c.subject_id, c.copy_id LIMIT i.batch_limit)
   UNION ALL
-  (SELECT subject_id, session_id FROM library.progress_session
-   WHERE :driver = 'session' AND route = :route AND account_id = :account_id
-     AND (subject_id, session_id) > (COALESCE(:after_subject, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(:after_fact, '00000000-0000-0000-0000-000000000000'::uuid))
-   ORDER BY subject_id, session_id LIMIT :limit)
+  (SELECT s.subject_id, s.session_id FROM library.progress_session s
+   WHERE i.driver = 'session' AND s.route = i.route AND s.account_id = i.account_id
+     AND (s.subject_id, s.session_id) > (i.after_subject, i.after_fact)
+   ORDER BY s.subject_id, s.session_id LIMIT i.batch_limit)
   UNION ALL
-  (SELECT subject_id, assignment_id FROM library.label_assignment
-   WHERE :driver = 'label' AND route = :route AND account_id = :account_id AND slot_no IS NOT NULL
-     AND (subject_id, assignment_id) > (COALESCE(:after_subject, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(:after_fact, '00000000-0000-0000-0000-000000000000'::uuid))
-   ORDER BY subject_id, assignment_id LIMIT :limit)
-) AS raw ORDER BY subject_id, fact_id;
+  (SELECT a.subject_id, a.assignment_id FROM library.label_assignment a
+   WHERE i.driver = 'label' AND a.route = i.route AND a.account_id = i.account_id AND a.slot_no IS NOT NULL
+     AND (a.subject_id, a.assignment_id) > (i.after_subject, i.after_fact)
+   ORDER BY a.subject_id, a.assignment_id LIMIT i.batch_limit)
+) AS raw
+ORDER BY raw.subject_id, raw.fact_id;

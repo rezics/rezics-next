@@ -1,13 +1,18 @@
--- The two mutually exclusive ranges keep the strict tuple in the index condition.
-SELECT subject_id::text AS "storedSubjectId", member_id::text AS "factId"
-FROM (
-  (SELECT subject_id, member_id FROM library.collection_member
-   WHERE :after_subject::uuid IS NULL AND route = :route AND collection_id = :collection_id
-   ORDER BY subject_id, member_id LIMIT :limit)
+-- Each mutually exclusive branch seeks its strict tuple before its exact limit.
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :collection_id::uuid AS collection_id,
+         :after_subject::nullable(uuid) AS after_subject, :after_fact::nullable(uuid) AS after_fact,
+         :limit::integer AS batch_limit
+)
+SELECT raw.subject_id::text AS "storedSubjectId", raw.member_id::text AS "factId"
+FROM input i CROSS JOIN LATERAL (
+  (SELECT m.subject_id, m.member_id FROM library.collection_member m
+   WHERE i.after_subject IS NULL AND m.route = i.route AND m.collection_id = i.collection_id
+   ORDER BY m.subject_id, m.member_id LIMIT i.batch_limit)
   UNION ALL
-  (SELECT subject_id, member_id FROM library.collection_member
-   WHERE :after_subject::uuid IS NOT NULL AND route = :route AND collection_id = :collection_id
-     AND (subject_id, member_id) > (:after_subject, :after_fact::uuid)
-   ORDER BY subject_id, member_id LIMIT :limit)
+  (SELECT m.subject_id, m.member_id FROM library.collection_member m
+   WHERE i.after_subject IS NOT NULL AND m.route = i.route AND m.collection_id = i.collection_id
+     AND (m.subject_id, m.member_id) > (i.after_subject, i.after_fact)
+   ORDER BY m.subject_id, m.member_id LIMIT i.batch_limit)
 ) AS raw
-ORDER BY subject_id, member_id;
+ORDER BY raw.subject_id, raw.member_id;
