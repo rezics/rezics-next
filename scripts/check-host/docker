@@ -1,6 +1,6 @@
 #!/bin/sh
 # Stands in for `docker` on a check host: remote-check.ts puts this directory first on the path of every remote run.
-# Containers that `docker run` and `docker create` start are placed in the host's capped slice, so no workspace has to
+# Containers that `docker run` and `docker create` start are placed in the run's slice, so no workspace has to
 # know it is running there. Every other command goes to the real docker unchanged.
 #
 # The real docker is the first one after this directory on the path. Anything ahead of it (a test's own docker shim, for
@@ -24,14 +24,16 @@ case "$1" in
   run | create)
     verb=$1
     shift
-    exec docker "$verb" --cgroup-parent=rezics-check.slice "$@"
+    if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
+    exec docker "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
     ;;
   container)
     case "${2:-}" in
       run | create)
         verb=$2
         shift 2
-        exec docker container "$verb" --cgroup-parent=rezics-check.slice "$@"
+        if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
+        exec docker container "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
         ;;
     esac
     ;;

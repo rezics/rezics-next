@@ -14,6 +14,8 @@
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
+// Admission depends only on free slots and memory headroom, whatever the host's load average. Each run has a nested
+// slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -309,13 +311,32 @@ flock -u 8
 exec 8>&-
 for run in ${ROOT}/runs/*; do
   [ -d "$run" ] || continue
-  if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then rm -rf -- "$run"; fi
+  if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
+    run_id=\${run##*/}
+    run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+    run_directory=$run
+    ${cleanupCommands()}
+  fi
 done
 echo "SLOTS ${count}"
 exec cat >/dev/null`;
 }
 
 const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
+
+function runSlice(id: string): string {
+  return `rezics-check-${id.replaceAll('-', '_')}.slice`;
+}
+
+/** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
+function cleanupCommands(): string {
+  return `systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
+docker ps -aq --filter "label=rezics.check.run=$run_id" | while IFS= read -r container; do
+  [ -z "$container" ] || docker rm -f -v "$container" >/dev/null 2>&1
+done
+systemctl stop "$run_slice" >/dev/null 2>&1
+rm -rf -- "$run_directory"`;
+}
 
 /**
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
@@ -342,20 +363,31 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
         awk -v elapsed="$((command_finished - command_started))" -v host="$host" 'BEGIN { printf "remote-check: command %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
       fi
     fi
-    peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak" 2>/dev/null) && echo "remote-check: peak memory of the run $((peak / 1048576)) MiB" >&2
+    run_finished=$(date +%s%N)
+    slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+    case "$slice_cgroup" in /*)
+      usage=$(awk '$1 == "usage_usec" { print $2 }' "/sys/fs/cgroup$slice_cgroup/cpu.stat" 2>/dev/null)
+      peak=$(cat "/sys/fs/cgroup$slice_cgroup/memory.peak" 2>/dev/null)
+      if [ -n "$usage" ] && [ -n "$peak" ]; then
+        awk -v usage="$usage" -v elapsed="$((run_finished - install_started))" -v peak="$peak" -v host="$host" 'BEGIN { seconds = elapsed / 1000000000; printf "remote-check: run used %.3f CPU seconds over %.3f s (%.2f cores), peak memory %d MiB on %s\\n", usage / 1000000, seconds, (seconds > 0 ? usage / 1000000 / seconds : 0), peak / 1048576, host }' >&2
+      fi
+      ;;
+    esac
     printf '%s\\n' "$code" > ${quote(statusFile)}
     exit $code`;
   return `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)}
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 cd ${directory} || exit 1
-exec systemd-run --scope --quiet --collect --slice=${SLICE} --unit=rezics-check-${id} \\
+exec systemd-run --scope --quiet --collect --slice=${runSlice(id)} --unit=rezics-check-${id} \\
   sh -c ${quote(systemdScript)} sh ${[cwd, ...command].map(quote).join(' ')}`;
 }
 
 function cleanupScript(id: string, directory: string): string {
-  return `systemctl stop rezics-check-${id}.scope >/dev/null 2>&1
-rm -rf -- ${directory}`;
+  return `run_id=${quote(id)}
+run_slice=${runSlice(id)}
+run_directory=${quote(directory)}
+${cleanupCommands()}`;
 }
 
 /** Reads the command's recorded exit status when ssh itself reports 255. */
@@ -490,11 +522,7 @@ function hostCapacity(host: Host, probe: HostProbe): number {
 function probeCapacity(probe: HostProbe, capacity: number): number {
   let freeSlots = 0;
   for (let count = 1; count <= capacity; count += 1) {
-    if (
-      probe.memoryHeadroom < count * CHECK_SLOT_MEMORY_BYTES ||
-      probe.load + count * CHECK_SLOT_PROCESSORS > probe.sliceProcessors
-    )
-      break;
+    if (probe.memoryHeadroom < count * CHECK_SLOT_MEMORY_BYTES) break;
     freeSlots = count;
   }
   return freeSlots;

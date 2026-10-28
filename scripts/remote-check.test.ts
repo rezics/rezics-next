@@ -1,6 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 import {
@@ -568,7 +578,7 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(run.identity).toBe('/keys/b');
   const script = run.script as string;
   expect(script).toContain('systemd-run --scope');
-  expect(script).toContain('--slice=rezics-check.slice');
+  expect(script).toMatch(/--slice=rezics-check-[a-z0-9_]+\.slice/);
   expect(script).toContain('KERNEL_CHECK_ON_REMOTE=1');
   expect(script).toContain('bun install --frozen-lockfile');
   expect(script).toContain(`bun scripts/check.ts ${kernelFiles.join(' ')}`);
@@ -579,7 +589,7 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
 });
 
-test('a host admits a slot only while its check slice has the memory and its processors the load for one more', async () => {
+test('a host admits runs by free slots and memory headroom whatever its load average', async () => {
   const { env, events } = scenario({
     memory: {
       available: 64 * 2 ** 30,
@@ -590,7 +600,7 @@ test('a host admits a slot only while its check slice has the memory and its pro
       load: 0,
       slots: 4,
     },
-    cpu: {
+    full: {
       available: 64 * 2 ** 30,
       memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
       memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES,
@@ -598,6 +608,7 @@ test('a host admits a slot only while its check slice has the memory and its pro
       processors: 16,
       load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
       slots: 4,
+      ordinaryBusy: 1,
     },
     ready: {
       available: 1,
@@ -605,7 +616,7 @@ test('a host admits a slot only while its check slice has the memory and its pro
       memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
       cpuQuotaPercent: 400,
       processors: 16,
-      load: 2 - CHECK_SLOT_PROCESSORS,
+      load: 1000,
       slots: 4,
     },
   });
@@ -1158,27 +1169,35 @@ test('SIGTERM stops the run, removes its directory and releases the slot', async
 
 test('containers started on a check host run under its capped cgroup slice', () => {
   const previous = process.env.KERNEL_CHECK_ON_REMOTE;
+  const previousSlice = process.env.REZICS_CHECK_SLICE;
   process.env.KERNEL_CHECK_ON_REMOTE = '1';
   try {
-    let args: string[] = [];
-    startPostgresContainer((given) => ((args = given), 'id'));
-    expect(args).toContain('--cgroup-parent=rezics-check.slice');
-    const search = spawnSync(
-      'bun',
-      [
-        '-e',
-        "import { searchRunArgs } from './services/kernel/scripts/search.ts'; console.log(JSON.stringify(searchRunArgs('image')))",
-      ],
-      {
-        cwd: repository,
-        env: { ...process.env, KERNEL_CHECK_ON_REMOTE: '1' },
-        encoding: 'utf8',
-      },
-    );
-    expect(JSON.parse(search.stdout) as string[]).toContain('--cgroup-parent=rezics-check.slice');
+    for (const slice of [undefined, 'rezics-check-test_run.slice']) {
+      if (slice === undefined) delete process.env.REZICS_CHECK_SLICE;
+      else process.env.REZICS_CHECK_SLICE = slice;
+      const expected = `--cgroup-parent=${slice ?? 'rezics-check.slice'}`;
+      let args: string[] = [];
+      startPostgresContainer((given) => ((args = given), 'id'));
+      expect(args).toContain(expected);
+      const search = spawnSync(
+        'bun',
+        [
+          '-e',
+          "import { searchRunArgs } from './services/kernel/scripts/search.ts'; console.log(JSON.stringify(searchRunArgs('image')))",
+        ],
+        {
+          cwd: repository,
+          env: { ...process.env, KERNEL_CHECK_ON_REMOTE: '1' },
+          encoding: 'utf8',
+        },
+      );
+      expect(JSON.parse(search.stdout) as string[]).toContain(expected);
+    }
   } finally {
     if (previous === undefined) delete process.env.KERNEL_CHECK_ON_REMOTE;
     else process.env.KERNEL_CHECK_ON_REMOTE = previous;
+    if (previousSlice === undefined) delete process.env.REZICS_CHECK_SLICE;
+    else process.env.REZICS_CHECK_SLICE = previousSlice;
   }
 });
 
@@ -1507,14 +1526,219 @@ test('a remote run reports how long it waited, synced, installed and ran', async
     expect(result.stderr).toMatch(new RegExp(`remote-check: ${phase} \\d+(?:\\.\\d+)? s on b`));
   }
   const script = events().find((event) => event.kind === 'run')!.script as string;
-  expect(script).toContain('remote-check: peak memory of the run');
+  expect(script).toContain('remote-check: run used');
 });
 
-test('every container a check host run starts is in the check slice', () => {
+/** Executes generated host scripts with local cgroup files and command fakes, never SSH or the real Docker daemon. */
+function runFixture() {
+  const directory = mkdtempSync(join(root, 'run-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const source = `#!${process.execPath}
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const directory = process.env.RUN_FIXTURE!;
+const command = process.argv[1]!.split('/').at(-1);
+const args = process.argv.slice(2);
+appendFileSync(directory + '/events', JSON.stringify({ command, args, slice: process.env.REZICS_CHECK_SLICE, run: process.env.REZICS_CHECK_RUN }) + '\\n');
+const stateFile = directory + '/state';
+const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + slice;
+if (command === 'systemd-run') {
+  const path = cgroup(process.env.REZICS_CHECK_SLICE!);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(path + '/cpu.stat', 'usage_usec 500000\\nuser_usec 400000\\nsystem_usec 100000\\n');
+  writeFileSync(path + '/memory.peak', String(64 * 1048576));
+  const start = args.indexOf('sh');
+  const result = spawnSync(args[start]!, args.slice(start + 1), { env: process.env, stdio: 'inherit' });
+  process.exit(result.status ?? 1);
+} else if (command === 'systemctl') {
+  if (args[0] === 'show') console.log('/rezics-check.slice/' + args.at(-1));
+  if (args[0] === 'is-active') process.exit(args.at(-1) === 'rezics-check-active-run.scope' ? 0 : 3);
+} else if (command === 'date') {
+  console.log(state.ticks++ * 1000000000);
+} else if (command === 'bun') {
+  process.exit(Number(process.env.INSTALL_EXIT ?? 0));
+} else if (command === 'docker') {
+  if (args[0] === 'run' || args[0] === 'create' || (args[0] === 'container' && ['run', 'create'].includes(args[1]!))) {
+    const id = 'container-' + state.containers.length;
+    const run = args[args.indexOf('--label') + 1]?.replace('rezics.check.run=', '');
+    state.containers.push({ id, run });
+    state.volumes.push(id);
+    const parent = args.filter((arg) => arg.startsWith('--cgroup-parent=')).at(-1)!.split('=')[1]!;
+    const path = cgroup(parent);
+    mkdirSync(path, { recursive: true });
+    const previous = existsSync(path + '/cpu.stat') ? Number(readFileSync(path + '/cpu.stat', 'utf8').match(/usage_usec (\\d+)/)![1]) : 0;
+    writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + 3000000) + '\\n');
+    writeFileSync(path + '/memory.peak', String(768 * 1048576));
+    console.log(id);
+  } else if (args[0] === 'ps') {
+    const run = args[args.indexOf('--filter') + 1]!.replace('label=rezics.check.run=', '');
+    for (const container of state.containers) if (container.run === run) console.log(container.id);
+  } else if (args[0] === 'rm') {
+    const id = args.at(-1);
+    state.containers = state.containers.filter((container) => container.id !== id);
+    if (args.includes('-v')) state.volumes = state.volumes.filter((volume) => volume !== id);
+  }
+}
+writeFileSync(stateFile, JSON.stringify(state));
+`;
+  for (const command of ['systemd-run', 'systemctl', 'docker', 'date', 'bun']) {
+    writeFileSync(join(bin, command), source);
+    chmodSync(join(bin, command), 0o755);
+  }
+  const stateFile = join(directory, 'state');
+  writeFileSync(
+    stateFile,
+    JSON.stringify({ ticks: 0, containers: [{ id: 'unrelated', run: 'other-run' }], volumes: ['unrelated'] }),
+  );
+  return {
+    directory,
+    state: () => JSON.parse(readFileSync(stateFile, 'utf8')),
+    events: () =>
+      readFileSync(join(directory, 'events'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line)),
+    execute: (script: string, env: Record<string, string> = {}) =>
+      spawnSync(
+        'sh',
+        [
+          '-c',
+          script
+            .replaceAll('/srv/rezics-check', directory)
+            .replaceAll('/sys/fs/cgroup', `${directory}/cgroup`)
+            .replaceAll(':/usr/local/bin:', ':'),
+        ],
+        {
+          cwd: repository,
+          env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}`, RUN_FIXTURE: directory },
+          input: '',
+          encoding: 'utf8',
+          timeout: 10_000,
+        },
+      ),
+  };
+}
+
+async function generatedRun() {
+  const { env, events } = scenario({ a: { available: 20e9 } });
+  expect(
+    (await remote(env, workspace(), ['sh', '-c', 'docker run database; docker container create search; exit 7'])).code,
+  ).toBe(0);
+  const script = (kind: string) => String(events().find((event) => event.kind === kind)!.script);
+  return { run: script('run'), cleanup: script('cleanup'), slot: script('slot') };
+}
+
+test('each run and every container it starts share one run slice', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  const result = fixture.execute(scripts.run);
+  expect(result.status, result.stderr).toBe(7);
+  const scope = fixture.events().find((event) => event.command === 'systemd-run');
+  expect(scope.run).toMatch(/^[a-z0-9-]+$/);
+  expect(scope.slice).toBe(`rezics-check-${scope.run.replaceAll('-', '_')}.slice`);
+  expect(scope.args).toContain(`--slice=${scope.slice}`);
+  const containers = fixture.events().filter((event) => event.command === 'docker');
+  expect(containers).toHaveLength(2);
+  for (const container of containers) {
+    expect(container.args).toContain(`--cgroup-parent=${scope.slice}`);
+    expect(container.args).toContain(`rezics.check.run=${scope.run}`);
+  }
+});
+
+test('a run reports its CPU seconds, average cores and peak memory including its containers', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  const result = fixture.execute(scripts.run);
+  expect(result.status, result.stderr).toBe(7);
+  expect(
+    result.stderr.split('\n').filter((line) => line.startsWith('remote-check: run used')),
+    result.stderr,
+  ).toEqual(['remote-check: run used 6.500 CPU seconds over 4.000 s (1.62 cores), peak memory 768 MiB on a']);
+  expect(result.stderr).not.toContain('peak memory of the run');
+  const failedInstall = runFixture();
+  const failure = failedInstall.execute(scripts.run, { INSTALL_EXIT: '9' });
+  expect(failure.status).toBe(9);
+  expect(failure.stderr).toContain('run used 0.500 CPU seconds over 2.000 s (0.25 cores), peak memory 64 MiB on a');
+});
+
+test('cleaning up a run removes its containers and their volumes', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  expect(fixture.execute(scripts.run).status).toBe(7);
+  expect(fixture.state().containers).toHaveLength(3);
+  expect(fixture.execute(scripts.cleanup).status).toBe(0);
+  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+  expect(fixture.state().volumes).toEqual(['unrelated']);
+  const events = fixture.events();
+  const stops = events.filter((event) => event.command === 'systemctl' && event.args[0] === 'stop');
+  const removals = events.filter((event) => event.command === 'docker' && event.args[0] === 'rm');
+  expect(stops).toHaveLength(2);
+  expect(stops[0].args[1]).toEndWith('.scope');
+  expect(stops[1].args[1]).toEndWith('.slice');
+  expect(removals).toHaveLength(2);
+  for (const removal of removals) {
+    expect(removal.args.slice(0, 3)).toEqual(['rm', '-f', '-v']);
+    expect(events.indexOf(removal)).toBeGreaterThan(events.indexOf(stops[0]));
+    expect(events.indexOf(removal)).toBeLessThan(events.indexOf(stops[1]));
+  }
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  expect(existsSync(join(fixture.directory, 'runs', id))).toBe(false);
+  // Retrying cleanup with no matching containers is harmless.
+  expect(fixture.execute(scripts.cleanup).status).toBe(0);
+  expect(fixture.state().volumes).toEqual(['unrelated']);
+});
+
+test("a stale run directory's containers are removed with it", async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  expect(fixture.execute(scripts.run).status).toBe(7);
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const stale = join(fixture.directory, 'runs', id);
+  const active = join(fixture.directory, 'runs/active-run');
+  const fresh = join(fixture.directory, 'runs/fresh-run');
+  mkdirSync(active);
+  mkdirSync(fresh);
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(stale, old, old);
+  utimesSync(active, old, old);
+  expect(fixture.execute(scripts.slot).status).toBe(0);
+  expect(existsSync(stale)).toBe(false);
+  expect(existsSync(active)).toBe(true);
+  expect(existsSync(fresh)).toBe(true);
+  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+  expect(fixture.state().volumes).toEqual(['unrelated']);
+  const events = fixture.events();
+  const scopeStop = events.findIndex(
+    (event) => event.command === 'systemctl' && event.args.join(' ') === `stop rezics-check-${id}.scope`,
+  );
+  const sliceStop = events.findIndex(
+    (event) =>
+      event.command === 'systemctl' && event.args.join(' ') === `stop rezics-check-${id.replaceAll('-', '_')}.slice`,
+  );
+  const removals = events.filter((event) => event.command === 'docker' && event.args[0] === 'rm');
+  expect(removals).toHaveLength(2);
+  for (const removal of removals) {
+    expect(removal.args.slice(0, 3)).toEqual(['rm', '-f', '-v']);
+    expect(events.indexOf(removal)).toBeGreaterThan(scopeStop);
+    expect(events.indexOf(removal)).toBeLessThan(sliceStop);
+  }
+});
+
+test('every container a check host run starts is in its run slice', () => {
   const { env, events } = scenario({ a: { available: 4e9 } });
   const wrapper = join(checkHost, 'docker');
   const docker = (...args: string[]) =>
-    spawnSync(wrapper, args, { env: { ...env, PATH: `${checkHost}:${env.PATH}` }, encoding: 'utf8' });
+    spawnSync(wrapper, args, {
+      env: {
+        ...env,
+        PATH: `${checkHost}:${env.PATH}`,
+        REZICS_CHECK_SLICE: 'rezics-check-test_run.slice',
+        REZICS_CHECK_RUN: 'test-run',
+      },
+      encoding: 'utf8',
+    });
 
   for (const args of [
     ['run', '-d', '--name', 'database', 'postgres:18'],
@@ -1537,10 +1761,44 @@ test('every container a check host run starts is in the check slice', () => {
     .filter((event) => event.kind === 'docker')
     .map((event) => event.args as string[]);
   expect(calls).toEqual([
-    ['run', '--cgroup-parent=rezics-check.slice', '-d', '--name', 'database', 'postgres:18'],
-    ['create', '--cgroup-parent=rezics-check.slice', '--name', 'database', 'postgres:18'],
-    ['container', 'run', '--cgroup-parent=rezics-check.slice', '--rm', 'postgres:18', 'run', 'create'],
-    ['container', 'create', '--cgroup-parent=rezics-check.slice', 'postgres:18'],
+    [
+      'run',
+      '--cgroup-parent=rezics-check-test_run.slice',
+      '--label',
+      'rezics.check.run=test-run',
+      '-d',
+      '--name',
+      'database',
+      'postgres:18',
+    ],
+    [
+      'create',
+      '--cgroup-parent=rezics-check-test_run.slice',
+      '--label',
+      'rezics.check.run=test-run',
+      '--name',
+      'database',
+      'postgres:18',
+    ],
+    [
+      'container',
+      'run',
+      '--cgroup-parent=rezics-check-test_run.slice',
+      '--label',
+      'rezics.check.run=test-run',
+      '--rm',
+      'postgres:18',
+      'run',
+      'create',
+    ],
+    [
+      'container',
+      'create',
+      '--cgroup-parent=rezics-check-test_run.slice',
+      '--label',
+      'rezics.check.run=test-run',
+      'postgres:18',
+    ],
     ['ps', '-aq'],
     ['rm', '-f', 'run'],
     ['port', 'create', '5432/tcp'],

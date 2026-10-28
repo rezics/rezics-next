@@ -72,9 +72,11 @@ export async function waitForSearch(url: string, containerName: string, timeoutM
   );
 }
 
-/** A check running on a development host keeps its containers inside that host's capped slice. */
+/** A check running on a development host keeps its containers inside its run's slice. */
 export function cgroupArgs(): string[] {
-  return process.env.KERNEL_CHECK_ON_REMOTE ? ['--cgroup-parent=rezics-check.slice'] : [];
+  return process.env.KERNEL_CHECK_ON_REMOTE
+    ? [`--cgroup-parent=${process.env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`]
+    : [];
 }
 
 export function searchRunArgs(image: string): string[] {
