@@ -91,8 +91,9 @@ test('native concurrent 32nd and 33rd claims serialize and duplicate races prese
   expect(race.map((r) => r.kind).sort()).toEqual(['applied', 'capacity']);
   const duplicates = await Promise.all([command(21, 131), command(21, 131)]);
   expect(duplicates.map((r) => r.kind).sort()).toEqual(['applied', 'existing']);
-  if (!('assignment' in duplicates[0]!) || !('assignment' in duplicates[1]!)) throw new Error('Missing identity');
-  expect(duplicates[0].assignment).toEqual(duplicates[1].assignment);
+  const [left, right] = duplicates;
+  if (!left || !right || !('assignment' in left) || !('assignment' in right)) throw new Error('Missing identity');
+  expect(left.assignment).toEqual(right.assignment);
   for (const subject of [20, 21]) {
     const result = await db.admin.query(
       'SELECT slot_no,assignment_id FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND slot_no IS NOT NULL',
