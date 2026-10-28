@@ -11,9 +11,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
-  activateSubjectIncarnation,
   createSubjectProjectionCoordinator,
-  initializeSubjectIncarnation,
   readSubjectCoverage,
   type IndexIncarnation,
 } from '../../src/search/coverage.ts';
@@ -35,6 +33,7 @@ import { subjectPartition } from '../../src/search/source.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { populateControlledSubjects } from './support/controlled-population.ts';
 
 /** Real baseline first; no missing export or stub can stand in for working commands/source/engine. */
 export async function createCoverageFixture() {
@@ -100,13 +99,7 @@ export async function createCoverageFixture() {
   async function population(transport = search) {
     const prefix = fresh();
     const config = options(prefix, transport);
-    const incarnation = await initializeSubjectIncarnation(config, 1);
-    const coordinator = createSubjectProjectionCoordinator(config);
-    while ((await coordinator.populate(incarnation)).state === 'more') {}
-    const certified = await coordinator.certify(incarnation, { deadline: Date.now() + 30_000 });
-    expect(certified.state).toBe('ready');
-    await activateSubjectIncarnation(config, incarnation);
-    await installTemplates(search, prefix);
+    const { incarnation, coordinator } = await populateControlledSubjects(config, { deadline: Date.now() + 30_000 });
     return { prefix, incarnation, coordinator, config };
   }
   async function raw(prefix: string) {
