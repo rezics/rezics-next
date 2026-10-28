@@ -222,7 +222,7 @@ export class WorkerJob implements GateOutcomeSink {
       await this.endAsEnvironment(worker.attempt, error);
     }
   }
-  private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
+  private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>, adopted = false): Promise<void> {
     const ref = worker.attempt,
       store = this.tasks.store;
     const task = store.task(ref.taskId);
@@ -241,6 +241,11 @@ export class WorkerJob implements GateOutcomeSink {
       ? Math.max(Date.parse(ref.startedAt), Math.min(Date.now(), lastLogMtime || Date.now()))
       : Date.parse(ref.startedAt);
     let checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
+    if (adopted)
+      checkWaitAtLastLogActivity = Math.max(
+        0,
+        checkWaitAtLastLogActivity - (Date.now() - lastLogActivityAt),
+      );
     const checkSilence = () => {
       if (silenceStopping || silenceFailure) return;
       try {
@@ -639,7 +644,7 @@ export class WorkerJob implements GateOutcomeSink {
               const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
                 readWorkerExit(attempt.logPath),
               );
-              await this.followAttempt({ attempt, exited });
+              await this.followAttempt({ attempt, exited }, true);
             } catch (error) {
               await this.endAsEnvironment(ref, error);
             }
