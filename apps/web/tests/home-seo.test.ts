@@ -98,5 +98,5 @@ test('the home loader keeps Worker bindings server-only and passes its validated
   expect(homeQueries).toMatch(/createServerFn\([\s\S]*?import\(['"]cloudflare:workers['"]\)/);
   expect(route).not.toContain("from 'cloudflare:workers'");
   expect(route).toContain('loaderData.origin');
-  expect(route).toContain('routePageJsonLd(loaderData.page, locale, loaderData.origin)');
+  expect(route).toContain('routePageJsonLd(loaderData.page, locale, origin)');
 });
