@@ -10,6 +10,7 @@ import {
   createLifecycleCommands,
   createLifecycleInternals,
   HANDLE_REDIRECT_TTL_MS,
+  LifecycleDeniedError,
   REGISTRATION_TTL_MS,
 } from '../../src/access/lifecycle.ts';
 import {
@@ -1995,7 +1996,9 @@ test.serial(
         });
         const redirected = await timed.resolveHandle(handle);
         instant = new Date(instant.getTime() + HANDLE_REDIRECT_TTL_MS + 1);
-        await timed.expireHandle({ handle, key: `growth-handle-expire-${repetition}` });
+        await expect(timed.expireHandle({ handle, key: `growth-handle-expire-${repetition}` })).rejects.toBeInstanceOf(
+          LifecycleDeniedError,
+        );
         return { pending, claim, active, redirect, redirected, expired: await timed.resolveHandle(handle) };
       },
       'Handle reserve/change/resolve/expire stays within its bound as A grows',

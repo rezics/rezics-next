@@ -724,8 +724,9 @@ can install the native management defaults as a separate command. Transfer
 reserves the new operator, changes the subject relation (invalidating old relation
 approvals), revokes Auth sessions, terminalizes and releases the old hold. It
 never copies resource grants. Deletion commits the authorized Access tombstone
-and fence before Auth erasure, then retires/releases responsibility and reserves
-the former handle under the existing redirect policy. Native Access commands
+and fence before Auth erasure, then retires/releases responsibility and calls the
+deletion handle step to permanently retire the account's current handle without
+forwarding or reassignment. Native Access commands
 continue to enforce holds, operator eligibility and last-owner rules.
 
 `fenceOperator` first commits the operator fence, then enumerates native pages of

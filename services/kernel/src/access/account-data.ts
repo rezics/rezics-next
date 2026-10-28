@@ -3,7 +3,7 @@ import type { PublicViews } from './public-views.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
-import handleRead from './account-handle-read.sql';
+import handleRead from './lifecycle-handle-read.sql';
 import agentPagesPage from './agent-pages-page.sql';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -60,6 +60,7 @@ export type PublicIdentityFields = {
 export type AccountLink = { label: string; url: string };
 export type AccountPublicViews = PublicViews & { realms: boolean };
 export type PublicAccountProfile = PublicIdentityFields & {
+  movedTo?: string;
   bio: string | null;
   links: AccountLink[];
   avatar: AvatarSummary | null;
@@ -69,19 +70,27 @@ export type PublicAccountProfile = PublicIdentityFields & {
   verified: boolean;
 };
 export type PublicSubject = { id: string; label: string; type: string };
-export type PublicHandleIdentity = PublicIdentityFields & { subject: PublicSubject | null; verified: boolean };
+export type PublicHandleIdentity = PublicIdentityFields & {
+  movedTo?: string;
+  subject: PublicSubject | null;
+  verified: boolean;
+};
 
-/** Resolve only an active claim, then read the account on its own anchor. */
+/** Resolve an active claim or live former-handle forward, then read the account on its own anchor. */
 export async function readPublicAccountByHandle(
   client: Pool,
   handle: string,
+  at = new Date(),
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   const route = createHash('sha256').update(handle).digest().readUInt16BE(0);
   const claim = await handleRead.run(client, { route, handle });
   if (!claim) return [];
+  const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at.getTime();
+  if (claim.state !== 'active' && !forwards) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending' || row.state === 'deleted') return [];
-  return publicIdentityForAccount(client, row);
+  if (forwards && (row.state !== 'active' || row.handle === null || row.handle === handle)) return [];
+  return publicIdentityForAccount(client, row, forwards ? row.handle! : undefined);
 }
 
 /** Resolve a verified catalogue subject through its pointer, then confirm it against the account authority. */
@@ -103,19 +112,20 @@ export async function readPublicAccountByAgent(
 async function publicIdentityForAccount(
   client: Pool,
   row: NonNullable<Awaited<ReturnType<typeof publicRead.run>>>,
+  movedTo?: string,
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   if (row.state === 'deleted' && row.kind === 'organization')
     return [{ id: row.accountId, kind: 'organization', state: 'deleted' }];
-  const identity: PublicIdentityFields = {
+  const identity: PublicIdentityFields & { movedTo?: string } = {
     id: row.accountId,
     kind: row.kind === 'organization' ? 'organization' : 'actor',
     handle: row.handle,
     displayName: row.displayName,
-    state: row.state === 'deleted' ? 'deleted' : 'active',
-    automated: row.state !== 'deleted' && row.operatorAccountId !== null,
+    state: 'active',
+    automated: row.operatorAccountId !== null,
     operatorId: row.operatorAccountId,
+    ...(movedTo ? { movedTo } : {}),
   };
-  if (row.state === 'deleted') return [{ ...identity, subject: null, verified: false }];
   const subjectId = row.agentVerified ? row.agentSubjectId : accountAgentId(row.accountId);
   let subject: PublicSubject | null = null;
   if (subjectId !== null) {

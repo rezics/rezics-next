@@ -181,6 +181,9 @@
                                 "maxItems": 5,
                                 "type": "array"
                               },
+                              "movedTo": {
+                                "type": "string"
+                              },
                               "operatorId": {
                                 "format": "uuid",
                                 "type": [
@@ -294,6 +297,9 @@
                                   "actor",
                                   "organization"
                                 ],
+                                "type": "string"
+                              },
+                              "movedTo": {
                                 "type": "string"
                               },
                               "operatorId": {

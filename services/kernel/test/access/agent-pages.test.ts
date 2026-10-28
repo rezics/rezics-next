@@ -187,6 +187,7 @@ test('every public identity column advances public change time and private colum
     operator_reservation_id: `operator_reservation_id='${newId(23)}'`,
     membership_inverse_complete: 'membership_inverse_complete=NOT membership_inverse_complete',
     handle_operation_id: "handle_operation_id='private'",
+    handle_change_times: "handle_change_times=ARRAY['2030-01-01'::timestamptz]",
     rate_tier: "rate_tier='trusted'",
     agent_verification_receipt_id: `agent_verification_receipt_id='${newId(23)}'`,
     pending_agent_subject_id: `pending_agent_subject_id='${newId(23)}', pending_agent_receipt_id='${newId(23)}'`,

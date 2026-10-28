@@ -197,7 +197,7 @@ test('profile patch sets and clears links, refuses invalid links and preserves t
   expect((await read('handle=profile_handle')).body.accounts[0].links).toEqual(maximum);
 });
 
-test('fencing and deletion erase biography and links, and a deleted handle answers like an unknown handle', async () => {
+test('fencing and deletion erase biography and links, and a deleted handle is unknown', async () => {
   for (const tombstone of [false, true]) {
     const handle = tombstone ? 'deleted_profile' : 'fenced_profile';
     const id = await person(handle);

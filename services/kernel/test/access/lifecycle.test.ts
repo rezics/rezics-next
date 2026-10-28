@@ -185,7 +185,7 @@ test('activation requires verified provisioning bound to this registration and r
   instant = before;
 });
 
-test('handle namespace protects active claims and redirects; expiry releases only expired pending or reserved claims', async () => {
+test('handle namespace protects active claims and former handles; expiry releases only expired pending claims', async () => {
   instant = Date.now();
   fixedClock = true;
   const id = await person('namespace');
@@ -204,8 +204,11 @@ test('handle namespace protects active claims and redirects; expiry releases onl
   );
   instant += HANDLE_REDIRECT_TTL_MS;
   expect(await internal.resolveHandle('namespace')).toBeNull();
-  await internal.expireHandle({ handle: 'namespace', key: key() });
-  await internal.reserveHandle({ handle: 'namespace', accountId: other, key: key() });
+  await expect(internal.expireHandle({ handle: 'namespace', key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(internal.reserveHandle({ handle: 'namespace', accountId: other, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await internal.reserveHandle({ handle: 'namespace', accountId: id, key: key() });
   const expired = await pending('expire_pending');
   instant += REGISTRATION_TTL_MS;
   await internal.expireHandle({ handle: 'expire_pending', key: key() });

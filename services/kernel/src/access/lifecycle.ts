@@ -70,9 +70,10 @@ import {
   type ContinuationBinding,
 } from './committed-continuations.ts';
 
-/** Authoritative application-clock policy: registration lasts 30 minutes and an
- * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
- * Coordination holds have NO expiry: only a durable workflow may resolve them.
+/** Authoritative application-clock policy: registration lasts 30 minutes and
+ * former handles forward for 30 days but retain their allocation forever.
+ * Neither clock nor timestamps come from JSON. Coordination holds have NO
+ * expiry: only a durable workflow may resolve them.
  */
 export class OrganizationCloseBlockedError extends LifecycleDeniedError {
   constructor(readonly blocker: { purpose: string; relatedAccountId: string }) {
@@ -82,6 +83,8 @@ export class OrganizationCloseBlockedError extends LifecycleDeniedError {
 }
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const HANDLE_CHANGE_LIMIT = 5;
+export const HANDLE_CHANGE_WINDOW_MS = HANDLE_REDIRECT_TTL_MS;
 export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
@@ -244,6 +247,9 @@ async function publishHandle(
       await handlePublish.run(tx, {
         ...transitionParameters(input),
         old_reservation_id: old?.reservationId ?? '',
+        at: authoritativeTimeValue(currentCommand(tx).time),
+        handle_change_limit: HANDLE_CHANGE_LIMIT,
+        handle_change_window_ms: HANDLE_CHANGE_WINDOW_MS,
         transaction_id: transactionId,
       }),
     ),
@@ -664,9 +670,17 @@ export function createLifecycleInternals(
       const route = handleRoute(input.handle);
       return execute(
         { route, id: input.handle, kind: 'handle-transition-released', key: input.key, input },
-        async (tx) => {
+        async (tx, transactionId) => {
           requireAllowed(matchesOperation(operation, input) && operation!.state === 'cancelled');
-          requireAllowed(affected(await transitionRelease.run(tx, { ...transitionParameters(input), route })));
+          requireAllowed(
+            affected(
+              await transitionRelease.run(tx, {
+                ...transitionParameters(input),
+                route,
+                transaction_id: transactionId,
+              }),
+            ),
+          );
           return { accountId: input.accountId, handle: input.handle };
         },
       );
@@ -730,6 +744,13 @@ export function createLifecycleInternals(
       const handle = normalized(input.handle);
       accountRoute(input.accountId);
       const route = handleRoute(handle);
+      const existing = await readClaim(pool, handle);
+      if (existing?.accountId === input.accountId && (existing.state === 'reserved' || existing.formerUntil !== null)) {
+        const owner = await withConnection(pool, (client) =>
+          accountRead.run(client, { route: accountRoute(input.accountId), account_id: input.accountId }),
+        );
+        requireAllowed(owner?.state === 'active' && !owner.fenced);
+      }
       const exception = isReservedHandle(handle);
       const context = request && snapshotRequest(request);
       let authorization: CommandAuthorization | undefined;
@@ -987,25 +1008,44 @@ export function createLifecycleInternals(
       input = { ...input };
       const handle = normalizeLookupHandle(input.handle);
       const route = handleRoute(handle);
-      return execute({ route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } }, async (tx) => {
-        requireAllowed(
-          affected(await handleExpire.run(tx, { route, handle, at: authoritativeTimeValue(currentCommand(tx).time) })),
-        );
-        return { handle, released: true };
-      });
+      return execute(
+        { route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } },
+        async (tx, transactionId) => {
+          requireAllowed(
+            affected(
+              await handleExpire.run(tx, {
+                route,
+                handle,
+                at: authoritativeTimeValue(currentCommand(tx).time),
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { handle, released: true };
+        },
+      );
     },
     async resolveHandle(value: string) {
       const handle = normalizeLookupHandle(value);
       const claim = await withConnection(pool, (client) =>
         handleRead.run(client, { route: handleRoute(handle), handle }),
       );
-      if (
-        !claim ||
-        (claim.state === 'pending' && Date.parse(claim.expiresAt!) <= Date.parse(iso(clock))) ||
-        (claim.state === 'reserved' && Date.parse(claim.reservedUntil!) <= Date.parse(iso(clock)))
-      )
-        return null;
-      return { accountId: claim.accountId, redirect: claim.state === 'reserved' };
+      if (!claim) return null;
+      const at = Date.parse(iso(clock));
+      const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at;
+      if (claim.state === 'pending' && Date.parse(claim.expiresAt!) <= at) return null;
+      if (claim.state === 'pending' && claim.formerUntil === null)
+        return { accountId: claim.accountId, redirect: false };
+      const account = await withConnection(pool, (client) =>
+        accountRead.run(client, { route: accountRoute(claim.accountId), account_id: claim.accountId }),
+      );
+      if (!account || account.state === 'deleted') return null;
+      if (claim.state === 'active') return { accountId: claim.accountId, redirect: false };
+      if (claim.state === 'pending' && account.state === 'active' && account.handle === handle)
+        return { accountId: claim.accountId, redirect: false };
+      if (forwards && account.state === 'active' && account.handle)
+        return { accountId: claim.accountId, redirect: true };
+      return null;
     },
     /** Release the exact member hold and inverse together, after independently
      * reading immutable organization-local terminal evidence. */

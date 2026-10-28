@@ -126,7 +126,7 @@ The tombstone transaction stores a durable cleanup checkpoint. The accounts work
 tombstone event and runs separate workflows of at most 100 membership rows, ordered by member ID and validity range.
 Each page commits the removed rows, terminal reservation proofs and its cursor with an immutable receipt before
 releasing the corresponding inverse rows on their own actor anchors. Replay finishes the same receipt's releases;
-restart resumes the saved step. Final cleanup runs the existing deleted-handle redirect step under the same
+restart resumes the saved step. Final cleanup runs the existing deleted-handle retirement step under the same
 committed key as any Auth deletion continuation. Member accounts,
 their grants and their other memberships are preserved, including suspended or deleted members' accounts.
 Deleted organization public identities expose only `{ id, state, kind }`.
@@ -707,9 +707,9 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
 
 ### Handle reserve/change/resolve/expire
 
-- Touches: `lifecycle-handle-*.sql`: reserve upserts, claim/redirect update, resolve reads or expire deletes 0–1 `handle_claim` by `handle_claim_pkey(route,normalized_handle)` on hashed-handle partition; claim first independently locks/reads 0–1 `account` on account partition. Each step 1 statement (claim 2); no account handle mutation endpoint is present in `lifecycle.ts`. Grow U/A, fixing spelling, account and reservation.
+- Touches: `lifecycle-handle-*.sql`: reserve upserts, claim/redirect update, resolve reads one `handle_claim`; expiry deletes only an expired ordinary pending claim and preserves former-handle claims. Rename publication changes one new claim, one former claim and the account row; the deletion handle step changes only the current claim. Each is a constant number of point statements independent of rename history. Grow U/A, fixing spelling, account and reservation.
 - Bound: Constant rows/statements, blocks `L(U)` plus `L(A)` for claim; registration, claiming, account activation and redirect are separate commits, not a cross-partition transaction.
-- Growth check: `test/access/growth-commands.test.ts`: `Handle reserve/change/resolve/expire stays within its bound as A grows`
+- Growth check: `test/access/growth-commands.test.ts`: `Handle reserve/change/resolve/expire stays within its bound as A grows`; `test/access/growth-handle-retirement.test.ts` covers forwarding, rename and deletion at [256, 1024, 4096] with a warm-up.
 
 ### Account update, coordination and fences
 
@@ -908,10 +908,22 @@ freeze assignments or public identity state.
 - Returns the identity fields above plus `bio` (the stored biography or null), `links` (an array of `{ label, url }`),
   `avatar`, `publicViews`, `subject` and `verified`. `avatar` is null or the [Content cover summary](../content/README.md#the-cover-summary)
   with `credit: null`. `subject` is the derived account agent until verification, then the verified catalogue subject;
-  both include `{ id, label, type }` from Semantic. A deleted account returns `subject: null` and `verified: false`.
-  Only an active handle claim resolves: unknown, pending or merely reserved handles return an empty list. Pending
-  accounts are absent. Deleted accounts have no profile fields; the ids read continues to return only its identity
-  tombstone.
+  both include `{ id, label, type }` from Semantic. A former handle returns the same current account profile as its
+  current handle, with optional `movedTo` while forwarding is live. `movedTo` always names the account's current
+  handle. After 30 days it is absent and the former handle returns an empty list. Unknown and ordinary pending handles
+  also return an empty list. A deleted account's current and former handles return exactly that empty list; an ids read
+  still returns only its identity tombstone.
+- A former handle keeps three independent facts: its allocation row records the owning account, its `former_until`
+  timestamp bounds public forwarding, and the owning account row determines whether that account still exists and is
+  active. Another account can never claim the former handle. Its own active account can take it back through an
+  ordinary rename, which applies the same rename limit. Forwarding reads the owner's current account row, so a handle
+  renamed more than once points straight to the current handle.
+- An account may change its handle at most five times in any rolling 30-day period. The account row keeps the latest
+  five change times; initial handle publication is not a change. Deleting an account retires its current handle under
+  the same allocation rule but never forwards it, because the account no longer exists. Former-handle rows are
+  retained to prevent impersonation; they contain allocation and timing data, not profile data. No work releases or
+  deletes a former-handle row. Until a reviewed command exists for forced renames or reassignment, impersonation is
+  contained through suspension.
 - The existing account profile patch accepts `links` alongside `displayName` and `biography`; `[]` clears links.
   There are at most 5 links, with labels of 1–64 characters and absolute `https:` URLs of at most 2048 characters,
   without credentials.
@@ -929,14 +941,19 @@ freeze assignments or public identity state.
   There is no new action. Fencing or deletion clears avatar, biography and links, sets every view off and clears speaker
   listing. Fenced or inactive profiles expose no public views even if stale presentation values remain stored.
 - Touches: one `handle_claim_pkey(route, normalized_handle)` point read on the handle's route, then one
-  `account_pkey(route, account_id)` point read on the account's route. A missing active claim stops after the first read.
+  `account_pkey(route, account_id)` point read on the account's route for an active or currently forwarding claim.
+  A missing, expired or ordinarily pending claim stops after the first read.
   An active profile reads the selected subject's label and type through Semantic's bounded one-id batch reads. An avatar
   adds one `readAvatarSummaries` statement in the account's partition. An avatar patch adds one
   `checkAvatarMedia` primary key read to the existing patch statements.
 - Bound: constant rows and statements; logarithmic blocks in accounts, handle claims and media.
-- Growth check: `test/access/growth-account-handle-read.test.ts`,
-  `public profile by handle stays bounded as accounts and handle claims grow`, uses the shared harness at
-  [256, 1024, 4096], seeding accounts, claims and media and patching the avatar in `grow`, with the default warm-up.
+- Growth checks: `test/access/growth-account-handle-read.test.ts` covers current profiles;
+  `test/access/growth-handle-retirement.test.ts` covers former-handle reads, rename and deletion at
+  [256, 1024, 4096], with one warm-up per scale.
+- Rename publication also checks the bounded account-local history and refuses a sixth change when the fifth-latest
+  change is less than 30 days old. Forwarding lasts until the former row's `former_until`; expiring forwarding never
+  releases that row. An active owner may reclaim it through the ordinary rename workflow, while deleted accounts and
+  other accounts cannot. The same growth check covers this forwarding and retirement path.
 
 ### Public activity view port
 
@@ -1409,9 +1426,9 @@ of authority, a closed validity interval or a terminal flag does not itself eras
 | Store / schema citation                                                                                                                                                                                                               | Account-linked personal fields or payload                                                                                                                                                      | Erasure or de-identification trigger and deadline                                                                                                                                                                                                                  | Retention purpose                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | `access.account`, identity/profile group ([schema](../../db/access/schema.sql), [fence SQL](lifecycle-fence.sql))                                                                                                                     | Handle, display name, avatar URL/id, biography, links, birth date, content preferences, suspension reason, registration ids/deadline, operator/controller ids                                  | Tombstone clears these in the barrier transaction; public views and speaker listing become false.                                                                                                                                                                  | Keep only the lifecycle tombstone for attribution and refusal of future authority.                      |
-| `access.account`, remaining state ([schema](../../db/access/schema.sql))                                                                                                                                                              | Stable account id/kind, timestamps, authentication floor/fence receipt, relation version/reservation, handle operation id, inverse status, rate tier, verified/pending subject and receipt ids | No erasure trigger or deadline for these residual fields; public disclosure is restricted by the deletion policy.                                                                                                                                                  | Terminal identity and replay/fencing; no deletion-retention purpose specified for every residual field. |
+| `access.account`, remaining state ([schema](../../db/access/schema.sql))                                                                                                                                                              | Stable account id/kind, timestamps, authentication floor/fence receipt, relation version/reservation, handle operation id and latest five handle-change times, inverse status, rate tier, verified/pending subject and receipt ids | No erasure trigger or deadline for these residual fields; public disclosure is restricted by the deletion policy.                                                                                                                                     | Terminal identity and replay/fencing; no deletion-retention purpose specified for every residual field.      |
 | `access.account_preferences` ([schema](../../db/access/schema.sql), [writer](preferences.ts), [fence SQL](lifecycle-fence.sql))                                                                                                       | Account id, spoiler level, suitability, shelf, notification overrides, version                                                                                                                 | Tombstone erases the row in the barrier transaction; a fence without tombstone preserves it.                                                                                                                                                                       | Private viewer choices while the account exists.                                                        |
-| `access.handle_claim` ([schema](../../db/access/schema.sql), [lifecycle](lifecycle.ts), [expiry](lifecycle-handle-expire.sql), [reservation](lifecycle-handle-reserve.sql))                                                           | Handle/account mapping, reservation and operation ids, expected prior handle, deadlines                                                                                                        | Registration/transition release can delete exact claims; expired unheld pending/reserved claims can be deleted or overwritten. Current deletion cleanup reserves the old handle for 30 days; expiry alone does not physically purge it. No bounded purge deadline. | Registration exclusion, rename redirects and reuse protection; retirement policy is separate work.      |
+| `access.handle_claim` ([schema](../../db/access/schema.sql), [lifecycle](lifecycle.ts), [expiry](lifecycle-handle-expire.sql), [reservation](lifecycle-handle-reserve.sql))                                                           | Handle/account mapping, reservation and operation ids, expected prior handle, forwarding deadline                                                                                                                                  | Exact unclaimed registration holds can be released. Former-handle rows are never deleted or reassigned; after their 30-day forwarding deadline, only their allocation record remains. Account deletion retires the current handle without forwarding. | Prevent handle impersonation while retaining only allocation facts; forwarding, reservation and reuse rules. |
 | `access.lifecycle_handle_operation`, `access.lifecycle_handle_effect`, `access.lifecycle_registration_expiry` ([schema](../../db/access/schema.sql))                                                                                  | Account, handles/expected handle, operation/reservation ids, effects and transactions                                                                                                          | Completion/registration expiry records terminal state; no erasure trigger or deadline.                                                                                                                                                                             | Idempotent handle and registration recovery.                                                            |
 | `access.organization_member` ([schema](../../db/access/schema.sql))                                                                                                                                                                   | Organization/member ids, role, validity history, transaction                                                                                                                                   | Membership removal closes intervals; no account-deletion purge or deadline.                                                                                                                                                                                        | Temporal membership authority/history.                                                                  |
 | `access.lifecycle_membership_slot`, `access.operator_relation_slot` ([schema](../../db/access/schema.sql))                                                                                                                            | Member/organization or operator/subject ids, reservations, terminal state                                                                                                                      | Terminalization preserves rows; no erasure trigger or deadline.                                                                                                                                                                                                    | Prevent reservation reuse.                                                                              |
@@ -1439,8 +1456,9 @@ commands is covered by the shared receipt, write-basis and outbox rows above.
 
 - Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
 - `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
+- Handle-based reads of retired and deleted handles return the same empty list as unknown handles; ids reads retain the exact three-field deletion identity.
 - The deleted handle projection in [account-data.ts](account-data.ts) still returns extra null/false fields, including `automated`; convergence to the policy's exact three-field identity is separate implementation work.
-- Handle claims can physically outlive their 30-day redirect expiry; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline. Handle retirement is separate work.
+- Former-handle allocation records intentionally remain after their 30-day forwarding period to prevent impersonation; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline.
 - Membership history, terminal slots/proofs and principal assignments have no erasure schedule; live inverse/coordination cleanup depends on workflow completion without a deadline.
 - Grants/role grants, denials, resource initialization/standing records and governance provenance have no account-deletion retention schedule; retained denial reasons also need minimization.
 - Rating controller history has no erasure trigger or justified retention duration.

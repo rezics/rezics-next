@@ -242,7 +242,7 @@ test('a committed deletion continuation runs its own steps through the runner an
 
   expect(await held(operator.accountId, subject.reservationId)).toBe(false);
   expect((await row(subject.accountId))!.state).toBe('deleted');
-  expect(await internal.resolveHandle(subject.handle)).toEqual({ accountId: subject.accountId, redirect: true });
+  expect(await internal.resolveHandle(subject.handle)).toBeNull();
   // Auth erases its own owner and records that step itself.
   expect((await completed(subject.accountId, view.operationKey)).map((item) => item.step)).toEqual([
     'redirect-deleted-handle',
@@ -253,7 +253,7 @@ test('a committed deletion continuation runs its own steps through the runner an
   const final = await deleteAccount(operator.accountId);
   await continuations.continueCommitted(final.reference);
   expect((await row(operator.accountId))!.state).toBe('deleted');
-  expect(await internal.resolveHandle(operator.handle)).toEqual({ accountId: operator.accountId, redirect: true });
+  expect(await internal.resolveHandle(operator.handle)).toBeNull();
   expect((await completed(operator.accountId, final.operationKey)).map((item) => item.step)).toEqual([
     'redirect-deleted-handle',
   ]);

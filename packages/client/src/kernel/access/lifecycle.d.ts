@@ -5,9 +5,10 @@ import { type CommandAttempt } from '../command/command.ts';
 import { type Access, type AccountActor, type AccessClient, type ActionCatalogue } from '../request/access.ts';
 import type { PermissionContext } from './permission.ts';
 import { type ContinuationBinding } from './committed-continuations.ts';
-/** Authoritative application-clock policy: registration lasts 30 minutes and an
- * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
- * Coordination holds have NO expiry: only a durable workflow may resolve them.
+/** Authoritative application-clock policy: registration lasts 30 minutes and
+ * former handles forward for 30 days but retain their allocation forever.
+ * Neither clock nor timestamps come from JSON. Coordination holds have NO
+ * expiry: only a durable workflow may resolve them.
  */
 export declare class OrganizationCloseBlockedError extends LifecycleDeniedError {
     readonly blocker: {
@@ -21,6 +22,8 @@ export declare class OrganizationCloseBlockedError extends LifecycleDeniedError 
 }
 export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
+export declare const HANDLE_CHANGE_LIMIT = 5;
+export declare const HANDLE_CHANGE_WINDOW_MS: number;
 export declare const LIFECYCLE_ACTIONS: ActionCatalogue;
 export declare function normalizeHandle(handle: string): string;
 export declare function normalizeLookupHandle(handle: string): string;

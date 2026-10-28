@@ -105,6 +105,7 @@ const coverSummary = t.Object(
 const publicProfile = t.Object(
   {
     ...publicIdentity.properties,
+    movedTo: t.Optional(t.String()),
     bio: t.Union([t.String(), t.Null()]),
     links: t.Array(
       t.Object({ label: t.String({ minLength: 1, maxLength: 64 }), url: t.String({ maxLength: 2048 }) }, closed),
@@ -124,6 +125,7 @@ const publicProfile = t.Object(
 const publicHandleIdentity = t.Object(
   {
     ...publicIdentity.properties,
+    movedTo: t.Optional(t.String()),
     subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
     verified: t.Boolean(),
   },
@@ -855,7 +857,11 @@ export function accessRoutes(
       async ({ query, admission, job, set }) => {
         const accounts = await admission.run('normal', job, async () => {
           if ('handle' in query)
-            return readPublicAccountByHandle(dependencies.pool, normalizeLookupHandle(query.handle));
+            return readPublicAccountByHandle(
+              dependencies.pool,
+              normalizeLookupHandle(query.handle),
+              dependencies.clock(),
+            );
           if ('agent' in query) return readPublicAccountByAgent(dependencies.pool, query.agent);
           const requested = query.ids.split(',');
           if (

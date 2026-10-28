@@ -149,10 +149,14 @@ test('holds survive pending TTL before and after publication, recovery finishes 
     internal.reserveHandle({ handle: 'crash_old', accountId: newId(0x1234), key: key() }),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
   instant += 1;
-  const newer = newId(0x1234);
-  await internal.reserveHandle({ handle: 'crash_old', accountId: newer, key: key() });
+  await expect(
+    internal.reserveHandle({ handle: 'crash_old', accountId: newId(0x1234), key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
   await finish(input);
-  expect(await internal.resolveHandle('crash_old')).toEqual({ accountId: newer, redirect: false });
+  const reclaim = await prepare(id, 'crash_old', input.handle);
+  await commands.transitionAccountHandle(await context(id), reclaim);
+  await finish(reclaim);
+  expect(await internal.resolveHandle('crash_old')).toEqual({ accountId: id, redirect: false });
 });
 
 test('public rename binds actor, scopes, expected handle, reservation and digest before receipt disclosure', async () => {

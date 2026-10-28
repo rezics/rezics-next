@@ -54,6 +54,7 @@ export type AccountPublicViews = PublicViews & {
     realms: boolean;
 };
 export type PublicAccountProfile = PublicIdentityFields & {
+    movedTo?: string;
     bio: string | null;
     links: AccountLink[];
     avatar: AvatarSummary | null;
@@ -68,11 +69,12 @@ export type PublicSubject = {
     type: string;
 };
 export type PublicHandleIdentity = PublicIdentityFields & {
+    movedTo?: string;
     subject: PublicSubject | null;
     verified: boolean;
 };
-/** Resolve only an active claim, then read the account on its own anchor. */
-export declare function readPublicAccountByHandle(client: Pool, handle: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
+/** Resolve an active claim or live former-handle forward, then read the account on its own anchor. */
+export declare function readPublicAccountByHandle(client: Pool, handle: string, at?: Date): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
 /** Resolve a verified catalogue subject through its pointer, then confirm it against the account authority. */
 export declare function readPublicAccountByAgent(client: Pool, subjectId: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
