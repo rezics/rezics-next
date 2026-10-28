@@ -21,6 +21,8 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import currentBan from '../../src/community/ban-current.sql';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -569,6 +571,66 @@ test.serial(
         ),
       ),
     ).toEqual(new Set([listed.accountId, second.accountId]));
+  },
+  600_000,
+);
+
+test.serial(
+  'protected read and admission ban probes stay bounded as bans in one Realm grow',
+  async () => {
+    const route = 0x7160;
+    const realmId = newId(route);
+    const accountId = newId(route);
+    const absentId = newId(route);
+    const at = '2026-01-01T00:00:00.000Z';
+    await admin.query(
+      `INSERT INTO community.realm_ban (route,realm_id,account_id,valid,reason,actor,transaction_id)
+     VALUES ($1,$2,$3,'[2020-01-01,)','Probe',$3,$4)`,
+      [route, realmId, accountId, newId(route)],
+    );
+    const report = await checkGrowth(db, {
+      name: 'Protected Realm read and admission ban point read',
+      scales: [256, 1024, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_db, scale, previous) {
+        await seed(
+          db,
+          {
+            name: 'same-realm-bans',
+            hotPartition: partitionOf(route),
+            hotShare: 1,
+            rows: () => ({
+              'community.realm_ban': [
+                {
+                  route,
+                  realm_id: realmId,
+                  account_id: newId(route),
+                  valid: '[2020-01-01,)',
+                  reason: 'Neighbour',
+                  actor: accountId,
+                  transaction_id: newId(route),
+                },
+              ],
+            }),
+          },
+          { from: previous, to: scale },
+        );
+      },
+      async operation() {
+        await withConnection(db.pool, async (client) => {
+          expect(await currentBan.run(client, { route, realm_id: realmId, account_id: accountId, at })).toEqual({
+            banned: true,
+          });
+          expect(await currentBan.run(client, { route, realm_id: realmId, account_id: absentId, at })).toBeNull();
+        });
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+    for (const { cost } of report.samples) {
+      expect(cost.statements).toBe(2);
+      expect(cost.rows).toBe(1);
+      for (const relation of Object.values(cost.relations ?? {})) expect(relation.sequentialScans).toBe(0);
+    }
   },
   600_000,
 );
