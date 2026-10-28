@@ -16,6 +16,7 @@ import { markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
+import { matchesPath } from './briefs.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import { makeRecord, readMeasurement, reportedApproaches, CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY } from './records.ts';
@@ -965,7 +966,23 @@ export class WorkerJob implements GateOutcomeSink {
       const limits = readRouting(this.tasks.settings.routingFile).classes[
         task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
       ];
-      const failureClass = classifyFailure(outcome, task, attempt, record, limits, this.hasCommit(outcome));
+      // A control-plane landing checks the whole control-plane tree, beyond the task's estimated diff size. A failed
+      // check is still the task's gate failure; retain scope-growth for an actual changed path outside the brief.
+      const controlPlaneGate =
+        task.brief.goal === 'control-plane' &&
+        outcome.stage === 'gate' &&
+        outcome.changedFiles.every((path) => matchesPath(path, task.brief.paths));
+      const classificationOutcome = controlPlaneGate
+        ? { ...outcome, diffLines: 0, nonGeneratedDiffLines: 0, nonGeneratedChangedFiles: [] }
+        : outcome;
+      const failureClass = classifyFailure(
+        classificationOutcome,
+        task,
+        attempt,
+        record,
+        limits,
+        this.hasCommit(outcome),
+      );
       record.escalation = failureClass;
       record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);
       store.updateAttempt(outcome, (a) => {

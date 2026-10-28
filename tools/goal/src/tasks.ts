@@ -15,7 +15,7 @@ import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts'
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
-import { choosePoolWithFallback } from './allowance.ts';
+import { choosePoolWithFallback } from './pools.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
@@ -488,6 +488,8 @@ export class WorkerTasks {
         : undefined;
       if (switched)
         fallbacks = fallbacks.filter((candidate) => candidate !== switched && candidate.model !== old!.profile.model);
+      const paceThisSelection = !pinned && !options.profile && !switched && paced;
+      const schedule = paceThisSelection ? readCodexSchedule(this.settings.stateDirectory) : undefined;
       const { profile, pool } = choosePoolWithFallback(
         pinned ? route.profile : (options.profile ?? switched ?? route.profile),
         fallbacks,
@@ -502,10 +504,9 @@ export class WorkerTasks {
         // engine, or a class routed with paced: false keeps its order.
         pinned || options.profile || switched || !paced
           ? undefined
-          : (candidate) => {
+          : (candidate, now) => {
               const reading = readings.find((value) => value.pool === candidate.name);
-              const schedule = readCodexSchedule(this.settings.stateDirectory);
-              return reading ? pace(reading, candidate, Date.now(), schedule)?.urgency : undefined;
+              return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
             },
       );
       const make = (n: number): Attempt => ({

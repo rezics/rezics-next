@@ -278,8 +278,9 @@ then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` bef
 swaps `main`, then merges the checked main commit into `stabilize` and merges that resulting stabilize head into the
 integration branch, also using compare-and-swap. A conflict aborts that merge, leaves its target branch unchanged, and
 notifies the task manager and supermanager. When no stabilize branch exists, the checked main commit merges directly
-into the integration branch. A control-plane task that changes a file outside `tools/goal/`, and tasks from other
-Goals, continue to integrate into the integration branch as before.
+into the integration branch. A failed control-plane check is recorded as a gate failure and retried with its failure
+evidence; changes outside the task's declared paths still count as scope growth. Control-plane tasks that change a file
+outside `tools/goal/`, as well as tasks from other Goals, continue to integrate into the integration branch as before.
 
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
