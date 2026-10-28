@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -12,17 +13,31 @@ import {
 } from './reads';
 
 export const libraryEntryStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'] as const;
-export type LibraryEntryState = (typeof libraryEntryStates)[number];
+export type LibraryEntryStateWrite = (typeof libraryEntryStates)[number];
+export type LibraryEntryStateRead = string;
 
-const stateSet = new Set<string>(libraryEntryStates);
+const writableEntryStates = new Set<string>(libraryEntryStates);
 
-export function libraryEntryState(value: string | undefined): LibraryEntryState | undefined {
-  return value !== undefined && stateSet.has(value) ? (value as LibraryEntryState) : undefined;
+function isWritableEntryState(value: string): value is LibraryEntryStateWrite {
+  return writableEntryStates.has(value);
+}
+
+export function libraryEntryStateWrite(value: string | undefined): LibraryEntryStateWrite | undefined {
+  return value !== undefined && isWritableEntryState(value) ? value : undefined;
+}
+
+export function libraryEntryStateLabel(state: LibraryEntryStateRead): string {
+  if (state === 'planned') return m.library_state_planned();
+  if (state === 'in_progress') return m.library_state_in_progress();
+  if (state === 'completed') return m.library_state_completed();
+  if (state === 'paused') return m.library_state_paused();
+  if (state === 'dropped') return m.library_state_dropped();
+  return m.library_other();
 }
 
 export type PersonalLibraryEntry = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateRead;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +51,7 @@ export const SHELF_SECTION_LIMIT = 12;
 export const SHELF_TAB_LIMIT = 48;
 
 /** The order of the All tab's sections: what the person is in the middle of first. */
-export const shelfSectionOrder: readonly LibraryEntryState[] = [
+export const shelfSectionOrder: readonly LibraryEntryStateWrite[] = [
   'in_progress',
   'planned',
   'completed',
@@ -44,16 +59,16 @@ export const shelfSectionOrder: readonly LibraryEntryState[] = [
   'dropped',
 ];
 
-export type ShelfSection = { state: LibraryEntryState; entries: PersonalLibraryEntry[] };
+export type ShelfSection = { state: LibraryEntryStateWrite; entries: PersonalLibraryEntry[] };
 
 export type PersonalLibraryView =
   | { signedIn: false }
   | { signedIn: true; state: null; sections: ShelfSection[] }
-  | { signedIn: true; state: LibraryEntryState; entries: PersonalLibraryEntry[]; next: string | null };
+  | { signedIn: true; state: LibraryEntryStateWrite; entries: PersonalLibraryEntry[]; next: string | null };
 
 export type SavedLibraryEntry = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateRead;
   revision: number;
   updatedAt: string;
 };
@@ -67,7 +82,7 @@ export type LibraryMutationResult =
 
 export type LibraryChangeInput = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateWrite;
   revision: number;
   idempotencyKey: string;
 };
@@ -80,7 +95,7 @@ export type LibraryRemoveInput = {
 
 type RawEntry = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateRead;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -127,7 +142,7 @@ export async function readEntryPage(
   client: KernelClient,
   authorization: string,
   cursor: string | undefined,
-  state: LibraryEntryState | undefined,
+  state: LibraryEntryStateWrite | undefined,
   limit?: number,
 ) {
   const result = await client.libraryEntries.get({
@@ -158,7 +173,7 @@ export async function loadPersonalLibrary(
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
-  const state = libraryEntryState(input.state);
+  const state = libraryEntryStateWrite(input.state);
   if (!state) {
     const pages = await Promise.all(
       shelfSectionOrder.map((section) => readEntryPage(client, authorization, undefined, section, SHELF_SECTION_LIMIT)),

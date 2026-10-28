@@ -3,7 +3,7 @@ import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { shelfSectionOrder, type LibraryEntryState, type PersonalLibraryView } from './entries-read';
+import { shelfSectionOrder, type LibraryEntryStateWrite, type PersonalLibraryView } from './entries-read';
 import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { ShelfEntries, stateLabel } from './shelf-view';
 
@@ -26,8 +26,8 @@ function sizeLabel(size: ShelfSize): string {
 }
 
 /** The status tabs. Each is a link, so they work without JavaScript, and each keeps the chosen layout and size. */
-function Tabs({ state, locale, display }: { state: LibraryEntryState | null; locale: string; display: Display }) {
-  const tabs: { state: LibraryEntryState | null; label: string }[] = [
+function Tabs({ state, locale, display }: { state: LibraryEntryStateWrite | null; locale: string; display: Display }) {
+  const tabs: { state: LibraryEntryStateWrite | null; label: string }[] = [
     { state: null, label: m.library_state_all() },
     ...shelfSectionOrder.map((tab) => ({ state: tab, label: stateLabel(tab) })),
   ];
@@ -60,7 +60,7 @@ function DisplayLinks({
   locale,
   display,
 }: {
-  state: LibraryEntryState | null;
+  state: LibraryEntryStateWrite | null;
   locale: string;
   display: Display;
 }) {
@@ -131,7 +131,7 @@ function StatusTab({
   locale,
   display,
 }: {
-  page: Extract<SignedIn, { state: LibraryEntryState }>;
+  page: Extract<SignedIn, { state: LibraryEntryStateWrite }>;
   cursor: string | undefined;
   locale: string;
   display: Display;

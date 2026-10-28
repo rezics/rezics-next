@@ -29,17 +29,24 @@ import { useId, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
-import { shelfSectionOrder, type LibraryEntryState, type PersonalLibraryEntry } from './entries-read';
+import {
+  libraryEntryStateWrite,
+  libraryEntryStateLabel,
+  shelfSectionOrder,
+  type LibraryEntryStateRead,
+  type LibraryEntryStateWrite,
+  type PersonalLibraryEntry,
+} from './entries-read';
 import { coverSubject, rowRatio } from './subject-row';
 import type { ShelfLayout, ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 
-export function stateLabel(state: LibraryEntryState): string {
-  if (state === 'planned') return m.library_state_planned();
-  if (state === 'in_progress') return m.library_state_in_progress();
-  if (state === 'completed') return m.library_state_completed();
-  if (state === 'paused') return m.library_state_paused();
-  return m.library_state_dropped();
+export function stateLabel(state: LibraryEntryStateRead): string {
+  return libraryEntryStateLabel(state);
+}
+
+function selectedStateValue(state: LibraryEntryStateRead): string {
+  return libraryEntryStateWrite(state) ?? '__library_other__';
 }
 
 function failureText(reason: ShelfFailure): string {
@@ -105,7 +112,7 @@ function EntryMenu({
         {
           type: 'radio',
           label: m.library_menu_status(),
-          value: entry.state,
+          value: selectedStateValue(entry.state),
           options: shelfSectionOrder.map((state) => ({ value: state, label: stateLabel(state) })),
           onValueChange: (value) => void controls.changeState(entry.subjectId, value),
         },
@@ -174,7 +181,7 @@ function EntryMenu({
 function StatusRadios({ row, controls }: { row: ShelfRow; controls: Controls }) {
   return (
     <DropdownMenuRadioGroup
-      value={row.entry.state}
+      value={selectedStateValue(row.entry.state)}
       onValueChange={(value) => void controls.changeState(row.entry.subjectId, value)}
     >
       {shelfSectionOrder.map((state) => (
@@ -190,7 +197,7 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
   return <RelativeTime value={entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 
-function GridView({ controls, shelf, size }: { controls: Controls; shelf: LibraryEntryState; size: ShelfSize }) {
+function GridView({ controls, shelf, size }: { controls: Controls; shelf: LibraryEntryStateWrite; size: ShelfSize }) {
   const { rows, locale } = controls;
   return (
     <CoverGrid ratio={rowRatio(rows.map((row) => row.entry.subject))} density={densities[size]}>
@@ -315,7 +322,7 @@ export function ShelfEntries({
   section,
 }: {
   entries: PersonalLibraryEntry[];
-  shelf: LibraryEntryState;
+  shelf: LibraryEntryStateWrite;
   locale: string;
   layout: ShelfLayout;
   size: ShelfSize;

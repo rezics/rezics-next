@@ -1,10 +1,10 @@
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
-import type { ProgressMode, ProgressUnit } from './progress-reads';
+import type { ProgressMode, ProgressUnitRead, ProgressUnitWrite } from './progress-reads';
 
 export type ProgressLabelInput = {
   mode: ProgressMode;
-  unit: ProgressUnit;
+  unit: ProgressUnitRead;
   amount: string | null;
   total: string | null;
   completedUnitCount: number;
@@ -12,6 +12,12 @@ export type ProgressLabelInput = {
 };
 
 export type ProgressView = { text: string; percent: number | null };
+
+const writableProgressUnits = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
+
+function isWritableProgressUnit(unit: ProgressUnitRead): unit is ProgressUnitWrite {
+  return writableProgressUnits.has(unit);
+}
 
 function amountOf(value: string | number | null): number | null {
   if (value === null) return null;
@@ -25,6 +31,11 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const options = { locale: locale as Locale };
   const inProgress = { text: m.home_continue_in_progress({}, options), percent: null };
+
+  if (!isWritableProgressUnit(progress.unit)) {
+    return { text: m.library_other(), percent: null };
+  }
+
   if (progress.mode === 'cursor_position') {
     const locator = progress.locator?.trim();
     return locator ? { text: locator, percent: null } : inProgress;

@@ -22,7 +22,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
+import type { ProgressIndex, ProgressMode, ProgressUnitWrite } from './progress-reads';
 import { progressView } from './progress-label';
 import { finishProgressSession, startProgressSession } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
@@ -33,7 +33,7 @@ const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'completed_units', label: () => m.library_progress_mode_units() },
 ];
 
-const unitChoices: { value: ProgressUnit; label: () => string }[] = [
+const unitChoices: { value: ProgressUnitWrite; label: () => string }[] = [
   { value: 'page', label: () => m.library_progress_unit_page() },
   { value: 'chapter', label: () => m.library_progress_unit_chapter() },
   { value: 'episode', label: () => m.library_progress_unit_episode() },
@@ -42,7 +42,7 @@ const unitChoices: { value: ProgressUnit; label: () => string }[] = [
   { value: 'percent', label: () => m.library_progress_unit_percent() },
 ];
 
-function unitLabel(unit: ProgressUnit): string {
+function unitLabel(unit: ProgressUnitWrite): string {
   return unitChoices.find((choice) => choice.value === unit)?.label() ?? m.library_progress_unit_page();
 }
 
@@ -78,7 +78,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   }
   const subject = chosen[0]?.id ?? '';
   const [mode, setMode] = useState<ProgressMode>('scalar_amount');
-  const [unit, setUnit] = useState<ProgressUnit>('page');
+  const [unit, setUnit] = useState<ProgressUnitWrite>('page');
   const [total, setTotal] = useState('');
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
@@ -186,7 +186,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                     <Select
                       value={unit}
                       onValueChange={(value) => {
-                        if (value) setUnit(value as ProgressUnit);
+                        if (value) setUnit(value as ProgressUnitWrite);
                       }}
                     >
                       <SelectTrigger id="progress-unit" className="w-full">

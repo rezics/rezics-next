@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -12,12 +13,13 @@ import {
   type LibrarySubject,
 } from './reads';
 
-export type CopyStatus = 'ordered' | 'owned' | 'lent' | 'disposed';
+export type CopyStatusWrite = 'ordered' | 'owned' | 'lent' | 'disposed';
+export type CopyStatusRead = string;
 
 /** A copy the page can render. Subject ids stay off this object so a hidden subject is never serialized. */
 export type CopyItem = {
   id: string;
-  status: CopyStatus;
+  status: CopyStatusRead;
   revision: number;
   location: string | null;
   source: string | null;
@@ -38,7 +40,7 @@ export type CopiesPageData = {
 
 export type SavedCopy = {
   id: string;
-  status: CopyStatus;
+  status: CopyStatusRead;
   revision: number;
   location: string | null;
   source: string | null;
@@ -56,7 +58,7 @@ export type CopyRemoved = { ok: true };
 export type CopyWriteResult = CopySaved | CopyWriteFailure;
 export type CopyRemoveResult = CopyRemoved | CopyWriteFailure;
 
-const statuses = new Set<CopyStatus>(['ordered', 'owned', 'lent', 'disposed']);
+const writableCopyStatuses = new Set<CopyStatusWrite>(['ordered', 'owned', 'lent', 'disposed']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const textLimit = { location: 200, source: 200, note: 1000 } as const;
 
@@ -70,7 +72,7 @@ type RawSubject = {
 type RawCopy = {
   id: string;
   subjectId: string;
-  status: CopyStatus;
+  status: CopyStatusRead;
   revision: number;
   location: string | null;
   source: string | null;
@@ -80,7 +82,7 @@ type RawCopy = {
   subject?: RawSubject;
 };
 type CopyFields = {
-  status: CopyStatus;
+  status: CopyStatusWrite;
   location: string | null;
   source: string | null;
   acquiredOn: string | null;
@@ -125,8 +127,18 @@ function keyOf(value: unknown): string | undefined {
   return typeof value === 'string' && uuid.test(value) ? value : undefined;
 }
 
-function statusOf(value: unknown): CopyStatus | undefined {
-  return typeof value === 'string' && statuses.has(value as CopyStatus) ? (value as CopyStatus) : undefined;
+function statusWriteOf(value: unknown): CopyStatusWrite | undefined {
+  return typeof value === 'string' && writableCopyStatuses.has(value as CopyStatusWrite)
+    ? (value as CopyStatusWrite)
+    : undefined;
+}
+
+export function copyStatusLabel(status: CopyStatusRead): string {
+  if (status === 'ordered') return m.library_copy_status_ordered();
+  if (status === 'owned') return m.library_copy_status_owned();
+  if (status === 'lent') return m.library_copy_status_lent();
+  if (status === 'disposed') return m.library_copy_status_disposed();
+  return m.library_other();
 }
 
 function textOf(value: unknown, max: number): string | null | undefined {
@@ -148,7 +160,7 @@ function revisionOf(value: unknown): number | undefined {
 }
 
 function fieldsOf(record: Record<string, unknown>): CopyFields | undefined {
-  const status = statusOf(record.status);
+  const status = statusWriteOf(record.status);
   const location = textOf(record.location, textLimit.location);
   const source = textOf(record.source, textLimit.source);
   const acquiredOn = dateOf(record.acquiredOn);

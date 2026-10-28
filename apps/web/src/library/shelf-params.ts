@@ -1,4 +1,4 @@
-import { libraryEntryState, type LibraryEntryState } from './entries-read';
+import { libraryEntryStateWrite, type LibraryEntryStateWrite } from './entries-read';
 
 export const shelfLayouts = ['grid', 'list', 'table'] as const;
 export type ShelfLayout = (typeof shelfLayouts)[number];
@@ -10,7 +10,7 @@ const defaultSize: ShelfSize = 'm';
 
 /** What the shelf's address says. A value that is not one of the documented ones is absent. */
 export type ShelfSearch = {
-  state?: LibraryEntryState;
+  state?: LibraryEntryStateWrite;
   layout?: ShelfLayout;
   size?: ShelfSize;
   cursor?: string;
@@ -21,7 +21,7 @@ function oneOf<T extends string>(values: readonly T[], value: unknown): T | unde
 }
 
 export function validateShelfSearch(search: Record<string, unknown>): ShelfSearch {
-  const state = typeof search.state === 'string' ? libraryEntryState(search.state) : undefined;
+  const state = typeof search.state === 'string' ? libraryEntryStateWrite(search.state) : undefined;
   const layout = oneOf(shelfLayouts, search.layout);
   const size = oneOf(shelfSizes, search.size);
   const cursor = typeof search.cursor === 'string' && search.cursor ? search.cursor : undefined;
@@ -41,7 +41,7 @@ export function shelfDisplay(search: ShelfSearch): { layout: ShelfLayout; size: 
 /** The address of a shelf view. Defaults stay out of it, and the layout and size are kept unless the caller changes them. */
 export function shelfHref(
   locale: string,
-  view: { state?: LibraryEntryState | null; layout?: ShelfLayout; size?: ShelfSize; cursor?: string },
+  view: { state?: LibraryEntryStateWrite | null; layout?: ShelfLayout; size?: ShelfSize; cursor?: string },
 ): string {
   const params = new URLSearchParams();
   if (view.state) params.set('state', view.state);

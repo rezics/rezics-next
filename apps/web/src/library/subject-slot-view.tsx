@@ -17,11 +17,12 @@ import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
 import { mutateSubjectLibrarySlot, readSubjectLibraryCollections } from './subject-slot-actions';
 import type {
-  LibraryEntryState,
+  LibraryEntryStateWrite,
   SubjectLibraryMutation,
   SubjectLibraryMutationResponse,
   SubjectLibrarySlotData,
 } from './subject-slot';
+import { subjectSlotStateLabel } from './subject-slot';
 
 type SubjectSlotProps = {
   subject: SubjectReference;
@@ -34,6 +35,7 @@ const buttonClass = buttonVariants({ variant: 'outline' });
 const primaryClass = buttonVariants({ variant: 'default' });
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
 const removeValue = 'remove';
+const otherStateValue = '__library_other__';
 
 function LibraryStateSelect({
   busy,
@@ -46,11 +48,15 @@ function LibraryStateSelect({
   busy: boolean;
   disabled: boolean;
   hasEntry: boolean;
-  selectedState: LibraryEntryState | '';
-  stateOptions: readonly (readonly [LibraryEntryState, string])[];
+  selectedState: string;
+  stateOptions: readonly (readonly [LibraryEntryStateWrite, string])[];
   onChoose: (value: string) => void;
 }) {
+  const knownState = stateOptions.some(([value]) => value === selectedState);
   const choices = [
+    ...(hasEntry && selectedState && !knownState
+      ? [{ value: otherStateValue, label: subjectSlotStateLabel(selectedState) }]
+      : []),
     ...stateOptions.map(([value, label]) => ({ value, label })),
     ...(hasEntry ? [{ value: removeValue, label: m.library_subject_remove() }] : []),
   ];
@@ -59,7 +65,7 @@ function LibraryStateSelect({
       disabled={disabled}
       items={choices}
       onValueChange={(value) => onChoose(value ?? '')}
-      value={selectedState || null}
+      value={selectedState ? (knownState ? selectedState : otherStateValue) : null}
     >
       <SelectTrigger
         aria-busy={busy ? true : undefined}
@@ -88,7 +94,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);
   const [entry, setEntry] = useState(data.entry);
-  const [selectedState, setSelectedState] = useState<LibraryEntryState | ''>(data.entry?.state ?? '');
+  const [selectedState, setSelectedState] = useState(data.entry?.state ?? '');
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
@@ -119,7 +125,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   ? m.library_subject_unavailable()
                   : null;
 
-  function applyEntryResult(response: SubjectLibraryMutationResponse, previous: LibraryEntryState | '') {
+  function applyEntryResult(response: SubjectLibraryMutationResponse, previous: string) {
     if (response.result === 'saved' && response.entry) {
       setEntry(response.entry);
       setSelectedState(response.entry.state);
@@ -142,7 +148,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     setActionResult(response.result);
   }
 
-  async function writeEntry(input: SubjectLibraryMutation, previous: LibraryEntryState | '') {
+  async function writeEntry(input: SubjectLibraryMutation, previous: string) {
     try {
       const response = await mutateSubjectLibrarySlot({
         data: input,
@@ -176,7 +182,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
       return;
     }
     if (value === selectedState || !stateOptions.some(([state]) => state === value)) return;
-    const next = value as LibraryEntryState;
+    const next = value as LibraryEntryStateWrite;
     const previous = selectedState;
     setSelectedState(next);
     setPending(true);

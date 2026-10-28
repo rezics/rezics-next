@@ -4,14 +4,10 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { libraryFullQuery } from './reads';
-import type {
-  LibraryEntryState,
-  SubjectLibraryMutation,
-  SubjectLibraryMutationResponse,
-  SubjectSlotEntry,
-} from './subject-slot';
+import { libraryEntryStatesWrite, type LibraryEntryStateWrite } from './subject-slot';
+import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectSlotEntry } from './subject-slot';
 
-const entryStates = new Set<LibraryEntryState>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 
 function problemCode(value: unknown): string | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -33,7 +29,6 @@ async function reloadEntry(
   if (loaded.status === 404) return null;
   if (loaded.error || loaded.data == null) return undefined;
   const entry = loaded.data.libraryEntry;
-  if (!entryStates.has(entry.state)) return undefined;
   return { subjectId: entry.subjectId, state: entry.state, revision: entry.revision };
 }
 
@@ -73,7 +68,7 @@ export async function applySubjectLibraryMutation(
         }
         return { result: 'cleared', entry: null };
       }
-      if (!input.state || !entryStates.has(input.state)) return { result: 'unavailable' };
+      if (!input.state || !writableEntryStates.has(input.state)) return { result: 'unavailable' };
       const saved = await client
         .libraryEntries({ subjectId: input.subjectId })
         .put(
@@ -86,7 +81,7 @@ export async function applySubjectLibraryMutation(
           return explainConflict(client, input.subjectId, authorization);
         return { result: 'unavailable' };
       }
-      return { result: 'saved', entry: saved.data.libraryEntry as SubjectSlotEntry };
+      return { result: 'saved', entry: saved.data.libraryEntry };
     }
     if (!input.collectionId) return { result: 'unavailable' };
     const added = await client

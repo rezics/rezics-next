@@ -5,14 +5,15 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   loadSubjectLibraryCollections,
-  type LibraryEntryState,
+  libraryEntryStatesWrite,
+  type LibraryEntryStateWrite,
   type SubjectLibraryMutation,
   type SubjectLibraryMutationResponse,
 } from './subject-slot';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const entryStates = new Set<LibraryEntryState>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 
 function validateMutation(input: unknown): SubjectLibraryMutation {
   if (
@@ -35,7 +36,7 @@ function validateMutation(input: unknown): SubjectLibraryMutation {
   if (
     'state' in input &&
     input.state !== undefined &&
-    (typeof input.state !== 'string' || !entryStates.has(input.state as LibraryEntryState))
+    (typeof input.state !== 'string' || !writableEntryStates.has(input.state as LibraryEntryStateWrite))
   )
     throw new Error('Invalid subject library action');
   if (

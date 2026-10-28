@@ -1,15 +1,28 @@
 import type { KernelClient } from '@rezics/client';
+import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { configured, type SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
+import { libraryEntryStates, type LibraryEntryStateWrite } from './entries-read';
 import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
 
-export type LibraryEntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
+export const libraryEntryStatesWrite = libraryEntryStates;
+export type { LibraryEntryStateWrite };
+export type LibraryEntryStateRead = string;
 export type SubjectSlotEntry = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateRead;
   revision: number;
 };
+
+export function subjectSlotStateLabel(state: LibraryEntryStateRead): string {
+  if (state === 'planned') return m.library_subject_state_planned();
+  if (state === 'in_progress') return m.library_subject_state_in_progress();
+  if (state === 'completed') return m.library_subject_state_completed();
+  if (state === 'paused') return m.library_subject_state_paused();
+  if (state === 'dropped') return m.library_subject_state_dropped();
+  return m.library_other();
+}
 export type SubjectSlotCollection = {
   id: string;
   curatorAccountId: string;
@@ -48,7 +61,7 @@ export type SubjectLibraryMutation = {
   subjectId: string;
   intent: 'entry' | 'member';
   action?: 'save' | 'clear';
-  state?: LibraryEntryState;
+  state?: LibraryEntryStateWrite;
   revision?: number;
   collectionId?: string;
   idempotencyKey: string;

@@ -6,23 +6,26 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy } from './copies-actions';
-import type { CopiesPageData, CopyItem, CopyStatus, SavedCopy } from './copies-read';
+import {
+  copyStatusLabel,
+  type CopiesPageData,
+  type CopyItem,
+  type CopyStatusWrite,
+  type SavedCopy,
+} from './copies-read';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
-const statuses = ['ordered', 'owned', 'lent', 'disposed'] as const;
+const statuses: readonly CopyStatusWrite[] = ['ordered', 'owned', 'lent', 'disposed'];
+function isWritableCopyStatus(value: string): value is CopyStatusWrite {
+  return statuses.some((status) => status === value);
+}
+
 const control =
   'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const button =
   'inline-flex min-h-10 items-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60';
 const quiet =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60';
-
-function statusLabel(status: CopyStatus): string {
-  if (status === 'ordered') return m.library_copy_status_ordered();
-  if (status === 'owned') return m.library_copy_status_owned();
-  if (status === 'lent') return m.library_copy_status_lent();
-  return m.library_copy_status_disposed();
-}
 
 function blank(value: string): string | null {
   return value === '' ? null : value;
@@ -60,8 +63,10 @@ function DateHints() {
   );
 }
 
-function StatusField({ value, onChange }: { value: CopyStatus; onChange: (status: CopyStatus) => void }) {
+function StatusField({ value, onChange }: { value: string; onChange: (status: CopyStatusWrite) => void }) {
   const id = useId();
+  const known = isWritableCopyStatus(value);
+  const other = '__library_other__';
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium" htmlFor={id}>
@@ -71,12 +76,16 @@ function StatusField({ value, onChange }: { value: CopyStatus; onChange: (status
         id={id}
         className={control}
         aria-describedby="copy-status-hints"
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value as CopyStatus)}
+        value={known ? value : other}
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          if (isWritableCopyStatus(next)) onChange(next);
+        }}
       >
+        {!known ? <option value={other}>{copyStatusLabel(value)}</option> : null}
         {statuses.map((status) => (
           <option key={status} value={status}>
-            {statusLabel(status)}
+            {copyStatusLabel(status)}
           </option>
         ))}
       </select>
@@ -135,7 +144,7 @@ function CopySummary({ copy }: { copy: CopyItem }) {
   return (
     <dl className="grid gap-2 sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">{m.library_copy_status()}</dt>
-      <dd>{statusLabel(copy.status)}</dd>
+      <dd>{copyStatusLabel(copy.status)}</dd>
       <dt className="text-muted-foreground">{m.library_copy_location()}</dt>
       <dd>{copy.location ?? ''}</dd>
       <dt className="text-muted-foreground">{m.library_copy_source()}</dt>
@@ -313,7 +322,7 @@ function AddCopyForm({
   onKey: (key: string) => void;
 }) {
   const [edition, setEdition] = useState(subjectId ?? '');
-  const [status, setStatus] = useState<CopyStatus>('owned');
+  const [status, setStatus] = useState<CopyStatusWrite>('owned');
   const [location, setLocation] = useState('');
   const [source, setSource] = useState('');
   const [acquiredOn, setAcquiredOn] = useState('');

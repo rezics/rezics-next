@@ -6,7 +6,7 @@ import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import {
   changePersonalLibraryEntry,
-  libraryEntryState,
+  libraryEntryStateWrite,
   loadPersonalLibrary,
   removePersonalLibraryEntry,
   type LibraryChangeInput,
@@ -52,7 +52,7 @@ function validateChange(input: unknown): LibraryChangeInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid library entry');
   const value = input as Record<string, unknown>;
   const identity = readIdentity(value);
-  const state = typeof value.state === 'string' ? libraryEntryState(value.state) : undefined;
+  const state = typeof value.state === 'string' ? libraryEntryStateWrite(value.state) : undefined;
   if (!identity || !state) throw new Error('Invalid library entry');
   return { ...identity, state };
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { csrfHeaders } from '../threads/composer';
 import { deletePersonalLibraryEntry, savePersonalLibraryEntry } from './entries-actions';
-import { libraryEntryState, type PersonalLibraryEntry } from './entries-read';
+import { libraryEntryStateWrite, type PersonalLibraryEntry } from './entries-read';
 
 export type ShelfFailure = 'closed' | 'unavailable' | 'signed-out';
 /** One entry as the shelf holds it: what the kernel last said, and what happened to the last write. */
@@ -45,7 +45,7 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
   const changeState = useCallback(
     async (subjectId: string, value: string) => {
       const row = rows.find((item) => item.entry.subjectId === subjectId);
-      const state = libraryEntryState(value);
+      const state = libraryEntryStateWrite(value);
       if (!row || !state || state === row.entry.state || pending) return;
       setPending(true);
       try {

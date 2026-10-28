@@ -19,10 +19,11 @@ const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][
 const decimal = /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
 const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
-const unitNames = new Set(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
+const writableProgressUnits = new Set(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+export type ProgressUnitWrite = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+export type ProgressUnitRead = string;
 export type ProgressState = 'active' | 'completed' | 'abandoned';
 
 export type ProgressChange = {
@@ -42,7 +43,7 @@ export type ProgressSessionCore = {
   subjectId: string;
   versionSubjectId: string | null;
   mode: ProgressMode;
-  unit: ProgressUnit;
+  unit: ProgressUnitRead;
   total: string | null;
   amount: string | null;
   locator: string | null;
@@ -125,8 +126,8 @@ function isMode(value: string): value is ProgressMode {
   return modes.has(value);
 }
 
-function isUnit(value: string): value is ProgressUnit {
-  return unitNames.has(value);
+function isWritableUnit(value: string): value is ProgressUnitWrite {
+  return writableProgressUnits.has(value);
 }
 
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
@@ -360,7 +361,7 @@ export async function startProgress(
   if (
     !routeId.test(input.subjectId) ||
     !isMode(input.mode) ||
-    !isUnit(input.unit) ||
+    !isWritableUnit(input.unit) ||
     !idempotencyKeyPattern.test(input.idempotencyKey) ||
     (total !== '' && (input.mode !== 'scalar_amount' || !decimal.test(total)))
   )
