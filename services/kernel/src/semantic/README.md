@@ -1144,7 +1144,7 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.
 
-## Native lifecycle evidence
+### Native lifecycle evidence
 
 `readSemanticLifecycle(client,{target,accountId,nativeT})` is trusted internal metadata, never a permission
 proof or an HTTP surface. The caller owns authorization, branded authoritative time and its RR or command

@@ -26,4 +26,5 @@ SELECT b.principal_id::text AS account_id
 FROM identity i
 LEFT JOIN editorial.write_basis b
   ON b.partition_no = :partition_no::integer AND b.transaction_id = i.recorded_transaction_id
-  AND b.principal_kind = 'account' AND b.principal_id = :account_id::uuid;
+  AND b.principal_kind = 'account' AND b.principal_id = :account_id::uuid
+LIMIT 1;
