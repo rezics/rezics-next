@@ -52,9 +52,12 @@ function figure(subjectId: string) {
     count: 2,
     mean: 8,
     score: 7.5,
+    m: 8,
+    C: 10,
     priorEpoch: 1,
     revision: '9007199254740993',
     asOf: '2026-10-28T00:00:00.000Z',
+    position: '1',
   };
 }
 
@@ -87,7 +90,9 @@ test('the public figure proposal uses the registered production schema, includin
   const validator = Compile(schema!);
   const data = figure(newId(151 * 16));
   expect(validator.Check(data)).toBe(true);
-  expect(validator.Check({ ...data, count: 0, mean: null, score: null, priorEpoch: null })).toBe(true);
+  expect(validator.Check({ ...data, count: 0, mean: null, score: null, m: null, C: null, priorEpoch: null })).toBe(
+    true,
+  );
   expect(validator.Check({ ...data, revision: 1 })).toBe(false);
 });
 
