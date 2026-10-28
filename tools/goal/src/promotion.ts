@@ -170,13 +170,20 @@ export function coveredByRootGate(command: readonly string[]): boolean {
   const paths = command.filter((argument) => argument.includes('/'));
   return paths.length > 0 && paths.every((path) => WORKSPACE.test(path));
 }
+// A plain `bun test` that mixes workspace files with outside ones runs only the outside ones: the root gate already
+// ran the workspace files under their own check, and a kernel test run bare has no database and fails on that alone.
+export function promotionCommand(command: readonly string[]): string[] | null {
+  if (coveredByRootGate(command)) return null;
+  if (command[0] !== 'bun' || command[1] !== 'test') return [...command];
+  return command.filter((argument) => !(argument.includes('/') && WORKSPACE.test(argument)));
+}
 function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): string[][] {
   const commands = new Map<string, string[]>([[JSON.stringify(rootGate), [...rootGate]]]);
   for (const task of tasks) {
-    const command = task.brief.acceptance.command;
+    const command = promotionCommand(task.brief.acceptance.command);
     // A specification is red by design whatever class its risk areas route it to; its verifier proves the
     // specification, not the product, and a 20-second red run once blocked a promotion whose root gate passed.
-    if (RED_BY_DESIGN.has(task.taskClass) || RED_BY_DESIGN.has(task.brief.kind) || coveredByRootGate(command)) continue;
+    if (!command || RED_BY_DESIGN.has(task.taskClass) || RED_BY_DESIGN.has(task.brief.kind)) continue;
     if (command.some((argument) => argument.endsWith('specs/support/verify-outcome-suite.ts'))) continue;
     commands.set(JSON.stringify(command), [...command]);
   }
@@ -751,7 +758,14 @@ function mergeIntoMain(options: PromotionOptions, main: string, snapshot: string
   try {
     const merged = spawnSync(
       'git',
-      ['merge', '--no-ff', '--no-edit', '-m', `Merge promoted ${settings.stabilizeBranch} into ${settings.mainBranch}`, snapshot],
+      [
+        'merge',
+        '--no-ff',
+        '--no-edit',
+        '-m',
+        `Merge promoted ${settings.stabilizeBranch} into ${settings.mainBranch}`,
+        snapshot,
+      ],
       { cwd: tree, encoding: 'utf8' },
     );
     return merged.status === 0 ? git(tree, 'rev-parse', 'HEAD') : undefined;
@@ -819,7 +833,10 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   if (stabilize !== undefined && !isAncestor(checkout, target, stabilize)) {
     const advanced = mergeMainIntoDev(options, target, settings.stabilizeBranch);
     if (!advanced)
-      notifySupermanager(options, `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`);
+      notifySupermanager(
+        options,
+        `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`,
+      );
   }
   const stabilized = advanceStabilizeAfterPublish(options, run);
   store.clearPromotion();
