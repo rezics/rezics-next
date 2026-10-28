@@ -24,7 +24,7 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
 // in progress) then fails the hook. Issue the removal in its own session so the
 // caller can return; a later check still collects a fixture whose owner has exited.
 function removeContainer(id: string): void {
-  const child = spawn('docker', ['rm', '-f', id], { cwd: directory, detached: true, stdio: 'ignore' });
+  const child = spawn('docker', ['rm', '-f', '-v', id], { cwd: directory, detached: true, stdio: 'ignore' });
   child.unref();
 }
 
@@ -138,7 +138,7 @@ export function ownDatabase(): TestDatabase {
       // An inaccessible owner may still be alive; only a missing process is stale.
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
       // Removing a container that another checker already removed is success.
-      spawnSync('docker', ['rm', '-f', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+      spawnSync('docker', ['rm', '-f', '-v', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
     }
   }
   // Unique per attempt so a timed-out `docker run` can be reaped without touching
@@ -156,11 +156,9 @@ export function ownDatabase(): TestDatabase {
       `rezics.auth.check.nonce=${nonce}`,
       '-p',
       '127.0.0.1::5432',
-      // Concurrent files, growth seeds at three scales and a 1GB WAL outgrew 1g, and
-      // every later file then failed once Postgres had stopped. tmpfs only takes
-      // memory for what is written. Same cap the kernel check uses.
-      '--tmpfs',
-      '/var/lib/postgresql:rw,size=8g',
+      // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+      '--mount',
+      `type=volume,destination=/var/lib/postgresql,volume-label=${label}=${process.pid}`,
       '-e',
       'POSTGRES_USER=rezics',
       '-e',

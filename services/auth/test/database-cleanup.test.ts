@@ -83,7 +83,7 @@ test('stale owner removed and live owner retained', async () => {
   try {
     const { result, commands } = fakeDocker([`live ${live.pid}`, `stale ${dead.pid}`]);
     expect(result.stderr.toString()).toContain('fixture setup reached');
-    expect(commands.filter((args) => args[0] !== 'run')).toEqual([listing, ['rm', '-f', 'stale']]);
+    expect(commands.filter((args) => args[0] !== 'run')).toEqual([listing, ['rm', '-f', '-v', 'stale']]);
     expect(() => process.kill(live.pid, 0)).not.toThrow();
     expect(live.exitCode).toBeNull();
   } finally {
@@ -97,7 +97,7 @@ test('concurrent already-gone removal succeeds', async () => {
   await dead.exited;
   const { result, commands } = fakeDocker([`vanished ${dead.pid}`], { gone: ['vanished'] });
   expect(result.stderr.toString()).toContain('fixture setup reached');
-  expect(commands.filter((args) => args[0] !== 'run')).toEqual([listing, ['rm', '-f', 'vanished']]);
+  expect(commands.filter((args) => args[0] !== 'run')).toEqual([listing, ['rm', '-f', '-v', 'vanished']]);
 });
 
 test('malformed owners are conservatively retained', () => {

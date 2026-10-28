@@ -75,7 +75,7 @@ test(
       const dumps = calls.filter((args) => args.includes('pg_dump'));
       expect(dumps.map((args) => args.slice(0, 3))).toEqual([['exec', container, 'pg_dump']]);
       expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
-      expect(calls.at(-1)).toEqual(['rm', '-f', container]);
+      expect(calls.at(-1)).toEqual(['rm', '-f', '-v', container]);
     });
   },
   timeout,
