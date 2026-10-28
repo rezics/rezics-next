@@ -30881,6 +30881,7 @@
                     ]
                   },
                   "status": {
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
                     "type": "string"
                   },
                   "subjectId": {
@@ -33365,6 +33366,7 @@
                     ]
                   },
                   "status": {
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
                     "type": "string"
                   }
                 },
@@ -45606,6 +45608,7 @@
             "name": "state",
             "required": false,
             "schema": {
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
               "type": "string"
             }
           },
@@ -48594,6 +48597,7 @@
                     "type": "integer"
                   },
                   "state": {
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
                     "type": "string"
                   }
                 },
@@ -81049,6 +81053,7 @@
                     ]
                   },
                   "unit": {
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
                     "type": "string"
                   },
                   "versionSubjectId": {

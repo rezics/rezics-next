@@ -20,7 +20,7 @@ import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
 import { admitShelfRead } from './shelf-admission.ts';
 import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
-import { libraryStoredVocabularySchema } from './profile-schemas.ts';
+import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import {
   shelfEntrySchema,
   shelfListQuerySchema,
@@ -43,8 +43,8 @@ const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
-const stateInput = t.String();
-const statusInput = t.String();
+const stateInput = libraryVocabularyIdSchema;
+const statusInput = libraryVocabularyIdSchema;
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
@@ -191,7 +191,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntries',
       {
         query: t.Object(
-          { ...shelfListQuerySchema.properties, orderBy: t.Optional(shelfListQuerySchema.properties.orderBy) },
+          {
+            ...shelfListQuerySchema.properties,
+            state: t.Optional(stateInput),
+            orderBy: t.Optional(shelfListQuerySchema.properties.orderBy),
+          },
           closed,
         ),
         response: {

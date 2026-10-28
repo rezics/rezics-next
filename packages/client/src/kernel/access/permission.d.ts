@@ -1,6 +1,6 @@
 import type { Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
-import { type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
+import { type AccessRealmRoleReader, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -29,11 +29,7 @@ export type MembershipRoleProof = {
     member: boolean;
     valid: string;
 };
-export type RealmRoleReader = (client: AccessClient, input: {
-    realmId: string;
-    accountId: string;
-    at: string;
-}) => Promise<readonly MembershipRoleProof[] | null>;
+export type RealmRoleReader = AccessRealmRoleReader;
 /** Internal evidence lifetime for separately anchored command proofs. This is
  * read from the opaque registry, never from caller-supplied authorization JSON.
  */

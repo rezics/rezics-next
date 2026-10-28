@@ -3828,9 +3828,9 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     view?: "BASIC" | "FULL";
                     limit?: number;
                     cursor?: string;
-                    state?: string;
                     direction?: never;
                     type?: string;
+                    state?: string;
                     orderBy?: never;
                 };
                 headers: unknown;

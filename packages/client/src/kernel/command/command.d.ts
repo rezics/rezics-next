@@ -150,6 +150,8 @@ type CommandContext = {
     transactionId: string;
     time: AuthoritativeTime;
 };
+/** Completion metadata only. The caller must retain the queried intent's action/resource policy. */
+export declare function hasOwnCommandCompletion(tx: CommandTransaction, receipt: PrincipalCommandReceipt): Promise<boolean>;
 export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 /** Read-only context is unavailable before authorization or after the attempt. */
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;

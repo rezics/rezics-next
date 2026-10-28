@@ -39,7 +39,7 @@ export type ActionCatalogue = ReadonlyMap<string, ActionMetadata>;
 /** Server-owned Realm membership proofs. The permission formula calls this on the
  * released Realm anchor; a missing reader denies Realm group matches.
  */
-export type AccessRealmRoleReader = (client: AccessClient, input: {
+export type AccessRealmRoleReader = ((client: AccessClient, input: {
     realmId: string;
     accountId: string;
     at: string;
@@ -47,7 +47,22 @@ export type AccessRealmRoleReader = (client: AccessClient, input: {
     role: 'owner' | 'member';
     member: boolean;
     valid: string;
-}[] | null>;
+}[] | null>) & {
+    /** One trusted statement for all admitted Realm/member anchors. */
+    batch?: (client: AccessClient, input: {
+        pairs: readonly {
+            realmId: string;
+            accountId: string;
+        }[];
+        at: string;
+    }) => Promise<readonly {
+        realmId: string;
+        accountId: string;
+        role: 'owner' | 'member';
+        member: boolean;
+        valid: string;
+    }[] | null>;
+};
 /** Actions available to an access implementation for one application. */
 export type AccessConfig = {
     actions: ActionCatalogue;
@@ -69,12 +84,30 @@ export type AccessDecision = Readonly<{
     explicit: boolean;
 }>;
 export type AccessExplicitCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<AccessDecision>;
+/** Trusted owner callback, evaluated at the formula's snapshot instant. UUIDs have no
+ * resource-kind tag: the owner supplies the homogeneous resourceType and ids. */
+export type ReadDecisionEligibility = (client: AccessClient, ids: readonly string[], at: string) => Promise<Readonly<Record<string, boolean>>>;
+export type ReadDecisionInput = Readonly<{
+    action: string;
+    resourceType: string;
+    ids: readonly string[];
+    eligibility?: ReadDecisionEligibility;
+}>;
+export type ReadDecisions = Readonly<{
+    decide(client: AccessClient, input: ReadDecisionInput, time?: AuthoritativeTime): Promise<Readonly<Record<string, AccessDecision>>>;
+}>;
+export type PrepareReadDecisionsInput = {
+    actor: Actor;
+    actions: ReadonlySet<string>;
+    context: AccessContext;
+};
 export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
 export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;
 };
 export interface Access {
     authenticate(token: string, context: AccessContext): Promise<AccountActor>;
+    prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
     prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
     preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
     authorizePage?(client: AccessClient, actor: Actor, action: string, page: ResourcePage, evidence?: unknown, time?: AuthoritativeTime): Promise<boolean>;
@@ -88,6 +121,8 @@ export declare function accessCheck(access: Access, actor: Actor, action: string
 /** Resolve the installed port through derived adapters; never infer explicit
  * authority from an adapter's ordinary boolean decision. */
 export declare function accessExplicitCheck(access: Access, actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<AccessExplicitCheck>;
+/** The installed root owns the sole batch read formula, including through adapters. */
+export declare function prepareReadDecisions(access: Access, input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
 /** Recheck command admission and prepare fresh evidence on every live attempt
  * before resource checkout. The stable check wrapper always uses the current
  * attempt's evidence, including body checks captured before execution. A retry
