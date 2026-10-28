@@ -199,9 +199,7 @@ function site(): Promise<string> {
 async function signedInPage(origin: string): Promise<Page> {
   browser ??= await chromium.launch();
   const context = await browser.newContext();
-  await context.addCookies([
-    { name: sessionCookie, value: sessionId, url: origin, path: '/', secure: true, sameSite: 'Lax' },
-  ]);
+  await context.addCookies([{ name: sessionCookie, value: sessionId, url: origin, secure: true, sameSite: 'Lax' }]);
   return context.newPage();
 }
 

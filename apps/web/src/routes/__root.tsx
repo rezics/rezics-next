@@ -36,7 +36,7 @@ export const Route = createRootRouteWithContext<{
     const origin = publicOrigin();
     const context = { origin, locale, path, ...(data?.paths ? { paths: data.paths } : {}) };
     const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
-    const missing = matches.some((match) => match.status === 'notFound');
+    const missing = matches.length === 1 || matches.some((match) => match.status === 'notFound');
     const head = closed ? closedPageHead(context) : pageHead(missing ? { robots: 'noindex' } : {}, context);
     return {
       meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, ...head.meta],
@@ -58,6 +58,7 @@ function Root() {
   });
   const rereadPage = useRouterState({
     select: (state) =>
+      state.matches.length === 1 ||
       state.matches.some((entry) => {
         const match = entry as unknown as {
           status: string;
