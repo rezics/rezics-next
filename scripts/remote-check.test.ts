@@ -23,6 +23,7 @@ import {
   controlSocketDirectoryPath,
   installedPackageCacheCheck,
   returnsProbe,
+  readHosts,
   selectSlotClass,
   workspaceFiles,
 } from './remote-check.ts';
@@ -379,6 +380,7 @@ type HostConfig = {
   busy?: number;
   grantOnly?: number;
   slots?: number;
+  processorsPerSlot?: number;
   ordinaryBusy?: number;
   expressBusy?: boolean;
   down?: boolean;
@@ -502,6 +504,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         cpuQuotaPercent: hosts[name].cpuQuotaPercent ?? 800,
         slots: hosts[name].slots ?? 2,
         ...(hosts[name].fallback ? { fallback: true } : {}),
+        ...(hosts[name].processorsPerSlot === undefined ? {} : { processorsPerSlot: hosts[name].processorsPerSlot }),
       })),
     }),
   );
@@ -918,6 +921,41 @@ test('configured slots and slice resources bound the admission capacity', async 
   expect(result.stderr).toContain('cap of 1');
   expect(events().filter((event) => event.kind === 'probe')).toHaveLength(1);
   expect(events().some((event) => event.kind === 'slot')).toBe(false);
+});
+
+test('a host with 1.5 processors per slot and 11 slice processors offers 7 slots', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 30 * 2 ** 30,
+      memoryMax: 30 * 2 ** 30,
+      memoryHeadroom: 30 * 2 ** 30,
+      sliceProcessors: 11,
+      processors: 11,
+      processorsPerSlot: 1.5,
+      slots: 8,
+    },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--slots', '3']);
+
+  expect(result.code).toBe(0);
+  const slotScript = String(events().find((event) => event.kind === 'slot')?.script);
+  expect(slotScript).toContain('# REMOTE_CHECK_ORDINARY_COUNT 6');
+  expect(slotScript).toContain('# REMOTE_CHECK_SLOT_LIMIT 6');
+});
+
+test('a host without processorsPerSlot keeps 2 processors per slot', () => {
+  const { env } = scenario({ a: {} });
+  expect(readHosts(env.KERNEL_CHECK_REMOTE!)[0]?.processorsPerSlot).toBe(CHECK_SLOT_PROCESSORS);
+});
+
+test('a non-positive or non-finite processorsPerSlot fails host loading with the host name', () => {
+  const { env } = scenario({ namedHost: {} });
+  const hostsFile = env.KERNEL_CHECK_REMOTE!;
+  const contents = readFileSync(hostsFile, 'utf8');
+  for (const invalid of ['null', '0', '-1', '1e999']) {
+    writeFileSync(hostsFile, contents.replace('"slots":2', `"slots":2,"processorsPerSlot":${invalid}`));
+    expect(() => readHosts(hostsFile)).toThrow('host namedHost: bad processorsPerSlot');
+  }
 });
 
 test('a request above half the smallest answering host capacity is refused before waiting', async () => {

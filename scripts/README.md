@@ -53,30 +53,32 @@ The root gate has its own placement rule: it uses the explicit hosts file and su
       "identity": ".secrets/server/check-small/operator-ed25519",
       "memoryMaxGiB": 10,
       "cpuQuotaPercent": 800,
-      "slots": 4
+      "slots": 4,
+      "processorsPerSlot": 2
     }
   ]
 }
 ```
 
-| Field             | Meaning                                                                                                                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | Nonempty host name used in logs and gate targeting. Use distinct names.                                                                                                                                          |
-| `address`         | SSH destination in `user@host` form. It identifies the machine, not a resource limit.                                                                                                                            |
-| `identity`        | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                                                                                    |
-| `memoryMaxGiB`    | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.                                                                    |
-| `cpuQuotaPercent` | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                       |
-| `slots`           | Positive integer ceiling on concurrent slot units, including the express slot. This does not change systemd limits.                                                                                              |
-| `fallback`        | Optional boolean. Non-gate checks prefer hosts without this field or with `false` whenever one can start now. A `true` host is selected when no other host can start the run; gate placement ignores this field. |
+| Field               | Meaning                                                                                                                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | Nonempty host name used in logs and gate targeting. Use distinct names.                                                                                                                                          |
+| `address`           | SSH destination in `user@host` form. It identifies the machine, not a resource limit.                                                                                                                            |
+| `identity`          | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                                                                                    |
+| `memoryMaxGiB`      | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.                                                                    |
+| `cpuQuotaPercent`   | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                       |
+| `slots`             | Positive integer ceiling on concurrent slot units, including the express slot. This does not change systemd limits.                                                                                              |
+| `processorsPerSlot` | Positive finite processor count required per slot. Defaults to 2.                                                                                                                                                |
+| `fallback`          | Optional boolean. Non-gate checks prefer hosts without this field or with `false` whenever one can start now. A `true` host is selected when no other host can start the run; gate placement ignores this field. |
 
 Editing JSON alone does not resize the slice. Provisioning takes memory and CPU values as arguments.
 
 ### Admission and queueing
 
-One slot represents **2 processors and 2.5 GiB**. For each answering host, compute:
+Each slot requires the host's configured `processorsPerSlot` (default **2**) and **2.5 GiB**. For each answering host, compute:
 
 ```text
-C = min(configured slots, floor(slice memory / 2.5 GiB), floor(slice processors / 2))
+C = min(configured slots, floor(slice memory / 2.5 GiB), floor(slice processors / processorsPerSlot))
 O = max(0, C - 1)        ordinary capacity
 G = max(0, O - 1)        gate capacity
 ```

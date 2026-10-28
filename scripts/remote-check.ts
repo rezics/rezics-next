@@ -18,7 +18,7 @@
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
-// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots }] }.
+// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
 // host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
@@ -36,6 +36,7 @@ export type Host = {
   cpuQuotaPercent: number;
   slots: number;
   fallback?: boolean;
+  processorsPerSlot: number;
 };
 
 export type RemoteCheck = {
@@ -166,6 +167,7 @@ export function readHosts(file: string): Host[] {
   if (!Array.isArray(parsed.hosts) || parsed.hosts.length === 0) throw new Error(`${file} lists no hosts`);
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
     const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback } = entry;
+    const processorsPerSlot = entry.processorsPerSlot === undefined ? CHECK_SLOT_PROCESSORS : entry.processorsPerSlot;
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
@@ -176,6 +178,8 @@ export function readHosts(file: string): Host[] {
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
+    if (typeof processorsPerSlot !== 'number' || !Number.isFinite(processorsPerSlot) || processorsPerSlot <= 0)
+      throw new Error(`host ${name}: bad processorsPerSlot`);
     return {
       name,
       address,
@@ -184,6 +188,7 @@ export function readHosts(file: string): Host[] {
       cpuQuotaPercent,
       slots: slots as number,
       ...(fallback ? { fallback: true } : {}),
+      processorsPerSlot,
     };
   });
 }
@@ -833,7 +838,7 @@ type RankedHost = {
 function hostCapacity(host: Host, probe: HostProbe): number {
   const memoryMaximum = probe.memoryMaximum ?? host.memoryMaxGiB * 2 ** 30;
   const memorySlots = Math.floor(memoryMaximum / CHECK_SLOT_MEMORY_BYTES);
-  const processorSlots = Math.floor(probe.sliceProcessors / CHECK_SLOT_PROCESSORS);
+  const processorSlots = Math.floor(probe.sliceProcessors / host.processorsPerSlot);
   return Math.min(host.slots, memorySlots, processorSlots);
 }
 
