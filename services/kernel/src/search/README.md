@@ -759,7 +759,7 @@ One current attempt occupies the home row. Competing writers return busy or wait
 attempt; there is no persistent queue/history of attempts. Attempt identity is a UUID. Store its original
 checkpoint range, actual observed source tuple, visible/ambiguous/completed outcome and checkpoint
 pending/advanced/lost/stopped result. Native pending is checked live and is never cached as permission to publish.
-Missing epoch/home/tuple/fence/provenance is unavailable, never zero or self. At most 4096 rows per live physical
+Missing epoch/home/tuple/fence/provenance is unavailable, never inferred as zero or self. At most 4096 rows per live physical
 generation and three live generations are admitted per prefix: 12,288 home rows plus bounded lifecycle control.
 No actor, record, subject, filter or historical basis rows are retained. A single monotonic allocation fence per
 prefix prevents generation/name reuse after retired rows are reclaimed; it is bounded control, not a tombstone
@@ -813,7 +813,7 @@ evidence, and neither timeout nor starting another attempt can verify an unknown
 Complete requires visible and the exact
 attempt ID; it records advanced/lost/stopped from the real checkpoint operation and marks completed, without
 advancing core itself. Completed attempts with any of those results may promote only after the coordinator has
-independently established catch-up: live revision, matching nonzero source/current/fence generation and epoch,
+independently established catch-up: live revision, matching observed source/current/fence generation and positive epoch,
 matching home partition, coveredThrough equal to attempt through and at or beyond the committed fence. It cannot
 promote across a changed tuple, unresolved slot or stale revision/attempt. Promotion writes verified and
 coveredThrough atomically. None of these operations creates an allow cache or native identity authority.
@@ -822,9 +822,12 @@ Input and durable JSON objects are closed, with exactly the fields in the existi
 where those types permit; no arrays or additional fields. All bigint values are nonnegative PostgreSQL bigint
 range (0..9223372036854775807), preserved as bigint at the TypeScript boundary and canonical decimal strings in
 JSON (`0` or a nonzero digit followed by digits), never Number. Revisions are positive persisted bigints. Positions
-may be zero; identity generations and epochs must be positive observations, never readiness from zero/missing.
-Partitions are integers 0..4095 except the population completion sentinel. Epochs/generations represented as
-numbers are positive safe integers (epochs fit PostgreSQL integer). Attempt IDs are lowercase UUIDs;
+may be zero. `CoverageHome.generation` and `StructuralFence.generation` accept observed native values
+0..9223372036854775807, including actual generation 0 with pending 0 from the ready native producer.
+Missing metadata or coverage remains unavailable; never infer zero from missing data. These storage observations
+do not establish native Scope readiness: the producer and reader independently establish actual zero provenance.
+Partitions are integers 0..4095 except the population completion sentinel. Physical `IndexIncarnation.generation`
+and epochs remain positive safe integers (epochs fit PostgreSQL integer). Attempt IDs are lowercase UUIDs;
 home/node identifiers and engine UUIDs are opaque nonempty UTF-8 strings <=128 bytes, preserving native spelling. Prefix and generation must satisfy existing
 `subjectIndexName` validation. Index/consumer strings are bounded at 255/63 UTF-8 bytes; registration requires
 exact existing `subjectIndexName` and `subjectConsumer` results. Well-shaped different names in read/mutation

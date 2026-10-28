@@ -184,14 +184,63 @@ test('visibility, actual checkpoint outcomes and promotion require current revis
   }
 });
 
-test('closed bounded shapes reject arrays, unknown fields, zero observations and invalid partitions', async () => {
+test('observed native generation zero roundtrips through enrollment, outcome, completion and promotion', async () => {
+  let guard: HomeGuard = await live();
+  const current = { ...tuple, generation: 0n };
+  const zeroPoint = { epoch: 1, position: 0n };
+  const zeroFence = { ...zeroPoint, generation: 0n };
+  // Explicit storage observations only; the native producer/reader must establish their provenance.
+  const observed = { current, fence: zeroFence, coveredThrough: zeroPoint };
+  expect(await store.readHome(guard.incarnation, guard.partition)).toBeNull();
+  const slot = { ...attempt(), through: zeroPoint };
+  const enrolled = await store.enroll(guard, slot);
+  expect(enrolled!.current).toBeNull();
+  expect(enrolled!.fence).toBeNull();
+  expect(enrolled!.verified).toBeNull();
+  expect(enrolled!.coveredThrough).toBeNull();
+  guard = { ...guard, revision: enrolled!.revision };
+  expect(await store.promote(guard, slot.id, observed)).toBeNull();
+  const ambiguous = await store.outcome(guard, slot.id, { outcome: 'ambiguous', source: null, fence: null });
+  expect(ambiguous!.verified).toBeNull();
+  expect(ambiguous!.coveredThrough).toBeNull();
+  guard = { ...guard, revision: ambiguous!.revision };
+  expect(await store.complete(guard, slot.id, 'advanced')).toBeNull();
+  expect(await store.promote(guard, slot.id, observed)).toBeNull();
+  const visible = await store.outcome(guard, slot.id, { outcome: 'visible', source: current, fence: zeroFence });
+  expect(visible!.current).toEqual(current);
+  expect(visible!.fence).toEqual(zeroFence);
+  expect(visible!.attempt!.source).toEqual(current);
+  expect(visible!.verified).toBeNull();
+  guard = { ...guard, revision: visible!.revision };
+  const done = await store.complete(guard, slot.id, 'advanced');
+  expect(done!.attempt!.checkpoint).toBe('advanced');
+  guard = { ...guard, revision: done!.revision };
+  const promoted = await store.promote(guard, slot.id, observed);
+  expect(promoted!.verified).toEqual(current);
+  expect(promoted!.coveredThrough).toEqual(zeroPoint);
+  expect(await createCoverageStore(pool).readHome(guard.incarnation, guard.partition)).toEqual(promoted);
+  const durable = await pool.query(
+    'SELECT "current", fence, verified, covered_through, attempt FROM search.index_home_coverage WHERE partition_no=$1 AND consumer=$2 AND index_uuid=$3',
+    [guard.partition, guard.incarnation.consumer, guard.incarnation.uuid],
+  );
+  expect(durable.rows[0].current.generation).toBe('0');
+  expect(durable.rows[0].fence.generation).toBe('0');
+  expect(durable.rows[0].fence.position).toBe('0');
+  expect(durable.rows[0].verified.generation).toBe('0');
+  expect(durable.rows[0].covered_through.position).toBe('0');
+  expect(durable.rows[0].attempt.source.generation).toBe('0');
+  expect(durable.rows[0].attempt.from.position).toBe('0');
+  expect(durable.rows[0].attempt.through.position).toBe('0');
+});
+
+test('closed bounded shapes reject arrays, unknown fields, negative generations and invalid partitions', async () => {
   const guard = await live();
   for (const bad of [
     { ...attempt(), history: [] },
     { ...attempt(), from: [] },
     { ...attempt(), through: { epoch: 1, position: '01' } },
     { ...attempt(), id: 'not-uuid' },
-    { ...attempt(), source: { ...tuple, generation: 0n } },
+    { ...attempt(), source: { ...tuple, generation: -1n } },
     { ...attempt(), through: { epoch: 1, position: 9223372036854775808n } },
   ]) {
     await expect(store.enroll(guard, bad as never)).rejects.toThrow();

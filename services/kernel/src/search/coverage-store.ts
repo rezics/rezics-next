@@ -11,7 +11,7 @@ import type {
   StructuralFence,
 } from './coverage.ts';
 
-/** Coordinator observations, not a certificate or permission to publish. */
+/** Coordinator observations, not a certificate or permission to publish; observed native generation 0 is valid. */
 export type CoverageObservation = Readonly<{
   current: CoverageHome;
   fence: StructuralFence;
