@@ -365,6 +365,7 @@ async function captureFailure(
   }
   if (options.retry) {
     expect(error).toMatchObject({ workflowId: expect.stringMatching(/^community\.join:/) });
+    await settle((error as { workflowId: string }).workflowId);
     expect(
       (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
     ).toHaveLength(1);
