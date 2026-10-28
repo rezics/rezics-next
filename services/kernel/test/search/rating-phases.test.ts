@@ -120,14 +120,23 @@ function params(call: Recorded): Record<string, unknown> {
 function bounded(calls: Recorded[], q: number, generation = 1) {
   expect(calls.length).toBeGreaterThan(0);
   expect(calls.length).toBeLessThanOrEqual(2);
-  expect(calls.reduce((sum, call) => sum + Number(params(call).size), 0)).toBeLessThanOrEqual(q);
-  expect(calls.reduce((sum, call) => sum + call.response.hits.hits.length, 0)).toBeLessThanOrEqual(q);
+  let remaining = q;
+  let returned = 0;
   for (const call of calls) {
+    const size = params(call).size;
+    const actual = call.response.hits.hits.length;
+    expect(Number.isInteger(size)).toBe(true);
+    expect(Number(size)).toBeGreaterThanOrEqual(0);
+    expect(Number(size)).toBeLessThanOrEqual(remaining);
+    expect(actual).toBeLessThanOrEqual(Number(size));
+    returned += actual;
+    remaining -= actual;
     expect(call.path.split('/')[1]).toBe(physical(generation));
     expect(call.response.timed_out).toBe(false);
     expect(call.response._shards.failed).toBe(0);
     expect(call.body).not.toHaveProperty('script');
   }
+  expect(returned).toBeLessThanOrEqual(q);
 }
 function rawHits(result: Result, calls: Recorded[], epoch: number | null) {
   for (const hit of result.hits) {
