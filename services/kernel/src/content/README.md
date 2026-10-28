@@ -390,6 +390,10 @@ the document licence. Erased authored documents, like missing or undisclosed doc
 `DELETE /v1/documents/{id}` requires an `Idempotency-Key` and the author's `document:erase` permission; a successful
 deletion and authorized replay return 204 with the stored session position.
 
+## Media claims
+
+A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or already claimed. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.
+
 ## Cost
 
 ### Step retries

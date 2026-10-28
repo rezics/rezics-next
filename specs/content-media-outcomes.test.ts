@@ -278,7 +278,7 @@ test('failed post and revision roll back claims receipts and all effects', async
     const { media } = await available('tiny');
     const before = await driver.inspect();
     await driver.failReferenceCommit();
-    expect(await driver.reference('author', reference(media, { kind }))).toBe('denied');
+    await expect(driver.reference('author', reference(media, { kind }))).rejects.toThrow(/\(503\): .*overloaded/);
     expect(await driver.inspect()).toEqual(before);
     expect((await row(media.id))?.claimedAt).toBeNull();
   }
@@ -297,7 +297,11 @@ test('another authorized uploader and moderator cannot claim or impersonate owne
   const { media } = await available('tiny');
   await driver.grantParent('other', media.containerId);
   for (const as of ['other', 'moderator', 'anonymous', 'suspended'] as const) {
-    await unchanged(() => driver.reference(as, reference(media, { untrusted: { uploaderId: driver.authorId } })));
+    await unchanged(() => driver.reference(as, reference(media)));
+    await unchanged(
+      () => driver.reference(as, reference(media, { untrusted: { uploaderId: driver.authorId } })),
+      'invalid',
+    );
   }
 });
 
@@ -312,13 +316,16 @@ test('reserved uploaded rejected erased and forged available references are deni
   expect((await row(erased.media.id))?.erased).toBe(true);
   fixtures.push(erased.media);
   for (const media of fixtures) {
-    await unchanged(() =>
-      driver.reference(
-        'author',
-        reference(media, {
-          untrusted: { state: 'available', claimedAt: '2000-01-01T00:00:00Z' },
-        }),
-      ),
+    await unchanged(() => driver.reference('author', reference(media)));
+    await unchanged(
+      () =>
+        driver.reference(
+          'author',
+          reference(media, {
+            untrusted: { state: 'available', claimedAt: '2000-01-01T00:00:00Z' },
+          }),
+        ),
+      'invalid',
     );
   }
 });

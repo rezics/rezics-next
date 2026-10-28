@@ -4,12 +4,13 @@ import type { Outcome } from '../../../../specs/content-media-driver.ts';
 type Classifier = (response: Response, method: string, path: string, invalid?: boolean) => Promise<Outcome>;
 const mediaDriver = (await import('./media-driver.ts')) as unknown as { classifyMediaOutcome: Classifier };
 
-function problem(status: number): Response {
+function problem(status: number, code?: string): Response {
   return Response.json(
     {
       type: 'https://rezics.com/problems/test',
       title: 'Fixture problem',
       status,
+      ...(code === undefined ? {} : { code }),
       detail: 'The fixture problem body',
     },
     { status, headers: { 'content-type': 'application/problem+json' } },
@@ -31,6 +32,15 @@ test('documented refusal statuses are denials and documented validation statuses
   for (const status of [401, 403, 404]) {
     expect(await mediaDriver.classifyMediaOutcome(problem(status), 'POST', '/v1/media')).toBe('denied');
   }
+  await expect(mediaDriver.classifyMediaOutcome(problem(409), 'POST', '/v1/threads')).rejects.toThrow(
+    'POST /v1/threads (409):',
+  );
+  expect(await mediaDriver.classifyMediaOutcome(problem(409, 'media_unavailable'), 'POST', '/v1/threads')).toBe(
+    'denied',
+  );
+  await expect(
+    mediaDriver.classifyMediaOutcome(problem(409, 'idempotency_conflict'), 'POST', '/v1/threads'),
+  ).rejects.toThrow('POST /v1/threads (409):');
   await expect(mediaDriver.classifyMediaOutcome(problem(409), 'POST', '/v1/media')).rejects.toThrow(
     'POST /v1/media (409):',
   );

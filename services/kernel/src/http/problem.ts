@@ -22,6 +22,7 @@ export const PROBLEMS = {
   forbidden: { status: 403, title: 'Forbidden', retryable: false },
   stale_editorial_head: { status: 409, title: 'Stale Editorial Head', retryable: false },
   offer_unavailable: { status: 409, title: 'Offer Unavailable', retryable: false },
+  media_unavailable: { status: 409, title: 'Media Unavailable', retryable: false },
   invalid_cursor: { status: 400, title: 'Invalid Cursor', retryable: false },
   stale_cursor: { status: 409, title: 'Stale Cursor', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },

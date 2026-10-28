@@ -536,7 +536,7 @@ export async function mediaGrowthFixture(
               licence: 'MIT',
               mediaIds: [staged.id],
             },
-            422,
+            409,
           ),
         containers.remote.partition,
         'collection',

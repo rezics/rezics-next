@@ -40,7 +40,7 @@ import {
   revisePost,
   type ContentCommandDependencies,
 } from './commands.ts';
-import { InvalidMediaClaimError } from './media.ts';
+import { InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import { reportRoutes } from './report-routes.ts';
@@ -232,7 +232,8 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
     if (error instanceof InvalidDocumentError) throw new ProblemError('invalid_request');
-    if (error instanceof InvalidMediaClaimError) throw new ProblemError('idempotency_conflict');
+    if (error instanceof InvalidMediaClaimError) throw new ProblemError('invalid_request');
+    if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
@@ -431,7 +432,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
           ...writeFailures,
-          409: problemSchema('conflict'),
+          409: problemSchema('conflict', 'media_unavailable'),
         },
         detail: {
           operationId: 'thread.create',
@@ -524,7 +525,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         transform: rejectOversized,
         headers: commandHeaders,
         body: postInput,
-        response: { 201: withHeaders(postResponse, sessionHeader), ...writeFailures },
+        response: {
+          201: withHeaders(postResponse, sessionHeader),
+          ...writeFailures,
+          409: problemSchema('media_unavailable'),
+        },
         detail: {
           operationId: 'post.create',
           'x-exposure': 'public',
@@ -651,6 +656,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           200: withHeaders(postResponse, sessionHeader),
           ...writeFailures,
+          409: problemSchema('media_unavailable'),
           412: problemSchema('precondition_failed'),
         },
         detail: {

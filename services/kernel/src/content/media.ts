@@ -154,8 +154,14 @@ export class NewThreadTargetExistsError extends Error {
 }
 export class InvalidMediaClaimError extends Error {
   constructor() {
-    super('The media references cannot be claimed');
+    super('The media reference list is invalid');
     this.name = 'InvalidMediaClaimError';
+  }
+}
+export class MediaUnavailableError extends Error {
+  constructor() {
+    super('The media references cannot be claimed');
+    this.name = 'MediaUnavailableError';
   }
 }
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -667,7 +673,7 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
   )
     throw new GrantDeniedError();
   const ids = [...new Set(input.mediaIds)];
-  if (ids.some((id) => routeOf(id) !== r)) throw new InvalidMediaClaimError();
+  if (ids.some((id) => routeOf(id) !== r)) throw new MediaUnavailableError();
   if (ids.length === 0) return;
   const rows = await claimStatement.run(transaction, {
     route: r,
@@ -681,7 +687,7 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     new_thread: command.authorization.action === 'thread:create',
     at: authoritativeTimeValue(command.time),
   });
-  if (rows.length !== ids.length) throw new InvalidMediaClaimError();
+  if (rows.length !== ids.length) throw new MediaUnavailableError();
 }
 export function decideDownload(
   dependencies: MediaDependencies,
