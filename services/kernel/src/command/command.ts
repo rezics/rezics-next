@@ -5,6 +5,7 @@ import type { Actor } from '../request/access.ts';
 import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
 import fenceStatement from './fence.sql';
+import noEffectFenceStatement from './no-effect-fence.sql';
 import readReceipt from './read-receipt.sql';
 import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -16,7 +17,21 @@ import { deadlineFor } from '../request/deadline.ts';
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
-type CommandResult<T> = { value: T; events: CommandEvent[] };
+export type CommandResult<T> = Readonly<{ value: T; events: readonly CommandEvent[] }>;
+const noEffectResults = new WeakSet<object>();
+
+/**
+ * Return a successful command result without domain events. The body must make
+ * no domain write; this result asserts that it did not. Its observed position
+ * can be 0. Callers whose consumers require a positive position must not use
+ * noEffect.
+ */
+export function noEffect<T>(value: T): CommandResult<T> {
+  const result = Object.freeze({ value, events: Object.freeze([]) });
+  noEffectResults.add(result);
+  return result;
+}
+
 export const MAX_COMMAND_EVENTS = 1000;
 
 /** Principal kind marker only; never an account ID. */
@@ -464,27 +479,32 @@ export async function runCommand<T>(
           if (mode === 'receipt-only') throw authorization!.denied();
           const transactionId = Bun.randomUUIDv7();
           const response = await body(tx, { transactionId, time });
-          if (response.events.length === 0) throw new TypeError('A command must emit at least one event');
+          const noEffect = response.events.length === 0 && noEffectResults.has(response);
+          if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
-          const events = response.events.map(({ type, subject, data: inputData }) => {
-            const validator = lookupEventType(type);
-            if (!validator) throw new TypeError(`Unregistered event type: ${type}`);
-            let data: unknown;
-            try {
-              const serialized = JSON.stringify(inputData);
-              if (serialized === undefined) throw new TypeError('Event data must be JSON serializable');
-              data = JSON.parse(serialized);
-            } catch (error) {
-              throw new TypeError(`Invalid event data for ${type}: ${String(error)}`);
-            }
-            if (!validator.Check(data)) {
-              const error = validator.Errors(data)[0]!;
-              throw new TypeError(`Invalid event data for ${type}: ${error.instancePath} ${error.message}`);
-            }
-            return { type, subject, data, id: Bun.randomUUIDv7() };
-          });
+          const events = noEffect
+            ? []
+            : response.events.map(({ type, subject, data: inputData }) => {
+                const validator = lookupEventType(type);
+                if (!validator) throw new TypeError(`Unregistered event type: ${type}`);
+                let data: unknown;
+                try {
+                  const serialized = JSON.stringify(inputData);
+                  if (serialized === undefined) throw new TypeError('Event data must be JSON serializable');
+                  data = JSON.parse(serialized);
+                } catch (error) {
+                  throw new TypeError(`Invalid event data for ${type}: ${String(error)}`);
+                }
+                if (!validator.Check(data)) {
+                  const error = validator.Errors(data)[0]!;
+                  throw new TypeError(`Invalid event data for ${type}: ${error.instancePath} ${error.message}`);
+                }
+                return { type, subject, data, id: Bun.randomUUIDv7() };
+              });
           await authorization?.finalize?.(tx, attempt, evidence);
+          if (noEffect && callbackState.callbacks.length > 0)
+            throw new TypeError('A no-effect command registers no work');
           for (let index = 0; index < callbackState.callbacks.length; index++)
             await callbackState.callbacks[index]!(transactionId);
           let receipt: Record<string, unknown> | null = null;
@@ -504,15 +524,21 @@ export async function runCommand<T>(
             value = receipt.response as T;
           }
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          const row = await fenceStatement.run(client, {
-            partition_no: partition,
-            events,
-            transaction_id: transactionId,
-            basis: basis
-              ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
-              : null,
-            receipt,
-          });
+          const row = noEffect
+            ? await noEffectFenceStatement.run(client, {
+                partition_no: partition,
+                transaction_id: transactionId,
+                receipt,
+              })
+            : await fenceStatement.run(client, {
+                partition_no: partition,
+                events,
+                transaction_id: transactionId,
+                basis: basis
+                  ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
+                  : null,
+                receipt,
+              });
           if (row.length === 0) {
             try {
               await client.query('ROLLBACK');

@@ -129,7 +129,7 @@ END) STORED,
     CONSTRAINT receipt_anonymous_key_check CHECK (((principal_kind <> 'anonymous'::text) OR (idempotency_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))),
     CONSTRAINT receipt_epoch_check CHECK ((epoch > 0)),
     CONSTRAINT receipt_idempotency_key_check CHECK (((char_length(idempotency_key) >= 1) AND (char_length(idempotency_key) <= 255))),
-    CONSTRAINT receipt_position_check CHECK (("position" > 0)),
+    CONSTRAINT receipt_position_check CHECK (("position" >= 0)),
     CONSTRAINT receipt_principal_check CHECK ((((principal_kind = 'account'::text) AND (principal_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((principal_kind = 'anonymous'::text) AND (principal_id = '00000000-0000-0000-0000-000000000000'::uuid)))),
     CONSTRAINT receipt_request_digest_check CHECK ((octet_length(request_digest) = 32))
 );
