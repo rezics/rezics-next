@@ -554,16 +554,24 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Bounded native name sort
 
-- Touches: Indexing deduplicates changed visible raw names and runs the index's `name_key` normalizer through
-  `_analyze` in chunks of at most 256 names before bulk. Each subject keeps one action and its anchor external version;
-  hidden/deleted names are not analyzed, and normalization failure prevents bulk and checkpoint advancement.
-- Bound: Write work is `O(changed visible names and bytes)`, zero SQL and at most
-  `ceil(distinct_names / 256)` extra engine analysis requests per batch, not per HTTP read. Retain only a complete
-  normalized key of at most 512 UTF-16 code units; larger results use null. Read-side sorting remains
-  match-dependent and follows missing-last plus unique id.
-- Growth check: Pinned-engine verification must show that `ignore_above` alone does not bound normalized output,
-  overlong normalized names become null, ordinary 250-CJK names keep their full key, and a new-generation replay
-  repairs existing values before bounded-read readiness. Those runtime outcomes remain pending.
+- Touches: The helper deduplicates distinct nonnull raw names and sends one `_analyze` request per name before bulk;
+  hidden/deleted action names are not analyzed. Each subject keeps one bulk action and its anchor external version.
+  Normalization failure prevents bulk and checkpoint advancement. The existing integration and batch contracts are
+  covered by `test/search/bounded-sort-indexer.test.ts` (“default index relay and rebuild bound native sort values
+  before visible writes and do not checkpoint failed normalization”) and `test/search/canonical-coverage.test.ts`
+  (“source cap stays 256 and publication waits for every real source chunk and checkpoint outcome”); their pass
+  status is unverified here.
+- Bound: The helper permits at most 16 concurrent analysis requests and validates each single token's position and
+  offsets; it does not infer alignment from multi-text output or cap its action set at 256. Helper work is
+  `O(distinct names and their bytes)`, with one request per distinct name and zero SQL. Any eventual source chunking
+  is a separate batch-contract bound. Retain only a complete normalized key of at most 512 UTF-16 code units; larger
+  results use null. Display and exact names stay unchanged, and read-side sorting remains match-dependent with
+  missing-last plus unique id.
+- Growth check: `test/search/bounded-sort-keys.test.ts` (“native normalization bounds complete name sort values on
+  writes while preserving full names and stable null pagination”) exercises the native helper; its pass status is
+  unverified here. Pinned-engine/runtime evidence for overlong normalization becoming null, ordinary 250-CJK names
+  retaining their full key, and replay repairing existing values before bounded-read readiness remains separate and
+  pending. Source/replay/default-worker/native API readiness requires its own integration/runtime evidence.
 
 ### Suggest
 
