@@ -4,6 +4,16 @@ import { matchesPath } from './briefs.ts';
 
 export type FrozenFile = { path: string; content: string; hash: string };
 
+/** Keep the content and hash tied to the exact UTF-8 bytes written to disk. */
+export function frozenFile(path: string, content: string | Uint8Array): FrozenFile {
+  const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content);
+  return {
+    path,
+    content: bytes.toString('utf8'),
+    hash: createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
 /** Read exact contents from fenced acceptance files embedded in a brief. */
 export function parseFrozenFiles(markdown: string, declaredPaths: readonly string[]): FrozenFile[] {
   const files: FrozenFile[] = [];
@@ -19,8 +29,15 @@ export function parseFrozenFiles(markdown: string, declaredPaths: readonly strin
     const pathMatch = /(?:^|\s)path=([^\s]+)/.exec(info);
     if (!pathMatch) continue;
     const path = pathMatch[1]!;
-    if (!path || path.includes('\\') || path.includes('\0') || isAbsolute(path) || win32.isAbsolute(path)
-      || path.split('/').some(part => !part || part === '.' || part === '..') || /[*?]/.test(path))
+    if (
+      !path ||
+      path.includes('\\') ||
+      path.includes('\0') ||
+      isAbsolute(path) ||
+      win32.isAbsolute(path) ||
+      path.split('/').some((part) => !part || part === '.' || part === '..') ||
+      /[*?]/.test(path)
+    )
       throw new Error(`invalid frozen file path: ${path}`);
     if (!matchesPath(path, declaredPaths)) throw new Error(`frozen file path is outside declared paths: ${path}`);
     if (names.has(path)) throw new Error(`duplicate frozen file path: ${path}`);
@@ -32,11 +49,14 @@ export function parseFrozenFiles(markdown: string, declaredPaths: readonly strin
       const current = lines.shift() ?? '';
       const currentStart = offset;
       offset += current.length;
-      if (closing.test(current)) { contentEnd = currentStart; break; }
+      if (closing.test(current)) {
+        contentEnd = currentStart;
+        break;
+      }
     }
     if (contentEnd < 0) throw new Error(`unclosed frozen file block: ${path}`);
     const content = markdown.slice(contentStart, contentEnd);
-    files.push({ path, content, hash: createHash('sha256').update(content, 'utf8').digest('hex') });
+    files.push(frozenFile(path, content));
     names.add(path);
   }
   return files;
