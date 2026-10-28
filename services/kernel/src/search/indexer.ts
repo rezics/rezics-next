@@ -2,14 +2,12 @@ import type { Pool } from 'pg';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
-import { bulkLines, documentActions } from './document.ts';
+import { documentActions } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
-import { IndexWriteError } from './write-actions.ts';
+import { writeIndexActions } from './write-actions.ts';
 
 export { IndexWriteError } from './write-actions.ts';
-
-type BulkResponse = { items?: Record<string, { status?: number; error?: { type?: string } }>[] };
 
 /** Internal composition only: admission must reject or await the same real apply exactly once. */
 export type SubjectApplyGuard = (
@@ -72,20 +70,7 @@ export function createSubjectIndexer(options: {
                 options.index,
                 documentActions(snapshot, chunk, counts),
               );
-              const response = await options.search.bulk<BulkResponse>(bulkLines(options.index, actions), {
-                query: { refresh: 'wait_for' },
-              });
-              const results = response.items ?? [];
-              const failures = results.filter((item, index) => {
-                const operation = Object.values(item)[0];
-                const status = operation?.status;
-                if (status === 200 || status === 201) return false;
-                if (status === 409 && operation?.error?.type === 'version_conflict_engine_exception') return false;
-                if (status === 404 && actions[index]?.op === 'delete') return false;
-                return true;
-              });
-              if (results.length !== actions.length || failures.length > 0)
-                throw new IndexWriteError(failures.length ? failures : results);
+              await writeIndexActions(options.search, options.index, actions);
             }
           };
           if (!options.aroundApply) return apply();
