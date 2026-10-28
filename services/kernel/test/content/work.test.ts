@@ -659,7 +659,9 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       store.fail(false);
       running = await worker(store);
       await result(schedule);
-      expect(store.deletes.filter((key) => !key.startsWith(`m/${pending.mediaId}/`)).slice(deletesAfterFirstSweep)).toEqual([]);
+      expect(
+        store.deletes.filter((key) => !key.startsWith(`m/${pending.mediaId}/`)).slice(deletesAfterFirstSweep),
+      ).toEqual([]);
       expect(store.objects.has(pending.key)).toBe(false);
       expect(await client.listSchedules({ scheduleNamePrefix: CONTENT_COLLECTION_SCHEDULE })).toHaveLength(1);
       expect(await client.getSchedule(CONTENT_COLLECTION_SCHEDULE)).toMatchObject({
