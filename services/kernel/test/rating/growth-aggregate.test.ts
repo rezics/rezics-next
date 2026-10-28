@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { createRatingCounter } from '../../src/access/rating-counter.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { applyRatingVoteEvent } from '../../src/rating/aggregate-effect.ts';
@@ -18,6 +19,9 @@ const targetId = '00000000-0000-7000-8000-4a0300000001';
 const controllerId = '00000000-0000-7000-8000-222200000001';
 const controllerKey = new Uint8Array(32).fill(91);
 const countingKey = createRatingCounter({ secret: controllerKey });
+const measuredCountingKey = createHmac('sha256', controllerKey)
+  .update(`access.rating-counter.v1\0${controllerId}`)
+  .digest('hex');
 const oldAt = '2026-10-27 09:00:00+00';
 let database: GrowthDatabase;
 
@@ -43,8 +47,8 @@ const population: Population = {
           population_id: GLOBAL_CONTEXT.id,
           target_id: targetId,
           voter_id: voterId,
-          counting_key: '5b'.padEnd(64, '0'),
-          units: ordinal % 21,
+          counting_key: measuredCountingKey,
+          units: 0,
           at: oldAt,
           revision: 1,
         },
@@ -61,6 +65,25 @@ const population: Population = {
         },
       ],
     };
+  },
+  finish: async (admin) => {
+    await admin.query(
+      `INSERT INTO rating.aggregate_component
+         (route, question_id, population_id, target_id, shard, count, sum, histogram, applied_at)
+       VALUES ($1, $2, $3, $4, $5, 1, 0, ARRAY[1::bigint, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], $6)
+       ON CONFLICT (route, question_id, population_id, target_id, shard) DO UPDATE
+       SET count = 1, sum = 0,
+           histogram = ARRAY[1::bigint, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+           applied_at = EXCLUDED.applied_at`,
+      [
+        targetRoute,
+        STANDARD_QUESTION_ID,
+        GLOBAL_CONTEXT.id,
+        targetId,
+        Number.parseInt(measuredCountingKey.slice(0, 2), 16) % 16,
+        oldAt,
+      ],
+    );
   },
 };
 
@@ -95,8 +118,8 @@ test('aggregate updates keep bounded rows and statements as votes, targets, acco
           voterId,
           questionId: STANDARD_QUESTION_ID,
           targetId,
-          previous: ordinal % 21,
-          units: (ordinal + scale) % 21,
+          previous: 0,
+          units: 0,
           revision: 2,
           populations: [GLOBAL_CONTEXT.id],
         },

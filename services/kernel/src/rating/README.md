@@ -289,6 +289,12 @@ both votes and Realm memberships for reinstatement.
 - Growth check: `test/rating/growth-aggregate-read.test.ts`, test "one population aggregate read has constant rows
   and statements as target voters grow" at scales `[64, 256, 1024]`.
 
+### Aggregate apply
+
+- Touches: the vote upsert and component apply by primary key, plus before and after winner probes through the counted-vote index.
+- Bound: each winner probe touches one counted-index entry; rows stay constant and blocks grow logarithmically.
+- Growth check: `test/rating/growth-aggregate.test.ts`, test "aggregate updates keep bounded rows and statements as votes, targets, accounts and source partitions grow".
+
 ### Population page
 
 - Touches: up to 16 shard rows for each of 20 populations, plus at most 21 index-only population-id seeks on
