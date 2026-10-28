@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -26,6 +26,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   threadId: string | null; activeTurnId: string | null; status: 'starting' | 'running' | 'paused' | 'complete';
   startedAt: number; turns: number; turnsWithoutDecision: number; decision: boolean;
   countedTurn: string | null; goalState: GoalState | null; usage: unknown;
+  continuationAsked?: boolean; continuationRenewed?: boolean; continuationTokensUsed?: number;
+  pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
 };
 export type ManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
@@ -129,14 +131,19 @@ export class ManagerSessions {
     else return;
     this.save(state);
     if (state.status === 'running') {
+      if (method === 'thread/goal/updated' && await this.handleGoalUpdate(state)) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
     }
   }
-  private opening(spec: ManagerSpec): string {
+  private continuationPath(spec: ManagerSpec): string {
+    return join(spec.cwd, '.temp', 'goal', spec.id, 'CONTINUATION.md');
+  }
+  private opening(spec: ManagerSpec, continuationFile?: string): string {
     return `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
       `Export GOAL_MANAGER=${spec.id} for control-plane commands. Completion is a proposal: run ` +
       `${this.services.command.join(' ')} manager complete ${spec.id}; the control plane verifies every scoped task is merged and the main gate passes. ` +
+      (continuationFile ? `Read the continuation file at ${continuationFile} completely, then continue from it. ` : '') +
       (spec.engine === 'codex'
         ? 'When no decision is pending, use clock.sleep inside the active turn; do not poll or end an empty turn. '
         : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
@@ -190,9 +197,11 @@ export class ManagerSessions {
     if (!Number.isSafeInteger(spec.budget) || spec.budget <= 0 || Object.values(spec.limits).some(n => !Number.isFinite(n) || n <= 0))
       throw new Error('Manager budget and limits must be positive');
   }
-  private async startSession(spec: ManagerSpec, history?: ManagerSessionSnapshot[]): Promise<ManagerState> {
+  private async startSession(spec: ManagerSpec, history?: ManagerSessionSnapshot[], pendingRenewal?: ManagerSessionSnapshot['pendingRenewal']): Promise<ManagerState> {
     const state: ManagerState = { ...spec, threadId: null, activeTurnId: null, status: 'starting', startedAt: this.now(),
       turns: 0, turnsWithoutDecision: 0, decision: false, countedTurn: null, goalState: null, usage: null,
+      continuationAsked: false, continuationRenewed: false,
+      ...(pendingRenewal ? { pendingRenewal } : {}),
       ...(history?.length ? { history } : {}) };
     this.save(state);
     try {
@@ -206,8 +215,16 @@ export class ManagerSessions {
           status: 'active', tokenBudget: spec.budget, origin: 'user' });
         state.goalState = goal.goal; state.status = 'running'; this.save(state);
         this.registerCodexViewer(state, client);
-        const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
+        const continuationFile = history?.length ? this.continuationPath(spec) : undefined;
+        const opening = continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
+        const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(opening) });
         this.turnStarted(state, turn.turn.id);
+        if (state.pendingRenewal) {
+          state.pendingRenewal.ready = true;
+          this.save(state);
+          await this.deliverRenewalNotice(state.id);
+          if (state.pendingRenewal?.ready) delete state.pendingRenewal;
+        }
       } else {
         state.threadId = randomUUID();
         this.services.windows.register(spec.id, this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec)), spec.cwd);
@@ -236,7 +253,9 @@ export class ManagerSessions {
       if (spec.id !== id) throw new Error(`Manager renewal id does not match: ${id}`);
       this.validateSpec(spec);
       const current = this.get(id);
-      if (current.status !== 'paused') throw new Error(`Manager must be paused to renew: ${id}`);
+      const goalCanRenew = current.engine === 'codex' &&
+        (current.goalState?.status === 'budgetLimited' || current.goalState?.status === 'blocked');
+      if (current.status !== 'paused' && !goalCanRenew) throw new Error(`Manager must be paused to renew: ${id}`);
       return this.renewInternal(id, spec);
     });
   }
@@ -246,7 +265,74 @@ export class ManagerSessions {
     const stopped = this.get(id);
     const { history: _history, ...snapshot } = stopped;
     const history = [...(stopped.history ?? []), snapshot];
-    return this.startSession(spec, history);
+    return this.startSession(spec, history, stopped.pendingRenewal);
+  }
+
+  private specFromState(state: ManagerState): ManagerSpec {
+    const { threadId: _threadId, activeTurnId: _activeTurnId, status: _status, startedAt: _startedAt,
+      turns: _turns, turnsWithoutDecision: _turnsWithoutDecision, decision: _decision, countedTurn: _countedTurn,
+      goalState: _goalState, usage: _usage, history: _history, continuationAsked: _continuationAsked,
+      continuationRenewed: _continuationRenewed, continuationTokensUsed: _continuationTokensUsed,
+      pendingRenewal: _pendingRenewal, ...spec } = state;
+    return spec;
+  }
+  private async askForContinuation(state: ManagerState): Promise<void> {
+    if (state.engine !== 'codex' || state.continuationAsked || !state.goalState ||
+      state.goalState.tokenBudget === null || state.goalState.tokenBudget <= 0 ||
+      state.goalState.tokensUsed < state.goalState.tokenBudget * 0.9) return;
+    this.db.transaction(() => {
+      const current = this.get(state.id);
+      if (current.continuationAsked || !current.goalState || current.goalState.tokenBudget === null ||
+        current.goalState.tokenBudget <= 0 || current.goalState.tokensUsed < current.goalState.tokenBudget * 0.9) return;
+      current.continuationAsked = true;
+      this.save(current);
+      this.inbox.deliver({ managerId: current.id, kind: 'instruction', summary:
+        `This Goal has used at least 90% of its token budget. Write .temp/goal/${current.id}/CONTINUATION.md with live task IDs and states, decisions in force, pending cross-owner agreements, and next actions. Then send ${current.supermanager} a message containing “continuation written”.` });
+    }).immediate();
+  }
+  private async handleGoalUpdate(state: ManagerState): Promise<boolean> {
+    if (state.engine !== 'codex') return false;
+    await this.askForContinuation(state);
+    const current = this.get(state.id);
+    if (current.status !== 'running' || current.goalState?.status !== 'budgetLimited') return false;
+    await this.renewForContinuation(current.id, current.goalState.tokensUsed);
+    return true;
+  }
+  private async deliverRenewalNotice(id: string): Promise<void> {
+    this.db.transaction(() => {
+      const state = this.get(id);
+      const pending = state.pendingRenewal;
+      if (!pending || !pending.ready || !state.threadId || state.threadId === pending.oldThreadId) return;
+      delete state.pendingRenewal;
+      this.save(state);
+      this.inbox.deliver({ managerId: state.supermanager, kind: 'environment', summary:
+        `Manager ${state.id} renewed after using ${pending.tokensUsed} tokens; new thread ${state.threadId}.` });
+    }).immediate();
+  }
+  private async renewForContinuation(id: string, tokensUsed: number): Promise<ManagerState> {
+    const state = this.get(id);
+    if (state.pendingRenewal) {
+      if (state.threadId && state.threadId !== state.pendingRenewal.oldThreadId && state.pendingRenewal.ready) {
+        await this.deliverRenewalNotice(id);
+        return this.get(id);
+      }
+      return this.renewInternal(id, this.specFromState(state));
+    }
+    if (state.continuationRenewed) return state;
+    state.continuationRenewed = true;
+    state.continuationTokensUsed = tokensUsed;
+    state.pendingRenewal = { tokensUsed, oldThreadId: state.threadId, ready: false };
+    this.save(state);
+    return this.renewInternal(id, this.specFromState(state));
+  }
+  /** Called for a manager's outgoing inbox message to its configured supermanager. */
+  async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
+    return this.serial(id, async () => {
+      const state = this.get(id);
+      if (state.engine !== 'codex' || !state.continuationAsked || state.continuationRenewed || state.pendingRenewal ||
+        recipient !== state.supermanager || !/continuation written/i.test(summary)) return;
+      await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
+    });
   }
   private turnStarted(state: ManagerState, turn: string): void {
     if (state.countedTurn !== turn) { state.turns++; state.decision = false; state.countedTurn = turn; }
@@ -388,25 +474,37 @@ export class ManagerSessions {
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(): Promise<void> {
-    for (const state of this.list().filter(state => state.status === 'running' || state.status === 'starting')) {
+    for (const state of this.list().filter(state => state.status === 'running' || state.status === 'starting' || state.pendingRenewal)) {
       await this.serial(state.id, async () => {
-        if (state.engine === 'codex' && state.threadId) {
-          const client = await this.client(state.pool);
-          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
-          state.activeTurnId = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
-          const goal = await client.request('thread/goal/get', { threadId: state.threadId });
-          state.goalState = goal.goal;
+        let current = this.get(state.id);
+        if (current.pendingRenewal) {
+          if (current.threadId && current.threadId !== current.pendingRenewal.oldThreadId && current.pendingRenewal.ready) {
+            await this.deliverRenewalNotice(current.id);
+            current = this.get(current.id);
+          } else {
+            await this.renewInternal(current.id, this.specFromState(current));
+            return;
+          }
         }
-        if (state.status === 'starting') { state.status = 'paused'; this.save(state); await this.pauseRemote(state); return; }
-        this.save(state);
-        if (state.engine === 'codex' && state.threadId) {
-          const client = await this.client(state.pool);
-          this.services.windows.unregister(state.id);
-          this.registerCodexViewer(state, client);
+        if (current.status !== 'running' && current.status !== 'starting') return;
+        if (current.engine === 'codex' && current.threadId) {
+          const client = await this.client(current.pool);
+          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
+          current.activeTurnId = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
+          const goal = await client.request('thread/goal/get', { threadId: current.threadId });
+          current.goalState = goal.goal;
         }
-        if (!await this.checkLimits(state)) {
-          if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
-          else await this.dispatch(state.id);
+        if (current.status === 'starting') { current.status = 'paused'; this.save(current); await this.pauseRemote(current); return; }
+        this.save(current);
+        if (current.engine === 'codex' && current.threadId) {
+          const client = await this.client(current.pool);
+          this.services.windows.unregister(current.id);
+          this.registerCodexViewer(current, client);
+        }
+        if (await this.handleGoalUpdate(current)) return;
+        if (!await this.checkLimits(current)) {
+          if (current.goalState?.status === 'complete') await this.completeInternal(current.id);
+          else await this.dispatch(current.id);
         }
       });
     }

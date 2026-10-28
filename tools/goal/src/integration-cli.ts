@@ -28,8 +28,8 @@ export type IntegrationRuntime = {
   manager(goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec;
   managerServices: ManagerServices;
 };
-export type HostRequest = { command: 'start' | 'renew' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end';
-  manager?: string; spec?: ManagerSpec };
+export type HostRequest = { command: 'start' | 'renew' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end' | 'outgoing-message';
+  manager?: string; spec?: ManagerSpec; recipient?: string; summary?: string };
 
 const appServerRegistryName = 'manager-app-servers.json';
 
@@ -159,6 +159,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           case 'decision': result = await managers.noteCommand(request.manager!); break;
           case 'turn-start': result = await managers.claudeTurn(request.manager!, true); break;
           case 'turn-end': result = await managers.claudeTurn(request.manager!, false); break;
+          case 'outgoing-message':
+            if (!request.manager || !request.recipient || request.summary === undefined) throw new Error('Incomplete outgoing manager message');
+            result = await managers.outgoingMessage(request.manager, request.recipient, request.summary); break;
           default: throw new Error('Unknown manager host command');
         }
         socket.end(`${JSON.stringify({ result: result ?? null })}\n`, completeRequest);
@@ -303,11 +306,21 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         ? runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null : null;
       if (recipient && JSON.parse(recipient.state).status === 'complete')
         throw new Error(`manager ${id} has completed its Goal and reads no inbox; send to ${runtime.supermanager || 'supermanager'}`);
+      const sender = callingManager(runtime);
       await recordManagerCommand(runtime);
       inbox.deliver({ managerId: id, kind: kind as ManagerEventKind, summary,
-        from: process.env.GOAL_MANAGER || runtime.supermanager || 'supermanager',
+        from: sender || runtime.supermanager || 'supermanager',
         ...(values.has('--task') ? { taskId: values.get('--task')! } : {}),
         ...(values.has('--evidence') ? { evidencePath: values.get('--evidence')! } : {}) });
+      if (sender && /continuation written/i.test(summary) &&
+        runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) {
+        const source = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender) as { state: string } | null;
+        const state = source ? JSON.parse(source.state) as { engine?: string; supermanager?: string; continuationAsked?: boolean; continuationRenewed?: boolean } : null;
+        if (state?.engine === 'codex' && state.supermanager === id && state.continuationAsked && !state.continuationRenewed) {
+          await ensureHost(runtime);
+          await hostRequest(runtime.managerSocket, { command: 'outgoing-message', manager: sender, recipient: id, summary });
+        }
+      }
     } else {
       await recordManagerCommand(runtime);
       if (subcommand === 'wait') {
@@ -359,11 +372,14 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
 
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */
 export async function recordManagerCommand(runtime: IntegrationRuntime): Promise<void> {
-  let manager = process.env.GOAL_MANAGER;
-  if (!manager && process.env.CODEX_THREAD_ID) {
-    if (!runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return;
-    const rows = runtime.db.query("SELECT state FROM manager_sessions").all() as { state: string }[];
-    manager = rows.map(row => JSON.parse(row.state)).find(state => state.threadId === process.env.CODEX_THREAD_ID)?.id;
-  }
+  const manager = callingManager(runtime);
   if (manager && existsSync(runtime.managerSocket)) await hostRequest(runtime.managerSocket, { command: 'decision', manager });
+}
+
+function callingManager(runtime: IntegrationRuntime): string | undefined {
+  if (process.env.GOAL_MANAGER) return process.env.GOAL_MANAGER;
+  if (!process.env.CODEX_THREAD_ID ||
+    !runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return undefined;
+  const rows = runtime.db.query('SELECT state FROM manager_sessions').all() as { state: string }[];
+  return rows.map(row => JSON.parse(row.state)).find(state => state.threadId === process.env.CODEX_THREAD_ID)?.id;
 }
