@@ -23,9 +23,9 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 | `mounted Zone`             | Shared bearer checks in `services/kernel/test/access/` and `services/auth/test/`; Zone does not define a separate bearer.                         |
 | `TypeList`                 | Shared bearer checks in `services/kernel/test/access/` and `services/auth/test/`; no distinct authentication list.                                |
 
-**Frozen scenarios:** Existing: “person registration claims pending handle and authenticates the same immutable account through Better Auth” and “Access commits epoch fence and durable receipt before Auth revokes sessions and stale recovery cannot undo it” (`specs/account-lifecycle-outcomes.test.ts`). Existing: “a person opens a session only with its own credential” (`specs/account-lifecycle-outcomes.test.ts`). Missing: `authentication-bearer-personas` — `services/kernel/test/access/authentication-user-cases.test.ts` (to freeze).
+**Frozen scenarios:** Existing: “person registration claims pending handle and authenticates the same immutable account through Better Auth” and “Access commits epoch fence and durable receipt before Auth revokes sessions and stale recovery cannot undo it” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`). Existing: “a person opens a session only with its own credential” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`). Missing: `authentication-bearer-personas` — `services/kernel/test/access/suspended-bearer.test.ts` (missing; to freeze).
 
-**Native acceptance:** `bun test specs/account-lifecycle-outcomes.test.ts services/auth/test/workflows.test.ts services/kernel/test/access/session-revocation.test.ts services/kernel/test/access/suspension.test.ts services/kernel/test/access/authentication-user-cases.test.ts`.
+**Native acceptance:** `sh -c 'bun run --cwd services/auth check test/workflows.test.ts && bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/session-revocation.test.ts test/access/suspension.test.ts test/access/suspended-bearer.test.ts'`.
 
 ## permission-formula
 
@@ -37,18 +37,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalogue`                | `services/kernel/test/access/permission-outcome.test.ts` exercises the consumer formula.                                                        |
-| `curated`                  | `specs/viewer-actions-outcomes.test.ts` exercises Collection consumers; `services/kernel/test/access/permission-outcome.test.ts` covers Access. |
-| `Everything without state` | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; no distinct Everything-specific formula.                         |
-| `own state`                | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; own state uses the same Access formula.                          |
-| `mounted Zone`             | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; Zone uses the same Access formula.                               |
-| `TypeList`                 | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; no TypeList-specific formula.                                    |
+| Cell                       | Acceptance                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | `services/kernel/test/access/permission-outcome.test.ts` exercises the consumer formula.                                                                                                                                        |
+| `curated`                  | `specs/viewer-actions-outcomes.test.ts` (native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`) exercises Collection consumers; `services/kernel/test/access/permission-outcome.test.ts` covers Access. |
+| `Everything without state` | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; no distinct Everything-specific formula.                                                                                                         |
+| `own state`                | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; own state uses the same Access formula.                                                                                                          |
+| `mounted Zone`             | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; Zone uses the same Access formula.                                                                                                               |
+| `TypeList`                 | `services/kernel/test/access/permission-outcome.test.ts` for consumer formula; no TypeList-specific formula.                                                                                                                    |
 
-**Frozen scenarios:** Existing: “actor grant AND consented scope AND principal grant permit the same action and resource”, “revoking only the actor grant denies”, “revoking only client consent denies an already authenticated request”, “revoking only the principal grant denies”, “active explicit denies override each account grant”, “without a principal actor grants and consent suffice”, “suspended and deleted actors fail closed” (`specs/permission-outcomes.test.ts`). Missing: `ban-beats-independent-read-grant` — `services/kernel/test/access/permission-user-cases.test.ts` (to freeze). Existing suspended expectations that return 401 require owner reconciliation; valid suspended bearers on every route must return 403 `account_suspended`.
+**Frozen scenarios:** Existing: “actor grant AND consented scope AND principal grant permit the same action and resource”, “revoking only the actor grant denies”, “revoking only client consent denies an already authenticated request”, “revoking only the principal grant denies”, “active explicit denies override each account grant”, “without a principal actor grants and consent suffice”, “suspended and deleted actors fail closed” (`specs/permission-outcomes.test.ts`; native binding: `services/kernel/test/access/permission-outcome.test.ts`). Missing: `ban-beats-independent-read-grant` — `specs/permission-outcomes.test.ts` with native binding `services/kernel/test/access/permission-outcome.test.ts`. Existing suspended expectations that return 401 require owner reconciliation; valid suspended bearers on every route must return 403 `account_suspended`.
 
-**Native acceptance:** `bun test specs/permission-outcomes.test.ts services/kernel/test/access/permission-outcome.test.ts services/kernel/test/access/permission-user-cases.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/permission-outcome.test.ts`.
 
 ## platform-gates
 
@@ -60,18 +60,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:** Gates apply to operation availability, not list membership.
 
-| Cell                       | Acceptance                                                                                                 |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `catalogue`                | `specs/platform-gates-outcomes.test.ts` verifies route exposure and viewer-visible operations.             |
-| `curated`                  | `specs/platform-gates-outcomes.test.ts` verifies gated operation admission; no separate curated list rule. |
-| `Everything without state` | `specs/platform-gates-outcomes.test.ts` verifies shared gate admission; no separate Everything list rule.  |
-| `own state`                | `specs/platform-gates-outcomes.test.ts` verifies shared gate admission; no separate own-state list rule.   |
-| `mounted Zone`             | `specs/platform-gates-outcomes.test.ts` verifies shared gate admission; no separate Zone list rule.        |
-| `TypeList`                 | `specs/platform-gates-outcomes.test.ts` verifies shared gate admission; no separate TypeList list rule.    |
+| Cell                       | Acceptance                                                                                                                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies route exposure and viewer-visible operations.             |
+| `curated`                  | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies gated operation admission; no separate curated list rule. |
+| `Everything without state` | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies shared gate admission; no separate Everything list rule.  |
+| `own state`                | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies shared gate admission; no separate own-state list rule.   |
+| `mounted Zone`             | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies shared gate admission; no separate Zone list rule.        |
+| `TypeList`                 | `specs/platform-gates-outcomes.test.ts` (native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`) verifies shared gate admission; no separate TypeList list rule.    |
 
-**Frozen scenarios:** Existing: “a route without a valid x-exposure is refused when the kernel is built”, “a closed operation answers the same 403 platform_closed to anonymous callers and ordinary accounts”, “a gated tester with the group's gate on the Global Context succeeds and loses it at revocation”, “platform staff holding gate any use every closed group and grant one gate to another account”, “opening a group in the exposure catalogue makes it public with no code change and closing it restores the denial” (`specs/platform-gates-outcomes.test.ts`).
+**Frozen scenarios:** Existing: “a route without a valid x-exposure is refused when the kernel is built”, “a closed operation answers the same 403 platform_closed to anonymous callers and ordinary accounts”, “a gated tester with the group's gate on the Global Context succeeds and loses it at revocation”, “platform staff holding gate any use every closed group and grant one gate to another account”, “opening a group in the exposure catalogue makes it public with no code change and closing it restores the denial” (`specs/platform-gates-outcomes.test.ts`; native binding: `services/kernel/test/access/gates/platform-gates-outcome.test.ts`).
 
-**Native acceptance:** `bun test specs/platform-gates-outcomes.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/gates/platform-gates-outcome.test.ts`.
 
 ## agent-identity
 
@@ -83,18 +83,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                               |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalogue`                | Missing `agent-identity` in `services/kernel/test/access/profile-user-cases.test.ts` (to freeze), covering subject and agent resolution. |
-| `curated`                  | Not applicable: identity resolution does not enumerate curated Collection membership.                                                    |
-| `Everything without state` | Not applicable: identity resolution does not enumerate Everything membership.                                                            |
-| `own state`                | Not applicable: identity resolution is public identity, not personal state.                                                              |
-| `mounted Zone`             | Missing `agent-identity` in `services/kernel/test/access/profile-user-cases.test.ts` (to freeze), including page-read resolution.        |
-| `TypeList`                 | Not applicable: identity resolution does not enumerate a TypeList.                                                                       |
+| Cell                       | Acceptance                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | Missing binding `services/kernel/test/access/agent-profile-outcomes.test.ts` for `specs/agent-profile-outcomes.test.ts`, covering subject and agent resolution. |
+| `curated`                  | Not applicable: identity resolution does not enumerate curated Collection membership.                                                                           |
+| `Everything without state` | Not applicable: identity resolution does not enumerate Everything membership.                                                                                   |
+| `own state`                | Not applicable: identity resolution is public identity, not personal state.                                                                                     |
+| `mounted Zone`             | Missing binding `services/kernel/test/access/agent-profile-outcomes.test.ts` for `specs/agent-profile-outcomes.test.ts`, including page-read resolution.        |
+| `TypeList`                 | Not applicable: identity resolution does not enumerate a TypeList.                                                                                              |
 
-**Frozen scenarios:** Existing: “automated profile and attribution disclose operator while private data stays absent” (`specs/account-lifecycle-outcomes.test.ts`). Missing: `agent-identity` — `services/kernel/test/access/profile-user-cases.test.ts` (to freeze); exact behavior is specified in `docs/research/api-acceptance-gaps.md`, accounts scenario A1. An operator relationship gives no agent authority or private profile disclosure.
+**Frozen scenarios:** Existing: “automated profile and attribution disclose operator while private data stays absent” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`). Missing: `agent-identity` — `specs/agent-profile-outcomes.test.ts` with binding `services/kernel/test/access/agent-profile-outcomes.test.ts` (binding missing); exact behavior is specified in `docs/research/api-acceptance-gaps.md`, accounts scenario A1. An operator relationship gives no agent authority or private profile disclosure.
 
-**Native acceptance:** `bun test specs/account-lifecycle-outcomes.test.ts services/kernel/test/access/account-agent-effect.test.ts services/kernel/test/access/profile-user-cases.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/account-agent-effect.test.ts test/presentation/agent-page-address.test.ts test/access/agent-profile-outcomes.test.ts`.
 
 ## self-profile
 
@@ -106,18 +106,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `catalogue`                | Missing `self-profile-http` in `services/kernel/test/access/profile-user-cases.test.ts` (to freeze), including public subject reads. |
-| `curated`                  | Not applicable: profile mutation and disclosure are account operations, not curated membership.                                      |
-| `Everything without state` | Not applicable: profile fields do not change Everything membership.                                                                  |
-| `own state`                | Missing `self-profile-http` in `services/kernel/test/access/profile-user-cases.test.ts` (to freeze), including owner profile read.   |
-| `mounted Zone`             | Not applicable: profile edits are not Zone mounted-list operations.                                                                  |
-| `TypeList`                 | Not applicable: profile edits do not affect TypeList membership.                                                                     |
+| Cell                       | Acceptance                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | Missing `self-profile-http` in `services/kernel/test/access/account-profile-http.test.ts` (to freeze), including public subject reads. |
+| `curated`                  | Not applicable: profile mutation and disclosure are account operations, not curated membership.                                        |
+| `Everything without state` | Not applicable: profile fields do not change Everything membership.                                                                    |
+| `own state`                | Missing `self-profile-http` in `services/kernel/test/access/account-profile-http.test.ts` (to freeze), including owner profile read.   |
+| `mounted Zone`             | Not applicable: profile edits are not Zone mounted-list operations.                                                                    |
+| `TypeList`                 | Not applicable: profile edits do not affect TypeList membership.                                                                       |
 
-**Frozen scenarios:** Existing: “actors and organizations default to all public views and can independently turn each off and on” and “invalid view patches and other accounts cannot change presentation fields” (`services/kernel/test/access/account-public-views.test.ts`); “profile patch sets and clears links, refuses invalid links and preserves the previous value on refusal” (`services/kernel/test/access/account-profile-read.test.ts`). Missing: `self-profile-http` — `services/kernel/test/access/profile-user-cases.test.ts` (to freeze). Profile update is a per-field merge-patch with no revision precondition; last write wins per field, and replay with the same idempotency key is stable. Verification and preferences retain their own commands and authority.
+**Frozen scenarios:** Existing: “actors and organizations default to all public views and can independently turn each off and on” and “invalid view patches and other accounts cannot change presentation fields” (`services/kernel/test/access/account-public-views.test.ts`); “profile patch sets and clears links, refuses invalid links and preserves the previous value on refusal” (`services/kernel/test/access/account-profile-read.test.ts`). Missing: `self-profile-http` — `services/kernel/test/access/account-profile-http.test.ts` (missing; to freeze). Missing binding `services/kernel/test/access/agent-profile-outcomes.test.ts` for `specs/agent-profile-outcomes.test.ts` (binding missing). Profile update is a per-field merge-patch with no revision precondition; last write wins per field, and replay with the same idempotency key is stable. Verification and preferences retain their own commands and authority.
 
-**Native acceptance:** `bun test services/kernel/test/access/account-public-views.test.ts services/kernel/test/access/account-profile-read.test.ts services/kernel/test/access/profile-user-cases.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/account-public-views.test.ts test/access/account-profile-read.test.ts test/access/account-profile-http.test.ts test/access/agent-profile-outcomes.test.ts`.
 
 ## follow-owner-counts
 
@@ -129,18 +129,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `catalogue`                | `specs/follow-counts-outcomes.test.ts` covers subject counts.                   |
-| `curated`                  | `specs/follow-counts-outcomes.test.ts` covers Collection counts and management. |
-| `Everything without state` | Not applicable: counts are never listed, sorted or filtered on.                 |
-| `own state`                | Not applicable: counts are never listed, sorted or filtered on.                 |
-| `mounted Zone`             | Not applicable: counts are never listed, sorted or filtered on.                 |
-| `TypeList`                 | Not applicable: counts are never listed, sorted or filtered on.                 |
+| Cell                       | Acceptance                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | `specs/follow-counts-outcomes.test.ts` (native binding: `services/kernel/test/library/follow-counts-outcomes.test.ts`) covers subject counts.                   |
+| `curated`                  | `specs/follow-counts-outcomes.test.ts` (native binding: `services/kernel/test/library/follow-counts-outcomes.test.ts`) covers Collection counts and management. |
+| `Everything without state` | Not applicable: counts are never listed, sorted or filtered on.                                                                                                 |
+| `own state`                | Not applicable: counts are never listed, sorted or filtered on.                                                                                                 |
+| `mounted Zone`             | Not applicable: counts are never listed, sorted or filtered on.                                                                                                 |
+| `TypeList`                 | Not applicable: counts are never listed, sorted or filtered on.                                                                                                 |
 
-**Frozen scenarios:** Existing: “follower counts are visible only through existing target management authority and outgoing follows only to their follower”, “Space management uses its installed role through native Access”, “revoked Collection management and ordinary unowned subjects conceal follower counts”, “anonymous suspended no-scope and closed gate requests fail closed without disclosing counts”, “follow unfollow receipt replay and duplicate projection effects preserve a single source edge” (`specs/follow-counts-outcomes.test.ts`). The complete frozen suite is to be bound natively as specified by accounts scenario A3 in `docs/research/api-acceptance-gaps.md`.
+**Frozen scenarios:** Existing: “follower counts are visible only through existing target management authority and outgoing follows only to their follower”, “Space management uses its installed role through native Access”, “revoked Collection management and ordinary unowned subjects conceal follower counts”, “anonymous suspended no-scope and closed gate requests fail closed without disclosing counts”, “follow unfollow receipt replay and duplicate projection effects preserve a single source edge” (`specs/follow-counts-outcomes.test.ts`; native binding: `services/kernel/test/library/follow-counts-outcomes.test.ts`).
 
-**Native acceptance:** `bun test specs/follow-counts-outcomes.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/library/follow-counts-outcomes.test.ts`.
 
 ## advertised-actions
 
@@ -152,18 +152,18 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalogue`                | Missing `advertised-actions` in `services/kernel/test/access/viewer-actions-user-cases.test.ts` (to freeze), for catalogue subject actions. |
-| `curated`                  | `specs/viewer-actions-outcomes.test.ts` covers Collection detail and list rows.                                                             |
-| `Everything without state` | Not applicable: Everything discovery does not advertise per-resource mutations.                                                             |
-| `own state`                | Not applicable: own-state list rows are not viewer-action discovery resources.                                                              |
-| `mounted Zone`             | Not applicable: Zone membership is not an advertised-action resource cell.                                                                  |
-| `TypeList`                 | Missing `advertised-actions` in `services/kernel/test/access/viewer-actions-user-cases.test.ts` (to freeze), for TypeList rows.             |
+| Cell                       | Acceptance                                                                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | `specs/viewer-actions-surfaces-outcomes.test.ts` with binding `services/kernel/test/access/viewer-actions-surfaces-outcomes.test.ts` (binding missing), for catalogue subject actions. |
+| `curated`                  | `specs/viewer-actions-outcomes.test.ts` (native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`) covers Collection detail and list rows.                        |
+| `Everything without state` | Not applicable: Everything discovery does not advertise per-resource mutations.                                                                                                        |
+| `own state`                | Not applicable: own-state list rows are not viewer-action discovery resources.                                                                                                         |
+| `mounted Zone`             | Not applicable: Zone membership is not an advertised-action resource cell.                                                                                                             |
+| `TypeList`                 | `specs/viewer-actions-surfaces-outcomes.test.ts` with binding `services/kernel/test/access/viewer-actions-surfaces-outcomes.test.ts` (binding missing), for TypeList rows.             |
 
-**Frozen scenarios:** Existing: “a delegated editor who is not the curator is offered the same operations”, “the same editor after the grant is revoked is offered nothing on the next read with the same bearer and the edit is refused”, “an assigned actor whose principal lacks the action or is suspended or whose assignment was revoked is offered nothing for it”, “a visible resource with no allowed action answers an empty list while a failing dependency answers 503 with no partial positives” (`specs/viewer-actions-outcomes.test.ts`). Missing: `advertised-actions` — `services/kernel/test/access/viewer-actions-user-cases.test.ts` (to freeze), covering catalogue subjects, Realm, Space and TypeList resource rows in addition to the existing Collection cases.
+**Frozen scenarios:** Existing: “a delegated editor who is not the curator is offered the same operations”, “the same editor after the grant is revoked is offered nothing on the next read with the same bearer and the edit is refused”, “an assigned actor whose principal lacks the action or is suspended or whose assignment was revoked is offered nothing for it”, “a visible resource with no allowed action answers an empty list while a failing dependency answers 503 with no partial positives” (`specs/viewer-actions-outcomes.test.ts`; native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`). Missing: `advertised-actions` — `services/kernel/test/access/viewer-actions-outcomes.test.ts` (binding missing; `specs/viewer-actions-outcomes.test.ts` native binding to add), covering catalogue subjects, Realm, Space and TypeList resource rows in addition to the existing Collection cases. The catalogue subject and TypeList row cases are specified by `specs/viewer-actions-surfaces-outcomes.test.ts` with binding `services/kernel/test/access/viewer-actions-surfaces-outcomes.test.ts` (binding missing).
 
-**Native acceptance:** `bun test specs/viewer-actions-outcomes.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/viewer-actions-outcomes.test.ts test/access/viewer-actions-surfaces-outcomes.test.ts`.
 
 ## membership-and-ban-protection
 
@@ -184,9 +184,9 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 | `mounted Zone`             | Not applicable: venue membership does not create a Zone list rule.                    |
 | `TypeList`                 | Not applicable: venue membership does not alter TypeList membership.                  |
 
-**Frozen scenarios:** Existing: “a banned Realm member loses join and participate while unrelated reads keep their own answers” (`specs/viewer-actions-outcomes.test.ts`). Missing: `protected-ban-barrier` — `services/kernel/test/content/protected-ban-user-cases.test.ts` (to freeze), per accounts research scenario R2. The decisive fixture has no independent read grant; ban precedence over an independent grant is specified separately by `permission-formula`.
+**Frozen scenarios:** Existing: “a banned Realm member loses join and participate while unrelated reads keep their own answers” (`specs/viewer-actions-outcomes.test.ts`; native binding: `services/kernel/test/access/viewer-actions-outcomes.test.ts`). Missing: `protected-ban-barrier` — `specs/ban-precedence-outcomes.test.ts` with binding `services/kernel/test/access/ban-precedence-outcomes.test.ts` (binding missing), per accounts research scenario R2. The decisive fixture has no independent read grant; ban precedence over an independent grant is specified separately by `permission-formula`.
 
-**Native acceptance:** `bun test specs/viewer-actions-outcomes.test.ts services/kernel/test/content/protected-ban-user-cases.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/ban-precedence-outcomes.test.ts test/access/viewer-actions-outcomes.test.ts`.
 
 ## notification-preferences
 
@@ -209,7 +209,7 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Frozen scenarios:** Existing: “preferences return every optional notification kind as enabled until the account turns one off and no default is stored”, “notificationAllowed follows the recipient's setting for an optional kind”, and “another account cannot read or set notification preferences” (`services/kernel/test/access/notification-preferences.test.ts`). Missing: `notification-send-time-access` — `services/kernel/test/access/notification-preferences.test.ts` (to freeze), covering access recheck at content send time.
 
-**Native acceptance:** `bun test services/kernel/test/access/notification-preferences.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/access/notification-preferences.test.ts`.
 
 ## terminal-erasure
 
@@ -221,15 +221,15 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:** Owner-store erasure evidence is defined by [deletion policy](../deletion.md); HTTP outcomes and payload removal are required.
 
-| Cell                       | Acceptance                                                                                                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalogue`                | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze).                                            |
-| `curated`                  | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze) for private/unlisted Collections.           |
-| `Everything without state` | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze) for personal sources.                       |
-| `own state`                | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze) for entries, labels and sessions.           |
-| `mounted Zone`             | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze) for prepared exports and Zone sources.      |
-| `TypeList`                 | `docs/deletion.md` owner-store policy; missing `terminal-erasure-graph` in `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze) for owner stores represented by a TypeList. |
+| Cell                       | Acceptance                                                                                                                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalogue`                | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing).                                            |
+| `curated`                  | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing) for private/unlisted Collections.           |
+| `Everything without state` | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing) for personal sources.                       |
+| `own state`                | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing) for entries, labels and sessions.           |
+| `mounted Zone`             | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing) for prepared exports and Zone sources.      |
+| `TypeList`                 | `docs/deletion.md` owner-store policy; `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing) for owner stores represented by a TypeList. |
 
-**Frozen scenarios:** Existing: “native completion purges every targeted history and copies while retaining unrelated authors” and “a suspension ends an erasure started before it, and reinstatement does not resume it” (`specs/erasure-operation-outcomes.test.ts`). Missing: `terminal-erasure-graph` — `services/kernel/test/access/terminal-erasure-user-cases.test.ts` (to freeze), per accounts scenario A5 in `docs/research/api-acceptance-gaps.md`. No ordinary restore can resurrect the account.
+**Frozen scenarios:** Existing: “native completion purges every targeted history and copies while retaining unrelated authors” and “a suspension ends an erasure started before it, and reinstatement does not resume it” (`specs/erasure-operation-outcomes.test.ts`; native binding: `services/kernel/test/content/erasure-operation-outcomes.test.ts`). Missing: `terminal-erasure-graph` — `specs/terminal-erasure-outcomes.test.ts` with binding `services/kernel/test/access/terminal-erasure-outcomes.test.ts` (binding missing), per accounts scenario A5 in `docs/research/api-acceptance-gaps.md`. No ordinary restore can resurrect the account.
 
-**Native acceptance:** `bun test specs/erasure-operation-outcomes.test.ts services/kernel/test/access/account-lifecycle-outcome.test.ts services/kernel/test/access/terminal-erasure-user-cases.test.ts`.
+**Native acceptance:** `bun run --cwd services/kernel check test/content/erasure-operation-outcomes.test.ts test/access/account-lifecycle-outcome.test.ts test/access/terminal-erasure-outcomes.test.ts`.
