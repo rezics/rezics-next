@@ -26,6 +26,21 @@ export const PROBLEMS = {
   stale_cursor: { status: 409, title: 'Stale Cursor', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },
   collection_full: { status: 409, title: 'Collection Full', retryable: false },
+  library_entry_restore_occupied: {
+    status: 409,
+    title: 'Library Entry Restore Occupied',
+    retryable: false,
+  },
+  library_entry_restore_stale: {
+    status: 409,
+    title: 'Library Entry Restore Stale',
+    retryable: false,
+  },
+  library_entry_restore_expired: {
+    status: 409,
+    title: 'Library Entry Restore Expired',
+    retryable: false,
+  },
   semantic_not_ready: { status: 503, title: 'Semantic Layer Not Ready', retryable: true },
   presentation_not_ready: { status: 503, title: 'Presentation Not Ready', retryable: true },
   not_found: { status: 404, title: 'Not Found', retryable: false },
