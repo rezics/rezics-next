@@ -36,8 +36,7 @@ function validateBulkResponse(response: unknown, actions: readonly IndexAction[]
     const action = actions[index]!;
     const item = items[index];
     const operationName = action.op;
-    if (!isRecord(item) || Object.keys(item).length !== 1 || !isRecord(item[operationName]))
-      return writeError([item]);
+    if (!isRecord(item) || Object.keys(item).length !== 1 || !isRecord(item[operationName])) return writeError([item]);
 
     const result = item[operationName] as BulkItem;
     const status = result.status;
@@ -61,8 +60,7 @@ function validateBulkResponse(response: unknown, actions: readonly IndexAction[]
 }
 
 function validateRefreshResponse(status: number, response: unknown): void {
-  if (!Number.isInteger(status) || status < 200 || status >= 300 || !isRecord(response))
-    return writeError([response]);
+  if (!Number.isInteger(status) || status < 200 || status >= 300 || !isRecord(response)) return writeError([response]);
 
   const shards = response._shards;
   if (!isRecord(shards)) return writeError([response]);
