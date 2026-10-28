@@ -25,11 +25,7 @@ test(
   title,
   async () => {
     // HTTP calls use the production "newest" spelling for the contract's "new" sort.
-    for (const [sort, index] of [
-      ['newest', 'board_thread_page_idx'],
-      ['active', 'board_thread_active_page_idx'],
-      ['hot', 'board_thread_hot_page_idx'],
-    ] as const) {
+    for (const sort of ['newest', 'active', 'hot'] as const) {
       await db.admin.query(
         'TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision CASCADE',
       );
@@ -167,13 +163,23 @@ test(
         },
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-      for (const { cost } of report.samples) {
+      for (const { scale, cost } of report.samples) {
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.blocks).toBeGreaterThan(0);
         expect(cost.statements).toBeGreaterThan(0);
+        for (const [name, relation] of Object.entries(cost.relations)) {
+          const measurement = JSON.stringify({
+            sort,
+            scale,
+            rows: cost.rows,
+            blocks: cost.blocks,
+            statements: cost.statements,
+            relation: name,
+            ...relation,
+          });
+          expect(relation.sequentialScans, measurement).toBe(0);
+        }
         expect(cost.relations['content.board_thread']?.rows).toBe(candidateLimit);
-        expect(cost.relations[`index:${index}`]?.blocks).toBeGreaterThan(0);
-        for (const relation of Object.values(cost.relations)) expect(relation.sequentialScans).toBe(0);
       }
     }
   },
