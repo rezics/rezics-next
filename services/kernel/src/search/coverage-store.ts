@@ -140,7 +140,7 @@ export function createCoverageStore(pool: Pool): CoverageStore {
   }
   async function locked(client: PoolClient, g: CoverageGuard) {
     const row = await lineage(client, g.incarnation, true);
-    return row && row.revision === g.lineageRevision && row.revision < codec.MAX ? row : null;
+    return row && row.revision === g.lineageRevision ? row : null;
   }
   async function home(client: Pick<PoolClient, 'query'>, physical: IndexIncarnation, partition: number) {
     const row = one(await readHome.run(client, { partition, consumer: physical.consumer, uuid: physical.uuid }));
@@ -232,6 +232,7 @@ export function createCoverageStore(pool: Pool): CoverageStore {
         if (
           !old ||
           old.state !== 'populating' ||
+          old.revision === codec.MAX ||
           old.complete ||
           next.partition < old.partition ||
           (next.partition === old.partition && (next.after === null || (old.after !== null && next.after <= old.after)))
@@ -260,6 +261,7 @@ export function createCoverageStore(pool: Pool): CoverageStore {
         const old = await locked(client, g);
         if (
           !old ||
+          old.revision === codec.MAX ||
           (state === 'live' && !(old.state === 'populating' && old.complete)) ||
           (state === 'quarantined' && !['populating', 'live'].includes(old.state))
         )

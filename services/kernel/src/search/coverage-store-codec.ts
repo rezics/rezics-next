@@ -128,7 +128,7 @@ export function lineageRow(value: unknown): PopulationLineage {
     value,
     'prefix generation index_name index_uuid protocol consumer revision state origin population_partition population_after population_complete',
   );
-  return {
+  const result: PopulationLineage = {
     incarnation: incarnation({
       prefix: v.prefix,
       generation: v.generation,
@@ -142,6 +142,8 @@ export function lineageRow(value: unknown): PopulationLineage {
     origin: choice(v.origin, ['created-empty', 'replay', 'audit']),
     ...frontier({ partition: v.population_partition, after: v.population_after, complete: v.population_complete }),
   };
+  requireValue(result.state !== 'live' || result.complete);
+  return result;
 }
 export function homeRow(value: unknown, physical: IndexIncarnation): HomeCoverage {
   const v = object(value, 'partition_no revision current fence verified covered_through attempt');
@@ -162,6 +164,8 @@ export function homeRow(value: unknown, physical: IndexIncarnation): HomeCoverag
     !result.verified ||
       (equal(result.verified, result.current) && result.verified.epoch === result.coveredThrough!.epoch),
   );
-  requireValue(!result.attempt?.source || equal(result.attempt.source, result.current));
+  requireValue(
+    !result.attempt || result.attempt.outcome === 'enrolled' || equal(result.attempt.source, result.current),
+  );
   return result;
 }
