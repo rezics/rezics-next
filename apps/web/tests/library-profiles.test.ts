@@ -87,6 +87,12 @@ const currentProfile: LibraryProfile = {
             identity: { kind: 'session_local' },
             structure: { kind: 'none' },
           },
+          {
+            id: 'unbounded-fragment',
+            labels: { en: 'Unbounded fragment' },
+            identity: { kind: 'session_local' },
+            structure: { kind: 'none' },
+          },
         ],
       },
       {
@@ -194,7 +200,10 @@ test('stored IDs resolve in the current profile, then legacy-fixed-v1, and label
     lang: 'ja',
   });
   expect(libraryUnitLabel(release, 'schema:Novel', 'completed_units', 'not-a-unit', 'en')).toBeUndefined();
-  expect(libraryUnitLabel(release, 'schema:Unconfigured', 'scalar_amount', 'page', 'en')).toBeUndefined();
+  expect(libraryUnitLabel(release, 'schema:Unconfigured', 'scalar_amount', 'page', 'ja-JP')).toEqual({
+    text: 'scalar_amount page 日本語',
+    lang: 'ja',
+  });
 });
 
 test("a profile's choices preserve its declaration order and exact progress metadata", () => {
@@ -211,6 +220,7 @@ test("a profile's choices preserve its declaration order and exact progress meta
         units: [
           { id: 'folio', minimum: '0.00', maximum: '12.5000', precision: 2, totalPolicy: 'forbidden' },
           { id: 'leaf', minimum: '1', maximum: '999.125', precision: 3, totalPolicy: 'forbidden' },
+          { id: 'unbounded-fragment' },
         ],
       },
       {
@@ -259,7 +269,9 @@ test('resolving profiles for one hundred subjects of five types reads the active
     const activeRelease = await readRelease();
     const types = ['schema:Novel', 'schema:Edition', 'schema:Unconfigured', 'schema:MissingProfile', 'schema:Other'];
     const subjects = Array.from({ length: 100 }, (_, index) => ({ type: types[index % types.length]! }));
-    expect(subjects.map(({ type }) => libraryProfile(activeRelease, type)?.id)).toHaveLength(100);
+    expect(subjects.map(({ type }) => libraryProfile(activeRelease, type)?.id)).toEqual(
+      Array.from({ length: 100 }, (_, index) => (index % types.length === 0 ? 'reading-v2' : 'legacy-fixed-v1')),
+    );
     expect(reads).toEqual({ active: 1, release: 1 });
   } finally {
     server.stop(true);
