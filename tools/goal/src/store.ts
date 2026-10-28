@@ -55,6 +55,11 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     version: 5,
     sql: `CREATE INDEX worker_events_task_attempt_sequence ON worker_events(task_id, attempt, sequence);`,
   },
+  {
+    module: 'worker',
+    version: 6,
+    sql: `CREATE INDEX worker_tasks_state ON worker_tasks(json_extract(body, '$.state'));`,
+  },
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
@@ -86,19 +91,28 @@ export class WorkerStore implements AttemptFence {
       : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
     return rows.map((row) => decode<Attempt>(row)!);
   }
-  /** Indexed, unsettled orphan candidates. The state index bounds attempt reads to running/exited rows. */
+  /** Reads one state through the attempt state index; used for the host's pending launcher recovery. */
+  attemptsInState(state: Attempt['state']): Attempt[] {
+    return this.db
+      .query("SELECT body FROM worker_attempts WHERE json_extract(body, '$.state') = ? ORDER BY task_id, attempt")
+      .all(state)
+      .map((row) => decode<Attempt>(row)!);
+  }
+  /**
+   * Candidate work is anchored by running tasks, then follows each task's current-attempt primary key.
+   * Settling writes the task to `landing` (or a failure path writes `ready`/`stopped`), removing it from this index.
+   */
   orphanSweepCandidates(): { attempt: Attempt; taskState: string; currentAttempt: number }[] {
     return this.db
       .query(`
-        /* worker_attempts_state bounds history reads to running/exited rows; task id is a primary-key lookup. */
+        /* worker_tasks_state bounds work to unsettled tasks; each current attempt is a primary-key lookup. */
         SELECT a.body AS attempt_body,
                json_extract(t.body, '$.state') AS task_state,
-               CAST(json_extract(t.body, '$.currentAttempt') AS INTEGER) AS current_attempt
-        FROM worker_attempts AS a
-        JOIN worker_tasks AS t ON t.id = a.task_id
-        WHERE json_extract(a.body, '$.state') IN ('running', 'exited')
-          AND json_extract(t.body, '$.state') = 'running'
-          AND CAST(json_extract(t.body, '$.currentAttempt') AS INTEGER) = a.attempt
+               t.current_attempt AS current_attempt
+        FROM worker_tasks AS t
+        JOIN worker_attempts AS a ON a.task_id = t.id AND a.attempt = t.current_attempt
+        WHERE json_extract(t.body, '$.state') = 'running'
+          AND json_extract(a.body, '$.state') IN ('running', 'exited')
       `)
       .all()
       .map((row) => {

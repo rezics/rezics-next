@@ -549,29 +549,14 @@ export class WorkerJob implements GateOutcomeSink {
         !isAbsolute(path)
       );
     };
-    const candidates = adoptRunning
-      ? store.attempts()
-          .filter(
-            (attempt) =>
-              ['running', 'exited'].includes(attempt.state) &&
-              (!attempt.driver || !sameProcess(attempt.driver)) &&
-              ownsRunLog(attempt.logPath),
-          )
-          .flatMap((attempt) => {
-            const task = store.task(attempt.taskId);
-            return task.currentAttempt === attempt.attempt && task.state === 'running'
-              ? [{ attempt, taskState: task.state, currentAttempt: task.currentAttempt }]
-              : [];
-          })
-      : store.orphanSweepCandidates().filter(
-          ({ attempt }) =>
-            (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath),
-        );
+    const candidates = store.orphanSweepCandidates().filter(
+      ({ attempt }) => (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath),
+    );
     // A pending attempt exists only while a process holds its task's lease to launch it. One that is old and whose
     // lease is free lost its launcher (nine tasks sat pending for three hours): the host retries the task.
     if (adoptRunning) {
       const graceMs = this.tasks.settings.startGraceMs ?? START_GRACE_MS;
-      for (const attempt of store.attempts()) {
+      for (const attempt of store.attemptsInState('pending')) {
         if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
         const task = store.task(attempt.taskId);
         if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
