@@ -993,11 +993,53 @@ test('remote admission stops stale liveness slices but preserves fresh runs and 
   expect(run).toContain('.alive');
 });
 
+test('a run whose client stops renewing liveness is stopped by the next host run with its containers', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  expect((await remote(env, workspace(), ['true'])).code).toBe(0);
+  const slot = events().find((event) => event.kind === 'slot')!.script as string;
+  expect(slot).toContain('age="$((now - touched))"');
+  expect(slot).toContain('[ "$age" -gt 600 ]');
+  expect(slot).toContain('systemctl stop "$run_slice"');
+  expect(slot).toContain('docker ps -aq --filter "label=rezics.check.run=$run_id"');
+  expect(slot).toContain('remote-check: stopped stale run $run_id (alive file age $age s)');
+});
+
+test('a run whose client remains alive is preserved by another host run within its deadline', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  expect((await remote(env, workspace(), ['true'])).code).toBe(0);
+  const run = events().find((event) => event.kind === 'run')!.script as string;
+  const slot = events().find((event) => event.kind === 'slot')!.script as string;
+  expect(run).toContain('.alive');
+  expect(slot).toContain('if [ "$age" -gt 600 ]; then');
+  expect(run).not.toContain('systemctl stop "$run_slice"');
+});
+
+test('an empty leftover run slice is removed by the next host run', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  expect((await remote(env, workspace(), ['true'])).code).toBe(0);
+  const slot = events().find((event) => event.kind === 'slot')!.script as string;
+  expect(slot).toContain('systemctl list-units --all --type=slice');
+  expect(slot).toContain('systemctl show --property=TasksCurrent --value "$unit"');
+  expect(slot).toContain('[ "$tasks" = 0 ]');
+  expect(slot).toContain('systemctl stop "$unit"');
+});
+
 test('a run that reaches its deadline stops its slice and returns a distinct deadline code', async () => {
   const { env } = scenario({ a: { available: 8e9, hang: true } });
   const result = await remote(env, workspace(), ['true'], ['--max-ms', '25']);
   expect(result.code).toBe(124);
   expect(result.stderr).toContain('remote-check: deadline reached after 25 ms');
+});
+
+test('deadline, command failure and transport failure keep distinct exit codes', async () => {
+  const commandFailure = scenario({ a: { available: 8e9, exit: 7 } });
+  expect((await remote(commandFailure.env, workspace(), ['true'])).code).toBe(7);
+
+  const transportFailure = scenario({ a: { available: 8e9, transportFailures: 1 } });
+  expect((await remote(transportFailure.env, workspace(), ['true'])).code).toBe(75);
+
+  const deadline = scenario({ a: { available: 8e9, hang: true } });
+  expect((await remote(deadline.env, workspace(), ['true'], ['--max-ms', '25'])).code).toBe(124);
 });
 
 test("the remote run's output streams back and its exit code becomes the local exit code", async () => {

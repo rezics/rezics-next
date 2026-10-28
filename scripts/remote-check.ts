@@ -481,7 +481,7 @@ for run in ${ROOT}/runs/*; do
   alive="$run/.alive"
   if [ -f "$alive" ]; then
     touched=$(stat -c %Y "$alive" 2>/dev/null || echo "$now")
-    age=$((now - touched))
+    age="$((now - touched))"
     if [ "$age" -gt 600 ]; then
       run_id=\${run##*/}
       run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
@@ -1535,7 +1535,9 @@ async function runLeased(
     const heartbeat = setInterval(() => {
       if (!heartbeatStopped) {
         const renew = Bun.spawn(['ssh', ...sshOptions(host), host.address, heartbeatScript(directory)], {
-          stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+          stdin: 'ignore',
+          stdout: 'ignore',
+          stderr: 'ignore',
         });
       }
     }, heartbeatMs);
@@ -1552,7 +1554,9 @@ async function runLeased(
         deadline = true;
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stop = Bun.spawn(['ssh', ...sshOptions(host), host.address, stopRunScript(id)], {
-          stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+          stdin: 'ignore',
+          stdout: 'ignore',
+          stderr: 'ignore',
         });
         await within(15_000, stop.exited);
         run.kill('SIGTERM');
