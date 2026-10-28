@@ -33,9 +33,9 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 const resource = (id: string) => ({ route: routeOf(id)!, id });
 const subject = (account: Account) => ({ kind: 'account', id: account.id });
-async function grant(account: Account, id: string, actions: string[], enabled = true) {
+async function grant(account: Account, id: string, actions: string[], enabled = true, actor = fixture.subjectOwner) {
   await json(
-    await call('POST', enabled ? '/v1/grants' : '/v1/grants:revoke', fixture.subjectOwner, {
+    await call('POST', enabled ? '/v1/grants' : '/v1/grants:revoke', actor, {
       resource: resource(id),
       subject: subject(account),
       actions,
@@ -152,7 +152,7 @@ async function personas() {
   return { protectedRealm, banRealm };
 }
 async function initialized(kind: 'space' | 'realm', value: Space | Realm, actor: Account) {
-  const id = 'spaceId' in value && !('realmId' in value) ? value.spaceId : (value as Realm).realmId;
+  const id = kind === 'space' ? (value as Space).spaceId : (value as Realm).realmId;
   expect(routeOf(id)).not.toBeNull();
   expect(routeOf(value.headRevisionId)).toBe(routeOf(id));
   expect(value.creator).toBe(actor.id);
@@ -334,7 +334,7 @@ test.serial(
   async () => {
     const protectedRealm = await realm('protected');
     await json(await call('POST', '/v1/roleGrants', fixture.owner, roleInput(protectedRealm, fixture.moderator)), 201);
-    await grant(fixture.moderator, protectedRealm.realmId, ['realm:manage']);
+    await grant(fixture.moderator, protectedRealm.realmId, ['realm:manage'], true, fixture.owner);
     await driver.settle();
     await worker.stop();
     let workflowId: string;
@@ -350,7 +350,7 @@ test.serial(
           protectedRealm.realmId,
         ]),
       ).toEqual([{ initiator_account_id: fixture.moderator.id }]);
-      await grant(fixture.moderator, protectedRealm.realmId, ['realm:manage'], false);
+      await grant(fixture.moderator, protectedRealm.realmId, ['realm:manage'], false, fixture.owner);
       before = await snapshot();
     } finally {
       await restartWorker();
