@@ -1,5 +1,5 @@
 #!/bin/sh
-# Stands in for `docker` on a check host: remote-check.ts puts this directory first on the path of every remote run.
+# Stands in for `docker` on check hosts and in worker worktrees.
 # Containers that `docker run` and `docker create` start are placed in the run's slice, so no workspace has to
 # know it is running there. Every other command goes to the real docker unchanged.
 #
@@ -25,6 +25,7 @@ case "$1" in
     verb=$1
     shift
     if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
+    if [ -n "${GOAL_TASK_ID:-}" ] && [ -n "${GOAL_ATTEMPT:-}" ]; then set -- --label "rezics.worker.attempt=$GOAL_TASK_ID/$GOAL_ATTEMPT" "$@"; fi
     exec docker "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
     ;;
   container)
@@ -33,6 +34,7 @@ case "$1" in
         verb=$2
         shift 2
         if [ -n "${REZICS_CHECK_RUN:-}" ]; then set -- --label "rezics.check.run=$REZICS_CHECK_RUN" "$@"; fi
+        if [ -n "${GOAL_TASK_ID:-}" ] && [ -n "${GOAL_ATTEMPT:-}" ]; then set -- --label "rezics.worker.attempt=$GOAL_TASK_ID/$GOAL_ATTEMPT" "$@"; fi
         exec docker container "$verb" --cgroup-parent="${REZICS_CHECK_SLICE:-rezics-check.slice}" "$@"
         ;;
     esac

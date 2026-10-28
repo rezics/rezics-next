@@ -136,6 +136,7 @@ export function workerEnvironment(
   pool: Pool,
   extra: NodeJS.ProcessEnv = {},
   parent: NodeJS.ProcessEnv = process.env,
+  worktree?: string,
 ): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
@@ -162,9 +163,14 @@ export function workerEnvironment(
           ? 'CLAUDE_CONFIG_DIR'
           : 'CURSOR_CONFIG_DIR';
   // With CLAUDE_CONFIG_DIR set, Claude Code looks for .claude.json inside it, not beside the default ~/.claude.
-  if (pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude'))
-    return { ...env, ...NO_COMPILE_CACHE, ...extra };
-  return { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
+  const result =
+    pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude')
+      ? { ...env, ...NO_COMPILE_CACHE, ...extra }
+      : { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
+  const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
+  if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))
+    result.PATH = [wrapperDirectory, result.PATH].filter(Boolean).join(':');
+  return result;
 }
 export function workerPrompt(
   task: Task,
@@ -423,7 +429,12 @@ export async function launch(
     // Keyed on the brief's kind: a research brief that declares a risk area or cites sources routes as a claim.
     ...(task.brief.kind === 'research' ? { research: true } : {}),
   });
-  const env = workerEnvironment(pool, attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))));
+  const env = workerEnvironment(
+    pool,
+    attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
+    process.env,
+    task.worktree,
+  );
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {

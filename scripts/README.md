@@ -137,6 +137,10 @@ It also adds `rezics.check.run=$REZICS_CHECK_RUN` labels. Other Docker commands 
 The wrapper finds the real Docker later on `PATH`, so a preceding test shim can call it without recursion.
 The run and its containers therefore share accounting and the parent slice's resource limits.
 
+Worker processes also put the worktree's `scripts/check-host` wrapper first on `PATH` when it exists. It places worker
+containers in `rezics-check.slice` and labels them `rezics.worker.attempt=<task>/<attempt>`; settlement removes only
+containers with that attempt label. Remote runs do not receive worker identity and retain their run label and cleanup.
+
 Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
 Returned outputs add `rsync back`. Slot wait includes probing and acquisition; rsync measures the upload.
 When cgroup counters are readable, the run also prints:

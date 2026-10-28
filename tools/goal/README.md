@@ -342,6 +342,15 @@ the task worktree; a second conflict goes to the manager as a specification conf
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 
+At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
+Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
+
+### Worker container cleanup
+
+- Touches: one label-filtered Docker listing and removal of that attempt's returned container IDs.
+- Bound: only containers created by the exact task attempt are examined or removed; the work grows with that attempt's containers.
+- Growth check: `bun test tools/goal/src/worker-containers.test.ts` records wrapper arguments and attempt cleanup.
+
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the
 consultation bundle. Consultation input uses only these four artifacts, with project-instruction loading and web search
