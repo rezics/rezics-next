@@ -15,6 +15,11 @@ const pages = ['home', 'subject', 'missing-subject', 'shell', 'board', 'thread',
 const visitors = ['Signed In', 'Signed Out'];
 const recorded = join(app, 'src/kernel/recorded');
 const englishTextExceptions: { story: string; locale: string; text: string }[] = [];
+const englishHomeTypeNames = new Set(['Book', 'TV Series', 'Recipe']);
+const englishMessages = Bun.file(join(app, 'messages/en.json')).json() as Promise<Record<string, unknown>>;
+const definitionsRelease = Bun.file(join(recorded, 'definitions-release.json')).json() as Promise<{
+  release: { types: Record<string, { labels?: Record<string, string> }> };
+}>;
 mkdirSync(join(root, '.temp'), { recursive: true });
 const temporary = mkdtempSync(join(root, '.temp/page-stories-'));
 const timeout = 1_800_000;
@@ -92,26 +97,57 @@ function storyUrl(origin: string, storyId: string, locale: string) {
 
 async function visibleTextNodes(page: Page, selector?: string): Promise<string[]> {
   return page.evaluate((rootSelector) => {
-    const root = rootSelector ? document.querySelector(rootSelector) : document.body;
-    if (!root) return [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const roots = rootSelector ? [...document.querySelectorAll(rootSelector)] : [document.body];
     const result: string[] = [];
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const text = node.nodeValue?.trim();
-      const element = node.parentElement;
-      if (!text || !element || element.getClientRects().length === 0) continue;
-      let visible = true;
-      for (let current: HTMLElement | null = element; current; current = current.parentElement) {
-        const style = window.getComputedStyle(current);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) {
-          visible = false;
-          break;
+    for (const root of roots) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.nodeValue ?? '';
+        const element = node.parentElement;
+        if (!text.trim() || !element || element.getClientRects().length === 0) continue;
+        let visible = true;
+        for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+          const style = window.getComputedStyle(current);
+          if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) {
+            visible = false;
+            break;
+          }
         }
+        if (visible) result.push(text);
       }
-      if (visible) result.push(text);
     }
     return result;
   }, selector);
+}
+
+async function englishTextHits(page: Page, story: string, locale: string, own: Record<string, unknown>) {
+  const [english, definitions] = await Promise.all([englishMessages, definitionsRelease]);
+  const candidates = new Set<string>();
+  for (const [key, value] of Object.entries(english))
+    if (typeof value === 'string' && own[key] !== value) candidates.add(value);
+  for (const type of Object.values(definitions.release.types))
+    if (type.labels?.en && type.labels[locale] !== type.labels.en) candidates.add(type.labels.en);
+  return (await visibleTextNodes(page)).filter(
+    (text) =>
+      candidates.has(text) &&
+      !englishTextExceptions.some(
+        (exception) => exception.story === story && exception.locale === locale && exception.text === text,
+      ),
+  );
+}
+
+async function expectHomeCardsWithoutTypeLines(page: Page, story: string, locale: string) {
+  expect(
+    await page.locator('[data-slot="cover-card-secondary"]').count(),
+    `${story} ${locale}: home type rows and Continue cards have no type line under the title`,
+  ).toBe(0);
+  if (locale === 'zh-Hans') {
+    const cardTexts = await visibleTextNodes(page, '[data-slot="cover-card"]');
+    expect(
+      cardTexts.filter((text) => englishHomeTypeNames.has(text)),
+      `${story} ${locale}: home cards do not show English type names`,
+    ).toEqual([]);
+  }
 }
 
 async function openStory(name: string, visitor: string, locale: string) {
@@ -294,20 +330,7 @@ test(
           );
           expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
           const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
-          if (name === 'home') {
-            expect(
-              await page.locator('[data-slot="cover-card-secondary"]').count(),
-              `${entry.id} ${locale}: home type rows and Continue cards have no type line under the title`,
-            ).toBe(0);
-            if (locale === 'zh-Hans') {
-              const cardTexts = await visibleTextNodes(page, '[data-slot="cover-card"]');
-              const englishTypes = new Set(['Book', 'TV Series', 'Recipe']);
-              expect(
-                cardTexts.filter((text) => englishTypes.has(text)),
-                `${entry.id} ${locale}: home cards do not show English type names`,
-              ).toEqual([]);
-            }
-          }
+          if (name === 'home') await expectHomeCardsWithoutTypeLines(page, entry.id, locale);
           expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
           const heading = main.getByRole('heading', { level: 1 }).first();
           await heading.waitFor();
@@ -333,20 +356,7 @@ test(
             expect(headingText).toBe(recording.subject.labels[locale] ?? recording.subject.labels.en);
           }
           if (locale !== 'en') {
-            const english = await Bun.file(join(app, 'messages/en.json')).json();
-            const release = await Bun.file(join(recorded, 'definitions-release.json')).json();
-            const candidates = new Set<string>();
-            for (const [key, value] of Object.entries(english))
-              if (typeof value === 'string' && own[key] !== value) candidates.add(value);
-            for (const type of Object.values(release.release.types) as { labels?: Record<string, string> }[])
-              if (type.labels?.en && type.labels[locale] !== type.labels.en) candidates.add(type.labels.en);
-            const hits = (await visibleTextNodes(page)).filter(
-              (text) =>
-                candidates.has(text) &&
-                !englishTextExceptions.some(
-                  (exception) => exception.story === entry.id && exception.locale === locale && exception.text === text,
-                ),
-            );
+            const hits = await englishTextHits(page, entry.id, locale, own);
             expect(
               hits.map((text) => `${entry.id}, ${locale}, ${text}`),
               'non-English page stories contain no English message or type label text nodes',
@@ -363,6 +373,68 @@ test(
     }
     expect(a11yFailures).toEqual([]);
     expect(run.code, run.output).toBe(0);
+  },
+  timeout,
+);
+
+test(
+  'every non-English page story contains no untranslated message or type-name text',
+  async () => {
+    const origin = await sharedStorybook();
+    const index = (await (await fetch(`${origin}/index.json`)).json()) as {
+      entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
+    };
+    const entries = Object.values(index.entries).filter(
+      (entry) => entry.type === 'story' && pages.includes(basename(entry.importPath, '.stories.tsx')),
+    );
+    const checked = new Set<string>();
+    for (const pageName of pages)
+      for (const visitor of visitors) {
+        const entry = entries.find(
+          (candidate) => basename(candidate.importPath, '.stories.tsx') === pageName && candidate.name === visitor,
+        );
+        expect(entry, `${pageName}: ${visitor} page story exists`).toBeDefined();
+        checked.add(entry!.id);
+      }
+    expect(checked.size, 'language checks include every page story').toBe(pages.length * visitors.length);
+
+    const allHits: string[] = [];
+    for (const entry of entries) {
+      const pageName = basename(entry.importPath, '.stories.tsx');
+      const localeHits = await Promise.all(
+        locales
+          .filter((locale) => locale !== 'en')
+          .map(async (locale) => {
+            const context = await (
+              await sharedBrowser()
+            ).newContext({
+              viewport: { width: 1280, height: 860 },
+              reducedMotion: 'reduce',
+            });
+            const page = await context.newPage();
+            await page.route('**/*', async (route) => {
+              const url = new URL(route.request().url());
+              if (url.origin === origin || !['http:', 'https:'].includes(url.protocol)) return route.continue();
+              await route.abort();
+            });
+            try {
+              await page.goto(storyUrl(origin, entry.id, locale), { waitUntil: 'networkidle' });
+              await page.locator('html[data-hydrated]').waitFor();
+              const main = page.getByRole('main');
+              await main.waitFor();
+              expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
+              const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+              const hits = await englishTextHits(page, entry.id, locale, own);
+              if (pageName === 'home') await expectHomeCardsWithoutTypeLines(page, entry.id, locale);
+              return hits.map((text) => `${entry.id}, ${locale}, ${text}`);
+            } finally {
+              await context.close();
+            }
+          }),
+      );
+      allHits.push(...localeHits.flat());
+    }
+    expect(allHits, 'non-English page stories contain no untranslated message or type-name text').toEqual([]);
   },
   timeout,
 );

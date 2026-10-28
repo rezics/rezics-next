@@ -2,7 +2,6 @@ import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
-import { typeText } from '../features/pages/data';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
 import { m } from '../paraglide/messages.js';
@@ -13,7 +12,7 @@ import type { ContinueEntry } from './continue-read';
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched
  * over the whole card, named for what it does to that title, and a menu that opens the subject's page. The card
- * holds the cover, the title, the type and one progress row. On a phone the cards are one row that scrolls
+ * holds the cover, the title and one progress row. On a phone the cards are one row that scrolls
  * sideways, so the search box and the catalogue stay on the first screen; from `sm` up they form a grid. Both are
  * drawn and CSS shows one, so the page does not depend on the script to choose.
  */
@@ -39,7 +38,6 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         title={title}
         {...(lang ? { titleLang: lang } : {})}
         linkLabel={m.home_continue_label({ title }, options)}
-        secondary={typeText(entry.summary?.type)}
         state={
           <ProgressRow
             value={progress?.percent == null ? null : progress.percent / 100}

@@ -13,7 +13,8 @@ function sourceFiles(directory: string): string[] {
 }
 
 test('web source never derives a displayed name from a type identifier local name', () => {
-  const localName = /\b(?:type|typeId|typeKey|typeCurie|typeIdentifier)\s*(?:\?\.|\.)\s*split\s*\(\s*['"]:\s*['"]\s*\)/g;
+  const localName =
+    /\b(?:type|typeId|typeKey|typeCurie|typeIdentifier)\s*(?:\?\.|\.)\s*split\s*\(\s*['"]:\s*['"]\s*\)/g;
   const hits = sourceFiles(source).flatMap((path) => {
     const contents = readFileSync(path, 'utf8');
     return [...contents.matchAll(localName)].map((match) => `${path}: ${match[0]}`);

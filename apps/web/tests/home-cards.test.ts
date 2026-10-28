@@ -459,10 +459,9 @@ const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
 type Page = Awaited<ReturnType<typeof open>>;
 // The Continue row draws its cards twice, once for the phone row and once for the grid; only one is displayed.
 const cardsOf = (page: Page) => page.locator('[data-slot="personal"] article:visible');
-const typeLabel = 'Book';
 
 test(
-  'each home Continue card is a CoverCard: cover edge to edge, the title, the type as the one secondary line, and one progress row with the share or unit form',
+  'each home Continue card has an edge-to-edge cover, title, and one progress row with the share or unit form',
   async () => {
     const cookie = await alice();
     for (const locale of locales) {
@@ -479,12 +478,11 @@ test(
           expect(Math.abs(cover.x - box.x), `${locale} ${n} cover left`).toBeLessThanOrEqual(1);
           expect(Math.abs(cover.y - box.y), `${locale} ${n} cover top`).toBeLessThanOrEqual(1);
           expect(Math.abs(cover.width - box.width), `${locale} ${n} cover width`).toBeLessThanOrEqual(1);
-          // Below the cover: the title, then the type as the one secondary line, then the state row.
+          // Below the cover: the title followed by the state row, with no secondary type line.
           const title = (await card.locator('a').boundingBox())!;
           expect(await card.locator('a').innerText()).toBe(labels[n]!);
           expect(title.y).toBeGreaterThanOrEqual(cover.y + cover.height - 1);
-          const secondary = (await card.getByText(typeLabel, { exact: true }).boundingBox())!;
-          expect(secondary.y).toBeGreaterThan(title.y);
+          expect(await card.locator('[data-slot="cover-card-secondary"]').count()).toBe(0);
         }
         const text = async (index: number) => squash(await cards.nth(index).innerText());
         const bar = (index: number) => cards.nth(index).getByRole('progressbar');

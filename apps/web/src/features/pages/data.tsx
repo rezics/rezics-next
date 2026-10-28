@@ -743,18 +743,8 @@ function countText(total: NonNullable<PreparedRead['total']>, locale: string): s
 }
 
 /**
- * A type's id as the line under a card's title: the name after its namespace, split into words. The id is all a read
- * carries without another request for the type's definition, so an opaque identifier ("Q689445") shows nothing.
- */
-export function typeText(type: string | undefined): string | undefined {
-  const name = type?.split(':').at(-1) ?? '';
-  if (/^[A-Z]?\d+$/.test(name)) return undefined;
-  return name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') || undefined;
-}
-
-/**
  * One vertical of the home: a row of cover cards with the section's count and a link to the whole search. The row
- * shares one frame ratio, so a mixed row stays aligned; each card links to its subject, with the type under the title.
+ * shares one frame ratio, so a mixed row stays aligned; the heading names the type for every card in the row.
  */
 function TypeList(props: Record<string, unknown>) {
   const read = useNodeRead(props.id);
@@ -813,7 +803,6 @@ function TypeList(props: Record<string, unknown>) {
             cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
             title={text.text || messages.unlabelled}
             {...(text.lang ? { titleLang: text.lang } : {})}
-            secondary={typeText(hit.type)}
           />
         ))}
       </CoverRow>
