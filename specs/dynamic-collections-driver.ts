@@ -29,7 +29,8 @@ export interface ProfileFixture {
   profileId: string;
   stateSetId: string;
   releaseDigest: string;
-  states: readonly { id: string; label: string }[];
+  /** Actual accepted release labels, not a test-side localization provider. */
+  states: readonly { id: string; labels: Readonly<Record<string, string>> }[];
 }
 
 export interface SubjectFixture {
@@ -38,18 +39,32 @@ export interface SubjectFixture {
   profileId: string | null;
 }
 
-export interface DynamicCollectionView {
+interface CollectionViewBase {
   id: string;
   curatorAccountId: string;
-  title: string;
   description: string | null;
   visibility: Visibility;
   revision: number;
+}
+
+export interface DynamicCollectionView extends CollectionViewBase {
+  title?: string | null;
   membershipKind: 'dynamic';
-  builtin: BuiltinKey;
+  builtinKind: 'everything' | 'state';
+  builtinLabels?: Readonly<Record<string, string>>;
+  /** Owner discovery only. Never present in public DTOs. */
+  builtin?: BuiltinKey;
+}
+
+export interface CuratedCollectionView extends CollectionViewBase {
+  title: string;
+  membershipKind: 'curated';
   createdAt: string;
   updatedAt: string;
+  memberCount: number;
+  orderEpoch: number;
 }
+export type CollectionView = CuratedCollectionView | DynamicCollectionView;
 
 export interface CuratedMemberView {
   id: string;
@@ -80,6 +95,21 @@ export interface Measurement {
   crossPartitionJoins: number;
   candidateIds: readonly string[];
   classifier: string;
+}
+
+export interface StateReferenceObservation {
+  value: Response;
+  /** Actual native reference statements/plans, excluding Access and member-source SQL. */
+  sql: readonly string[];
+  probes: number;
+  rowsExamined: number;
+  plans: readonly {
+    nodeType: string;
+    indexCondition: string;
+    rows: number;
+    loops: number;
+    rowsRemovedByFilter: number;
+  }[];
 }
 
 export interface DynamicCollectionsInspection {
@@ -139,7 +169,7 @@ export interface DynamicCollectionsDriver {
   activateProfileRelease(
     profile: ProfileName,
     input: {
-      states: readonly { id: string; label: string }[];
+      states: readonly { id: string; labels: Readonly<Record<string, string>> }[];
     },
   ): Promise<ProfileFixture>;
   retireProfile(profile: ProfileName): Promise<void>;
@@ -170,5 +200,11 @@ export interface DynamicCollectionsDriver {
   inspect(): Promise<DynamicCollectionsInspection>;
   /** Measure the real callback's SQL only; setup, inspection and background consumer SQL are excluded. */
   measure(operation: () => Promise<Response>): Promise<Measurement>;
+  /** Capture the real opaque-ID reference lookup; never derive a tuple or rewrite a request in the driver. */
+  measureStateReference(operation: () => Promise<Response>): Promise<StateReferenceObservation>;
+  /** Pause actual bounded native repair after source capture, before its terminal-owner writing guard. */
+  holdStateReferenceRepair(): Promise<{ reached: Promise<void>; resume(): void }>;
+  /** Dispatch/await the production bounded repair through its real work module, never fixture SQL. */
+  repairStateReferences(): Promise<void>;
   close(): Promise<void>;
 }

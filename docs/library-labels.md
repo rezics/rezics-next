@@ -231,6 +231,8 @@ Reuse parent revision as evidence, with no extra visibility generation. Effectiv
 delete/restore advance the generic owner fact-source fence in the SAME native command, without subject/list fanout.
 Changed evidence invalidates positives, negatives and completeness before final use; no cached allow or ready empty
 result. That fence, producer hooks and source-completeness cutover remain missing implementation dependencies.
+Public follow-count coverage of current account eligibility remains a separate gap; this private fact-source fence
+does not supply it.
 
 Native delete/restore/reclaim/purge order is account barrier, sorted transaction advisory subject guards, sorted
 parent FOR SHARE locks, exact assignment CAS, source fence, shared receipt/outbox/checkpoint. Header-only commands

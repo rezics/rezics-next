@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type {
   CollectionMembersPage,
+  CollectionView,
   DynamicCollectionView,
   DynamicCollectionsDriver,
   Persona,
@@ -92,7 +93,7 @@ async function allMembers(collectionId: string, as: Persona = 'owner', limit = 2
   throw new Error('Collection pagination did not terminate');
 }
 async function ownerCollections() {
-  const result = await json<{ collections: (DynamicCollectionView | Record<string, unknown>)[]; next: string | null }>(
+  const result = await json<{ collections: CollectionView[]; next: string | null }>(
     await get('owner', `/v1/collections?curatorAccountId=${driver.accounts.owner.id}&limit=100`),
   );
   return result.collections;
@@ -274,7 +275,10 @@ test('profile activation and retirement preserve old pins and do not relabel sta
   const acceptingDigest = driver.profiles.game.releaseDigest;
   const before = (await driver.inspect()).facts;
   const nextRelease = await driver.activateProfileRelease('game', {
-    states: [{ ...state, label: `${state.label} revised` }, ...driver.profiles.game.states.slice(1)],
+    states: [
+      { ...state, labels: { ...state.labels, en: `${state.labels.en} revised` } },
+      ...driver.profiles.game.states.slice(1),
+    ],
   });
   expect(nextRelease.releaseDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
   expect(nextRelease.releaseDigest).not.toBe(acceptingDigest);
@@ -388,13 +392,17 @@ test('private predicates stay owner-only and public dynamic output contains only
   expect(subjectIds(page)).toEqual([visible.id]);
   const publicJson = JSON.stringify({ publicBody, page }).toLowerCase();
   for (const privateField of [
-    'state',
-    'label',
+    '"state":',
+    '"label":',
     'progress',
     'holding',
     'predicate',
     'query',
     'profilepin',
+    'profileid',
+    'statesetid',
+    'stateid',
+    'releasedigest',
     'membercount',
   ])
     expect(publicJson).not.toContain(privateField);
@@ -402,6 +410,7 @@ test('private predicates stay owner-only and public dynamic output contains only
   expect(publicBody).not.toHaveProperty('query');
   expect(publicBody).not.toHaveProperty('memberCount');
   expect(publicView).toHaveProperty('membershipKind', 'dynamic');
+  expect(publicView).toHaveProperty('builtinKind', 'state');
 });
 
 test('public dynamic revocation withholds stale membership and older projection events cannot restore it', async () => {
@@ -960,4 +969,115 @@ test('terminal deletion preserves completed A and purges private payload through
   for (const order of ['reverse', 'forward'] as const) await driver.replayProjectionEvents(order);
   expect(subjectIds(await members(publicView.id, 'anonymous'))).toEqual([a.id]);
   expect((await driver.inspect()).publicMembership.some((row) => row.subjectId === b.id)).toBe(false);
+});
+
+test('Collection DTOs discriminate curated metadata and localized dynamic presentation without private keys', async () => {
+  await subjectIn('game');
+  const everything = await builtin({ kind: 'everything' });
+  const state = await stateCollection('game');
+  const curated = await createCurated();
+  expect(curated.membershipKind).toBe('curated');
+  for (const field of ['createdAt', 'updatedAt']) expect(curated[field]).toEqual(expect.any(String));
+  for (const field of ['memberCount', 'orderEpoch']) expect(curated[field]).toEqual(expect.any(Number));
+  const assertDynamic = (view: DynamicCollectionView, kind: 'everything' | 'state') => {
+    expect(view.membershipKind).toBe('dynamic');
+    expect(view.builtinKind).toBe(kind);
+    for (const field of ['createdAt', 'updatedAt', 'memberCount', 'orderEpoch']) expect(view).not.toHaveProperty(field);
+    if (kind === 'state') {
+      expect(view.builtinLabels).toEqual(driver.profiles.game.states[0]!.labels);
+      for (const locale of Object.keys(view.builtinLabels!))
+        expect(['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']).toContain(locale);
+    }
+  };
+  for (const view of [everything, state]) {
+    expect(view.title == null).toBe(true);
+    assertDynamic(view, view === everything ? 'everything' : 'state');
+  }
+  const renamed = (
+    await json<{ collection: DynamicCollectionView }>(
+      await write('owner', 'PATCH', `/v1/collections/${state.id}`, {
+        revision: state.revision,
+        title: 'My selection',
+      }),
+    )
+  ).collection;
+  expect(renamed).toMatchObject({ id: state.id, revision: 1, title: 'My selection' });
+  await okay(await setVisibility(renamed, 'public'));
+  await okay(await setVisibility(everything, 'public'));
+  await driver.resumeAndSettle();
+  for (const [view, kind] of [
+    [state, 'state'],
+    [everything, 'everything'],
+  ] as const) {
+    const published = (
+      await json<{ collection: DynamicCollectionView }>(await get('anonymous', `/v1/collections/${view.id}`))
+    ).collection;
+    assertDynamic(published, kind);
+    if (kind === 'state') expect(published.title).toBe('My selection');
+    else expect(published.title == null).toBe(true);
+    const assertPublic = (value: unknown) => {
+      if (typeof value !== 'object' || value === null) return;
+      for (const [field, child] of Object.entries(value)) {
+        expect([
+          'builtin',
+          'profileId',
+          'stateSetId',
+          'stateId',
+          'predicate',
+          'query',
+          'pin',
+          'releaseDigest',
+        ]).not.toContain(field);
+        assertPublic(child);
+      }
+    };
+    assertPublic(published);
+  }
+});
+
+test('opaque state lookup uses one native point and terminal deletion defeats delayed repair and follow', async () => {
+  await subjectIn('game');
+  const state = await stateCollection('game');
+  const path = `/v1/collections/${state.id}`;
+  const before = await driver.inspect();
+  expect(before.collections.some((row) => row.id === state.id)).toBe(false);
+  const found = await driver.measureStateReference(() => get('owner', path));
+  expect((await json<{ collection: DynamicCollectionView }>(found.value)).collection.id).toBe(state.id);
+  const denied = await driver.measureStateReference(() => get('other', path));
+  const unknown = await driver.measureStateReference(() =>
+    get('other', `/v1/collections/${driver.unknown.collectionId}`),
+  );
+  expect(await problem(denied.value, 404, 'not_found')).toEqual(await problem(unknown.value, 404, 'not_found'));
+  for (const observation of [found, denied, unknown]) {
+    expect(observation.probes).toBe(1);
+    expect(observation.sql).toHaveLength(1);
+    expect(observation.rowsExamined).toBeLessThanOrEqual(1);
+    expect(observation.plans.length).toBeGreaterThan(0);
+    for (const plan of observation.plans) {
+      expect(plan.nodeType).toMatch(/^Index (Only )?Scan$/);
+      expect(plan.indexCondition).toContain('route');
+      expect(plan.indexCondition).toContain('collection_id');
+      expect((plan.rows + plan.rowsRemovedByFilter) * plan.loops).toBeLessThanOrEqual(1);
+    }
+  }
+  expect(await driver.inspect()).toEqual(before);
+  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+  expect(await driver.inspect()).toEqual(before);
+  const latch = await driver.holdStateReferenceRepair();
+  const repair = driver.repairStateReferences();
+  try {
+    await latch.reached;
+    await okay(await driver.deleteAccount());
+    expect((await get('owner', path)).ok).toBe(false);
+    expect((await write('owner', 'PUT', `/v1/follows/${state.id}`)).ok).toBe(false);
+    await problem(await get('other', path), 404, 'not_found');
+    await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+  } finally {
+    latch.resume();
+  }
+  await repair;
+  await driver.resumeAndSettle();
+  await problem(await get('other', path), 404, 'not_found');
+  await problem(await write('other', 'PUT', `/v1/follows/${state.id}`), 404, 'not_found');
+  expect((await driver.inspect()).collections.some((row) => row.id === state.id)).toBe(false);
 });
