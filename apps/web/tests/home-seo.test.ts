@@ -89,3 +89,14 @@ test('the server home read is anonymous and a signed-out home does not start Con
   expect(route).toContain("state === 'signed-in'");
   expect(continueRead).toContain('enabled: personalRead.enabled');
 });
+
+test('the home loader keeps Worker bindings server-only and passes its validated origin to head', async () => {
+  const homeQueries = await Bun.file(new URL('../src/features/pages/home-queries.ts', import.meta.url)).text();
+  const route = await Bun.file(new URL('../src/routes/index.tsx', import.meta.url)).text();
+
+  expect(homeQueries).toContain('validatePublicOrigin');
+  expect(homeQueries).toMatch(/createServerFn\([\s\S]*?import\(['"]cloudflare:workers['"]\)/);
+  expect(route).not.toContain("from 'cloudflare:workers'");
+  expect(route).toContain('loaderData.origin');
+  expect(route).toContain('routePageJsonLd(loaderData.page, locale, loaderData.origin)');
+});
