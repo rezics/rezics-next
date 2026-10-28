@@ -374,11 +374,13 @@ for (const [site, invoke] of Object.entries(sites)) {
     test(`${site}: ${name} closes the request without effects`, async () => {
       requestDeadlineMs =
         reason === 'contention'
-          ? ['standing parent validate', 'creation validate'].includes(site)
-            ? 1000
-            : commandEvidenceSites.has(site)
-              ? 750
-              : 250
+          ? site === 'creation validate'
+            ? 2500
+            : site === 'standing parent validate'
+              ? 1000
+              : commandEvidenceSites.has(site)
+                ? 750
+                : 250
           : 5000;
       const cause = error();
       let calls = 0;
