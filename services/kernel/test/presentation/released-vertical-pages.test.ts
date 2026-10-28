@@ -169,11 +169,12 @@ async function factualPage(
   const own = selectedViews(expected);
   const generic = templateViews(platformProfile.generic);
   const document = own[view] ?? generic[view];
-  const selected = own[view] ? expected : { scope: 'generic', key: null };
+  const selected: Scope = own[view] ? expected : { scope: 'generic', key: null };
   expect(page.subject).toBe(id);
   expect(page.profile).toBe(digest);
   expect(page.template).toEqual(selected);
-  expect(page.document).toEqual(document);
+  expect(document).toBeDefined();
+  expect(page.document).toEqual(document!);
   const chain = [
     ...platformProfile.types.filter((entry) => entry.type === type),
     ...bundledRelease.types[type]!.bases.flatMap((base) =>
