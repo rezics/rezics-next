@@ -5,6 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { fullView } from '../../src/library/views.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
@@ -27,7 +28,10 @@ import { encodeSession } from '../../src/tokens/session.ts';
 import readCheckpoint from '../../src/semantic/read-link-checkpoint.sql';
 import readPending from '../../src/semantic/merge-read-projection-pending.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
+import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
+import readSubject from '../../src/semantic/read-subject.sql';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
+import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -52,7 +56,6 @@ const kernel = createKernel({
 });
 const projection = linkProjection(pool);
 const property = 'rezics:penNameOf';
-let owner: AccountActor;
 let agent: string;
 const digest = (id: string) => createHash('sha256').update(id).digest();
 const partition = () => randomInt(1000, 4000);
@@ -62,7 +65,7 @@ beforeAll(async () => {
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:merge');
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
-  owner = await actor('owner');
+  const owner = await actor('owner');
   agent = (await ensureAccountAgent(pool, { account: owner.accountId, kind: 'person', name: 'Evidence owner' })).subject
     .id;
 });
@@ -79,6 +82,7 @@ async function actor(persona: keyof typeof accounts) {
   )) as AccountActor;
 }
 async function create(part: number, label: string, target?: string, privateStatement = false) {
+  const owner = await actor('owner');
   const route = part * 16;
   const id = newId(route);
   const authorize = await accessCheck(
@@ -257,11 +261,20 @@ for (const kind of ['links', 'relations'] as const) {
       else expect(result.relations).toHaveLength(1);
       expect(result.freshness.caught_up).toBe(true);
       const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
+      const snapshot = observer.records.findIndex(
+        ({ statement }, index) => index > wait && statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      );
+      expect(snapshot).toBeGreaterThan(wait);
       expect(
         observer.records.slice(0, wait).filter(({ statement }) => statement === readPermissionTime.sql),
       ).toHaveLength(2);
+      // Preparation occurs outside RR. The two authoritative permission times
+      // inside the final snapshot are evaluations, not additional preparations.
       expect(
-        observer.records.slice(wait + 1).filter(({ statement }) => statement === readPermissionTime.sql),
+        observer.records.slice(wait + 1, snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
+      ).toHaveLength(2);
+      expect(
+        observer.records.slice(snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
       ).toHaveLength(2);
     } finally {
       await observer.close();
@@ -276,6 +289,7 @@ test('pending inbound merge member retry prepares fresh primary and audience evi
   const second = await create(part, 'Pending member second', target.id);
   await catchUp(part);
   const [survivor, merged] = [first.id, second.id].sort() as [string, string];
+  const owner = await actor('owner');
   const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
   const mergeCheck = await accessCheck(
     access,
@@ -384,6 +398,7 @@ for (const kind of ['links', 'relations'] as const) {
               expect(response.status).toBe(200);
             } else {
               if (!mate) throw new Error('Redirect mate is missing');
+              const owner = await actor('owner');
               const check = await accessCheck(
                 access,
                 owner,
@@ -469,5 +484,50 @@ test('a native relations retry cannot reuse a formerly allowed moderator audienc
   } finally {
     await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
     await observer.close();
+  }
+}, 60_000);
+
+test('FULL display records every backend and the fixed preflight and late preparation cost', async () => {
+  const part = partition();
+  const subject = await create(part, 'Full read cost evidence');
+  await catchUp(part);
+  const growth = await openGrowthDatabase(databaseUrl);
+  try {
+    const reader = (await actorOf(
+      access,
+      new Request('https://kernel.test', { headers: { authorization: `Bearer ${real.bearer('reader')}` } }),
+      { pool: growth.pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+    )) as AccountActor;
+    const measured = await capture(
+      growth,
+      () =>
+        withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
+          fullView({ pool: growth.pool, access, tokens }, reader, 'FULL', {
+            entries: [{ subjectId: subject.id }],
+          }),
+        ),
+      { includeBackends: true },
+    );
+    expect(measured.value.entries[0]!.subject).toMatchObject({ id: subject.id });
+    expect(measured.capture.statementBackends).toHaveLength(measured.capture.statements.length);
+    expect(measured.capture.statements.filter((statement) => statement === readSubjectIdentity.sql)).toHaveLength(1);
+    expect(measured.capture.statements.filter((statement) => statement === readSubject.sql)).toHaveLength(1);
+    // Preserve the complete capture, including control/catalog statements and
+    // all backend plans, so the additional point is independently auditable.
+    console.log(
+      'READ_ORDER_PROFILE',
+      JSON.stringify({
+        callsite: 'library/views.ts ViewReader.subject -> semantic/subject.ts readSubject',
+        files: {
+          identity: { file: 'semantic/read-subject-identity.sql', sql: readSubjectIdentity.sql },
+          final: { file: 'semantic/read-subject.sql', sql: readSubject.sql },
+          preparationAndEvaluation: { file: 'access/permission-time.sql', sql: readPermissionTime.sql },
+          checkpoint: { file: 'semantic/read-link-checkpoint.sql', sql: readCheckpoint.sql },
+        },
+        capture: measured.capture,
+      }),
+    );
+  } finally {
+    await growth.close();
   }
 }, 60_000);
