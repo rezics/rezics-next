@@ -30,7 +30,7 @@ The continuation and registered delivery briefs were read from the main checkout
 read-only: entry-undo research adoption (the shorter suggested adoption filename was absent),
 retention DAO, incarnation exposure, prepared owner command, owner barrier, profile source, reference producer,
 and first-scope deletion closure. Those brief filenames identify evidence; they are not implementation imports.
-No main-checkout file was written.
+Source and brief inspection was read-only; the edited repository files are in this worktree.
 
 ## Command acceptance and interpretation
 
@@ -190,3 +190,9 @@ assertion found no `restoreEntry`; five observed the actual physical delete's En
 transaction-addressed deletion descriptor. The separate custom-profile baseline failed at the current writer's
 `Unknown library entry state` for `listening`, before any archival assertion. Thus lifecycle RED and the already absent
 profile writer are reported separately; none is replaced by a fixture outcome or claimed as automatic-purge coverage.
+
+Two local test runs used the check harness's default shared timing sink. It wrote three files outside the requested
+worktree, under `/home/edge/projects/rezics/rezics-next/.temp/kernel-check/timings/`:
+`20261028T025215.345Z.json`, `20261028T025643.117Z.json`, and `latest.json`. This crossed the requested path boundary;
+no main-checkout source was edited, and these shared artifacts were not subsequently changed or removed by this
+attempt. The final focused check sets worktree-local `KERNEL_CHECK_TIMINGS` and `REZICS_TEST_ESTIMATES_DIR` overrides.
