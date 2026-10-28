@@ -2,15 +2,12 @@ import { Pool } from 'pg';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { startNativeWebStack } from './stack.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
 afterEach(async () => {
   for (const stack of stacks.splice(0)) await stack.stop();
 });
 
-async function semanticDatabases(): Promise<string[]> {
+async function semanticDatabases(databaseUrl: string): Promise<string[]> {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const result = await pool.query<{ datname: string }>(
@@ -24,10 +21,12 @@ async function semanticDatabases(): Promise<string[]> {
 
 describe('native web stack', () => {
   test('isolates lifecycle and serves native kernel reads through the production Worker', async () => {
-    const databasesBefore = await semanticDatabases();
+    const databaseUrlBefore = process.env.DATABASE_URL;
+    const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
     const start = performance.now();
     const stack = await startNativeWebStack();
     stacks.push(stack);
+    const stackDatabaseUrl = process.env.DATABASE_URL!;
     const startedInMs = Math.round(performance.now() - start);
 
     const active = await stack.kernel('/v1/definitions/active');
@@ -84,7 +83,8 @@ describe('native web stack', () => {
     await stack.stop();
     const stoppedInMs = Math.round(performance.now() - stoppedAt);
     stacks.splice(stacks.indexOf(stack), 1);
-    expect(await semanticDatabases()).toEqual(databasesBefore);
+    if (databaseUrlBefore) expect(await semanticDatabases(stackDatabaseUrl)).toEqual(databasesBefore);
+    expect(process.env.DATABASE_URL).toBe(databaseUrlBefore);
     await expect(fetch(canonicalUrl, { signal: AbortSignal.timeout(2000) })).rejects.toThrow();
     await expect(fetch(stack.kernelOrigin, { signal: AbortSignal.timeout(2000) })).rejects.toThrow();
     console.info(
@@ -93,7 +93,8 @@ describe('native web stack', () => {
   }, 300_000);
 
   test('cleans up the database and listeners when the production web Worker fails to start', async () => {
-    const databasesBefore = await semanticDatabases();
+    const databaseUrlBefore = process.env.DATABASE_URL;
+    const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
     const priorInspectorPort = process.env.WORKER_INSPECTOR_PORT;
     process.env.WORKER_INSPECTOR_PORT = 'not-a-port';
     try {
@@ -102,6 +103,7 @@ describe('native web stack', () => {
       if (priorInspectorPort === undefined) delete process.env.WORKER_INSPECTOR_PORT;
       else process.env.WORKER_INSPECTOR_PORT = priorInspectorPort;
     }
-    expect(await semanticDatabases()).toEqual(databasesBefore);
+    expect(process.env.DATABASE_URL).toBe(databaseUrlBefore);
+    if (databaseUrlBefore) expect(await semanticDatabases(databaseUrlBefore)).toEqual(databasesBefore);
   }, 300_000);
 });

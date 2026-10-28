@@ -2,8 +2,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { createSemanticDriver, type SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
+import { Pool } from 'pg';
 import { workerTestEnv } from '../../../../services/kernel/test/support/worker-env.ts';
+import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
 
 export type NativeCredentials = { authorization: string };
 export type NativeKernelRequest = {
@@ -131,6 +132,8 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   let durableWorker: Awaited<ReturnType<typeof import('../../../../services/kernel/src/worker.ts').startWorker>> | undefined;
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
+  let postgresContainer: string | undefined;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
   const sampleMemory = () => {
@@ -156,6 +159,33 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     return account;
   };
   try {
+    if (!process.env.DATABASE_URL) {
+      const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
+      const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
+      postgresContainer = startPostgresContainer();
+      const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
+      if (portResult.exitCode !== 0) throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
+      const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
+      if (!Number.isInteger(port) || port <= 0) throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
+      const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+      const deadline = Date.now() + 60_000;
+      while (true) {
+        const probe = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 1500, max: 1 });
+        try {
+          await probe.query('SELECT 1');
+          break;
+        } catch (error) {
+          if (Date.now() >= deadline) throw new Error('Disposable PostgreSQL did not become ready.', { cause: error });
+          await Bun.sleep(500);
+        } finally {
+          await probe.end();
+        }
+      }
+      process.env.DATABASE_URL = databaseUrl;
+      migrate(databaseUrl);
+    }
+    // The semantic harness reads DATABASE_URL during module evaluation.
+    const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     const { readWorkerConfig, startWorker } = await import('../../../../services/kernel/src/worker.ts');
     let kernel: ReturnType<typeof createKernel> | undefined;
@@ -207,6 +237,13 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       await attempt(() => durableWorker?.stop());
       durableWorker = undefined;
       await attempt(() => driver!.close());
+      if (postgresContainer) {
+        const removed = Bun.spawnSync(['docker', 'rm', '-f', postgresContainer]);
+        if (removed.exitCode !== 0) errors.push(new Error(`Could not remove owned PostgreSQL container: ${removed.stderr.toString()}`));
+        postgresContainer = undefined;
+      }
+      if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = originalDatabaseUrl;
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
     })());
 
@@ -242,6 +279,9 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     kernelServer?.stop(true);
     await durableWorker?.stop().catch(() => {});
     await driver?.close().catch(() => {});
+    if (postgresContainer) Bun.spawnSync(['docker', 'rm', '-f', postgresContainer]);
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
     throw error;
   }
 }
