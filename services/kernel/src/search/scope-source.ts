@@ -8,12 +8,12 @@ import {
 } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
-import { activeRelease } from '../semantic/definitions.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
 import { compileFilter } from './filter.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
+import { readSearchScopeRelease } from './scope-release.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
 
 /** Independent native work reservation; none of these units are candidate keys. */
@@ -41,6 +41,11 @@ export type ScopeBasis = Readonly<{
   canonical: string;
   generation: number;
   index: string;
+}>;
+
+/** Additive preparation controls; future metadata-budget fields belong on this same options object. */
+export type ScopePrepareOptions = Readonly<{
+  releaseDigest?: string;
 }>;
 
 declare const preparedScope: unique symbol;
@@ -88,7 +93,7 @@ function nativeBudget(budget: ScopeNativeBudget): void {
 /** Admission-only scaffold. Native positive execution is deliberately unavailable. */
 export function createSearchScopeSource({
   pool,
-  release = async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null,
+  release,
 }: {
   pool: Pool;
   client: OpenSearch;
@@ -99,7 +104,7 @@ export function createSearchScopeSource({
   /** Actual reader context; absence does not disable independent raw prefix work. */
   evidence?: LeafOptions;
 }): {
-  prepare(filter: FilterDocument): Promise<PreparedSearchScope>;
+  prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope>;
   prefix(
     prepared: PreparedSearchScope,
     request: {
@@ -115,12 +120,19 @@ export function createSearchScopeSource({
   ): Promise<SearchScopeEvaluation>;
 } {
   return {
-    async prepare(filter) {
+    async prepare(filter, options) {
       try {
         const parsed = parseFilter(filter);
-        const current = await release();
+        let current: { digest?: string; release: FilterRelease } | null;
+        if (options?.releaseDigest !== undefined) current = await readSearchScopeRelease(pool, options.releaseDigest);
+        else if (release) {
+          const injectedRelease = await release();
+          current = injectedRelease ? { release: injectedRelease } : null;
+        } else current = await readSearchScopeRelease(pool);
         if (!current) unavailable();
-        const admitted = admitFilter(parsed, current);
+        // Keep the resolved digest paired with its immutable body; when native readiness lands, this exact
+        // digest becomes ScopeBasis.release. An injected current-release callback remains body-only for compatibility.
+        const admitted = admitFilter(parsed, current.release);
         if (!positiveFilter(admitted))
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/filter', code: 'unsupported' }] });
         // Exactly the existing compiler, once after expansion/admission. No separate query language.

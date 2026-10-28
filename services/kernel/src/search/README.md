@@ -101,7 +101,16 @@ or positive capability is minted. Valid native requests are not specified to rem
 
 The factory takes `{pool: Pool, client: OpenSearch, prefix: string, source: SubjectSource,
 release?: () => Promise<FilterRelease | null>, evidence?: LeafOptions}`. The default release reader is
-`activeRelease(pool)`. `LeafOptions` is imported directly from Semantic's `scope-leaf-evidence.ts`: the actual
+`readSearchScopeRelease(pool)` from `scope-release.ts`. It delegates to Semantic's immutable `activeRelease` and
+`readRelease` functions and returns `{digest, release}`. A supplied canonical `sha256:` plus 64 lowercase hex digest
+selects that stored immutable release; malformed or missing pins return null and never fall back to active. The
+additive `ScopePrepareOptions` carries `releaseDigest` on `prepare(filter, options?)`; an injected `release` callback
+continues to supply the current body when no pin is given. Saved references expand, admit and compile under the
+selected body using the existing filter implementation. When native readiness lands, that same selected digest
+must become `ScopeBasis.release`. The pin controls saved-filter meaning only: current source, target, Access and
+release capability checks remain current. A changed active digest alone does not invalidate an old expansion;
+an incompatible current capability must remain unavailable until republish. This lookup does not establish Scope
+readiness. `LeafOptions` is imported directly from Semantic's `scope-leaf-evidence.ts`: the actual
 `access`, `actor`, `routeKey`, `deadline` and optional `nativeT` closure used by the point reader. Neither a source
 nor a principal string supplies an actor; there is no anonymous fallback. Raw prefix capability is independent
 of missing point context. There are no pretend `SearchScopeNative` basis/identity/leaves callbacks. Following
@@ -110,7 +119,7 @@ runtime work must import actual `readIdentityBasis`, `readTerminalSubjectIdentit
 
 The exported method signatures are:
 
-- `prepare(filter: FilterDocument): Promise<PreparedSearchScope>`.
+- `prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope>`.
 - `prefix(prepared, {afterSubject: string | null, quota: number, budget: number}): Promise<SearchScopePrefix>`.
 - `evaluate(prepared, subjects: readonly string[], reservation: ScopeEvaluationReservation): Promise<SearchScopeEvaluation>`.
 
