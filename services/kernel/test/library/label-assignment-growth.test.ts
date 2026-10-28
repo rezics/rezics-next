@@ -270,6 +270,18 @@ async function growHistory(scale: number, previous: number) {
   );
 }
 
+async function admissionOperation() {
+  await rollback(async (c) => {
+    expect((await setLabelAssignment(c, input(30, 502), context)).kind).toBe('existing');
+    expect((await setLabelAssignment(c, input(31, 534), context)).kind).toBe('capacity');
+    applied(await setLabelAssignment(c, input(30, 534), { ...context, time: expired }));
+    const first = applied(await setLabelAssignment(c, input(32, 535), context));
+    expect(await setLabelAssignment(c, input(32, 535), context)).toEqual({ kind: 'existing', assignment: first });
+    expect((await setLabelAssignment(c, input(30, 500), context)).kind).toBe('not_found');
+    expect((await setLabelAssignment(c, input(30, 999), context)).kind).toBe('not_found');
+  });
+}
+
 test('native admission all-pool SQL plans remain bounded at 64 512 4096 inactive same-subject histories', async () => {
   const c = await db.admin.connect();
   try {
@@ -290,18 +302,8 @@ test('native admission all-pool SQL plans remain bounded at 64 512 4096 inactive
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: (_db, scale, previous) => growHistory(scale, previous),
-    async operation(_db, scale) {
-      const measured = await capture(db, () =>
-        rollback(async (c) => {
-          expect((await setLabelAssignment(c, input(30, 502), context)).kind).toBe('existing');
-          expect((await setLabelAssignment(c, input(31, 534), context)).kind).toBe('capacity');
-          applied(await setLabelAssignment(c, input(30, 534), { ...context, time: expired }));
-          const first = applied(await setLabelAssignment(c, input(32, 535), context));
-          expect(await setLabelAssignment(c, input(32, 535), context)).toEqual({ kind: 'existing', assignment: first });
-          expect((await setLabelAssignment(c, input(30, 500), context)).kind).toBe('not_found');
-          expect((await setLabelAssignment(c, input(30, 999), context)).kind).toBe('not_found');
-        }),
-      );
+    async warmup(_db, scale) {
+      const measured = await capture(db, admissionOperation);
       assertPlans(measured.capture);
       evidence.set(scale, {
         cost: costOf(measured.capture),
@@ -313,6 +315,7 @@ test('native admission all-pool SQL plans remain bounded at 64 512 4096 inactive
         ),
       });
     },
+    operation: admissionOperation,
   });
   for (const sample of report.samples) {
     expect(sample.cost.relations['library.label_assignment']?.sequentialScans ?? 0).toBe(0);
