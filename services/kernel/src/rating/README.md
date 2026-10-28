@@ -79,6 +79,7 @@ by the internal reads.
 `readPublicFigures(client, { partition, questionId, populationId, subjectIds })` reads at most 256 current figures
 with one statement. `pagePublicFigures(client, { partition, questionId, populationId, after, limit })` reads at most
 500 current figures in subject order with one statement.
+The search adapter `createPublicRatingSource` reads standard-question Global figures in batches of at most 256 anchored subjects.
 
 ## Thresholds and privacy
 
