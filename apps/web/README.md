@@ -607,14 +607,23 @@ language through the client's `accept-language`.
 
 ### Realm page
 
-- **Touches:** One session read, then `GET /v1/spaceAddresses/<address>`, then `GET /v1/spaces/<id>`. Only when the
-  Space's `realmId` is non-null: the Realm, one boards page (`limit` 20), one publications page (`limit` 12) and, signed
-  in, `members/me` and `participation` together; then one `GET /v1/subjects/<id>` per published subject shown, started
-  together. `/realms/<id>` reads the Realm and the Space instead of the address and Space, then redirects when the Space
-  has an address.
-- **Bound:** 5 K signed out and 7 K signed in, plus one K per published subject shown, which is at most 12; 1 D signed in,
-  0 R and 0 A. The Space alone costs 2 K. Boards and publications are single pages, never walked.
+- **Touches:** The anonymous page render reads `GET /v1/spaceAddresses/<address>`, then `GET /v1/spaces/<id>`. Only
+  when its `realmId` is non-null it reads the Realm, one boards page (`limit` 20), one publications page (`limit` 12),
+  and one `GET /v1/subjects/<id>` per published subject shown, started together. `/realms/<id>` reads the Realm and
+  Space instead and redirects when the Space has an address. After hydration, a signed-in reader gets one personal
+  query that reads `members/me` and `participation` together.
+- **Bound:** 3 K anonymous without a Realm, 5 K anonymous with a Realm, plus one K per published subject shown (at most
+  12). A signed-in browser adds at most 2 K membership reads. No server session read and no D, R or A. Boards and
+  publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
+
+### Community page head
+
+- **Touches:** Builds title, localized description, default share card, robots and one JSON-LD graph from the Space and
+  public Realm data already rendered by the page. A protected Realm marks the page `noindex, follow`.
+- **Bound:** 0 additional K, D, R or A; constant local work per page.
+- **Growth check:** `tests/community-seo.test.ts`: unique localized metadata, public visibility, one WebPage and
+  BreadcrumbList graph, and no server session reread.
 
 ### My Realms
 

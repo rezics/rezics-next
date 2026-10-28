@@ -32,6 +32,7 @@ export type PublishedSubject = {
 
 export type RealmHome = {
   id: string;
+  title: string;
   visibility: 'public' | 'protected';
   boards: RealmBoard[];
   published: PublishedSubject[];
@@ -149,18 +150,16 @@ async function readViewer(
   return { state: state === 'none' && denied ? 'banned' : state, idempotencyKey: crypto.randomUUID() };
 }
 
-/** The Realm's boards page, publications page and the viewer's standing, started together. */
+/** The public Realm content. Personal membership is loaded separately after hydration. */
 async function readHome(
   client: KernelClient,
-  realm: { realmId: string; visibility: 'public' | 'protected' },
-  signedIn: boolean,
+  realm: { realmId: string; visibility: 'public' | 'protected'; title?: string },
   auth: Auth,
 ): Promise<RealmHome> {
   const realmId = realm.realmId;
-  const [boards, publications, viewer] = await Promise.all([
+  const [boards, publications] = await Promise.all([
     readOptional(client.realms({ realmId }).boards.get({ query: { limit: BOARD_ROW_LIMIT }, ...auth })),
     readOptional(client.realms({ realmId }).publications.get({ query: { limit: COVER_ROW_LIMIT }, ...auth })),
-    signedIn ? readViewer(client, realmId, auth) : null,
   ]);
   const published = await readPublished(
     client,
@@ -169,13 +168,19 @@ async function readHome(
   );
   return {
     id: realmId,
+    title: realm.title ?? '',
     visibility: realm.visibility,
     boards: (boards?.items ?? [])
       .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
       .map((board) => ({ id: board.id, title: board.title, purpose: board.purpose, visibility: board.visibility })),
     published,
-    viewer,
+    viewer: null,
   };
+}
+
+/** The signed-in reader's membership state, loaded only by a browser personal query. */
+export async function loadRealmMembership(client: KernelClient, realmId: string, auth: Auth) {
+  return readViewer(client, realmId, auth);
 }
 
 /**
@@ -189,7 +194,7 @@ export async function loadSpacePage(
   input: { address: string },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<SpacePageData> {
-  const { signedIn, auth } = await session(request, sessionEnv, credentialMode);
+  const { auth } = await session(request, sessionEnv, credentialMode);
   const { spaceId } = readCommunity(await client.spaceAddresses({ address: input.address }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId }).get(auth));
   const base = { id: space.spaceId, title: space.title, summary: space.summary };
@@ -197,10 +202,13 @@ export async function loadSpacePage(
   const realmId = space.realmId;
   const [realm, home] = await Promise.all([
     readOptional(client.realms({ realmId }).get(auth)),
-    readHome(client, { realmId, visibility: 'public' }, signedIn, auth),
+    readHome(client, { realmId, visibility: 'public' }, auth),
   ]);
   if (!realm) return { space: base, realm: null };
-  return { space: base, realm: { ...home, visibility: realm.realm.visibility } };
+  return {
+    space: base,
+    realm: { ...home, title: realm.realm.title, visibility: realm.realm.visibility },
+  };
 }
 
 /**
@@ -214,11 +222,11 @@ export async function locateRealm(
   input: { realmId: string },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<Located> {
-  const { signedIn, auth } = await session(request, sessionEnv, credentialMode);
+  const { auth } = await session(request, sessionEnv, credentialMode);
   const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
   if (space.address) return { kind: 'redirect', address: space.address };
-  const home = await readHome(client, realm, signedIn, auth);
+  const home = await readHome(client, realm, auth);
   return {
     kind: 'page',
     page: { space: { id: space.spaceId, title: space.title, summary: space.summary }, realm: home },

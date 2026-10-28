@@ -3,21 +3,20 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { spaceQuery } from '../../community/space-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 import { SpacePage } from '../../community/space-page';
-import { m } from '../../paraglide/messages.js';
 import { ClosedErrorPage } from '../../shell/closed';
+import { spacePageHead } from '../../community/space-head';
 
 export const Route = createFileRoute('/spaces/$address')({
-  staticData: { sessionReread: true },
   loader: ({ params, context }) =>
-    context.queryClient.ensureQueryData(spaceQuery(params.address, getLocale(), context.credentialMode)),
-  head: ({ loaderData }) => ({ meta: [{ title: loaderData?.space.title ?? m.not_found_heading() }] }),
+    context.queryClient.ensureQueryData(spaceQuery(params.address, getLocale(), 'anonymous')),
+  head: ({ loaderData, params }) =>
+    spacePageHead(loaderData, getLocale(), `/spaces/${encodeURIComponent(params.address)}`),
   errorComponent: ClosedErrorPage,
   component: SpaceRoute,
 });
 
 function SpaceRoute() {
   const { address } = Route.useParams();
-  const { credentialMode } = Route.useRouteContext();
-  const { data } = useSuspenseQuery(spaceQuery(address, getLocale(), credentialMode));
+  const { data } = useSuspenseQuery(spaceQuery(address, getLocale(), 'anonymous'));
   return <SpacePage page={data} />;
 }
