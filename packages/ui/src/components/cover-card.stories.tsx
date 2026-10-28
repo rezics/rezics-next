@@ -108,7 +108,7 @@ export const Shelf: Story = {
               href={`/${subject.id}`}
               title={subject.title}
               cover={{ subject, cover: null, src: () => '' }}
-              status={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">Reading</span>}
+              status={{ label: 'Reading' }}
               badge={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">2</span>}
               meta="Finished yesterday"
               progress={{ value: 0.42, label: '42%' }}
@@ -133,7 +133,7 @@ function SelectionExample() {
         href="/book"
         title="A book"
         cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
-        status="Reading"
+        status={{ label: 'Reading' }}
         selectable={selectable}
         selected={selected}
         onSelect={() => {
@@ -160,6 +160,86 @@ export const Selection: Story = {
     await expect(control).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(control);
     await expect(control).toHaveAttribute('aria-pressed', 'true');
+  },
+};
+
+const statusCards = () => (
+  <CoverGrid ratio="2:3" density="medium">
+    <CoverCard
+      href="/book"
+      title="A book with status and progress"
+      cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
+      status={{ label: 'In progress', href: '/library?status=active' }}
+      progress={{ value: 0.4, label: '40%' }}
+      menu={<DropdownMenuItem>Remove</DropdownMenuItem>}
+    />
+    <CoverCard
+      href="/album"
+      title="A tile without status or progress"
+      cover={{ subject: subjects[1]!, cover: null, src: () => '' }}
+    />
+    <CoverCard
+      href="/other"
+      title="Long localized status"
+      cover={{ subject: subjects[2]!, cover: null, src: () => '' }}
+      status={{ label: '非常に長い翻訳済みのライブラリ状態ラベルを一行で省略します' }}
+      progress={{ value: null, label: 'Ep 3/12' }}
+    />
+    <CoverCard
+      href="/four"
+      title="Planned without progress"
+      cover={{ subject: subjects[3]!, cover: null, src: () => '' }}
+      status={{ label: 'Planned', href: '/library?status=planned' }}
+    />
+  </CoverGrid>
+);
+
+export const Status: Story = {
+  render: () => statusCards(),
+  async play({ canvasElement }) {
+    const cards = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="cover-card"]')];
+    const first = cards[0]!;
+    const statusLink = first.querySelector<HTMLAnchorElement>('[data-slot="cover-card-status"]')!;
+    const titleLink = first.querySelector<HTMLAnchorElement>('[data-slot="cover-card-title"]')!;
+    await expect(first.querySelectorAll('[data-slot="cover-card-status"]')).toHaveLength(1);
+    await expect(statusLink).toHaveAttribute('href', '/library?status=active');
+    await expect(statusLink.closest('[data-slot="cover-card-title"]')).toBeNull();
+    await expect(cards[1]!.querySelector('[data-slot="cover-card-status-row"]')).toBeNull();
+    await expect(statusLink.className).toContain('text-muted-foreground');
+    const color = getComputedStyle(statusLink).color;
+    await expect(color).toBeTruthy();
+    await expect(statusLink.className).not.toContain('text-primary');
+    await expect(statusLink.className).not.toContain('bg-primary');
+    const brandProbe = document.createElement('span');
+    brandProbe.className = 'text-primary';
+    canvasElement.append(brandProbe);
+    const brandColor = getComputedStyle(brandProbe).color;
+    brandProbe.remove();
+    await expect(color).not.toBe(brandColor);
+    const longStatus = cards[2]!.querySelector<HTMLElement>('[data-slot="cover-card-status"]')!;
+    const longCard = cards[2]!;
+    longCard.parentElement!.style.width = '390px';
+    await expect(longStatus.scrollWidth).toBeGreaterThan(longStatus.clientWidth);
+    await expect(longStatus.clientWidth).toBeLessThan(longCard.clientWidth);
+    longCard.parentElement!.style.width = '';
+    titleLink.focus();
+    await userEvent.tab();
+    await expect(document.activeElement).toBe(statusLink);
+    await userEvent.tab();
+    await expect(document.activeElement).toBe(first.querySelector('button'));
+
+    const container = canvasElement.querySelector<HTMLElement>('.\\@container')!;
+    for (const width of [390, 1280]) {
+      container.style.width = `${width}px`;
+      const rows = new Map<number, number[]>();
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        const top = Math.round(rect.top);
+        rows.set(top, [...(rows.get(top) ?? []), rect.height]);
+      }
+      await expect([...rows.values()].every((heights) => Math.max(...heights) - Math.min(...heights) < 1)).toBe(true);
+    }
+    container.style.width = '';
   },
 };
 

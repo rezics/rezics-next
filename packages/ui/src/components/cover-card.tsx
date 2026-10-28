@@ -52,7 +52,7 @@ export interface CoverCardProps {
   menuTrigger?: ReactNode;
   menuLabel?: string;
   density?: CoverDensity;
-  status?: ReactNode;
+  status?: { label: string; href?: string };
   badge?: ReactNode;
   meta?: ReactNode;
   selectable?: boolean;
@@ -151,13 +151,6 @@ export function CoverCard({
         </span>
       ) : (
         <>
-          {status != null && (
-            <div
-              className={`pointer-events-none absolute top-2 left-2 z-10 ${onSelect ? 'pointer-fine:group-hover:invisible pointer-fine:group-focus-within:invisible' : ''}`}
-            >
-              {status}
-            </div>
-          )}
           {onSelect && (
             <button
               type="button"
@@ -208,6 +201,28 @@ export function CoverCard({
             className="line-clamp-1 text-center text-[11px] leading-4 text-muted-foreground"
           >
             {meta ?? secondary}
+          </div>
+        )}
+        {status != null && (
+          <div data-slot="cover-card-status-row" className="flex min-w-0 justify-center pt-0.5">
+            {status.href !== undefined ? (
+              <a
+                href={status.href}
+                aria-label={status.label}
+                data-slot="cover-card-status"
+                className="relative z-10 block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {status.label}
+              </a>
+            ) : (
+              <span
+                aria-label={status.label}
+                data-slot="cover-card-status"
+                className="block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground"
+              >
+                {status.label}
+              </span>
+            )}
           </div>
         )}
         {progress != null ? (

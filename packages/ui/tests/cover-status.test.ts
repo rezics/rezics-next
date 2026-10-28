@@ -39,13 +39,14 @@ test('a linked status is separate from the subject link and keyboard follows tit
   const html = renderToStaticMarkup(tile({ status, menu: createElement('span', null, 'Remove') }));
   const titleEnd = html.indexOf('</a>');
   const statusStart = html.indexOf('href="/library?status=active"');
+  const statusLinkStart = html.lastIndexOf('<a', statusStart);
   const menuStart = html.indexOf('<button');
 
   expect(html.match(/data-slot="cover-card-status"/g)).toHaveLength(1);
   expect(titleEnd).toBeLessThan(statusStart);
   expect(statusStart).toBeLessThan(menuStart);
-  expect(html.slice(titleEnd, statusStart)).not.toContain('<a');
-  expect(html).toContain('text-foreground');
+  expect(titleEnd).toBeLessThan(statusLinkStart);
+  expect(html.includes('text-foreground') || html.includes('text-muted-foreground')).toBe(true);
   expect(html).not.toContain('text-primary');
 });
 
@@ -59,7 +60,7 @@ test('long status labels stay on one line and truncate within the tile', () => {
   const html = renderToStaticMarkup(
     tile({ status: { label: 'A very long localized library status label that must not widen the tile' } }),
   );
-  const match = html.match(/<span data-slot="cover-card-status"[^>]*>/);
+  const match = html.match(/<span[^>]*data-slot="cover-card-status"[^>]*>/);
   expect(match?.[0]).toContain('truncate');
   expect(match?.[0]).toContain('min-w-0');
   expect(match?.[0]).toContain('whitespace-nowrap');

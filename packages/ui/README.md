@@ -155,6 +155,12 @@ A tile with progress takes `progress={{ value, label }}` and renders `ProgressRo
 shows the bar and percentage on one line; unknown progress shows its position label without a bar. Pages do not build
 their own progress row inside a cover tile.
 
+A tile can take `status={{ label, href? }}`. The caller passes the status label already localized for the subject
+profile. The quiet, neutral chip sits in the caption after the title and byline and before progress; its ink uses the
+foreground or muted-foreground token. A long label stays on one line and truncates while remaining available to
+assistive technology. When `href` is present, the chip is a separate link above the stretched subject link, so pointer
+and keyboard users can reach it; keyboard order is subject, status, then the menu.
+
 ## Progress
 
 Import `ProgressRow` from `@rezics/ui/progress-row`.
