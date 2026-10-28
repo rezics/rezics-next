@@ -25,6 +25,7 @@ const session = {
 
 export const env = {
   KERNEL_ORIGIN: kernelOrigin,
+  PUBLIC_ORIGIN: 'https://rezics.example',
   AUTH_ISSUER: 'https://auth.example.test',
   API_RESOURCE: 'https://kernel.local',
   WEBSITE_SCOPES: 'openid',
