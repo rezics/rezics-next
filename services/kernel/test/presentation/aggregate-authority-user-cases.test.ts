@@ -493,7 +493,8 @@ test('production page aggregates preserve each standalone read authority and dis
       send(null, 'POST', '/v1/pages:read', { target: { route: '/' } }),
     );
     status(searchPage, 200);
-    expect(observed.requests.filter(({ path }) => path === '/v1/subjects:search')).toHaveLength(1);
+    // Elysia's wrapper observes the native AIP-136 transport route after rewriting.
+    expect(observed.requests.filter(({ path }) => path === '/v1/subjects/$search')).toHaveLength(1);
     expect(observed.engine!.filter((request) => request.endsWith('/_search/template'))).toHaveLength(1);
     const searchRead = record(Object.values(record(searchPage.body.reads))[0]);
     expect(searchRead.status).toBe(standaloneSearch!.status);
