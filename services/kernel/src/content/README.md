@@ -437,6 +437,15 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
 - **Bound:** Constant rows and statements.
 - **Growth check:** `test/content/avatar-media.test.ts`, `avatar check`: 64, 512 and 4096 media in the partition.
 
+### Notice store
+
+- **Touches:** Writes are at most 100 rows, grouped into one insert per recipient partition. Retention uses the
+  `(route, created_at, notice_id)` index for pages of at most 1,000 rows. Account erasure uses the recipient index
+  for pages of at most 1,000 rows and removes one seen marker.
+- **Bound:** Constant write rows per notice batch and at most 1,000 deleted rows per page, independent of notice
+  history.
+- **Growth check:** `test/content/growth-notices.test.ts`, notices per recipient at 256, 1024 and 4096, with constant rows per write and per page.
+
 ### Review creation
 
 - **Touches:** The board's partition for the existing validation read, then only the author's partition: one

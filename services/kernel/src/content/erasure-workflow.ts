@@ -17,6 +17,7 @@ import pagePosts from './page-erasure-posts.sql';
 import pageReceipt from './read-erasure-page-receipt.sql';
 import nullRevisions from './null-erased-revisions.sql';
 import eraseMedia from './page-erasure-media.sql';
+import { deleteAccountNoticePage, deleteAccountNoticeSeen, NOTICE_PAGE_SIZE } from './notices.ts';
 
 export type NativeDurableStep = <T>(name: string, action: () => Promise<T>) => Promise<T>;
 
@@ -346,6 +347,11 @@ export async function runAuthorErasure(
     if (!last) throw new Error('Committed erasure page is missing');
     after = { at: last.at, id: last.post_id };
   }
+  for (let page = 0; ; page = add(page)) {
+    const deleted = await step(`notices:${page}`, () => deleteAccountNoticePage(deps.pool, source.authorId));
+    if (deleted < NOTICE_PAGE_SIZE) break;
+  }
+  await step('notice-seen', () => deleteAccountNoticeSeen(deps.pool, source.authorId));
   await deps.checkpoint.write(operationId, progress);
   if (denied) throw new ErasurePermissionDenied();
   return { processedPosts: progress.processedPosts, erasedRevisions: progress.erasedRevisions };

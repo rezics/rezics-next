@@ -735,6 +735,44 @@ CREATE TABLE content.media_variant (
 
 
 --
+-- Name: notice; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.notice (
+    route integer NOT NULL,
+    recipient_id uuid NOT NULL,
+    notice_id uuid NOT NULL,
+    kind text NOT NULL,
+    actor_id uuid,
+    thread_id uuid,
+    post_id uuid,
+    decision_id uuid,
+    report_id uuid,
+    source_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    CONSTRAINT notice_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
+    CONSTRAINT notice_check1 CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
+    CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'moderation_decision'::text]))),
+    CONSTRAINT notice_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: notice_seen; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.notice_seen (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    seen_notice_id uuid NOT NULL,
+    seen_at timestamp with time zone NOT NULL,
+    CONSTRAINT notice_seen_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT notice_seen_check1 CHECK ((route = ((get_byte(uuid_send(seen_notice_id), 10) * 256) + get_byte(uuid_send(seen_notice_id), 11)))),
+    CONSTRAINT notice_seen_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: operation; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1167,6 +1205,22 @@ ALTER TABLE ONLY content.media_variant
 
 
 --
+-- Name: notice notice_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice
+    ADD CONSTRAINT notice_pkey PRIMARY KEY (route, notice_id);
+
+
+--
+-- Name: notice_seen notice_seen_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice_seen
+    ADD CONSTRAINT notice_seen_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: operation operation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1375,6 +1429,27 @@ CASE
     WHEN (width < 320) THEN 1
     ELSE array_position(ARRAY[320, 640, 960, 1280, 1920, 2560], width)
 END)));
+
+
+--
+-- Name: notice_recipient_created_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX notice_recipient_created_idx ON content.notice USING btree (route, recipient_id, created_at DESC, notice_id DESC);
+
+
+--
+-- Name: notice_recipient_kind_source_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX notice_recipient_kind_source_idx ON content.notice USING btree (route, recipient_id, kind, source_id);
+
+
+--
+-- Name: notice_route_created_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX notice_route_created_idx ON content.notice USING btree (route, created_at, notice_id);
 
 
 --

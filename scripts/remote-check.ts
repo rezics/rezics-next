@@ -126,8 +126,9 @@ export function controlSocketDirectoryPath(
 }
 
 function controlSocketDirectory(): string {
-  const uid = process.getuid?.();
-  if (uid === undefined) throw new Error('remote-check: SSH control directories require a Unix user id');
+  const getuid = process.getuid;
+  if (typeof getuid !== 'function') throw new Error('remote-check: SSH control directories require a Unix user id');
+  const uid = getuid.call(process);
   const directory = controlSocketDirectoryPath(process.env.XDG_RUNTIME_DIR, uid);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const info = lstatSync(directory);

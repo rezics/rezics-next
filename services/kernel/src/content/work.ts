@@ -32,6 +32,7 @@ import { createReactionCountEffect } from './reaction-projection.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
+import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -45,8 +46,11 @@ import {
 export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
 export const CONTENT_COLLECTION_SCHEDULE = 'content.collection.hourly';
 export const CONTENT_BOARD_RANK_SCHEDULE = 'content.board-rank.every-10-minutes';
+export const CONTENT_NOTICE_RETENTION_SCHEDULE = 'content.notice-retention.hourly';
 const PARTITION_WORKFLOW = 'content.collect.partition';
 const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
+const NOTICE_RETENTION_WORKFLOW = 'content.notice-retention';
+const NOTICE_RETENTION_PARTITION_WORKFLOW = 'content.notice-retention.partition';
 const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
 const STEP_RETRY_DELAY_SECONDS = 1;
@@ -292,6 +296,44 @@ async function registerWork(
       name: BOARD_RANK_WORKFLOW,
     },
   );
+  const noticeRetentionCutoff = DBOS.registerStep(
+    async () => new Date(context.clock().getTime() - NOTICE_RETENTION_MS).toISOString(),
+    { name: 'content.notice-retention.cutoff', ...retry },
+  );
+  const noticeRetentionPage = DBOS.registerStep(
+    async (route: number, cutoff: string) => deleteExpiredNoticesPage(context.pool, route, new Date(cutoff)),
+    { name: 'content.notice-retention.page', ...retry },
+  );
+  const noticeRetentionPartition = DBOS.registerWorkflow(
+    async (partition: number, cutoff: string) => {
+      if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
+        throw new RangeError('Invalid notice retention partition');
+      for (let routeOffset = 0; routeOffset < 16; routeOffset++) {
+        const route = partition * 16 + routeOffset;
+        for (;;) {
+          if ((await noticeRetentionPage(route, cutoff)) < NOTICE_PAGE_SIZE) break;
+        }
+      }
+    },
+    { name: NOTICE_RETENTION_PARTITION_WORKFLOW },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      const cutoff = await noticeRetentionCutoff();
+      const sweep = DBOS.workflowID!;
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY) {
+        const handles = await Promise.all(
+          partitions.slice(offset, offset + PARTITION_CONCURRENCY).map((partition) =>
+            DBOS.startWorkflow(noticeRetentionPartition, {
+              workflowID: `${sweep}:partition:${partition}`,
+            })(partition, cutoff),
+          ),
+        );
+        await Promise.all(handles.map((handle) => handle.getResult()));
+      }
+    },
+    { name: NOTICE_RETENTION_WORKFLOW },
+  );
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
@@ -307,6 +349,14 @@ async function registerWork(
       scheduleName: CONTENT_BOARD_RANK_SCHEDULE,
       workflowName: BOARD_RANK_WORKFLOW,
       schedule: '*/10 * * * *',
+      queueName: CONTENT_QUEUES.collect,
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: CONTENT_NOTICE_RETENTION_SCHEDULE,
+      workflowName: NOTICE_RETENTION_WORKFLOW,
+      schedule: '0 * * * *',
       queueName: CONTENT_QUEUES.collect,
       cronTimezone: 'UTC',
       automaticBackfill: false,

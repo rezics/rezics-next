@@ -10,7 +10,11 @@ import {
   registerContent,
 } from '../../src/content/register.ts';
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
-import { CONTENT_BOARD_RANK_SCHEDULE, CONTENT_COLLECTION_SCHEDULE } from '../../src/content/work.ts';
+import {
+  CONTENT_BOARD_RANK_SCHEDULE,
+  CONTENT_COLLECTION_SCHEDULE,
+  CONTENT_NOTICE_RETENTION_SCHEDULE,
+} from '../../src/content/work.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { WorkClient } from '../../src/work/client.ts';
@@ -176,6 +180,8 @@ if (process.argv.includes('--content-registration')) {
         CONTENT_WORKFLOWS.importFromUrl,
         'content.collect.partition',
         'content.board-rank.refresh',
+        'content.notice-retention',
+        'content.notice-retention.partition',
         'content.erasePostRevisions',
       ]),
     );
@@ -230,6 +236,14 @@ if (process.argv.includes('--content-registration')) {
         cronTimezone: 'UTC',
         automaticBackfill: false,
       },
+      {
+        scheduleName: CONTENT_NOTICE_RETENTION_SCHEDULE,
+        workflowName: 'content.notice-retention',
+        schedule: '0 * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
     ]);
     expect(empty.registration.steps).toEqual(
       expect.arrayContaining([
@@ -238,6 +252,8 @@ if (process.argv.includes('--content-registration')) {
         'content.import.step',
         'content.authorErase.step',
         'content.collect.step',
+        'content.notice-retention.cutoff',
+        'content.notice-retention.page',
       ]),
     );
     expect(absenceLines(full.output)).toEqual([]);

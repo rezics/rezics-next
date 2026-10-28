@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
+import { observeSql } from './support/sql-observer.ts';
 
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
@@ -454,6 +455,49 @@ async function launchSelection(
   if (pause) expect(await client.getEvent(workflowId, 'barrier', 30)).toBe(barrier);
   return { handle, workflowId, operationId: source.value.operationId };
 }
+
+test('author erasure deletes account notices and its seen marker through bounded pages', async () => {
+  const selected = await scope(1);
+  const accountId = selected.actor.accountId;
+  const accountRoute = routeOf(accountId)!;
+  const ids = Array.from({ length: 2001 }, () => newId(accountRoute));
+  await fixture.reader.query(
+    `INSERT INTO content.notice (route, recipient_id, notice_id, kind, source_id, created_at)
+     SELECT $1, $2, notice_id, 'reply', notice_id, now()
+     FROM unnest($3::uuid[]) AS seeded(notice_id)`,
+    [accountRoute, accountId, ids],
+  );
+  const seenNoticeId = newId(accountRoute);
+  await fixture.reader.query(
+    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_at)
+     VALUES ($1, $2, $3, now())`,
+    [accountRoute, accountId, seenNoticeId],
+  );
+
+  const trace = observeSql(systemPool);
+  try {
+    const { handle } = await launchSelection(selected);
+    expect(await handle.getResult()).toEqual({ processedPosts: 1, erasedRevisions: 1 });
+  } finally {
+    await trace.close();
+  }
+  expect(
+    trace.records.filter((record) => /DELETE FROM content\.notice AS notice/i.test(record.statement)),
+  ).toHaveLength(3);
+  expect(trace.records.filter((record) => /DELETE FROM content\.notice_seen/i.test(record.statement))).toHaveLength(1);
+
+  const notices = await fixture.reader.query(
+    'SELECT notice_id FROM content.notice WHERE route = $1 AND recipient_id = $2',
+    [accountRoute, accountId],
+  );
+  const seen = await fixture.reader.query(
+    'SELECT account_id FROM content.notice_seen WHERE route = $1 AND account_id = $2',
+    [accountRoute, accountId],
+  );
+  expect(notices.rows).toHaveLength(0);
+  expect(seen.rows).toHaveLength(0);
+  await fixture.reader.query('TRUNCATE TABLE content.notice_seen, content.notice');
+});
 
 for (const revocation of ['grant', 'consent'] as const) {
   test(`native ${revocation} revocation at the logical step barrier preserves cleanup and stops later posts`, async () => {
