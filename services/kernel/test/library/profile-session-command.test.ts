@@ -56,7 +56,7 @@ async function compileSessions(changed: boolean, absent = false) {
       precision: 6,
       totalPolicy: 'required',
     },
-    { ...unitData('precise'), minimum: '1.25', maximum: '9.75', precision: 2 },
+    { ...unitData('minute'), minimum: '1.25', maximum: '9.75', precision: 2 },
     { ...unitData('no-total'), totalPolicy: 'forbidden' },
     unitData('percent'),
     { id: 'page', identity: { kind: 'none' }, structure: { kind: 'none' } },
@@ -267,11 +267,11 @@ test('fresh active profile admission rejects missing capabilities and pairs with
   const unprofiled = await native.createSubject('unprofiled');
   expect((await native.send(owner.bearer, 'GET', `/v1/subjects/${unprofiled}`)).status).toBe(200);
   for (const input of [
-    create(game, 'scalar_amount', 'unknown-unit'),
-    create(game, 'cursor_position', 'precise'),
-    create(recipe, 'cursor_position', 'percent'),
-    create(recordSubject),
     create(unprofiled),
+    create(recordSubject),
+    create(recipe, 'cursor_position', 'percent'),
+    create(game, 'scalar_amount', 'unknown-unit'),
+    create(game, 'cursor_position', 'minute'),
   ])
     await rejectCreate(input, 422, 'unsupported_library_profile');
   await native.activate(replacement);
@@ -304,14 +304,14 @@ test('scalar metadata checks total separately from amount using exact decimal bo
     await rejectCreate(create(subject, 'scalar_amount', unit, extra));
   }
   await rejectCreate(create(subject, 'scalar_amount', 'seed-tray.v2', { total: null }));
-  const bounded = await start(subject, 'scalar_amount', 'precise', { total: '9.75' });
+  const bounded = await start(subject, 'scalar_amount', 'minute', { total: '9.75' });
   for (const amount of ['1.24', '9.76', '1.251', '0', '-1', '1e1', '01.25'])
     await rejectRecord(bounded.id, 1, { amount });
   for (const total of ['1.24', '9.76', '1.251'])
-    await rejectCreate(create(subject, 'scalar_amount', 'precise', { total }));
+    await rejectCreate(create(subject, 'scalar_amount', 'minute', { total }));
   expect((await record(bounded.id, 1, { amount: '1.25' })).amount).toBe('1.25');
   expect((await record(bounded.id, 2, { amount: '9.75' })).amount).toBe('9.75');
-  const optional = await start(subject, 'scalar_amount', 'precise');
+  const optional = await start(subject, 'scalar_amount', 'minute');
   expect(optional.total).toBeNull();
   expect((await start(subject, 'scalar_amount', 'no-total')).total).toBeNull();
   const exact = await start(subject, 'scalar_amount', 'seed-tray.v2', { total: '999999999999.999998' });
