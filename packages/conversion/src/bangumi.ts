@@ -17,7 +17,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@2';
+export const converter_revision = 'bangumi@3';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -27,10 +27,9 @@ export const converter_revision = 'bangumi@2';
 const types: Readonly<Record<number, string>> = {
   1: 'schema:Book',
   2: 'schema:TVSeries',
-  3: 'schema:MusicAlbum',
   4: 'schema:VideoGame',
-  6: 'schema:TVSeries',
 };
+type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
   type: number;
@@ -46,10 +45,11 @@ type NormalizedRecord = {
 };
 type DeferredCover = Omit<MediaImportRequest, 'containerId'>;
 export type BangumiConversion = ConvertedRecord<BatchCommand> & {
+  outcome: 'converted' | 'ignored';
   record_revision: string;
   digest: string;
   /** Sanitized source payload, suitable for a later pure target-binding call. */
-  normalizedRecord: NormalizedRecord;
+  normalizedRecord: NormalizedRecord | IgnoredRecord;
   /** Deferred assets have no container; only mediaImportIntents are executable. */
   coverAssets: DeferredCover[];
   mediaImportIntents: MediaImportRequest[];
@@ -81,13 +81,15 @@ function string(value: unknown, pointer: string, max: number, empty = false): st
     invalid(pointer);
   return value;
 }
-function normalize(input: ConversionInput): NormalizedRecord {
+function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   const raw = object(input.record, '');
   const get = (key: string) => own(raw, key, `/${key}`);
   const id = get('id');
   if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || String(id) !== input.external_id)
     invalid('/id', 'invalid_identifier');
   const type = get('type');
+  // Recognized exclusions retain identity only, without visiting discarded fields.
+  if (type === 3 || type === 6) return { id, type };
   if (typeof type !== 'number' || !Object.hasOwn(types, type)) invalid('/type', 'unsupported_type');
   const record: NormalizedRecord = { id, type, name: string(get('name'), '/name', 500) };
   const chinese = get('name_cn');
@@ -158,6 +160,26 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   };
   const envelope = (group: FieldGroup) => sourceEnvelope(metadata, group);
   const recordUrl = `https://bgm.tv/subject/${input.external_id}`;
+  const sourceMetadata: BangumiConversion['sourceMetadata'] = {
+    recordUrl,
+    summary: { language: 'und', takedownEligible: true },
+    cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
+  };
+  if (!('name' in record)) {
+    // No command will validate the envelope on this path; apply the same bounds.
+    envelope('facts');
+    return {
+      ...metadata,
+      source: 'bangumi',
+      outcome: 'ignored',
+      normalizedRecord: record,
+      proposals: [],
+      diagnostics: [{ pointer: '/type', code: 'ignored_type_outside_launch_scope' }],
+      coverAssets: [],
+      mediaImportIntents: [],
+      sourceMetadata,
+    };
+  }
   const references = (urls: string[] = [recordUrl]): BatchReference[] => [
     {
       parts: urls.map((url) => ({ property: { id: 'schema:url' }, value: { type: 'value', content: url } })),
@@ -265,6 +287,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   return {
     ...metadata,
     source: 'bangumi',
+    outcome: 'converted',
     proposals,
     digest,
     normalizedRecord: record,
@@ -283,10 +306,6 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       })),
     coverAssets,
     mediaImportIntents,
-    sourceMetadata: {
-      recordUrl,
-      summary: { language: 'und', takedownEligible: true },
-      cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
-    },
+    sourceMetadata,
   };
 }
