@@ -7,7 +7,7 @@ import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { boardPageHead } from '../../threads/thread-head';
-import { rememberThreadSlug, threadHref, threadTitle } from '../../threads/thread-href';
+import { rememberThreadSlug, threadSlug, threadTitle } from '../../threads/thread-href';
 import { boardPageQuery } from '../../threads/thread-queries';
 import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
@@ -83,12 +83,13 @@ function BoardPage() {
                   <Item className="gap-x-4 gap-y-1 rounded-none px-1 py-3" size="sm">
                     <ItemContent className="min-w-0 basis-72 gap-1.5">
                       <ItemTitle className="max-w-full text-base">
-                        <a
-                          href={`/${locale}${threadHref({ id: thread.id, title: threadTitle(thread) })}`}
+                        <Link
+                          to="/threads/$id/$slug"
+                          params={{ id: thread.id, slug: threadSlug(threadTitle(thread)) }}
                           className="truncate text-primary hover:underline"
                         >
                           {thread.title ?? m.threads_untitled()}
-                        </a>
+                        </Link>
                       </ItemTitle>
                       <Byline
                         author={authors?.[thread.authorId]}

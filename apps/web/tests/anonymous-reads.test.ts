@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
-import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
+import { createStoryRecordedKernelFetch, storyViewerId } from '../src/kernel/fake';
 import spaceAddress from '../src/kernel/recorded/space-address.json';
 import space from '../src/kernel/recorded/space.json';
 import realm from '../src/kernel/recorded/realm.json';
@@ -37,7 +37,9 @@ const kernelCalls: KernelCall[] = [];
 let sessionReads = 0;
 let credentialReads = 0;
 let spaceAccess: 'public' | 'member' | 'non-member' = 'public';
+let realmHasNoAddress = false;
 let privateThreadEnabled = false;
+let privateThreadAccess: 'member' | 'non-member' = 'member';
 const recorded = createStoryRecordedKernelFetch();
 
 const platformClosed = {
@@ -86,25 +88,28 @@ const kernel = Bun.serve({
         });
     }
     if (url.pathname === `/v1/threads/${privateThreadId}` && privateThreadEnabled) {
-      if (authorization !== readerCredential)
+      if (authorization !== readerCredential || privateThreadAccess !== 'member')
         return Response.json(notFound, { status: 404, headers: { 'content-type': 'application/problem+json' } });
       return Response.json({
         thread: {
           ...thread.thread,
           id: privateThreadId,
           title: privateThreadTitle,
-          firstPost: { ...thread.thread.firstPost, threadId: privateThreadId },
+          authorId: storyViewerId,
+          firstPost: { ...thread.thread.firstPost, authorId: storyViewerId, threadId: privateThreadId },
         },
       });
     }
     if (url.pathname === `/v1/threads/${privateThreadId}/posts` && privateThreadEnabled) {
-      if (authorization !== readerCredential)
+      if (authorization !== readerCredential || privateThreadAccess !== 'member')
         return Response.json(notFound, { status: 404, headers: { 'content-type': 'application/problem+json' } });
       return Response.json({
-        posts: threadPosts.posts.map((post) => ({ ...post, threadId: privateThreadId })),
+        posts: threadPosts.posts.map((post) => ({ ...post, authorId: storyViewerId, threadId: privateThreadId })),
         next: threadPosts.next,
       });
     }
+    if (url.pathname === `/v1/spaces/${space.space.spaceId}` && realmHasNoAddress)
+      return Response.json({ space: { ...space.space, address: null } });
     return recorded(request);
   },
 });
@@ -113,7 +118,6 @@ let child: ChildProcess | undefined;
 let browser: Browser | undefined;
 let started: Promise<string> | undefined;
 let directory: string | undefined;
-
 function reset() {
   kernelCalls.length = 0;
   sessionReads = 0;
@@ -153,7 +157,7 @@ function site(): Promise<string> {
             )
             .replace(
               'credential(): Promise<Credential> {',
-              'credential(): Promise<Credential> { return fetch(${JSON.stringify(credentialReadUrl)}).then(() => ({ status: "active", subject: ${JSON.stringify(thread.thread.authorId)}, accessToken: "anonymous-reads-reader", csrfToken: "anonymous-reads-csrf" }));',
+              'credential(): Promise<Credential> { return fetch(${JSON.stringify(credentialReadUrl)}).then(() => ({ status: "active", subject: ${JSON.stringify(storyViewerId)}, accessToken: "anonymous-reads-reader", csrfToken: "anonymous-reads-csrf" }));',
             );
         }
       }] };
@@ -204,7 +208,14 @@ async function signedInPage(origin: string): Promise<Page> {
   await context.addCookies([
     { name: sessionCookie, value: sessionId, url: cookieUrl.href, secure: true, sameSite: 'Lax' },
   ]);
-  return context.newPage();
+  const page = await context.newPage();
+  // Keep session counts scoped to page data reads; cover authorization has its own session path.
+  const appOrigin = new URL(origin).origin;
+  await page.route(
+    (url) => url.origin === appOrigin && url.pathname.startsWith('/media/'),
+    (route) => route.abort(),
+  );
+  return page;
 }
 
 afterAll(async () => {
@@ -267,6 +278,32 @@ test(
 );
 
 test(
+  'a signed-in Realm page rereads once after hydration and receives its membership state',
+  async () => {
+    const origin = await site();
+    reset();
+    realmHasNoAddress = true;
+    const page = await signedInPage(origin);
+    await page.goto(`${origin}/en/realms/${realmId}`);
+    await page.locator('html[data-hydrated]').waitFor();
+    await page.locator('[data-member-state="none"]').waitFor();
+    await page.getByRole('button', { name: 'Join' }).waitFor();
+    await page.waitForLoadState('networkidle');
+    const realmReads = kernelCalls.filter((call) => call.path === `/v1/realms/${realmId}`);
+    expect(realmReads).toHaveLength(2);
+    expect(realmReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+    const memberReads = kernelCalls.filter((call) => call.path === `/v1/realms/${realmId}/members/me`);
+    expect(memberReads).toHaveLength(1);
+    expect(memberReads[0]?.authorization).toBe(readerCredential);
+    expect(sessionReads).toBe(1);
+    expect(credentialReads).toBe(1);
+    realmHasNoAddress = false;
+    await page.context().close();
+  },
+  timeout,
+);
+
+test(
   'a signed-in marked board rereads once after hydration and keeps the session mode for navigation',
   async () => {
     const origin = await site();
@@ -282,8 +319,10 @@ test(
     expect(threadListReads).toHaveLength(2);
     expect(boardReads.map((call) => call.authorization)).toEqual([null, null]);
     expect(threadListReads.map((call) => call.authorization)).toEqual([null, null]);
-    await page.locator(`a[href="${threadPath}"]`).click();
-    await page.waitForURL(`**${threadPath}`);
+    await page.getByRole('link', { name: thread.thread.title }).click();
+    await page.waitForURL((url) => url.pathname === threadPath);
+    await page.getByRole('heading', { name: thread.thread.title }).waitFor();
+    await page.waitForLoadState('networkidle');
     const threadRead = kernelCalls.filter((call) => call.path === `/v1/threads/${threadId}`);
     expect(threadRead).toHaveLength(1);
     expect(threadRead[0]?.authorization).toBe(readerCredential);
@@ -358,7 +397,8 @@ test(
       expect(sessionReads).toBe(1);
       expect(credentialReads).toBe(1);
       const html = await page.locator('html').innerHTML();
-      expect(html).toContain('name="robots"');
+      if (access === 'non-member')
+        expect(html).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
       await page.context().close();
     }
     spaceAccess = 'public';
@@ -372,6 +412,7 @@ test(
     const origin = await site();
     reset();
     privateThreadEnabled = true;
+    privateThreadAccess = 'member';
     const page = await signedInPage(origin);
     const response = await page.goto(`${origin}${privateThreadPath}`);
     await page.locator('html[data-hydrated]').waitFor();
@@ -403,6 +444,7 @@ test(
     const origin = await site();
     reset();
     privateThreadEnabled = true;
+    privateThreadAccess = 'non-member';
     const page = await signedInPage(origin);
     const response = await page.goto(`${origin}${privateThreadPath}`);
     await page.locator('html[data-hydrated]').waitFor();
@@ -418,6 +460,7 @@ test(
       /name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/,
     );
     privateThreadEnabled = false;
+    privateThreadAccess = 'member';
     await page.context().close();
   },
   timeout,

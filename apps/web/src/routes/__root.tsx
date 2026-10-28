@@ -1,4 +1,11 @@
-import { createRootRouteWithContext, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  isNotFound,
+  Outlet,
+  Scripts,
+  useRouterState,
+} from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { setResponseStatus } from '@tanstack/react-start/server';
@@ -36,7 +43,14 @@ export const Route = createRootRouteWithContext<{
     const origin = publicOrigin();
     const context = { origin, locale, path, ...(data?.paths ? { paths: data.paths } : {}) };
     const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
-    const missing = matches.length === 1 || matches.some((match) => match.status === 'notFound');
+    const missing =
+      matches.length === 1 ||
+      matches.some(
+        (match) =>
+          (match as { _notFound?: boolean })._notFound === true ||
+          match.status === 'notFound' ||
+          (match.status === 'error' && isNotFound(match.error)),
+      );
     const head = closed ? closedPageHead(context) : pageHead(missing ? { robots: 'noindex' } : {}, context);
     return {
       meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, ...head.meta],
@@ -63,11 +77,14 @@ function Root() {
         const match = entry as unknown as {
           status: string;
           error?: unknown;
+          _notFound?: boolean;
           staticData?: { sessionReread?: boolean };
         };
         return (
           match.staticData?.sessionReread === true ||
+          match._notFound === true ||
           match.status === 'notFound' ||
+          isNotFound(match.error) ||
           (match.status === 'error' && isPlatformClosedError(match.error))
         );
       }),
