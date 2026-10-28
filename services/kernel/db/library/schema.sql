@@ -24,6 +24,36 @@ CREATE SCHEMA library;
 
 
 --
+-- Name: advance_fact_source_head(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.advance_fact_source_head() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO library.fact_source_head AS head (route, account_id, generation)
+      VALUES (OLD.route, OLD.account_id, 1)
+      ON CONFLICT (route, account_id) DO UPDATE SET generation = head.generation + 1;
+  ELSE
+    INSERT INTO library.fact_source_head AS head (route, account_id, generation)
+      VALUES (NEW.route, NEW.account_id, 1)
+      ON CONFLICT (route, account_id) DO UPDATE SET generation = head.generation + 1;
+    IF TG_OP = 'UPDATE' THEN
+      IF (OLD.route, OLD.account_id) IS DISTINCT FROM (NEW.route, NEW.account_id) THEN
+        INSERT INTO library.fact_source_head AS head (route, account_id, generation)
+          VALUES (OLD.route, OLD.account_id, 1)
+          ON CONFLICT (route, account_id) DO UPDATE SET generation = head.generation + 1;
+      END IF;
+    END IF;
+  END IF;
+  -- Native bigint overflow aborts the fact mutation and its metadata atomically.
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: collection_listing_public_history_guard(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -1592,6 +1622,13 @@ CREATE INDEX copy_profile_pending ON library.copy USING btree (route, account_id
 
 
 --
+-- Name: copy_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_raw_source ON library.copy USING btree (route, account_id, subject_id, copy_id);
+
+
+--
 -- Name: entry_account_state; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1788,6 +1825,13 @@ CREATE INDEX progress_session_profile_pending ON library.progress_session USING 
 
 
 --
+-- Name: progress_session_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_raw_source ON library.progress_session USING btree (route, account_id, subject_id, session_id);
+
+
+--
 -- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1844,10 +1888,80 @@ CREATE TRIGGER collection_membership_kind_immutable BEFORE UPDATE OF membership_
 
 
 --
+-- Name: copy copy_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_rows AFTER INSERT OR DELETE ON library.copy FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: copy copy_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_update AFTER UPDATE ON library.copy FOR EACH ROW WHEN (((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry entry_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_fact_source_rows AFTER INSERT OR DELETE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry entry_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.state IS DISTINCT FROM new.state)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
 -- Name: follow follow_target_type_immutable; Type: TRIGGER; Schema: library; Owner: -
 --
 
 CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON library.follow FOR EACH ROW EXECUTE FUNCTION library.guard_follow_target_type();
+
+
+--
+-- Name: label_assignment label_assignment_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER label_assignment_fact_source_rows AFTER INSERT OR DELETE ON library.label_assignment FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: label_assignment label_assignment_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((((((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.label_id IS DISTINCT FROM new.label_id)) OR (old.assignment_id IS DISTINCT FROM new.assignment_id)) OR (old.slot_no IS DISTINCT FROM new.slot_no)) OR (old.deleted_at IS DISTINCT FROM new.deleted_at))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: personal_label personal_label_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER personal_label_fact_source_delete AFTER DELETE ON library.personal_label FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: personal_label personal_label_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER personal_label_fact_source_update AFTER UPDATE ON library.personal_label FOR EACH ROW WHEN ((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.deleted_at IS DISTINCT FROM new.deleted_at))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session progress_session_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER progress_session_fact_source_rows AFTER INSERT OR DELETE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session progress_session_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progress_session FOR EACH ROW WHEN (((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.library_profile_pin IS DISTINCT FROM new.library_profile_pin))) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
