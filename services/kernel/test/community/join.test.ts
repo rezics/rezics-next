@@ -364,7 +364,7 @@ async function captureFailure(
     capture.mockRestore();
   }
   if (options.retry) {
-    expect(error).toBeUndefined();
+    expect(error).toMatchObject({ workflowId: expect.stringMatching(/^community\.join:/) });
     expect(
       (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
     ).toHaveLength(1);
