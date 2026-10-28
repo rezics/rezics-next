@@ -82,6 +82,11 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     'source_fence:takedown',
   ];
   const real = await createRealAccess(db.admin, accounts, actions);
+  // Use the existing trusted-account rate class for this import workload; authorization
+  // still comes from real grants and the production limiter keeps its native budgets.
+  await db.admin.query("UPDATE access.account SET rate_tier='trusted' WHERE account_id=ANY($1::uuid[])", [
+    Object.values(accounts),
+  ]);
   for (const action of actions) await real.grant(global, 'importer', action);
   for (const action of ['subject:create', 'statement:propose', 'context:accept', 'context:adopt']) {
     await real.grant(global, 'editor', action);
