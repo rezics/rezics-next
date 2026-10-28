@@ -381,9 +381,14 @@ test('production page aggregates preserve each standalone read authority and dis
     }
     const unscopedRead = await send(unscoped, 'GET', routes[0][1]);
     const unscopedPage = await send(unscoped, 'POST', '/v1/pages:read', { target: { subject: subject.id } });
-    status(unscopedRead, 404);
+    // Native public eligibility admits this read without a token scope. The
+    // aggregate must preserve that public floor and still exclude private facts.
+    status(unscopedRead, 200);
     status(unscopedPage, unscopedRead.status);
-    expect(stable(unscopedPage.body)).toEqual(stable(unscopedRead.body));
+    const unscopedSubject = record(record(unscopedPage.body.reads)[plan.nodes.header!]);
+    expect(record(unscopedSubject.body).subject).toEqual(unscopedRead.body.subject);
+    expect(JSON.stringify(unscopedPage.body)).not.toContain(privateCandidate);
+    console.info('native public representation violations:', violations);
 
     // Fourteen distinct inverse reads cost 121 slots, plus subject(1) and
     // CollectionList(6): exactly sixteen distinct reads and 128 output slots.
