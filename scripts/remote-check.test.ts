@@ -406,8 +406,32 @@ type HostConfig = {
 
 let root: string;
 let counter = 0;
+const inheritedCheckEnvironment = { ...process.env };
+
+function cleanTestEnvironment(environment: Record<string, string | undefined>): Record<string, string | undefined> {
+  const clean = { ...environment };
+  for (const key of Object.keys(clean)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete clean[key];
+  }
+  return clean;
+}
 
 beforeAll(() => {
+  for (const key of Object.keys(process.env)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete process.env[key];
+  }
   mkdirSync(join(repository, '.temp'), { recursive: true });
   root = mkdtempSync(join(repository, '.temp/remote-check-test-'));
   mkdirSync(join(root, 'bin'));
@@ -422,7 +446,42 @@ beforeAll(() => {
   }
 });
 
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+  for (const key of Object.keys(process.env)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(inheritedCheckEnvironment)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    ) {
+      if (value !== undefined) process.env[key] = value;
+    }
+  }
+});
+
+test('nested remote checks start with default placement environment', () => {
+  const environment = cleanTestEnvironment({
+    ...process.env,
+    REZICS_CHECK_SLICE: 'outer.slice',
+    REZICS_CHECK_RUN: 'outer-run',
+    KERNEL_CHECK_REMOTE: '/outer/hosts.json',
+    KERNEL_CHECK_ON_REMOTE: '1',
+  });
+  expect(environment.REZICS_CHECK_SLICE).toBeUndefined();
+  expect(environment.REZICS_CHECK_RUN).toBeUndefined();
+  expect(environment.KERNEL_CHECK_REMOTE).toBeUndefined();
+  expect(environment.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
+});
 
 function scenario(hosts: Record<string, HostConfig>): { env: Record<string, string>; events: () => Event[] } {
   const dir = join(root, `scenario-${counter++}`);
@@ -454,7 +513,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     if (config.expressBusy) mkdirSync(join(dir, `${hostKey}.slot.express`));
   }
   const env: Record<string, string> = {
-    ...(process.env as Record<string, string>),
+    ...(cleanTestEnvironment(process.env as Record<string, string>)),
     PATH: `${join(root, 'bin')}:${process.env.PATH}`,
     FAKE_DIR: dir,
     XDG_RUNTIME_DIR: join(dir, 'runtime'),

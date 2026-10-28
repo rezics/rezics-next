@@ -1,12 +1,74 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
+const inheritedCheckEnvironment = { ...process.env };
+
+function cleanTestEnvironment(environment: Record<string, string | undefined>): Record<string, string | undefined> {
+  const clean = { ...environment };
+  for (const key of Object.keys(clean)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete clean[key];
+  }
+  return clean;
+}
+
+beforeAll(() => {
+  for (const key of Object.keys(process.env)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete process.env[key];
+  }
+});
+afterAll(() => {
+  for (const key of Object.keys(process.env)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    )
+      delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(inheritedCheckEnvironment)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_REMOTE' ||
+      key === 'KERNEL_CHECK_ON_REMOTE'
+    ) {
+      if (value !== undefined) process.env[key] = value;
+    }
+  }
+});
 afterEach(() => {
   for (const directory of dirs.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('nested worker checks start with default placement environment', () => {
+  const environment = cleanTestEnvironment({
+    ...process.env,
+    REZICS_CHECK_SLICE: 'outer.slice',
+    REZICS_CHECK_RUN: 'outer-run',
+    KERNEL_CHECK_REMOTE: '/outer/hosts.json',
+    KERNEL_CHECK_ON_REMOTE: '1',
+  });
+  expect(environment.REZICS_CHECK_SLICE).toBeUndefined();
+  expect(environment.REZICS_CHECK_RUN).toBeUndefined();
+  expect(environment.KERNEL_CHECK_REMOTE).toBeUndefined();
+  expect(environment.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
 });
 
 function withQuietAdmission<T>(run: () => Promise<T>): Promise<T> {
