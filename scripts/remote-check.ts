@@ -70,6 +70,9 @@ const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
 export const CHECK_SLOT_PROCESSORS = 2;
 const MAX_WAIT_RECORD_MS = 60_000;
+export const BASE_REFRESH_INTERVAL_SECONDS = 30 * 60;
+export const BASE_RETENTION_SECONDS = 2 * 60 * 60;
+const RSYNC_COMPRESS_LEVEL = 3;
 
 /** Shell guard for installed package files changed in place after installation. */
 export function installedPackageCacheCheck(
@@ -492,6 +495,16 @@ for run in ${ROOT}/runs/*; do
     ${cleanupCommands()}
   fi
 done
+mkdir -p ${ROOT}/bases
+exec 9>"${ROOT}/bases/.lock"
+flock -x 9
+current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
+for base in ${ROOT}/bases/*; do
+  [ -d "$base" ] || continue
+  [ "$base" = "$current" ] && continue
+  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
+done
+flock -u 9
 echo "SLOTS ${count}"
 exec cat >/dev/null`;
 }
@@ -552,7 +565,8 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
     esac
     printf '%s\\n' "$code" > ${quote(statusFile)}
     exit $code`;
-  return `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
+  return `${refreshBaseScript(id, directory)}
+mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 cd ${directory} || exit 1
@@ -565,6 +579,62 @@ function cleanupScript(id: string, directory: string): string {
 run_slice=${runSlice(id)}
 run_directory=${quote(directory)}
 ${cleanupCommands()}`;
+}
+
+/** Serializes stale-base cleanup and reports the immutable current base used by this upload. */
+function baseStateScript(): string {
+  return `# REMOTE_CHECK_BASE_STATE
+set -eu
+mkdir -p ${ROOT}/bases
+exec 9>"${ROOT}/bases/.lock"
+flock -x 9
+current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
+for base in ${ROOT}/bases/*; do
+  [ -d "$base" ] || continue
+  [ "$base" = "$current" ] && continue
+  if [ -n "$(find "$base" -maxdepth 0 -mmin +${BASE_RETENTION_SECONDS / 60})" ]; then rm -rf -- "$base"; fi
+done
+if [ -n "$current" ] && [ -d "$current" ]; then
+  age=$(( $(date +%s) - $(stat -c %Y "$current") ))
+  printf 'BASE %s\\nAGE %s\\n' "$current" "$age"
+else
+  printf 'BASE -\\nAGE -\\n'
+fi
+if rsync --version 2>/dev/null | grep -qi zstd; then echo ZSTD 1; else echo ZSTD 0; fi
+flock -u 9`;
+}
+
+/** Refreshes only when the current immutable base is old enough; replacing the symlink is atomic. */
+function refreshBaseScript(id: string, directory: string): string {
+  return `# REMOTE_CHECK_BASE_REFRESH
+set -eu
+if [ -d ${quote(directory)} ]; then
+mkdir -p ${ROOT}/bases
+exec 9>"${ROOT}/bases/.lock"
+flock -x 9
+current=$(readlink -f ${ROOT}/bases/current 2>/dev/null || true)
+refresh=0
+if [ -z "$current" ] || [ ! -d "$current" ]; then refresh=1
+else age=$(( $(date +%s) - $(stat -c %Y "$current") )); [ "$age" -ge ${BASE_REFRESH_INTERVAL_SECONDS} ] && refresh=1 || true
+fi
+if [ "$refresh" -eq 1 ]; then
+  name="$(date +%s)-${id}"
+  staging=${ROOT}/bases/.new-${id}
+  target=${ROOT}/bases/$name
+  rm -rf -- "$staging"
+  mkdir -p "$staging"
+  cp -a ${quote(directory)}/. "$staging"/
+  mv -- "$staging" "$target"
+  ln -s "$target" ${ROOT}/bases/.current-${id}
+  mv -Tf ${ROOT}/bases/.current-${id} ${ROOT}/bases/current
+fi
+flock -u 9
+fi`;
+}
+
+function localRsyncSupportsZstd(): boolean {
+  const result = Bun.spawnSync(['rsync', '--version'], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+  return result.exitCode === 0 && /zstd/i.test(result.stdout.toString());
 }
 
 /** Reads the command's recorded exit status when ssh itself reports 255. */
@@ -1243,8 +1313,31 @@ function reportVanishedFiles(direction: 'to' | 'from', host: string, count: numb
   console.error(`remote-check: rsync ${direction} ${host}: ${count} files vanished during transfer`);
 }
 
-function reportDuration(phase: string, started: number, host: string): void {
-  console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}`);
+function reportDuration(phase: string, started: number, host: string, bytesSent?: number): void {
+  const bytes = bytesSent === undefined ? '' : `, ${bytesSent} bytes sent`;
+  console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}${bytes}`);
+}
+
+function rsyncBytesSent(stderr: string): number | undefined {
+  const match = stderr.match(/^sent\s+([\d,]+)\s+bytes\b/m);
+  return match ? Number(match[1]!.replaceAll(',', '')) : undefined;
+}
+
+async function baseState(host: Host): Promise<{ base: string | null; zstd: boolean }> {
+  const probe = Bun.spawn(['ssh', ...sshOptions(host), host.address, baseStateScript()], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'ignore',
+  });
+  const [code, output] = await Promise.all([probe.exited, new Response(probe.stdout).text()]);
+  if (code !== 0) throw new RemoteTransportError(host.name, 'base lookup');
+  const base = output.match(/^BASE (.+)$/m)?.[1];
+  const age = output.match(/^AGE (.+)$/m)?.[1];
+  const zstd = output.match(/^ZSTD ([01])$/m)?.[1];
+  if (base === undefined || age === undefined || zstd === undefined || (base !== '-' && !base.startsWith(`${ROOT}/bases/`))) {
+    throw new Error(`remote-check: invalid base state from ${host.name}`);
+  }
+  return { base: base === '-' ? null : base, zstd: zstd === '1' };
 }
 
 function assertReturnPath(path: string): void {
@@ -1331,11 +1424,24 @@ async function runLeased(
   const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const directory = `${ROOT}/runs/${id}`;
   try {
+    const base = await baseState(host);
+    if (signal.aborted) throw new Aborted();
+    const useZstd = base.zstd && localRsyncSupportsZstd();
+    if (!useZstd) {
+      console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
+    }
     const rsyncStarted = performance.now();
+    const compression = useZstd
+      ? ['--compress', `--compress-choice=zstd`, `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
+      : ['--compress'];
     const sync = Bun.spawn(
       [
         'rsync',
         '-lpt',
+        ...compression,
+        '--stats',
+        '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
+        ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
         '--mkpath',
         '--from0',
         '--files-from=-',
@@ -1347,7 +1453,7 @@ async function runLeased(
       { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
     );
     const { code: synced, stderr } = await finishedRsync(sync, signal);
-    reportDuration('rsync', rsyncStarted, host.name);
+    reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
     if (signal.aborted) throw new Aborted();
     if ([12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload');
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));

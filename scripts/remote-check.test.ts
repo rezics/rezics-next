@@ -18,10 +18,13 @@ import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
+  BASE_REFRESH_INTERVAL_SECONDS,
+  BASE_RETENTION_SECONDS,
   controlSocketDirectoryPath,
   installedPackageCacheCheck,
   returnsProbe,
   selectSlotClass,
+  workspaceFiles,
 } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
@@ -266,6 +269,10 @@ if (script.includes('/proc/loadavg')) {
   log({ kind: 'returns', paths });
   const present = new Set(config.present ?? []);
   for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
+} else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
+  console.log('BASE ' + (config.base ?? '-'));
+  console.log('AGE ' + (config.baseAgeSeconds === undefined ? '-' : String(config.baseAgeSeconds)));
+  console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
@@ -307,6 +314,10 @@ if (script.includes('/proc/loadavg')) {
 const fakeRsync = `#!/usr/bin/env bun
 import { appendFileSync, readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
+if (args.includes('--version')) {
+  console.log('rsync version 3.3.0\\nCapabilities: zstd zlib');
+  process.exit(0);
+}
 const input = await Bun.stdin.text();
 const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
 const address = remote?.slice(0, remote.indexOf(':'));
@@ -316,11 +327,13 @@ const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
 const code = isBack ? (config.rsyncBackExit ?? 0) : (config.rsyncExit ?? 0);
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
+  args,
   destination: args.at(-1),
   rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
   files: input.split('\\0').filter(Boolean),
   code,
 }) + '\\n');
+console.error('sent 1,234 bytes 10,000 bytes/sec');
 for (const file of config.vanishedFiles ?? []) console.error('rsync: [sender] file has vanished: ' + file);
 process.exit(code);
 `;
@@ -365,6 +378,10 @@ type HostConfig = {
   runDurationMs?: number;
   present?: string[];
   ordinaryBusySlots?: number[];
+  base?: string;
+  baseAgeSeconds?: number;
+  zstd?: boolean;
+  baseRefreshExit?: number;
 };
 
 let root: string;
@@ -1001,6 +1018,82 @@ test('an upload with vanished source files runs and reports the vanished count',
   expect(result.code).toBe(0);
   expect(result.stderr).toContain('remote-check: rsync to a: 2 files vanished during transfer');
   expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+});
+
+test('the workspace upload compresses with zstd and sends only what differs from the host base tree', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, base: '/srv/rezics-check/bases/base-one', baseAgeSeconds: 60 } });
+  const directory = workspace();
+  const result = await remote(env, directory, ['true']);
+
+  expect(result.code).toBe(0);
+  const upload = events().find((event) => event.kind === 'rsync')!;
+  const args = upload.args as string[];
+  expect(args).toContain('--compress-choice=zstd');
+  expect(args).toContain('--compress-level=3');
+  expect(args).toContain('--checksum');
+  expect(args).toContain('--copy-dest=/srv/rezics-check/bases/current');
+  expect(args).toContain('--stats');
+  expect(result.stderr).toContain('remote-check: rsync 0.');
+  expect(result.stderr).toContain('1234 bytes sent');
+});
+
+test("a host without zstd support uses rsync's default compression", async () => {
+  const { env, events } = scenario({ a: { available: 8e9, zstd: false } });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  const args = events().find((event) => event.kind === 'rsync')!.args as string[];
+  expect(args).toContain('--compress');
+  expect(args).not.toContain('--compress-choice=zstd');
+  expect(result.stderr).toContain('rsync zstd unavailable on a; using default compression');
+});
+
+test("a run whose upload finds no base on the host uploads the whole workspace and the run sees exactly the workspace's files", async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  const directory = workspace();
+  const expected = workspaceFiles(directory).sort();
+  const result = await remote(env, directory, ['true']);
+
+  expect(result.code).toBe(0);
+  const seen = events();
+  const upload = seen.find((event) => event.kind === 'rsync')!;
+  const args = upload.args as string[];
+  expect(args).not.toContain('--checksum');
+  expect(args.some((argument) => argument.startsWith('--copy-dest='))).toBe(false);
+  expect((upload.files as string[]).sort()).toEqual(expected);
+  expect(seen.find((event) => event.kind === 'run')!.script).toContain('bun install --frozen-lockfile');
+  expect(seen.find(event => event.kind === 'run')!.script).toContain('REMOTE_CHECK_BASE_REFRESH');
+});
+
+test('after a successful upload the host refreshes an old base atomically without disturbing a run that reads it', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, base: '/srv/rezics-check/bases/base-old', baseAgeSeconds: BASE_REFRESH_INTERVAL_SECONDS + 1 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  const seen = events();
+  const upload = seen.find((event) => event.kind === 'rsync')!;
+  const args = upload.args as string[];
+  expect(args).toContain('--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync');
+  const refresh = seen.find((event) => event.kind === 'run')!.script as string;
+  expect(refresh).toContain(`-ge ${BASE_REFRESH_INTERVAL_SECONDS}`);
+  expect(refresh).toContain('flock -x 9');
+  expect(refresh).toContain('cp -a');
+  expect(refresh).toContain('mv -Tf');
+  expect(refresh.indexOf('REMOTE_CHECK_BASE_REFRESH')).toBeLessThan(refresh.indexOf('systemd-run'));
+});
+
+test('bases older than the retention period are removed by host cleanup while the current base is kept', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  await remote(env, workspace(), ['true']);
+
+  const slot = events().find((event) => event.kind === 'slot' && event.granted === true)!;
+  const cleanup = slot.script as string;
+  expect(cleanup).toContain(`mmin +${BASE_RETENTION_SECONDS / 60}`);
+  expect(cleanup).toContain('current=$(readlink -f /srv/rezics-check/bases/current');
+  expect(cleanup).toContain('[ "$base" = "$current" ] && continue');
+  expect(cleanup).toContain('flock -x 9');
 });
 
 test('a host with no free slot is skipped and with none free the check waits', async () => {

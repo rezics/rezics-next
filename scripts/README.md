@@ -123,6 +123,11 @@ Admission retries races against other callers. The default probe interval is fiv
 1. Acquire the slot locks and hold their SSH session for the run's lifetime.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>`.
    Omit Git metadata, `node_modules` and root `.temp` files.
+   Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
+   `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
+   After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;
+   older runs can keep reading the previous tree. Bases older than two hours are removed during host cleanup, except
+   for the current base.
 3. Run `bun install --frozen-lockfile` at the copied checkout root, then the command in its requested directory.
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` shares downloaded packages across runs.
    `BUN_RUNTIME_TRANSPILER_CACHE_PATH=<run-directory>/bun-runtime-transpiler-cache` isolates runtime transpilation.
@@ -144,7 +149,9 @@ containers in `rezics-check.slice` and labels them `rezics.worker.attempt=<task>
 containers with that attempt label. Remote runs do not receive worker identity and retain their run label and cleanup.
 
 Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
-Returned outputs add `rsync back`. Slot wait includes probing and acquisition; rsync measures the upload.
+The `rsync` line also includes the bytes sent from rsync statistics. If zstd is unavailable, the run reports that it
+uses rsync's default compression. Returned outputs add `rsync back`. Slot wait includes probing and acquisition;
+rsync measures the upload.
 Rsync exit code 24 is accepted for uploads and returned outputs, with the number of vanished files logged.
 When cgroup counters are readable, the run also prints:
 
