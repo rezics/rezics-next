@@ -7,6 +7,12 @@ The optional `languages` request field is the reader's language chain, in priori
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.
 
+The approved [public facet discovery contract](../../../../docs/search-facets.md) is the single owner of the
+count-free continuation wire, with additive types in `facet-discovery-contract.ts`. The current facets query is a
+sampled, count-ordered preview with unsafe count metadata. Count removal is separate work; complete count-free
+continuation, admission, Source/privacy integration and preparation remain **UNIMPLEMENTED**. This specification
+adoption supplies no runtime or native acceptance evidence.
+
 ## Deletion lifecycle
 
 [Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)
@@ -485,7 +491,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   totals and facet counts over unchecked populations. Existing sample/overflow lower-bound behavior describes
   partial implementation, not a privacy-safe aggregate; approximate/as_of and zero/row-length substitutes are not
   permitted. Future safe aggregates require separately admitted complete disclosure dependencies
-  and query-level privacy acknowledgement. No new response schema is selected here.
+  and query-level privacy acknowledgement. The adopted count-free discovery wire is owned by
+  [Public facet discovery](../../../../docs/search-facets.md); it does not make this preview complete.
 - Growth check: existing facet/overflow tests retain their scoped evidence. Native paused-indexer local/foreign
   reduction, NOT and order/count cases and three-scale engine/native captures remain required before safe aggregate
   claims; the shared matrix in [Filtered lists](../../../../docs/filtered-lists.md#shared-acceptance-matrix) owns outcomes.
