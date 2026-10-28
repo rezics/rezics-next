@@ -352,7 +352,11 @@ test('durable Relay delivers dependency and original-time owner changes with res
       )
     ).rows;
     expect(complete.length).toBeGreaterThan(0);
-    expect(complete.every((row) => row.state === 'done')).toBe(true);
+    expect(await p.runner.step({ limit: 32 }), 'owner fanout is durably idle before late delivery').toEqual({
+      processed: 0,
+      next: null,
+      done: true,
+    });
     const priorRequests = (await observed(ownerHome)).filter((e) => e.type === repairType).length;
     await drainRelay(restarted, partitionOf(late.route));
     expect((await reverse(owner, late)).some((row) => row.present)).toBe(true);
@@ -405,7 +409,7 @@ test('native removal deltas retain tombstones and older real membership cannot r
         sourceVersion: String(membership.source_version),
         eventId: event!.id,
         present: true,
-        time: { effectiveAt: new Date(origin + 11_000).toISOString(), evidence: 'known' },
+        time: { effectiveAt: event!.time, evidence: 'known' },
         outbox,
       });
       expect(outbox).toEqual([]);

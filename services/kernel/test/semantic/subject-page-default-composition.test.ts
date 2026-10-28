@@ -94,7 +94,7 @@ async function feed(kernel = app) {
   const response = await kernel.handle(new Request('http://kernel.test/v1/subject-pages?limit=1000'));
   expect(response.status, 'actual mounted public transport precedes runtime discovery').toBe(200);
   const body = (await response.json()) as {
-    subjectPages: { id: string; lastModified?: string }[];
+    subjectPages: { id: string; labels: { language: string; value: string }[]; lastModified?: string }[];
     next: string | null;
   };
   expect(Object.keys(body).sort()).toEqual(['next', 'subjectPages']);
@@ -229,6 +229,7 @@ test('default worker registers semantic publication and Relay once and shuts dow
   // This is a native/default composition test, never a manually supplied WorkModule list.
   await nativeSubject();
   const subject = await coldSource();
+  expect((await feed()).subjectPages.map((s) => s.id)).not.toContain(subject.id);
   const program = `
     import assert from 'node:assert/strict';
     import { spyOn } from 'bun:test';
