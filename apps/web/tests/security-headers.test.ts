@@ -291,6 +291,7 @@ async function page(signedIn = false): Promise<Page> {
     await page.goto(`${origin}/auth/sign-in?return_to=/en`);
     await page.locator('html[data-hydrated]').waitFor();
     expect((await context.cookies()).some((cookie) => cookie.name === sessionCookie)).toBe(true);
+    await page.locator('form[action="/auth/sign-out"]').waitFor({ state: 'attached' });
     expect(await page.locator('form[action="/auth/sign-out"]').count()).toBe(1);
   }
   return page;

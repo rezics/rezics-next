@@ -1,3 +1,4 @@
+import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
@@ -80,7 +81,7 @@ function ThreadPage() {
     now,
   } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
   const location = useLocation();
   const id = Route.useParams().id;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;

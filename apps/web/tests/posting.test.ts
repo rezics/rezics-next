@@ -1,3 +1,4 @@
+import { browserSessionToken, waitForPersonalRead } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -425,6 +426,7 @@ async function open(path: string, signedIn = true): Promise<{ page: Page; access
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  await waitForPersonalRead(page, ['session']);
 }
 afterAll(async () => {
   await browser?.close();
@@ -441,6 +443,7 @@ const title = (page: Page) => page.getByRole('textbox', { name: /title|タイト
 const send = (page: Page) => page.locator('main').getByRole('button', { name: /send|publish|post|送信|投稿/i });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function labelledEditor(page: Page) {
+  await editor(page).waitFor();
   expect(await editor(page).count(), 'a visibly labelled rich-text composer is present').toBe(1);
   expect(await editor(page).getAttribute('contenteditable')).toBe('true');
   // An accessible name alone is insufficient: the label must also be visible on the page.
@@ -494,7 +497,7 @@ async function checkWrite(
   expect(new URL(request.url()).origin).toBe(await site());
   expect(request.headers()['content-type']).toContain('application/json');
   expect(request.postDataJSON()).toMatchObject({ body: draft.body });
-  const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+  const csrf = await browserSessionToken(page);
   expect(csrf).toBeTruthy();
   expect(request.headers()['x-csrf-token']).toBe(csrf!);
 }

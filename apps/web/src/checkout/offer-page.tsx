@@ -1,3 +1,4 @@
+import { useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useState } from 'react';
@@ -10,11 +11,11 @@ import { SubjectCover } from './subject-cover';
 type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
 
 export function OfferPage({ offer }: { offer: OfferPageData }) {
+  const { state: session, csrfToken: csrf } = useSession();
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
 
   async function start() {
     if (phase === 'unavailable' || phase === 'submitting') return;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     if (!csrf) {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
@@ -92,7 +93,12 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
             {m.offer_retry()}
           </Button>
         ) : phase === 'closed' ? null : (
-          <Button size="lg" className="w-full sm:w-auto" disabled={phase !== 'ready'} onClick={() => void start()}>
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            disabled={phase !== 'ready' || session === 'unknown'}
+            onClick={() => void start()}
+          >
             {m.offer_buy()}
           </Button>
         )}

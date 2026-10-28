@@ -1,3 +1,4 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -224,7 +225,7 @@ async function signIn(sub: string) {
   expect(value).toBeDefined();
   const page = await fetch(`${origin}/en`, { headers: { cookie: `${sessionCookie}=${value}` } });
   expect(page.status).toBe(200);
-  const csrfToken = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await page.text())?.[1];
+  const csrfToken = await readSessionToken(origin, `${sessionCookie}=${value}`);
   expect(csrfToken).toBeDefined();
   return {
     origin,

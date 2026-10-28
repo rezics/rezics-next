@@ -487,6 +487,15 @@ async function open(path: string, cookie: string): Promise<Page> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
+async function accountMenuHtml(path: string, cookie: string): Promise<string> {
+  const page = await open(path, cookie);
+  try {
+    await page.locator('#account-menu input[name="csrf_token"]').waitFor({ state: 'attached' });
+    return await page.locator('#account-menu').innerHTML();
+  } finally {
+    await page.context().close();
+  }
+}
 async function eventually(check: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 20_000;
   while (!(await check()) && Date.now() < deadline) await Bun.sleep(50);
@@ -712,7 +721,7 @@ test(
     const cookie = await alice();
     const english = await readPage('/en/library', cookie);
     expect(english.status).toBe(200);
-    const menu = /<div\b[^>]*id="account-menu"[^>]*>([\s\S]*?)<\/div>/.exec(english.html)?.[1] ?? '';
+    const menu = await accountMenuHtml('/en/library', cookie);
     const menuLinks = linksIn(menu);
     expect(menuLinks.find((link) => link.text === 'Library')?.href).toBe('/en/library');
     expect(menuLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
@@ -724,7 +733,7 @@ test(
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
-    const japaneseMenu = /<div\b[^>]*id="account-menu"[^>]*>([\s\S]*?)<\/div>/.exec(japanese.html)?.[1] ?? '';
+    const japaneseMenu = await accountMenuHtml('/ja/library', cookie);
     const japaneseLinks = linksIn(japaneseMenu);
     expect(japaneseLinks.find((link) => link.text === 'ライブラリ')?.href).toBe('/ja/library');
     expect(japaneseLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');

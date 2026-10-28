@@ -45,26 +45,26 @@ This transport is for website uploads; imported covers use content's own server-
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
 Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, and order reads.
-Offer pages and other pages read the session's presence, lifetime and CSRF token from its Durable Object alongside theme
-preferences, without refreshing tokens or contacting Auth. Missing, invalid, expired or unreadable sessions render as signed
+After hydration, the shell reads session presence, lifetime and CSRF token once through the private browser session query,
+without refreshing tokens or contacting Auth. The root and public home, Space and board renders do not read session or preference cookies. Missing, invalid, expired or unreadable sessions render as signed
 out without changing the cookie. Media requests, checkout start and order reads resolve before calling the kernel, so
 unreachable Auth returns 502 even for downloads that otherwise conceal upstream errors. An explicit
 `Authorization` header skips credential resolution; an unsafe request with a session cookie still validates its token.
 Unsafe requests carrying that cookie require an exact allowed `Origin` and the session's CSRF token in
-`X-CSRF-Token`. The only form-field exception is the sign-out form's `csrf_token` field. The signed-in document head
-contains the token in a `csrf-token` meta element; it is never placed in a cookie.
+`X-CSRF-Token`. The only form-field exception is the sign-out form's `csrf_token` field. The browser session query supplies the token to controls and imperative transports; no page emits a `csrf-token` meta
+element, and the token is never placed in a cookie.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
 The header offers a sign-in document link returning to the current path and query, or an account menu with a security
 settings link at `<AUTH_ISSUER origin>/security` and a sign-out form that revokes the session and ends it at Auth. The
-menu and form work without JavaScript. When session configuration is missing, neither sign-in nor account controls
-appear.
+menu and form appear after hydration. Without JavaScript, an Account link opens the server-checked settings page.
+When session configuration is missing, the hydrated account slot remains empty.
 Login transactions expire after 10 minutes; sessions expire 30 days after sign-in. The `SESSIONS` Durable Object binding
 stores both in SQLite, with one instance per login transaction or session. Development simulates the objects locally.
 Reads use two Worker rate-limit bindings: `READS_10S` has namespace `1001`, limit `100`, and period `10` seconds;
-`READS_60S` has namespace `1002`, limit `300`, and period `60` seconds. GET and HEAD requests consume both. Active
-sessions share `account:<sub>` limits, signed-out requests with a well-formed session or login cookie use
-`session:<id>`, and other requests use `ip:<CF-Connecting-IP>`.
+`READS_60S` has namespace `1002`, limit `300`, and period `60` seconds. GET and HEAD requests consume both. Public documents use `ip:<CF-Connecting-IP>` without reading session cookies. Credential reads share
+`account:<sub>` across active sessions; other non-document reads with a well-formed session or login cookie use
+`session:<id>`, and other requests use the IP key.
 
 Configure these variables in the environment of `bun run dev`:
 
@@ -443,31 +443,39 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Site shell (navigation column and header)
 
-- **Touches:** The root's existing preferences read (theme and navigation cookies, session state) → three fixed
-  destinations, the header controls and one navigation column; the column's background and the link underlines are CSS
-- **Bound:** 0 added K/D/R/A; at most 3 destinations and 8 locales rendered per page, independent of s, M and t; the
-  navigation column is painted by one stretched element, so a page of any length adds no per-line work
-- **Growth check:** No growth check applies
+- **Touches:** A nonce-bearing inline head script applies theme and navigation cookies before first paint. The
+  shell renders three fixed destinations, header controls and one navigation column; the column background and
+  link underlines are CSS. The account slot reserves the same space while session state is unknown
+- **Bound:** 0 server K/D/R/A; at most 3 destinations and 8 locales per page, independent of s, M and t;
+  navigation background is one stretched element, with no per-line work
+- **Growth check:** `tests/public-render.test.ts` checks pre-paint preferences, the account slot and script-free Account
+
+### Session state
+
+- **Touches:** One browser GET server function reads session state and CSRF with `Cache-Control: private, no-store`;
+  a valid configured session cookie causes one D `signedIn` read, with no credential resolution or Auth request
+- **Bound:** Once per document load; client navigations reuse `sessionQuery`. The existing sign-in and sign-out
+  document redirects create a fresh query client and read the new session state. Server renders remain unknown
+- **Growth check:** `tests/public-render.test.ts` counts one session-state read across hydration and three navigations
 
 ### Home page (`/<locale>`)
 
-- **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; one `POST /v1/pages:read`
-  for route `/`, including the platform search box and the type lists
+- **Touches:** One anonymous `POST /v1/pages:read` for route `/`, including platform search and type lists.
+  The personal Continue row starts its separate browser read after the session is known
 - **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read, each hit with its cover summary),
-  ≤1 D, 0 R/A; O(t) session bytes and O(document + read results) rendering, bounded by composition limits; no result,
-  label or media calls per item
-- **Growth check:** `tests/session-controls.test.ts`:
-  `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A;
-  `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K
+  0 D/R/A for the server render; O(document + read results) rendering, bounded by composition limits;
+  no result, label or media calls per item
+- **Growth check:** `tests/public-render.test.ts` asserts identical HTML with and without a session cookie and zero
+  session/Auth reads; `tests/request-cost.test.ts` checks the public K bound as s grows
 
 ### Home Continue row
 
 - **Touches:** for a signed-in visitor, one `GET /v1/libraryEntries?state=in_progress&view=FULL` with a limit of 6,
-  started together with the home page read, then one `GET /v1/progressSessions?subjectId=` for each entry shown, all
+  started in the browser after the session is known, then one `GET /v1/progressSessions?subjectId=` for each entry shown, all
   started together; none for a signed-out visitor.
 - **Bound:** signed in, 1 more K per home view returning at most 6 entries with their embedded subjects, whatever the
   size of the library, plus at most 6 progress reads (one per card shown), and 1 more D for the credential the reads
-  send; signed out, 0. No R or A beyond the home page's existing session read; no other per-entry reads.
+  send; signed out, 0. Credential refresh can add R/A as for other personal reads; no other per-entry reads.
 - **Growth check:** `tests/home-continue-cost.test.ts`: the home page reads the library once per view whatever the size of the library
 - **Card:** each card is a `CoverCard`: the cover edge to edge, the title, the subject's type as the one secondary
   line, and one `ProgressRow`. The card is one link to the progress session, named "Continue <title>", and its ⋯ menu

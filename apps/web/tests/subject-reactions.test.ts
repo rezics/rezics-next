@@ -1,3 +1,4 @@
+import { browserSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -454,7 +455,7 @@ test(
       expect(own).toBeNull();
 
       expect(browserPosts).toHaveLength(3);
-      const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+      const csrf = await browserSessionToken(page);
       expect(csrf).toBeTruthy();
       for (const request of browserPosts) expect(request.headers()['x-csrf-token']).toBe(csrf!);
     } finally {
@@ -465,7 +466,7 @@ test(
 );
 
 test(
-  'signed out, the counts show and reacting offers sign-in; without JavaScript the controls are disabled',
+  'signed out, the counts show and reacting offers sign-in; without JavaScript the same public controls show',
   async () => {
     reset();
     const { page, origin } = await open(subjectPath, { signedIn: false });
@@ -484,13 +485,13 @@ test(
       await page.context().close();
     }
 
-    // Writes need JavaScript: server-rendered for a signed-in reader, every control is disabled.
+    // Until the browser reads the session, even a signed-in reader sees the public controls.
     const bare = await open(subjectPath, { javaScript: false });
     try {
       const buttons = cluster(bare.page).getByRole('button');
-      expect(await buttons.count()).toBe(6);
-      for (let index = 0; index < 6; index += 1) expect(await buttons.nth(index).isDisabled()).toBe(true);
-      expect(await cluster(bare.page).getByRole('button', { name: 'Like 6', exact: true }).count()).toBe(1);
+      expect(await buttons.count()).toBe(0);
+      expect(await cluster(bare.page).getByRole('link', { name: 'React', exact: true }).count()).toBe(1);
+      expect(await cluster(bare.page).getByRole('img', { name: 'Like 6', exact: true }).count()).toBe(1);
     } finally {
       await bare.page.context().close();
     }
@@ -557,7 +558,7 @@ test(
         headers: { cookie: `${session}=${auth.session}` },
       });
       expect(signedIn.status).toBe(200);
-      expect(await signedIn.text()).toContain('aria-pressed="true"');
+      expect(await signedIn.text()).toContain(`Like ${total}`);
       const inCounts = calls.filter((call) => call.path === `/v1/subjects/${subjectId}/reactions`);
       const inOwn = calls.filter((call) => call.path === `/v1/subjects/${subjectId}/reaction`);
       expect(inCounts).toHaveLength(1);

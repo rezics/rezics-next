@@ -4,7 +4,6 @@ import { authRequest } from './session/routes.ts';
 import { prepareSession } from './session/request.ts';
 import { cookie, clearCookie, SESSION_COOKIE, validId } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';
-import { readSessionIdentity } from './session/state.ts';
 import { sessionSubject } from './session/request.ts';
 import {
   carriesSession,
@@ -264,8 +263,15 @@ export default {
       }
     }
     const isRead = request.method === 'GET' || request.method === 'HEAD';
+    const isServerFn = url.pathname.startsWith('/_serverFn/');
     const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
-    if (isRead && !isMedia && !url.pathname.startsWith('/auth/') && url.pathname !== '/api/search/suggestions') {
+    if (
+      isRead &&
+      !isMedia &&
+      !isServerFn &&
+      !url.pathname.startsWith('/auth/') &&
+      url.pathname !== '/api/search/suggestions'
+    ) {
       const redirect = await pageRedirect(request, url);
       if (redirect) return redirect;
     }
@@ -281,14 +287,18 @@ export default {
           mediaSessionError = error;
         }
         subject = sessionSubject(request);
-      } else if (!url.pathname.startsWith('/auth/') && url.pathname !== '/') {
-        subject = (await readSessionIdentity(request, env as Partial<SessionEnv>)).subject;
       }
 
-      const refused = await limitRead(request, env as typeof env & ReadRateLimitEnv, readLimitKey(request, subject));
+      // Public document admission must not resolve or inspect a reader's session.
+      const publicPage =
+        !isMedia && !isServerFn && !url.pathname.startsWith('/auth/') && !url.pathname.startsWith('/api/');
+      const key = publicPage ? `ip:${request.headers.get('CF-Connecting-IP') ?? ''}` : readLimitKey(request, subject);
+      const refused = await limitRead(request, env as typeof env & ReadRateLimitEnv, key);
       if (refused) return refused;
       if (mediaSessionError !== undefined) return problemResponse(mediaSessionError);
     }
+
+    if (isServerFn) return fetchHandler(request);
 
     if (url.pathname.startsWith('/auth/')) {
       if (isUnsafeRequest(request) && carriesSession(request)) {

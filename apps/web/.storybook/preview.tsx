@@ -34,6 +34,7 @@ const preview: Preview = {
       document.documentElement.lang = locale;
       document.documentElement.classList.remove('light', 'dark');
       document.documentElement.classList.add(theme);
+      document.cookie = `rezics_theme=${theme}; Path=/; SameSite=Lax`;
       return (
         <HydrationMarker key={context.id} storyId={context.id}>
           <Story />

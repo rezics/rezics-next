@@ -115,3 +115,20 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
 .thread-opening-fallback {
   min-height: calc(10lh + 1.5rem);
 }
+
+/* Apply the saved rail width before React hydrates the expanded, reader-independent document. */
+@media (min-width: 768px) {
+  html[data-nav='collapsed']:not([data-hydrated]) :is([data-slot='sidebar-gap'], [data-slot='sidebar-container']) {
+    width: var(--sidebar-width-icon);
+    transition: none;
+  }
+
+  html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar-menu-button'] {
+    width: 2rem;
+    padding: 0.5rem;
+  }
+
+  html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar-menu-button'] > span {
+    display: none;
+  }
+}

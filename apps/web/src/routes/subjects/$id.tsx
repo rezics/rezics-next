@@ -1,4 +1,5 @@
-import { createFileRoute, notFound, redirect, useLoaderData, useLocation, useRouter } from '@tanstack/react-router';
+import { useSession } from '../../session/query';
+import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import {
@@ -118,7 +119,7 @@ export const Route = createFileRoute('/subjects/$id')({
 
 function SubjectRoute() {
   const { page, library, reader, frame, relations, tabs, reactions, verification } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
   const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0]!;
   const nonce = useRouter().options.ssr?.nonce;
   return (

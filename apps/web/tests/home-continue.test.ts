@@ -1,3 +1,4 @@
+import { chromium } from 'playwright';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -6,6 +7,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import { waitForPersonalRead } from './session-token';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -374,10 +376,23 @@ const alice = async () => {
 };
 
 async function readPage(path: string, cookie?: string) {
-  const response = await fetch(`${await site()}${path}`, {
-    headers: cookie ? { cookie: `${session}=${cookie}` } : {},
-  });
-  return { status: response.status, html: await response.text() };
+  const origin = await site();
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext();
+    if (cookie)
+      await context.addCookies([
+        { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
+      ]);
+    const page = await context.newPage();
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    await page.locator(cookie ? '#account-menu-button' : '[data-session-slot] a[href^="/auth/sign-in"]').waitFor();
+    if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+    await page.waitForLoadState('networkidle');
+    return { status: response!.status(), html: await page.content() };
+  } finally {
+    await browser.close();
+  }
 }
 function main(html: string) {
   return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;

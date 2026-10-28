@@ -1,3 +1,4 @@
+import { browserSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -514,7 +515,7 @@ test(
     try {
       expect(await buy(page).count()).toBe(1);
       const html = await page.content();
-      const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+      const csrf = await browserSessionToken(page);
       expect(csrf).toBeTruthy();
       const posts: { url: string; csrf: string | undefined }[] = [];
       page.on('request', (request) => {
@@ -626,7 +627,7 @@ test(
       try {
         expect(await buy(page).count()).toBe(1);
         const html = await page.content();
-        const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+        const csrf = await browserSessionToken(page);
         const tokens: (string | undefined)[] = [];
         page.on('request', (request) => {
           if (request.method() === 'POST') tokens.push(request.headers()['x-csrf-token']);

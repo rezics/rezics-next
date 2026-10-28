@@ -1,3 +1,4 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -296,7 +297,7 @@ async function pageOf(origin: string, value?: string) {
     const count = await meta.count();
     return {
       count,
-      token: count === 1 ? await meta.getAttribute('content') : null,
+      token: value ? await readSessionToken(origin, `${session}=${value}`) : null,
       cookies: (await response!.headersArray()).filter((header) => header.name.toLowerCase() === 'set-cookie'),
     };
   } finally {
@@ -412,15 +413,15 @@ test(
   timeout,
 );
 
-// Render the session's token in the signed-in document head to turn this into test(...).
+// Public HTML carries no token; the private browser session query supplies it.
 test(
-  "a signed-in page carries its session's CSRF token and a signed-out page carries none",
+  "a signed-in browser reads its session's CSRF token while the public head carries none",
   async () => {
     const { origin, value } = await signIn();
     const signedOut = await pageOf(origin);
     expect(signedOut.count).toBe(0);
     const signedIn = await pageOf(origin, value);
-    expect(signedIn.count).toBe(1);
+    expect(signedIn.count).toBe(0);
     expect(tokenBytes(signedIn.token).length).toBe(16);
     expect((await pageOf(origin, value)).token).toBe(signedIn.token);
     const accepted = await upload(origin, { cookie: `${session}=${value}`, origin, ...tokenHeaders(signedIn.token) });

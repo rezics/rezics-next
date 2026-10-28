@@ -408,6 +408,9 @@ async function open(path: string, signedIn = true): Promise<{ page: Page; origin
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
   try {
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await page
+      .locator(signedIn ? '#account-menu-button' : '[data-session-slot] a[href^="/auth/sign-in"]')
+      .waitFor({ timeout: 120_000 });
   } catch (error) {
     throw new Error(
       `${String(error)}; page=${await page.locator('body').innerText()}; browser=${browserErrors.join(' | ')}`,

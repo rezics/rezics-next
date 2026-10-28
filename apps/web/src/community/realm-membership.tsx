@@ -1,3 +1,4 @@
+import { useSession } from '../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { useEffect, useState } from 'react';
@@ -5,31 +6,25 @@ import { m } from '../paraglide/messages.js';
 import type { MemberState, RealmHome } from './space';
 import { changeRealmMembership } from './space-actions';
 
-function csrfHeaders(): HeadersInit {
-  const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-  return { 'X-CSRF-Token': token };
-}
-
 type Problem = 'closed' | 'refused' | null;
 
 /** The viewer's standing in a Realm and the one write that changes it. */
 export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnTo: string }) {
+  const { csrfToken } = useSession();
   const viewer = realm.viewer;
   const [state, setState] = useState<MemberState>(viewer?.state ?? 'none');
-  const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem>(null);
-  useEffect(() => setHydrated(true), []);
   useEffect(() => setState(viewer?.state ?? 'none'), [viewer?.state]);
 
   async function change(action: 'join' | 'leave') {
-    if (!viewer || busy) return;
+    if (!viewer || !csrfToken || busy) return;
     setBusy(true);
     setProblem(null);
     try {
       const result = await changeRealmMembership({
         data: { realmId: realm.id, action, idempotencyKey: viewer.idempotencyKey },
-        headers: csrfHeaders(),
+        headers: { 'X-CSRF-Token': csrfToken },
       });
       if (result.outcome === 'accepted') setState('pending');
       else setProblem(result.outcome);
@@ -64,13 +59,13 @@ export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnT
         {state === 'member' ? (
           <>
             <Badge>{m.realm_state_member()}</Badge>
-            <Button type="button" variant="outline" disabled={!hydrated || busy} onClick={() => void change('leave')}>
+            <Button type="button" variant="outline" disabled={!csrfToken || busy} onClick={() => void change('leave')}>
               {m.realm_leave()}
             </Button>
           </>
         ) : null}
         {state === 'none' ? (
-          <Button type="button" disabled={!hydrated || busy} onClick={() => void change('join')}>
+          <Button type="button" disabled={!csrfToken || busy} onClick={() => void change('join')}>
             {m.realm_join()}
           </Button>
         ) : null}

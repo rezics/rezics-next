@@ -47,10 +47,10 @@ export function createServerFn() {
         }
         return Promise.resolve(result).then((value) => {
           const context = (globalThis as StoryGlobals).__rezicsStoryContext;
-          if (context && value && typeof value === 'object' && 'theme' in value && 'session' in value) {
+          if (context && value && typeof value === 'object' && 'state' in value && 'csrfToken' in value) {
             return {
               ...value,
-              session: context.visitor === 'Signed In' ? 'signed-in' : 'signed-out',
+              state: context.visitor === 'Signed In' ? 'signed-in' : 'signed-out',
               csrfToken: context.visitor === 'Signed In' ? 'story-csrf-token' : null,
             };
           }

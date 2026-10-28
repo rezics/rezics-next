@@ -621,6 +621,7 @@ test(
     const { page } = await open(threadPath());
     try {
       await page.getByRole('button', { name: 'More actions', exact: true }).nth(1).click();
+      await page.getByRole('menuitem', { name: 'Copy link', exact: true }).waitFor();
       expect(await page.getByRole('menuitem', { name: 'Copy link', exact: true }).count()).toBe(1);
       expect(await page.getByRole('menuitem', { name: 'Report', exact: true }).count()).toBe(0);
       expect(writes()).toHaveLength(0);

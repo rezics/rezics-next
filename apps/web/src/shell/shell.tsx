@@ -26,7 +26,7 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { use, useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/search.tsx';
 import {
@@ -49,6 +49,8 @@ import {
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
+import { useSession } from '../session/query';
+type ShellSession = SessionState | 'unknown';
 
 const names = {
   en: 'English',
@@ -99,7 +101,7 @@ function destinationCurrent(pathname: string, to: (typeof destinations)[number][
   return pathname === to;
 }
 
-function offeredDestinations(session: SessionState) {
+function offeredDestinations(session: ShellSession) {
   return destinations.filter((item) => !('signedIn' in item) || session === 'signed-in');
 }
 const headerControlClass =
@@ -112,7 +114,6 @@ const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
 });
-let authIssuerPromise: Promise<string> | undefined;
 
 // False on the server and while the page hydrates, true afterwards. Controls that need script stay disabled until then.
 const noSubscription = () => () => {};
@@ -139,7 +140,7 @@ function Logo() {
     </Link>
   );
 }
-function Navigation({ pathname, session }: { pathname: string; session: SessionState }) {
+function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   const { setOpenMobile } = useSidebar();
   return (
     <nav aria-label={m.shell_navigation()} className="flex min-h-0 w-full flex-1 flex-col">
@@ -170,14 +171,14 @@ function Navigation({ pathname, session }: { pathname: string; session: SessionS
 }
 // On a phone the navigation is a sheet the header button opens. Before script runs, and where there is none, the same
 // destinations are a plain list under the header, so the page always has one named primary navigation.
-function PhoneNavigation({ pathname, session }: { pathname: string; session: SessionState }) {
+function PhoneNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   const { openMobile, setOpenMobile } = useSidebar();
   return (
     <Sheet open={openMobile} onOpenChange={setOpenMobile}>
       <SheetContent
         side="left"
         showCloseButton={false}
-        className="w-72 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-72"
+        className="w-72 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground motion-reduce:translate-x-0! motion-reduce:transition-none sm:max-w-72"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-sidebar-border px-4 py-3">
           <div className="flex items-center gap-2.5 px-1.5">
@@ -198,7 +199,7 @@ function PhoneNavigation({ pathname, session }: { pathname: string; session: Ses
     </Sheet>
   );
 }
-function NavigationColumn({ pathname, session }: { pathname: string; session: SessionState }) {
+function NavigationColumn({ pathname, session }: { pathname: string; session: ShellSession }) {
   const { isMobile } = useSidebar();
   if (isMobile) return <PhoneNavigation pathname={pathname} session={session} />;
   return (
@@ -207,7 +208,7 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Se
     </Sidebar>
   );
 }
-function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: SessionState }) {
+function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   return (
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
@@ -264,17 +265,28 @@ function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggl
 }
 function ThemeControl() {
   const hydrated = useHydrated();
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-      ? 'dark'
-      : typeof document !== 'undefined' && document.documentElement.classList.contains('light')
-        ? 'light'
-        : 'system',
-  );
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null);
+  useLayoutEffect(() => {
+    const cookie = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(document.cookie)?.[1];
+    setTheme(cookie === 'light' || cookie === 'dark' ? cookie : 'system');
+  }, []);
+  useLayoutEffect(() => {
+    if (theme === null) return;
+    const preference = matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const dark = theme === 'dark' || (theme === 'system' && preference.matches);
+      document.documentElement.classList.toggle('dark', dark);
+      document.documentElement.classList.toggle('light', !dark);
+    };
+    apply();
+    if (theme !== 'system') return;
+    preference.addEventListener('change', apply);
+    return () => preference.removeEventListener('change', apply);
+  }, [theme]);
   const icons = { system: Monitor, light: Sun, dark: Moon };
-  const Icon = icons[theme];
+  const Icon = icons[theme ?? 'system'];
   const choose = (value: string) => {
-    const next = value as typeof theme;
+    const next = value as Exclude<typeof theme, null>;
     setTheme(next);
     document.documentElement.classList.remove('light', 'dark');
     if (next !== 'system') document.documentElement.classList.add(next);
@@ -299,7 +311,7 @@ function ThemeControl() {
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{m.shell_theme()}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={choose}>
+          <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={choose}>
             <DropdownMenuRadioItem value="system">{m.shell_theme_system()}</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="light">{m.shell_theme_light()}</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="dark">{m.shell_theme_dark()}</DropdownMenuRadioItem>
@@ -358,27 +370,28 @@ function LanguageControl() {
     </>
   );
 }
-// The account menu is a native popover, so it opens, and signing out works, before any script has run.
-function SessionControl({ session, csrfToken }: { session: SessionState; csrfToken: string | null }) {
+// The account slot is reserved while the browser reads its private session.
+function SessionControl({ session, csrfToken }: { session: ShellSession; csrfToken: string | null }) {
   const location = useLocation();
-  if (session === 'unavailable') return null;
+  const [securitySettingsHref, setSecuritySettingsHref] = useState('/security');
+  useEffect(() => {
+    if (session !== 'signed-in') return;
+    let active = true;
+    void readAuthIssuer().then((issuer) => {
+      if (active && issuer) setSecuritySettingsHref(new URL('/security', issuer).href);
+    });
+    return () => {
+      active = false;
+    };
+  }, [session]);
+  if (session === 'unknown' || session === 'unavailable') return null;
   if (session === 'signed-in') {
-    const existingHref =
-      typeof document === 'undefined'
-        ? null
-        : document.querySelector<HTMLAnchorElement>('[data-account-security-settings]')?.getAttribute('href');
-    let securitySettingsHref = existingHref ?? '/security';
-    if (typeof document === 'undefined') {
-      authIssuerPromise ??= readAuthIssuer();
-      const issuer = use(authIssuerPromise);
-      if (issuer) securitySettingsHref = new URL('/security', issuer).href;
-    }
     const locale = getLocale();
     return (
       <>
         <Button
           id="account-menu-button"
-          className={cn(headerControlClass, 'px-3 sm:px-4')}
+          className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
           variant="ghost"
           size="lg"
           aria-label={m.account_menu()}
@@ -411,7 +424,15 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
             <Settings aria-hidden="true" className="size-4" />
             {m.settings_heading()}
           </a>
-          <a href={securitySettingsHref} data-account-security-settings autoFocus className={accountMenuLinkClass}>
+          <a
+            href={securitySettingsHref}
+            data-account-security-settings
+            // React's client autoFocus only focuses on mount, while this popover is still hidden.
+            ref={(link) => {
+              link?.setAttribute('autofocus', '');
+            }}
+            className={accountMenuLinkClass}
+          >
             <ShieldCheck aria-hidden="true" className="size-4" />
             {m.account_security_settings()}
           </a>
@@ -430,7 +451,7 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
   return (
     <a
       data-slot="button"
-      className={cn(buttonVariants({ size: 'lg' }), headerControlClass, 'px-3 sm:px-4')}
+      className={cn(buttonVariants({ size: 'lg' }), headerControlClass, 'w-full px-3 sm:px-4')}
       href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
     >
       <LogIn aria-hidden="true" />
@@ -438,28 +459,22 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
     </a>
   );
 }
-export function AppShell({
-  children,
-  theme = 'system',
-  collapsed = false,
-  session,
-  csrfToken = null,
-}: {
-  children: React.ReactNode;
-  theme?: string;
-  collapsed?: boolean;
-  session: SessionState;
-  csrfToken?: string | null;
-}) {
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { state: session, csrfToken } = useSession();
   const location = useLocation();
   const router = useRouter();
-  const [railCollapsed, setRailCollapsed] = useState(collapsed);
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useLayoutEffect(() => {
+    setRailCollapsed(document.documentElement.dataset.nav === 'collapsed');
+  }, []);
   useEffect(() => {
     const unsub = router.subscribe('onResolved', () => document.getElementById('main-content')?.focus());
     return unsub;
   }, [router]);
   const setCollapsed = (value: boolean) => {
     setRailCollapsed(value);
+    if (value) document.documentElement.dataset.nav = 'collapsed';
+    else delete document.documentElement.dataset.nav;
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
@@ -496,7 +511,21 @@ export function AppShell({
             ) : null}
             <LanguageControl />
             <ThemeControl />
-            <SessionControl session={session} csrfToken={csrfToken} />
+            <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
+              <SessionControl session={session} csrfToken={csrfToken} />
+              <noscript>
+                <a
+                  href={`/${getLocale()}/settings`}
+                  className={cn(
+                    headerControlClass,
+                    'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
+                  )}
+                >
+                  <UserRound aria-hidden="true" className="size-4" />
+                  <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+                </a>
+              </noscript>
+            </div>
           </div>
         </div>
       </header>

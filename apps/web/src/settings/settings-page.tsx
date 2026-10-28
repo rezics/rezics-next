@@ -1,3 +1,4 @@
+import { useSession } from '../session/query';
 import { useId, useLayoutEffect, useState } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -22,6 +23,7 @@ const levels: { value: SpoilerLevel; title: () => string; text: () => string }[]
 ];
 
 function ReadingCard({ initial }: { initial: ReadingPreferences }) {
+  const { csrfToken } = useSession();
   const ids = useId();
   const [hydrated, setHydrated] = useState(false);
   // What the server last confirmed, and what the controls show. They differ after a stale write.
@@ -33,7 +35,7 @@ function ReadingCard({ initial }: { initial: ReadingPreferences }) {
   const busy = signal === 'saving' || signal === 'reloading';
 
   async function change(next: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>>) {
-    if (!hydrated || busy) return;
+    if (!hydrated || !csrfToken || busy) return;
     setChoice((current) => ({ ...current, ...next }));
     setSignal('saving');
     try {
@@ -86,7 +88,7 @@ function ReadingCard({ initial }: { initial: ReadingPreferences }) {
             </div>
             <RadioGroup
               value={String(choice.spoilerLevel)}
-              disabled={!hydrated || busy}
+              disabled={!hydrated || !csrfToken || busy}
               onValueChange={(value) => void change({ spoilerLevel: Number(value) as SpoilerLevel })}
               aria-labelledby={`${ids}-spoilers`}
             >
@@ -117,7 +119,7 @@ function ReadingCard({ initial }: { initial: ReadingPreferences }) {
               <Switch
                 id={`${ids}-suitability`}
                 checked={choice.suitability === 'show'}
-                disabled={!hydrated || busy}
+                disabled={!hydrated || !csrfToken || busy}
                 onCheckedChange={(checked) => void change({ suitability: checked ? 'show' : 'blur' })}
                 aria-labelledby={`${ids}-suitability-title`}
                 aria-describedby={`${ids}-suitability-text`}
@@ -168,7 +170,7 @@ function AccountCard({ securityHref, csrfToken }: { securityHref: string | null;
         ) : null}
         <form method="post" action="/auth/sign-out" className="m-0">
           <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-          <Button type="submit" variant="outline" size="lg">
+          <Button type="submit" variant="outline" size="lg" disabled={!csrfToken}>
             {m.account_sign_out()}
           </Button>
         </form>

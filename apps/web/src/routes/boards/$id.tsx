@@ -1,6 +1,7 @@
+import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Item, ItemActions, ItemContent, ItemTitle } from '@rezics/ui/shadcn/item';
-import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { createFileRoute, Link, useLocation } from '@tanstack/react-router';
 import { MessageSquareIcon } from 'lucide-react';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
@@ -46,7 +47,7 @@ export const Route = createFileRoute('/boards/$id')({
 
 function BoardPage() {
   const { board, realm, threads, authors, now } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
   const location = useLocation();
   const id = Route.useParams().id;
   const locale = getLocale();
@@ -62,13 +63,13 @@ function BoardPage() {
         <h2 id="board-threads-heading" className="text-xl font-semibold">
           {m.board_threads_heading()}
         </h2>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
           <BoardSortNav boardId={id} sort={sort ?? 'active'} />
           {session === 'signed-in' ? (
             <a className={buttonVariants({ size: 'lg' })} href={`/${locale}/boards/${id}/new`}>
               {m.board_start_thread()}
             </a>
-          ) : session === 'signed-out' ? (
+          ) : session !== 'unavailable' ? (
             <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
           ) : null}
         </div>

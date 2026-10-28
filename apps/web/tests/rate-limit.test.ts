@@ -387,7 +387,7 @@ test(
 );
 
 test(
-  "a signed-in person's reads share one limit across their sessions",
+  "a signed-in person's credential reads share one limit across their sessions",
   async () => {
     const sub = randomUUID();
     const first = await signIn('/en', { sub });
@@ -396,8 +396,8 @@ test(
     expect(second).not.toBe(first);
     const ip = address();
     await nextWindow();
-    await allowed(50, withCookie(session, first, ip), true);
-    await allowed(50, withCookie(session, second), true);
+    await allowed(50, withCookie(session, first, ip));
+    await allowed(50, withCookie(session, second));
     // A different account on the same IP has its own budget.
     await allowed(1, withCookie(session, other, ip));
     await limited(withCookie(session, second, ip), 10);

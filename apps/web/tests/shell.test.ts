@@ -176,8 +176,8 @@ test(
       const html = await (await fetch(`${origin}/en`, cookie ? { headers: { cookie } } : {})).text();
       return (/<html[^>]*\sclass="([^"]*)"/.exec(html)?.[1] ?? '').split(/\s+/);
     };
-    expect(await htmlClass('rezics_theme=dark')).toContain('dark');
-    expect(await htmlClass('rezics_theme=light')).toContain('light');
+    expect(await htmlClass('rezics_theme=dark')).not.toContain('dark');
+    expect(await htmlClass('rezics_theme=light')).not.toContain('light');
     for (const cookie of [undefined, 'rezics_theme=system']) {
       const classes = await htmlClass(cookie);
       expect(classes).not.toContain('dark');

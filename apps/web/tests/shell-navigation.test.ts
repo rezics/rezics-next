@@ -1,3 +1,4 @@
+import { waitForPersonalRead } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -192,15 +193,20 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (options.javaScriptEnabled !== false)
+  if (options.javaScriptEnabled !== false) {
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await waitForPersonalRead(page, ['session']);
+  }
   return page;
 }
 
 async function visit(page: Page, path: string, javaScriptEnabled = true): Promise<void> {
   const origin = await site();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (javaScriptEnabled) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  if (javaScriptEnabled) {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await waitForPersonalRead(page, ['session']);
+  }
 }
 
 afterAll(async () => {

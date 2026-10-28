@@ -1,4 +1,5 @@
-import { createFileRoute, useLoaderData } from '@tanstack/react-router';
+import { useSession } from '../session/query';
+import { createFileRoute } from '@tanstack/react-router';
 import { readSettingsPage } from '../settings/actions';
 import { SettingsPageView } from '../settings/settings-page';
 import { m } from '../paraglide/messages.js';
@@ -10,6 +11,6 @@ export const Route = createFileRoute('/settings')({
 });
 
 function SettingsRoute() {
-  const { csrfToken } = useLoaderData({ from: '__root__' });
+  const { csrfToken } = useSession();
   return <SettingsPageView page={Route.useLoaderData()} csrfToken={csrfToken} />;
 }

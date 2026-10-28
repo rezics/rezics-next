@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
+import { waitForPersonalRead } from './session-token';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -524,7 +525,20 @@ async function readPage(path: string, sub?: string) {
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
     redirect: 'manual',
   });
-  return { status: response.status, html: await response.text(), location: response.headers.get('location') };
+  let html = await response.text();
+  if (sub && response.status === 200 && path.includes('/spaces/')) {
+    const page = await open(path, sub);
+    try {
+      await page.locator('#account-menu-button').waitFor();
+      const [, locale, , address] = path.split('/');
+      await waitForPersonalRead(page, ['personal-space', address!, locale!]);
+      await page.waitForLoadState('networkidle');
+      html = await page.content();
+    } finally {
+      await page.context().close();
+    }
+  }
+  return { status: response.status, html, location: response.headers.get('location') };
 }
 async function open(path: string, sub: string): Promise<Page> {
   browser ??= await chromium.launch();
@@ -643,7 +657,7 @@ test(
     ).toBe(true);
     const visitor = await readPage('/en/spaces/atlas', 'blake');
     expect(main(visitor.html)).toContain('data-member-state="none"');
-    expect(main(visitor.html)).toMatch(/<button\b[^>]*\bdisabled\b[^>]*>\s*Join\s*<\/button>/);
+    expect(main(visitor.html)).toMatch(/<button\b(?![^>]*\sdisabled(?:=|\s|>))[^>]*>\s*Join\s*<\/button>/);
 
     // A Space that carries no Realm shows the Space alone and reads nothing else.
     calls.length = 0;

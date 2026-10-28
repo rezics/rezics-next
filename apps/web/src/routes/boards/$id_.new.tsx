@@ -1,5 +1,6 @@
+import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { createFileRoute, Link, useLocation } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/boards/$id_/new')({
 
 function NewThreadPage() {
   const { board, idempotencyKey } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
   const location = useLocation();
 
   return (
@@ -50,7 +51,7 @@ function NewThreadPage() {
             window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
           }}
         />
-      ) : session === 'signed-out' ? (
+      ) : session !== 'unavailable' ? (
         <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} label={m.board_sign_in_to_start()} />
       ) : null}
       <Link to="/boards/$id" params={{ id: board.id }} className={buttonVariants({ variant: 'outline', size: 'lg' })}>

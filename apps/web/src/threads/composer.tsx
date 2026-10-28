@@ -1,3 +1,4 @@
+import { sessionCsrfToken } from '../session/query';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -13,7 +14,7 @@ import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from '
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
 
 export function csrfHeaders(): HeadersInit {
-  const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+  const token = sessionCsrfToken() ?? '';
   return { 'X-CSRF-Token': token };
 }
 

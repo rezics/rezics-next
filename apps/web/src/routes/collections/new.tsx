@@ -1,4 +1,5 @@
-import { createFileRoute, useLoaderData } from '@tanstack/react-router';
+import { useSession } from '../../session/query';
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
 import { createCollection, readNewCollection } from '../../library/collection-edit';
 import { buttonClass, fieldClass, VisibilityField } from '../../library/collection-page';
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/collections/new')({
 
 function NewCollectionPage() {
   const loaded = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const { state: session } = useSession();
   const [idempotencyKey, setIdempotencyKey] = useState(loaded.idempotencyKey);
   const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
   const [hydrated, setHydrated] = useState(false);

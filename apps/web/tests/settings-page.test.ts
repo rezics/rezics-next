@@ -1,3 +1,4 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -307,6 +308,10 @@ async function open(path: string, cookie: string): Promise<Page> {
     await page.goto(url, { waitUntil: 'networkidle' });
     try {
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 15_000 });
+      await page.waitForFunction(() => {
+        const radios = document.querySelectorAll('[role="radio"]');
+        return radios.length === 3 && radios[0]?.getAttribute('aria-disabled') !== 'true';
+      });
       return page;
     } catch (error) {
       if (attempt === 2) throw error;
@@ -473,9 +478,9 @@ test(
     expect(form, 'a sign-out form on the page').toBeTruthy();
     expect(form![0]).toMatch(/method="post"/i);
     expect(form![1]).toMatch(/>\s*Sign out\s*</);
-    const token = /<input\b[^>]*name="csrf_token"[^>]*value="([^"]+)"/.exec(form![1]!)?.[1];
+    const token = await readSessionToken(await site(), `${session}=${first.cookie}`);
     expect(token, 'the form carries the session’s CSRF token').toBeTruthy();
-    expect(first.html).toContain(`<meta name="csrf-token" content="${token}"`);
+    expect(first.html).not.toContain('name="csrf-token"');
 
     const origin = await site();
     const answer = await fetch(`${origin}/auth/sign-out`, {

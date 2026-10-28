@@ -1,3 +1,4 @@
+import { sessionCsrfToken } from '../session/query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
 import type { ReservationInput } from '../media/kernel';
@@ -43,7 +44,7 @@ function isPostImageType(value: string): value is PostImageType {
 }
 
 function csrfToken(): string {
-  return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+  return sessionCsrfToken() ?? '';
 }
 
 function throwIfAborted(signal: AbortSignal): void {

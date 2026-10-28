@@ -9,6 +9,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import { waitForPersonalRead } from './session-token';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -572,17 +573,43 @@ const alice = async () => {
   return aliceCookie;
 };
 
-// Reads the server-rendered page with the visitor's cookie, then looks at it with JavaScript off: the home page's
-// reads must work without a script.
+// Public home content works without script; personal Continue cards load after hydration.
 async function render(path: string, cookie?: string): Promise<Page> {
   const response = await fetch(`${await site()}${path}`, {
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
   });
   expect(response.status).toBe(200);
   browser ??= await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, javaScriptEnabled: false });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    javaScriptEnabled: Boolean(cookie),
+  });
+  if (cookie)
+    await context.addCookies([
+      { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+    ]);
+  // This fixture supplies cover metadata; live browser rendering also needs a successful image response.
+  await context.route(
+    (url) => url.pathname.startsWith('/media/'),
+    (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      }),
+  );
   const page = await context.newPage();
-  await page.setContent(await response.text());
+  if (cookie) {
+    await page.goto(`${await site()}${path}`, { waitUntil: 'networkidle' });
+    await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+    await page.locator('[data-slot="personal"] article').first().waitFor({ state: 'attached' });
+    // Keep this markup proof unstyled, as the script-free snapshots below are.
+    await page.evaluate(() => {
+      for (const stylesheet of document.querySelectorAll('style, link[rel="stylesheet"]')) stylesheet.remove();
+    });
+  } else await page.setContent(await response.text());
   return page;
 }
 

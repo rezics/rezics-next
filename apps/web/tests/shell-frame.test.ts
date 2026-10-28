@@ -61,13 +61,17 @@ function site(): Promise<string> {
   return started;
 }
 
-async function open(path: string, options: BrowserContextOptions = {}): Promise<Page> {
+async function open(path: string, options: BrowserContextOptions = {}, beforeHydration = false): Promise<Page> {
   const origin = await site();
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
+  if (beforeHydration)
+    await page.route('**/*', (route) =>
+      route.request().resourceType() === 'script' ? route.abort() : route.continue(),
+    );
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (options.javaScriptEnabled !== false)
+  if (options.javaScriptEnabled !== false && !beforeHydration)
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
@@ -191,13 +195,16 @@ test(
     expect(await home.isVisible()).toBe(true);
     expect(await home.getAttribute('aria-current')).toBe('page');
 
-    // One preference is kept in one cookie, and the server paints it before any script runs.
+    // One preference is kept in one cookie; the inline script restores it before hydration.
     const cookies = await page.context().cookies();
     expect(cookies.filter((cookie) => !before.some((old) => old.name === cookie.name)).length).toBe(1);
-    const again = await open('/en', { javaScriptEnabled: false, storageState: { cookies, origins: [] } });
+    const again = await open('/en', { storageState: { cookies, origins: [] } }, true);
     expect(await navigationWidth(again, nav)).toBeLessThanOrEqual(96);
-    expect(await again.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).count()).toBe(1);
+    expect(await again.locator('html[data-hydrated]').count()).toBe(0);
     await again.context().close();
+    const hydrated = await open('/en', { storageState: { cookies, origins: [] } });
+    expect(await hydrated.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).count()).toBe(1);
+    await hydrated.context().close();
 
     await page.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).click();
     await until(async () => (await navigationWidth(page, nav)) >= 160, 'the navigation expands');

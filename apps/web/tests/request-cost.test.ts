@@ -298,10 +298,13 @@ test('home page stays within its bound as s grows', async () => {
     subjectSize = s;
     kernelCalls.length = 0;
     authCalls.length = 0;
-    const response = await fetch(`${origin}/en/`);
-    expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['POST /v1/pages:read']);
-    expect(authCalls).toEqual([]);
+    for (const cookie of ['', `__Host-rezics_session=${cookieId}`]) {
+      kernelCalls.length = 0;
+      const response = await fetch(`${origin}/en/`, { headers: { cookie } });
+      expect(response.status).toBe(200);
+      expect(kernelCalls).toEqual(['POST /v1/pages:read']);
+      expect(authCalls).toEqual([]);
+    }
   }
 }, 300_000);
 test('subject page stays within its bound as s grows', async () => {

@@ -4,7 +4,6 @@ import { Route } from '../src/routes/__root';
 import { AppShell } from '../src/shell/shell';
 
 function StorybookDocument() {
-  const { theme, collapsed, session, csrfToken } = Route.useLoaderData();
   useLayoutEffect(() => {
     const moveSkipLink = () => {
       const skipLink = document.querySelector('[data-slot="skip-nav-link"]');
@@ -18,11 +17,11 @@ function StorybookDocument() {
   }, []);
 
   return (
-    <AppShell theme={theme} collapsed={collapsed} session={session} csrfToken={csrfToken}>
+    <AppShell>
       <Outlet />
     </AppShell>
   );
 }
 
-// Storybook owns the iframe document. Keep the real root route and its loader, but mount its AppShell in the story canvas.
+// Storybook owns the iframe document. Keep the real root route but mount its AppShell in the story canvas.
 Route.update({ component: StorybookDocument });

@@ -78,6 +78,14 @@ export const readSpacePage = createServerFn({ method: 'GET' })
   .validator(validateAddress)
   .handler(async ({ data }): Promise<SpacePageData> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const page = await loadSpacePage(kernelClient(), new Request('https://public.invalid/'), {}, data);
+    return namePublishedTypes(page, requestLocale(getRequest()) ?? 'en');
+  });
+
+export const readPersonalSpacePage = createServerFn({ method: 'GET' })
+  .validator(validateAddress)
+  .handler(async ({ data }): Promise<SpacePageData> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const page = await loadSpacePage(kernelClient(), request, env as Partial<SessionEnv>, data);
     return namePublishedTypes(page, requestLocale(request) ?? 'en');

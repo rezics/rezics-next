@@ -1,3 +1,4 @@
+import { browserSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -553,7 +554,7 @@ test(
       const created = article(page, 'Second shelf');
       await created.waitFor({ timeout: 15_000 });
       expect(requests).toHaveLength(1);
-      const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+      const csrf = await browserSessionToken(page);
       expect(csrf).toBeTruthy();
       expect(requests[0]!.headers()['x-csrf-token']).toBe(csrf);
       expect(new URL(requests[0]!.url()).origin).toBe(origin);

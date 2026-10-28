@@ -1,3 +1,4 @@
+import { useSession } from '../session/query';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
@@ -12,12 +13,8 @@ import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
 import { coverSubject } from './subject-row';
 
-function csrfHeaders(): HeadersInit {
-  const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-  return { 'X-CSRF-Token': token };
-}
-
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
+  const { csrfToken } = useSession();
   const location = useLocation();
   const [follows, setFollows] = useState(page.follows);
   const [pending, setPending] = useState<string | null>(null);
@@ -34,13 +31,13 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   ];
 
   async function submit(follow: MineFollow) {
-    if (pending) return;
+    if (!csrfToken || pending) return;
     setPending(follow.targetId);
     setFailure('');
     try {
       const result = await unfollow({
         data: { targetId: follow.targetId, idempotencyKey: follow.idempotencyKey },
-        headers: csrfHeaders(),
+        headers: { 'X-CSRF-Token': csrfToken },
       });
       if (result.ok) setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
       else setFailure(m.error_message());
@@ -108,7 +105,10 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                         }
                         menuLabel={m.library_follow_more_actions({ title: subject.title })}
                         menu={
-                          <DropdownMenuItem disabled={pending !== null} onClick={() => void submit(follow)}>
+                          <DropdownMenuItem
+                            disabled={!csrfToken || pending !== null}
+                            onClick={() => void submit(follow)}
+                          >
                             {m.library_follow_unfollow()}
                           </DropdownMenuItem>
                         }

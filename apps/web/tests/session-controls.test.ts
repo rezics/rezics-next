@@ -1,3 +1,4 @@
+import { waitForPersonalRead } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -222,8 +223,10 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (options.javaScriptEnabled !== false)
+  if (options.javaScriptEnabled !== false) {
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await waitForPersonalRead(page, ['session']);
+  }
   return page;
 }
 
@@ -241,6 +244,7 @@ const signInLink = (page: Page, own: Messages) => page.getByRole('link', { name:
 const accountMenuButton = (page: Page, own: Messages) =>
   page.getByRole('button', { name: own.account_menu!, exact: true });
 async function signOutButton(page: Page, own: Messages) {
+  await page.locator('[data-session-slot] > [data-slot="button"]').waitFor();
   if (own.account_menu) {
     const account = accountMenuButton(page, own);
     const menu = page.getByRole('group', { name: own.account_menu, exact: true });
@@ -263,7 +267,10 @@ async function signIn(page: Page, own: Messages, javaScriptEnabled = true) {
   ]);
   await page.waitForURL(from);
   await page.waitForLoadState('networkidle');
-  if (javaScriptEnabled) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  if (javaScriptEnabled) {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await accountMenuButton(page, own).waitFor();
+  }
 }
 
 async function eventually(read: () => Promise<string | null>, expected: string): Promise<void> {
@@ -303,9 +310,10 @@ test(
 
     const ja = await messages('ja');
     const small = await open('/ja', { javaScriptEnabled: false, viewport: phone });
-    expect(await signInLink(small, ja).count()).toBe(1);
-    const target = new URL((await signInLink(small, ja).getAttribute('href'))!, origin);
-    expect(target.searchParams.get('return_to')).toBe('/ja');
+    expect(await signInLink(small, ja).count()).toBe(0);
+    expect(await small.getByRole('link', { name: ja.account_menu!, exact: true }).getAttribute('href')).toBe(
+      '/ja/settings',
+    );
     await small.context().close();
   },
   timeout,
@@ -316,9 +324,8 @@ test(
   async () => {
     const origin = await site();
     const ja = await messages('ja');
-    // Without JavaScript: the link and the form work as plain HTML.
-    const page = await open('/ja/no-such-page', { javaScriptEnabled: false, locale: 'ja' });
-    await signIn(page, ja, false);
+    const page = await open('/ja/no-such-page', { locale: 'ja' });
+    await signIn(page, ja);
     const refreshToken = signInRefreshTokens.at(-1)!;
     const idToken = idTokens.at(-1)!;
     expect(new URL(page.url()).pathname).toBe('/ja/no-such-page');
@@ -328,7 +335,7 @@ test(
     const session = cookies.find((cookie) => cookie.name === sessionCookie);
     expect(session).toBeDefined();
     expect(cookies.some((cookie) => cookie.name === loginCookie)).toBe(false);
-    // Every server-rendered page knows the session, not only the one the callback returned to.
+    // Each document hydrates its private session after rendering the public shell.
     await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
     expect(await (await signOutButton(page, ja)).count()).toBe(1);
 
@@ -338,6 +345,7 @@ test(
     ]);
     await page.waitForURL(`${origin}/ja`);
     await page.waitForLoadState('networkidle');
+    await signInLink(page, ja).waitFor();
     expect(revoked).toContain(refreshToken);
     const ended = endSessions.at(-1)!;
     expect(ended.get('post_logout_redirect_uri')).toBe(`${origin}/`);
@@ -349,6 +357,7 @@ test(
     // The ended session's id, sent again, reads as signed out.
     await page.context().addCookies([session!]);
     await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
+    await signInLink(page, ja).waitFor();
     expect(await signInLink(page, ja).count()).toBe(1);
     expect(await (await signOutButton(page, ja)).count()).toBe(0);
     await page.context().close();
@@ -357,7 +366,7 @@ test(
 );
 
 test(
-  'the signed-in header keeps sign-out and security settings in an account menu that opens without JavaScript',
+  'the hydrated header keeps sign-out and security settings in an account menu; script-free pages link to Account',
   async () => {
     for (const locale of locales) {
       const own = await messages(locale);
@@ -369,7 +378,15 @@ test(
     const en = await messages('en');
     for (const javaScriptEnabled of [true, false]) {
       const page = await open('/en', { javaScriptEnabled });
-      await signIn(page, en, javaScriptEnabled);
+      if (!javaScriptEnabled) {
+        expect(await page.getByRole('link', { name: en.account_menu!, exact: true }).getAttribute('href')).toBe(
+          '/en/settings',
+        );
+        expect(await accountMenuButton(page, en).count()).toBe(0);
+        await page.context().close();
+        continue;
+      }
+      await signIn(page, en);
 
       const account = accountMenuButton(page, en);
       expect(await account.count()).toBe(1);
@@ -400,16 +417,6 @@ test(
       await page.locator('body').click({ position: { x: 10, y: 500 } });
       expect(await menu.isVisible()).toBe(false);
 
-      if (!javaScriptEnabled) {
-        await account.click();
-        await Promise.all([
-          page.waitForResponse((response) => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
-          signOut.click(),
-        ]);
-        await page.waitForURL(`${origin}/en`);
-        await page.waitForLoadState('networkidle');
-        expect(await signInLink(page, en).count()).toBe(1);
-      }
       await page.context().close();
     }
   },

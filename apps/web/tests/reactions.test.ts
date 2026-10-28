@@ -1,3 +1,4 @@
+import { browserSessionToken } from './session-token';
 import { afterAll, expect as bunExpect, test } from 'bun:test';
 
 // bun:test has no locator matchers. These two forward to the same checks the assertions name.
@@ -534,7 +535,7 @@ test(
       await expect(replyReactions.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'false');
 
       expect(browserPosts).toHaveLength(5);
-      const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+      const csrf = await browserSessionToken(page);
       expect(csrf).toBeTruthy();
       for (const request of browserPosts) {
         expect(request.headers()['x-csrf-token']).toBe(csrf!);

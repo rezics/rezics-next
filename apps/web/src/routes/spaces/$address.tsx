@@ -1,5 +1,8 @@
+import { useSession } from '../../session/query';
+import { personalRead } from '../../kernel/query';
+import { readPersonalSpacePage } from '../../community/space-actions';
 import { createFileRoute } from '@tanstack/react-router';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { spaceQuery } from '../../community/space-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 import { SpacePage } from '../../community/space-page';
@@ -16,5 +19,13 @@ export const Route = createFileRoute('/spaces/$address')({
 function SpaceRoute() {
   const { address } = Route.useParams();
   const { data } = useSuspenseQuery(spaceQuery(address, getLocale()));
-  return <SpacePage page={data} />;
+  const { state } = useSession();
+  const { data: personal } = useQuery({
+    ...personalRead,
+    queryKey: ['personal-space', address, getLocale()],
+    queryFn: () => readPersonalSpacePage({ data: { address } }),
+    enabled: personalRead.enabled && state === 'signed-in',
+    staleTime: Infinity,
+  });
+  return <SpacePage page={personal ?? data} />;
 }

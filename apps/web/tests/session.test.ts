@@ -1,3 +1,4 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -302,7 +303,7 @@ async function credentialOf(value?: string): Promise<string | null> {
 async function csrfTokenOf(origin: string, value: string): Promise<string> {
   const response = await fetch(`${origin}/en`, { headers: { cookie: `${session}=${value}` } });
   expect(response.status).toBe(200);
-  const token = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await response.text())?.[1];
+  const token = await readSessionToken(origin, `${session}=${value}`);
   expect(token).toBeDefined();
   return token!;
 }

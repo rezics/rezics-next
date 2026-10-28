@@ -349,6 +349,7 @@ async function open(
   page.setDefaultNavigationTimeout(120_000);
   await page.goto(`${origin}${path}`, { waitUntil: javaScript ? 'networkidle' : 'load' });
   if (javaScript) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  if (javaScript && signedIn) await page.locator('#account-menu-button').waitFor({ timeout: 120_000 });
   return { page, access: auth?.access, origin };
 }
 
