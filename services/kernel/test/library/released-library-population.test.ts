@@ -189,27 +189,33 @@ native('Unscoped native identities cannot create private Library support', async
 });
 
 native(
-  'Native revoked and invalid bearers remain401 controls distinct from the missing valid suspended403 prerequisite',
+  'Native pre-suspension and invalid bearers reach401 invalid_credentials with invalid_token challenge and no private disclosure or effects',
   async (f) => {
-    problem(await f.request('suspended', 'GET', '/v1/definitions/active'), 401, 'invalid_credentials');
-    problem(
+    const refused = (response: HttpResponse) => {
+      problem(response, 401, 'invalid_credentials');
+      expect(response.headers.get('WWW-Authenticate')).toBe('Bearer error="invalid_token"');
+      expect(response.body).not.toHaveProperty('collections');
+      expect(response.body).not.toHaveProperty('collection');
+    };
+    refused(await f.request('suspended', 'GET', '/v1/definitions/active'));
+    refused(
       await f.request('anonymous', 'GET', '/v1/definitions/active', undefined, {
         authorization: 'Bearer invalid-library-control',
       }),
-      401,
-      'invalid_credentials',
     );
-    problem(
+    const path = `/v1/collections?curatorAccountId=${f.base.personas.alice.accountId}&limit=100`;
+    const before = await page(f, path, 'collections');
+    refused(await f.request('suspended', 'GET', path));
+    refused(
       await f.request(
         'suspended',
-        'GET',
-        `/v1/collections?curatorAccountId=${f.base.personas.alice.accountId}&limit=100`,
+        'POST',
+        '/v1/collections',
+        { title: 'Revoked bearer must not create a Collection', visibility: 'private' },
+        discoveryKey(),
       ),
-      401,
-      'invalid_credentials',
     );
-    // Base v1 does not deliver a valid suspended bearer. This control cannot certify the required403.
-    expect(f.prerequisites.validSuspended.state).toBe('prerequisite');
+    expect(await page(f, path, 'collections')).toEqual(before);
   },
 );
 

@@ -335,11 +335,6 @@ export async function createReleasedLibraryPopulation(
         required:
           'Base v1 exposes unscoped, not an Alice bearer with read-only scopes. Its internal identity factory is not exported.',
       } as Boundary,
-      validSuspended: {
-        state: 'prerequisite',
-        required:
-          'Base suspended bearer was revoked by native suspension. A valid suspended bearer producer is not exported.',
-      } as Boundary,
       publishedDynamicAndZone: {
         state: 'prerequisite',
         required:

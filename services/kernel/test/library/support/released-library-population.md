@@ -48,7 +48,7 @@ try {
 | `multiple()`    | The same `state()` subject with independent native holding and completed session.                                                                                                                                                                                                               |
 | `recipes()`     | The base's shared released Recipe group; Alice create/record/complete on R-cooked and Bob on R-other-cooked. Neither creates state/copy.                                                                                                                                                        |
 | `sources()`     | Three curated source handles (public/unlisted/private), original create/member responses and ordered occurrence handles. Each contains every shared Book, edition, Recipe, personal support and empty/follow/Bob/curated-only control, plus a second B-long occurrence with a distinct note/ID. |
-| `prerequisites` | Explicit non-success boundaries: shell, ownerReadonly, validSuspended, publishedDynamicAndZone, historicalProfiles, cookedQuery. They are never successful populated groups.                                                                                                                    |
+| `prerequisites` | Explicit non-success boundaries: shell, ownerReadonly, publishedDynamicAndZone, historicalProfiles, cookedQuery. They are never successful populated groups.                                                                                                                                    |
 | `close()`       | Idempotently closes only the owned base resources. A failed family closes the base and rethrows native evidence; combined cleanup failure is preserved.                                                                                                                                         |
 
 Families are lazy and memoized. Each acceptance owns a fresh instance and closes in `finally`, including assertion
@@ -59,6 +59,13 @@ The base's native Auth, Access, default kernel and owned projection infrastructu
 is inferred from link projection, and no replacement worker or permission map is installed.
 
 ## Native writes and reads
+
+The following describes required native setup/assertions, not shipped profile-aware commands. Source inspection at
+integration base `21a2c4bbb75a3d17f3d25666a61cfd6c0eb0f679` finds `entries.ts` still checking five fixed
+`ENTRY_STATES` with `state()` before the command body, without a profile lookup or accepted pin. `copies.ts` and
+its HTTP DTO have fixed statuses and no kind/profile/pin admission. `sessions.ts` uses `parseSessionCreate` and
+`parseRecord` from `progress.ts` with fixed units. Profile/compiler/decimal helpers and prospective native command
+tests exist, but their existence establishes no profile-aware writer or native pass.
 
 Entry writes use `PUT /v1/libraryEntries/{subjectId}` with a state selected by declared active role from the actual
 Book profile. There is no universal `in_progress`. Copy creation sends the profile's declared kind and status;
@@ -81,10 +88,16 @@ Everything descriptor and members response, then compares the exact own union on
 occurrences and Bob-only supports never enter that expected union. The helper exports no membership result.
 An absent route, missing dynamic descriptor or unsupported response remains a real failing assertion.
 
-Clear uses the adopted per-subject DELETE with revision, requires 204 and the two native descriptor headers
+Clear acceptance requires the adopted per-subject DELETE with revision, requires 204 and the two native descriptor headers
 `Library-Entry-Deletion-Id` / `Library-Entry-Deletion-Revision`, and restores through
 `POST /v1/libraryEntries/{subjectId}:restore` with closed `{deletionId,revision}`. The ordinary entry and independent
-holding/history are read back; original dates/state survive Undo. Undo must allocate a new private owner sequence,
+holding/history must be read back; original dates/state must survive Undo. Actual `entries.deleteEntry` still
+physically deletes through `store.deleteEntry`, returning the old entry; HTTP emits empty 204 without descriptor
+headers and has no restore route. Archive/incarnation schema and future native tests do not supply the absent
+`entry-retention-store.ts` export, retained command outcome or completed DAO. The required archive keeps all 18
+pre-delete snapshot fields in the owning entry deletion contract plus original `owner_write_seq`, with exact
+720-hour expiry, addressed deletion/incarnation CAS and empty-slot/no-overwrite restore. These remain native
+acceptance obligations. Undo must allocate a new private owner sequence,
 but this fixture neither manufactures backend counters nor claims HTTP can prove their allocation. Native owner
 state-write acceptance remains responsible for that transaction invariant. Deleting a label parent must immediately
 invalidate its effective assignments and remove Alice's final support even while Bob's independent assignment lives.
@@ -96,10 +109,17 @@ Native follows and entitlement reads currently return403 `platform_closed`; thes
 not evidence of an owner denial or an empty payment list. This extension does not install broad grants or alter gates.
 
 The actual base exports only Alice/Bob/outsider/unscoped account handles. Its internal genuine identity factory is
-not exported. Unscoped denial is covered; it does not prove an Alice read-only bearer. The delivered Semantic
-`suspended` bearer predates native suspension and is revoked. Native401 controls must remain401 and cannot be
-relabeled as valid suspended403 evidence. No valid suspended bearer is manufactured; the required403 scenario
-awaits a genuine producer. Neither missing identity is represented as a successful group or a product pass.
+not exported. Unscoped denial is covered; it does not prove an Alice read-only bearer, which remains a prerequisite.
+The delivered Semantic `suspended` persona already carries the genuine pre-suspension bearer. Native suspension
+fences authentication and advances its floor, revoking that bearer: HTTP `401`, JSON problem code
+`invalid_credentials`, exact raw `WWW-Authenticate: Bearer error="invalid_token"`. `invalid_token` is a challenge
+error only, not a JSON problem catalogue code. There is no valid-suspended-bearer prerequisite or exported
+population key. This supersedes the older hypothetical producer requirement still present in the base's privacy
+descriptor/document; neither base nor Auth is altered here. Auth issues tokens only for active accounts. Verified
+correct-password sign-in's `403 ACCOUNT_SUSPENDED` with no session is a distinct journey; defensive kernel
+`403 account_suspended` handling cannot justify a manufactured bearer. No SQL state, JWT or authentication-floor
+bypass is permitted. `403 insufficient_scope` challenges and all other `401` responses remain unchanged. The
+revoked native control asserts private-list concealment and unchanged owner Collections after a refused write.
 
 The adopted entry PUT requires state. No actual adopted shell creation API exists, so there is no raw shell INSERT
 or fake shell handle; the empty-subject control is explicitly distinct. Historical renamed/retired bundled profiles
@@ -128,7 +148,7 @@ The literal native test titles proposed for freezing are:
 - `Released holding-only support retains a native copy without an entry session or payment`
 - `Shared controlled labels copies and session history retain no-entry supports while Bob facts never become Alice private rows`
 - `Unscoped native identities cannot create private Library support`
-- `Native revoked and invalid bearers remain401 controls distinct from the missing valid suspended403 prerequisite`
+- `Native pre-suspension and invalid bearers reach401 invalid_credentials with invalid_token challenge and no private disclosure or effects`
 - `Discovered Everything has the exact own support union once and excludes empty follow curated and Bob-only controls`
 - `State clear removes only state while native history holding and exact Undo descriptor survive`
 - `Removing the final live label support removes presence on the next owner read and deleted parents never qualify`
@@ -140,7 +160,8 @@ The executable titles reside in `released-library-population.test.ts`. These are
 manager review/freezing. Their required success paths remain red against missing native data/implementation;
 no missing-driver verifier, caught error, skip/todo, fake successful page or unsupported response counts as completion.
 The handoff must report the exact titles/counts, observed native failures, format status, file hashes and real commit.
-No existing acceptance or frozen source is modified. This suite adds fixture discrimination and source setup rather
+Only the explicitly amended native credential case/title is reconciled here; the other 13 cases and all frozen
+parent scenarios remain unchanged. This suite adds fixture discrimination and source setup rather
 than duplicating curated CRUD, profile migration, privacy ordering or retained-history frameworks.
 
 Read-only reference surfaces inspected: the indexed BookWyrm `bookwyrm/models/shelf.py` owner-local uniqueness;

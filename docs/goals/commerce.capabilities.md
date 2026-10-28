@@ -2,7 +2,9 @@
 
 This is the parent checklist for the complete [Commerce Goal](commerce.md), reconciled with
 [first-public scope](../scope.md) and the [API acceptance audit](../research/api-acceptance-gaps.md).
-It records documentation and source inspection at revision `6557c8ae6379cb0f5f9dbcbd849339530bc87bbb`.
+Its historical inspection was at revision `6557c8ae6379cb0f5f9dbcbd849339530bc87bbb`.
+Shared fixture delivery, credential reachability, profile writers and ordinary entry deletion are reconciled below
+against integration base `21a2c4bbb75a3d17f3d25666a61cfd6c0eb0f679`; unrelated capability evidence remains historical.
 It does not validate product completion, execute native cases, or replace the full Goal with a smaller test list.
 Product authority remains in the linked owning specifications; the audit's suggested transports are not adopted APIs.
 The existing per-capability Markdown format is used; no manifest schema or validator is introduced.
@@ -62,8 +64,9 @@ migration. Missing-driver contract/verifier suites are specification checks only
 Supporting native entry points include these existing argv, with their narrower scope preserved:
 
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/library/profile-entry-command.test.ts", "test/library/profile-session-command.test.ts", "test/library/profile-copy-command.test.ts"]`:
-  real data-defined command/HTTP admission using compiled **test** releases and
-  `test/library/support/profile-entry-fixture.ts`, not the complete profile driver or bundled vertical journey.
+  prospective native data-defined command/HTTP acceptance using compiled **test** releases and
+  `test/library/support/profile-entry-fixture.ts`. These tests exist, but their profile-aware writers are absent
+  at the integration base; file existence proves neither passing admission nor the bundled vertical journey.
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/revise-offer-target-replay.test.ts"]`:
   native target-bound receipt regression, not offer discovery or the complete offer lifecycle.
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/payouts.test.ts", "test/commerce/payout-mark-paid.test.ts"]`:
@@ -81,12 +84,19 @@ native binding; this inventory does not claim it has happened.
 
 ## Shared personas and released fixture contract
 
-**Personas P:** Alice/owner, Bob/other, anonymous, authenticated unscoped caller, invalid/revoked bearer, valid
-suspended bearer, delegated/editor with distinct actor/principal and consent, and revoked grant/assignment/consent.
-Protected-context ban beats an independent read grant immediately. Every applicable read, write, receipt retry,
-continuation and final disclosure must use current native Access. Valid suspended credentials mean
-`403 account_suspended`; invalid/revoked credentials remain `401`. An authenticated refusal never falls back to
-anonymous. Public facts and private viewer-self personalization have separate disclosure/cache boundaries.
+**Personas P:** Alice/owner, Bob/other, anonymous, authenticated unscoped caller, invalid/revoked bearer including
+the genuine bearer held before native suspension, delegated/editor with distinct actor/principal and consent, and
+revoked grant/assignment/consent. Protected-context ban beats an independent read grant immediately. Every applicable
+read, write, receipt retry, continuation and final disclosure must use current native Access. Native suspension
+fences authentication and advances its floor; the pre-suspension bearer returns HTTP `401`, JSON problem code
+`invalid_credentials`, and `WWW-Authenticate: Bearer error="invalid_token"`. `invalid_token` is the challenge error
+only, not a JSON problem catalogue code. [Accounts](../accounts.md) and [Auth](../../services/auth/README.md) admit
+token issuance only for active accounts: there is no valid-suspended-bearer producer prerequisite. Verified
+correct-password sign-in instead returns `403 ACCOUNT_SUSPENDED` with no session; that distinct Auth journey and
+defensive kernel `403 account_suspended` handling do not make such a bearer reachable. No SQL-made state, JWT or
+floor bypass supplies one. `403 insufficient_scope` challenges and all other `401` behavior remain unchanged.
+An authenticated refusal never falls back to anonymous. Public facts and private viewer-self personalization have
+separate disclosure/cache boundaries.
 
 **Personas M:** P plus buyer, other buyer, refunded buyer, seller, creator, authorized payout operator and outsider.
 Seller and creator authority are not inferred from buyer entitlements, subject authorship or organization pointers.
@@ -97,22 +107,37 @@ The ONE registered shared fixture delivery is the Definitions contract
 [`packages/definitions/src/released-discovery-fixtures.md`](../../packages/definitions/src/released-discovery-fixtures.md)
 and native acceptance producer
 [`services/kernel/test/support/released-discovery.ts`](../../services/kernel/test/support/released-discovery.ts).
-Both paths are **NOTPRESENT at the inspected revision**, despite registration of this producer obligation.
-Delivery is pending, not a reason to create a duplicate fixture world/private source mirror. No approved
-`createReleasedDiscoveryFixture` signature/export was delivered. The following logical controls are declared
-requirements, not delivered IDs or a claim that new released word/form/diet definitions already exist.
+Both artifacts are delivered at the integration base; the earlier NOTPRESENT observation applies only to the
+historical inspected revision. The actual export is
+`createReleasedDiscoveryFixture(options?: {version: 1}): Promise<ReleasedDiscoveryFixture>`; omission selects 1.
+It returns `version`, HTTP-read `release` (`digest`, `activeHead`, `definition`), native `personas`
+(Alice/Bob/outsider/unscoped), `meaning`, lazy `classification()`, `diet()`, `words()`, `books()`, `recipes()`,
+`request`, `createSubject`, `adopt`, `read`, `authoredRecipe`, `filters`, `catchUp` and `close`.
+`personal`, `sources`, `privacy`, `profiles` and `platform` are prerequisite descriptors, not populated groups.
+The old valid-suspended-403 requirement in the base's `privacy.required` and fixture document is superseded by
+the credential barrier above; it is not a new Accounts producer obligation. Actual IDs come from native receipts.
 
-| Fixture set                    | Discriminatory logical data and delivery boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B: books                       | `B-long` has 1,200,001 genuine words; `B-edge` 1,000,000; `B-short` 999,999; `B-unknown` absent/somevalue; `B-characters` has 1,400,000 characters and no word count. Page counts on editions and character counts are never words. Audit proposal: nonnegative integer `schema:wordCount`, unit `1`; released definition NOTPRESENT.                                                                                                                                                                                                                                                                               |
-| F: form and tag                | `FORM` must be the actually adopted released item property; `LN` and `HAREM` must be actual released `skos:Concept` IDs, not these logical aliases as fabricated CURIEs. Exact property/IDs remain MISSING. B-long/B-edge have LN+harem; B-short LN without harem; B-unknown harem with unknown form; B-characters LN+harem but unknown words; B-form-only LN without harem; B-tag-only harem with other form. `schema:keywords` tag meaning is distinct from form.                                                                                                                                                 |
-| R: recipes                     | `R-quick` vegetarian/25 min, `R-edge` vegetarian/30, `R-slow` vegetarian/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked` vegetarian/20 with Alice's completed session, `R-other-cooked` vegetarian/20 with only Bob's completed session. Declared `schema:suitableForDiet` maps an adopted diet Concept to Schema.org VegetarianDiet; new released diet mapping is MISSING. Cook duration uses `schema:cookTime` and minute unit `wd:Q7727`, excluding prep/rest time. Authored ingredients/instructions are required. Bob's private label named `vegetarian` is never public diet evidence. |
-| G: platform tuples             | Games/releases include Switch and PC and platform/language/date qualifiers on the SAME statement. Separate statements deliberately form a false Cartesian match. Actual approved Concepts and native released tuple producer are pending; no holding-derived platform join is promised.                                                                                                                                                                                                                                                                                                                             |
-| H: historical profiles         | Real bundled Book/game/recipe/record consumer journey with two immutable releases, explicit accepted pins, changed/retired values and rollback. An unprofiled Person cannot acquire fresh profiled state/session/holding. Existing `fixture.*` compiled releases test generic plumbing only; they are not bundled acceptance. Full delivered vertical choices/two-release producer remain MISSING.                                                                                                                                                                                                                  |
-| L: independent private support | Alice has state-only, label-only, active-session-only, completed-history-only, holding-only, overlapping multi-support, no-entry label/holding support, shell-only and follow-only controls; Bob has separate facts. No-entry differs from a state entry not equal to a selected state. Labels/sessions/holdings support Everything without inventing state; archive/deleted rows do not. Purchase, state, session, holding, follow, rating and subject reaction never imply one another.                                                                                                                           |
-| C: sources and outputs         | C-public/C-unlisted/C-private contain all relevant controls, duplicate occurrences with independent notes/order and a B-long alias to a readable canonical terminal. Z-public mounts eligible overlapping Collection and saved scope; TypeList uses the configured released vertical. Completed public generation A and private pending B have different output/payloads. Only complete eligible public A can survive terminal de-identification; B never becomes public by deletion.                                                                                                                               |
-| Q: privacy/cursors             | Withheld harem, hidden foreign tag target, revoked source/consent/foreign tuple fence, hidden original with readable terminal, hidden-only aliases, no matches and deep sparse matches. Include invalid/revoked versus valid suspended credentials, delegated editor and ban plus independent grant on a protected context. Exact result sets, exclusion, ordering and cursor metadata must all be safe; private witnesses never enter public caches.                                                                                                                                                               |
-| O: payment/retention           | Two authorized offers in the SAME partition with distinct offer targets and equal requested prices; other seller/target; captured existing order and receipt history. Controlled paid/unpaid/refund/dispute provider reads with barriers, abandoned/cached attempts and newer business no-op; known late-paid order repair and signed replay/forgery. Ordinary deletion before/at exact 720 hours, repeated episodes/replacement/CAS and parked purge; account-terminal all-graph plus separate financial participant and shared payload controls. No account-restore/hold/custody engine is implied.               |
+Commerce's delivered extension is
+[`createReleasedLibraryPopulation(options?: {version: 1}): Promise<ReleasedLibraryPopulation>`](../../services/kernel/test/library/support/released-library-population.ts),
+with exported inferred return type and [contract](../../services/kernel/test/library/support/released-library-population.md).
+It reuses one base and returns `version`, `base`, `calls`, `request`, `profile`, lazy `state`, `labels`, `sessions`,
+`holdings`, `controls`, `multiple`, `recipes`, `sources`, `prerequisites` and `close`. Its native acceptance is
+`["bun", "run", "--cwd", "services/kernel", "check", "test/library/released-library-population.test.ts"]`
+(14 literal cases). Neither integration nor this registration proves accepted/passed/promoted user APIs. The base
+opens Collections, not Library/progress/commerce gates; bundled profiles and measurement/diet admissions still have
+meaningful native reds. No duplicate fixture, runtime or successful setup is inferred from these exports.
+
+| Fixture set                    | Discriminatory logical data and delivery boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| B: books                       | `B-long` has 1,200,001 genuine words; `B-edge` 1,000,000; `B-short` 999,999; `B-unknown` absent/somevalue; `B-characters` requires 1,400,000 characters and has no word count; the separate character producer remains a prerequisite. Page counts on editions and character counts are never words. Actual fixture meaning is nonnegative integer `schema:wordCount`, unit `1`; required bundled admission is still absent. Basic amounts are controlled assertions, not measured-source proof; holder/text/version/language/method/scope/provenance grammar remains open.                                                                                                                                                                                                          |
+| F: form and tag                | Actual builder meaning uses `wdt:P7937` (`workFormat`, currently anime-scoped; required Book generalization remains red), with native light-novel and source-scoped harem Concepts from HTTP receipts. Light novel cites `http://www.wikidata.org/entity/Q747381`; harem is Bangumi public `meta_tags` exact member `后宫`, via `schema:keywords`, with Q690342 close only. No fabricated CURIEs or exact harem identity are supplied. B-long/B-edge have LN+harem; B-short LN without harem; B-unknown harem with unknown form; B-characters LN+harem but unknown words; B-form-only LN without harem; B-tag-only harem with other form. `schema:keywords` tag meaning is distinct from form.                                                                                       |
+| R: recipes                     | `R-quick` vegetarian/25 min, `R-edge` vegetarian/30, `R-slow` vegetarian/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked` vegetarian/20 with Alice's completed session, `R-other-cooked` vegetarian/20 with only Bob's completed session. Declared `schema:suitableForDiet` maps an adopted diet Concept to Schema.org VegetarianDiet; the native Concept correspondence exists, but required bundled `schema:suitableForDiet` admission remains red. Cook duration uses `schema:cookTime`; actual storage and filter unit are both `http://www.wikidata.org/entity/Q7727` (`wd:Q7727` is YAML spelling only), excluding prep/rest time. Authored ingredients/instructions are required. Bob's private label named `vegetarian` is never public diet evidence. |
+| G: platform tuples             | Games/releases include Switch and PC and platform/language/date qualifiers on the SAME statement. Separate statements deliberately form a false Cartesian match. Actual approved Concepts and native released tuple producer are pending; no holding-derived platform join is promised.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| H: historical profiles         | Real bundled Book/game/recipe/record consumer journey with two immutable releases, explicit accepted pins, changed/retired values and rollback. An unprofiled Person cannot acquire fresh profiled state/session/holding. Existing `fixture.*` compiled releases test generic plumbing only; they are not bundled acceptance. Full delivered vertical choices/two-release producer remain MISSING.                                                                                                                                                                                                                                                                                                                                                                                   |
+| L: independent private support | Alice has state-only, label-only, active-session-only, completed-history-only, holding-only, overlapping multi-support, no-entry label/holding support, shell-only and follow-only controls; Bob has separate facts. No-entry differs from a state entry not equal to a selected state. Labels/sessions/holdings support Everything without inventing state; archive/deleted rows do not. Purchase, state, session, holding, follow, rating and subject reaction never imply one another.                                                                                                                                                                                                                                                                                            |
+| C: sources and outputs         | C-public/C-unlisted/C-private contain all relevant controls, duplicate occurrences with independent notes/order and a B-long alias to a readable canonical terminal. Z-public mounts eligible overlapping Collection and saved scope; TypeList uses the configured released vertical. Completed public generation A and private pending B have different output/payloads. Only complete eligible public A can survive terminal de-identification; B never becomes public by deletion.                                                                                                                                                                                                                                                                                                |
+| Q: privacy/cursors             | Withheld harem, hidden foreign tag target, revoked source/consent/foreign tuple fence, hidden original with readable terminal, hidden-only aliases, no matches and deep sparse matches. Include invalid/revoked credentials and the native pre-suspension bearer barrier, delegated editor and ban plus independent grant on a protected context. Exact result sets, exclusion, ordering and cursor metadata must all be safe; private witnesses never enter public caches.                                                                                                                                                                                                                                                                                                          |
+| O: payment/retention           | Two authorized offers in the SAME partition with distinct offer targets and equal requested prices; other seller/target; captured existing order and receipt history. Controlled paid/unpaid/refund/dispute provider reads with barriers, abandoned/cached attempts and newer business no-op; known late-paid order repair and signed replay/forgery. Ordinary deletion before/at exact 720 hours, repeated episodes/replacement/CAS and parked purge; account-terminal all-graph plus separate financial participant and shared payload controls. No account-restore/hold/custody engine is implied.                                                                                                                                                                                |
 
 Each capability's fixture field selects these declared sets plus inspected existing suite fixtures. Shared delivery,
 actual released IDs and composed setup remain open unless explicitly described as existing; a native custom release
@@ -123,7 +148,8 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 - [Library](../library-and-collections.md) owns state reduction: highest committed per-owner `owner_write_seq` wins
   across original subjects, never timestamps, UUID order or an executor hook. Undo allocates a fresh sequence;
-  originals, pins and independent session/copy histories remain. The sequence runtime/schema producer is missing.
+  originals, pins and independent session/copy histories remain. The [sequence prerequisite](../../services/kernel/src/library/owner-write-sequence.md)
+  supplies schema/allocator only; entry set/clear/Undo writers and canonical reduction integration remain missing.
 - [Filtered lists](../filtered-lists.md) owns scale/admission and query privacy. Its
   [three-scale checks](../filtered-lists.md#three-scale-checks) replace the audit's old membership/filter scale example.
   Per-plan rows/bytes/statements/pool/alias/depth/progress obligations remain; unrelated operation-specific scales
@@ -146,9 +172,10 @@ curated occurrences preserves permitted duplicates, notes and order.
   `profile retirement preserves every own fact until clearing or soft deletion without accepting new profile facts`
   against those rules. Preserve label-only Everything, no-entry queries, retained-history and privacy outcomes;
   owner reconciliation/native binding is still required, not accomplished by these notes.
-- Existing follow-count and viewer-action suspension assertions use old 401 variants; credential producers must
-  distinguish valid suspended 403 from invalid/revoked 401 before binding. Existing public-Realm readability tests
-  do not prove the protected-context ban barrier. These frozen files are not edited by this inventory.
+- Bind follow-count and viewer-action suspension assertions to the actual native pre-suspension bearer: `401`
+  `invalid_credentials` with the `invalid_token` challenge. A hypothetical valid suspended `403` prerequisite is
+  superseded; no manufactured bearer is required. Existing public-Realm readability tests do not prove the
+  protected-context ban barrier. These frozen files are not edited by this inventory.
 - [Commerce's native refresh protocol](../../services/kernel/src/commerce/README.md) supersedes the audit's time
   watermark proposal. Times are metadata. Receipt-aware native order-revision admission/fresh provider read/apply,
   the shared metadata-only completion helper, default queue composition and repair producers remain missing.
@@ -216,9 +243,9 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. The three profile primitive argv above are existing and narrower.
 
-**Coverage gap:** Full profile driver, bundled Book/game/recipe/record producer and historical end-to-end consumer binding are missing. Native commands are data-defined now; do not repeat the stale fixed-writer-only claim.
+**Coverage gap:** Full profile driver, bundled Book/game/recipe/record producer and historical end-to-end consumer binding are missing. At the integration base, `entries.ts` still validates the fixed five `ENTRY_STATES` through `state()` before the command body, with no profile import or accepted pin. `copies.ts` has fixed statuses and no kind/profile/pin admission; `sessions.ts` calls `parseSessionCreate`/`parseRecord` from `progress.ts` with fixed units. Profile source/compiler/decimal helpers and prospective command tests exist; the missing profile-aware writers are not implemented by those artifacts.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: native profile commands/HTTP exist; released composed journey missing; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: legacy fixed entry/copy/session commands/HTTP exist; profile helpers/compiler exist, profile-aware writers and released composed journey missing; user-case accepted at revision: unknown; promoted: pending.
 
 ## independent-labels
 
@@ -278,9 +305,9 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** Library register above: existing production wrapper/driver and exact Library argv. Complete profiles/Continue composition is NOTREGISTERED; native profile-session primitive argv exists.
 
-**Coverage gap:** Continue still has a literal in_progress consumer; generic profile session command admission does not prove Continue or the released recipe absence job. No completion infers state/holding/purchase.
+**Coverage gap:** Continue still has a literal in_progress consumer. Session creation/recording uses the legacy fixed mode/unit parser, without profile lookup or accepted pin; prospective profile-session tests do not establish admission, Continue or the released recipe absence job. No completion infers state/holding/purchase.
 
-**Stages:** Specification validated red: unknown; native driver registered: Library suite only; implementation exposed: native session modes/history and data-profile admission exist; Continue journey incomplete; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Specification validated red: unknown; native driver registered: Library suite only; implementation exposed: native legacy session modes/history exist; profile-aware admission missing; Continue journey incomplete; user-case accepted at revision: unknown; promoted: pending.
 
 ## independent-holdings
 
@@ -309,9 +336,9 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Existing Library two-copy scenario and profile-copy native primitive argv remain supporting coverage.
 
-**Coverage gap:** Complete released journey/Undo binding is missing. Copies are neither purchase evidence nor a rights grant.
+**Coverage gap:** `copies.ts` and the HTTP create DTO accept legacy fixed statuses, without a declared kind, profile lookup or accepted pin. Profile-copy tests are prospective acceptance, not implementation proof. Complete released journey/Undo binding is missing. Copies are neither purchase evidence nor a rights grant.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: typed copy commands/HTTP exist; ordinary retained copy/Undo and composed journey incomplete; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: legacy fixed-status copy commands/HTTP exist; profile-aware kind/status/pin admission missing; ordinary retained copy/Undo and composed journey incomplete; user-case accepted at revision: unknown; promoted: pending.
 
 ## builtin-discovery-and-population
 
@@ -371,7 +398,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Collection-source/dynamic contracts name real native canonical plans, not an executor reducer substitute.
 
-**Coverage gap:** Per-owner allocator, storage/migration/native writer and reduction ports are missing. Highest owner_write_seq wins, with fresh Undo sequence and retained source originals; no timestamp/UUID tie-break or private witness cache.
+**Coverage gap:** Per-owner allocator and nullable live/archive sequence columns exist as prerequisites only; native state writer/cutover and reduction integration remain missing. Highest owner_write_seq wins, with fresh Undo sequence and retained source originals; no timestamp/UUID tie-break or private witness cache.
 
 **Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: semantic contracts/helpers present; ordered own-state runtime missing; user-case accepted at revision: unknown; promoted: pending.
 
@@ -710,11 +737,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `ordinary-delete-undo` (audit name); Library Undo composed coverage remains open.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Retain library-deletion driver contracts and existing retained-entry/collection/label lifecycle native primitives.
+**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Retain library-deletion driver contracts, prospective retained-entry native tests and existing Collection/label lifecycle primitives; no completed entry-retention DAO is exported.
 
-**Coverage gap:** Entry has independent deletionId/deletionRevision and incarnation, per-subject restore; Undo preserves originals/pins/dates and fresh state sequence. All owned kinds need actual HTTP/default purge binding. Follow unfollow is a transition; session/history has no independent delete/Undo API. Archive rows never support current Everything/state. No account restore or hold/custody engine.
+**Coverage gap:** Required entry deletion has independent deletionId/deletionRevision and incarnation, per-subject restore; Undo must preserve originals/pins/dates and allocate a fresh state sequence. At the integration base, `entries.deleteEntry` calls physical `store.deleteEntry` and returns the old entry; HTTP returns empty `204` without deletion descriptor headers and has no restore route. Archive/incarnation schema columns and prospective native tests exist, but no `entry-retention-store.ts` export, retained command outcome or completed DAO does. The required archive preserves all 18 pre-delete snapshot fields listed by the [entry deletion contract](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration), plus original `owner_write_seq`; exact 720-hour expiry, deletion/incarnation CAS, empty-slot/no-overwrite restore and native binding remain obligations. The snapshot fields are `route`, `account_id`, `subject_id`, `requested_subject_id`, `state`, `revision`, `created_at`, `updated_at`, `transaction_id`, `activity_at`, `finished_at`, `type_id`, `type_source_id`, `type_source_partition`, `type_source_epoch`, `type_source_position`, `incarnation_id` and `library_profile_pin`. All owned kinds need actual HTTP/default purge binding. Follow unfollow is a transition; session/history has no independent delete/Undo API. Archive rows never support current Everything/state. No account restore or hold/custody engine.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: retention DAOs/entry command support partial; complete route/lifecycle/purge graph missing; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: archive/incarnation schema and Collection/label lifecycle primitives exist; entry command still physically deletes, retained-entry DAO/outcome/restore runtime missing; complete route/lifecycle/purge graph missing; user-case accepted at revision: unknown; promoted: pending.
 
 ## terminal-library-and-financial-closure
 
@@ -770,7 +797,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Frozen scenarios:** [follow-counts outcomes](../../specs/follow-counts-outcomes.test.ts): `follower counts are visible only through existing target management authority and outgoing follows only to their follower`; `person agent self automated operator and organization owner resolve the actual account before management`; `a delayed reverse positive cannot beat a newer negative even on its first target application`; `private follow data never enters public responses FTS public counts sitemaps or notifications`.
 
-**Missing-to-freeze scenarios:** `follow-owner-counts`; reconcile the frozen suspended-token fixture before native binding.
+**Missing-to-freeze scenarios:** `follow-owner-counts`; bind the frozen suspended-token fixture to the native pre-suspension credential barrier before native binding.
 
 **Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Native Library outgoing follows are existing; complete count projection/source protocol and HTTP binding are missing.
 
@@ -786,7 +813,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Personas:** P; curator and noncurator delegated editor have equivalent allowed operations; principal/actor/assignment/consent revocation and protected ban independently deny.
 
-**Released fixture data:** Q, C, O; distinct identity partitions, discovered-positive then revoked execution; valid suspended bearer distinct from invalid token.
+**Released fixture data:** Q, C, O; distinct identity partitions, discovered-positive then revoked execution; genuine pre-suspension bearer revoked by the native authentication floor (`401 invalid_credentials`, `invalid_token` challenge).
 
 **Surface cells:**
 
@@ -805,7 +832,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Complete viewer-actions native driver remains missing, even though underlying permission suites exist.
 
-**Coverage gap:** Discovery is private/no-store and is not authorization. Native execution must not replace Access with curator equality. Suspension setup/status reconciliation required; ban beats independent grant in protected contexts, public unrelated reads keep their own scope.
+**Coverage gap:** Discovery is private/no-store and is not authorization. Native execution must not replace Access with curator equality. Suspension uses the native pre-suspension credential barrier above; ban beats independent grant in protected contexts, public unrelated reads keep their own scope.
 
 **Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: native permission foundations exist; composed action metadata binding missing; user-case accepted at revision: unknown; promoted: pending.
 
@@ -1043,12 +1070,12 @@ not a count of implemented surfaces. Subject-detail and financial resource bound
 lists are not the abstraction. Shared Search, Semantic, Definitions, Accounts, Content, Zones, Performance and Web
 participants remain visible obligations; absent composition is never permanent unsupported scope.
 
-Known contracts can proceed acceptance-first without waiting for a workflow-document dependency. Released fixture
-production/actual IDs, pending owner-query and Continue/export/offer transports, missing native driver registration,
+Known contracts can proceed acceptance-first without waiting for a workflow-document dependency. Remaining released fixture
+producer gaps, pending owner-query and Continue/export/offer transports, missing native driver registration,
 owner-sequence runtime, source/preparation/query-safety producers, native provider protocol and financial closure are
 separate exact gaps. Do not invent a producer signature or route to turn a gap into apparent completion.
 
-Only documentation/file-existence acceptance can advance from this change. Specification red execution remains
+This reconciliation advances inventory accuracy only; fixture/test-source delivery does not advance product acceptance. Specification red execution remains
 unknown, native acceptance requires zero skips/todos and the named real bindings at a named revision, and promotion/
 main/root proof remains pending. No acceptance command listed here has been run as part of this inventory.
 
