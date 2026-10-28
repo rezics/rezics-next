@@ -280,6 +280,25 @@ test.serial(
       expect(banned.status).toBe(anonymous.status);
       expect(await banned.json()).toEqual(await anonymous.json());
     }
+  },
+  120_000,
+);
+
+test.serial(
+  'an open ban follows Realm visibility changes despite an independent read grant',
+  async () => {
+    const c = await community('public');
+    await json(
+      await call('POST', '/v1/grants', fixture.owner, {
+        resource: { route: routeOf(c.realm.realmId), id: c.realm.realmId },
+        subject: { kind: 'account', id: fixture.member.id },
+        actions: ['realm:read'],
+        valid: '(,)',
+      }),
+      201,
+    );
+    await json(await ban(c.realm, fixture.member));
+    await driver.settle();
     const protectedResult = await json<{ realm: Realm }>(
       await call(
         'PATCH',
