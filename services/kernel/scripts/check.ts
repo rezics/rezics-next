@@ -184,19 +184,22 @@ export async function scheduleFiles<T>(
   return outcomes;
 }
 
-type GrowthFailure = { title: string; message: string; kind: 'growth' | 'load' };
+type GrowthFailure = { title: string; message: string; kind: 'growth' | 'load' | 'cascade' };
 
 const loadFailurePatterns = [
-  /AccessUnavailableError: Access unavailable: (?:overloaded|deadline)\b/,
-  /CommandUnavailableError: Command unavailable for partition \d+: (?:overloaded|deadline)\b/,
+  /(?:AccessUnavailableError:\s*)?Access unavailable: (?:overloaded|deadline)\b/i,
+  /(?:CommandUnavailableError:\s*)?Command unavailable for partition \d+: (?:overloaded|deadline)\b/i,
   /sorry, too many clients already/i,
   /too many connections for database/i,
   /remaining connection slots are reserved/i,
   /the database system is (?:starting up|shutting down)/i,
   /could not extend file/i,
   /No space left on device/i,
-  /\bcode:\s*"(?:53300|53100|57P03)"/,
+  /\bcode\s*:\s*["']?(?:53300|53100|57P03)\b/i,
+  /["']?code["']?\s*:\s*["']?(?:overloaded|deadline_exceeded|transaction_retry_exhausted)\b/i,
   /deadline_exceeded/i,
+  /transaction_retry_exhausted/i,
+  /\bHTTP\s+503\b|\(503\)/i,
   /this test timed out after \d+ms/i,
   /(?:hook.{0,40}(?:timed out|timeout)|(?:timed out|timeout).{0,40}hook)/i,
 ];
@@ -205,7 +208,7 @@ function isLoadFailureMessage(line: string): boolean {
   return loadFailurePatterns.some((pattern) => pattern.test(line));
 }
 
-/** The error text Bun prints before its stack; source excerpts, stack frames and assertion diffs are not messages. */
+/** Bun's message text plus Received assertion values; excerpts, frames and Expected values are excluded. */
 function errorMessageLines(block: string[]): string[] {
   const messages: string[] = [];
   let inMessage = false;
@@ -214,7 +217,11 @@ function errorMessageLines(block: string[]): string[] {
     if (/^\s*at\b/.test(line)) break;
     let message = line.trim().replace(/^\^\s*/, '');
     if (!message || /^\((?:pass|fail)\)/.test(message)) continue;
-    if (/^(?:Expected|Received):/.test(message)) break;
+    if (/^Expected:/.test(message)) continue;
+    if (/^Received:/.test(message)) {
+      messages.push(message);
+      continue;
+    }
 
     const errorHeader = /^(?:error|[\w$]+(?:Error|Exception)):/i.test(message);
     if (errorHeader || isLoadFailureMessage(message)) inMessage = true;
@@ -224,51 +231,65 @@ function errorMessageLines(block: string[]): string[] {
 }
 
 /**
- * The failed checks of one test file's output when every failure is a `GrowthBoundError` or a known load error raised
- * inside a test, else null. Bun prints a failed test's error in the block before its `(fail)` line; anything else in a
- * block, or after the last one, is a different failure (an unhandled error, a hook failure, a timeout) and makes the
- * file ineligible.
+ * Failure details for a file that has at least one growth-bound or recognized load failure, else null. Other test
+ * failures and unhandled errors are retained as cascades. Bun prints a failure's message before `(fail)`, except that
+ * a timeout can be printed immediately after it.
  */
 export function growthFailures(output: string): GrowthFailure[] | null {
-  const failures: GrowthFailure[] = [];
+  const blocks: { title: string; lines: string[] }[] = [];
   let block: string[] = [];
-  let finished = false;
-  for (const line of output.split(/\r\n?|\n/)) {
-    if (/^# Unhandled\b/.test(line)) return null;
+  let previousFailure: { title: string; lines: string[] } | undefined;
+  const lines = output.split(/\r\n?|\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (/^# Unhandled\b/.test(line)) {
+      block = [];
+      const unhandled = { title: 'unhandled error', lines: [line.replace(/^# Unhandled\s*/, '')] };
+      while (index + 1 < lines.length && !/^\s*\d+ (?:pass|fail|skip|todo)\b/.test(lines[index + 1]!)) {
+        const next = lines[index + 1]!;
+        if (/^\(pass\) |^\(fail\) /.test(next) || /^# Unhandled\b/.test(next)) break;
+        unhandled.lines.push(next);
+        index++;
+      }
+      blocks.push(unhandled);
+      previousFailure = undefined;
+      continue;
+    }
     const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
     if (failure) {
-      const messages = errorMessageLines(block);
-      const growth = messages.find((candidate) => candidate.startsWith('GrowthBoundError:'));
-      const load = messages.find(isLoadFailureMessage);
-      const loadCode = messages.some((candidate) => /\bcode:\s*"(?:53300|53100|57P03)"/.test(candidate));
-      const disallowedError = messages.some(
-        (candidate) =>
-          /^error:/i.test(candidate) &&
-          !isLoadFailureMessage(candidate) &&
-          !(loadCode && !/^error:\s*(?:expect|assert)\b/i.test(candidate)),
-      );
-      if ((!growth && !load) || disallowedError) return null;
-      const kind = growth ? 'growth' : 'load';
-      const message = kind === 'growth' ? growth!.slice('GrowthBoundError:'.length).trim() : messages[0]!;
-      failures.push({ title: failure[1]!, message, kind });
+      previousFailure = { title: failure[1]!, lines: block };
+      blocks.push(previousFailure);
       block = [];
     } else if (/^\(pass\) /.test(line)) {
       // Passing tests have no failure block; their output must not qualify the next failure.
       block = [];
-    } else if (/^\s*\d+ (pass|fail|skip|todo)\b/.test(line) || line.startsWith('Ran ')) {
-      finished = true;
-    } else if (!finished) {
+      previousFailure = undefined;
+    } else if (previousFailure && /^\s*\^\s*this test timed out after \d+ms\./i.test(line)) {
+      // Bun reports this timeout after `(fail)`; keep it with that test and out of the next block.
+      previousFailure.lines.push(line);
+    } else if (!/^\s*\d+ (?:pass|fail|skip|todo)\b/.test(line) && !line.startsWith('Ran ')) {
       block.push(line);
+      if (line.trim() !== '') previousFailure = undefined;
     }
   }
-  return failures.length > 0 && block.every((line) => line.trim() === '') ? failures : null;
+
+  const failures = blocks.map(({ title, lines: failureLines }) => {
+    const messages = errorMessageLines(failureLines);
+    const growth = messages.find((candidate) => candidate.startsWith('GrowthBoundError:'));
+    const load = messages.find(isLoadFailureMessage);
+    const kind = growth ? 'growth' : load ? 'load' : 'cascade';
+    const message = growth
+      ? growth.slice('GrowthBoundError:'.length).trim()
+      : load ?? messages[0] ?? 'unhandled error';
+    return { title, message, kind } satisfies GrowthFailure;
+  });
+  return failures.some((failure) => failure.kind !== 'cascade') ? failures : null;
 }
 
 /**
- * Reruns, once each and one at a time under a stack slot, the files whose only failures are growth bound or known load
- * errors. Growth checks count work, so a genuine regression fails alone too; load failures that pass alone only failed
- * under load. Returns the outcomes that still fail the run: every ineligible one and each eligible file that failed
- * again.
+ * Reruns, once each and one at a time under a stack slot, files with at least one growth-bound or known load failure.
+ * The alone run decides whether the file still fails; other failures in the original run are reported as cascades when
+ * the file passes alone. Returns every ineligible outcome and each eligible file that failed again.
  */
 export async function rerunGrowthFailures(
   outcomes: FileOutcome<string>[],
@@ -279,6 +300,9 @@ export async function rerunGrowthFailures(
   const failed: FileOutcome<string>[] = [];
   const loadSensitive: string[] = [];
   const loadSensitiveGrowth: string[] = [];
+  let rerunFiles = 0;
+  let passedAlone = 0;
+  let aloneMilliseconds = 0;
   for (const outcome of outcomes) {
     if (!outcome.error) continue;
     const failures = outcome.error.message.includes('Database cleanup failed:')
@@ -288,20 +312,25 @@ export async function rerunGrowthFailures(
       failed.push(outcome);
       continue;
     }
+    rerunFiles++;
+    const startedAt = performance.now();
     const [again] = await lease('kernel growth rerun', (env) =>
       scheduleFiles([outcome.file], 1, { ...runner, run: (file, database) => runner.run(file, database, env) }),
     );
+    aloneMilliseconds += performance.now() - startedAt;
     if (again?.error) {
       write(`${outcome.error.message}\n${outcome.file}: failed again alone:\n${again.error.message}\n`);
       failed.push(outcome);
       continue;
     }
+    passedAlone++;
     for (const failure of failures) {
       const message = failure.message.split('\n')[0]!;
       if (failure.kind === 'growth') {
         loadSensitiveGrowth.push(`load-sensitive growth check: ${outcome.file} :: ${failure.title} :: ${message}`);
       } else {
-        loadSensitive.push(`load-sensitive test: ${outcome.file} :: ${failure.title} :: ${message}`);
+        const cascade = failure.kind === 'cascade' ? ' (cascade)' : '';
+        loadSensitive.push(`load-sensitive test: ${outcome.file} :: ${failure.title}${cascade} :: ${message}`);
       }
     }
   }
@@ -313,6 +342,9 @@ export async function rerunGrowthFailures(
       `Load-sensitive growth checks (passed alone): ${loadSensitiveGrowth.length}\n${loadSensitiveGrowth.join('\n')}\n`,
     );
   }
+  write(
+    `Load reruns: ${rerunFiles} files, ${(aloneMilliseconds / 1000).toFixed(2)} s alone (${passedAlone} passed alone)\n`,
+  );
   return { failed };
 }
 

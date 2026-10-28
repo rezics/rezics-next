@@ -124,7 +124,7 @@ test('a growth file that fails again alone fails the run', async () => {
   expect(text).not.toContain('load-sensitive growth check: test/a.test.ts');
 });
 
-test('a file with any failure other than a growth bound error is not rerun and fails the run', async () => {
+test('growth failures keep a file eligible despite cascades while files without growth or load signals stay failed', async () => {
   const { events, log, runner, lease, write } = fakes({});
   const unhandled = ['error: unhandled late', '      at <anonymous> (x.test.ts:5:1)', '(fail) late [5.00ms]'].join(
     '\n',
@@ -159,15 +159,21 @@ test('a file with any failure other than a growth bound error is not rerun and f
 
   const result = await rerunGrowthFailures(outcomes, runner, lease, write);
 
-  expect(events).toEqual([]);
+  expect(events.filter((event) => event.startsWith('run'))).toEqual([
+    'run test/mixed.test.ts held=1',
+    'run test/unhandled.test.ts held=1',
+    'run test/timeout.test.ts held=1',
+  ]);
   expect(result.failed.map((outcome) => outcome.file)).toEqual([
-    'test/mixed.test.ts',
-    'test/unhandled.test.ts',
     'test/before.test.ts',
-    'test/timeout.test.ts',
     'test/exit.test.ts',
     'test/cleanup.test.ts',
     'test/create.test.ts',
   ]);
-  expect(log.join('')).not.toContain('Load-sensitive growth checks');
+  expect(log.join('')).toContain('load-sensitive test: test/mixed.test.ts :: second (cascade) :: error: expect(received).toBe(expected)');
+  expect(log.join('')).toContain('load-sensitive test: test/unhandled.test.ts :: late (cascade) :: error: unhandled late');
+  expect(log.join('')).toContain('load-sensitive test: test/timeout.test.ts :: slow :: this test timed out after 60000ms.');
+  expect(log.join('')).toContain('Load-sensitive growth checks (passed alone):');
+  expect(log.join('')).toContain('Load reruns: 3 files, ');
+  expect(log.join('')).toContain('(3 passed alone)');
 });
