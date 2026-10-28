@@ -741,10 +741,11 @@ The reader performs no population, replay, worker drain or raw search.
 
 The storage slice implements two current-row tables and one bounded prefix allocator, without identity-table writes:
 
-- `search.index_prefix_control`: primary key `(prefix)`; monotonic `revision` and `issued_generation`, matching
+- `search.index_prefix_control`: primary key `(partition_no, prefix)`, `CHECK (partition_no = 0)`; monotonic `revision` and `issued_generation`, matching
   `CoveragePrefixControl`. Allocate only strictly increasing safe-integer generation numbers; retain this one
   fence when retired generation rows are reclaimed. No per-retired-name history is needed.
-- `search.index_incarnation`: primary key `(consumer, index_uuid)`, unique live `(prefix, generation)`;
+- `search.index_incarnation`: primary key `(partition_no, consumer, index_uuid)`, `CHECK (partition_no = 0)`, unique retained
+  `(partition_no, prefix, generation)`;
   `index_name`, `protocol`, monotonic `revision`, `state`, `origin`, `population_partition`,
   `population_after`, `population_complete`. These are the fields of `IndexIncarnation` and
   `PopulationLineage`. The partition/keyset frontier is singular, bounded and durable.
@@ -763,6 +764,72 @@ generation and three live generations are admitted per prefix: 12,288 home rows 
 No actor, record, subject, filter or historical basis rows are retained. A single monotonic allocation fence per
 prefix prevents generation/name reuse after retired rows are reclaimed; it is bounded control, not a tombstone
 per historical generation.
+
+`coverage-store.ts` exports only `createCoverageStore(pool)`, `CoverageStore`, `CoverageGuard`, `HomeGuard`
+and `CoverageObservation`. The factory currently throws retryable `index_not_ready` from every method; it never
+simulates a DB. The independent storage implementation must satisfy `test/search/coverage-store.test.ts` against
+the actual migrated database. These tests supply storage observations, not native readiness certificates. Native
+Scope run/populate/certify remain unavailable until the actual producer lands.
+
+The store methods are `readPrefix`, `allocate`, `readLineage`, `register`, `population`, `transition`, `reclaim`,
+`readHome`, `enroll`, `outcome`, `complete` and `promote`; their exact signatures are in `CoverageStore`.
+All writes atomically compare full incarnation identity (prefix, generation, index, UUID, protocol, consumer) and
+lifecycle revision; home writes additionally compare partition and home revision. Revisions start at 1, missing
+rows compare as revision 0, and every successful mutation increments its row revision. CAS loss/absent or
+ineligible state returns null (reclaim returns false), malformed input rejects without mutation. Reads of absent
+or differently bound identities return null. Only `subject-coverage-v1` is valid. Control partition zero is internal,
+never an additional caller field. Every authoritative primary/unique key starts with `partition_no`; secondary
+retirement access is not a second authority. All mutation guards are checked inside the same short transaction,
+including the prefix lock that serializes admission and retained-row counting.
+
+Allocation accepts positive safe-integer generations strictly greater than the issued fence, without requiring
+contiguity. Register requires the exact latest control revision/generation, never an arbitrary old allocation;
+failed registration leaves the allocation fence advanced. Retrying an unbound latest allocation is allowed;
+a preexisting physical index still requires actual replay/audit provenance. Initial lineage is populating, revision 1, partition 0, after null,
+complete false. At most three retained lineage rows (including quarantined/retiring) per prefix are admitted;
+reclamation deletes the retiring lineage rather than retaining retired history. Population advances a singular
+monotonic partition/UUID keyset frontier, cannot regress or reopen completion, and completes only at partition
+4096 with after null. It records the coordinator's actual replay/audit result; storage cannot establish provenance.
+Only complete populating lineage can become live. Populating/live may become quarantined; any nonretired state
+may become retiring. Retiring blocks enrollment, outcome, completion and promotion before cleanup. Reclaim compares
+its revision, deletes at most 4096 homes and its lineage atomically, retains the prefix fence, and never performs
+engine deletion or deletes core checkpoints. The lifecycle owner separately owns those external operations.
+
+Enrollment accepts only an enrolled/pending attempt with null source, a fresh UUID and ordered same-epoch
+checkpoint range; its initial home has null current/fence/verified/coveredThrough. Only populating/live can enroll.
+A completed slot may be replaced; any other slot blocks replacement indefinitely. Enrollment always clears
+verified/coveredThrough conservatively. Outcome records actual post-read source/fence observations and marks
+enrolled as visible or ambiguous; ambiguous may become visible only on actual resolution, never expiry. A visible
+outcome requires nonnull source/fence, matching partition/epoch/generation; a newer committed fence may exceed this batch through position,
+which blocks promotion until a later completed attempt covers it;
+ambiguous may retain null observations. An already recorded nonnull source/fence cannot be changed on resolution.
+Outcome copies source/fence into current/fence and the attempt source. Complete requires visible and the exact
+attempt ID; it records advanced/lost/stopped from the real checkpoint operation and marks completed, without
+advancing core itself. Completed attempts with any of those results may promote only after the coordinator has
+independently established catch-up: live revision, matching nonzero source/current/fence generation and epoch,
+matching home partition, coveredThrough equal to attempt through and at or beyond the committed fence. It cannot
+promote across a changed tuple, unresolved slot or stale revision/attempt. Promotion writes verified and
+coveredThrough atomically. None of these operations creates an allow cache or native identity authority.
+
+Input and durable JSON objects are closed, with exactly the fields in the existing coverage types, nullable only
+where those types permit; no arrays or additional fields. All bigint values are nonnegative PostgreSQL bigint
+range (0..9223372036854775807), preserved as bigint at the TypeScript boundary and canonical decimal strings in
+JSON (`0` or a nonzero digit followed by digits), never Number. Revisions are positive persisted bigints. Positions
+may be zero; identity generations and epochs must be positive observations, never readiness from zero/missing.
+Partitions are integers 0..4095 except the population completion sentinel. Epochs/generations represented as
+numbers are positive safe integers (epochs fit PostgreSQL integer). Attempt IDs are lowercase UUIDs;
+home/node identifiers and engine UUIDs are opaque nonempty UTF-8 strings <=128 bytes, preserving native spelling. Prefix and generation must satisfy existing
+`subjectIndexName` validation. Index/consumer strings are bounded at 255/63 UTF-8 bytes; registration requires
+exact existing `subjectIndexName` and `subjectConsumer` results. Well-shaped different names in read/mutation
+guards return null as identity mismatches. Never bind a new generation to an old physical name.
+Population after is a UUID or null. Validate nested shapes,
+range ordering and these bounds on input and decode; malformed stored state fails closed, never coerces.
+
+The follow-up implementation slice targets <=400 lines across <=8 files: one migration, this store module,
+up to four typed SQL modules (allocation/lifecycle, home reads/enrollment, attempt outcomes, promotion/cleanup),
+the owning database schema snapshot if required, and these native tests. Keep only current fixed state; splitting
+SQL does not authorize identity-table SQL, coordinator changes or a second protocol. If typed SQL/schema overhead
+exceeds this budget, report it before expanding the slice.
 
 ### Event fence and producer state machine
 
@@ -876,14 +943,16 @@ composition passes. Original frozen assertions and the existing thirteen plus si
 
 ### Cost: coverage writes and lifecycle
 
-- Touches: each real attempt performs enrollment, native source observations, bounded source chunks, actual bulk
+- Touches: store allocation/admission serializes bounded prefix controls and at most three retained lifecycle
+  rows; point home mutations touch one current row plus its lifecycle guard, not history. Each real attempt performs enrollment, native source observations, bounded source chunks, actual bulk
   and refresh, checkpoint CAS outcome and conditional completion/promotion. Charge checkpoint, incarnation and
   attempt reads/writes separately, including failed/CAS-lost/ambiguous attempts. Source payload/history and physical
   engine work retain their existing costs.
 - Bound: O(event anchors + payload + engine writes) per apply, source chunks at most 256 and batches at most 64
   envelopes; current storage O(4096 × live generations), at most 12,288 rows plus bounded lifecycle control.
   Replay/audit is O(retained log + source/index population) total in bounded steps. Retirement removes at most
-  4096 home and checkpoint rows per generation; physical deletion/refresh is not constant work. A raw window's
+  4096 home rows in store reclamation and separately at most 4096 checkpoint rows in lifecycle cleanup per
+  generation; physical deletion/refresh is not constant work. A raw window's
   quota plus one bounds fetched keys only, not postings, sort work, latency or source history.
 - Growth check: `test/search/coverage-writers.test.ts`, `test/search/coverage-lifecycle.test.ts` and
   `test/search/growth-coverage.test.ts` must independently grow actual changed anchors, source history, extra-index

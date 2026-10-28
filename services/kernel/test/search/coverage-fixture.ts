@@ -3,7 +3,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { admitFilter, parseFilter } from '@rezics/filter';
 import pg from 'pg';
 import { createHash } from 'node:crypto';
-import { accessCheck, type AccountActor } from '../../src/request/access.ts';
+import { accessCheck } from '../../src/request/access.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -175,23 +175,11 @@ export async function createCoverageFixture() {
       });
     },
     async merge(original: string, survivor: string) {
-      const actor: AccountActor = {
-        kind: 'account',
-        accountId,
-        clientId: 'web',
-        scopes: actions,
-        requestedBy: null,
-        authnEpoch: 1,
-      };
+      const realAccess = access.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
       const resource = { route: routeOf(original)!, id: original };
       const deadline = Date.now() + 30_000;
-      const check = await accessCheck(
-        access.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) }),
-        actor,
-        'subject:merge',
-        resource,
-        { pool: admin, deadline },
-      );
+      const actor = await realAccess.authenticate(access.bearer('editor'), { pool: admin, deadline });
+      const check = await accessCheck(realAccess, actor, 'subject:merge', resource, { pool: admin, deadline });
       const key = crypto.randomUUID();
       return mergeSubjects(pool, {
         subjects: [original, survivor],
