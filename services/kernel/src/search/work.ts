@@ -1,6 +1,7 @@
 import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { subjectSource } from '../semantic/search-source.ts';
+import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createOpenSearch } from './opensearch.ts';
 import { startSearchIndexing } from './runner.ts';
@@ -30,11 +31,12 @@ export const searchWorkModule: WorkModule = {
   register(context) {
     const config = readSearchConfig(context.env);
     if (!config) return;
+    const routeKey = readMembershipRouteKey(context.env);
     context.addService(() =>
       startSearchIndexing({
         pool: context.pool,
         search: createOpenSearch(config.url),
-        source: subjectSource(context.pool),
+        source: subjectSource(context.pool, routeKey),
         listing: subjectListingSource(context.pool),
         prefix: config.prefix,
         concurrency: 2,

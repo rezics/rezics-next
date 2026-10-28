@@ -66,7 +66,11 @@ async function registered(moduleEnv: Record<string, string>) {
 
 /** The worker's indexing runner on its own prefix, once it has created generation 1. */
 async function indexing(prefix: string): Promise<WorkService> {
-  const services = await registered({ OPENSEARCH_URL: searchUrl!, KERNEL_SEARCH_PREFIX: prefix });
+  const services = await registered({
+    OPENSEARCH_URL: searchUrl!,
+    KERNEL_SEARCH_PREFIX: prefix,
+    KERNEL_ROUTE_KEY: env.KERNEL_ROUTE_KEY,
+  });
   expect(services).toHaveLength(1);
   const running = await services[0]!();
   await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
@@ -114,6 +118,34 @@ test('the search work module starts the indexing runner only when search is conf
   await running.stop();
   expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1], active: 1 });
 }, 30_000);
+
+test('a configured Search worker refuses a missing or malformed route key', async () => {
+  const malformed = 'not-a-canonical-route-key';
+  for (const routeKey of [undefined, malformed]) {
+    const services: (() => WorkService | Promise<WorkService>)[] = [];
+    const context = {
+      pool,
+      env: {
+        OPENSEARCH_URL: searchUrl!,
+        KERNEL_SEARCH_PREFIX: freshPrefix(),
+        ...(routeKey === undefined ? {} : { KERNEL_ROUTE_KEY: routeKey }),
+      },
+      addService(start: () => WorkService | Promise<WorkService>) {
+        services.push(start);
+      },
+    } as unknown as WorkContext;
+    let error: unknown;
+    try {
+      await searchWorkModule.register(context);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as Error).message).toBe('Invalid or missing KERNEL_ROUTE_KEY');
+    expect((error as Error).message).not.toContain(malformed);
+    expect(services).toEqual([]);
+  }
+});
 
 test('a server answers search and suggest from the index the worker feeds', async () => {
   const prefix = freshPrefix();

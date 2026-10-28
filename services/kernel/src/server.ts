@@ -240,7 +240,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               pool,
               client: openSearch,
               prefix: searchConfig.prefix,
-              source: subjectSource(pool),
+              source: subjectSource(pool, config.routeKey),
               cursors: config.tokens,
             }),
           }),
