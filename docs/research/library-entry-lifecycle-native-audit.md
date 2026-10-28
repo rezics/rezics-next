@@ -64,20 +64,27 @@ Restore keeps saved created/updated/activity/finish times, requested/source IDs,
 pin, with only revision r+2 and a new real command transaction identity. Custom profile admission has its own
 baseline so its known absent-writer failure is distinguishable from planned-state lifecycle failures.
 
-The shared fixture change is optional `{clock?: KernelClock}` plumbing only. The existing kernel, native entry,
+The shared fixture accepts optional `{clock?: KernelClock}` plumbing. The existing kernel, native entry,
 lifecycle, grant and suspension compositions receive the same supplied clock; absent options retain their defaults.
-No deadlines, mounted registries, positive grants or admission setup changed. The supplied clock follows actual wall
-time during fixture provisioning/authentication, then freezes only for explicit lifecycle-time observations. At just-before/exact 720 hours the
-suite advances this native domain clock, calls commands directly with the same admitted actor, and observes the
-original retained deadline. It neither patches global Date nor substitutes an expired HTTP request for Undo.
+The test signer uses that clock for bearer `iat`, `exp` and `auth_time`, with exactly 300 seconds between issuance
+and expiry. Kernel T governs bearer validity, approvals, openings and grant validity. Only request and evidence
+execution deadlines use wall time. Passing `config.clock` to the native authenticator and command admission is
+correct; native undo needs no Access production change or additional clock dependency.
 
-There is an additional concrete future-composition issue: `createKernel` forwards its clock into `createAccess`;
-`access/index.ts` currently gives it to `createAuthenticator` and `createCommandAdmission`, which compare token
-expiry against it. That contradicts `clock.ts`'s stated separation of domain time from authentication wall time
-when a future restore preparation uses native admission after a 720-hour advance. Do not hide this with a fixture
-Access override, forged actor or replacement credential. The owning native clock/admission composition must honor
-that existing separation. The focused boundary case remains required, rather than accepting authentication denial
-as evidence of expiry.
+After resetting the clock between cases, the fixture re-authenticates its existing default identities before
+operations. At just-before/exact 720 hours, it issues and actually verifies fresh credentials for the SAME owner,
+client, scopes, authentication epoch and requested-by principal against the original Access/pool. It replaces the
+Actor reference with the newly verified immutable Actor; it does not copy an Actor, read a newer epoch, create
+accounts/grants/fences or cache an allow verdict. Unknown, suspended or fenced identities still fail normal
+authentication. Token issuance changes neither the original deletion timestamps/window nor the receipt's
+principal/input. Current authorization still precedes returning the original stored replay result.
+
+A separate native credential control advances only the supplied kernel clock, proves the original token is
+rejected by actual `Access.authenticate`, then verifies a newly issued 300-second credential at T for the same
+principal and performs ordinary command and HTTP reads. It resets the clock and refreshes the existing identities
+in cleanup. This control runs without restore runtime. The precedent is
+`test/access/permission-kernel-clock.test.ts`, which rejects a wall-time token at a future kernel T and accepts
+credentials issued at that T. No global Date patch, altered deadline or expired credential is used for Undo.
 
 ## Exact preparation bridge before runtime dispatch
 
@@ -116,8 +123,9 @@ owner integration question before runtime dispatch is: which existing native adm
 inside `ownAccountPrepared.prepare` before its short owner archive checkout, and how is that same proof fenced at
 final authorization? Deliver the already specified prepared-owner and owner-barrier exports and an actual
 max-one-connection native example of this ordering. Do not invent a new core port, trust `trustedAccount`, copy an
-account authorization formula, or nest owner/Global checkouts to answer it. Native admission's clock issue above
-must also be resolved at its owner. A stale archive witness refreshes/retries through existing native attempt rules.
+account authorization formula, or nest owner/Global checkouts to answer it. At an advanced T, native admission
+uses newly verified credentials for the unchanged principal. A stale archive witness refreshes/retries through
+existing native attempt rules.
 
 Legacy null incarnations may be stamped only by bounded owner migration or the actual fresh-delete transaction's
 exact legacy revision/transaction/null CAS. They cannot be stamped by GET or treated as one identity. Existing null
@@ -184,7 +192,7 @@ constraints; no source was copied and no new external research or standard is re
 
 ## Validation evidence
 
-The final exact acceptance command,
+Historically, the exact acceptance command,
 `bun run --cwd services/kernel check test/library/entry-lifecycle-command.test.ts`, completed on check host `a`
 after its queued slot became available: **1 passed, 7 failed, 105 assertions**, with typechecking, formatting and
 linting completed before all eight native tests ran. These are the requested native REDs, not a passing runtime.
@@ -198,8 +206,7 @@ Root `bun scripts/typecheck.ts` completed on check host `b`: all 13 workspaces p
 The unchanged `profile-entry-command.test.ts`, run through the same kernel check on host `a` with the fixture's
 default options, had **3 passed and 6 failed**. Its three native authorization/concealment cases passed; its six
 profile-writer/HTTP cases still expose the absent profile-aware writer and validation. No existing assertion,
-case or scale was changed to make these baseline gaps pass. The only tracked changes are the new command suite,
-this audit and optional fixture clock plumbing.
+case or scale was changed to make these baseline gaps pass. That validation predates the native credential control and fresh-credential boundary correction above.
 
 Two local test runs used the check harness's default shared timing sink. It wrote three files outside the requested
 worktree, under `/home/edge/projects/rezics/rezics-next/.temp/kernel-check/timings/`:

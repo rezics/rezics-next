@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { decodeJwt } from 'jose';
 import pg from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { IdempotencyConflictError, type CommandOutcome } from '../../src/command/command.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
-import type { Actor } from '../../src/request/access.ts';
+import { AuthenticationError, type Actor } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
@@ -24,6 +25,7 @@ beforeAll(async () => {
 }, 120_000);
 beforeEach(async () => {
   time = undefined;
+  await Promise.all([f.refresh(f.owner), f.refresh(f.other), f.refresh(f.steward)]);
   await f.activate(f.originalDigest);
 });
 afterAll(async () => {
@@ -185,6 +187,41 @@ test('native lifecycle baseline creates and reads a legal planned entry before l
   expect((await f.commands.readEntry(f.owner.actor, subjectId)).revision).toBe(row.revision);
 });
 
+test('native credential refresh preserves the principal after kernel-clock expiry and admits an ordinary read', async () => {
+  const { subjectId, row } = await create();
+  const originalToken = f.owner.bearer;
+  const originalActor = f.owner.actor;
+  try {
+    time = Date.now() + windowMs;
+    await expect(
+      f.access.authenticate(originalToken, { pool: f.pool, deadline: deadlineFor(30_000) }),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+    const actor = await f.refresh(f.owner);
+    const claims = decodeJwt(f.owner.bearer);
+    const issuedAt = Math.floor(time / 1000);
+    expect(claims.iat).toBe(issuedAt);
+    expect(claims.auth_time).toBe(issuedAt);
+    expect(claims.exp).toBe(issuedAt + 300);
+    expect(claims.exp! - claims.iat!).toBe(300);
+    expect(claims).toMatchObject({
+      sub: originalActor.accountId,
+      client_id: originalActor.clientId,
+      scope: originalActor.scopes.join(' '),
+      authn_epoch: originalActor.authnEpoch,
+    });
+    expect(actor).not.toBe(originalActor);
+    expect(actor).toEqual(originalActor);
+    expect(actor).toBe(f.owner.actor);
+    expect(Object.isFrozen(actor)).toBe(true);
+    expect(f.owner.bearer).not.toBe(originalToken);
+    expect((await f.commands.readEntry(actor, subjectId)).revision).toBe(row.revision);
+    expect((await f.send('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(200);
+  } finally {
+    time = undefined;
+    await Promise.all([f.refresh(f.owner), f.refresh(f.other), f.refresh(f.steward)]);
+  }
+});
+
 test('native entry factory exposes restoreEntry after a successful native create and read', async () => {
   await create();
   expect(
@@ -296,6 +333,7 @@ test('native delete and restore receipts require current owner scope active acco
           clientId: who.actor.clientId,
           scopes: ['subject:read'],
         },
+        clock,
       );
     if (denial === 'suspended') await f.suspend(who.actor.accountId);
     if (denial === 'fence') await f.revokeIdentity(who.actor.accountId);
@@ -331,7 +369,7 @@ test('native delete and restore receipts require current owner scope active acco
   }
 });
 
-test('native restore uses the strict original 720 hour deadline with a live kernel clock and unchanged authentication', async () => {
+test('strict entry undo deadlines use new native credentials from the same principal after advancing the single kernel clock', async () => {
   const a = await create(),
     b = await create();
   time = Date.now();
@@ -342,9 +380,12 @@ test('native restore uses the strict original 720 hour deadline with a live kern
   const { d: d2 } = await snapshot(b.row, db);
   const restoreKey = entryKey();
   time = deletedAt + windowMs - 1;
+  // The principal and original deletion window stay unchanged; credentials are newly verified at T.
+  await f.refresh(f.owner);
   const beforeBoundary = await restore(f.owner.actor, a.subjectId, d1, restoreKey);
   await restored(a.row, beforeBoundary);
   time = deletedAt + windowMs;
+  await f.refresh(f.owner);
   // No worker runs in this command fixture: prove expiry while the original archive still exists.
   const boundary = await observed(b.subjectId);
   expect(boundary.archived).toHaveLength(1);
