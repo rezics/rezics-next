@@ -677,8 +677,7 @@ function rankHost(
   const gateCapacity = Math.max(0, ordinaryCapacity - 1);
   const hasMultiWaiter = !probe.gateWaiting && probe.multiWaitingSlots > 0;
   const isOldestMultiWaiter = hasMultiWaiter && multiWaiterId !== undefined && probe.multiWaitingId === multiWaiterId;
-  const waitsBehindOlderMulti =
-    hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
+  const waitsBehindOlderMulti = hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
   const ordinaryAdmissionLimit = gate
     ? ordinaryCapacity
     : probe.gateWaiting
@@ -922,7 +921,17 @@ async function takeSlots(
 ): Promise<Lease | null> {
   return takeSession(
     host,
-    slotScript(host, count, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit, shortRun, estimateMs, gate, multiWaiterId),
+    slotScript(
+      host,
+      count,
+      slotLimit,
+      ordinaryCapacity,
+      ordinaryAdmissionLimit,
+      shortRun,
+      estimateMs,
+      gate,
+      multiWaiterId,
+    ),
     /^SLOTS \d+$/m,
     signal,
   );
@@ -1081,7 +1090,8 @@ async function acquire(
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
         }
       } else if (giveUpIfUnanswered && !answered) return null;
-      const acquisitionHosts = multiWaiterId && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
+      const acquisitionHosts =
+        multiWaiterId && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
       for (const entry of acquisitionHosts) {
         const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
         if (freeSlots < slots) continue;

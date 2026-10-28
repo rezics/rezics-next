@@ -1392,7 +1392,9 @@ test('a multi-slot reservation blocks new runs when existing work already fills 
     await waitFor(() => existsSync(singleWaitFile));
     await waitFor(() => events().some((event) => event.kind === 'probe' && event.multiWaitingId === multiMarker.id));
     expect(events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test')).toHaveLength(1);
-    expect(events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted)).toHaveLength(1);
+    expect(
+      events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted),
+    ).toHaveLength(1);
 
     first.child.kill('SIGTERM');
     await first.child.exited;
@@ -1448,14 +1450,20 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
     );
     await waitFor(() => singles.some((_, index) => existsSync(join(env.FAKE_DIR!, `remainder-${index}-wait-ms`))));
     const whileWaiting = events();
-    expect(whileWaiting.some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(false);
+    expect(whileWaiting.some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
+      false,
+    );
     expect(whileWaiting.some((event) => event.kind === 'multi-marker-release')).toBe(false);
     const admittedSingles = whileWaiting.filter((event) => event.kind === 'slot' && event.granted);
     expect(admittedSingles).toHaveLength(3);
-    expect(admittedSingles.every((event) => String(event.script).includes('# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT 3'))).toBe(true);
+    expect(
+      admittedSingles.every((event) => String(event.script).includes('# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT 3')),
+    ).toBe(true);
 
     rmSync(holdMultiGrant, { force: true });
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+    );
 
     const started = events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test');
     expect(started.filter((event) => /echo single-/.test(String(event.script)))).toHaveLength(3);
@@ -1539,13 +1547,14 @@ test('a waiting gate keeps priority over a waiting multi-slot run on the same ho
 
     holder.child.kill('SIGTERM');
     await holder.child.exited;
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo gate-run')) &&
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+    await waitFor(
+      () =>
+        events().some((event) => event.kind === 'run' && String(event.script).includes('echo gate-run')) &&
+        events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
     );
     const started = events()
       .filter((event) => event.kind === 'run' && /echo (?:gate|multi)-run/.test(String(event.script)))
-      .map((event) => String(event.script).includes('echo gate-run') ? 'gate' : 'multi');
+      .map((event) => (String(event.script).includes('echo gate-run') ? 'gate' : 'multi'));
     expect(started).toEqual(['gate', 'multi']);
     expect(await gate.child.exited).toBe(0);
     expect(await multi.child.exited).toBe(0);
@@ -1574,7 +1583,9 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
   let older: ReturnType<typeof startRemote> | undefined;
   let younger: ReturnType<typeof startRemote> | undefined;
   try {
-    await waitFor(() => events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script))).length === 2);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script))).length === 2,
+    );
     const holderRuns = events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script)));
     const latestHolderFinish = Math.max(...holderRuns.map((event) => Number(event.fakeStartedAt) + durationMs));
 
@@ -1583,27 +1594,30 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
     const olderMarker = events().find((event) => event.kind === 'multi-marker')!;
     younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2']);
     await waitFor(() => events().filter((event) => event.kind === 'multi-marker').length === 2, 10_000);
-    const youngerMarker = events().find(
-      (event) => event.kind === 'multi-marker' && event.id !== olderMarker.id,
-    )!;
-    await waitFor(() =>
-      events().some((event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2),
+    const youngerMarker = events().find((event) => event.kind === 'multi-marker' && event.id !== olderMarker.id)!;
+    await waitFor(
+      () =>
+        events().some(
+          (event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2,
+        ),
       10_000,
     );
 
     writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish));
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo older')) &&
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo younger')),
+    await waitFor(
+      () =>
+        events().some((event) => event.kind === 'run' && String(event.script).includes('echo older')) &&
+        events().some((event) => event.kind === 'run' && String(event.script).includes('echo younger')),
       10_000,
     );
     const grantedWaiterOrder = events()
       .filter((event) => event.kind === 'slot' && event.granted && event.requested === 2)
       .map((event) => String(event.script).match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1])
       .filter((id): id is string => Boolean(id) && id !== '-');
-    expect(
-      [...new Set(grantedWaiterOrder.filter((id) => id === olderMarker.id || id === youngerMarker.id))],
-    ).toEqual([String(olderMarker.id), String(youngerMarker.id)]);
+    expect([...new Set(grantedWaiterOrder.filter((id) => id === olderMarker.id || id === youngerMarker.id))]).toEqual([
+      String(olderMarker.id),
+      String(youngerMarker.id),
+    ]);
     writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish + durationMs));
     await Promise.all([older.child.exited, younger.child.exited]);
   } finally {
