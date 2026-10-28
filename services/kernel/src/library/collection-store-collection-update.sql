@@ -1,9 +1,8 @@
 WITH input AS NOT MATERIALIZED (SELECT :visibility::text AS new_visibility)
 UPDATE library.collection
-SET title = :title, description = :description::nullable(text), visibility = input.new_visibility, revision = revision + 1,
-    source_generation = source_generation + CASE WHEN visibility IS DISTINCT FROM input.new_visibility THEN 1 ELSE 0 END,
+SET title = :title, description = :description::nullable(text), visibility = (SELECT new_visibility FROM input), revision = revision + 1,
+    source_generation = source_generation + CASE WHEN visibility IS DISTINCT FROM (SELECT new_visibility FROM input) THEN 1 ELSE 0 END,
     updated_at = :time, transaction_id = :transaction_id
-FROM input
 WHERE route = :route AND collection_id = :id AND revision = :revision AND state = 'active'
 RETURNING collection_id AS id, curator_account_id AS "curatorAccountId", title, description, visibility, state,
           revision, member_count AS "memberCount", order_epoch AS "orderEpoch",
