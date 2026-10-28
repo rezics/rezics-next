@@ -199,9 +199,34 @@ subject-wide protection. Transport gates retain pending barriers for delayed/fai
 changed dependent versions, late registration and competing native repair exercise the actual publication race.
 Tuple and consent cases require dependent SOURCE keys to disappear before a fresh observation is clean.
 
-The start/final physical capture shares at most two statements and
-`64 + 2*(behind homes + changed homes)` examined rows. Metadata, capture, engine iteration/bytes and every backend
-are charged within the existing public read budgets; no full-head scan disguised as hashing/aggregation is free.
+One inclusive native capture surrounds the entire `query` and its final `readStatus`, including engine execution,
+immutable definition/execution/start/result bookkeeping, metadata, current own rows and every backend operation.
+In the ACK-before-final race, a bounded barrier exposes the actual original query execution to the fixture
+controller, waits for its concurrent reduction/repair/refresh/ACK and fresh observation, then runs final status
+inside that SAME capture. Fixture work runs outside the page operation's async scope and retains its separate
+preparation costs/background evidence. No query or status work moves there, and all concurrent work drains in
+`finally`; neither native deadlines nor retained-observation TTLs are extended.
+
+Only the actual all-home privacy START/FINAL coverage subset shares the ceiling of two statements and
+`64 + 2*(distinct behind homes + distinct changed homes)` examined rows, once per page across its reads. The native
+producer must annotate each such SQL statement, after optional whitespace, with exactly one leading operation
+comment: `/* semantic.privacy-start */` or `/* semantic.privacy-final */`. Separate keyed own-row checks use
+`/* semantic.own-rows */` and remain in the whole read, outside that coverage subset. Own-row work merged into final
+carries `/* semantic.privacy-final */` and its WHOLE native plan counts as coverage. These closed annotations
+identify operations, not a selected runtime SQL layout. Untagged/relabelled coverage violates attribution; missing
+recognized START or FINAL statements/plans never proves clean or zero work. A third coverage statement fails even
+when the whole read fits its budget. No relation-name inference, supplied counters, manufactured plans or subtraction
+of own-row/nested work is permitted.
+
+Derive the subset from actual `Capture.statements` and native plans' `Query Text`, matching backend and every call
+occurrence, including duplicate SQL; retain parallel byte/backend/error arrays. Keep the raw subset and whole
+capture together. Unclassified operations stay charged to the whole read; only the existing shared catalog-only
+classification applies. The same whole capture independently meets the one-read ceiling of 12 statements and one
+connection per PostgreSQL backend, with the existing direct candidate/point/row/block/byte budgets. Composed pages
+retain `8 + 4R` statements per backend. Count actual candidates including rejected/duplicate/lookahead work, not
+returned hits; this zero-returned-candidate scenario grants no hypothetical exemption. Metadata, capture, engine
+iteration/bytes, retained execution writes and every backend remain charged within the public read budgets. No
+full 4096-head scan, packed-vector/JSON aggregation, permission cache or uncounted ACK/registration read is admitted.
 The helper's lifecycle is not ACK evidence. Missing producers fail before protocol assertions today; every case
 retains its full assertions, without skips, fake sources, unconditional missing-port bodies or stub success.
 

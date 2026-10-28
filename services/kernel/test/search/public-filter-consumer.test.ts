@@ -20,7 +20,7 @@ import type {
   PublicFilterConsumerOperations,
   PublicFilterQueriedObservation,
 } from '../../src/search/public-filter-consumer-contract.ts';
-import { capture, costOf } from '../support/growth.ts';
+import { capture, costOf, isControlStatement, withoutCatalogStatements, type Capture } from '../support/growth.ts';
 import {
   complete,
   capturedStep,
@@ -357,33 +357,177 @@ test('native query revalidation detects a reduction even when repair is acknowle
     const projected = await complete(n.f, n.source, book);
     const candidate = projected.records.find((row) => row.statement.property.id === 'schema:author')!.candidate;
     const observation = await captured(n, negative(author));
-    const start = await capture(n.f.db, () => execute(n, observation.queried), { includeBackends: true });
-    // No candidates to recheck: a stale negative exclusion still discloses the removed fact.
-    expect(start.value.result.hits).toEqual([]);
-    const before = await head(n.source, home(book));
-    await n.f.post(`/v1/subjects/${book}/candidates/${candidate}:hide`, { reason: 'Reduction AFTER query start' });
-    const reduction = await head(n.source, home(book));
-    expect(reduction.position > before.position).toBe(true);
-    await settle(n, observation.repair);
-    const fresh = await captured(n, negative(author));
-    expect((await execute(n, fresh.queried)).result.hits.map((hit) => hit.id)).toEqual([book]);
-    expect((await status(n.operations, fresh.queried)).pending).toEqual([]);
-    // Final runs AFTER native repair, refresh and persisted ACK, against the ORIGINAL execution.
-    const final = await capture(n.f.db, () => status(n.operations, start.value.queried, start.value.execution), {
-      includeBackends: true,
-    });
-    expect(final.value.pending).toEqual([]);
-    expect(final.value.changed).toContainEqual(reduction);
-    expect(final.value.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });
-    expect(final.value.queried.snapshot.observation).toBe(observation.queried.snapshot.observation);
-    const work = [costOf(start.capture), costOf(final.capture)];
-    expect(work.reduce((sum, cost) => sum + cost.statements, 0)).toBeLessThanOrEqual(2);
-    const behindHomes = new Set(final.value.pending.map((head) => head.partition));
-    const changedHomes = new Set(final.value.changed.map((head) => head.partition));
-    expect(work.reduce((sum, cost) => sum + cost.rows, 0)).toBeLessThanOrEqual(
-      64 + 2 * (behindHomes.size + changedHomes.size),
+    const started = Promise.withResolvers<Awaited<ReturnType<typeof execute>>>();
+    const repaired = Promise.withResolvers<void>();
+    // Bound fixture coordination; context() keeps every native deadline unchanged, including after this wait.
+    const timer = setTimeout(() => {
+      const error = new Error('Native ACK-before-final fixture barrier timed out');
+      started.reject(error);
+      repaired.reject(error);
+    }, 60_000);
+    // Observe early failures even while the outside controller is doing native fixture work.
+    void started.promise.catch(() => {});
+    void repaired.promise.catch(() => {});
+    const measured = capture(
+      n.f.db,
+      async () => {
+        try {
+          const start = await execute(n, observation.queried);
+          started.resolve(start);
+          await repaired.promise;
+          return { start, final: await status(n.operations, start.queried, start.execution) };
+        } catch (error) {
+          started.reject(error);
+          throw error;
+        }
+      },
+      { includeBackends: true },
     );
-    expect(work.every((cost) => cost.responseBytes !== undefined)).toBe(true);
+    void measured.catch(() => {});
+    try {
+      const start = await started.promise;
+      // No candidates to recheck: a stale negative exclusion still discloses the removed fact.
+      expect(start.result.hits).toEqual([]);
+      const before = await head(n.source, home(book));
+      await n.f.post(`/v1/subjects/${book}/candidates/${candidate}:hide`, { reason: 'Reduction AFTER query start' });
+      const reduction = await head(n.source, home(book));
+      expect(reduction.position > before.position).toBe(true);
+      // The controller stays outside the measured async scope. Its native SQL is background, not page work.
+      // A nested capturedStep on this same database would replace/fail the inclusive page capture.
+      const preparationCosts: Awaited<ReturnType<PublicFilterConsumerOperations['repairStep']>>['cost'][] = [];
+      async function repair(job: PublicFilterConsumerJob) {
+        for (let step = 0; step < 256; step++) {
+          const result = await n.operations.repairStep(job, context());
+          preparationCosts.push(result.cost);
+          expect(['progress', 'settled']).toContain(result.status);
+          for (const value of Object.values(result.cost)) expect(Number.isSafeInteger(value) && value >= 0).toBe(true);
+          expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+          expect(result.cost.candidates).toBeLessThanOrEqual(result.cost.inputKeys);
+          expect(result.cost.accessPoints + result.cost.dependencyPoints).toBeLessThanOrEqual(
+            8 * result.cost.inputKeys,
+          );
+          expect(result.cost.resultWrites).toBeLessThanOrEqual(1000);
+          expect(result.cost.frontierWrites).toBeLessThanOrEqual(1);
+          expect(result.cost.engineSearches).toBeLessThanOrEqual(4);
+          if (result.status === 'settled') return;
+        }
+        throw new Error('Finite native consumer repair did not finish');
+      }
+      await repair(observation.repair);
+      // Preserve fresh capture/preparation and native identity checks in the controller's background scope.
+      let fresh: Awaited<ReturnType<typeof captured>> | undefined;
+      for (let step = 0; step < 256; step++) {
+        const result = await n.operations.capture({ plan: negative(author), snapshot: 'pit' }, context());
+        expect(['captured', 'preparing']).toContain(result.status);
+        if (result.status === 'captured') {
+          expect(result.queried.consumer.physicalTarget).toBe(n.consumer.physicalTarget);
+          expect(result.queried.consumer.incarnation).toBe(await n.consumer.incarnation());
+          expect(result.queried.consumer.meaningDigest).toBe(n.f.meaning.digest);
+          expect(result.queried.consumer.readDefinition).toBeString();
+          expect(result.queried.consumer.readDefinition!.length).toBeGreaterThan(0);
+          expect(result.queried.snapshot.kind).toBe('pit');
+          fresh = result;
+          break;
+        }
+        if (result.status === 'preparing') await repair(result.repair);
+      }
+      if (!fresh) throw new Error('Finite native consumer capture did not finish');
+      expect((await execute(n, fresh.queried)).result.hits.map((hit) => hit.id)).toEqual([book]);
+      expect((await status(n.operations, fresh.queried)).pending).toEqual([]);
+      // Final runs AFTER native repair, refresh and persisted ACK, against the ORIGINAL execution.
+      repaired.resolve();
+      const { value, capture: whole } = await measured;
+      const final = value.final;
+      expect(final.pending).toEqual([]);
+      expect(final.changed).toContainEqual(reduction);
+      expect(final.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });
+      expect(final.queried.snapshot.observation).toBe(observation.queried.snapshot.observation);
+
+      const operation = (text: string) =>
+        /^\s*\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//.exec(text)?.[1];
+      const coverageStatement = (text: string) => ['privacy-start', 'privacy-final'].includes(operation(text) ?? '');
+      const statements = whole.statements.flatMap((text, i) => (coverageStatement(text) ? [i] : []));
+      const plans = whole.plans.flatMap((document, i) => {
+        const entries: unknown[] = Array.isArray(document) ? document : [document];
+        return entries.flatMap((entry) => {
+          if (typeof entry !== 'object' || entry === null || !('Query Text' in entry))
+            throw new Error('Native plan is missing Query Text for operation attribution');
+          const text = entry['Query Text'];
+          if (typeof text !== 'string') throw new Error('Native plan Query Text must be SQL');
+          return [{ document: entry, text, backend: whole.planBackends?.[i] }];
+        });
+      });
+      const coveragePlans = plans.filter(({ text }) => coverageStatement(text));
+      const coverage: Capture = {
+        statements: statements.map((i) => whole.statements[i]!),
+        plans: coveragePlans.map(({ document }) => document),
+        requestBytes: statements.map((i) => whole.requestBytes![i]!),
+        responseBytes: statements.map((i) => whole.responseBytes![i]!),
+        statementErrors: statements.map((i) => whole.statementErrors![i]!),
+        statementBackends: statements.map((i) => whole.statementBackends![i]),
+        planBackends: coveragePlans.map(({ backend }) => backend),
+      };
+      await Bun.write(
+        new URL('../../../../.temp/goal/public-filter-consumer-ack-before-final.json', import.meta.url),
+        JSON.stringify({ whole, coverage, preparationCosts }),
+      );
+      expect(whole.statementBackends).toHaveLength(whole.statements.length);
+      expect(whole.planBackends).toHaveLength(whole.plans.length);
+      expect(whole.requestBytes).toHaveLength(whole.statements.length);
+      expect(whole.responseBytes).toHaveLength(whole.statements.length);
+      expect(whole.statementErrors).toEqual(whole.statements.map(() => null));
+      // Match occurrences, not distinct SQL. This also checks own-row and unclassified bookkeeping plans.
+      const key = (text: string, backend: number | undefined) => JSON.stringify([backend, text]);
+      expect(plans.map(({ text, backend }) => key(text, backend)).sort()).toEqual(
+        whole.statements
+          .flatMap((text, i) => (isControlStatement(text) ? [] : [key(text, whole.statementBackends![i])]))
+          .sort(),
+      );
+      expect(coverage.statements.map(operation).sort()).toEqual(['privacy-final', 'privacy-start']);
+      for (const text of whole.statements.filter((text) => operation(text) !== undefined)) {
+        const rest = text.replace(/^\s*\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//, '');
+        expect(operation(rest), 'Exactly one leading semantic operation annotation is required').toBeUndefined();
+      }
+      const privacy = costOf(coverage);
+      expect(privacy.statements).toBe(coverage.statements.length);
+      expect(privacy.statements).toBeLessThanOrEqual(2);
+      const behindHomes = new Set(final.pending.map((head) => head.partition));
+      const changedHomes = new Set(final.changed.map((head) => head.partition));
+      expect(privacy.rows).toBeLessThanOrEqual(64 + 2 * (behindHomes.size + changedHomes.size));
+
+      const work = costOf(whole);
+      const candidates = value.start.cost.candidates + final.cost.candidates;
+      for (const cost of [value.start.cost, final.cost])
+        for (const count of Object.values(cost)) expect(Number.isSafeInteger(count) && count >= 0).toBe(true);
+      expect(candidates).toBeLessThanOrEqual(Math.min(600, 6 * 20 + 3));
+      expect(
+        value.start.cost.accessPoints +
+          value.start.cost.dependencyPoints +
+          final.cost.accessPoints +
+          final.cost.dependencyPoints,
+      ).toBeLessThanOrEqual(16 + 8 * candidates);
+      expect(value.start.cost.engineSearches + final.cost.engineSearches).toBeLessThanOrEqual(6);
+      expect(value.start.cost.outputSlots + final.cost.outputSlots).toBeLessThanOrEqual(20);
+      expect(work.rows).toBeLessThanOrEqual(64 + 16 * candidates);
+      expect(work.blocks).toBeLessThanOrEqual(6 * (64 + 16 * candidates));
+      expect(work.requestBytes).toBeDefined();
+      expect(work.responseBytes).toBeDefined();
+      expect(work.requestBytes!).toBeLessThanOrEqual(64 * 1024 + 1024 * candidates);
+      expect(work.responseBytes!).toBeLessThanOrEqual(16 * 1024 + 4 * 1024 * candidates);
+      const charged = withoutCatalogStatements('native ACK-before-final whole read', whole);
+      const backends = new Set(whole.statementBackends);
+      expect(backends.has(undefined)).toBe(false);
+      expect(backends.size).toBeLessThanOrEqual(1);
+      for (const backend of backends)
+        expect(
+          charged.statements.filter((text, i) => charged.statementBackends![i] === backend && !isControlStatement(text))
+            .length,
+        ).toBeLessThanOrEqual(12);
+    } finally {
+      repaired.resolve();
+      clearTimeout(timer);
+      await Promise.allSettled([measured, started.promise, repaired.promise]);
+    }
   } finally {
     await n.close();
   }
