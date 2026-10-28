@@ -10,7 +10,7 @@ test("the red run's time limit defaults to 120 seconds", () => {
   expect(getOutcomeTimeoutMs({})).toBe(120_000);
 });
 
-test('VERIFY_OUTCOME_TIMEOUT_MS sets the red run time limit', () => {
+test("VERIFY_OUTCOME_TIMEOUT_MS sets the red run's time limit", () => {
   expect(getOutcomeTimeoutMs({ VERIFY_OUTCOME_TIMEOUT_MS: '37' })).toBe(37);
 });
 
