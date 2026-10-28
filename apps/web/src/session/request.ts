@@ -1,4 +1,5 @@
 import { dependencyUnavailable, problem } from '../media/kernel.ts';
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { configured, type SessionEnv } from './client.ts';
 import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
 import {
@@ -15,6 +16,7 @@ const subjects = new WeakMap<Request, string>();
 // Credential-using routes resolve before their first kernel call, outside any error
 // concealment. Page requests need no lookup. The boolean clears stale cookies.
 export async function prepareSession(request: Request, env: Partial<SessionEnv>): Promise<boolean> {
+  assertPublicCacheReadAllowed(request, 'session');
   const id = cookie(request, SESSION_COOKIE);
   if (id === undefined) return false;
   const requireCsrf = isUnsafeRequest(request) && carriesSession(request);
@@ -54,9 +56,11 @@ export async function prepareSession(request: Request, env: Partial<SessionEnv>)
 }
 
 export function sessionSubject(request: Request): string | undefined {
+  assertPublicCacheReadAllowed(request, 'session');
   return subjects.get(request);
 }
 
 export function viewerCredential(request: Request): string | null {
+  assertPublicCacheReadAllowed(request, 'session credential');
   return request.headers.get('authorization') ?? credentials.get(request) ?? null;
 }

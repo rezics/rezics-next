@@ -1,9 +1,12 @@
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
+
 export const SESSION_COOKIE = '__Host-rezics_session';
 export const LOGIN_COOKIE = '__Host-rezics_login';
 export const SESSION_SECONDS = 30 * 24 * 60 * 60;
 export const LOGIN_SECONDS = 10 * 60;
 
 export function cookie(request: Request, name: string): string | undefined {
+  assertPublicCacheReadAllowed(request, 'session or cookie');
   const entries = (request.headers.get('cookie') ?? '').split(';').map((part) => part.trim());
   return entries.find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
 }

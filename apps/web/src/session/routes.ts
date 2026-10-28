@@ -1,5 +1,6 @@
 import * as oidc from 'openid-client';
 import { dependencyUnavailable, problem, problemResponse } from '../media/kernel.ts';
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { authClient, configured, unreachable, type SessionEnv } from './client.ts';
 import { newCsrfToken } from './csrf.ts';
 import {
@@ -144,6 +145,7 @@ export async function authRequest(
   env: Partial<SessionEnv>,
   endedSession?: { idToken?: string | undefined },
 ): Promise<Response> {
+  assertPublicCacheReadAllowed(request, 'Auth');
   const path = new URL(request.url).pathname;
   let response: Response;
   try {

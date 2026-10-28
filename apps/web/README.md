@@ -273,7 +273,7 @@ The search route keeps its schema in `search/search-params.ts`; its query key in
 
 **Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
 
-**Caching**: Anonymous responses of public routes carry `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600` and a weak `ETag`, never `Set-Cookie`. Server functions that read the session answer `private, no-store`.
+**Caching**: Anonymous responses of public routes carry `Cache-Control: public, max-age=0, s-maxage=60` and a weak `ETag`, never `Set-Cookie`. A deleted, restored, or withheld record can remain in shared cache for at most 60 seconds. Server functions that read the session answer `private, no-store`.
 
 **Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.
 
@@ -352,6 +352,12 @@ action needs no additional session read.
 - **Bound:** Constant per request; no loader runs for a signed-out reader.
 - **Growth check:** `tests/signed-in-routes.test.ts` counts kernel and session reads for a signed-out GET of each
   signed-in route: one session read and no kernel read.
+
+### Page cache
+
+- **Touches:** One Cache API lookup per anonymous GET of an opted-in route; on a miss, the page's usual reads and one Cache API put.
+- **Bound:** A hit makes no kernel request; the HTML rewrite is linear in the page's bytes. A deleted, restored, or withheld record appears everywhere within 60 seconds.
+- **Growth check:** The acceptance test counts kernel requests for two GETs of an opted-in page within the TTL: the first makes the page's reads, the second none.
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,
 `src/session/` and `src/media/`; they count outbound work, not the kernel's internal query cost.

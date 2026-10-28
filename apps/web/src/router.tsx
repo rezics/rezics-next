@@ -10,6 +10,38 @@ import { NotFoundPage } from './shell/shell';
 import { PendingPage } from './shell/pending';
 import { routeTree } from './routeTree.gen';
 import { deLocalizeUrl, localizeUrl } from './paraglide/runtime.js';
+
+type RouteNode = {
+  options?: { id?: string; path?: string; staticData?: { publicCache?: boolean } };
+  children?: Record<string, RouteNode>;
+};
+
+function routePattern(path: string): RegExp {
+  const segments = path.split('/').map((segment) => {
+    if (/^@\{\$[^}]+\}$/.test(segment)) return '@[^/]+';
+    if (segment.startsWith('$')) return '[^/]+';
+    if (segment === '*') return '.+';
+    return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  });
+  return new RegExp(`^${segments.join('/')}/?$`);
+}
+
+function hasPublicCachePath(route: RouteNode, pathname: string, parentPath = '/', inherited = false): boolean {
+  const routePath = route.options?.path ?? route.options?.id ?? '';
+  const fullPath = routePath.startsWith('/') ? routePath : `${parentPath.replace(/\/$/, '')}/${routePath}`;
+  const marked = inherited || route.options?.staticData?.publicCache === true;
+  if (routePath && routePattern(fullPath || '/').test(pathname) && marked) return true;
+  return Object.values(route.children ?? {}).some((child) => hasPublicCachePath(child, pathname, fullPath, marked));
+}
+
+export function isPublicCacheRequest(request: Request): boolean {
+  const publicUrl = deLocalizeUrl(new URL(request.url));
+  const root = routeTree as unknown as RouteNode;
+  return (
+    root.options?.staticData?.publicCache === true ||
+    Object.values(root.children ?? {}).some((route) => hasPublicCachePath(route, publicUrl.pathname))
+  );
+}
 const nonce = createIsomorphicFn()
   .server(() => requestNonce(getRequest()))
   .client(() => document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.content);

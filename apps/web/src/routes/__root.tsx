@@ -4,13 +4,13 @@ import {
   isNotFound,
   Outlet,
   Scripts,
+  useRouter,
   useRouterState,
 } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { setResponseStatus } from '@tanstack/react-start/server';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useRouter } from '@tanstack/react-router';
 import { env } from 'cloudflare:workers';
 import { PreferencesScript } from '../shell/preferences-script';
 import { getLocale } from '../paraglide/runtime.js';
@@ -70,6 +70,7 @@ export const Route = createRootRouteWithContext<{
 });
 function Root() {
   const router = useRouter();
+  const nonce = router.options.ssr?.nonce;
   const { state: session } = useSession();
   const platformClosed = useRouterState({
     select: (state) => state.matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error)),
@@ -107,6 +108,7 @@ function Root() {
   return (
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
+        {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         <PreferencesScript />
         <HeadContent />
       </head>

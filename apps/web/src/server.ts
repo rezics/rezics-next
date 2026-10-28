@@ -33,6 +33,16 @@ import { orderStatusResponse } from './checkout/order.server.ts';
 import { startCheckout } from './checkout/start.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
+import { isPublicCacheRequest } from './router.tsx';
+import {
+  cachePublicPage,
+  consumeDehydratedPageData,
+  dehydratedPageDataFromRouter,
+  isPublicCacheRender,
+  privateServerFunctionResponse,
+  recordDehydratedPageData,
+} from './security/page-cache.ts';
+import { createNonce, requestNonce } from './security/nonce.ts';
 import {
   defineCustomServerStrategy,
   extractLocaleFromRequestAsync,
@@ -220,144 +230,162 @@ defineCustomServerStrategy('custom-accept-language', {
   },
 });
 
-const fetchHandler = createStartHandler(defaultStreamHandler);
-const worker = {
-  async fetch(request: Request) {
-    const url = new URL(request.url);
-    // Crawler files read no session and make no kernel request.
-    if (url.pathname === '/robots.txt') return fetchHandler(request);
-    const publicEnv = env as Partial<SitemapEnv> & { PUBLIC_ORIGIN?: string };
-    const crawlerFile = await sitemapResponse(request, publicEnv);
-    if (crawlerFile) return crawlerFile;
-    const sessionEnv = env as Partial<SessionEnv>;
-    if (
-      isUnsafeRequest(request) &&
-      carriesSession(request) &&
-      !isAllowedSiteOrigin(request, request.headers.get('origin'), sessionEnv.SITE_ORIGINS)
-    )
-      return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-    const orderStatus = /^\/orders\/([^/]+)\/status$/.exec(url.pathname);
-    if (orderStatus && request.method === 'GET') {
-      try {
-        await prepareSession(request, sessionEnv);
-        const refused = await limitRead(
-          request,
-          env as typeof env & ReadRateLimitEnv,
-          readLimitKey(request, sessionSubject(request)),
-        );
-        if (refused) return refused;
-        return await orderStatusResponse(request, orderStatus[1]!);
-      } catch (error) {
-        return problemResponse(error);
-      }
-    }
-    if (url.pathname === '/checkout') {
-      if (request.method !== 'POST')
-        return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
-      try {
-        return await startCheckout(request, sessionEnv);
-      } catch (error) {
-        return problemResponse(error);
-      }
-    }
-    const isRead = request.method === 'GET' || request.method === 'HEAD';
-    const isServerFn = url.pathname.startsWith('/_serverFn/');
-    const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
-    if (
-      isRead &&
-      !isMedia &&
-      !isServerFn &&
-      !url.pathname.startsWith('/auth/') &&
-      url.pathname !== '/api/search/suggestions'
-    ) {
-      const redirect = await pageRedirect(request, url);
-      if (redirect) return redirect;
-    }
-    let clearSessionCookie = false;
-    let mediaSessionError: unknown;
+const fetchHandler = createStartHandler((options) => {
+  if (isPublicCacheRender(options.request))
+    recordDehydratedPageData(options.request, dehydratedPageDataFromRouter(options.router));
+  return defaultStreamHandler(options);
+});
 
-    if (isRead) {
-      let subject: string | undefined;
-      if (isMedia) {
-        try {
-          clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
-        } catch (error) {
-          mediaSessionError = error;
-        }
-        subject = sessionSubject(request);
-      }
-
-      // Public document admission must not resolve or inspect a reader's session.
-      const publicPage =
-        !isMedia && !isServerFn && !url.pathname.startsWith('/auth/') && !url.pathname.startsWith('/api/');
-      const key = publicPage ? `ip:${request.headers.get('CF-Connecting-IP') ?? ''}` : readLimitKey(request, subject);
-      const refused = await limitRead(request, env as typeof env & ReadRateLimitEnv, key);
-      if (refused) return refused;
-      if (mediaSessionError !== undefined) return problemResponse(mediaSessionError);
-    }
-
-    if (isServerFn) return fetchHandler(request);
-
-    if (url.pathname.startsWith('/auth/')) {
-      if (isUnsafeRequest(request) && carriesSession(request)) {
-        const id = cookie(request, SESSION_COOKIE);
-        const token = await csrfTokenFromRequest(request);
-        if (url.pathname === '/auth/sign-out') {
-          if (!validId(id) || !sessionEnv.SESSIONS) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-          try {
-            const ended = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).end(token);
-            if (typeof ended !== 'object' || ended === null || !ended.allowed)
-              return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-            return authRequest(request, sessionEnv, { idToken: ended.idToken });
-          } catch (error) {
-            return problemResponse(error);
-          }
-        }
-        if (!validId(id) || !sessionEnv.SESSIONS || token === null)
-          return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-        try {
-          const result = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).signedIn();
-          const signedIn = typeof result === 'object' ? result.signedIn : Boolean(result);
-          const csrfToken = typeof result === 'object' ? (result.csrfToken ?? undefined) : undefined;
-          if (!signedIn || !csrfTokenMatches(csrfToken, token))
-            return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-        } catch {
-          return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-        }
-      }
-      return authRequest(request, sessionEnv);
-    }
-    if (url.pathname === '/api/search/suggestions') {
-      if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
-      const query = url.searchParams.get('q')?.trim() ?? '';
-      if (!query || query.length > 256)
-        return Response.json(
-          { subjects: [], as_of: new Date().toISOString() },
-          { headers: { 'cache-control': 'no-store' } },
-        );
-      try {
-        return Response.json(await suggestSubjects(query, request), { headers: { 'cache-control': 'no-store' } });
-      } catch {
-        return Response.json(
-          { error: 'Suggestions unavailable' },
-          { status: 503, headers: { 'cache-control': 'no-store' } },
-        );
-      }
-    }
-    if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
+async function fetchRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  // Crawler files read no session and make no kernel request.
+  if (url.pathname === '/robots.txt') return fetchHandler(request);
+  const publicEnv = env as Partial<SitemapEnv> & { PUBLIC_ORIGIN?: string };
+  const crawlerFile = await sitemapResponse(request, publicEnv);
+  if (crawlerFile) return crawlerFile;
+  const sessionEnv = env as Partial<SessionEnv>;
+  if (
+    isUnsafeRequest(request) &&
+    carriesSession(request) &&
+    !isAllowedSiteOrigin(request, request.headers.get('origin'), sessionEnv.SITE_ORIGINS)
+  )
+    return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+  const orderStatus = /^\/orders\/([^/]+)\/status$/.exec(url.pathname);
+  if (orderStatus && request.method === 'GET') {
     try {
-      if (!isRead) clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
-      const response = await mediaRequest(request, env as Partial<MediaEnv>);
-      if (!clearSessionCookie) return response;
-      const headers = new Headers(response.headers);
-      headers.append('set-cookie', clearCookie(SESSION_COOKIE));
-      headers.set('cache-control', 'private, no-store');
-      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      await prepareSession(request, sessionEnv);
+      const refused = await limitRead(
+        request,
+        env as typeof env & ReadRateLimitEnv,
+        readLimitKey(request, sessionSubject(request)),
+      );
+      if (refused) return refused;
+      return await orderStatusResponse(request, orderStatus[1]!);
     } catch (error) {
       return problemResponse(error);
     }
+  }
+  if (url.pathname === '/checkout') {
+    if (request.method !== 'POST')
+      return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
+    try {
+      return await startCheckout(request, sessionEnv);
+    } catch (error) {
+      return problemResponse(error);
+    }
+  }
+  const isRead = request.method === 'GET' || request.method === 'HEAD';
+  const isServerFn = url.pathname === '/_serverFn' || url.pathname.startsWith('/_serverFn/');
+  const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
+  if (
+    isRead &&
+    !isMedia &&
+    !isServerFn &&
+    !url.pathname.startsWith('/auth/') &&
+    url.pathname !== '/api/search/suggestions'
+  ) {
+    const redirect = await pageRedirect(request, url);
+    if (redirect) return redirect;
+  }
+  let clearSessionCookie = false;
+  let mediaSessionError: unknown;
+
+  if (isRead) {
+    let subject: string | undefined;
+    if (isMedia) {
+      try {
+        clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
+      } catch (error) {
+        mediaSessionError = error;
+      }
+      subject = sessionSubject(request);
+    }
+
+    // Public document admission must not resolve or inspect a reader's session.
+    const publicPage =
+      !isMedia && !isServerFn && !url.pathname.startsWith('/auth/') && !url.pathname.startsWith('/api/');
+    const key = publicPage ? `ip:${request.headers.get('CF-Connecting-IP') ?? ''}` : readLimitKey(request, subject);
+    const refused = await limitRead(request, env as typeof env & ReadRateLimitEnv, key);
+    if (refused) return refused;
+    if (mediaSessionError !== undefined) return problemResponse(mediaSessionError);
+  }
+
+  if (isServerFn) return privateServerFunctionResponse(await fetchHandler(request));
+
+  if (url.pathname.startsWith('/auth/')) {
+    if (isUnsafeRequest(request) && carriesSession(request)) {
+      const id = cookie(request, SESSION_COOKIE);
+      const token = await csrfTokenFromRequest(request);
+      if (url.pathname === '/auth/sign-out') {
+        if (!validId(id) || !sessionEnv.SESSIONS) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+        try {
+          const ended = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).end(token);
+          if (typeof ended !== 'object' || ended === null || !ended.allowed)
+            return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+          return authRequest(request, sessionEnv, { idToken: ended.idToken });
+        } catch (error) {
+          return problemResponse(error);
+        }
+      }
+      if (!validId(id) || !sessionEnv.SESSIONS || token === null)
+        return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+      try {
+        const result = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).signedIn();
+        const signedIn = typeof result === 'object' ? result.signedIn : Boolean(result);
+        const csrfToken = typeof result === 'object' ? (result.csrfToken ?? undefined) : undefined;
+        if (!signedIn || !csrfTokenMatches(csrfToken, token))
+          return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+      } catch {
+        return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+      }
+    }
+    return authRequest(request, sessionEnv);
+  }
+  if (url.pathname === '/api/search/suggestions') {
+    if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
+    const query = url.searchParams.get('q')?.trim() ?? '';
+    if (!query || query.length > 256)
+      return Response.json(
+        { subjects: [], as_of: new Date().toISOString() },
+        { headers: { 'cache-control': 'no-store' } },
+      );
+    try {
+      return Response.json(await suggestSubjects(query, request), { headers: { 'cache-control': 'no-store' } });
+    } catch {
+      return Response.json(
+        { error: 'Suggestions unavailable' },
+        { status: 503, headers: { 'cache-control': 'no-store' } },
+      );
+    }
+  }
+  if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
+  try {
+    if (!isRead) clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
+    const response = await mediaRequest(request, env as Partial<MediaEnv>);
+    if (!clearSessionCookie) return response;
+    const headers = new Headers(response.headers);
+    headers.append('set-cookie', clearCookie(SESSION_COOKIE));
+    headers.set('cache-control', 'private, no-store');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  } catch (error) {
+    return problemResponse(error);
+  }
+}
+
+const worker = {
+  async fetch(request: Request) {
+    const publicRoute = isPublicCacheRequest(request);
+    return cachePublicPage(request, {
+      publicRoute,
+      cache: (caches as CacheStorage & { default: Cache }).default,
+      buildId: (env as Partial<{ BUILD_ID: string }>).BUILD_ID ?? 'development',
+      dehydratedData: () => consumeDehydratedPageData(request),
+      freshNonce: () => requestNonce(request) ?? createNonce(request),
+      render: () => fetchRequest(request),
+    });
   },
 };
+
 export default {
   scheduled,
   async fetch(request: Request) {

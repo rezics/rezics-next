@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { kernelClient } from '../kernel/client';
 import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
@@ -109,6 +110,7 @@ const readCache = new Map<string, { at: number; value: unknown }>();
 const readInflight = new Map<string, Promise<unknown>>();
 
 function viewerReadKey(request: Request, kind: string, data: unknown): string {
+  assertPublicCacheReadAllowed(request, 'session or cookie');
   return `${kind}\n${request.headers.get('cookie') ?? ''}\n${JSON.stringify(data)}`;
 }
 
