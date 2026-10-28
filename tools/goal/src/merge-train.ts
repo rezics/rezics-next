@@ -1383,7 +1383,22 @@ export class MergeTrain {
         if (controlPlane) {
           stage = 'gate';
           appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
-          const checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
+          let checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
+          // The suite runs on the train's host beside every worker, and a timing test can fail under that load: two
+          // landings of one task failed on two different tests that pass alone. As the kernel check does, failing
+          // test files rerun alone once, and the check passes only if they pass alone.
+          const suite = CONTROL_PLANE_CHECKS.at(-1)!;
+          if (!checked.passed && !checked.timedOut && JSON.stringify(checked.failedCommand) === JSON.stringify(suite)) {
+            const files = failingTestFiles(checked.output);
+            if (files.length) {
+              appendFileSync(logPath, `Rerunning failed control-plane test files alone: ${files.join(' ')}\n`);
+              const alone = await runIntegrationChecks([['bun', 'test', ...files]], trainTree, logPath, runGate);
+              if (alone.passed) {
+                appendFileSync(logPath, 'Load-sensitive control-plane tests passed alone\n');
+                checked = alone;
+              }
+            }
+          }
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!checked.passed) {

@@ -282,6 +282,59 @@ test('a main advance during control-plane checks is preserved by compare-and-swa
   }
 });
 
+test('a control-plane test file that fails in the suite under load and passes alone does not keep the task off main', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const task = dispatch(h, 'tools/goal/src/hotfix.ts');
+    await h.start(task);
+    const runs: string[][] = [];
+
+    await train(h, async (command) => {
+      runs.push([...command]);
+      if (JSON.stringify(command) === JSON.stringify(['bun', 'test', 'tools/goal/src']))
+        return {
+          passed: false,
+          output: 'tools/goal/src/flaky.test.ts:\n(fail) a timing test [5000.00ms]\n 1 fail',
+          timedOut: false,
+        };
+      return { passed: true, output: '', timedOut: false };
+    });
+
+    expect(runs).toContainEqual(['bun', 'test', 'tools/goal/src/flaky.test.ts']);
+    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
+    expect(h.store.task(task.id).state).toBe('merged');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a control-plane test file that fails alone too keeps the task off main', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const main = h.head('main');
+    const task = dispatch(h, 'tools/goal/src/hotfix.ts');
+    await h.start(task);
+
+    await train(h, async (command) =>
+      command[1] === 'test'
+        ? {
+            passed: false,
+            output: 'tools/goal/src/broken.test.ts:\n(fail) a real failure [1.00ms]\n 1 fail',
+            timedOut: false,
+          }
+        : { passed: true, output: '', timedOut: false },
+    );
+
+    expect(h.head('main')).toBe(main);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.store.task(task.id).state).not.toBe('merged');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('failed control-plane checks keep the task off main', async () => {
   const h = integrationHarness();
   try {
