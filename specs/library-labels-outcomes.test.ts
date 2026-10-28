@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { derivedId } from '../services/kernel/src/route/route.ts';
+import type { DynamicCollectionView } from './dynamic-collections-driver.ts';
 import type {
   LibraryLabelsDriver,
   LibraryLabelsPersona,
@@ -955,6 +956,41 @@ const readEverything = (path: string) => driver.request('ownerReadOnly', { metho
 const plusHours = (instant: string, hours: number) => new Date(Date.parse(instant) + hours * 3_600_000).toISOString();
 const removal = (subjectId: string, labelId: string, assignment: AssignmentView) => ({
   subjectId, labelId, assignmentId: assignment.id, expectedRevision: assignment.revision,
+});
+
+test('empty logical Everything detail and members remain read-only without a stored resource', async () => {
+  const owner = driver.accounts.owner;
+  const id = derivedId(owner.id, JSON.stringify(['library.collection.builtin', 1, 'everything']), owner.route);
+  const inspect = () => driver.inspect({ owner: 'owner', collectionIds: [id] });
+  const before = await inspect();
+  expect(before.collections).toEqual([]);
+  expect(before.collectionGrants).toEqual([]);
+  expect(before.subjectFacts).toEqual([]);
+
+  for (let repetition = 0; repetition < 2; repetition++) {
+    const listed = await driver.request('ownerReadOnly', {
+      method: 'GET', path: `/v1/collections?curatorAccountId=${owner.id}&limit=100`,
+    });
+    expect(listed.status).toBe(200);
+    const page = await body<{ collections: DynamicCollectionView[]; next: string | null }>(listed);
+    expect(page.collections).toHaveLength(1);
+    expect(page.next).toBeNull();
+    expect(page.collections[0]).toMatchObject({ id, builtin: { kind: 'everything' } });
+    const detail = await driver.request('ownerReadOnly', { method: 'GET', path: `/v1/collections/${id}` });
+    expect(detail.status).toBe(200);
+    const { collection } = await body<{ collection: DynamicCollectionView }>(detail);
+    expect(collection).toMatchObject({
+      id, curatorAccountId: owner.id, membershipKind: 'dynamic', builtinKind: 'everything',
+      visibility: 'private', revision: 0,
+    });
+    expect(collection.title == null).toBe(true);
+    for (const field of ['createdAt', 'updatedAt', 'memberCount', 'orderEpoch'])
+      expect(collection).not.toHaveProperty(field);
+    const members = await readEverything(`/v1/collections/${id}/members?limit=100`);
+    expect(members.status).toBe(200);
+    expect(await body(members)).toEqual({ members: [], next: null });
+    expect(await inspect()).toEqual(before);
+  }
 });
 
 test('one stale reservation is reclaimed and parent undo cannot revive it above the live cap', async () => {

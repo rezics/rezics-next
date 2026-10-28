@@ -185,8 +185,9 @@ generic source, and prevents future writes or dynamic-query use. It does not syn
 assignment rows. Recreating the same name makes a new ID; cleanup for the old ID cannot match or
 delete the new label's assignments.
 
-For a label deleted by its owner, assignment cleanup begins only after the 30-day undo window,
-through shared bounded cleanup. It pages the owner/label/subject assignment index in keyset order, processing no more
+For a label deleted by its owner, physical assignment purge begins only after the 30-day undo window,
+through shared bounded cleanup. Before that deadline, an admitted assignment may reclaim one inactive reservation
+by soft-deleting its child as specified above; this neither purges payload nor renews undo. Purge pages the owner/label/subject assignment index in keyset order, processing no more
 than 100 candidates per page with `O(P)` memory and `O(N)` total work. Page effects, checkpoint, terminal fence, and
 replay receipt commit together. A crash or lost acknowledgement may replay a page without deleting later rows or
 reversing a tombstone. No library-local orchestrator, mass cascade, unbounded trigger, or cleanup path outside the

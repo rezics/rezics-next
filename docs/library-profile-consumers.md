@@ -154,9 +154,11 @@ the current actor. The order is part of the privacy contract:
    key returns the existing idempotency conflict. Do not revalidate current subject membership or current profile
    capability before an exact authorized receipt: a later release change must not turn a valid own receipt into a
    new write or alter its response.
-4. Only when no receipt exists, perform current subject membership/existence checks, resolve the active Global head
-   and current accepting type at `T`, look up one profile, and validate capability/value membership. A miss or
+4. Only when no receipt exists, perform the operation's current subject/resource admission. For NEW profiled values,
+   resolve the active Global head and current accepting type at `T`, look up one profile, and validate capability/value membership. A miss or
    unsupported pair fails before any fact row, receipt, event, activity, counter, or migration state is written.
+   Clearing/deleting an own historic fact uses its exact identity/CAS and stored pin without requiring a current
+   profile. Generic label and curated occurrence commands likewise do not perform profile-capability admission.
 5. Commit the fact row, pin, ordinary receipt and normal effects as one owner command. A successful pin records the
    exact immutable release digest/type/profile observed at `T`; later activation does not rewrite it.
 
