@@ -255,8 +255,27 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
   async 'durable operation reader'(fail) {
     await durable.step(operation, { reader: fail });
   },
-  async 'durable anchor validate'(fail) {
-    await durable.step({ ...operation, anchor: { ...operation.anchor, validate: fail } });
+  async 'durable anchor validate'() {
+    // The durable test helper owns a fixed ten-second request deadline. Advance
+    // its clock only after the Access callback starts so this command-site case
+    // exercises deadline exhaustion without adding ten seconds to the suite.
+    const realNow = Date.now;
+    let simulatedNow = realNow();
+    Date.now = () => simulatedNow;
+    try {
+      await durable.step({
+        ...operation,
+        anchor: {
+          ...operation.anchor,
+          validate: async () => {
+            simulatedNow += 10_001;
+            throw new AccessUnavailableError('contention');
+          },
+        },
+      });
+    } finally {
+      Date.now = realNow;
+    }
   },
   async 'workflow resolve anchor validate'(fail) {
     let prepared = false;
