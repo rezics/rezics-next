@@ -45,6 +45,49 @@ Inputs are parsed JSON, without cycles. Validation does not mutate them.
 `releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its
 RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 
+### Exact quantities
+
+`valueSchema('quantity', { exact: true, units, integer })` opts into a second
+fixed quantity schema: a closed object requiring `amount` and `unit`, with only
+those two properties. Either uncertainty bound (`lowerBound` or `upperBound`),
+including a bound equal to the amount, is an unknown field. An ordinary quantity
+continues to admit both optional bounds. Omission of `exact` preserves its
+canonical schema bytes. The only admitted explicit flag is boolean `true`;
+`false`, strings, numbers and null are invalid, and the option is quantity-only.
+
+A LinkML quantity slot opts in with `annotations.exact: true`, including through
+ordinary slot induction. Its `integer` or `decimal` range, expanded units and
+property-level `minimum_value` / `maximum_value` retain their existing meanings.
+Exactness imposes no integer, nonnegative or unit-`1` default. Signed amount
+strings remain lossless within the existing 127-character structural limit.
+`somevalue` and `novalue` retain their existing unknown-value rules.
+
+The serialized meaning is the absence of both bound properties in the fixed
+`value` schema. There is no property-level exact flag, runtime registry or
+vertical handler. `validateRelease` admits only the complete ordinary or exact
+fixed variant for the property's datatype, units and amount grammar; partial
+bound removal or arbitrary schema edits remain invalid. Portable subject,
+statement, nested Snak and bulk validation consume that same schema, as do native
+writes. Existing releases, digests, receipts and stored pins keep their meaning.
+
+This mechanism does not release any measurement property or helper vocabulary,
+adopt measured data, or enable string-qualifier discovery. In particular, free
+English scope text supplies no whole-Book completeness assertion. Measurement
+method/scope/digest/time representation, actual source associations, indexing and
+native discovery jobs remain separate work. The generic extension conformance
+fixture in `test/semantic/exact-quantity-schema.test.ts` in the kernel is not the
+bundled word-count/diet release or the shared released-discovery fixture.
+
+#### Cost
+
+- Touches: one slot annotation and its existing fixed value schema during bounded
+  compilation/release validation; one selected property's cached validator per Snak.
+- Bound: the existing release, request and decimal-length limits apply. No new
+  database lookup, traversal or native write operation is introduced.
+- Growth check: the full Definitions package check retains the existing 10/100
+  manifest assertions. `test/exact-quantity.test.ts` and the focused native file
+  prove the two fixed variants through the existing generic routes.
+
 ## Bundled catalogue
 
 The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` imports
@@ -646,7 +689,7 @@ Source conventions:
   Class and slot keys must each be unique. Prefix expansions must be consistent
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
-- Slot `annotations` permits `datatype`, `units`, `qualifiers`, `relation_group`,
+- Slot `annotations` permits `datatype`, `units`, `exact`, `qualifiers`, `relation_group`,
   `inverse`, `symmetric`, `acyclic`, `relation_order`, `relation_filter`, and
   `relation_slot_key`. The last annotation compiles to `relation.slotKey` and must
   name an admitted item qualifier.
@@ -659,8 +702,9 @@ Source conventions:
   metadata. Quantity requires `units`, a space-separated string of `1` or
   CURIEs, expanded to IRIs, or `'*'` alone for any unit (`1` or an absolute IRI).
   Quantities alone permit minimum and maximum bounds. Amounts and optional
-  `lowerBound` and `upperBound` are exact signed decimal strings; bounds enclose
-  the amount and obey the property's limits. APIs preserve those strings.
+  `lowerBound` and `upperBound` are signed decimal strings; bounds enclose
+  the amount and obey the property's limits. `exact: true` forbids both bounds
+  through the [exact quantity variant](#exact-quantities). APIs preserve those strings.
   `qualifiers` is a space-separated string of existing slot names.
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
