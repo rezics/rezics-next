@@ -55,6 +55,12 @@ test('recorded release frames work descendants, people, music and recipes throug
   }) as typeof fetch;
 
   try {
+    for (const [type, definition] of workDescendants) {
+      expect(
+        (await typeFrame(type, 'en')).ratio,
+        `typeFrame(${type}) should resolve its ${definition.coverRatio} frame`,
+      ).toBe(definition.coverRatio);
+    }
     for (const [type, ratio] of expectedFrames) {
       expect(release.types[type]?.coverRatio, `${type} should have a ${ratio} recorded frame`).toBe(ratio);
       expect((await typeFrame(type, 'en')).ratio, `typeFrame(${type}) should resolve ${ratio}`).toBe(ratio);
