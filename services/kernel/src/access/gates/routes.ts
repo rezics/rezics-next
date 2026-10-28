@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
-import { AuthenticationError } from '../../request/access.ts';
+import { AuthenticationError, type Access } from '../../request/access.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -60,7 +60,7 @@ const detail = (operation: 'open' | 'close') => ({
 
 export function exposureRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; clock: () => Date },
+  dependencies: { pool: Pool; clock: () => Date; access: () => Access },
 ) {
   let resolved: ReturnType<typeof createExposureCommands> | undefined;
   const commands = () => (resolved ??= createExposureCommands({ pool: dependencies.pool, clock: dependencies.clock }));

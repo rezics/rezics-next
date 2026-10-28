@@ -31,15 +31,18 @@ already closed is a no-op catalogue change.
 `GET /v1/platform/exposure` is a public read (`exposure:read`) with optional bearer authentication. It returns
 `{ admitted: string[] }`: the sorted mounted gate groups the caller is admitted to at T. Closed groups the caller
 cannot enter are omitted, so their names are never disclosed; consumers treat an absent group as closed. The read
-shares the open-groups and held-gates statements and admission rule with `visibleOperations`, including the actor
-and principal requirement for delegated callers. It performs no route projection and sends `cache-control: no-store`.
+shares the open-groups read and `authorizePlatformGate` port with `visibleOperations`: a closed group is admitted
+only when at least one mounted operation is in the caller's scopes and the formula allows its gate, including the
+actor and principal requirement for delegated callers. Both served discovery routes use the kernel's Access instance,
+which holds the viewer's authenticated identity evidence. The groups read performs no route projection and sends
+`cache-control: no-store`.
 
 ## Cost
 
 ### Admitted groups read
 
-- Touches: The open-groups read for the mounted group set and, for an account, the held-gates read on the Global Context. These are the same two statements `visibleOperations` runs.
-- Bound: Constant statements; O(G log E) buffers, where G is the mounted group count, a deployment constant.
+- Touches: One open-groups read for the mounted group set, plus at most G calls to `authorizePlatformGate`, one per closed group with an in-scope operation, at the same T.
+- Bound: G is the mounted closed-group count, a deployment constant. The opening probes cost O(M log E) buffers for M mounted groups; each gate check has the bound of "`gate:<g>` and `gate:any` on the Global Context" below. Rows and statements stay constant as unrelated data grows.
 - Growth check: `services/kernel/test/access/gates/growth-discovery.test.ts`: "admitted groups read stays bounded as unrelated accounts, gate grants, and openings grow".
 
 ### Per-request exposure read
@@ -62,6 +65,6 @@ and principal requirement for delegated callers. It performs no route projection
 
 ### visibleOperations and served OpenAPI
 
-- Touches: One read of the viewer's gate grants on the Global Context and one read of the open groups for the mounted group set.
-- Bound: Linear in the mounted route catalogue, a deployment constant.
-- Growth check: `growth-discovery.test.ts` grows unrelated accounts, their gate grants and other groups' opening rows at 1, 8, and 64.
+- Touches: The same open-groups read and at most G gate checks as the admitted groups read. Public operations and operations of open groups are visible; operations of closed groups also require their own action in the viewer's scopes and an allowed gate check. Served OpenAPI projects this single decision.
+- Bound: Linear in the mounted route catalogue, plus the opening probes and at most G checks with the bound of "`gate:<g>` and `gate:any` on the Global Context" above. G is the mounted closed-group count, a deployment constant.
+- Growth check: `growth-discovery.test.ts` grows unrelated accounts, gate grants, organization role grants on the Global Context, and other groups' opening rows at 1, 8, and 64.

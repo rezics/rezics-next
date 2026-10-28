@@ -336,6 +336,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
+    access: () => resolveAccess({ actions: actionCatalogue(exposed), realmRoleReader }),
   });
   const community = communityRoutes(exposed as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,

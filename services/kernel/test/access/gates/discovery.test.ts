@@ -28,7 +28,10 @@ const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-govern
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
 const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
 const { createRegistrationProofBindings } = await import('../../../src/access/registration-proof.ts');
-const { createAccess, visibleOperations } = await import('../../../src/access/index.ts');
+const accessModule = await import('../../../src/access/index.ts');
+const { createAccess, visibleOperations } = accessModule;
+const { createMembershipInverseCommands } = await import('../../../src/access/membership-inverse.ts');
+const { actionLabelOfMountedRoute } = await import('../../../src/http/request.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createPool } = await import('../../../src/database/pool.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
@@ -48,10 +51,12 @@ const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(95)]]) }
 const group = 'fixture_group';
 const groupAction = `gate:${group}`;
 const fixtureAction = 'fixture:read';
-const clientScopes = ['access:grant', 'exposure:open', 'exposure:close', 'gate:any', fixtureAction];
+const siblingAction = 'fixture:inspect';
+const clientScopes = ['access:grant', 'exposure:open', 'exposure:close', 'gate:any', fixtureAction, siblingAction];
 const fixtures = [
   { method: 'GET', path: '/v1/public-fixture', operationId: 'fixture.public_read', exposure: 'public' },
   { method: 'GET', path: '/v1/gated-fixture', operationId: 'fixture.gated_read', exposure: `gate:${group}` },
+  { method: 'GET', path: '/v1/gated-sibling', operationId: 'fixture.gated_inspect', exposure: `gate:${group}` },
 ] as const;
 
 type Person = { accountId: string; email: string; bearer: string };
@@ -84,13 +89,17 @@ function operationIds(document: Contract): string[] {
   return ids.sort();
 }
 
-function mountedOperations(): { operationId: string; exposure: string }[] {
-  const operations: { operationId: string; exposure: string }[] = [];
+function mountedOperations(): { operationId: string; exposure: string; action: string }[] {
+  const operations: { operationId: string; exposure: string; action: string }[] = [];
   for (const route of kernel.routes) {
     const detail = route.hooks?.detail as Record<string, unknown> | undefined;
     if (!detail || detail.hide === true) continue;
     if (typeof detail.operationId !== 'string' || typeof detail['x-exposure'] !== 'string') continue;
-    operations.push({ operationId: detail.operationId, exposure: detail['x-exposure'] });
+    operations.push({
+      operationId: detail.operationId,
+      exposure: detail['x-exposure'],
+      action: actionLabelOfMountedRoute(route),
+    });
   }
   return operations;
 }
@@ -229,6 +238,8 @@ beforeAll(async () => {
       security,
     };
     app.get('/v1/gated-fixture', { detail: gatedDetail }, () => ({ value: 'gated' }));
+    const siblingDetail = { ...gatedDetail, operationId: 'fixture.gated_inspect', 'x-action': siblingAction };
+    app.get('/v1/gated-sibling', { detail: siblingDetail }, () => ({ value: 'sibling' }));
     app.get('/v1/public-fixture', { detail: publicDetail }, () => ({ value: 'public' }));
     return app;
   });
@@ -347,22 +358,24 @@ test('anonymous callers and ordinary accounts receive only the public contract',
   }
 });
 
-test('a gated tester sees the operations of the gates it holds', async () => {
+test('a gated tester sees only in-scope operations of the gates it holds', async () => {
   const { served, visible } = await discovered(gated.bearer);
   const ids = operationIds(served.document);
   expect(ids).toEqual(visible.map((operation) => operation.operationId).sort());
   expect(ids).toContain('fixture.gated_read');
   expect(ids).toContain('fixture.public_read');
   for (const operation of mountedOperations()) {
-    const held = operation.exposure === 'public' || operation.exposure === `gate:${group}`;
+    const held =
+      operation.exposure === 'public' || (operation.exposure === `gate:${group}` && operation.action === fixtureAction);
     expect(ids.includes(operation.operationId)).toBe(held);
   }
 });
 
-test('platform staff see every mounted operation', async () => {
+test('platform staff see public operations and every in-scope gated operation', async () => {
   const { served, visible } = await discovered(staff.bearer);
   const ids = operationIds(served.document);
   const mounted = mountedOperations()
+    .filter((operation) => operation.exposure === 'public' || clientScopes.includes(operation.action))
     .map((operation) => operation.operationId)
     .sort();
   expect(ids).toEqual(mounted);
@@ -421,15 +434,16 @@ test('an opened group appears for everyone from T and disappears again at close'
 
 test('served OpenAPI and visibleOperations agree with admission on every fixture route', async () => {
   const delegated = await delegatedBearer(gated, principal.accountId);
-  const personas: { bearer?: string; name: string }[] = [
-    { name: 'anonymous' },
-    { name: 'ordinary', bearer: ordinary.bearer },
-    { name: 'tester', bearer: gated.bearer },
-    { name: 'staff', bearer: staff.bearer },
-    { name: 'delegated', bearer: delegated },
+  const personas: { bearer?: string; name: string; allowed: readonly string[] }[] = [
+    { name: 'anonymous', allowed: [] },
+    { name: 'ordinary', bearer: ordinary.bearer, allowed: [] },
+    { name: 'tester', bearer: gated.bearer, allowed: ['fixture.gated_read'] },
+    { name: 'tester-without-operation-scopes', bearer: await issue(gated.email, ['access:grant']), allowed: [] },
+    { name: 'staff', bearer: staff.bearer, allowed: ['fixture.gated_read', 'fixture.gated_inspect'] },
+    { name: 'delegated', bearer: delegated, allowed: [] },
   ];
 
-  async function agree(name: string, bearer?: string) {
+  async function agree(name: string, bearer: string | undefined, allowed: readonly string[]) {
     const { served, visible } = await discovered(bearer);
     expect(served.response.status).toBe(200);
     const ids = operationIds(served.document);
@@ -438,7 +452,9 @@ test('served OpenAPI and visibleOperations agree with admission on every fixture
       const admission = await get(fixture.path, bearer);
       const listed = ids.includes(fixture.operationId);
       const shown = visible.some((operation) => operation.operationId === fixture.operationId);
-      if (admission.response.status === 200) {
+      const expected = fixture.exposure === 'public' || allowed.includes(fixture.operationId);
+      expect(admission.response.status, `${name} ${fixture.operationId}`).toBe(expected ? 200 : 403);
+      if (expected) {
         expect(listed, `${name} ${fixture.operationId}`).toBe(true);
         expect(shown, `${name} ${fixture.operationId}`).toBe(true);
       } else {
@@ -450,13 +466,111 @@ test('served OpenAPI and visibleOperations agree with admission on every fixture
     }
   }
 
-  for (const persona of personas) await agree(persona.name, persona.bearer);
+  for (const persona of personas) await agree(persona.name, persona.bearer, persona.allowed);
 
   await grant(staff.bearer, principal.accountId, groupAction);
-  await agree('delegated-with-principal', delegated);
+  await agree('delegated-with-principal', delegated, ['fixture.gated_read']);
+
+  const organizationId = newId(0x3456);
+  const organizationRoute = routeOf(organizationId)!;
+  const transactionId = Bun.randomUUIDv7();
+  await pool.query(
+    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+     VALUES ($1, $2, 'organization', 'active', $3)`,
+    [organizationRoute, organizationId, transactionId],
+  );
+  await createMembershipInverseCommands({ pool }).reserve({
+    accountId: ordinary.accountId,
+    principal: { kind: 'organization', id: organizationId },
+    key: `discovery-${organizationId}`,
+  });
+  await pool.query(
+    `INSERT INTO access.organization_member
+       (route, organization_id, member_account_id, role, valid, transaction_id)
+     VALUES ($1, $2, $3, 'member', '(,)', $4)`,
+    [organizationRoute, organizationId, ordinary.accountId, transactionId],
+  );
+  const roleGrant = await post('/v1/grants', staff.bearer, {
+    resource: PLATFORM_RESOURCE,
+    subject: { kind: 'organization', id: organizationId, role: 'member' },
+    actions: [groupAction],
+    valid: '(,)',
+  });
+  expect(roleGrant.response.status, JSON.stringify(roleGrant.body)).toBe(201);
+  const organizationBearer = await issue(ordinary.email, [fixtureAction, siblingAction]);
+  await agree('organization-role-only', organizationBearer, ['fixture.gated_read', 'fixture.gated_inspect']);
+
+  await grant(staff.bearer, ordinary.accountId, groupAction);
+  await pool.query(
+    `INSERT INTO access.resource_denial
+       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     VALUES (0, $1, $2, 'member', $3, 'resource', '(,)', $4)`,
+    [PLATFORM_RESOURCE.id, organizationId, groupAction, transactionId],
+  );
+  await agree('organization-role-denial-with-direct-grant', organizationBearer, []);
 
   const invalid = await kernel.handle(
     new Request('http://kernel.test/v1/openapi.json', { headers: { authorization: 'Bearer not-a-token' } }),
   );
   expect(invalid.status).toBe(401);
+});
+
+test('discovery checks each eligible closed group once at the openings clock', async () => {
+  const source = kernel.routes.find((route) => route.path === '/v1/gated-fixture')!;
+  const detail = source.hooks!.detail!;
+  const openGroup = `discovery_open_${tag}`;
+  await pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ($1, '[2026-06-01,2026-06-02)', $2)`,
+    [openGroup, Bun.randomUUIDv7()],
+  );
+  const routes = [
+    ...kernel.routes.filter((route) => fixtures.some((fixture) => fixture.path === route.path)),
+    {
+      ...source,
+      path: '/v1/discovery-out-of-scope',
+      hooks: {
+        ...source.hooks,
+        detail: {
+          ...detail,
+          operationId: 'fixture.out_of_scope',
+          'x-action': 'fixture:other',
+          'x-exposure': 'gate:discovery_unscoped',
+        },
+      },
+    },
+    {
+      ...source,
+      path: '/v1/discovery-open',
+      hooks: {
+        ...source.hooks,
+        detail: { ...detail, operationId: 'fixture.open_group', 'x-exposure': `gate:${openGroup}` },
+      },
+    },
+  ];
+  const viewer = await viewerFor(staff.bearer);
+  const deadline = Date.now() + 15_000;
+  const clock = () => new Date('2026-06-01T12:00:00.000Z');
+  const formula = spyOn(accessModule, 'authorizePlatformGate').mockResolvedValue(true);
+  try {
+    const visible = await visibleOperations({ viewer, pool, access, routes, deadline, clock });
+    expect(visible.map((operation) => operation.operationId).sort()).toEqual([
+      'fixture.gated_inspect',
+      'fixture.gated_read',
+      'fixture.open_group',
+      'fixture.public_read',
+    ]);
+    expect(formula).toHaveBeenCalledTimes(1);
+    expect(formula).toHaveBeenCalledWith(
+      access,
+      viewer,
+      [groupAction, 'gate:any'],
+      fixtureAction,
+      PLATFORM_RESOURCE,
+      { pool, deadline },
+      clock().toISOString(),
+    );
+  } finally {
+    formula.mockRestore();
+  }
 });

@@ -1,17 +1,13 @@
 import { requireAccessDeadline } from '../unavailable.ts';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../authenticate.ts';
-import { resourceRoleCatalogue } from '../resource-roles.ts';
+import { authorizePlatformGate } from '../index.ts';
 import { withConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from './catalogue.ts';
 import { parseExposure, type Exposure } from './declaration.ts';
-import heldGates from './held-gates.sql';
 import openGroups from './open-groups.sql';
-
-const REQUESTED_BY =
-  /^urn:rezics:request:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 export type VisibleOperation = {
   readonly method: string;
@@ -53,28 +49,6 @@ function classify(routes: readonly MountedRoute[]): Classified[] {
   return operations;
 }
 
-function principalId(viewer: Actor): string | null {
-  if (viewer.kind !== 'account' || viewer.requestedBy === null) return null;
-  return REQUESTED_BY.exec(viewer.requestedBy)?.[1] ?? null;
-}
-
-function grantRoles(access: Access, action: string): string[] {
-  const catalogue = resourceRoleCatalogue(access);
-  if (!catalogue) return [];
-  return [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
-}
-
-/**
- * The admission decision: a public route, a group open at T, or a closed group whose
- * gate:<group> or gate:any the actor and principal both hold on the Global Context.
- */
-function admits(exposure: Exposure, open: ReadonlySet<string>, held: ReadonlySet<string>, viewer: Actor): boolean {
-  if (exposure.kind === 'public') return true;
-  if (open.has(exposure.group)) return true;
-  if (viewer.kind !== 'account' || (viewer.requestedBy !== null && principalId(viewer) === null)) return false;
-  return held.has(`gate:${exposure.group}`) || held.has('gate:any');
-}
-
 type DiscoveryInput = {
   viewer: Actor;
   pool: Pool;
@@ -84,77 +58,77 @@ type DiscoveryInput = {
   clock: () => Date;
 };
 
-/** Mounted gate groups admitted by the same snapshot and rule as operation discovery. */
-export async function admittedGroups(input: DiscoveryInput): Promise<readonly string[]> {
-  const mounted = new Set<string>();
-  for (const route of input.routes) {
-    const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : undefined;
-    if (detail?.hide === true) continue;
-    const exposure = parseExposure(detail);
-    if (exposure.kind === 'gate') mounted.add(exposure.group);
+/** Read openings and ask admission's formula once per closed group with an in-scope operation. */
+async function discover(input: DiscoveryInput): Promise<Classified[]> {
+  const operations = classify(input.routes);
+  const groups = new Set<string>();
+  const scopedActions = new Map<string, string>();
+  for (const operation of operations) {
+    if (operation.exposure.kind !== 'gate') continue;
+    const group = operation.exposure.group;
+    groups.add(group);
+    if (input.viewer.kind === 'account' && input.viewer.scopes.includes(operation.action)) {
+      if (!scopedActions.has(group)) scopedActions.set(group, operation.action);
+    }
   }
-  const groups = [...mounted];
   const at = input.clock();
   if (!(at instanceof Date) || !Number.isFinite(at.getTime())) throw new TypeError('Invalid command clock');
+  const instant = at.toISOString();
   const open = new Set<string>();
   const held = new Set<string>();
   requireAccessDeadline(input.deadline);
-  if (groups.length > 0) {
-    const instant = at.toISOString();
-    const actions = [...groups.map((group) => `gate:${group}`), 'gate:any'];
-    const account = input.viewer.kind === 'account' ? input.viewer : undefined;
-    const principal = principalId(input.viewer);
+  if (groups.size > 0) {
     await within(input.deadline, () =>
       withConnection(input.pool, async (client) => {
         const bounded = deadlineClient(client, input.deadline);
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          for (const row of await openGroups.run(bounded, { groups, at: instant })) {
-            if (typeof row.group !== 'string') throw new Error('Open group read failed');
-            open.add(row.group);
-          }
-          // An unparsable requested-by URN cannot hold a principal operand, so the grant read is skipped.
-          if (account && (account.requestedBy === null || principal !== null)) {
-            for (const row of await heldGates.run(bounded, {
-              at: instant,
-              actor_id: account.accountId,
-              principal_id: principal ?? '',
-              resource_id: GLOBAL_CONTEXT.id,
-              actions: actions.map((action) => ({
-                action,
-                grant_roles: grantRoles(input.access, action),
-              })),
-            })) {
-              if (typeof row.action !== 'string') throw new Error('Held gate read failed');
-              held.add(row.action);
-            }
-          }
-          await bounded.query('COMMIT');
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch {
-            // Preserve the original discovery failure.
-          }
-          throw error;
+        for (const row of await openGroups.run(bounded, { groups: [...groups], at: instant })) {
+          if (typeof row.group !== 'string') throw new Error('Open group read failed');
+          open.add(row.group);
         }
       }),
     );
+    for (const [group, action] of scopedActions) {
+      if (open.has(group)) continue;
+      if (
+        await authorizePlatformGate(
+          input.access,
+          input.viewer,
+          [`gate:${group}`, 'gate:any'],
+          action,
+          GLOBAL_CONTEXT,
+          { pool: input.pool, deadline: input.deadline },
+          instant,
+        )
+      ) {
+        held.add(group);
+      }
+    }
   }
-  return groups.filter((group) => admits({ kind: 'gate', group }, open, held, input.viewer)).sort();
+  return operations.filter(
+    (operation) =>
+      operation.exposure.kind === 'public' ||
+      open.has(operation.exposure.group) ||
+      (input.viewer.kind === 'account' &&
+        input.viewer.scopes.includes(operation.action) &&
+        held.has(operation.exposure.group)),
+  );
+}
+
+/** Mounted groups that are open or have at least one visible operation for this viewer. */
+export async function admittedGroups(input: DiscoveryInput): Promise<readonly string[]> {
+  const visible = await discover(input);
+  return [
+    ...new Set(visible.flatMap((operation) => (operation.exposure.kind === 'gate' ? [operation.exposure.group] : []))),
+  ].sort();
 }
 
 /** The mounted operations this viewer may use at the kernel clock. */
 export async function visibleOperations(input: DiscoveryInput): Promise<readonly VisibleOperation[]> {
-  const operations = classify(input.routes);
-  const admitted = new Set(await admittedGroups(input));
-  return operations
-    .filter((operation) => operation.exposure.kind === 'public' || admitted.has(operation.exposure.group))
-    .map((operation) => ({
-      method: operation.method,
-      path: operation.path,
-      operationId: operation.operationId,
-      action: operation.action,
-      exposure: operation.exposure.kind === 'public' ? 'public' : `gate:${operation.exposure.group}`,
-    }));
+  return (await discover(input)).map((operation) => ({
+    method: operation.method,
+    path: operation.path,
+    operationId: operation.operationId,
+    action: operation.action,
+    exposure: operation.exposure.kind === 'public' ? 'public' : `gate:${operation.exposure.group}`,
+  }));
 }

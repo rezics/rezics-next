@@ -1,11 +1,10 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import { createAccess } from '../index.ts';
 import type { Access } from '../../request/access.ts';
 import { customMethodPath } from '../../http/custom-method.ts';
 import { formatDocument, openApiDocument } from '../../http/openapi.ts';
 import { problemSchema } from '../../http/problem.ts';
-import { actionCatalogue, type MountedRoute } from '../../http/request.ts';
+import type { MountedRoute } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { visibleOperations, type VisibleOperation } from './visibility.ts';
 
@@ -25,7 +24,6 @@ const documentSchema = t.Object({
 type Catalogue = {
   document: ContractDocument;
   routes: readonly MountedRoute[];
-  access: Access;
 };
 
 function documentPath(path: string): string {
@@ -55,7 +53,7 @@ function project(document: ContractDocument, visible: readonly VisibleOperation[
  */
 export function openApiRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; clock: () => Date },
+  dependencies: { pool: Pool; clock: () => Date; access: () => Access },
 ) {
   let catalogue: Catalogue | undefined;
   // Read routes from the shared instance. Naming the `get` result here and using it
@@ -79,12 +77,11 @@ export function openApiRoutes(
       catalogue ??= {
         document: openApiDocument(app),
         routes: [...app.routes],
-        access: createAccess({ actions: actionCatalogue(app) }),
       };
       const visible = await visibleOperations({
         viewer: actor,
         pool: dependencies.pool,
-        access: catalogue.access,
+        access: dependencies.access(),
         routes: catalogue.routes,
         deadline: job.deadline,
         clock: dependencies.clock,

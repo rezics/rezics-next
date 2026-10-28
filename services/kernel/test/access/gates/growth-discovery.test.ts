@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   capture,
   checkGrowth,
@@ -26,6 +27,7 @@ const groupAction = `gate:${group}`;
 let db: GrowthDatabase;
 let kernel: ReturnType<typeof createKernel>;
 let access: ReturnType<typeof createAccess>;
+let viewer: Awaited<ReturnType<typeof access.authenticate>>;
 let actorId: string;
 let accountRoute: number;
 let accountGrowthIds: string[];
@@ -103,7 +105,35 @@ beforeAll(async () => {
     },
   });
   composition.mockRestore();
-  access = createAccess({ actions: actionCatalogue(kernel) });
+  const keys = await generateKeyPair('ES256');
+  const issuer = `https://growth-discovery-${tag}.auth.test`;
+  const audience = `https://growth-discovery-${tag}.api.test`;
+  const jwk = { ...(await exportJWK(keys.publicKey)), kid: 'discovery-growth' };
+  access = createAccess({
+    actions: actionCatalogue(kernel),
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/jwks`,
+      fetch: async () => Response.json({ keys: [jwk] }),
+    },
+  });
+  const iat = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    client_id: 'growth-discovery',
+    scope: 'fixture:read exposure:read',
+    authn_epoch: 1,
+    auth_time: iat,
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'discovery-growth', typ: 'at+jwt' })
+    .setIssuer(issuer)
+    .setAudience(audience)
+    .setSubject(actorId)
+    .setIssuedAt(iat)
+    .setExpirationTime(iat + 300)
+    .sign(keys.privateKey);
+  viewer = await access.authenticate(token, { pool: db.pool, deadline: Date.now() + 15_000 });
 
   accountGrowthIds = Array.from({ length: 64 * rowsPerScaleUnit }, () => newId(accountRoute));
   grantSubjectIds = Array.from({ length: 64 * rowsPerScaleUnit }, () => newId(accountRoute));
@@ -116,14 +146,7 @@ afterAll(async () => {
 
 async function discover(): Promise<void> {
   const visible = await visibleOperations({
-    viewer: {
-      kind: 'account',
-      accountId: actorId,
-      clientId: 'growth-discovery',
-      scopes: ['fixture:read'],
-      requestedBy: null,
-      authnEpoch: 1,
-    },
+    viewer,
     pool: db.pool,
     access,
     routes: kernel.routes,
@@ -169,7 +192,7 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
       const ids = grantSubjectIds.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
       await database.admin.query(
         `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-         SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+         SELECT $1, id, 'organization', 'active', $3 FROM unnest($2::uuid[]) id`,
         [accountRoute, ids, Bun.randomUUIDv7()],
       );
       await database.admin.query(
@@ -183,6 +206,20 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
         `INSERT INTO access.resource_role_grant
            (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
          SELECT 0, '00000000-0000-8000-8000-000000000000', 'identity', id, '', 'growth_unrelated', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [ids, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_grant
+           (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'member', $2, '(,)', $3
+         FROM unnest($1::uuid[]) id`,
+        [ids, groupAction, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_role_grant
+           (route, resource_id, subject_id, subject_role, grant_role, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'member', 'growth_unrelated', '(,)', $2
          FROM unnest($1::uuid[]) id`,
         [ids, Bun.randomUUIDv7()],
       );
@@ -234,14 +271,7 @@ test('admitted groups read stays bounded as unrelated accounts, gate grants, and
   const names = Array.from({ length: 64 * rowsPerScaleUnit }, (_, index) => `gd${tag}_admitted_${alpha(index)}`);
   const read = async () => {
     const admitted = await admittedGroups({
-      viewer: {
-        kind: 'account',
-        accountId: actorId,
-        clientId: 'growth-admitted',
-        scopes: ['exposure:read'],
-        requestedBy: null,
-        authnEpoch: 1,
-      },
+      viewer,
       pool: db.pool,
       access,
       routes: kernel.routes,
@@ -259,7 +289,7 @@ test('admitted groups read stays bounded as unrelated accounts, gate grants, and
       const added = ids.slice(previous * rowsPerScaleUnit, scale * rowsPerScaleUnit);
       await database.admin.query(
         `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-         SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+         SELECT $1, id, 'organization', 'active', $3 FROM unnest($2::uuid[]) id`,
         [accountRoute, added, Bun.randomUUIDv7()],
       );
       await database.admin.query(
@@ -272,6 +302,20 @@ test('admitted groups read stays bounded as unrelated accounts, gate grants, and
         `INSERT INTO access.resource_role_grant
            (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
          SELECT 0, '00000000-0000-8000-8000-000000000000', 'identity', id, '', 'growth_unrelated', '(,)', $2
+         FROM unnest($1::uuid[]) id`,
+        [added, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_grant
+           (route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'member', $2, '(,)', $3
+         FROM unnest($1::uuid[]) id`,
+        [added, groupAction, Bun.randomUUIDv7()],
+      );
+      await database.admin.query(
+        `INSERT INTO access.resource_role_grant
+           (route, resource_id, subject_id, subject_role, grant_role, valid, transaction_id)
+         SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'member', 'growth_unrelated', '(,)', $2
          FROM unnest($1::uuid[]) id`,
         [added, Bun.randomUUIDv7()],
       );

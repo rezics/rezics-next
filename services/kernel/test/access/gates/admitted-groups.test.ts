@@ -32,11 +32,15 @@ let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 let ordinaryId: string;
 let delegatedRequest: string;
 
-async function bearer(accountId: string, requestedBy?: string): Promise<string> {
+async function bearer(
+  accountId: string,
+  requestedBy?: string,
+  scopes = ['exposure:read', 'fixture:read'],
+): Promise<string> {
   const iat = Math.floor(instant.getTime() / 1000) - 1;
   return new SignJWT({
     client_id: 'admitted-groups',
-    scope: 'exposure:read',
+    scope: scopes.join(' '),
     authn_epoch: 1,
     auth_time: iat,
     amr: ['pwd'],
@@ -200,7 +204,9 @@ test('an account holding gate:<group> or gate:any on the Global Context also see
   await grant(fixture.principalId, 'gate:any');
   await grant(ordinaryId, `gate:${groups.secret}`, fixture.resource);
   expect(await read(await bearer(fixture.actorId))).toEqual([...opened, groups.secret].sort());
-  expect(await read(await bearer(fixture.principalId))).toEqual(mountedGroups());
+  expect(await read(await bearer(fixture.actorId, undefined, ['exposure:read']))).toEqual(opened);
+  const fixtureGroups = Object.values(groups);
+  expect(await read(await bearer(fixture.principalId))).toEqual(fixtureGroups.sort());
   expect(await read(await bearer(ordinaryId))).toEqual(opened);
 });
 

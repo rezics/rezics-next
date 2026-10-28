@@ -1,18 +1,17 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import { createAccess } from '../index.ts';
 import type { Access } from '../../request/access.ts';
 import { problemSchema } from '../../http/problem.ts';
-import { actionCatalogue, type MountedRoute } from '../../http/request.ts';
+import type { MountedRoute } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { admittedGroups } from './visibility.ts';
 
 /** Capture the complete mounted catalogue on the first request, as the served OpenAPI route does. */
 export function admittedGroupsRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; clock: () => Date },
+  dependencies: { pool: Pool; clock: () => Date; access: () => Access },
 ) {
-  let catalogue: { routes: readonly MountedRoute[]; access: Access } | undefined;
+  let catalogue: readonly MountedRoute[] | undefined;
   return app.get(
     '/v1/platform/exposure',
     {
@@ -29,12 +28,12 @@ export function admittedGroupsRoutes(
       },
     },
     async ({ actor, job, set }) => {
-      catalogue ??= { routes: [...app.routes], access: createAccess({ actions: actionCatalogue(app) }) };
+      catalogue ??= [...app.routes];
       const admitted = await admittedGroups({
         viewer: actor,
         pool: dependencies.pool,
-        access: catalogue.access,
-        routes: catalogue.routes,
+        access: dependencies.access(),
+        routes: catalogue,
         deadline: job.deadline,
         clock: dependencies.clock,
       });
