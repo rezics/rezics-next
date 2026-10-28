@@ -218,7 +218,8 @@ export async function runBrowserWorker(input: {
   const reportDirectory = resolve(root, input.report);
   const result = await runWebTestLanes({
     files: input.files,
-    ...(input.env === undefined ? {} : { env: input.env }),
+    // A placed worker shares one generated source tree and Vite cache between its browser files.
+    env: { ...(input.env ?? process.env), WEB_BROWSER_CHECK_CONCURRENCY: '1' },
     ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
     reportDirectory,
     timingsFile: join(reportDirectory, 'timings.json'),

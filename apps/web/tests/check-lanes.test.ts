@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { runWebTestLanes } from '../scripts/check.ts';
+import { runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -134,4 +134,20 @@ test('reports a failed fake file with its own output', async () => {
   const failed = outcomes.find((outcome) => outcome.file === failing);
   expect(failed?.error?.message).toContain(failing);
   expect(failed?.error?.message).toContain('failure-output-owned-by-this-file');
+});
+
+test('a placed browser worker serializes files that share its generated source and Vite cache', async () => {
+  const first = addFakeTest('worker-browser-first.test.ts', { browser: true, delay: 500 });
+  const second = addFakeTest('worker-browser-second.test.ts', { browser: true, delay: 500 });
+  const env = { ...process.env, WEB_BROWSER_CHECK_CONCURRENCY: '3' };
+  delete env.REZICS_STACK_SLOT;
+  const result = await runBrowserWorker({
+    files: [first, second],
+    report: relative(root, join(temporary, 'worker-report')),
+    env,
+  });
+  expect(result).toBe(0);
+  const start = (name: string) => Number(readFileSync(join(events, `start-${name}`), 'utf8'));
+  const end = (name: string) => Number(readFileSync(join(events, `end-${name}`), 'utf8'));
+  expect(start('worker-browser-second.test.ts')).toBeGreaterThanOrEqual(end('worker-browser-first.test.ts'));
 });
