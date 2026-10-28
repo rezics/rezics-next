@@ -298,7 +298,7 @@ function reclassifiedTable(
 function relationTable(relations: GrowthProfileRead['nonGrowingRelations']): string[] {
   const grouped = new Map<
     string,
-    { file: string; check: string; run: string; relation: string; first: number; last: number }[]
+    { file: string; check: string; occurrence: number; run: string; relation: string; first: number; last: number }[]
   >();
   for (const relation of relations) {
     const key = JSON.stringify([relation.file, relation.check, relation.occurrence, relation.relation]);

@@ -259,10 +259,13 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
   );
   omitted.sort((left, right) => left.file.localeCompare(right.file) || left.check.localeCompare(right.check));
 
-  const series = Object.fromEntries(
-    GROWTH_PROFILE_METRICS.map((metric) => [
-      metric,
-      complete.map((group) => ({
+  const series: Record<GrowthProfileMetric, readonly CalibrationCheck[]> = {
+    rows: [],
+    blocks: [],
+    statements: [],
+  };
+  for (const metric of GROWTH_PROFILE_METRICS) {
+    series[metric] = complete.map((group) => ({
         check: growthProfileCheckId(group[0]!.file, group[0]!.check, group[0]!.occurrence),
         runs: group.map(({ scales, repetitions }) =>
           scales.map((scale, scaleIndex): CalibrationRunPoint => ({
@@ -270,9 +273,8 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
             repetitions: repetitions[scaleIndex]!.map((repetition) => repetition[metric]),
           })),
         ),
-      })),
-    ]),
-  ) as Record<GrowthProfileMetric, readonly CalibrationCheck[]>;
+      }));
+  }
 
   const shadowOutcomes = entries.map(({ file, check, occurrence, run, shadow }) => ({
     file,
