@@ -8,20 +8,20 @@ properties:
 libraryProfiles:
   recipe.cooking:
     states:
-      planned: "Planned"
-      in_progress: "In progress"
-      completed: "Completed"
-      paused: "Paused"
-      dropped: "Dropped"
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
     units:
       scalar_amount:
-        minute: "minute"
+        minute: 'minute'
     copyKinds:
-      physical: "Physical"
-      digital: "Digital"
+      physical: 'Physical'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "Owned"
-        disposed: "Disposed"
+        owned: 'Owned'
+        disposed: 'Disposed'
       digital:
-        owned: "Owned"
+        owned: 'Owned'

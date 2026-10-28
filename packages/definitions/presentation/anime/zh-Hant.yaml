@@ -24,77 +24,77 @@ typeDescriptions:
 libraryProfiles:
   anime.series:
     states:
-      planned: "計劃"
-      in_progress: "進行中"
-      completed: "已完成"
-      paused: "暫停"
-      dropped: "放棄"
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
     units:
       scalar_amount:
-        episode: "集"
+        episode: '集'
     copyKinds:
-      physical: "實體"
-      digital: "數位"
+      physical: '實體'
+      digital: '數位'
     copyStatuses:
       physical:
-        owned: "擁有"
-        disposed: "已處置"
+        owned: '擁有'
+        disposed: '已處置'
       digital:
-        owned: "擁有"
+        owned: '擁有'
   anime.season:
     states:
-      planned: "計劃"
-      in_progress: "進行中"
-      completed: "已完成"
-      paused: "暫停"
-      dropped: "放棄"
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
     units:
       scalar_amount:
-        episode: "集"
+        episode: '集'
     copyKinds:
-      physical: "實體"
-      digital: "數位"
+      physical: '實體'
+      digital: '數位'
     copyStatuses:
       physical:
-        owned: "擁有"
-        disposed: "已處置"
+        owned: '擁有'
+        disposed: '已處置'
       digital:
-        owned: "擁有"
+        owned: '擁有'
   anime.episode:
     states:
-      planned: "計劃"
-      in_progress: "進行中"
-      completed: "已完成"
-      paused: "暫停"
-      dropped: "放棄"
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
     units:
       scalar_amount:
-        minute: "分鐘"
+        minute: '分鐘'
     copyKinds:
-      physical: "實體"
-      digital: "數位"
+      physical: '實體'
+      digital: '數位'
     copyStatuses:
       physical:
-        owned: "擁有"
-        disposed: "已處置"
+        owned: '擁有'
+        disposed: '已處置'
       digital:
-        owned: "擁有"
+        owned: '擁有'
   anime.film:
     states:
-      planned: "計劃"
-      in_progress: "進行中"
-      completed: "已完成"
-      paused: "暫停"
-      dropped: "放棄"
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
     units:
       scalar_amount:
-        minute: "分鐘"
+        minute: '分鐘'
     copyKinds:
-      physical: "實體"
-      digital: "數位"
+      physical: '實體'
+      digital: '數位'
     copyStatuses:
       physical:
-        owned: "擁有"
-        disposed: "已處置"
+        owned: '擁有'
+        disposed: '已處置'
       digital:
-        owned: "擁有"
+        owned: '擁有'

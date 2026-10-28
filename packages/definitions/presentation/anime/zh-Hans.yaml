@@ -24,77 +24,77 @@ typeDescriptions:
 libraryProfiles:
   anime.series:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        episode: "集"
+        episode: '集'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'
   anime.season:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        episode: "集"
+        episode: '集'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'
   anime.episode:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        minute: "分钟"
+        minute: '分钟'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'
   anime.film:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        minute: "分钟"
+        minute: '分钟'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'

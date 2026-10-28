@@ -17,76 +17,76 @@ typeDescriptions:
 libraryProfiles:
   book.reading:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        page: "página"
+        page: 'página'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'
   book.edition:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        page: "página"
+        page: 'página'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'
   legacy-fixed-v1:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        page: "página"
-        chapter: "capítulo"
-        episode: "episodio"
-        minute: "minuto"
-        volume: "tomo"
-        percent: "porcentaje"
+        page: 'página'
+        chapter: 'capítulo'
+        episode: 'episodio'
+        minute: 'minuto'
+        volume: 'tomo'
+        percent: 'porcentaje'
       cursor_position:
-        page: "página"
-        chapter: "capítulo"
-        episode: "episodio"
-        minute: "minuto"
-        volume: "tomo"
-        percent: "porcentaje"
+        page: 'página'
+        chapter: 'capítulo'
+        episode: 'episodio'
+        minute: 'minuto'
+        volume: 'tomo'
+        percent: 'porcentaje'
       completed_units:
-        page: "página"
-        chapter: "capítulo"
-        episode: "episodio"
-        minute: "minuto"
-        volume: "tomo"
-        percent: "porcentaje"
+        page: 'página'
+        chapter: 'capítulo'
+        episode: 'episodio'
+        minute: 'minuto'
+        volume: 'tomo'
+        percent: 'porcentaje'
     copyKinds:
-      legacy-unspecified: "Sin especificar"
+      legacy-unspecified: 'Sin especificar'
     copyStatuses:
       legacy-unspecified:
-        ordered: "Pedido"
-        owned: "En propiedad"
-        lent: "Prestado"
-        disposed: "Desprendido"
+        ordered: 'Pedido'
+        owned: 'En propiedad'
+        lent: 'Prestado'
+        disposed: 'Desprendido'

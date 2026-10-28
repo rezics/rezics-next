@@ -14,76 +14,76 @@ inverseProperties:
 libraryProfiles:
   book.reading:
     states:
-      planned: "Planned"
-      in_progress: "In progress"
-      completed: "Completed"
-      paused: "Paused"
-      dropped: "Dropped"
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
     units:
       scalar_amount:
-        page: "page"
+        page: 'page'
     copyKinds:
-      physical: "Physical"
-      digital: "Digital"
+      physical: 'Physical'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "Owned"
-        disposed: "Disposed"
+        owned: 'Owned'
+        disposed: 'Disposed'
       digital:
-        owned: "Owned"
+        owned: 'Owned'
   book.edition:
     states:
-      planned: "Planned"
-      in_progress: "In progress"
-      completed: "Completed"
-      paused: "Paused"
-      dropped: "Dropped"
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
     units:
       scalar_amount:
-        page: "page"
+        page: 'page'
     copyKinds:
-      physical: "Physical"
-      digital: "Digital"
+      physical: 'Physical'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "Owned"
-        disposed: "Disposed"
+        owned: 'Owned'
+        disposed: 'Disposed'
       digital:
-        owned: "Owned"
+        owned: 'Owned'
   legacy-fixed-v1:
     states:
-      planned: "Planned"
-      in_progress: "In progress"
-      completed: "Completed"
-      paused: "Paused"
-      dropped: "Dropped"
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
     units:
       scalar_amount:
-        page: "page"
-        chapter: "chapter"
-        episode: "episode"
-        minute: "minute"
-        volume: "volume"
-        percent: "percent"
+        page: 'page'
+        chapter: 'chapter'
+        episode: 'episode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'percent'
       cursor_position:
-        page: "page"
-        chapter: "chapter"
-        episode: "episode"
-        minute: "minute"
-        volume: "volume"
-        percent: "percent"
+        page: 'page'
+        chapter: 'chapter'
+        episode: 'episode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'percent'
       completed_units:
-        page: "page"
-        chapter: "chapter"
-        episode: "episode"
-        minute: "minute"
-        volume: "volume"
-        percent: "percent"
+        page: 'page'
+        chapter: 'chapter'
+        episode: 'episode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'percent'
     copyKinds:
-      legacy-unspecified: "Unspecified"
+      legacy-unspecified: 'Unspecified'
     copyStatuses:
       legacy-unspecified:
-        ordered: "Ordered"
-        owned: "Owned"
-        lent: "Lent"
-        disposed: "Disposed"
+        ordered: 'Ordered'
+        owned: 'Owned'
+        lent: 'Lent'
+        disposed: 'Disposed'

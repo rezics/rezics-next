@@ -26,58 +26,58 @@ typeDescriptions:
 libraryProfiles:
   game.playing:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        minute: "minuto"
+        minute: 'minuto'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'
   game.release:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        minute: "minuto"
+        minute: 'minuto'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'
   game.addon:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        minute: "minuto"
+        minute: 'minuto'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'

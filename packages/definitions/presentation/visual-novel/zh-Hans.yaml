@@ -12,20 +12,20 @@ inverseProperties:
 libraryProfiles:
   visual-novel.reading:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        percent: "百分比"
+        percent: '百分比'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'

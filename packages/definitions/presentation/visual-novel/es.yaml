@@ -12,20 +12,20 @@ inverseProperties:
 libraryProfiles:
   visual-novel.reading:
     states:
-      planned: "Planeado"
-      in_progress: "En curso"
-      completed: "Completado"
-      paused: "En pausa"
-      dropped: "Abandonado"
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
     units:
       scalar_amount:
-        percent: "porcentaje"
+        percent: 'porcentaje'
     copyKinds:
-      physical: "Físico"
-      digital: "Digital"
+      physical: 'Físico'
+      digital: 'Digital'
     copyStatuses:
       physical:
-        owned: "En propiedad"
-        disposed: "Desprendido"
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
       digital:
-        owned: "En propiedad"
+        owned: 'En propiedad'

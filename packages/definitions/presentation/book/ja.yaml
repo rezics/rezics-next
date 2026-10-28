@@ -14,76 +14,76 @@ inverseProperties:
 libraryProfiles:
   book.reading:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        page: "ページ"
+        page: 'ページ'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
   book.edition:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        page: "ページ"
+        page: 'ページ'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
   legacy-fixed-v1:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        page: "ページ"
-        chapter: "章"
-        episode: "エピソード"
-        minute: "分"
-        volume: "巻"
-        percent: "パーセント"
+        page: 'ページ'
+        chapter: '章'
+        episode: 'エピソード'
+        minute: '分'
+        volume: '巻'
+        percent: 'パーセント'
       cursor_position:
-        page: "ページ"
-        chapter: "章"
-        episode: "エピソード"
-        minute: "分"
-        volume: "巻"
-        percent: "パーセント"
+        page: 'ページ'
+        chapter: '章'
+        episode: 'エピソード'
+        minute: '分'
+        volume: '巻'
+        percent: 'パーセント'
       completed_units:
-        page: "ページ"
-        chapter: "章"
-        episode: "エピソード"
-        minute: "分"
-        volume: "巻"
-        percent: "パーセント"
+        page: 'ページ'
+        chapter: '章'
+        episode: 'エピソード'
+        minute: '分'
+        volume: '巻'
+        percent: 'パーセント'
     copyKinds:
-      legacy-unspecified: "未指定"
+      legacy-unspecified: '未指定'
     copyStatuses:
       legacy-unspecified:
-        ordered: "注文済み"
-        owned: "所持"
-        lent: "貸出中"
-        disposed: "手放した"
+        ordered: '注文済み'
+        owned: '所持'
+        lent: '貸出中'
+        disposed: '手放した'

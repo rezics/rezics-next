@@ -23,77 +23,77 @@ typeDescriptions:
 libraryProfiles:
   anime.series:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        episode: "épisode"
+        episode: 'épisode'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'
   anime.season:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        episode: "épisode"
+        episode: 'épisode'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'
   anime.episode:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        minute: "minute"
+        minute: 'minute'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'
   anime.film:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        minute: "minute"
+        minute: 'minute'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'

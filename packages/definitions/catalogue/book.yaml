@@ -132,27 +132,133 @@ classes:
             - mode: scalar_amount
               units:
                 - { id: page, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
-                - { id: chapter, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
-                - { id: episode, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
-                - { id: volume, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
-                - { id: minute, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
-                - { id: percent, dimension: percent, minimum: '0', maximum: '100', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    maximum: '100',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
             - mode: cursor_position
               units:
-                - { id: page, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
-                - { id: chapter, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
-                - { id: episode, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
-                - { id: volume, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
-                - { id: minute, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
-                - { id: percent, dimension: percent, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - {
+                    id: page,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
             - mode: completed_units
               units:
-                - { id: page, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
-                - { id: chapter, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
-                - { id: episode, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
-                - { id: volume, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
-                - { id: minute, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
-                - { id: percent, dimension: percent, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - {
+                    id: page,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
         copies:
           kinds:
             - id: legacy-unspecified

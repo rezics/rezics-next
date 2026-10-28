@@ -17,76 +17,76 @@ typeDescriptions:
 libraryProfiles:
   book.reading:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        page: "页"
+        page: '页'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'
   book.edition:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        page: "页"
+        page: '页'
     copyKinds:
-      physical: "实体"
-      digital: "数字"
+      physical: '实体'
+      digital: '数字'
     copyStatuses:
       physical:
-        owned: "拥有"
-        disposed: "已处置"
+        owned: '拥有'
+        disposed: '已处置'
       digital:
-        owned: "拥有"
+        owned: '拥有'
   legacy-fixed-v1:
     states:
-      planned: "计划"
-      in_progress: "进行中"
-      completed: "已完成"
-      paused: "暂停"
-      dropped: "放弃"
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
     units:
       scalar_amount:
-        page: "页"
-        chapter: "章"
-        episode: "集"
-        minute: "分钟"
-        volume: "卷"
-        percent: "百分比"
+        page: '页'
+        chapter: '章'
+        episode: '集'
+        minute: '分钟'
+        volume: '卷'
+        percent: '百分比'
       cursor_position:
-        page: "页"
-        chapter: "章"
-        episode: "集"
-        minute: "分钟"
-        volume: "卷"
-        percent: "百分比"
+        page: '页'
+        chapter: '章'
+        episode: '集'
+        minute: '分钟'
+        volume: '卷'
+        percent: '百分比'
       completed_units:
-        page: "页"
-        chapter: "章"
-        episode: "集"
-        minute: "分钟"
-        volume: "卷"
-        percent: "百分比"
+        page: '页'
+        chapter: '章'
+        episode: '集'
+        minute: '分钟'
+        volume: '卷'
+        percent: '百分比'
     copyKinds:
-      legacy-unspecified: "未指定"
+      legacy-unspecified: '未指定'
     copyStatuses:
       legacy-unspecified:
-        ordered: "已订购"
-        owned: "拥有"
-        lent: "已借出"
-        disposed: "已处置"
+        ordered: '已订购'
+        owned: '拥有'
+        lent: '已借出'
+        disposed: '已处置'

@@ -17,76 +17,76 @@ typeDescriptions:
 libraryProfiles:
   book.reading:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: "page"
+        page: 'page'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'
   book.edition:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: "page"
+        page: 'page'
     copyKinds:
-      physical: "Physique"
-      digital: "Numérique"
+      physical: 'Physique'
+      digital: 'Numérique'
     copyStatuses:
       physical:
-        owned: "Possédé"
-        disposed: "Cédé"
+        owned: 'Possédé'
+        disposed: 'Cédé'
       digital:
-        owned: "Possédé"
+        owned: 'Possédé'
   legacy-fixed-v1:
     states:
-      planned: "Prévu"
-      in_progress: "En cours"
-      completed: "Terminé"
-      paused: "En pause"
-      dropped: "Abandonné"
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: "page"
-        chapter: "chapitre"
-        episode: "épisode"
-        minute: "minute"
-        volume: "volume"
-        percent: "pourcentage"
+        page: 'page'
+        chapter: 'chapitre'
+        episode: 'épisode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'pourcentage'
       cursor_position:
-        page: "page"
-        chapter: "chapitre"
-        episode: "épisode"
-        minute: "minute"
-        volume: "volume"
-        percent: "pourcentage"
+        page: 'page'
+        chapter: 'chapitre'
+        episode: 'épisode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'pourcentage'
       completed_units:
-        page: "page"
-        chapter: "chapitre"
-        episode: "épisode"
-        minute: "minute"
-        volume: "volume"
-        percent: "pourcentage"
+        page: 'page'
+        chapter: 'chapitre'
+        episode: 'épisode'
+        minute: 'minute'
+        volume: 'volume'
+        percent: 'pourcentage'
     copyKinds:
-      legacy-unspecified: "Non précisé"
+      legacy-unspecified: 'Non précisé'
     copyStatuses:
       legacy-unspecified:
-        ordered: "Commandé"
-        owned: "Possédé"
-        lent: "Prêté"
-        disposed: "Cédé"
+        ordered: 'Commandé'
+        owned: 'Possédé'
+        lent: 'Prêté'
+        disposed: 'Cédé'

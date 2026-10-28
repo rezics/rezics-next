@@ -26,7 +26,16 @@ const unitWords: Record<string, readonly string[]> = {
 const copyKindWords: Record<string, readonly string[]> = {
   physical: ['Physisch', 'Physical', 'Físico', 'Physique', '物理', '실물', '实体', '實體'],
   digital: ['Digital', 'Digital', 'Digital', 'Numérique', 'デジタル', '디지털', '数字', '數位'],
-  'legacy-unspecified': ['Nicht näher bestimmt', 'Unspecified', 'Sin especificar', 'Non précisé', '未指定', '미지정', '未指定', '未指定'],
+  'legacy-unspecified': [
+    'Nicht näher bestimmt',
+    'Unspecified',
+    'Sin especificar',
+    'Non précisé',
+    '未指定',
+    '미지정',
+    '未指定',
+    '未指定',
+  ],
 };
 const copyStatusWords: Record<string, readonly string[]> = {
   ordered: ['Bestellt', 'Ordered', 'Pedido', 'Commandé', '注文済み', '주문함', '已订购', '已訂購'],
@@ -100,7 +109,9 @@ export function libraryLabels(profile: ProfileData, locale: (typeof LIBRARY_LOCA
       : {}),
     ...(profile.copies
       ? {
-          copyKinds: Object.fromEntries(profile.copies.kinds.map((k: ProfileData) => [k.id, copyKindWords[k.id]?.[n] ?? k.id])),
+          copyKinds: Object.fromEntries(
+            profile.copies.kinds.map((k: ProfileData) => [k.id, copyKindWords[k.id]?.[n] ?? k.id]),
+          ),
           copyStatuses: Object.fromEntries(
             profile.copies.kinds.map((k: ProfileData) => [
               k.id,

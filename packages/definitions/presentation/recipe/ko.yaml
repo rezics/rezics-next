@@ -8,20 +8,20 @@ properties:
 libraryProfiles:
   recipe.cooking:
     states:
-      planned: "예정"
-      in_progress: "진행 중"
-      completed: "완료"
-      paused: "일시 중지"
-      dropped: "중단"
+      planned: '예정'
+      in_progress: '진행 중'
+      completed: '완료'
+      paused: '일시 중지'
+      dropped: '중단'
     units:
       scalar_amount:
-        minute: "분"
+        minute: '분'
     copyKinds:
-      physical: "실물"
-      digital: "디지털"
+      physical: '실물'
+      digital: '디지털'
     copyStatuses:
       physical:
-        owned: "소장"
-        disposed: "처분함"
+        owned: '소장'
+        disposed: '처분함'
       digital:
-        owned: "소장"
+        owned: '소장'

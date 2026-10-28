@@ -23,77 +23,77 @@ typeDescriptions:
 libraryProfiles:
   anime.series:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        episode: "エピソード"
+        episode: 'エピソード'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
   anime.season:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        episode: "エピソード"
+        episode: 'エピソード'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
   anime.episode:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        minute: "分"
+        minute: '分'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
   anime.film:
     states:
-      planned: "予定"
-      in_progress: "進行中"
-      completed: "完了"
-      paused: "中断"
-      dropped: "断念"
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
     units:
       scalar_amount:
-        minute: "分"
+        minute: '分'
     copyKinds:
-      physical: "物理"
-      digital: "デジタル"
+      physical: '物理'
+      digital: 'デジタル'
     copyStatuses:
       physical:
-        owned: "所持"
-        disposed: "手放した"
+        owned: '所持'
+        disposed: '手放した'
       digital:
-        owned: "所持"
+        owned: '所持'
