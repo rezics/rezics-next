@@ -72,7 +72,10 @@ export async function imageSource(kind: ImageFixture): Promise<Source> {
 }
 
 /** Provision the real Realm board and its catalogue grants through Kernel HTTP. */
-export async function provisionMediaContainers(system: ContentSystem): Promise<{
+export async function provisionMediaContainers(
+  system: ContentSystem,
+  options: { namespace?: string } = {},
+): Promise<{
   containers: { thread: Container; sibling: Container; remote: Container };
   posts: Map<string, { id: string; revisionId: string }>;
 }> {
@@ -145,12 +148,12 @@ export async function provisionMediaContainers(system: ContentSystem): Promise<{
     posts.set(thread.id, { id: thread.firstPost.id, revisionId: thread.firstPost.revisionId });
     return { id: thread.id, route: thread.route, partition: partitionOf(thread.route) };
   }
-  const key = 'media-thread';
+  const key = options.namespace ? `media-thread-${options.namespace}` : 'media-thread';
   const home = threadTarget(system.routeKey, author.actor.accountId, key);
   let siblingKey: string | undefined;
   let remoteKey: string | undefined;
   for (let i = 0; i < 100_000 && (!siblingKey || !remoteKey); i++) {
-    const candidate = `media-neighbour-${i}`;
+    const candidate = `${options.namespace ? `media-neighbour-${options.namespace}` : 'media-neighbour'}-${i}`;
     const target = threadTarget(system.routeKey, author.actor.accountId, candidate);
     if (partitionOf(target.route) === partitionOf(home.route)) siblingKey ??= candidate;
     else remoteKey ??= candidate;

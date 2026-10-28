@@ -1,4 +1,4 @@
-import { mock } from 'bun:test';
+import { afterAll, mock } from 'bun:test';
 import { Pool } from 'pg';
 import sharp, { type SharpInput, type SharpOptions } from 'sharp';
 import type {
@@ -24,6 +24,44 @@ import { digest, embeddedMetadata, imageSource, provisionMediaContainers } from 
 import { createMediaStorage, StorageDeleteFailure } from './support/storage.ts';
 
 const realSharp = sharp;
+type OpenApiResponse = {
+  content?: Record<string, { schema?: { properties?: { code?: { const?: unknown; enum?: unknown[] } } } }>;
+};
+type OpenApiOperation = { responses?: Record<string, OpenApiResponse> };
+type OpenApiPaths = Record<string, Record<string, unknown>>;
+const openApiDocument = (await Bun.file(new URL('../../../../contracts/openapi.json', import.meta.url)).json()) as {
+  paths: OpenApiPaths;
+};
+const documentedOutcomeRoutes = Object.entries(openApiDocument.paths).flatMap(([path, operations]) =>
+  Object.entries(operations).flatMap(([method, candidate]) => {
+    if (!candidate || typeof candidate !== 'object' || !('responses' in candidate)) return [];
+    const responses = candidate.responses as OpenApiOperation['responses'];
+    if (!responses || typeof responses !== 'object') return [];
+    const routePattern = new RegExp(
+      `^${path
+        .split(/(\{[^}]+\})/g)
+        .map((part) =>
+          part.startsWith('{') && part.endsWith('}') ? '[^/:]+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        )
+        .join('')}$`,
+    );
+    const refusalStatuses = new Set(
+      Object.entries(responses)
+        .filter(([status, response]) => {
+          if (['401', '403', '404'].includes(status)) return true;
+          if (status !== '409') return false;
+          const code = response.content?.['application/problem+json']?.schema?.properties?.code;
+          const codes = [code?.const, ...(code?.enum ?? [])];
+          return codes.some((value) =>
+            ['authentication_required', 'invalid_credentials', 'forbidden', 'not_found'].includes(String(value)),
+          );
+        })
+        .map(([status]) => status),
+    );
+    return [{ method: method.toUpperCase(), routePattern, statuses: new Set(Object.keys(responses)), refusalStatuses }];
+  }),
+);
+
 let observeSharp: ((options: SharpOptions | undefined) => void) | undefined;
 // A forwarding dependency observer: native Sharp still constructs, decodes and encodes every image.
 mock.module('sharp', () => ({
@@ -36,7 +74,102 @@ const { createImageJob } = await import('../../src/content/image-job.ts');
 const { createCollectionJob } = await import('../../src/content/collection-job.ts');
 const { createErasureJob } = await import('../../src/content/erasure-job.ts');
 
-let scenario: { system: ContentSystem; anchors: Awaited<ReturnType<typeof provisionMediaContainers>> } | undefined;
+type MediaScenario = { system: ContentSystem; anchors: Awaited<ReturnType<typeof provisionMediaContainers>> };
+let scenario: MediaScenario | undefined;
+
+type SharedContentSystem = {
+  databaseUrl: string;
+  system: ContentSystem;
+  jobPool: Pool;
+  collectionBinding: Awaited<ReturnType<typeof checkStatement>>;
+  onAuthentication: ((bearer: string, actor: AccountActor) => void) | undefined;
+  closing?: Promise<void>;
+};
+
+let sharedSystemPromise: Promise<SharedContentSystem> | undefined;
+let activeDrivers = 0;
+
+function createSharedContentSystem(databaseUrl: string): Promise<SharedContentSystem> {
+  let pending: Promise<SharedContentSystem>;
+  pending = (async () => {
+    const system = await createContentSystem({ databaseUrl });
+    const jobPool = new Pool({ ...system.database.pool.options, max: 4 });
+    try {
+      const collectionBinding = await checkStatement(jobPool, {
+        sql: selectCandidates.sql,
+        params: [...selectCandidates.params],
+      });
+      const shared: SharedContentSystem = {
+        databaseUrl,
+        system,
+        jobPool,
+        collectionBinding,
+        onAuthentication: undefined,
+      };
+      const authenticate = system.access.authenticate.bind(system.access);
+      system.access.authenticate = async (bearer, context) => {
+        const actor = await authenticate(bearer, context);
+        if (bearer) shared.onAuthentication?.(bearer, actor);
+        return actor;
+      };
+      return shared;
+    } catch (error) {
+      try {
+        await jobPool.end();
+        await system.close();
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Shared content fixture construction and cleanup failed');
+      }
+      throw error;
+    }
+  })().catch((error) => {
+    if (sharedSystemPromise === pending) sharedSystemPromise = undefined;
+    throw error;
+  });
+  sharedSystemPromise = pending;
+  return pending;
+}
+
+async function acquireSharedContentSystem(databaseUrl: string): Promise<SharedContentSystem> {
+  const shared = await (sharedSystemPromise ?? createSharedContentSystem(databaseUrl));
+  if (shared.databaseUrl !== databaseUrl) throw new Error('A media test process cannot switch database templates');
+  if (shared.closing) throw new Error('The shared content fixture is already closing');
+  activeDrivers++;
+  return shared;
+}
+
+async function releaseSharedContentSystem(): Promise<void> {
+  if (activeDrivers < 1) throw new Error('Shared content driver reference count underflow');
+  activeDrivers--;
+}
+
+async function closeSharedContentSystem(): Promise<void> {
+  const pending = sharedSystemPromise;
+  if (!pending) return;
+  const shared = await pending;
+  if (shared.closing) return shared.closing;
+  shared.closing = (async () => {
+    const errors: unknown[] = [];
+    try {
+      await shared.jobPool.end();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await shared.system.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    shared.onAuthentication = undefined;
+    if (scenario?.system === shared.system) scenario = undefined;
+    if (sharedSystemPromise === pending) sharedSystemPromise = undefined;
+    if (errors.length) throw new AggregateError(errors, 'Shared content fixture cleanup failed');
+  })();
+  return shared.closing;
+}
+
+afterAll(closeSharedContentSystem);
+process.once('beforeExit', () => void closeSharedContentSystem());
 
 /** The focused growth test shares the unchanged suite's ordinary beforeEach fixture. */
 export function currentMediaScenario() {
@@ -44,10 +177,42 @@ export function currentMediaScenario() {
   return scenario;
 }
 
-function outcome(response: Response, invalid = false): Outcome {
-  if (response.ok) return 'permitted';
-  if (invalid && (response.status === 400 || response.status === 422)) return 'invalid';
-  return 'denied';
+function outcomeRoute(method: string, path: string) {
+  let pathname: string;
+  try {
+    pathname = new URL(path, 'https://content.test').pathname;
+  } catch {
+    pathname = path.split('?')[0]!;
+  }
+  return documentedOutcomeRoutes.find(
+    (route) => route.method === method.toUpperCase() && route.routePattern.test(pathname),
+  );
+}
+
+async function problemBody(response: Response): Promise<string> {
+  try {
+    return await response.clone().text();
+  } catch (error) {
+    return `[problem body unavailable: ${error instanceof Error ? error.message : String(error)}]`;
+  }
+}
+
+/** Classify a media command response against the route statuses in contracts/openapi.json. */
+export async function classifyMediaOutcome(
+  response: Response,
+  method: string,
+  path: string,
+  invalid = false,
+): Promise<Outcome> {
+  const route = outcomeRoute(method, path);
+  const documented = route?.statuses.has(String(response.status)) ?? false;
+  const succeeds = documented && response.status >= 200 && response.status < 300;
+  const validation = documented && (response.status === 400 || response.status === 422);
+  const refusal = route?.refusalStatuses.has(String(response.status)) ?? false;
+  if (succeeds) return 'permitted';
+  if (invalid && validation) return 'invalid';
+  if (refusal) return 'denied';
+  throw new Error(`Kernel ${method} ${path} (${response.status}): ${await problemBody(response)}`);
 }
 function instant(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
@@ -63,47 +228,74 @@ function parameter(record: SqlExecution, names: readonly string[], name: string)
 export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name a migrated application template');
-  const system = await createContentSystem({ databaseUrl });
+  const shared = await acquireSharedContentSystem(databaseUrl);
+  const system = shared.system;
   const pool = system.database.pool;
   const observer = observeSql(pool);
-  // The API and trusted worker run in separate hosts. Separate real pools also
-  // keep their process-local command gates independent during PostgreSQL races.
-  const jobPool = new Pool({ ...pool.options, max: 4 });
-  const jobObserver = observeSql(jobPool);
+  const jobObserver = observeSql(shared.jobPool);
   const bytes = createMediaStorage();
+  const namespace = crypto.randomUUID();
+  const mediaIds = new Set<string>();
+  const requestIdToWire = new Map<string, string>();
+  const wireToRequestId = new Map<string, string>();
+  const wireRequestId = (requestId: string) => {
+    let wire = requestIdToWire.get(requestId);
+    if (!wire) {
+      wire = `${namespace}:${requestId}`;
+      requestIdToWire.set(requestId, wire);
+      wireToRequestId.set(wire, requestId);
+    }
+    return wire;
+  };
+  const visibleRequestId = (requestId: string) => wireToRequestId.get(requestId) ?? requestId;
+  const verified = new Map<string, AccountActor>();
+  const captureAuthentication = (bearer: string, actor: AccountActor) => verified.set(bearer, actor);
+  shared.onAuthentication = captureAuthentication;
+  let mediaScenario: MediaScenario | undefined;
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
-      if (scenario?.system === system) scenario = undefined;
+      const errors: unknown[] = [];
+      if (scenario === mediaScenario) scenario = undefined;
       observeSharp = undefined;
-      await jobObserver.close();
-      await jobPool.end();
-      await observer.close();
-      bytes.close();
-      await system.close();
+      if (shared.onAuthentication === captureAuthentication) shared.onAuthentication = undefined;
+      for (const release of [
+        () => jobObserver.close(),
+        () => observer.close(),
+        () => bytes.close(),
+        releaseSharedContentSystem,
+      ]) {
+        try {
+          await release();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length) throw new AggregateError(errors, 'Media driver cleanup failed');
     })());
   try {
-    const collectionBinding = await checkStatement(jobPool, {
-      sql: selectCandidates.sql,
-      params: [...selectCandidates.params],
-    });
-    const { containers, posts } = await provisionMediaContainers(system);
+    await pool.query('TRUNCATE access.write_rate_counter');
+    // A fresh native system starts with its wall clock unset. Reproduce that
+    // fixture boundary before creating resources so later tests can move the
+    // command clock to an earlier fixed instant without predating their grants.
+    await system.clock.setCommandTime(new Date().toISOString());
+    const { containers, posts } = await provisionMediaContainers(system, { namespace });
     const baseline = await pool.query<{ transaction_id: string }>('SELECT transaction_id::text FROM core.receipt');
     const setupTransactions = baseline.rows.map((row) => row.transaction_id);
+    const issueFresh = (original: ContentCredential) =>
+      system.auth.issue({
+        accountId: original.actor.accountId,
+        clientId: original.actor.clientId,
+        scopes: [...original.actor.scopes],
+        ...(original.actor.requestedBy === null ? {} : { requestedBy: original.actor.requestedBy }),
+      });
     const credentials: Record<Exclude<Persona, 'anonymous' | 'job'>, ContentCredential> = {
-      author: system.actors.author,
-      other: system.actors.other,
-      moderator: system.actors.moderator,
-      suspended: system.actors.suspended,
-      worker: system.actors.worker,
-      'other-worker': system.actors.otherWorker,
-    };
-    const verified = new Map<string, AccountActor>();
-    const authenticate = system.access.authenticate.bind(system.access);
-    system.access.authenticate = async (bearer, context) => {
-      const actor = await authenticate(bearer, context);
-      if (bearer && actor.kind === 'account') verified.set(bearer, actor);
-      return actor;
+      author: await issueFresh(system.actors.author),
+      other: await issueFresh(system.actors.other),
+      moderator: await issueFresh(system.actors.moderator),
+      suspended: { ...system.actors.suspended, actor: { ...system.actors.suspended.actor } },
+      worker: await issueFresh(system.actors.worker),
+      'other-worker': await issueFresh(system.actors.otherWorker),
     };
     const authEvidence = new Map<string, AccountActor>();
     const reservationTraces = new Map<string, readonly SqlExecution[]>();
@@ -111,9 +303,9 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
     const references = new Map<string, { body: Record<string, unknown>; path: string; match?: string }>();
     const processing = new Map<string, SharpOptions[]>();
     let now: string | undefined;
-    const collection = createCollectionJob(jobPool, bytes.storage, { clock: () => new Date(now ?? Date.now()) });
-    const image = createImageJob(jobPool, bytes.storage);
-    const erasure = createErasureJob(jobPool, bytes.storage);
+    const collection = createCollectionJob(shared.jobPool, bytes.storage, { clock: () => new Date(now ?? Date.now()) });
+    const image = createImageJob(shared.jobPool, bytes.storage);
+    const erasure = createErasureJob(shared.jobPool, bytes.storage);
     // Service capabilities are closed over here. HTTP personas have credentials,
     // never an image/collection capability; their denial does not inspect account names.
     const jobCapabilities = new Map<Persona, { image: typeof image; collection: typeof collection }>([
@@ -131,7 +323,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
       const credential = as === 'anonymous' || as === 'job' ? undefined : credentials[as];
       const headers = new Headers(extra);
       if (credential) headers.set('authorization', `Bearer ${credential.bearer}`);
-      if (requestId) headers.set('idempotency-key', JSON.stringify(requestId));
+      if (requestId) headers.set('idempotency-key', JSON.stringify(wireRequestId(requestId)));
       if (body) headers.set('content-type', 'application/json');
       const { response } = await system.transport.capture(
         new Request(`https://content.test${path}`, {
@@ -144,22 +336,29 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         const actor = verified.get(credential.bearer);
         if (actor) authEvidence.set(`${as}:${requestId}`, actor);
       }
-      if (response.status >= 500 && response.status !== 503)
-        throw new Error(`Kernel ${method} ${path} failed (${response.status}): ${await response.clone().text()}`);
       if (!response.ok) {
-        const problem = await response.clone().json();
+        const bodyText = await response.clone().text();
+        let problem: Record<string, unknown>;
+        try {
+          problem = JSON.parse(bodyText) as Record<string, unknown>;
+        } catch {
+          throw new Error(`Kernel ${method} ${path} (${response.status}): ${bodyText}`);
+        }
         const expected = ['GET', 'HEAD', 'OPTIONS'].includes(method) ? 'not_applicable' : 'not_applied';
         if (problem.effect_status !== expected)
-          throw new Error(`Kernel ${method} ${path} returned an inconsistent problem effect status`);
+          throw new Error(`Kernel ${method} ${path} (${response.status}): ${bodyText}`);
       }
       return response;
     }
 
     async function mediaRows(): Promise<Media[]> {
-      const result = await pool.query(`SELECT media_id::text AS id,key,container_id::text AS "containerId",
+      const result = await pool.query(
+        `SELECT media_id::text AS id,key,container_id::text AS "containerId",
         uploader_id::text AS "uploaderId",route,purpose,media_type AS type,byte_count,
         COALESCE(sha256,declared_sha256) AS sha256,state,erased,created_at,claimed_at,decision
-        FROM content.media ORDER BY media_id`);
+        FROM content.media WHERE media_id::text=ANY($1::text[]) ORDER BY media_id`,
+        [[...mediaIds]],
+      );
       return result.rows.map((row) => ({
         id: row.id,
         key: row.key,
@@ -204,7 +403,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         };
         references.set(input.requestId, captured);
       }
-      return outcome(
+      return classifyMediaOutcome(
         await send(
           as,
           'POST',
@@ -213,6 +412,8 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           captured.body,
           captured.match ? { 'if-match': captured.match } : undefined,
         ),
+        'POST',
+        captured.path,
       );
     }
     async function collect(as: Persona, partition: number): Promise<CollectionRun> {
@@ -231,7 +432,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         .filter((record) => record.statement === selectCandidates.sql)
         .map((record) => {
           const route = Number(parameter(record, selectCandidates.params, 'route'));
-          const hasRouteCondition = collectionBinding.bound && collectionBinding.parameter === 'route';
+          const hasRouteCondition = shared.collectionBinding.bound && shared.collectionBinding.parameter === 'route';
           return {
             partition: partitionOf(route),
             bound: hasRouteCondition && Number.isInteger(route) && partitionOf(route) === partition,
@@ -255,9 +456,10 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
         });
         reservationTraces.set(input.requestId, observer.records.slice(mark));
-        const result = outcome(response, true);
+        const result = await classifyMediaOutcome(response, 'POST', '/v1/media', true);
         if (result !== 'permitted') return { outcome: result };
         const { media: reservation } = await response.json();
+        mediaIds.add(reservation.id);
         completionTargets.set(`${input.containerId}:${input.requestId}`, reservation.id);
         // The uploader-only reservation read is itself a real HTTP operation.
         const read = await send(as, 'GET', `/v1/media/${reservation.id}`);
@@ -291,7 +493,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           await pool.query<{ media_id: string }>(
             `SELECT media_id::text FROM content.media
           WHERE route=$1 AND uploader_id=$2 AND reservation_request_id=$3`,
-            [route, account, requestId],
+            [route, account, wireRequestId(requestId)],
           )
         ).rows[0];
         return {
@@ -310,13 +512,16 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         const target =
           completionTargets.get(`${input.containerId}:${input.reservationRequestId}`) ?? newId(routeOf(container)!);
         // The HTTP schema takes uploader identity and completion scope only from the bearer token.
-        return outcome(
-          await send(as, 'POST', `/v1/media/${target}:complete`, input.requestId, {
+        const path = `/v1/media/${target}:complete`;
+        return classifyMediaOutcome(
+          await send(as, 'POST', path, input.requestId, {
             containerId: container,
-            reservationRequestId: input.reservationRequestId,
+            reservationRequestId: wireRequestId(input.reservationRequestId),
             byteCount: input.byteCount,
             sha256: input.sha256,
           }),
+          'POST',
+          path,
         );
       },
       async authenticationEvidence(as, requestId) {
@@ -360,17 +565,18 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
                   [route, objectId],
                 )
               ).rows[0]?.variant ?? 'webp-320');
+        const path = `/v1/media/${objectId}:authorizeDownload?variant=${variant}`;
         const response = await send(
           as,
           'GET',
-          `/v1/media/${objectId}:authorizeDownload?variant=${variant}`,
+          path,
           undefined,
           undefined,
           conditional ? { 'if-none-match': JSON.stringify(conditional.ifNoneMatch) } : undefined,
         );
         if (!response.ok) {
-          if (response.status !== 404 && response.status !== 401)
-            throw new Error(`Download denied with unexpected status ${response.status}`);
+          const result = await classifyMediaOutcome(response, 'GET', path);
+          if (result !== 'denied') throw new Error(`Download returned an unexpected ${result} outcome`);
           const problem = await response.json();
           if ('key' in problem) throw new Error('Denied download disclosed a storage key');
           return { outcome: 'denied' };
@@ -407,8 +613,11 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
           );
           return {
             media: await mediaRows(),
-            references: refs.rows,
-            receipts: receipts.rows.map((row) => ({ requestId: row.requestId, effects: Number(row.effects) })),
+            references: refs.rows.map((row) => ({ ...row, commandId: visibleRequestId(row.commandId) })),
+            receipts: receipts.rows.map((row) => ({
+              requestId: visibleRequestId(row.requestId),
+              effects: Number(row.effects),
+            })),
             storage: bytes.inspect(),
           };
         } finally {
@@ -542,7 +751,8 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         return { claim: claimResult, collection: collectionResult };
       },
     };
-    scenario = { system, anchors: { containers, posts } };
+    mediaScenario = { system, anchors: { containers, posts } };
+    scenario = mediaScenario;
     return driver;
   } catch (error) {
     await close();
