@@ -1,5 +1,6 @@
 export { readPublicViews, type PublicViews } from './public-views.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
+import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
@@ -45,7 +46,7 @@ export {
 
 export type AccessConfig = KernelAccessConfig & { auth?: AuthenticationConfig };
 
-type Prepared = {
+type Prepared = IdentityExpiry & {
   actor: Actor;
   action: string;
   route: number;
@@ -53,7 +54,6 @@ type Prepared = {
   pageBinding?: string;
   deadline: number;
   requestDeadline: number;
-  expires: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 };
 
@@ -133,7 +133,7 @@ export function createAccess(config: AccessConfig): Access {
       const requestDeadline = Math.min(context.deadline, identity?.deadline ?? Infinity);
       requireAccessDeadline(requestDeadline);
       const expires = identity?.expires ?? Infinity;
-      if (clock().getTime() >= expires) return null;
+      if (identity && identityExpired(identity, clock)) return null;
       const attempt = accessCommandAttempt(context);
       if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
         return null;
@@ -172,6 +172,7 @@ export function createAccess(config: AccessConfig): Access {
         deadline,
         requestDeadline,
         expires,
+        expiryClock: identity?.expiryClock ?? 'kernel',
         ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
       });
       return evidence;
@@ -205,7 +206,7 @@ export function createAccess(config: AccessConfig): Access {
       return { allowed: false, explicit: false };
     try {
       requireAccessDeadline(facts.requestDeadline);
-      if (clock().getTime() >= facts.expires) return { allowed: false, explicit: false };
+      if (identityExpired(facts, clock)) return { allowed: false, explicit: false };
       return await within(facts.deadline, async () => {
         const bounded = deadlineClient(client, facts.deadline);
         if (explicit) return permissions.authorizeExplicit!(bounded, actor, action, page ?? resource, evidence, time);
@@ -319,7 +320,9 @@ export function createAccess(config: AccessConfig): Access {
     scope: authentication.approvalScope,
     expiry(actor, context) {
       const identity = authentication.identity(actor);
-      return identity?.pool === context.pool && identity.durableTime === undefined ? identity.expires : undefined;
+      return identity?.pool === context.pool && identity.durableTime === undefined
+        ? { expires: identity.expires, expiryClock: identity.expiryClock }
+        : undefined;
     },
     restore: authentication.restoreApproval,
   });

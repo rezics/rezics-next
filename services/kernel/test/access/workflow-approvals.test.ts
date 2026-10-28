@@ -219,7 +219,8 @@ test('approval uses the verified original expiry and remains expired across rest
   const f = await fixture();
   const exp = Math.floor(Date.now() / 1000) + 2;
   const a = await build().approve(await token(f.actor, { iat: exp - 299, exp, auth_time: exp - 299 }), f, context());
-  expect(Date.parse(a.expiresAt)).toBe(exp * 1000);
+  expect(Date.parse(a.expiresAt)).toBeLessThanOrEqual(exp * 1000);
+  expect(Date.parse(a.expiresAt)).toBeGreaterThan(exp * 1000 - 1000);
   await Bun.sleep(Math.max(0, exp * 1000 - Date.now()));
   await denied(build().resolve(a.reference, f.operation, context()));
   expect(

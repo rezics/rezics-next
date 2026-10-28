@@ -60,7 +60,7 @@ async function bearer(at: Date) {
     .setExpirationTime(issuedAt + 300)
     .sign(signingKey);
 }
-async function call(method: string, path: string, body?: unknown, tokenTime = clock()) {
+async function call(method: string, path: string, body?: unknown, tokenTime = new Date(Date.now())) {
   const response = await app.handle(
     new Request(`http://kernel.test${path}`, {
       method,
@@ -159,7 +159,7 @@ test.serial('a create and the following read share a kernel clock two years ahea
   expect(row.rowCount).toBe(1);
 });
 
-test.serial('a wall-time token is expired on the kernel clock two years ahead of PostgreSQL', async () => {
+test.serial('a wall-time token is accepted with the kernel clock two years ahead of PostgreSQL', async () => {
   kernelNow = yearsFrom(databaseNow, 2);
   const response = await call(
     'POST',
@@ -173,7 +173,7 @@ test.serial('a wall-time token is expired on the kernel clock two years ahead of
     },
     new Date(),
   );
-  expect(response.status).toBe(401);
+  expect(response.status).toBe(201);
 });
 
 function normalize(statement: string): string {

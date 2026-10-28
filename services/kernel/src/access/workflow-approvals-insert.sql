@@ -1,3 +1,5 @@
+-- jwt_expires_at is the bearer's remaining wall lifetime carried into kernel time
+-- at issuance (the JWT exp when the clocks agree, less any sampling gap).
 WITH input AS NOT MATERIALIZED (
   SELECT :operation::jsonb AS operation, :at::timestamptz AS at, :jwt_expires_at::timestamptz AS jwt_expires_at,
          :evidence_expires_at::timestamptz AS evidence_expires_at

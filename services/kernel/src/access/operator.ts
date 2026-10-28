@@ -2,7 +2,7 @@ import { accessClock } from './access-clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
-import { verifiedBearerExpiry } from './approved-identity.ts';
+import { verifiedKernelExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
 import credentialConsume from './operator-opening-credential-consume.sql';
 import { createHash } from 'node:crypto';
@@ -829,7 +829,7 @@ export function createOperatorCommands(config: OperatorConfig) {
               at: authoritativeTimeValue(currentCommand(tx).time),
               expires_at: new Date(
                 Math.min(
-                  verifiedBearerExpiry(access, context.actor, { pool, deadline: context.deadline }),
+                  verifiedKernelExpiry(access, context.actor, { pool, deadline: context.deadline }),
                   Date.parse(authoritativeTimeValue(currentCommand(tx).time)) + OPERATOR_RECEIPT_TTL_MS,
                 ),
               ).toISOString(),

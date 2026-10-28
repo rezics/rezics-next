@@ -1,3 +1,4 @@
+import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { requireAccessDeadline } from './unavailable.ts';
@@ -6,10 +7,9 @@ import { isIP } from 'node:net';
 import type { Actor, AccountActor } from '../request/access.ts';
 import type { WriteRateContext, AccountRateClass } from './write-rate.ts';
 
-type Identity = {
+type Identity = IdentityExpiry & {
   pool: WriteRateContext['pool'];
   deadline: number;
-  expires: number;
   clock: KernelClock;
   route?: number;
   name: string;
@@ -24,6 +24,7 @@ export function bindAccountRateIdentity(
   facts: { route: number; createdAt: number | null; rateTier: string; operatorAccountId: string | null },
   expires: number,
   clock: KernelClock = systemClock,
+  expiryClock: IdentityExpiry['expiryClock'] = 'kernel',
 ): void {
   const rateClass: AccountRateClass =
     facts.rateTier === 'service' && facts.operatorAccountId !== null
@@ -39,6 +40,7 @@ export function bindAccountRateIdentity(
       pool: context.pool,
       deadline: context.deadline,
       expires,
+      expiryClock,
       clock,
       route: facts.route,
       name: `account:${actor.accountId}`,
@@ -111,6 +113,7 @@ export function bindAnonymousRateIdentity(
       pool: context.pool,
       deadline: context.deadline,
       expires: Infinity,
+      expiryClock: 'kernel',
       clock: systemClock,
       name: `anonymous:${canonicalRateAddress(address)}`,
       rateClass: 'anonymous',
@@ -123,7 +126,7 @@ export function rateIdentity(context: WriteRateContext, secret: string) {
   requireAccessDeadline(context.deadline);
   const identity = identities.get(context.actor);
   if (identity) requireAccessDeadline(identity.deadline);
-  if (!identity || identity.pool !== context.pool || identity.clock().getTime() >= identity.expires)
+  if (!identity || identity.pool !== context.pool || identityExpired(identity, identity.clock))
     throw new Error('Verified rate identity unavailable');
   const identityDigest = createHmac('sha256', secret).update(identity.name).digest('hex');
   return {

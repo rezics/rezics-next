@@ -47,19 +47,20 @@ async function fixture(at = Date.now()) {
        VALUES ($1,$2,$2,$3,'(,)',$2)`,
       [routeOf(human), human, action],
     );
+  const issuedAt = Math.floor(Date.now() / 1000);
   const bearer = await new SignJWT({
     client_id: 'web',
     scope: [...actions.keys()].join(' '),
     authn_epoch: 1,
-    auth_time: Math.floor(at / 1000),
+    auth_time: issuedAt,
     amr: ['pwd'],
   })
     .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
     .setIssuer(issuer)
     .setAudience(issuer)
     .setSubject(human)
-    .setIssuedAt(Math.floor(at / 1000))
-    .setExpirationTime(Math.floor(at / 1000) + 300)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + 300)
     .sign(signing.privateKey);
   const actor = await access.authenticate(bearer, context());
   const operators = createOperatorCommands({

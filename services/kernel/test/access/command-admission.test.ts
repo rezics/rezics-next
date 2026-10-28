@@ -390,14 +390,11 @@ test('read snapshot is bounded by actual authentication observation, original de
   } finally {
     Date.now = realNow;
   }
+  await Bun.sleep(1000 - (Date.now() % 1000));
   const now = Math.floor(Date.now() / 1000);
-  const expiring = await access.authenticate(await signed(f.id, { exp: now + 30 }), f.context);
-  try {
-    Date.now = () => (now + 30) * 1000 + 1;
-    await denied(execute(f, Bun.randomUUIDv7(), true, expiring));
-  } finally {
-    Date.now = realNow;
-  }
+  const expiring = await access.authenticate(await signed(f.id, { exp: now + 1 }), f.context);
+  await Bun.sleep(Math.max(0, (now + 1) * 1000 - Date.now()));
+  await denied(execute(f, Bun.randomUUIDv7(), true, expiring));
 });
 
 test('target-local stable check uses fresh evidence and T after a serialization retry', async () => {

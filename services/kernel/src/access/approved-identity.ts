@@ -1,3 +1,4 @@
+import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { AuthenticationError, type Access, type AccessContext, type AccountActor } from '../request/access.ts';
@@ -34,7 +35,7 @@ type Claims = { actor: AccountActor; expires: number; scope: object; pool: Acces
 const proofs = new WeakMap<ApprovedIdentity, Claims>();
 type Bridge = {
   scope: object;
-  expiry(actor: AccountActor, context: AccessContext): number | undefined;
+  expiry(actor: AccountActor, context: AccessContext): IdentityExpiry | undefined;
   restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
 const bridges = new WeakMap<Access, Bridge>();
@@ -54,12 +55,22 @@ export function approvedIdentityClaims(
   const facts = proofs.get(proof);
   return facts?.scope === scope && facts.pool === pool ? facts : undefined;
 }
-export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+function verifiedExpiry(access: Access, actor: AccountActor, context: AccessContext): IdentityExpiry {
   const bridge = bridges.get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   const expires = bridge.expiry(actor, context);
-  if (expires === undefined || accessClock(access)().getTime() >= expires) throw new ApprovalIdentityDeniedError();
+  if (expires === undefined || identityExpired(expires, accessClock(access))) throw new ApprovalIdentityDeniedError();
   return expires;
+}
+/** The original verified instant, checked on the clock that issued the identity. */
+export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+  return verifiedExpiry(access, actor, context).expires;
+}
+
+/** Kernel rows retain kernel instants, including caps inherited from a bearer. */
+export function verifiedKernelExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+  const expiry = verifiedExpiry(access, actor, context);
+  return expiry.expiryClock === 'kernel' ? expiry.expires : carryExpiry(expiry.expires, accessClock(access), 'kernel');
 }
 /** Bind every immutable column, including original scope ceiling and JWT expiry. */
 export function approvalRowDigest(row: ApprovalRow): string {

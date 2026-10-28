@@ -1,3 +1,4 @@
+import type { IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -25,11 +26,10 @@ export type AuthenticationConfig = {
   fetch?: FetchImplementation;
 };
 
-type Identity = {
+type Identity = IdentityExpiry & {
   account: Account;
   pool: AccessContext['pool'];
   deadline: number;
-  expires: number;
   observedAt: number;
   durableTime?: AuthoritativeTime;
   durableAction?: string;
@@ -188,7 +188,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
     try {
       remaining(context.deadline);
       const { config, keys } = resolveVerifier();
-      const at = clock();
+      const at = new Date();
       const { payload, protectedHeader } = await within(context.deadline, () =>
         deadlines.run(context.deadline, () =>
           jwtVerify(token, keys, {
@@ -240,7 +240,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       }
       const expires = payload.exp! * 1000;
       remaining(context.deadline);
-      if (clock().getTime() >= expires) throw invalid();
+      if (new Date().getTime() >= expires) throw invalid();
       if (account.state === 'suspended') {
         const error = invalid();
         suspendedFailures.add(error);
@@ -259,9 +259,10 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         pool: context.pool,
         deadline: context.deadline,
         expires,
+        expiryClock: 'wall',
         observedAt,
       });
-      bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock);
+      bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock, 'wall');
       return actor;
     } catch (error) {
       throwAccessUnavailable(error, context.deadline);
@@ -288,6 +289,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         pool: context.pool,
         deadline,
         expires: Infinity,
+        expiryClock: 'kernel',
         observedAt: Date.now(),
         durableTime: time,
         durableAction: facts.action,
@@ -331,9 +333,10 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
           pool: context.pool,
           deadline: context.deadline,
           expires,
+          expiryClock: 'kernel',
           observedAt,
         });
-        bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock);
+        bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock, 'kernel');
         return actor;
       } catch (error) {
         throwAccessUnavailable(error, context.deadline);

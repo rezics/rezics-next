@@ -1,6 +1,7 @@
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
+import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
@@ -23,10 +24,11 @@ export function accessCommandAttempt(context: AccessContext): CommandAttempt | u
 }
 
 type Snapshot = Readonly<{
+  expiryClock?: IdentityExpiry['expiryClock'];
+  expires: number;
   account: Account;
   pool: AccessContext['pool'];
   deadline: number;
-  expires: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 }>;
 type CapturedAccount = Readonly<{ minimumAuthnEpoch: string; operatorAccountId: string | null }>;
@@ -111,7 +113,7 @@ export function createCommandAdmission(
     const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity);
     if (
       !snapshot ||
-      clock().getTime() >= snapshot.expires ||
+      identityExpired(snapshot, clock) ||
       snapshot.pool !== context.pool ||
       (snapshot.durableTime !== undefined && snapshot.durableTime !== attempt.time) ||
       !Number.isFinite(deadline) ||

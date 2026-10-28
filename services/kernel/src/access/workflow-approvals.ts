@@ -26,7 +26,7 @@ import {
   approvalRowDigest,
   readApprovedIdentity,
   ApprovalIdentityUnavailableError,
-  verifiedBearerExpiry,
+  verifiedKernelExpiry,
   type ApprovalRow,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
@@ -717,7 +717,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
       if (operation.kind === 'revoke')
         requireAllowed(actor.accountId !== operation.accountId || actor.requestedBy === null);
-      const expires = verifiedBearerExpiry(config.access, actor, bounded);
+      const expires = verifiedKernelExpiry(config.access, actor, bounded);
       const deadline = bounded.deadline;
       const descriptor = await operationDescriptor(actor, operation, native, deadline);
       const route = routeOf(actor.accountId)!;
