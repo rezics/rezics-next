@@ -180,7 +180,70 @@ test('the build output is ignored by git', () => {
     assets: { directory: string };
   };
   expect(config.name).toBe('rezics-storybook');
+  expect(config.account_id).toBe('dcc939f004008f8e36e11456df3f0fe2');
   expect(config.preview_urls).toBe(true);
   expect(config.routes).toContainEqual({ pattern: 'storybook.rezics.com', custom_domain: true });
   expect(config.assets.directory).toBe('./storybook-static');
+  expect(config.assets).not.toHaveProperty('binding');
+  expect(config.assets).not.toHaveProperty('run_worker_first');
+});
+
+test('the installed Wrangler accepts the assets-only config in dry-run mode', () => {
+  const result = Bun.spawnSync(
+    ['./node_modules/.bin/wrangler', 'deploy', '--dry-run', '--config', 'storybook.wrangler.jsonc'],
+    { cwd: app, stdout: 'pipe', stderr: 'pipe' },
+  );
+  expect(`${result.stdout.toString()}\n${result.stderr.toString()}`).toContain('Total Upload');
+  expect(result.exitCode).toBe(0);
+});
+
+test('deployment applies the custom domain and verifies the live build commit', async () => {
+  const calls: string[][] = [];
+  const outputLines: string[] = [];
+  const expected = 'a'.repeat(40);
+  await runDeployment({
+    dryRun: false,
+    commit: expected,
+    build: async () => {},
+    smoke: async () => {},
+    wrangler: async (args) => {
+      calls.push(args);
+      if (args[1] === 'upload') return 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev';
+      return 'deployed';
+    },
+    fetchBuild: async () => ({ commit: expected }),
+    print: (line) => outputLines.push(line),
+  });
+  expect(calls.map((args) => args.slice(0, 2))).toEqual([
+    ['versions', 'upload'],
+    ['versions', 'deploy'],
+    ['triggers', 'deploy'],
+  ]);
+  expect(calls[1]).toContain('ver-123@100');
+  expect(outputLines.join('\n')).toContain('https://ver-123.storybook.rezics.workers.dev');
+});
+
+test('deployment fails when the live domain serves a different commit', async () => {
+  const calls: string[][] = [];
+  await expect(
+    runDeployment({
+      dryRun: false,
+      commit: 'a'.repeat(40),
+      build: async () => {},
+      smoke: async () => {},
+      wrangler: async (args) => {
+        calls.push(args);
+        return args[1] === 'upload'
+          ? 'Version ID: ver-123\nPreview URL: https://ver-123.storybook.rezics.workers.dev'
+          : 'deployed';
+      },
+      fetchBuild: async () => ({ commit: 'b'.repeat(40) }),
+      print: () => {},
+    }),
+  ).rejects.toThrow(/live build.*commit/i);
+  expect(calls.map((args) => args.slice(0, 2))).toEqual([
+    ['versions', 'upload'],
+    ['versions', 'deploy'],
+    ['triggers', 'deploy'],
+  ]);
 });
