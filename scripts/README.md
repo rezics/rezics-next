@@ -166,8 +166,9 @@ These include the run's containers and installation, but exclude upload and admi
 Finally, cleanup stops that run's scope, removes only its labelled containers with their associated volumes,
 stops its slice and deletes its directory. It then releases the slot locks.
 Signals also take this cleanup path. A failed cleanup connection leaves a warning.
-On a later successful slot take, the stale-run sweep removes directories older than 60 minutes
-whose corresponding scope is inactive. It uses the same run-specific cleanup.
+Before taking a slot, the stale-run sweep also removes directories older than 60 minutes
+whose corresponding scope is inactive and whose `.alive` file is absent or older than 10 minutes; a run without
+that file keeps this directory rule for compatibility with older clients. It uses the same run-specific cleanup.
 Never prune Docker or remove another active run's resources.
 
 Both remote admission and the local stack lease append waits to `GOAL_CHECK_WAIT_FILE` when set.

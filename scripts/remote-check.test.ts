@@ -2296,10 +2296,17 @@ if (command === 'systemd-run') {
   const result = spawnSync(args[start]!, args.slice(start + 1), { env: process.env, stdio: 'inherit' });
   process.exit(result.status ?? 1);
 } else if (command === 'systemctl') {
-  if (args[0] === 'show') console.log('/rezics-check.slice/' + args.at(-1));
+  if (args[0] === 'list-units') {
+    for (const slice of Object.keys(state.slices ?? {})) console.log(slice + ' loaded active active');
+  }
+  if (args[0] === 'show') {
+    if (args.includes('--property=TasksCurrent')) console.log(state.slices?.[args.at(-1)!] ?? 1);
+    else console.log('/rezics-check.slice/' + args.at(-1));
+  }
+  if (args[0] === 'stop' && state.slices) delete state.slices[args[1]!];
   if (args[0] === 'is-active') process.exit(args.at(-1) === 'rezics-check-active-run.scope' ? 0 : 3);
 } else if (command === 'date') {
-  console.log(state.ticks++ * 1000000000);
+  console.log(args[0] === '+%s' ? (state.now ?? Math.floor(Date.now() / 1000)) : state.ticks++ * 1000000000);
 } else if (command === 'bun') {
   process.exit(Number(process.env.INSTALL_EXIT ?? 0));
 } else if (command === 'docker') {
@@ -2338,6 +2345,8 @@ writeFileSync(stateFile, JSON.stringify(state));
   return {
     directory,
     state: () => JSON.parse(readFileSync(stateFile, 'utf8')),
+    update: (updates: Record<string, unknown>) =>
+      writeFileSync(stateFile, JSON.stringify({ ...JSON.parse(readFileSync(stateFile, 'utf8')), ...updates })),
     events: () =>
       readFileSync(join(directory, 'events'), 'utf8')
         .trim()
@@ -2458,6 +2467,7 @@ test("a stale run directory's containers are removed with it", async () => {
   mkdirSync(active);
   mkdirSync(fresh);
   const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(join(stale, '.alive'), old, old);
   utimesSync(stale, old, old);
   utimesSync(active, old, old);
   expect(fixture.execute(scripts.slot).status).toBe(0);
@@ -2481,6 +2491,100 @@ test("a stale run directory's containers are removed with it", async () => {
     expect(events.indexOf(removal)).toBeGreaterThan(scopeStop);
     expect(events.indexOf(removal)).toBeLessThan(sliceStop);
   }
+});
+
+test('a run whose client stops renewing its liveness file is stopped by the next run that starts on the host, with its slice and containers', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  expect(fixture.execute(scripts.run).status).toBe(7);
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const directory = join(fixture.directory, 'runs', id);
+  const now = Math.floor(Date.now() / 1000);
+  const expired = new Date((now - 601) * 1000);
+  utimesSync(join(directory, '.alive'), expired, expired);
+  fixture.update({ now });
+
+  const result = fixture.execute(scripts.slot);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stderr).toContain(`remote-check: stopped stale run ${id} (alive file age 601 s)`);
+  // Liveness stops resources promptly; directory retention still uses the 60-minute rule.
+  expect(existsSync(directory)).toBe(true);
+  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+  expect(fixture.state().volumes).toEqual(['unrelated']);
+  expect(fixture.events()).toContainEqual(
+    expect.objectContaining({ command: 'systemctl', args: ['stop', `rezics-check-${id.replaceAll('-', '_')}.slice`] }),
+  );
+});
+
+test('a run whose client is alive is never stopped by another run, however long it lasts within its deadline', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  expect(fixture.execute(scripts.run).status).toBe(7);
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const directory = join(fixture.directory, 'runs', id);
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(directory, old, old);
+  const containers = fixture.state().containers;
+  // The command has ended, so its scope is inactive. Its live client may still be copying results back.
+  for (const elapsed of [0, 60, 600, 1800]) {
+    const now = Math.floor(Date.now() / 1000) + elapsed;
+    const renewed = new Date(now * 1000);
+    utimesSync(join(directory, '.alive'), renewed, renewed);
+    fixture.update({ now });
+    expect(fixture.execute(scripts.slot).status).toBe(0);
+    expect(existsSync(directory)).toBe(true);
+    expect(fixture.state().containers).toEqual(containers);
+  }
+  expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([]);
+});
+
+test('a run directory without a liveness file keeps the older inactive-directory cleanup rule', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  expect(fixture.execute(scripts.run).status).toBe(7);
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
+  const directory = join(fixture.directory, 'runs', id);
+  rmSync(join(directory, '.alive'));
+  const recentlyAbandoned = new Date(Date.now() - 30 * 60 * 1000);
+  utimesSync(directory, recentlyAbandoned, recentlyAbandoned);
+  expect(fixture.execute(scripts.slot).status).toBe(0);
+  expect(existsSync(directory)).toBe(true);
+  expect(fixture.state().containers).toHaveLength(3);
+  expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([]);
+
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(directory, old, old);
+  expect(fixture.execute(scripts.slot).status).toBe(0);
+  expect(existsSync(directory)).toBe(false);
+  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+});
+
+test('an empty leftover run slice is removed by the next run that starts on the host', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  fixture.update({ slices: { 'rezics-check-empty.slice': 0, 'rezics-check-busy.slice': 2 } });
+  expect(fixture.execute(scripts.slot).status).toBe(0);
+  expect(fixture.state().slices).toEqual({ 'rezics-check-busy.slice': 2 });
+  expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([
+    expect.objectContaining({ args: ['stop', 'rezics-check-empty.slice'] }),
+  ]);
+});
+
+test("a run that passes its deadline is stopped and the client exits with the deadline exit code, distinct from the command's own failure and from transport failures", async () => {
+  const { env, events } = scenario({ a: { available: 8e9, hang: true } });
+  const result = await remote(env, workspace(), ['true'], ['--max-ms', '100']);
+  expect(result.code).toBe(124);
+  expect(result.stderr).toContain('remote-check: deadline reached after 100 ms');
+  const run = String(events().find((event) => event.kind === 'run')!.script);
+  const slice = run.match(/REZICS_CHECK_SLICE=([^\s]+)/)![1]!;
+  const stopAt = events().findIndex((event) => String(event.script).startsWith(`systemctl stop ${slice} `));
+  const releaseAt = events().findIndex((event) => event.kind === 'release');
+  expect(stopAt).toBeGreaterThanOrEqual(0);
+  expect(releaseAt).toBeGreaterThan(stopAt);
+  const failure = scenario({ a: { available: 8e9, exit: 7 } });
+  expect((await remote(failure.env, workspace(), ['true'])).code).toBe(7);
+  const transport = scenario({ a: { available: 8e9, transportFailures: 1 } });
+  expect((await remote(transport.env, workspace(), ['true'])).code).toBe(75);
 });
 
 test('every container a check host run starts is in its run slice', () => {

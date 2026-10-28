@@ -479,17 +479,22 @@ now=$(date +%s)
 for run in ${ROOT}/runs/*; do
   [ -d "$run" ] || continue
   alive="$run/.alive"
+  age=
   if [ -f "$alive" ]; then
     touched=$(stat -c %Y "$alive" 2>/dev/null || echo "$now")
     age="$((now - touched))"
     if [ "$age" -gt 600 ]; then
       run_id=\${run##*/}
       run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
-      systemctl stop "$run_slice" >/dev/null 2>&1 || true
+      run_directory=$run
+      ${cleanupCommands(false)}
       echo "remote-check: stopped stale run $run_id (alive file age $age s)" >&2
-      rm -rf -- "$run"
+    else
+      continue
     fi
-  elif [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
+  fi
+  # Older clients have no liveness file: retain their existing inactive-directory cleanup rule.
+  if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
     run_id=\${run##*/}
     run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
     run_directory=$run
@@ -547,13 +552,13 @@ function runSlice(id: string): string {
 }
 
 /** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
-function cleanupCommands(): string {
+function cleanupCommands(removeDirectory = true): string {
   return `systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
 docker ps -aq --filter "label=rezics.check.run=$run_id" | while IFS= read -r container; do
   [ -z "$container" ] || docker rm -f -v "$container" >/dev/null 2>&1
 done
 systemctl stop "$run_slice" >/dev/null 2>&1
-rm -rf -- "$run_directory"`;
+${removeDirectory ? 'rm -rf -- "$run_directory"' : ''}`;
 }
 
 /**
