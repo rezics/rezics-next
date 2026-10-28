@@ -285,6 +285,10 @@ outside `tools/goal/`, as well as tasks from other Goals, continue to integrate 
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
+At dispatch, a task is also held after the earliest running task or landing task with an unacknowledged landing request
+from any Goal that declares the same concrete, non-derived file. The controller records that task in `after:` and reports
+the shared file. Directory and glob patterns, and files matched by `defaults.json` `derivedFiles`, do not trigger this
+rule. Automatically held tasks use the normal release path when their dependency integrates.
 
 A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
 brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused while the branch does
