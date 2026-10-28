@@ -240,8 +240,27 @@ $$;
 CREATE FUNCTION access.guard_erasure_acknowledgement() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE
+  store text;
+  resolved jsonb;
 BEGIN
-  RAISE EXCEPTION 'Erasure acknowledgements are immutable' USING ERRCODE = '23514';
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Erasure acknowledgements are immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NEW.route IS DISTINCT FROM OLD.route OR NEW.account_id IS DISTINCT FROM OLD.account_id
+     OR NEW.participant IS DISTINCT FROM OLD.participant OR NEW.outcome IS DISTINCT FROM OLD.outcome
+     OR NEW.retained IS DISTINCT FROM OLD.retained OR NOT (NEW.resolutions @> OLD.resolutions) THEN
+    RAISE EXCEPTION 'Erasure acknowledgements are immutable' USING ERRCODE = '23514';
+  END IF;
+  FOR store, resolved IN SELECT key, value FROM jsonb_each(NEW.resolutions) LOOP
+    IF jsonb_typeof(resolved) <> 'string' OR NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(NEW.retained) x
+      WHERE x->>'store' = store AND (x->>'expiresAt')::timestamptz <= (resolved #>> '{}')::timestamptz
+    ) THEN
+      RAISE EXCEPTION 'Invalid retention resolution' USING ERRCODE = '23514';
+    END IF;
+  END LOOP;
+  RETURN NEW;
 END;
 $$;
 
@@ -678,8 +697,12 @@ CREATE TABLE access.erasure_acknowledgement (
     account_id uuid NOT NULL,
     participant text NOT NULL,
     outcome text NOT NULL,
+    retained jsonb DEFAULT '[]'::jsonb NOT NULL,
+    resolutions jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT erasure_acknowledgement_outcome_check CHECK ((outcome = ANY (ARRAY['erased'::text, 'none'::text]))),
-    CONSTRAINT erasure_acknowledgement_participant_check CHECK (((length(participant) >= 1) AND (length(participant) <= 64)))
+    CONSTRAINT erasure_acknowledgement_participant_check CHECK (((length(participant) >= 1) AND (length(participant) <= 64))),
+    CONSTRAINT erasure_acknowledgement_resolutions_check CHECK ((jsonb_typeof(resolutions) = 'object'::text)),
+    CONSTRAINT erasure_acknowledgement_retained_check CHECK (((jsonb_typeof(retained) = 'array'::text) AND (jsonb_array_length(retained) <= 16) AND ((outcome = 'erased'::text) OR (retained = '[]'::jsonb))))
 );
 
 

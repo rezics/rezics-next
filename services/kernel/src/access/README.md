@@ -557,8 +557,8 @@ Registration expiry deletes only pending accounts, which cannot create consumer 
 
 Modules that retain per-account data register a durable effect on this event through
 [`registerEffects`](../events/effects.ts), using the account id to start their own purge. Work modules contribute
-effects through `context.addEffects`. The existing consumers in [Rating eligibility](../rating/eligibility.ts),
-[Library](../library/README.md) and [organization close](organization-close-work.ts) show the pattern: persist progress
+effects through `context.addEffects`. The existing consumers in [Rating eligibility](../rating/eligibility.ts)
+and [organization close](organization-close-work.ts) show the pattern: persist progress
 and schedule bounded steps with stable workflow identities. Access never calls an owner's purge code.
 
 The barrier also inserts one `access.erasure` row in the account's partition with T and the current participant
@@ -573,11 +573,26 @@ command transaction in the account's partition: `erased` attests to actual clean
 applies. This mechanical work runs as the platform and restores no initiator. New acknowledgements use the existing
 `account-updated` event; there is no new event type. Dispatch success is not completion.
 
-Each participant's acknowledgement is immutable. Repeating the same outcome does nothing; an unknown participant,
-a missing erasure or a different second outcome is refused. The last acknowledgement sets completion in the same
-transaction. PostgreSQL keeps the minimal record independently of DBOS history and command receipts; completion
-never reopens on event replay. Internal/test-only `readErasureStatus(client, accountId)` returns the recorded version,
-T, every participant's `erased`, `none` or `pending` outcome and `completedAt`, or null. It has no HTTP route.
+Only `erased` may name optional `retained` exceptions, at most 16, each with `store`, `fields`, `purpose` and
+`expiresAt: Date`. Store and field identifiers match `[A-Za-z_][A-Za-z0-9_]{0,63}`; each exception names 1 to 32
+fields, a purpose of 1 to 200 characters and a known expiry strictly after T. Store names are unique within
+an acknowledgement. A participant without a decided expiry stays pending. Exception and field order do not affect
+identity. Each participant's acknowledgement is immutable: the same outcome and exceptions do nothing; any
+difference, unknown participant or missing erasure is refused.
+
+The owner names exceptions in its acknowledgement and retention inventory, purges each store at expiry, then calls
+`resolveRetention({ pool }, { accountId, participant, store })` as its own command transaction after that purge
+commits. Resolution records one time, requires expiry to have arrived, is idempotent, and refuses an unknown erasure,
+participant or store. Like acknowledgement, it runs as the platform and restores no initiator.
+
+The last acknowledgement sets `completedAt` in the same transaction: it means active cleanup complete, even when
+retention remains. PostgreSQL keeps the minimal record independently of DBOS history and command receipts;
+completion never reopens on event replay. Internal/test-only `readErasureStatus(client, accountId)` returns the
+recorded version, T, `completedAt`, and each participant's `outcome` and `retained` exceptions with `resolvedAt`
+(null until resolved) and `overdue` (true only while unresolved and expiry is before the database read time).
+Its `state` is `pending` until all participants acknowledge, then `retention-outstanding` while any exception is
+unresolved, then `complete`. It returns null for a missing erasure and has no HTTP route. Backup expiry is not
+modelled because no backup policy exists; it remains an open external condition.
 
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
@@ -608,18 +623,26 @@ Start at route 0 and the zero UUID; release the caller's client between pages an
 
 ### Erasure acknowledgement
 
-- Touches: one point read locking the erasure row, one keyed insert (or lookup of the immutable existing outcome),
-  and at most one completion update in the account's partition, counting at most P acknowledgements.
-- Bound: O(P + log A), P the recorded version's participant count (11 in version 1), independent of accounts,
-  erasures and history. A duplicate uses the command's no-effect fence without advancing history.
-- Growth check: `test/access/growth-erasure-coordinator.test.ts`, accounts and completed erasures at three scales;
-  statements and rows per acknowledgement stay constant.
+- Touches: one point read locking the erasure row, one keyed insert of the acknowledgement with at most 16
+  exceptions (or lookup of the immutable existing acknowledgement), and at most one completion update in the
+  account's partition, counting at most P acknowledgements.
+- Bound: O(P + X + log A), P the version's participant count and X ≤ 16 the exception count. A duplicate uses the
+  command's no-effect fence without advancing history.
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, accounts, completed erasures and other accounts'
+  exceptions at three scales; statements and rows per acknowledgement stay constant.
+
+### Retention resolution
+
+- Touches: one keyed point update in the account's partition; its statement locks that acknowledgement and returns
+  the existing resolution on replay without writing it again.
+- Bound: O(log A), with at most 16 exceptions in the acknowledgement.
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales; statements and rows stay constant.
 
 ### Erasure status read
 
-- Touches: one point read and one key-range read of at most P acknowledgement rows in one snapshot.
-- Bound: O(P + log A).
-- Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales.
+- Touches: one point read and one key-range read of at most P acknowledgements and their exceptions in one snapshot.
+- Bound: O(P·X + log A).
+- Growth check: `test/access/growth-erasure-coordinator.test.ts`, the same three scales; statements and rows stay constant.
 
 ### Active account page
 
@@ -1550,6 +1573,8 @@ of authority, a closed validity interval or a terminal flag does not itself eras
 commands is covered by the shared receipt, write-basis and outbox rows above.
 
 ### Known retention gaps
+
+- Backup expiry is an open external condition: no backup retention policy exists, so the coordinator does not model it.
 
 - Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
 - `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
