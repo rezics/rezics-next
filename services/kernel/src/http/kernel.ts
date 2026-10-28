@@ -182,13 +182,25 @@ function realmAwareContentAccess(access: Access): Access {
   return wrapped;
 }
 
-/** Builds the Access resolver shared by production kernels and test compositions. */
+export class KernelAccessCompositionError extends Error {
+  constructor() {
+    super('Access was resolved before kernel composition finished');
+    this.name = 'KernelAccessCompositionError';
+  }
+}
+
+/** One Access per kernel, built on first use after composition from the complete
+ * mounted catalogue; composition code receives Access lazily. Standalone test
+ * compositions may supply their already-complete catalogue in resolveAccess.
+ */
 export function createKernelAccessResolver(options: {
   pool: Pool;
   tokens: KeyRing;
   clock: () => Date;
   access?: Access | AccessFactory;
   realmRoleReader?: AccessRealmRoleReader;
+  /** Undefined until the kernel has mounted its last route. */
+  composedActions?: () => AccessConfig['actions'] | undefined;
 }): { resolveAccess: (config: AccessConfig) => Access; realmRoleReader: AccessRealmRoleReader } {
   const factory = options.access ?? createAccess;
   let access: Access | undefined;
@@ -207,9 +219,13 @@ export function createKernelAccessResolver(options: {
       }
       return realmMembership.roleReader(client, input);
     });
-  const resolveAccess = (config: AccessConfig) =>
-    (access ??=
-      typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock: options.clock }) : factory);
+  const resolveAccess = (config: AccessConfig): Access => {
+    if (typeof factory !== 'function') return (access = factory);
+    if (access) return access;
+    const actions = options.composedActions ? options.composedActions() : config.actions;
+    if (!actions) throw new KernelAccessCompositionError();
+    return (access = factory({ ...config, actions, realmRoleReader, clock: options.clock }));
+  };
   return { resolveAccess, realmRoleReader };
 }
 
@@ -222,10 +238,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     return instant;
   };
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  let compositionFinished = false;
   const { resolveAccess, realmRoleReader } = createKernelAccessResolver({
     pool: dependencies.pool,
     tokens,
     clock,
+    composedActions: () => (compositionFinished ? actionCatalogue(zones) : undefined),
     ...(dependencies.access === undefined ? {} : { access: dependencies.access }),
     ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
@@ -320,7 +338,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
-    access: contentDependencies.access,
+    get access() {
+      return contentDependencies.access;
+    },
     clock,
   });
   subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
@@ -411,6 +431,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
+  compositionFinished = true;
   assertDeclaredResourceTypes(zones);
   return zones as Kernel;
 }
