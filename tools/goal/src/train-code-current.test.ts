@@ -32,7 +32,11 @@ function setup() {
       worktreeRoot: join(repo.path, 'trees'),
       queue,
       fence,
-      sink: { onGateOutcome(outcome: GateOutcome) { outcomes.push(outcome); } },
+      sink: {
+        onGateOutcome(outcome: GateOutcome) {
+          outcomes.push(outcome);
+        },
+      },
     },
     close() {
       db.close();
@@ -64,7 +68,9 @@ test('a train finishes its landing after its code changes and the next train tak
     await new MergeTrain({
       ...s.options,
       codeIsCurrent: () => codeVersion(s.repo.main, 'tools/goal') === originalVersion,
-      handOff() { handoffs++; },
+      handOff() {
+        handoffs++;
+      },
       async runGate() {
         gateVersions.push(codeVersion(s.repo.main, 'tools/goal'));
         return { passed: true, output: '', timedOut: false };
@@ -81,7 +87,9 @@ test('a train finishes its landing after its code changes and the next train tak
     await new MergeTrain({
       ...s.options,
       codeIsCurrent: () => codeVersion(s.repo.main, 'tools/goal') === currentVersion,
-      handOff() { handoffs++; },
+      handOff() {
+        handoffs++;
+      },
       async runGate() {
         gateVersions.push(codeVersion(s.repo.main, 'tools/goal'));
         return { passed: true, output: '', timedOut: false };
@@ -120,7 +128,9 @@ test('a train waiting for the lease exits when its code becomes stale', async ()
         if (checks === 2) reachedWaitCheck();
         return current;
       },
-      handOff() { handoffs++; },
+      handOff() {
+        handoffs++;
+      },
       async runGate() {
         throw new Error('A stale process must not take the lease or run a landing');
       },
@@ -149,7 +159,9 @@ test('a current train continues landing requests while it holds the lease', asyn
     await new MergeTrain({
       ...s.options,
       codeIsCurrent: () => true,
-      handOff() { handoffs++; },
+      handOff() {
+        handoffs++;
+      },
       async runGate() {
         return { passed: true, output: '', timedOut: false };
       },
