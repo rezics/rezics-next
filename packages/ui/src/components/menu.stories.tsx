@@ -50,7 +50,7 @@ export const PlainEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const panel = await screen.findByRole('dialog');
-    const labels = [...panel.querySelectorAll('button')].map((button) => button.textContent?.trim()).filter(Boolean);
+    const labels = [...panel.querySelectorAll('button, a')].map((row) => row.textContent?.trim()).filter(Boolean);
     await expect(labels).toEqual(['Open', 'Visit subject', 'Copy link']);
   },
 };
@@ -91,6 +91,7 @@ export const BrowserBack: Story = {
   },
 };
 export const RadioEntries: Story = {
+  args: { entries: [] },
   render: () => <RadioExample />,
   parameters: phone,
   play: async () => {
@@ -98,17 +99,21 @@ export const RadioEntries: Story = {
     const planned = await screen.findByRole('radio', { name: 'Planned' });
     await expect(planned).toBeChecked();
     await userEvent.click(await screen.findByRole('radio', { name: 'Reading' }));
-    await expect(screen.queryByRole('radio', { name: 'Reading' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeVisible());
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await expect(await screen.findByRole('radio', { name: 'Reading' })).toBeChecked();
   },
 };
 export const RadioDropdown: Story = {
+  args: { entries: [] },
   render: () => <RadioExample />,
   parameters: { viewport: { defaultViewport: 'desktop' } },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     await expect(await screen.findByRole('menuitemradio', { name: 'Planned' })).toBeChecked();
+    const menu = screen.getByRole('menu');
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Reading' }));
-    await expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() => expect(menu).not.toBeVisible());
   },
 };
 export const DestructiveEntry: Story = {

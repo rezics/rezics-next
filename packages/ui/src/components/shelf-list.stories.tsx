@@ -26,6 +26,7 @@ export const Entries: Story = {
   },
 };
 export const MenusOpenPhone: Story = {
+  args: { children: null },
   render: () => <Example />,
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {

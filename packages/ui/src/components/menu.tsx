@@ -33,7 +33,7 @@ export type MenuEntry =
     };
 
 export interface MenuProps {
-  entries?: MenuEntry[];
+  entries?: MenuEntry[] | undefined;
   content?: ReactNode;
   trigger: ReactElement;
   title: string;

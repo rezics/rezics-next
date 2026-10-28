@@ -81,6 +81,7 @@ export const MenuKeyboard: Story = {
   },
 };
 export const MenuOpenPhone: Story = {
+  args: { onCopyLink: fn(), onReport: fn(async () => undefined), ownsContent: false, verified: true },
   render: () => <StrangerActions />,
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
