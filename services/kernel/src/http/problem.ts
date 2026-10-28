@@ -25,6 +25,10 @@ export const PROBLEMS = {
   invalid_cursor: { status: 400, title: 'Invalid Cursor', retryable: false },
   stale_cursor: { status: 409, title: 'Stale Cursor', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },
+  library_label_restore_stale: { status: 409, title: 'Stale Library Label Restore', retryable: false },
+  library_label_restore_expired: { status: 409, title: 'Library Label Restore Expired', retryable: false },
+  library_label_restore_occupied: { status: 409, title: 'Library Label Restore Occupied', retryable: false },
+  library_label_restore_capacity: { status: 409, title: 'Library Label Restore Capacity Reached', retryable: false },
   collection_full: { status: 409, title: 'Collection Full', retryable: false },
   library_entry_restore_occupied: {
     status: 409,
