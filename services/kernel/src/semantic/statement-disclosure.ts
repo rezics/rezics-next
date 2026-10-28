@@ -25,9 +25,15 @@ import readVisibility from './read-visibility.sql';
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 export type StatementReader = { account: string; moderator: (client: CommandTransaction) => Promise<boolean> };
-const readers = new AsyncLocalStorage<StatementReader>();
+const PUBLIC_READER = Symbol('public statement reader');
+const readers = new AsyncLocalStorage<StatementReader | typeof PUBLIC_READER>();
+/** Restrict disclosure throughout nested hydration without changing caller authority. */
+export function withPublicStatementReader<T>(fn: () => T): T {
+  return readers.run(PUBLIC_READER, fn);
+}
 /** Request-scoped audience; relays, exports and background work always use the public view. */
 export function withStatementReader<T>(reader: StatementReader, read: () => T): T {
+  if (readers.getStore() === PUBLIC_READER) return read();
   return readers.run(reader, read);
 }
 export async function readStatementAs<T>(
@@ -37,7 +43,7 @@ export async function readStatementAs<T>(
   deadline: number,
   read: () => Promise<T>,
 ): Promise<T> {
-  if (actor.kind !== 'account') return read();
+  if (readers.getStore() === PUBLIC_READER || actor.kind !== 'account') return read();
   const check = await accessCheck(
     access,
     actor,
@@ -53,7 +59,8 @@ export async function readStatementAs<T>(
 }
 export async function statementAudience(client: CommandTransaction) {
   const reader = readers.getStore();
-  return { viewer_account: reader?.account ?? NIL, viewer_moderator: reader ? await reader.moderator(client) : false };
+  if (!reader || reader === PUBLIC_READER) return { viewer_account: NIL, viewer_moderator: false };
+  return { viewer_account: reader.account, viewer_moderator: await reader.moderator(client) };
 }
 
 /** Validate consent at the same transaction snapshot as the proposal, including bulk writes. */
@@ -158,7 +165,7 @@ export async function privateLinks(
   },
 ): Promise<{ entries: PrivateLink[]; total: number }> {
   const reader = readers.getStore();
-  if (!reader) return { entries: [], total: 0 };
+  if (!reader || reader === PUBLIC_READER) return { entries: [], total: 0 };
   const row = await readPrivateLinks.run(client, {
     subject_id: input.subject,
     inbound: input.inbound ?? false,
