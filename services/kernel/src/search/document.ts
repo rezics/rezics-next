@@ -1,3 +1,5 @@
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
@@ -25,6 +27,9 @@ export type SubjectDocument = {
   relation_facet_overflow?: string[];
   /** Active public Collections listing this subject. Omitted unless counts are supplied. */
   public_collection_count?: number;
+  /** Published Global standard-question score and prior identity; absent figures omit both fields. */
+  rating_score?: number | null;
+  rating_prior_epoch?: number | null;
 };
 
 export type IndexAction =
@@ -67,6 +72,15 @@ function subjectFacts(statements: readonly IndexedStatement[]): SubjectFact[] {
 }
 
 function subjectDocument(partition: number, subject: IndexedSubject): SubjectDocument {
+  // The source owns standard-question proof; this boundary validates Global and exact subject binding.
+  const rating =
+    subject.publicRating === undefined
+      ? undefined
+      : normalizePublicRatingFigure(subject.publicRating, {
+          questionId: subject.publicRating.questionId,
+          populationId: GLOBAL_CONTEXT.id,
+          subjectId: subject.id,
+        });
   const labels = [...subject.labels].sort((a, b) => (a.language < b.language ? -1 : a.language > b.language ? 1 : 0));
   const names = uniqueValues([
     ...subject.labels.map((item) => item.value),
@@ -82,6 +96,7 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
     facts: subjectFacts(subject.statements),
+    ...(rating === undefined ? {} : { rating_score: rating.score, rating_prior_epoch: rating.priorEpoch }),
     ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
       ? {}
       : { relation_facet_overflow: uniqueValues(subject.relationFacetOverflow) }),

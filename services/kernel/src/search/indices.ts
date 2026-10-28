@@ -48,6 +48,21 @@ export async function createSubjectIndex(search: OpenSearch, prefix: string, gen
   }
 }
 
+/** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
+export async function ensureSubjectRatingMapping(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<void> {
+  const index = subjectIndexName(prefix, generation);
+  await search.request('PUT', `/${index}/_mapping`, {
+    properties: {
+      rating_score: { type: 'double', doc_values: true, coerce: false },
+      rating_prior_epoch: { type: 'long', doc_values: true, coerce: false },
+    },
+  });
+}
+
 export async function subjectGenerations(
   search: OpenSearch,
   prefix: string,

@@ -49,7 +49,8 @@
     "dynamic": "strict",
     "properties": {
       "id": {
-        "type": "keyword"
+        "type": "keyword",
+        "ignore_above": 512
       },
       "partition": {
         "type": "integer"
@@ -62,6 +63,16 @@
       },
       "public_collection_count": {
         "type": "integer"
+      },
+      "rating_score": {
+        "type": "double",
+        "doc_values": true,
+        "coerce": false
+      },
+      "rating_prior_epoch": {
+        "type": "long",
+        "doc_values": true,
+        "coerce": false
       },
       "names": {
         "type": "text",
@@ -90,7 +101,8 @@
       },
       "name_sort": {
         "type": "keyword",
-        "normalizer": "name_key"
+        "normalizer": "name_key",
+        "ignore_above": 512
       },
       "statements": {
         "type": "keyword"
