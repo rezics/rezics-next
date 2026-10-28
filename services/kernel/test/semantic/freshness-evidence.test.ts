@@ -30,6 +30,7 @@ import readPending from '../../src/semantic/merge-read-projection-pending.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
 import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
 import readSubject from '../../src/semantic/read-subject.sql';
+import readVisibility from '../../src/semantic/read-visibility.sql';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
@@ -261,8 +262,10 @@ for (const kind of ['links', 'relations'] as const) {
       else expect(result.relations).toHaveLength(1);
       expect(result.freshness.caught_up).toBe(true);
       const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
-      const snapshot = observer.records.findIndex(
-        ({ statement }, index) => index > wait && statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      const visibility = observer.records.findIndex(({ statement }) => statement === readVisibility.sql);
+      expect(visibility).toBeGreaterThan(wait);
+      const snapshot = observer.records.slice(0, visibility).findLastIndex(
+        ({ statement }) => statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
       );
       expect(snapshot).toBeGreaterThan(wait);
       expect(
