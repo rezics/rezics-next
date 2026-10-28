@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createCommerceWork as createEnqueue } from '../../src/commerce/enqueue.ts';
 import { classifyStripeEvent, verifyStripeEvent } from '../../src/commerce/webhook.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { until, workFixture } from './support/work-fixture.ts';
+import { refreshUserFixture } from './support/refresh-user-fixture.ts';
+import { workFixture } from './support/work-fixture.ts';
 
 setDefaultTimeout(30_000);
 let fixture: Awaited<ReturnType<typeof workFixture>>;
@@ -34,6 +35,8 @@ test('a verified paid event awaits its session checkout workflow and applies onc
     workflowName: 'commerce.checkoutSync',
     status: 'SUCCESS',
     parentWorkflowID: event.id,
+    queueName: 'effects',
+    queuePartitionKey: expect.stringContaining(session.id),
   });
   expect(await fixture.entitlements(order.id)).toMatchObject([
     { account_id: fixture.buyer, route: routeOf(order.id), revoked_at: null },
@@ -93,40 +96,35 @@ test('an event whose payment intent has no resolvable Checkout Session starts no
   ]);
 });
 
-test('a worker stopped inside the checkout workflow recovers and applies once', async () => {
-  const { order, session } = await fixture.checkout();
-  fixture.transport.fake.pay(session.id);
-  const lock = await fixture.pool.connect();
-  await lock.query('BEGIN');
-  await lock.query('SELECT order_id FROM commerce.purchase_order WHERE route=$1 AND order_id=$2 FOR UPDATE', [
-    routeOf(order.id),
-    order.id,
-  ]);
-  const before = fixture.transport.reads;
-  const event = await fixture.deliver('checkout.session.completed', session.id);
-  const checkoutId = `checkout:${session.id}:${event.ref.eventId}`;
+test('a worker stopped after the full checkout read recovers fresh and applies once', async () => {
+  await fixture.stop();
+  const native = await refreshUserFixture(fixture.transport.fake);
   try {
-    await until(
-      () => fixture.client.listWorkflowSteps(checkoutId),
-      (steps) => !!steps?.some((step) => step.name === 'commerce.readCheckout' && step.completedAtEpochMs),
-    );
-    await fixture.stop();
+    await native.start();
+    const { order, session } = await native.checkout();
+    native.fake.pay(session);
+    const event = await native.event('checkout.session.completed', session);
+    const hold = await native.arm(event.child, 'read');
+    await event.submit();
+    const captured = await hold.captured();
+    expect((await native.stop())?.pid).toBe(captured.pid);
+    expect(await native.receipts(event.child)).toHaveLength(0);
+    await native.start();
+    await native.finish(event.id);
+    expect(await native.client.getWorkflow(event.child)).toMatchObject({ status: 'SUCCESS' });
+    expect(native.reads(event.child)).toHaveLength(2);
+    const response = await native.request(`/v1/orders/${order.id}`);
+    expect(response.status).toBe(200);
+    expect((await response.json()).order).toMatchObject({ settlement: 'paid', entitlementId: expect.any(String) });
+    const listed = await native.request('/v1/entitlements');
+    expect(listed.status).toBe(200);
+    expect(
+      (await listed.json()).entitlements.filter((row: { orderId: string }) => row.orderId === order.id),
+    ).toMatchObject([{ active: true }]);
+    expect(await native.events(order.id, 'entitlement.granted')).toHaveLength(1);
+    expect(await native.receipts(event.child)).toHaveLength(1);
   } finally {
-    await lock.query('ROLLBACK');
-    lock.release();
+    await native.close();
+    await fixture.start();
   }
-  expect(await fixture.entitlements(order.id)).toHaveLength(0);
-  await fixture.start();
-  await fixture.finish(event.id);
-  expect(await fixture.client.getWorkflow(checkoutId)).toMatchObject({ status: 'SUCCESS' });
-  expect(fixture.transport.reads - before).toBe(1);
-  expect(await fixture.entitlements(order.id)).toHaveLength(1);
-  expect(await fixture.events(order.id, 'entitlement.granted')).toHaveLength(1);
-  const receipts = (
-    await fixture.pool.query('SELECT idempotency_key FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2', [
-      'commerce.checkout.apply',
-      `wf:${checkoutId}:apply`,
-    ])
-  ).rows;
-  expect(receipts).toHaveLength(1);
 });
