@@ -125,229 +125,29 @@ Realm and Space items come in strictly increasing `(route, id)` order.
 
 ## Cost
 
-### Realm sitemap feed
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Create Space | Global admission and authorization; one Space insert, first revision insert, creation receipt and fixed native grant initialization in the Space partition. | Constant rows and statements; logarithmic blocks in partition and Space population. | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”. |
+| Update Space | Space authorization and exact head read; one revision insert and head compare-and-set, with receipt in the Space partition. | Constant rows and statements; logarithmic blocks in partition and revision population. | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”. |
+| Read Space with its carried Realm | Space read and authorization; exact head read, one carried-Realm slot lookup, and at most one Realm head read with its ordinary read authorization. | Constant rows and statements; logarithmic blocks in the Space and Realm indexes. | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”. |
+| Public Space eligibility | One prepared Space point read and one current Space/head verification at Access's authoritative time. | Constant rows and statements; logarithmic blocks in the Space indexes. | `test/community/growth-space-address.test.ts`: “address claim, change and resolve stay bounded as addresses, Spaces and handles grow”. |
+| Claim or change Space address | Routed handle point read; pending claim write; Space head read, revision insert and compare-and-set; address activation and, on change, reservation of the old claim. Each phase is a single-partition command. | Constant rows and statements per step; logarithmic blocks in address, Space and handle indexes. | `test/community/growth-space-address.test.ts`: “address claim, change and resolve stay bounded as addresses, Spaces and handles grow”. |
+| Resolve Space address | Active address point read followed by the Space's normal read authorization and exact head read. | Constant rows and statements; logarithmic blocks in address and Space indexes. | `test/community/growth-space-address.test.ts`: “address claim, change and resolve stay bounded as addresses, Spaces and handles grow”. |
+| Create Realm | Shared admission for Global, host Space and Context checks; exact host and slot reads; prepared Context evidence and verification; Realm identity, first revision, receipt and fixed grant initialization in the host partition. | Constant rows and statements; logarithmic blocks in the host partition, plus bounded Access checks. | `test/community/growth-realm.test.ts`: “Realm ${operation} stays bounded across growth scales ${scales.join(', ')}”. |
+| Update Realm | Realm authorization and exact head read; supplied Context adds one prepared evidence read and point verification; one revision insert and head compare-and-set. | Constant rows and statements; logarithmic blocks in the Realm partition, plus bounded Access checks. | `test/community/growth-realm.test.ts`: “Realm ${operation} stays bounded across growth scales ${scales.join(', ')}”. |
+| Read Realm | Exact Realm head read during public eligibility; protected reads also evaluate the native `realm:read` grant. | Constant domain rows and statements; logarithmic blocks, plus bounded Access checks for protected reads. | `test/community/growth-realm.test.ts`: “Realm ${operation} stays bounded across growth scales ${scales.join(', ')}”. |
+| Publish, withdraw or reject a publication | Admission and Realm authorization; exact subject-slot and current-head reads; one append-only publication record and slot/head change in the Realm partition, with receipt. | Constant rows and statements per command; logarithmic blocks in Realm and subject indexes. | `test/community/growth-publication.test.ts`: “publication writes and pages stay within their bound across growth scales ${scales.join(', ')}”. |
+| Read or list publications | Read one subject's current publication slot/history or keyset-page a fixed limit of Realm publications, with the corresponding exact Realm and subject reads. | Constant rows for a point read; linear rows in page limit for a list; logarithmic blocks in the relevant indexes. | `test/community/growth-publication.test.ts`: “publication writes and pages stay within their bound across growth scales ${scales.join(', ')}”. |
+| Set or read board scheme | Admission for Realm management and subject eligibility; Realm head and Semantic subject/type point reads; setting appends one revision and compare-and-sets the head, while reading uses the head seek. | Constant rows and statements; logarithmic blocks in Realm and subject indexes, plus bounded Access checks. | `test/community/board-scheme.test.ts`: `Realm board scheme set and read`. |
+| Publish membership, read terminal or change, or prove a role | Publish reads the Realm and opens or closes one membership interval, with at most one terminal insert. Terminal/change reads use one primary-key point read; role proof uses two membership index seeks and the Realm existence point. | Constant rows and statements per operation; logarithmic blocks in Realm membership indexes, plus bounded Access. | `test/community/growth-membership.test.ts`: “publish, terminal reads and role proofs stay within their bound as Realms and members grow”. |
+| Read current Realm membership | One unique `realm_member_open` index point read filtered at T; closed history does not widen the lookup. | One row and statement; logarithmic blocks in the Realm's membership history, including closed intervals. | `test/community/growth-membership-history.test.ts`: “current membership is one index point read as the same account and Realm accumulate closed intervals”. |
+| List own Realms | Keyset-read at most 80 caller-route inverse rows, then confirm each candidate with one current `realm_member` primary-key read. | At most 160 rows and a constant number of statements; logarithmic blocks in the inverse and membership indexes. | `test/community/own-realms.test.ts`: “own Realm pages use confirmed memberships, signed cursors and bounded inverse scans”. |
+| List Realm and Space sitemap pages | Keyset-read at most four candidates per requested item (limit at most 1,000); each eligible item reads its exact head and related Realm/board slot as applicable. Skipped protected or inactive candidates remain bounded. | Linear rows in page limit with at most four times the limit candidates; logarithmic blocks in feed indexes. | `test/community/growth-sitemap.test.ts`: “Realm sitemap page stays within its bound as listed items grow”; “Space sitemap page stays within its bound as listed items grow”; “Realm sitemap page stays within its bound as protected Realms grow”; “Space sitemap page stays within its bound as protected Realms grow”. |
+| Check Realm participation or ensure its member grant | Participation checks `realm:participate`, the independent `realm:read` eligibility and one exact Realm head at shared T. Grant ensure reads the exact Realm head and idempotently inserts the member-group grant in the command. | Constant rows and statements; logarithmic blocks, plus bounded Access membership proof. | `test/community/participation.test.ts`: “Realm participation stays bounded as Realms, members and grants grow”. |
+| Join a Realm | Acceptance command reads the Realm and current-ban key, inserts one operation and receipt; reserve and publish workflow steps restore the initiator; follow is one point upsert on the member account partition. Publication rechecks the ban. | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history. | `test/community/growth-join.test.ts`: “Join a Realm has constant rows and statements as Realms and its members grow”. |
+| Leave a Realm | Acceptance command reads the Realm and current-ban key and inserts one operation and receipt; reserve, publish and release steps restore the initiator. No follow is written or removed. | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history. | `test/community/growth-join.test.ts`: “Leave a Realm has constant rows and statements as Realms and its members grow”. |
+| Add a Realm member | Acceptance command reads the Realm and current-ban key, inserts one operation and receipt; workflow reserves and publishes with initiator restoration, ensures the protected member grant, and upserts the member's follow point. | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history. | `test/community/growth-join.test.ts`: “Add a Realm member has constant rows and statements as Realms and its members grow”. |
+| Read Realm votes | One primary-key read of `community.realm` per requested Realm, with one statement per partition. | Linear rows and statements in the number of requested Realms; logarithmic blocks per Realm. | `test/community/realm-votes.test.ts`: `Read Realm votes`. |
+| Ban, unban or list current bans | Ban opens the Realm ban record and two identity denials, checks the owner/moderator grant keys and probes current membership; an existing member also gets a removal operation/workflow. Unban closes the record and denials. Listing keyset-reads at most L current bans plus one lookahead row. | Ban and unban have constant rows and statements; listing has linear rows in L and constant statements. Logarithmic blocks in Realm and ban indexes, plus bounded Access and removal workflow where applicable. | `test/community/growth-ban.test.ts`: `Realm ban, unban and list`. |
 
-- Touches: At most `4 × limit` candidates ordered by `(route, realm_id)`. A public Realm adds its
-  exact head revision read and one newest-board seek through `board_realm_page`.
-- Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
-  `4L` and `L` respectively. The shared list cursor keeps skipped Realm identities confidential.
-- Growth check: `test/community/growth-sitemap.test.ts`, "Realm sitemap page stays within its bound as listed items grow" and "Realm sitemap page stays within its bound as protected Realms grow".
-
-### Space sitemap feed
-
-- Touches: At most `4 × limit` candidates ordered by `(route, space_id)`. Each candidate uses the
-  anonymous `space:read` eligibility check. A listed Space adds its exact head revision read and
-  `realm_route_space_id_key` slot probe; a filled slot adds one Realm primary-key read.
-- Bound: O(L log N) per page, with `L ≤ 1,000`; candidate and returned item counts are bounded by
-  `4L` and `L` respectively. The shared list cursor keeps skipped Space identities confidential.
-- Growth check: `test/community/growth-sitemap.test.ts`, "Space sitemap page stays within its bound as listed items grow" and "Space sitemap page stays within its bound as protected Realms grow".
-
-A is Access's bounded admission and permission evaluation; C is a partition-local `runCommand`
-transaction. Access grant initialization uses fixed role templates and point inserts. R denotes
-rows in the relevant partition. See [Access Cost](../access/README.md#cost) for its account and
-grant lookup bounds.
-
-| Operation                         | Touches                                                                                                                                                                                                             | Bound                                                      | Growth check                                                                                                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create Space                      | One admission read and Global parent check (A); two inserts, a same-transaction creation proof and native grant initialization (C), in the Space partition; a fresh response carries null without another statement | O(1) rows and statements; O(log R) blocks                  | `test/community/growth-space.test.ts`, "Space create stays bounded at 256, 1024 and 4096 Spaces and their revisions", at 256, 1024 and 4096                               |
-| Update Space                      | A on the Space with one point read joining its head; one revision insert and one head compare-and-set (C)                                                                                                           | O(1) rows and statements; O(log R) blocks                  | `test/community/growth-space.test.ts`, "Space update stays bounded at 256, 1024 and 4096 Spaces and their revisions", at 256, 1024 and 4096                               |
-| Read Space with its carried Realm | Existing Space read and authorization; one exact `realm_route_space_id_key` lookup in that partition and, only when a Realm is found, one Realm head read with its ordinary `realm:read` evaluation (A)             | O(1) rows and statements; O(log R) blocks, plus A          | `test/community/growth-space.test.ts`, "Space read stays bounded at 256, 1024 and 4096 Spaces and their revisions", with the probe carrying a Realm at 256, 1024 and 4096 |
-| Public eligibility                | One prepared point read and one current point verification through Access                                                                                                                                           | O(1) rows and statements; O(log R) blocks                  | `test/community/growth-space-address.test.ts`, "address claim, change and resolve stay bounded as addresses, Spaces and handles grow", at 256, 1024 and 4096              |
-| Claim or change address           | One handle point read; one address-partition pending write; one Space head read, revision insert and head compare-and-set; one address activation and, for changes, one old-claim reservation                       | O(1) rows and statements; O(log A + S + H) blocks per step | `test/community/growth-space-address.test.ts`, "address claim, change and resolve stay bounded as addresses, Spaces and handles grow", at 256, 1024 and 4096              |
-| Resolve address                   | One active address point read and the Space's normal read authorization and exact-head read                                                                                                                         | O(1) rows and statements; O(log A + S) blocks              | `test/community/growth-space-address.test.ts`, "address claim, change and resolve stay bounded as addresses, Spaces and handles grow", at 256, 1024 and 4096              |
-
-The growth checks use `checkGrowth` with other identities and their revisions growing around a
-fixed probe, and require zero sequential scans on community relations and the handle-claim table.
-Metadata byte sizes are
-bounded by the database character limits. Revision and predecessor lookups use exact routed keys;
-no operation walks revision history or counts Spaces. Command serialization uses a partition-local
-position counter.
-
-| Operation    | Touches                                                                                                                                                                                                                                                                | Bound                                                                        | Growth check                                                                 |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Create Realm | One admission observation shared by Global parent, Space and Context checks; one host point read and unique slot probe, prepared Context evidence and one Context verification at T; two inserts, a creation proof and grant initialization in the Space partition (C) | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: create as other Realms grow                          |
-| Update Realm | A on the Realm and one exact head read; a supplied Context adds its prepared evidence and point verification at T; one revision insert and head compare-and-set (C)                                                                                                    | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: update a fixed probe at the same scales              |
-| Read Realm   | One exact head read during public eligibility verification; protected reads require A's grant branch                                                                                                                                                                   | O(1) domain rows and statements; O(log R) blocks, plus A for protected reads | `growth-realm.test.ts`: public and protected fixed probes at the same scales |
-
-A Realm publishes subjects into one slot per subject. The record history is append-only and the head
-names the current record. `publish`, `withdraw` and `reject` require `realm:publish` on that Realm.
-The owner and moderator role templates both include that action. Publishing confers no ownership
-and writes no access grant, resource initialization or semantic row on the subject or the Global Context.
-
-Each command attempt shares one admission observation between the Realm authorization and the
-`subject:read` check. The anchor reads the active Realm at T and verifies the prepared subject check,
-which uses `subjectReadEligibility`. Publishing into an empty slot needs no `If-Match`. An authorized
-publisher can move an occupied slot by supplying its current head in the optional `If-Match` header;
-without it, publish returns 409 and writes nothing, and a wrong head returns 412. Withdraw and reject
-require `If-Match`, append a record and move the same head, so the slot leaves the adopted keyset in
-the transaction that writes it.
-
-`subject_revision_id` is null. The subject eligibility point read (`subject-public-evidence.sql`)
-exposes visibility and a security revision, not a subject revision id. `readSubject` exposes an integer
-`revision`, not a revision id.
-
-`listPublications` fetches at most `L + 1` adopted heads for a limit of L, then prepares subject
-checks for the first L candidates. In a repeatable-read snapshot it checks `realm:read`, rereads each
-candidate's adopted head and checks `subject:read` with `subjectReadEligibility` before returning it.
-Changed heads and subjects that fail disclosure are omitted without fetching replacements. The next
-cursor follows the last candidate in that window when the initial seek found a lookahead row, so a
-page can be short or empty and still have a continuation. `readPublication` checks `realm:read`, reads
-one adopted head and checks `subject:read` in a repeatable-read snapshot. Both use the Realm's ordinary
-read eligibility, including the public floor or the protected grant and current-ban checks.
-
-### Publish, withdraw or reject
-
-- Touches: One shared admission observation and prepared subject evidence per command attempt; one active Realm point read and subject authorization at T; one record insert and one head insert or compare-and-set, plus the command receipt and outbox event in the Realm partition.
-- Bound: O(1) rows and statements; O(log R) blocks, plus A for Realm publication and subject read authorization.
-- Growth check: `growth-publication.test.ts`, `checkGrowth` name `community publication write`, republishes a fixed subject as publications on other Realms and subjects grow. Withdraw and reject use the same write path but are not separately measured there.
-
-### List publications
-
-- Touches: One keyset seek of at most `L + 1` adopted heads, prepared subject checks for at most L candidates, one partition epoch read and Realm read authorization, then at most L head point rereads and subject read checks in the final snapshot. Skipped candidates count toward L; there is no count, offset or refill.
-- Bound: O(L) domain rows and statements and O(L log R) blocks, plus A for the Realm and each candidate, with `L ≤ 100`.
-- Growth check: `growth-publication.test.ts`, `checkGrowth` name `community publication page`, keeps the probe Realm and page fixed as publications on other Realms and subjects grow.
-
-### Read a publication
-
-- Touches: Prepared Realm and subject checks, one Realm read authorization, one adopted-head point read and, when the head exists, one subject read check in the final snapshot.
-- Bound: O(1) domain rows and statements; O(log R) blocks, plus A for the Realm and subject.
-- Growth check: No separate single-publication growth measurement; `community publication page` in `growth-publication.test.ts` measures the same head reread and disclosure path within a fixed page.
-
-A Realm's `boardSchemeId` is initially null. `setBoardScheme` requires `realm:manage`,
-reads the proposed subject through Semantic's own subject/statement reader and
-`subjectReadEligibility` at the command's T, and accepts only `skos:ConceptScheme`.
-It appends a revision and compares the expected head before updating the identity.
-Metadata-only revisions inherit the scheme from their predecessor. The Realm reader
-in `board-scheme.ts` includes the scheme in its exact head read, including HTTP reads.
-`PUT /v1/realms/{realmId}/boardScheme` requires `If-Match`, `Idempotency-Key`, and
-`{ schemeId }`. Board concepts remain ordinary `skos:Concept` subjects linked by
-`skos:inScheme`; Semantic has no per-Context scheme table.
-
-| Operation             | Touches                                                                                                                                                                                                                                                                | Bound                                             | Growth check                                                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Set/read board scheme | One admission observation shared by Realm management and subject eligibility; one Realm head point read and Semantic's subject/type read at T; one revision insert and head compare-and-set in the Realm partition. Reading includes the scheme in the Realm head seek | O(1) rows and statements; O(log R) blocks, plus A | `board-scheme.test.ts`: fixed Realm and scheme as other Realms and subjects grow; constant rows/statements and zero sequential scans on Realm and subject identities/revisions |
-
-The board scheme and publication HTTP tests use genuine Auth-issued tokens and
-production Access. They cover a suspended-account persona through the native
-`account:suspend` route, called by platform governance. The persona's existing
-bearer receives 401 when setting a board scheme, publishing, withdrawing or
-rejecting, with the Realm head and publication rows unchanged.
-
-Accounts owns the durable membership workflow and the actor-side inverse.
-`createRealmMembership` is the Realm partition adapter that workflow calls.
-`publish` runs in the Realm partition under the workflow step key. Role `member`
-opens `[T, infinity)` when no interval covers T. Role null closes the interval
-that covers T for that reservation and writes the terminal slot. The Realm must
-be active at T. Role `owner` is rejected: Realm owners are identity grants, not
-membership rows. The actor needs `realm:join` when joining themselves and
-`realm:manage` otherwise. `terminalize` writes the terminal slot only when that
-reservation has no member row, so an unpublished reservation can be closed and a
-published one cannot. Terminal rows are immutable. `readTerminal` and `readChange`
-are exact point reads of committed evidence. The role reader returns the owner
-and member proofs, using the current temporal key and the next lower-bound seek.
-
-`GET /v1/me/realms?cursor=` lists only the authenticated active account's current
-Realm memberships at its current authentication floor. It keyset-pages the
-account's `access.membership_inverse` rows, 20 items per page. The inverse is a
-candidate index: each Realm is confirmed against that account's current
-`community.realm_member` row at the request's T, and the name and role come from
-the confirmed membership and current Realm head. A cursor is signed, bound to
-the viewer and the account partition epoch. Each page scans no more than 80
-inverse candidates and performs at most 80 current-membership point reads;
-stale inverse rows are skipped and cannot make a page unbounded.
-
-### Durable initiators
-
-Accepting a join, leave, add-member or ban removal runs one native command on the Realm's
-partition with the authenticated actor. It authorizes the action, captures the actor, original
-floor, operator and delegation through `captureDurableInitiator`, and commits one immutable
-`realm_membership_operation` row with its creation receipt. The receipt's `durableInitiator`
-commits the whole record, so a copied row or receipt never restores. Only then does it enqueue.
-The sealed workflow reference names that operation and repeats the request's facts; it carries no
-actor and no scopes.
-
-Every workflow step calls `restoreInitiator` inside the command's `prepare`, at the attempt's T,
-over that committed operation and Auth's current consent, and authorizes with the actor it returns.
-A revoked grant, withdrawn or reduced consent, suspended or fenced account, or a changed floor
-denies the step with no effect. The initiator is the person who asked: the member for a join or
-leave, the manager for add-member, the moderator for a ban removal. `createRealmMembership`
-takes the restorer; without one, a sealed step fails closed. A reference that is not sealed
-authenticates through Access, and `publish` authorizes with that authenticated actor object itself,
-never a copy: production admission knows no other object. The kernel's worker composes both from
-the one Auth consent configuration (`KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID`,
-`CF_ACCESS_CLIENT_SECRET`); with the group absent, restoration is unavailable.
-A missing Realm, or one that is not yet active at T, has no proof.
-
-| Operation               | Touches                                                                                                               | Bound                                                                                                         | Growth check                                                                                                                                 |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A                                                                            | `growth-membership.test.ts`: a fixed probe as members of other Realms and accounts grow; constant rows and statements, zero sequential scans |
-| Read current membership | One `realm_member_open` unique index point read, filtered at T; closed history does not widen the lookup              | O(1) row and statement; O(log N) blocks, where N is the Realm's membership history including closed intervals | `growth-membership-history.test.ts`: one row and statement, zero sequential scans as closed intervals of the same account and Realm grow     |
-| List own Realms         | At most 80 caller-route inverse rows by keyset, then one current `realm_member` primary-key read per candidate        | At most 80 + 80 rows and constant statements; O(log R) blocks                                                 | `own-realms.test.ts`: one caller and other accounts' memberships grow at three scales; constant rows/statements and logarithmic blocks       |
-| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"       |
-| Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks                                                                                    | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"       |
-
-### Check Realm participation
-
-- Touches: One Access evaluation for `realm:participate`, one `realm:read` eligibility check, and one exact Realm head read at their shared T.
-- Bound: O(1) rows and statements plus Access's bounded membership proof; O(log R) blocks.
-- Growth check: `participation.test.ts` keeps the protected Realm probe fixed as Realms, members and grants grow; constant rows/statements and zero sequential scans.
-
-### Ensure protected Realm member grant
-
-- Touches: One exact Realm head read and one idempotent `resource_role_grant` insert in the Realm command transaction.
-- Bound: O(1) rows and statements; O(log R) blocks.
-- Growth check: `participation.test.ts` asserts one group grant after protection and uses the same bounded checks as Realms, members and grants grow.
-
-### Join a Realm
-
-- Touches: One acceptance command (admission, one Realm point read, one current-ban point read, one operation insert, the creation receipt), then the membership workflow's own bounded reserve and publish steps, each adding one initiator restoration, then one follow point upsert on the member's account partition. Member publication rechecks the current-ban key before writing.
-- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `test/community/growth-join.test.ts`, "Join a Realm has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
-
-### Leave a Realm
-
-- Touches: One acceptance command as for join, then the membership workflow's own bounded reserve, publish and release steps. Leave writes no follow and never unfollows.
-- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `test/community/growth-join.test.ts`, "Leave a Realm has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
-
-### Add a Realm member
-
-- Touches: The same acceptance command and membership workflow as join, one idempotent member-group grant when the Realm is protected, and one follow point upsert.
-- Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
-- Growth check: `test/community/growth-join.test.ts`, "Add a Realm member has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
-
-### Read own Realm membership
-
-- Touches: One `realm_member_open` unique index point read of the member's open interval, filtered at T, after the Realm read check. Closed intervals do not widen the lookup.
-- Bound: O(log N) blocks, one row and one statement. N is the Realm's membership history, including closed intervals.
-- Growth check: `growth-membership-history.test.ts` fixes one account and Realm as closed intervals of that same membership and unrelated memberships spread across routes grow; one index point read, one row and one statement at every scale, zero sequential scans.
-
-### Read Realm votes
-
-- Touches: one primary-key read of community.realm per given Realm, one statement per partition.
-- Bound: O(n log R) for n Realms.
-- Growth check: `test/community/realm-votes.test.ts`, `checkGrowth` name `Read Realm votes`: a fixed set of Realms read with constant rows and statements as Realms grow.
-
-### Ban an account
-
-- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, one bounded owner/moderator probe through Access's grant keys, plus a member interval point read and, when present, one removal acceptance command (one operation insert) and one native leave workflow keyed by the ban.
-- Bound: O(1) rows and statements in the ban command, plus Access and one leave workflow; O(log R) blocks. No scan of members, bans or content.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
-
-### Unban an account
-
-- Touches: One admission and Realm authorization; one Realm record close and two identity denial closes in the Realm partition.
-- Bound: O(1) rows and statements, plus Access; O(log R) blocks. Membership is not restored.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
-
-### List current bans
-
-- Touches: One admission and Realm authorization; one current-ban keyset seek of L rows, with one lookahead row for the next cursor.
-- Bound: O(L) rows and O(1) statements, plus Access; O(log R + L) blocks. Historical intervals and other Realms do not widen the window.
-- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
-
-### Protected Realm read and admission ban check
-
-- Touches: One current-ban point read by route, Realm and account in the Realm partition, at the read or command's T. Protected read eligibility applies it before the independent grant branch; public reads skip it. Join and add-member check before accepting an operation, and membership publication rechecks before writing.
-- Bound: O(1) rows and statements; O(log B) blocks for B bans. Closed history does not widen the current key.
-- Growth check: `test/community/growth-ban.test.ts`, "protected read and admission ban probes stay bounded as bans in one Realm grow", at 256, 1024 and 4096 bans around fixed present and absent probes; zero sequential scans.
+A is bounded Access admission and permission evaluation. Each `runCommand` phase is a single-partition transaction. Fixed request, page and change limits are inputs; no operation above depends on scanning unrelated history. Bounds describe database rows, statements and indexed blocks, not wall-clock latency or engine posting-list work.
