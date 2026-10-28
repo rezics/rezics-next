@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test';
 import { existsSync, watch, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import type { DirectoryLease } from './lease.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import type { Attempt } from './types.ts';
-import { harness } from './test-support.ts';
+import { harness, repository } from './test-support.ts';
 import type { ProcessIdentity } from './process.ts';
 
 const deadDriver: ProcessIdentity = { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 };
@@ -56,7 +56,8 @@ test('command and host sweeps read and lease a constant live candidate set as se
   for (const settledCount of [100, 1_000, 5_000]) {
     for (const adoptRunning of [false, true]) {
       const db = openDb(':memory:');
-      const stateDirectory = `/tmp/orphan-sweep-${settledCount}`;
+      const fixture = repository();
+      const stateDirectory = join(fixture.path, 'state');
       try {
         const store = new WorkerStore(db);
         const insertTask = db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
@@ -90,7 +91,7 @@ test('command and host sweeps read and lease a constant live candidate set as se
         handle.query = (sql: string) => {
           const statement = originalQuery(sql);
           if (!/^\s*(?:\/\*.*?\*\/\s*)?SELECT\b/i.test(sql) || !/worker_tasks AS t|worker_events/i.test(sql)) return statement;
-          const observe = (rows: unknown[] | unknown) => {
+          const observe = <T,>(rows: T): T => {
             const count = Array.isArray(rows) ? rows.length : rows == null ? 0 : 1;
             counts.statements += 1;
             if (/worker_tasks AS t/i.test(sql)) {
@@ -108,11 +109,21 @@ test('command and host sweeps read and lease a constant live candidate set as se
           counts.leases += 1;
           return { release() {} };
         };
-        const tasks = { store, settings: { stateDirectory, startGraceMs: 10_000_000 }, dependenciesMet: () => true } as unknown as WorkerTasks;
+        const tasks = {
+          store,
+          settings: {
+            stateDirectory,
+            mainCheckout: fixture.main,
+            worktreeRoot: join(fixture.path, 'worktrees'),
+            startGraceMs: 10_000_000,
+          },
+          dependenciesMet: () => true,
+        } as unknown as WorkerTasks;
         await new WorkerJob(tasks, { enqueue() {} }, { deliver() {} }, undefined, undefined, acquire).recoverOrphans({ adoptRunning });
         measurements.push(counts);
       } finally {
         db.close();
+        fixture.close();
       }
     }
   }

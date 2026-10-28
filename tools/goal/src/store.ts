@@ -100,7 +100,8 @@ export class WorkerStore implements AttemptFence {
   }
   /**
    * Candidate work is anchored by running tasks, then follows each task's current-attempt primary key.
-   * Settling writes the task to `landing` (or a failure path writes `ready`/`stopped`), removing it from this index.
+   * settle calls store.updateTask to write `landing`; failure paths write `ready`/`stopped`,
+   * removing the task from the running-state range.
    */
   orphanSweepCandidates(): { attempt: Attempt; taskState: string; currentAttempt: number }[] {
     return this.db
