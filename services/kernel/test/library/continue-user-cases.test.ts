@@ -8,6 +8,7 @@ import {
   type DiscoveryPersona,
   type ReleasedDiscoveryFixture,
 } from '../support/released-discovery.ts';
+import { createProfileEntryFixture, entryStates, entryTypes } from './support/profile-entry-fixture.ts';
 
 // Native executable specification; no replacement release, transport, policy or Continue implementation.
 type World = ReleasedDiscoveryFixture;
@@ -77,15 +78,10 @@ function profile(f: World, type: string): LibraryProfile {
   return accepted!;
 }
 
-function stateChoice(f: World, type: string, role: 'active' | 'completed' | 'planned', renamed = false): string {
+function stateChoice(f: World, type: string, role: 'active' | 'completed' | 'planned'): string {
   const accepted = profile(f, type);
-  const choice = accepted.entryStateSet?.states.find(
-    (state) => state.role === role && (!renamed || state.id !== 'in_progress'),
-  );
-  expect(
-    choice,
-    `Bundled ${f.release.digest} ${type}/${accepted.id}: required ${role} state${renamed ? ' other than in_progress' : ''}`,
-  ).toBeDefined();
+  const choice = accepted.entryStateSet?.states.find((state) => state.role === role);
+  expect(choice, `Bundled ${f.release.digest} ${type}/${accepted.id}: required ${role} state`).toBeDefined();
   return choice!.id;
 }
 
@@ -170,9 +166,9 @@ test(
   'Continue uses actual accepted active profile roles and session activity across released Library subjects without requiring an entry or coupling independent facts',
   () =>
     world(async (f) => {
-      const active = stateChoice(f, 'schema:Book', 'active', true);
+      const active = stateChoice(f, 'schema:Book', 'active');
       const completed = stateChoice(f, 'schema:Book', 'completed');
-      const stateOnly = await f.createSubject('schema:Book', 'Active role with non-fixed state ID');
+      const stateOnly = await f.createSubject('schema:Book', 'Actual released active-role state');
       const book = await f.createSubject('schema:Book', 'Session-only Book');
       const recipe = await f.createSubject('schema:Recipe', 'Session-only Recipe');
       const history = await f.createSubject('schema:Book', 'Completed-only history');
@@ -256,7 +252,7 @@ test(
   () =>
     world(async (f) => {
       const book = await f.createSubject('schema:Book', 'Independent transitions');
-      const active = stateChoice(f, 'schema:Book', 'active', true);
+      const active = stateChoice(f, 'schema:Book', 'active');
       const entry = await put(f, book, active);
       expect((await read(f)).subjects).toMatchObject([
         { subjectId: book.id, state: active, activeProgressSession: null },
@@ -402,7 +398,7 @@ test(
   'Continue shares default20 max100 paging over actual released active-state subjects',
   () =>
     world(async (f) => {
-      const active = stateChoice(f, 'schema:Book', 'active', true);
+      const active = stateChoice(f, 'schema:Book', 'active');
       const ids = [];
       for (let index = 0; index < 21; index++) {
         const subject = await f.createSubject('schema:Book', `Native default-page subject ${index}`);
@@ -448,7 +444,7 @@ test(
   () =>
     world(async (f) => {
       const subject = await f.createSubject('schema:Book', 'Read-only Continue replay');
-      const entry = await put(f, subject, stateChoice(f, 'schema:Book', 'active', true));
+      const entry = await put(f, subject, stateChoice(f, 'schema:Book', 'active'));
       const recorded = await transition(
         f,
         await start(f, subject, 'schema:Book'),
@@ -547,3 +543,47 @@ test(
     }),
   180_000,
 );
+
+test('Continue generic plumbing accepts a custom compiled active state ID; this is not bundled-data or historical-release proof', async () => {
+  // Reuse the existing native compiler fixture separately; never replace a discovery world's bundle.
+  const native = await createProfileEntryFixture();
+  try {
+    const reference = native.original.types[entryTypes.game]!.library!;
+    const accepted = native.original.libraryProfiles![reference.profileId]!;
+    const active = accepted.entryStateSet!.states.find(
+      (state) => state.role === 'active' && state.id === entryStates.game,
+    );
+    expect(active, 'Existing custom compiled fixture must declare its playing state active').toBeDefined();
+    expect(active!.id).not.toBe('in_progress');
+    const owner = await native.identity([
+      'subject:read',
+      'library_entry:update',
+      'library_entry:list',
+      'progress_session:list',
+    ]);
+    const opened = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
+    status(
+      { status: opened.status, headers: opened.headers, body: await opened.json() },
+      200,
+      'Open actual progress gate for generic fixture',
+    );
+    const subjectId = await native.createSubject('game');
+    const written = await native.send(owner.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, {
+      state: active!.id,
+    });
+    const body = await written.json();
+    status(
+      { status: written.status, headers: written.headers, body },
+      201,
+      `Accept custom ${accepted.id} active state ${active!.id}`,
+    );
+    expect(body.libraryEntry).toMatchObject({ subjectId, state: active!.id });
+    const response = await native.send(owner.bearer, 'GET', '/v1/libraryContinue');
+    const result = page({ status: response.status, headers: response.headers, body: await response.json() });
+    expect(result.next).toBeNull();
+    expect(result.subjects).toHaveLength(1);
+    expect(result.subjects[0]).toMatchObject({ subjectId, state: active!.id, activeProgressSession: null });
+  } finally {
+    await native.close();
+  }
+}, 180_000);

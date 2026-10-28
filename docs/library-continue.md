@@ -119,8 +119,8 @@ response. Older Library prose about valid suspended tokens does not change this 
 ## Frozen native scenarios and delivered gaps
 
 [continue-user-cases.test.ts](../services/kernel/test/library/continue-user-cases.test.ts) uses exactly one
-`createReleasedDiscoveryFixture({version: 1})` world per test, production HTTP, real registered personas and returned
-subject/profile choices. The
+`createReleasedDiscoveryFixture({version: 1})` world per bundled journey, production HTTP, real registered personas
+and returned subject/profile choices. The
 [released fixture ABI](../packages/definitions/src/released-discovery-fixtures.md) owns setup and cleanup.
 Its `personal`, `profiles` and `privacy` prerequisite descriptors are not callable producers. At adoption there is
 no integrated released Library population family export; the independent setup uses actual `createSubject` and
@@ -130,7 +130,7 @@ permanent throw placeholders. Existing profile and outcome suites are frozen and
 
 The executable cases require:
 
-- Released Book active-role state whose ID differs from `in_progress`, without a session; session-only Book and
+- Released Book's actual declared active-role state, without a session; session-only Book and
   Recipe with null state; exact union excluding completed-only, label-only, holding-only, follow-only and Bob-only.
 - Native start/record/complete/state-clear transitions preserving independent state, sessions and history;
   a non-active explicit state plus an active session still qualifies.
@@ -140,13 +140,27 @@ The executable cases require:
 - Replayed GETs preserving exposed native entries, sessions, history, copies, follows, labels and Collections.
   This observable read-only case is not SQL cost or complete hidden-storage mutation instrumentation.
 
+The current immutable bundled release is
+`sha256:57f4211bebf2a5d697e624f0d87a351d11e5be2ffda1c5e3eec57f10b3000bd0`: eleven attached profiles plus the
+unattached `legacy-fixed-v1` registry entry. Book uses `book.reading`; Recipe uses `recipe.cooking`. Both declare
+`legacy-five` with `in_progress` as the active state ID. Profile IDs are not state literals. Select by the accepted
+state's role and retain its actual ID; neither profile name licenses invented `reading`, `playing` or `cooked` values.
+This release data establishes no native session/support implementation or word/form/diet fixtures.
+
+A separate **generic plumbing** case reuses
+[`createProfileEntryFixture`](../services/kernel/test/library/support/profile-entry-fixture.ts), whose actual compiler
+output declares `playing` active for its custom game type. It uses that fixture's native owner HTTP, existing scopes
+and gate administration. It supplies independent coverage against hard-coded active state IDs; it is not a bundled
+discovery world, bundled-data evidence or a substitute for the released Book/Recipe journeys. Its custom releases
+do not close the historical bundled-release gap below.
+
 Two immutable historical bundled-release variants remain a **delivered fixture gap**. The producer must supply real
 published release bytes and ordinary activation/rollback that (a) rename/change an active state ID/role and (b)
 remove a formerly accepted state or progress choice. Runtime acceptance must preserve old facts' exact pins,
 membership, session admission and activity from their accepting release while rejecting unsupported fresh writes;
 it must cover old active meaning versus new non-active meaning and the reverse. Do not fabricate v2 bytes, mutate
-the single world's release or claim these history cases passed. Current bundled absence is an asserted failure,
-not a reason to weaken these requirements.
+the single world's release or claim these history cases passed. The missing historical producer remains an explicit
+gap, not a reason to weaken these requirements or reject the delivered bundle's actual active state.
 
 Runtime also requires native canonical merge/unmerge, withheld-original/readable-terminal, current source
 revocation on continuation, pending/published epoch restart, missing-pin readiness, exact SQL submillisecond/tie
