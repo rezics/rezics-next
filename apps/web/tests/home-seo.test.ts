@@ -36,9 +36,10 @@ test('the home page publishes localized site metadata and one WebSite graph', as
       inLanguage: locale,
       potentialAction: {
         '@type': 'SearchAction',
-        'query-input': 'required name=search_term_string',
+        target: `${origin}/${locale}/search?q={search_term_string}`,
       },
     });
+    expect(website.potentialAction).not.toHaveProperty('query-input');
   }
 
   const route = await Bun.file(new URL('../src/routes/index.tsx', import.meta.url)).text();
