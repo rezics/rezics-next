@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
 import { systemClock } from '../../src/clock.ts';
+import { releaseDigest } from '@rezics/definitions';
 import { randomUUID } from 'node:crypto';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { batchCommand } from '../../src/semantic/bulk.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
@@ -47,10 +48,11 @@ const negative = (author: string): PublicFilterConsumerCaptureInput => ({
   },
 });
 
-async function setup(type = 'schema:Book') {
+async function setup(type = 'schema:Book', configure?: (f: Awaited<ReturnType<typeof fixture>>) => Promise<void>) {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   try {
+    await configure?.(f);
     const source = publicFilterSource(f.config);
     const url = process.env.OPENSEARCH_URL;
     if (!url) throw new Error('OPENSEARCH_URL must name the configured native engine');
@@ -496,16 +498,29 @@ test('native irrelevant key narrowing never suppresses own-row or excluded negat
 }, 600_000);
 
 test('native capture retains the expanded shared query meaning before deriving its physical plan and complete dependency keys', async () => {
-  const n = await setup();
-  try {
-    const author = await n.f.create();
-    const book = await n.f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] });
-    const release = structuredClone(n.f.meaning.release);
+  let author!: string;
+  let book!: string;
+  const n = await setup('schema:Book', async (f) => {
+    author = await f.create();
+    book = await f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] });
+    const release = structuredClone(f.meaning.release);
     release.filters = {
-      'native/public': {
-        filter: {
+      'native/public': { labels: { en: 'Public books' }, filter: { type: { in: ['schema:Book'] } } },
+    };
+    // Install the real accepted release before constructing Source and the native consumer.
+    const active = await activeRelease(f.db.pool);
+    const digest = releaseDigest(release);
+    await f.post('/v1/definitions/releases', { release });
+    await f.post(`/v1/definitions/releases/${digest}:activate`, { expected_head: active?.head ?? null });
+    Object.assign(f.meaning, { release, digest });
+  });
+  try {
+    const release = n.f.meaning.release;
+    const expand = (): FilterDocument =>
+      admitFilter(
+        {
           and: [
-            { type: { in: ['schema:Book'] } },
+            { saved: 'native/public' },
             {
               or: [
                 { statement: { property: 'schema:author', in: [author] } },
@@ -514,13 +529,13 @@ test('native capture retains the expanded shared query meaning before deriving i
             },
           ],
         },
-      },
-      'native/private': { filter: { owner: { presence: true } } },
-    };
-    const expanded = admitFilter({ saved: 'native/public' }, release);
+        release,
+      );
+    const expanded = expand();
+    const text = parseText('Native -"unpublished phrase"');
     const input: PublicFilterConsumerCaptureInput = {
       filterDocument: expanded,
-      text: parseText('Native AND NOT "unpublished phrase"'),
+      text,
       sort: 'name',
       size: 20,
     };
@@ -529,15 +544,49 @@ test('native capture retains the expanded shared query meaning before deriving i
     expect(first.result.hits.map((hit) => hit.id)).toEqual([book]);
     const definition = observation.queried.consumer.readDefinition;
     // The native retained definition owns both trees and keyset/order, not this mutable caller graph.
+    Object.assign(text, { kind: 'term', value: 'absent' });
     Object.assign(input, { text: parseText('absent'), sort: 'id', size: 1, after: ['zzzz'] });
     Object.assign(expanded, { and: [{ type: { in: ['schema:Person'] } }] });
     expect((await execute(n, observation.queried)).result.hits.map((hit) => hit.id)).toEqual([book]);
     expect(observation.queried.consumer.readDefinition).toBe(definition);
-    const other = await captured(n, { ...positive(author), text: parseText('Native'), sort: 'id' });
-    expect(other.queried.consumer.readDefinition).not.toBe(definition);
+    const semantic = {
+      ...positive(author),
+      filterDocument: expand(),
+      text: parseText('Native -"unpublished phrase"'),
+      sort: 'name' as const,
+    };
+    const compatible = await captured(n, {
+      ...semantic,
+      filter: compileFilter(semantic.filterDocument, { prefix: 'f', relationOverflow: true }).query,
+    });
+    expect(compatible.queried.consumer.readDefinition).toBe(definition);
+    for (const change of [
+      { text: parseText('absent') },
+      { sort: 'id' as const },
+      { size: 1 },
+      { after: ['zzzz', book] },
+    ]) {
+      const other = await captured(n, { ...semantic, ...change });
+      expect(other.queried.consumer.readDefinition).not.toBe(definition);
+    }
+    const after = ['zzzz', book];
+    const keyset = await captured(n, { ...semantic, after });
+    expect((await execute(n, keyset.queried)).result.hits).toEqual([]);
+    after[0] = '';
+    expect((await execute(n, keyset.queried)).result.hits).toEqual([]);
 
-    const owner = admitFilter({ saved: 'native/private' }, release, { owner: true });
-    for (const filterDocument of [owner, { not: owner }, { or: [{ type: { in: ['schema:Book'] } }, owner] }]) {
+    // An owner-context expansion is untrusted input, never a shipped public release definition.
+    const privateRelease = {
+      ...release,
+      filters: { 'native/private': { filter: { owner: { presence: true as const } } } },
+    };
+    const owner = admitFilter({ saved: 'native/private' }, privateRelease, { owner: true });
+    for (const filterDocument of [
+      owner,
+      { not: owner },
+      { or: [{ type: { in: ['schema:Book'] } }, owner] },
+      { saved: 'native/public' },
+    ]) {
       const before = n.consumer.engineResponses();
       const rejected = await capture(
         n.f.db,
@@ -563,7 +612,7 @@ test('native capture retains the expanded shared query meaning before deriving i
     await expect(
       n.operations.capture(
         {
-          plan: { filter: { match_all: {} }, sort: 'id', size: 20 } as PublicFilterConsumerCaptureInput,
+          plan: { filter: { match_all: {} }, sort: 'id', size: 20 } as unknown as PublicFilterConsumerCaptureInput,
           snapshot: 'pit',
         },
         context(),
@@ -637,6 +686,34 @@ test('native refresh controls cover explicit refresh and genuine bulk wait_for c
     expect(response.errors).toBe(false);
     expect(response.items[0]!.index._shards.failed).toBe(0);
     expect(delivered).toBe(true);
+    // The same refresh fault names retain their before/after native-effect distinction for wait_for.
+    for (const fault of ['disconnect_before', 'disconnect_after'] as const) {
+      const failedId = randomUUID();
+      const receipts = n.consumer.nativeReceipts().length;
+      const disconnected = n.consumer.arm('refresh', fault);
+      const attempt = n.consumer.transport
+        .bulk([{ index: { _index: n.consumer.physicalTarget, _id: failedId } }, { id: failedId }], {
+          query: { refresh: 'wait_for' },
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      try {
+        expect(await disconnected.reached).toEqual({
+          kind: 'bulk_wait_for',
+          stage: fault === 'disconnect_before' ? 'before_send' : 'after_response',
+        });
+        expect(n.consumer.nativeReceipts().length).toBe(receipts + (fault === 'disconnect_after' ? 1 : 0));
+        const actual = await n.search.request<{ hits: { hits: { _id: string }[] } }>('POST', `${target}/_search`, {
+          query: { ids: { values: [failedId] } },
+        });
+        expect(actual.body.hits.hits.map((hit) => hit._id)).toEqual(fault === 'disconnect_after' ? [failedId] : []);
+      } finally {
+        disconnected.release();
+      }
+      expect(await attempt).toBeInstanceOf(Error);
+    }
   } finally {
     await n.close();
   }

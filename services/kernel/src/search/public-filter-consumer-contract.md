@@ -3,8 +3,9 @@
 Search owns the canonical `PublicFilterQueriedObservation` in the adjacent type-only file. Semantic must import
 and re-export that exact type when closing its population observation boundary. There is no second observation
 type and no live/latest-ACK snapshot branch. This specification consumes only committed Source public types and
-existing shared FilterDocument, parsed TextNode, SearchPlan/SearchResult, OpenSearch, Pool and KernelClock. It does not import the preserved Semantic
-closure proposal. That proposal is context for owner review, not an available runtime dependency.
+existing shared FilterDocument, parsed TextNode, SearchPlan/SearchResult, OpenSearch, Pool and KernelClock.
+It does not import the preserved Semantic closure proposal. That proposal is context for owner review, not an
+available runtime dependency.
 
 The authority for disclosure, narrowing and budgets remains [Filtered lists](../../../../docs/filtered-lists.md).
 The [Source contract](../semantic/public-filter-source-contract.md) owns native public projection, reduction append
@@ -181,10 +182,13 @@ writes or explicit `_refresh` before send, or hold the genuine bulk `refresh=wai
 completion and BEFORE delivery to the producer. Both `bulk(lines, options)` and request-path bulk query options
 are recognized. No bulk option/request/response is changed and no redundant explicit refresh is required.
 `arm('refresh').reached` reports `{kind, stage}` to distinguish dispatch from completed native visibility;
-`nativeReceipts()` retains actual responses (including errors), never a fabricated shard/refresh success or ACK.
+`nativeReceipts()` retains actual returned responses (including bulk item errors), never a fabricated shard/refresh
+success or ACK.
 A bare bulk response is a write receipt only and cannot consume the refresh gate; native errors/shard failures
-remain producer publication barriers. The helper also disconnects transport before send/after actual engine effect; none supplies successful receipts
-or ACK booleans. Recreate deletes/creates only its own index with the same name. Close releases gates, drains
+remain producer publication barriers. A wait_for `disconnect_before` gate stops dispatch before any native effect;
+its ordinary hold and lost-response gates run after genuine completion. The helper also disconnects writes and
+explicit refresh before send/after actual engine effect; none supplies successful receipts or ACK booleans. Recreate
+deletes/creates only its own index with the same name. Close releases gates, drains
 the actual producer and deletes only that index, leaving the supplied Semantic resources to their owner.
 
 The focused suite uses migrated native fixtures, real editorial/consent/moderation/source-fence commands, Source
@@ -209,8 +213,12 @@ committing these four specification/helper files or from a later isolated protoc
 
 The two executable input/transport controls use the same actual producer lookup as all native races. Missing
 `semantic/public-filter-source.ts` fails before engine execution; it is not a pass for immutability, dependency
-keys, PIT/prepared identity, visibility or ACK. Once producers exist, the controls exercise expanded saved AST,
-OwnerLeaf under NOT/OR/saved expansion, compiled mismatch/compiled-only rejection, caller mutation, full OR
+keys, PIT/prepared identity, visibility or ACK. Once producers exist, the controls install a valid public saved filter
+through the ordinary release API before
+constructing Source/the consumer. Public expansion uses that exact configured release; an owner-context saved
+expansion is deliberately untrusted input, never installed as a public release. The controls exercise the expanded AST,
+OwnerLeaf under NOT/OR/saved expansion, compiled mismatch/compiled-only rejection, caller AST/text/keyset mutation,
+definition changes for text/order/size/keyset, full OR
 narrowing, explicit refresh and real wait_for visibility while its native response remains withheld. Transport
 control documents are owned fixture inputs, never a synthetic privacy event or repair receipt. The existing tuple
 case still requires automatic FOREIGN repair with no unrelated subject edit, injected event or checkpoint advance.

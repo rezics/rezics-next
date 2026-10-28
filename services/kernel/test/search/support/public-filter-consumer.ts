@@ -39,17 +39,18 @@ export async function createPublicFilterConsumerFixture(
   const physicalTarget = subjectIndexName(prefix, 1);
   type Phase = 'write' | 'refresh';
   type Fault = 'hold' | 'disconnect_before' | 'disconnect_after';
+  type ReceiptKind = 'write' | 'explicit_refresh' | 'bulk_wait_for' | 'other';
   type Gate = {
     phase: Phase;
     fault: Fault;
-    entered: (point: Readonly<{ kind: string; stage: 'before_send' | 'after_response' }>) => void;
+    entered: (point: Readonly<{ kind: ReceiptKind; stage: 'before_send' | 'after_response' }>) => void;
     wait: Promise<void>;
     release: () => void;
   };
   let next: Gate | undefined;
   const held = new Set<Gate>();
   let responses = 0;
-  const receipts: { kind: 'write' | 'explicit_refresh' | 'bulk_wait_for' | 'other'; response: unknown }[] = [];
+  const receipts: { kind: ReceiptKind; response: unknown }[] = [];
   function arm(phase: Phase, fault: Fault = 'hold') {
     if (next) throw new Error('A native transport control is already armed');
     let entered!: Gate['entered'];
@@ -63,7 +64,7 @@ export async function createPublicFilterConsumerFixture(
     next = { phase, fault, entered, wait, release };
     return { reached, release };
   }
-  async function barrier(gate: Gate, kind: string, stage: 'before_send' | 'after_response') {
+  async function barrier(gate: Gate, kind: ReceiptKind, stage: 'before_send' | 'after_response') {
     held.add(gate);
     gate.entered({ kind, stage });
     await gate.wait;
@@ -85,6 +86,13 @@ export async function createPublicFilterConsumerFixture(
       await barrier(gate, kind, 'before_send');
       if (gate.fault === 'disconnect_before')
         throw new SearchUnavailableError('Native fixture disconnected before send');
+    }
+    // A before-send fault still prevents the genuine bulk, even though its ordinary hold point
+    // is response completion. Do not relabel an already-applied write as disconnected-before.
+    if (kind === 'bulk_wait_for' && next?.phase === 'refresh' && next.fault === 'disconnect_before') {
+      const before = take('refresh')!;
+      await barrier(before, kind, 'before_send');
+      throw new SearchUnavailableError('Native fixture disconnected before send');
     }
     const result = await send();
     responses++;

@@ -126,6 +126,8 @@ export interface PublicFilterConsumerOperations {
 
 /** Future search/public-filter-consumer.ts export createPublicFilterConsumerOperations: MISSING.
  * The target is a native physical name to resolve, never an incarnation/ACK supplied as truth.
+ * Source must resolve its native registered public-catalogue identity/read definition; the current
+ * reader-only Source port is insufficient for runtime (see the adjacent prerequisite).
  */
 export type PublicFilterConsumerOperationsFactory = (
   config: Readonly<{
