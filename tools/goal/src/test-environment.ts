@@ -1,5 +1,15 @@
 import { resolve } from 'node:path';
 
+// Root test preloads also route checks, whose wait recorder must see the attempt's file after this preload strips the
+// control-plane environment from test processes.
+const checkWaitFile = process.env.GOAL_CHECK_WAIT_FILE;
+const checkHostsFile = process.env.KERNEL_CHECK_REMOTE;
+const handoff = globalThis as typeof globalThis & Record<symbol, unknown>;
+if (checkWaitFile !== undefined) {
+  handoff[Symbol.for('rezics.goal-check-wait-file')] = checkWaitFile;
+}
+if (checkHostsFile !== undefined) handoff[Symbol.for('rezics.check-hosts-file')] = checkHostsFile;
+
 // Tests never inherit the store, identity or session of the control plane that launched them: a worker's
 // environment names the live database, and a test that spawns the CLI would otherwise act on live tasks.
 for (const key of Object.keys(process.env)) if (key.startsWith('GOAL_')) delete process.env[key];

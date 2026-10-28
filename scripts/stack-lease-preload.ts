@@ -4,6 +4,13 @@ import { acquireStackSlot } from './stack-lease.ts';
 import { runOnCheckHost, testKeepsFiles } from './stack-run.ts';
 
 const root = resolve(import.meta.dir, '..');
+const waitFileKey = Symbol.for('rezics.goal-check-wait-file');
+const hostsFileKey = Symbol.for('rezics.check-hosts-file');
+const waitFileHandoff = globalThis as typeof globalThis & Record<symbol, unknown>;
+const goalCheckWaitFile = waitFileHandoff[waitFileKey] as string | undefined;
+const checkHostsFile = waitFileHandoff[hostsFileKey] as string | undefined;
+delete waitFileHandoff[waitFileKey];
+delete waitFileHandoff[hostsFileKey];
 
 const requiredValueOptions = new Set([
   '--timeout',
@@ -91,15 +98,26 @@ if (includesSpecs(testFileFilters(testArguments()))) {
   // run whose working directory is under the check host's run root stays here.
   const args = testArguments();
   const forHost = hostInvocation(args);
-  const code = await runOnCheckHost({
-    label: 'root bun test',
-    root,
-    cwd: process.cwd(),
-    command: ['bun', 'test', ...(forHost ?? [])],
-    keepsFiles: forHost === null || testKeepsFiles(args),
-  });
+  if (goalCheckWaitFile !== undefined) process.env.GOAL_CHECK_WAIT_FILE = goalCheckWaitFile;
+  if (checkHostsFile !== undefined) process.env.KERNEL_CHECK_REMOTE = checkHostsFile;
+  let code: number | null;
+  try {
+    code = await runOnCheckHost({
+      label: 'root bun test',
+      root,
+      cwd: process.cwd(),
+      command: ['bun', 'test', ...(forHost ?? [])],
+      keepsFiles: forHost === null || testKeepsFiles(args),
+    });
+  } finally {
+    delete process.env.GOAL_CHECK_WAIT_FILE;
+    delete process.env.KERNEL_CHECK_REMOTE;
+  }
   if (code !== null) process.exit(code);
-  const slot = await acquireStackSlot('root bun test');
+  const slot = await acquireStackSlot('root bun test', {
+    ...process.env,
+    ...(goalCheckWaitFile === undefined ? {} : { GOAL_CHECK_WAIT_FILE: goalCheckWaitFile }),
+  });
   if (slot.env.REZICS_STACK_SLOT !== undefined) {
     process.env.REZICS_STACK_SLOT = slot.env.REZICS_STACK_SLOT;
   }
