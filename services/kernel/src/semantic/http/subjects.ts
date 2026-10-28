@@ -43,6 +43,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } f
 import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
 import { listSubjectGraph } from '../graph.ts';
+import { readSubjectRelationCounts, type SubjectRelationCountResponse } from '../counts.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateStatement,
@@ -182,6 +183,44 @@ const readResponse = t.Object(
     related: t.Record(t.String(), LabelsSchema),
   },
   { additionalProperties: false },
+);
+const SubjectCountsSchema = t.Unsafe<SubjectRelationCountResponse>(
+  t.Object(
+    {
+      properties: t.Optional(
+        t.Record(
+          t.String(),
+          t.Union([
+            t.Object(
+              { out: t.Integer({ minimum: 1 }), in: t.Optional(t.Integer({ minimum: 1 })) },
+              { additionalProperties: false },
+            ),
+            t.Object(
+              { out: t.Optional(t.Integer({ minimum: 1 })), in: t.Integer({ minimum: 1 }) },
+              { additionalProperties: false },
+            ),
+          ]),
+        ),
+      ),
+      groups: t.Optional(
+        t.Record(
+          t.String(),
+          t.Union([
+            t.Object(
+              { out: t.Integer({ minimum: 1 }), in: t.Optional(t.Integer({ minimum: 0 })) },
+              { additionalProperties: false },
+            ),
+            t.Object(
+              { out: t.Optional(t.Integer({ minimum: 0 })), in: t.Integer({ minimum: 1 }) },
+              { additionalProperties: false },
+            ),
+          ]),
+        ),
+      ),
+      content: t.Null(),
+    },
+    { additionalProperties: false },
+  ),
 );
 const graphResponse = t.Object(
   {
@@ -1657,6 +1696,49 @@ function subjectRoutes(
           if (error instanceof SubjectRedirectError) {
             set.status = 308;
             set.headers.location = `/v1/subjects/${error.to}/graph${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/counts',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: withHeaders(SubjectCountsSchema, cacheControl),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'subject.counts',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component } = await admission.run('normal', job, () =>
+            readSubjectRelationCounts(pool, { subject: params.id, release: active.release, authorize: check }),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          // Stored counters have no current source and target disclosure proof, so they remain internal.
+          return { content: null };
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/counts${new URL(request.url).search}`;
             return { redirect: { from: error.from, to: error.to } };
           }
           return candidateError(error);

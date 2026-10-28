@@ -594,6 +594,20 @@ The global context is inserted once by migration and has no runtime semantic rea
 - Bound: rows O(s + suppressions in the page's range); independent of Global's and the Context's totals elsewhere.
 - Growth check: `test/semantic/context-relations.test.ts`: `a Context relation page examines rows bounded by the page and the Context's own changes in its range`, scales `[16, 128, 1024]` Context changes outside the page's property range; forward and inverse page rows stay flat.
 
+### View-count read
+
+`GET /v1/subjects/:id/counts` reads the subject's exact internal inbound and outbound relation counters by property, then sums them by the active release's relation group. Stored counters do not prove current source and target disclosure, so the public response omits the optional `properties` and `groups` fields until bounded current proof is available. Its `content` field is `null` until the content service supplies thread, review and public-collection counts; content fills that field. The response names relation properties and groups, not presentation views.
+
+- Touches: the subject's counter rows (one range per direction), the subject probe and authorization.
+- Bound: rows O(properties with relations) ≤ release properties; independent of relation count.
+- Growth check: `test/semantic/view-counts.test.ts`: `the view-count read costs the same whatever the subject's relation count`. This measures the internal counter ranges with positive totals independently of public omission.
+
+### Client type representation
+
+- Touches: the complete mounted route/schema types, materialized as named client groups before Eden derives method types, and the exactly derived subject-read alias used by Web. The existing proxy, session handling, headers and custom methods remain unchanged.
+- Bound: compiler work follows the fixed mounted route/schema surface; no per-request work, SQL or runtime graph is added. Every mounted group, route and native response type remains available.
+- Growth check: `packages/client/tests/client.test.ts`: `the derived subjects group keeps native counts and routes contributed by other modules`, the existing positive and negative client type contracts, and the full root typecheck against generated declarations.
+
 ### Inverse page
 
 - Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one pending-merge index probe for the scanned holder ids, one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.

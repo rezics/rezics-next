@@ -126630,6 +126630,553 @@
         "x-exposure": "gate:collections"
       }
     },
+    "/v1/subjects/{id}/counts": {
+      "get": {
+        "operationId": "subject.counts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "content": {
+                      "type": "null"
+                    },
+                    "groups": {
+                      "patternProperties": {
+                        "^.*$": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "in": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "out": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "out"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "in": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "out": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "in"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "properties": {
+                      "patternProperties": {
+                        "^.*$": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "in": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "out": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "out"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "in": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "out": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "in"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "content"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200",
+            "headers": {
+              "cache-control": {
+                "schema": {
+                  "const": "no-cache",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "308": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "redirect": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "from": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "to": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "redirect"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 308",
+            "headers": {
+              "location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "invalid_request",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Invalid Request",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/invalid_request",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "not_found",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Not Found",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/not_found",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "semantic_not_ready",
+                        "overloaded",
+                        "deadline_exceeded"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        true,
+                        true,
+                        true
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Semantic Layer Not Ready",
+                        "Service Overloaded",
+                        "Deadline Exceeded"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
+                        "https://rezics.com/problems/overloaded",
+                        "https://rezics.com/problems/deadline_exceeded"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Semantic not ready; Overloaded; Deadline exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {}
+        ],
+        "x-action": "subject:read",
+        "x-exposure": "public"
+      }
+    },
     "/v1/subjects/{id}/graph": {
       "get": {
         "operationId": "subject.graph",

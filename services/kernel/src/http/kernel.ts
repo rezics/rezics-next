@@ -441,7 +441,6 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof contextRoutes>;
-
 export type Kernel = KernelComposition;
 
 /** createKernel guarantees one parameter name for each route position. */

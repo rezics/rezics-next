@@ -1034,6 +1034,13 @@ CREATE INDEX inbound_link_context_overrides ON semantic.inbound_link USING btree
 
 
 --
+-- Name: inbound_link_count_unfiltered; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX inbound_link_count_unfiltered ON semantic.inbound_link_count USING btree (route, subject_id, property) INCLUDE (value) WHERE ((filter_value = '00000000-0000-0000-0000-000000000000'::uuid) AND (value > 0));
+
+
+--
 -- Name: inbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -1059,6 +1066,13 @@ CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, s
 --
 
 CREATE INDEX outbound_link_context_overrides ON semantic.outbound_link USING btree (route, subject_id, property, filter_value, statement_id, target_subject_id, context_id) WHERE (present AND (context_id <> '00000000-0000-8000-8000-000000000000'::uuid));
+
+
+--
+-- Name: outbound_link_count_unfiltered; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX outbound_link_count_unfiltered ON semantic.outbound_link_count USING btree (route, subject_id, property) INCLUDE (value) WHERE ((filter_value = '00000000-0000-0000-0000-000000000000'::uuid) AND (value > 0));
 
 
 --

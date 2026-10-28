@@ -1,8 +1,46 @@
-import { treaty } from '@elysia/eden';
+import { treaty, type Treaty } from '@elysia/eden';
+import type { Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
+import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
+
+type Routes = KernelType['~Routes']['v1'];
+
+/** Reuse each shared method's original declaration; retain every other mounted path and method. */
+type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
+  ? Original
+  : {
+      [Path in keyof Mounted]: Path extends keyof Original
+        ? SharedRoutes<Mounted[Path], Original[Path]>
+        : Mounted[Path];
+    };
+
+// Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
+type SubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
+
+type ClientApp = Elysia<
+  KernelType['~Prefix'],
+  'local',
+  KernelType['~Singleton'],
+  KernelType['~Definitions'],
+  KernelType['~Metadata'],
+  {
+    [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
+      ? Omit<Routes, 'subjects'> & { subjects: SubjectRoutes }
+      : KernelType['~Routes'][Prefix];
+  },
+  KernelType['~Ephemeral'],
+  KernelType['~Volatile']
+>;
+
+/** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
+export type KernelClient = Omit<ReturnType<typeof treaty<ClientApp>>['v1'], 'subjects'> & {
+  subjects: KernelSubjectsClient;
+};
+export type KernelSubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
+export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
@@ -18,7 +56,7 @@ export type KernelClientOptions = {
 };
 
 /** Creates one viewer's client and keeps its session token so the viewer's reads see its own writes. */
-export function createKernelClient(origin: string, options: KernelClientOptions = {}) {
+export function createKernelClient(origin: string, options: KernelClientOptions = {}): KernelClient {
   let session = options.session;
   const fetcher = options.fetch ?? globalThis.fetch;
   const config = {
@@ -42,7 +80,5 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
       }
     },
   };
-  return treaty<KernelType>(origin, config).v1;
+  return treaty<ClientApp>(origin, config).v1;
 }
-
-export type KernelClient = ReturnType<typeof createKernelClient>;

@@ -129,6 +129,7 @@ const typed = [
   'GET /v1/subjects/:id/candidates',
   'GET /v1/subjects/:id/revisions',
   'GET /v1/subjects/:id/links',
+  'GET /v1/subjects/:id/counts',
   'GET /v1/subjects/:id/relations',
   'GET /v1/subjects/graph',
   'GET /v1/subjects/:id/graph',
