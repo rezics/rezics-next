@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
 import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { RatingPhase } from './rating-cursor.ts';
+import { searchRatingSubjects } from './rating-query.ts';
+import type { PublicRatingEpoch } from './rating-source.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
 export const SEARCH_TEMPLATE = 'subjects-search-v2';
@@ -36,7 +39,11 @@ export type SearchPlan = {
   query?: Record<string, unknown>;
   filter?: Record<string, unknown>;
   boost?: string;
-  sort: 'relevance' | 'name' | 'id' | 'collections';
+  sort: 'relevance' | 'name' | 'id' | 'collections' | 'rating';
+  /** Internal native planner metadata, never HTTP body selectors. */
+  rating?: PublicRatingEpoch;
+  ratingPhase?: RatingPhase;
+  generation?: number;
   size: number;
   after?: readonly SortValue[];
   /** Distinct statement properties in the admitted filter. */
@@ -51,11 +58,13 @@ export type SubjectHit = {
 };
 
 export type SearchHit = SubjectHit & {
+  ratingPhase?: RatingPhase;
   matched: string[];
   sort: SortValue[];
 };
 
 export type SearchResult = {
+  generation?: number;
   hits: SearchHit[];
   total: { value: number; relation: 'exact' | 'lower_bound' };
   overflow?: boolean;
@@ -98,6 +107,8 @@ export async function installTemplates(search: OpenSearch, prefix: string): Prom
 
 export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult> {
   validateSize(plan.size, 200);
+  if (plan.sort === 'rating')
+    return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
   const alias = subjectAlias(prefix);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
