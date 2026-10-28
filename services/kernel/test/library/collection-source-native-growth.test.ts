@@ -56,7 +56,7 @@ test('actual curated first/deep source seeks and exact original probes retain bo
   expect(created.status).toBe(201);
   const id = (await created.json()).collection.id as string,
     subject = await native.createSubject('game');
-  let metadata: NativeCollectionMetadata,
+  let metadata!: NativeCollectionMetadata,
     after: CanonicalRangeKey | null = null;
   await checkGrowth(db, {
     name: 'native raw curated source first/deep and exact original',
@@ -98,9 +98,7 @@ test('actual curated first/deep source seeks and exact original probes retain bo
   });
   await measured(() => page(db.pool, metadata, { ...options(), driver: 'member', after, limit: 8 }));
   const positive = await measured(() => probe(db.pool, metadata, { ...options(), originalId: subject }));
-  const missing = await measured(() =>
-    probe(db.pool, metadata, { ...options(), originalId: native.unknownSubject(), keyHint: undefined }),
-  );
+  const missing = await measured(() => probe(db.pool, metadata, { ...options(), originalId: native.unknownSubject() }));
   expect(positive.result).toBe('present');
   expect(missing.result).toBe('absent');
   const bounded = await probe(db.pool, metadata, {

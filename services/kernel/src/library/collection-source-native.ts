@@ -283,7 +283,7 @@ export function authorizeNativeCollectionMetadata(
       resource: { route: metadata.route, id: metadata.collectionId },
       action: 'collection:read',
       async prepare() {
-        return null;
+        return { route: metadata.route, collectionId: metadata.collectionId };
       },
       async verify({ client }) {
         try {
