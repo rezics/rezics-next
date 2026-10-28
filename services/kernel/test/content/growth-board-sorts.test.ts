@@ -14,6 +14,7 @@ const authorId = newId(threadRoute);
 const pageSize = 3;
 const candidateLimit = 200;
 const scales = [256, 1024, 4096] as const;
+const baseline = { from: 1_000_000, to: 1_004_096 };
 const text = 'A fixed board page growth body';
 const document = fromPlainText(text);
 const body = Buffer.from(serializeDocument(document));
@@ -76,8 +77,10 @@ test(
         name: `board-sorts-${sort}-${randomUUID()}`,
         hotPartition: partitionOf(threadRoute),
         hotShare: 1,
-        rows: ({ ordinal, route }) => {
-          const onBoard = ordinal < candidateLimit || ordinal % 2 === 0;
+        rows: ({ ordinal, route: seededRoute }) => {
+          // Baseline threads share the probe's route but never its board or candidate window.
+          const route = ordinal >= baseline.from ? threadRoute : seededRoute;
+          const onBoard = ordinal < baseline.from && (ordinal < candidateLimit || ordinal % 2 === 0);
           const otherBoard = newId(boardRoute);
           const targetBoard = onBoard ? boardId : otherBoard;
           const threadId = newId(route);
@@ -152,8 +155,8 @@ test(
                 thread_id: threadId,
                 created_at: at,
                 last_activity_at: at,
-                active_rank: 8192 - ordinal,
-                hot_rank: 8192 - ordinal,
+                active_rank: Math.max(0, 8192 - ordinal),
+                hot_rank: Math.max(0, 8192 - ordinal),
                 rank_refreshed_at: at,
                 source_epoch: 1,
                 source_position: ordinal + 1,
@@ -163,9 +166,11 @@ test(
           };
         },
       };
-      // Keep even the first scale off empty/tiny-table planner scans. These resources and subjects
-      // never belong to the probe; the disjoint baseline ordinals follow the inverse-membership fixture.
-      await seed(db, accessPopulation, { from: 1_000_000, to: 1_004_000 });
+      // Give every content relation 4096 unrelated rows before the measured scales, and every Access
+      // relation 4096 per measured route. core.partition already has all 4096 anchors from migration.
+      // These disjoint ordinals follow the inverse-membership fixture; seed also VACUUMs (ANALYZE).
+      await seed(db, population, baseline);
+      await seed(db, accessPopulation, baseline);
       const report = await checkGrowth(db, {
         name: `Board page ${sort}, including candidate and final disclosure`,
         scales,

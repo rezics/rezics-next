@@ -485,8 +485,10 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
   logarithmic in the indexed relations, independent of total threads, same-board threads, other boards and hidden
   candidate count. No sequential scan or unbounded hidden-candidate refill is needed.
 - **Growth check:** `test/content/growth-board-sorts.test.ts`, `board pages under new active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow`:
-  each HTTP sort at 256, 1024 and 4096 total threads, growing same-board threads, other boards and protected/taken-down
-  candidates around a fixed board and page size. The first Q candidates include 196 hidden threads and s + 1 visible
+  each HTTP sort at 256, 1024 and 4096 additional threads over a base of 4096 unrelated boards, threads, posts and
+  revisions, plus 4096 unrelated grants, role grants and denials in every measured Access route. Each scale grows
+  same-board threads, other boards, protected/taken-down candidates and unrelated Access rows around a fixed board
+  and page size, then analyzes the relations. The first Q candidates include 196 hidden threads and s + 1 visible
   entries, exercising both disclosure passes; rows/statements are constant, blocks logarithmic and sequential scans zero.
 
 `document.ts` and both document tables cap canonical bodies at 2 MiB, with at most 128 subject references and 32 media IDs per revision; document validation, hashing and text extraction are linear in those bounded bytes.
