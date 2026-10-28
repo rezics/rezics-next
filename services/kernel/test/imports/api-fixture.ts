@@ -142,7 +142,9 @@ export async function openImportApiFixture(options: DriverOptions): Promise<Impo
                 : String((native.vn as { id: string }).id);
         const revision =
           source === 'wikidata'
-            ? String(native.lastrevid)
+            ? Object.hasOwn(native, 'lastrevid')
+              ? String(native.lastrevid)
+              : 'unversioned'
             : source === 'openlibrary'
               ? String(native.revision)
               : source === 'vndb'
