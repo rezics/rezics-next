@@ -332,11 +332,7 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** Update a ready or stopped task; abandoning pending is valid only while the caller holds the task lease. */
-  updateHeldRetryTask(
-    ref: AttemptRef,
-    update: (task: Task) => void,
-    options: { abandonPending?: boolean } = {},
-  ): Task {
+  updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void, options: { abandonPending?: boolean } = {}): Task {
     return this.db
       .transaction(() => {
         const task = this.task(ref.taskId);

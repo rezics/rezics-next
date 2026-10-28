@@ -54,8 +54,9 @@ test('merge train branch lookup reports a spawn error when git cannot start', ()
       ): { error?: string };
     };
 
-    expect(trainWithBranchMerge.mergeCommitIntoBranch('commit', 'source', 'target', join(temp.path, 'merge.log')).error)
-      .toContain('ENOENT');
+    expect(
+      trainWithBranchMerge.mergeCommitIntoBranch('commit', 'source', 'target', join(temp.path, 'merge.log')).error,
+    ).toContain('ENOENT');
   } finally {
     temp.close();
   }

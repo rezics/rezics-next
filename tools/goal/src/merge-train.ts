@@ -510,11 +510,7 @@ type SpawnTextResult = {
   stderr: string | null;
   error?: Error;
 };
-type SpawnText = (
-  command: string,
-  args: string[],
-  options: { cwd: string; encoding: 'utf8' },
-) => SpawnTextResult;
+type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
 
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
