@@ -69,6 +69,7 @@ export function compileCurrentFilter(filter: FilterDocument): CurrentFilterPlan 
         return result === 'not_proven' ? result : !result;
       };
     }
+    if ('owner' in node) throw new Error('Catalogue filters do not support owner predicates');
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
     const clause: FactClause =
       'type' in node

@@ -75,7 +75,7 @@ test('owner presence state label session holding are closed leaves of the same b
     expect(parsed.owner).not.toBe(leaf.owner);
   }
   // No active release/type lookup can establish the meaning of a stored historic pin.
-  expect(admit(families[1], { types: {}, properties: {} })).toEqual(families[1]);
+  expect(admit(families[1], { types: {}, properties: {} })).toEqual(families[1]!);
 });
 
 test('catalogue only admission rejects all owner families including owner under NOT and saved expansion', () => {
@@ -289,7 +289,7 @@ test('complete expanded AST traversal retains negative owner and catalogue depen
   expect(nodes[1]).toBe(mixed.and[0]);
   expect(nodes[2]).toBe(mixed.and[1]);
   const leaves = nodes.filter((node) => 'owner' in node || 'statement' in node || 'type' in node);
-  expect(leaves).toEqual([book, families[9], qualified, families[1]]);
+  expect(leaves).toEqual([book, families[9]!, qualified, families[1]!]);
   expect(nodes.some((node) => 'saved' in node)).toBe(false);
   expect(
     leaves.flatMap((node) =>

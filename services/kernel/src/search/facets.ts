@@ -1,4 +1,4 @@
-import { admitFilter, FilterError, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 
@@ -77,6 +77,15 @@ export function validateFacets(request: FacetRequest): Facet[] {
 
 /** Probe admission with the same immediate type anchors, without spending the query's leaf/depth budget. */
 export function admitFacets(facets: readonly Facet[], filter: FilterDocument | undefined, release: FilterRelease) {
+  // A type-only facet request must not bypass rejection of private predicates, including under NOT.
+  if (filter) {
+    for (const node of walkFilter(filter)) {
+      if ('owner' in node || 'saved' in node) {
+        admitFilter(filter, release);
+        break;
+      }
+    }
+  }
   let types: string[] | undefined;
   for (const node of filter && 'and' in filter ? filter.and : filter ? [filter] : []) {
     const expanded = 'saved' in node ? admitFilter(node, release) : node;

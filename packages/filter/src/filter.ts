@@ -1,3 +1,5 @@
+import type { OwnerLeaf } from './owner-filter.ts';
+
 export const FILTER_LIMITS = Object.freeze({ leaves: 32, depth: 4, or: 16, in: 64, qualifiers: 4 } as const);
 
 export type FieldErrorCode =
@@ -20,7 +22,8 @@ export type FilterDocument =
   | { readonly not: FilterDocument }
   | { readonly type: { readonly in: readonly string[] } }
   | { readonly statement: FilterStatement }
-  | { readonly saved: string };
+  | { readonly saved: string }
+  | OwnerLeaf;
 
 export type FilterRelease = {
   types: Record<string, { bases?: readonly string[]; facets?: readonly string[] }>;
@@ -36,6 +39,9 @@ export type FilterRelease = {
   >;
   filters?: Record<string, { filter: unknown }>;
 };
+
+/** Owner-context admission checks structure, not authorization, capabilities or accepted historical pins. */
+export type FilterAdmissionOptions = { saved?: boolean; owner?: true };
 
 export type FilterValidationError = { problem: FilterProblem; pointer: string; code: FieldErrorCode };
 
@@ -187,6 +193,94 @@ function parseSaved(input: unknown, pointer: string): string {
   return input;
 }
 
+const ownerIdPattern = /^[a-z][a-z0-9_.-]{0,63}$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function ownerId(input: unknown, pointer: string): string {
+  const value = stringValue(input, pointer, false);
+  if (ownerIdPattern.exec(value)?.[0] !== value) fail(pointer, 'invalid_format');
+  return value;
+}
+
+function requiredValue(fields: object, key: string, pointer: string): unknown {
+  if (!Object.hasOwn(fields, key)) fail(pointer, 'required');
+  return ownValue(fields, key, pointer);
+}
+
+function parseOwner(input: unknown, pointer: string): OwnerLeaf {
+  const fields = record(input, pointer);
+  const keys = Object.getOwnPropertyNames(fields);
+  if (keys.length !== 1) fail(pointer, 'unsupported');
+  const family = keys[0]!;
+  const familyPointer = appendPointer(pointer, family);
+  if (family === 'presence') {
+    const value = ownValue(fields, family, familyPointer);
+    if (typeof value !== 'boolean') fail(familyPointer, 'invalid_type');
+    if (value !== true) fail(familyPointer, 'invalid_format');
+    return { owner: { presence: true } };
+  }
+  let allowed: readonly string[];
+  switch (family) {
+    case 'state':
+      allowed = ['profileId', 'stateSetId', 'in'];
+      break;
+    case 'label':
+      allowed = ['id'];
+      break;
+    case 'session':
+      allowed = ['profileId', 'lifecycle'];
+      break;
+    case 'holding':
+      allowed = ['profileId', 'kind', 'status'];
+      break;
+    default:
+      return fail(familyPointer, 'unknown_field');
+  }
+  const operands = record(ownValue(fields, family, familyPointer), familyPointer);
+  for (const key of Object.getOwnPropertyNames(operands)) {
+    if (!allowed.includes(key)) fail(appendPointer(familyPointer, key), 'unknown_field');
+  }
+  const required = (key: string) => requiredValue(operands, key, appendPointer(familyPointer, key));
+  const id = (key: string) => ownerId(required(key), appendPointer(familyPointer, key));
+  if (family === 'label') {
+    const value = stringValue(required('id'), appendPointer(familyPointer, 'id'), false);
+    if (uuidPattern.exec(value)?.[0] !== value) fail(appendPointer(familyPointer, 'id'), 'invalid_format');
+    return { owner: { label: { id: value } } };
+  }
+  const profileId = id('profileId');
+  if (family === 'state') {
+    const stateSetId = id('stateSetId');
+    const inPointer = appendPointer(familyPointer, 'in');
+    const items = array(required('in'), inPointer, FILTER_LIMITS.in);
+    const selected: string[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < items.length; index++) {
+      const itemPointer = appendPointer(inPointer, index);
+      const value = ownerId(ownValue(items, index, itemPointer), itemPointer);
+      if (seen.has(value)) fail(itemPointer, 'invalid_format');
+      seen.add(value);
+      selected.push(value);
+    }
+    return { owner: { state: { profileId, stateSetId, in: selected } } };
+  }
+  if (family === 'session') {
+    const lifecyclePointer = appendPointer(familyPointer, 'lifecycle');
+    const lifecycle = stringValue(required('lifecycle'), lifecyclePointer, false);
+    if (lifecycle !== 'active' && lifecycle !== 'completed' && lifecycle !== 'abandoned')
+      fail(lifecyclePointer, 'invalid_format');
+    return { owner: { session: { profileId, lifecycle } } };
+  }
+  return {
+    owner: {
+      holding: {
+        profileId,
+        ...(Object.hasOwn(operands, 'kind') ? { kind: id('kind') } : {}),
+        ...(Object.hasOwn(operands, 'status') ? { status: id('status') } : {}),
+      },
+    },
+  };
+}
+
 export function parseFilter(input: unknown): FilterDocument {
   let leaves = 0;
 
@@ -260,6 +354,9 @@ export function parseFilter(input: unknown): FilterDocument {
               : { property, in: selected, ...qualifierField },
         };
       }
+      case 'owner':
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return parseOwner(ownValue(fields, key, fieldPointer), fieldPointer);
       case 'saved':
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { saved: parseSaved(ownValue(fields, key, fieldPointer), fieldPointer) };
@@ -269,6 +366,18 @@ export function parseFilter(input: unknown): FilterDocument {
   }
 
   return node(input, '', 0, false);
+}
+
+/** Walk every node in source order, including NOT children. Expand saved filters through admission first. */
+export function* walkFilter(filter: FilterDocument): IterableIterator<FilterDocument> {
+  yield filter;
+  if ('and' in filter) {
+    for (const child of filter.and) yield* walkFilter(child);
+  } else if ('or' in filter) {
+    for (const child of filter.or) yield* walkFilter(child);
+  } else if ('not' in filter) {
+    yield* walkFilter(filter.not);
+  }
 }
 
 export function positiveFilter(filter: FilterDocument): boolean {
@@ -410,7 +519,7 @@ function mappedPointer(actual: string, source: string | undefined): string {
 export function admitFilter(
   filter: FilterDocument,
   release: FilterRelease,
-  options: { saved?: boolean } = {},
+  options: FilterAdmissionOptions = {},
 ): FilterDocument {
   const expansions = new Map<string, FilterDocument | null>();
   const allowSaved = options.saved !== false;
@@ -499,8 +608,6 @@ export function admitFilter(
       if (!hasOwnMapKey(typeMap, type)) reject(valuePointer, source, 'unsupported', 'unsupported_query');
     }
   }
-
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   function validateUuidValues(values: readonly string[], pointer: string, source: string | undefined): void {
     for (let index = 0; index < values.length; index++) {
@@ -634,6 +741,11 @@ export function admitFilter(
       return { type: { in: [...node.type.in] } };
     }
 
+    if ('owner' in node) {
+      if (options.owner !== true) reject(appendPointer(pointer, 'owner'), source, 'unsupported', 'unsupported_query');
+      return parseOwner(node.owner, appendPointer(pointer, 'owner'));
+    }
+
     const statement = node.statement;
     if ('in' in statement) {
       if (statement.in.length === 0 || statement.in.length > FILTER_LIMITS.in)
@@ -714,7 +826,7 @@ export function admitFilter(
 export function validateFilter(
   input: unknown,
   release: FilterRelease,
-  options?: { saved?: boolean },
+  options?: FilterAdmissionOptions,
 ): FilterValidationError[] {
   try {
     const parsed = parseFilter(input);

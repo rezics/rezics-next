@@ -62,6 +62,7 @@ export function compileFilter(
       const exact = { terms: { type: values, _name: name } };
       return relationOverflow && negated ? { bool: { must_not: [exact] } } : exact;
     }
+    if ('owner' in node) throw new Error('Catalogue filters do not support owner predicates');
     if ('saved' in node) throw new Error('Compile only admitted filters');
     const { property, qualifiers } = node.statement;
     const condition: { values: string[] } | { range: FilterRange } =

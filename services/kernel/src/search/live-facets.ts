@@ -196,6 +196,8 @@ function compare(left: string, right: string): number {
 }
 
 function collectRelationProperties(filter: FilterDocument, release: FilterRelease, properties: Set<string>): void {
+  if ('owner' in filter) throw new Error('Catalogue facets do not support owner predicates');
+  if ('saved' in filter) throw new Error('Collect only admitted, expanded filters');
   if ('and' in filter) {
     for (const child of filter.and) collectRelationProperties(child, release, properties);
   } else if ('or' in filter) {

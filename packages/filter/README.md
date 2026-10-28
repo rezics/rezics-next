@@ -14,6 +14,13 @@ Filter ::= { and: Filter[] }
          | { type: { in: Curie[] } }
          | { statement: Statement }
          | { saved: SavedFilterId }
+         | OwnerLeaf
+
+OwnerLeaf ::= { owner: { presence: true } }
+            | { owner: { state: { profileId: DataId, stateSetId: DataId, in: DataId[] } } }
+            | { owner: { label: { id: UUID } } }
+            | { owner: { session: { profileId: DataId, lifecycle: 'active' | 'completed' | 'abandoned' } } }
+            | { owner: { holding: { profileId: DataId, kind?: DataId, status?: DataId } } }
 
 Statement ::= { property: Curie, in: string[], qualifiers?: Qualifier[] }
             | { property: Curie, range: Range, qualifiers?: Qualifier[] }
@@ -41,7 +48,7 @@ are at most 96 characters. Parsing retains saved filters as leaves; admission ex
 | Values in an `in` list    |      64 |
 | Qualifiers on a statement |       4 |
 
-Each statement counts as one leaf plus one for every qualifier. Each saved filter counts as one leaf while parsing;
+Each owner predicate counts as one leaf. Each statement counts as one leaf plus one for every qualifier. Each saved filter counts as one leaf while parsing;
 admission expands it and checks the expanded document against the same limits. A `not` cannot directly contain another
 `not`.
 
@@ -62,6 +69,59 @@ a missing definition, malformed stored filter, or stored filter containing anoth
 Pass `{ saved: false }` to reject saved leaves, including for validation of release definitions that must not reference
 other saved filters. `validateFilter` combines parsing and admission and returns either no errors or the first field
 error without throwing.
+
+## Owner context and complete traversal
+
+The [owner predicate contract](../../docs/library-owner-queries.md) owns private fact meanings. `OwnerLeaf` is part
+of the same `FilterDocument` union and may occur anywhere a leaf is allowed, including below NOT and in saved
+expansions. Each owner object selects exactly one family. All operand objects are closed, with no account, route,
+client or accepting-pin selector. `DataId` uses the native released Library identifier rule: 1–64 ASCII characters,
+first `[a-z]`, remaining `[a-z0-9_.-]`, matched against the entire input. State IDs must be nonempty and distinct and
+obey the shared `in` limit. Label IDs are lowercase canonical UUID strings, with no name or global owner lookup.
+The holding's optional kind and status remain independent data operands; supplying both refers to the same holding.
+
+Actual entry point signatures are:
+
+```ts
+export type FilterAdmissionOptions = { saved?: boolean; owner?: true };
+export function parseFilter(input: unknown): FilterDocument;
+export function admitFilter(
+  filter: FilterDocument,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterDocument;
+export function validateFilter(
+  input: unknown,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterValidationError[];
+export function walkFilter(filter: FilterDocument): IterableIterator<FilterDocument>;
+```
+
+Ordinary admission rejects owner predicates with `unsupported_query`, including under NOT and after saved expansion.
+Commerce can explicitly pass `{ owner: true }` to the same admitter or validator. This permits only the structural
+owner operands; it performs no private IO, kernel/definitions calls or current profile lookup. It grants no permission
+and proves no accepted pin. Catalogue type, datatype, unit and qualifier admission still applies to every catalogue
+leaf. Search's catalogue compilers and facet admission explicitly reject owner expressions before source/engine IO.
+
+A consuming native owner plan must bind the authenticated viewer-self partition, admit CURRENT scopes/gates for every
+private family, and validate each historical accepted pin against its own immutable release. Owner state/session/
+holding queries must not reinterpret historical data using current subject type or current release. The owner
+indexed/prepared adapters, real Collection/dynamic integration, native user-case drivers, accepted-pin readers,
+immutable engine observations, privacy-reduction acknowledgement and composed cost proof remain separate runtime
+dependencies. This grammar boundary does not deliver those native outcomes or a public owner-query capability.
+
+For dependency extraction, call `walkFilter` on the actual expanded result from `admitFilter`. It yields every native
+node by identity in preorder, including nodes below NOT, without deduplication, projection, interpretation or IO.
+Statement nodes retain all same-statement qualifiers; owner nodes retain all family operands. Unexpanded saved nodes
+are yielded as references, not resolved by the walker. Never derive dependencies from only positive/matched leaves.
+Public query/name/label/alias/fallback/type/order and immutable observation dependencies belong to Source and the
+native Search planner. Private owner operands must not enter the public per-home privacy log.
+
+The entry point also retains `FILTER_LIMITS`, `FilterError`, `positiveFilter`, `relationFacetProperty`, `facetProperties`
+and the `FieldErrorCode`, `FilterProblem`, `FilterRange`, `FilterQualifier`, `FilterStatement`, `FilterDocument`,
+`FilterRelease` and `FilterValidationError` types. `OwnerLeaf` and `FilterAdmissionOptions` are the additive types;
+`walkFilter` is the additive structural traversal. There is no second Filter union or JSON schema.
 
 ## Execution admission and conformance
 
