@@ -24,10 +24,27 @@ export function readCodexSchedule(stateDirectory: string): CodexSchedule | undef
 }
 
 export function parseCodexStatus(body: string, now: number): CodexSchedule {
-  const data = (JSON.parse(body) as { data?: { scheduled_reset?: { scheduled_at?: string; at?: string } | string | null;
-    latest_reset?: { announced_at?: string } | null } }).data ?? {};
+  // The API names the announced time scheduled_for; reading only scheduled_at missed the reset announced at 02:42 UTC
+  // on 2026-10-28 for 07:00, so pacing never hurried the expiring allowance.
+  const data =
+    (
+      JSON.parse(body) as {
+        data?: {
+          scheduled_reset?:
+            | { scheduled_for?: string; scheduled_at?: string; at?: string; status?: string }
+            | string
+            | null;
+          latest_reset?: { announced_at?: string } | null;
+        };
+      }
+    ).data ?? {};
   const scheduled = data.scheduled_reset;
-  const scheduledAt = typeof scheduled === 'string' ? scheduled : (scheduled?.scheduled_at ?? scheduled?.at ?? null);
+  const scheduledAt =
+    typeof scheduled === 'string'
+      ? scheduled
+      : scheduled && (scheduled.status === undefined || scheduled.status === 'scheduled')
+        ? (scheduled.scheduled_for ?? scheduled.scheduled_at ?? scheduled.at ?? null)
+        : null;
   return {
     scheduledAt: scheduledAt && Number.isFinite(Date.parse(scheduledAt)) ? scheduledAt : null,
     latestResetAt: data.latest_reset?.announced_at ?? null,
@@ -39,7 +56,9 @@ export function parseCodexStatus(body: string, now: number): CodexSchedule {
 export function refreshCodexSchedule(stateDirectory: string, now = Date.now()): CodexSchedule | undefined {
   const current = readCodexSchedule(stateDirectory);
   if (current && now - Date.parse(current.fetchedAt) < SCHEDULE_REFRESH_MS) return current;
-  const response = spawnSync('curl', ['-sf', '-m', '15', 'https://codex-resets.com/api/v1/status'], { encoding: 'utf8' });
+  const response = spawnSync('curl', ['-sf', '-m', '15', 'https://codex-resets.com/api/v1/status'], {
+    encoding: 'utf8',
+  });
   if (response.status !== 0) return current;
   try {
     const schedule = parseCodexStatus(response.stdout, now);
@@ -103,7 +122,9 @@ export function alertUnspentAllowances(
   const seen = new Set<string>();
   let count = 0;
   // Pools sharing an allowance can keep different reserves; the one that keeps the most is the one work is limited by.
-  for (const pool of [...pools].sort((a, b) => effectiveReserve(b, longestOrEmpty(read(b)), now) - effectiveReserve(a, longestOrEmpty(read(a)), now))) {
+  for (const pool of [...pools].sort(
+    (a, b) => effectiveReserve(b, longestOrEmpty(read(b)), now) - effectiveReserve(a, longestOrEmpty(read(a)), now),
+  )) {
     if (seen.has(pool.allowanceKey)) continue;
     seen.add(pool.allowanceKey);
     const current = pace(read(pool), pool, now, schedule);
