@@ -124,6 +124,15 @@ if [ "$(/usr/local/bin/node --version 2>/dev/null || true)" != "v$node_version" 
   ln -sfn "/usr/local/lib/nodejs/node-v${node_version}-linux-${build}/bin/node" /usr/local/bin/node
 fi
 
+legacy_transpiler_caches=(
+  /root/.bun/install/cache/@t@
+  /srv/rezics-check/bun-cache/@t@
+)
+for cache in "${legacy_transpiler_caches[@]}"; do
+  rm -rf -- "$cache"
+done
+echo "removed legacy Bun runtime transpiler caches (if present): ${legacy_transpiler_caches[*]}"
+
 mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache /srv/rezics-check/browsers
 
 browsers=/srv/rezics-check/browsers

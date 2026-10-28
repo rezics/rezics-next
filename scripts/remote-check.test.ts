@@ -370,6 +370,28 @@ async function kernelCheck(
   return { code, stdout, stderr };
 }
 
+test("each remote run keeps Bun's transpiler cache inside its own run directory", async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  const work = workspace();
+
+  expect((await remote(env, work, ['true'])).code).toBe(0);
+  expect((await remote(env, work, ['true'])).code).toBe(0);
+
+  const seen = events();
+  const runDirectories = seen
+    .filter((event) => event.kind === 'rsync')
+    .map((event) => String(event.destination).match(/:(\/srv\/rezics-check\/runs\/[^/]+)\/$/)?.[1]);
+  const scripts = seen.filter((event) => event.kind === 'run').map((event) => String(event.script));
+  expect(runDirectories).toHaveLength(2);
+  expect(runDirectories[0]).not.toBe(runDirectories[1]);
+  expect(scripts).toHaveLength(2);
+
+  for (const [index, script] of scripts.entries()) {
+    const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
+    expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
+  }
+});
+
 test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally and runs them on the host with the most free capacity', async () => {
   const { env, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9 } });
   const result = await kernelCheck(env);
@@ -843,6 +865,18 @@ test('provision-check-host installs and validates the sshd limits before reloadi
   expect(sent.slice(validationStart, validationElse)).toContain('systemctl reload ssh');
   expect(sent.slice(validationElse, validationEnd)).not.toContain('systemctl reload ssh');
   expect(sent).toContain('sshd configuration validation failed; sshd was not reloaded');
+});
+
+test('provision-check-host removes and reports the old shared runtime transpiler caches', () => {
+  const fixture = provisionScenario();
+  expect(fixture.run().status).toBe(0);
+
+  const sent = readFileSync(fixture.received, 'utf8');
+  expect(sent).toContain('/root/.bun/install/cache/@t@');
+  expect(sent).toContain('/srv/rezics-check/bun-cache/@t@');
+  expect(sent).toContain('rm -rf -- "$cache"');
+  expect(sent).toContain('removed legacy Bun runtime transpiler caches (if present)');
+  expect(sent.indexOf('legacy_transpiler_caches=')).toBeLessThan(sent.indexOf('bun x "playwright@'));
 });
 
 test('provision-check-host writes the whole sshd drop-in with the penalty exemptions it is given', () => {
