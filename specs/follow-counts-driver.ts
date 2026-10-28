@@ -7,10 +7,11 @@
  * fake Access, modeled policies, in-memory counts or direct follow/projection writes.
  * Failed setup cleans up its resources; close never removes another worker's resources.
  *
- * Dispatch starts held. Captures park the REAL source observation after its source
- * client is released and before its first native target command. deliver invokes
- * that command, not comparison/count logic implemented in this driver. Captures
- * are opaque test handles to native observations, not a proposed kernel interface.
+ * Dispatch starts held. Captures park a REAL pending per-edge replacement after
+ * its source client is released and before its first native target command. deliver
+ * invokes native current-source reconciliation, then the target command: it never
+ * retargets a saved positive. Revision comparison/count logic stays in native code.
+ * Captures are opaque handles to pending native work, not a proposed kernel API.
  */
 import type { FollowRow, FollowTargetType } from '../services/kernel/src/library/follow-model.ts';
 
@@ -71,15 +72,17 @@ export interface FollowCountsDriver {
   additionalOutgoing(follower: Principal): Promise<CountTarget>;
   /** Real entry command that invokes followFromLibrary in its source transaction. */
   libraryFollow(follower: Principal, target: CountTarget): Promise<void>;
+  /** Park real pending per-edge work after source release; no driver-owned snapshot. */
   capture(follower: Principal, target: CountTarget): Promise<string>;
+  /** Reconcile current source eligibility natively before invoking the target command. */
   deliver(capture: string): Promise<void>;
   reconcile(follower: Principal, target: CountTarget): Promise<void>;
   /** Redeliver the actual terminal account-tombstoned event through its production consumer. */
   accountSignal(accountId: string): Promise<void>;
-  /** Await actual event-enqueued bounded purge, without advancing time or invoking a manual cleanup shortcut. */
+  /** Await the event-enqueued bounded Library erasure participant; no time advance/manual cleanup shortcut. */
   purge(accountId: string): Promise<{ pages: number; maxRows: number; complete: boolean }>;
   inspect(follower: Principal, target: CountTarget): Promise<CountInspection>;
-  /** Fault actual dependency/coverage readiness; never fabricate a response. */
+  /** Fault actual dependency/maintenance readiness; never fabricate a response. */
   fault(state: 'access_unavailable' | 'projection_unready' | 'clear'): Promise<void>;
   /** Native SQL/outbox/search/notification inspection, not just response filtering. */
   publicArtifacts(): Promise<{ surface: string; value: unknown }[]>;
