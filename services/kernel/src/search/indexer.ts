@@ -4,16 +4,9 @@ import type { Relay } from '../events/relays.ts';
 import { bulkLines, documentActions } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
+import { IndexWriteError } from './write-actions.ts';
 
-export class IndexWriteError extends Error {
-  readonly items: unknown[];
-
-  constructor(items: unknown[]) {
-    super('One or more search index bulk items failed');
-    this.name = 'IndexWriteError';
-    this.items = items;
-  }
-}
+export { IndexWriteError } from './write-actions.ts';
 
 type BulkResponse = { items?: Record<string, { status?: number; error?: { type?: string } }>[] };
 
