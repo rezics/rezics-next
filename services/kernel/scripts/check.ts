@@ -241,10 +241,11 @@ export function growthFailures(output: string): GrowthFailure[] | null {
       const growth = messages.find((candidate) => candidate.startsWith('GrowthBoundError:'));
       const load = messages.find(isLoadFailureMessage);
       const loadCode = messages.some((candidate) => /\bcode:\s*"(?:53300|53100|57P03)"/.test(candidate));
-      const disallowedError = messages.some((candidate) =>
-        /^error:/i.test(candidate) &&
-        !isLoadFailureMessage(candidate) &&
-        !(loadCode && !/^error:\s*(?:expect|assert)\b/i.test(candidate)),
+      const disallowedError = messages.some(
+        (candidate) =>
+          /^error:/i.test(candidate) &&
+          !isLoadFailureMessage(candidate) &&
+          !(loadCode && !/^error:\s*(?:expect|assert)\b/i.test(candidate)),
       );
       if ((!growth && !load) || disallowedError) return null;
       const kind = growth ? 'growth' : 'load';
@@ -308,7 +309,9 @@ export async function rerunGrowthFailures(
     write(`Load-sensitive tests (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
   }
   if (loadSensitiveGrowth.length > 0) {
-    write(`Load-sensitive growth checks (passed alone): ${loadSensitiveGrowth.length}\n${loadSensitiveGrowth.join('\n')}\n`);
+    write(
+      `Load-sensitive growth checks (passed alone): ${loadSensitiveGrowth.length}\n${loadSensitiveGrowth.join('\n')}\n`,
+    );
   }
   return { failed };
 }

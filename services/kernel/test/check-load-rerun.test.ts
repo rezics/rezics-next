@@ -172,10 +172,7 @@ test('a file with any other failure is not rerun', async () => {
 });
 
 test('a load-induced file that fails again alone remains failed after one rerun', async () => {
-  const again = failed(
-    'test/repeats.test.ts',
-    testFailure('query', 'error: remaining connection slots are reserved'),
-  );
+  const again = failed('test/repeats.test.ts', testFailure('query', 'error: remaining connection slots are reserved'));
   const { events, log, runner, lease, write } = fakes({ 'test/repeats.test.ts': again.error! });
   const outcome = failed(
     'test/repeats.test.ts',
@@ -185,9 +182,7 @@ test('a load-induced file that fails again alone remains failed after one rerun'
   const result = await rerunGrowthFailures([outcome], runner, lease, write);
 
   expect(result.failed).toEqual([outcome]);
-  expect(events.filter((event) => event.startsWith('run '))).toEqual([
-    'run test/repeats.test.ts held=true slot=0/1',
-  ]);
+  expect(events.filter((event) => event.startsWith('run '))).toEqual(['run test/repeats.test.ts held=true slot=0/1']);
   expect(events.filter((event) => event.startsWith('lease '))).toEqual(['lease kernel growth rerun']);
   expect(log.join('')).toContain('remaining connection slots are reserved');
   expect(log.join('')).toContain('failed again alone:');
