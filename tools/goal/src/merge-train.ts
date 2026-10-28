@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -11,17 +11,22 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import type { IntegrationTarget } from './types.ts';
 import {
   changedFiles,
   diffLineCount,
   firstFailure,
   gateRunner,
+  gateEnvironment,
   git,
   nonGeneratedFiles,
   outsideScope,
   type GateResult,
   type GateRunner,
 } from './merge.ts';
+
+import type { AffectedTestResult } from './types.ts';
+import { CHECK_HOST_TRANSPORT } from './records.ts';
 
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type IntegrationCheck = { paths: string[]; command: string[] };
@@ -31,18 +36,98 @@ const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
 
+/** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
+export function failingTestFiles(output: string): string[] {
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
+  const files = new Set<string>();
+  const add = (file: string) => files.add(file.replace(/^\.\//, ''));
+  let summarized = false;
+  for (const summary of clean.matchAll(/tests failed for (\d+) file\(s\):\r?\n([^]*?)(?=\n\s*at |$)/gi)) {
+    summarized = true;
+    files.clear(); // The final summary excludes files that passed the check's own rerun.
+    for (const line of summary[2]!.split(/\r?\n/).slice(0, Number(summary[1]))) {
+      const file = line.trim();
+      if (file) add(file);
+    }
+  }
+  if (summarized) return [...files].sort();
+  for (const match of clean.matchAll(
+    /^\s*(?:FAIL\s+([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?)|([^\s:]+\.(?:test|spec)\.[cm]?[jt]sx?):[^\n]*(?:fail|error))/gim,
+  ))
+    add((match[1] ?? match[2])!);
+  let currentFile: string | undefined;
+  for (const line of clean.split(/\r?\n/)) {
+    const heading = line.match(/^([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/);
+    if (heading) currentFile = heading[1];
+    else if (currentFile && /^\s*\(fail\)/.test(line)) add(currentFile);
+  }
+  return [...files].sort();
+}
+
+function checkTransportFailed(output: string): boolean {
+  return (
+    CHECK_HOST_TRANSPORT.test(output) ||
+    /remote-check: (?:connection to .+ failed during .+ before a result|no check host answered)/.test(output)
+  );
+}
+
+/** No wall timeout: a check waiting for a shared host slot is still queued. */
+export async function runAffectedTest(
+  command: readonly string[],
+  cwd: string,
+  logPath: string,
+  env: NodeJS.ProcessEnv,
+): Promise<AffectedTestResult> {
+  const started = Date.now();
+  let output = '';
+  let passed = false;
+  let unverified = false;
+  for (let retry = 0; retry < 2; retry++) {
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+    const result = await new Promise<{ passed: boolean; output: string }>((done) => {
+      let captured = '';
+      const child = spawn(command[0]!, command.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      const collect = (chunk: Buffer) => {
+        captured += chunk.toString();
+        appendFileSync(logPath, chunk);
+      };
+      child.stdout.on('data', collect);
+      child.stderr.on('data', collect);
+      child.once('error', (error) => done({ passed: false, output: String(error) }));
+      child.once('close', (code) => done({ passed: code === 0, output: captured }));
+    });
+    output = result.output;
+    passed = result.passed;
+    unverified = !passed && checkTransportFailed(output);
+    if (!unverified) break;
+    if (retry === 0) appendFileSync(logPath, 'Check-host transport failed; retrying once\n');
+  }
+  const status = unverified ? 'unverified' : passed ? 'passed' : 'failed';
+  const durationMs = Date.now() - started;
+  appendFileSync(logPath, `Affected test: ${status} in ${durationMs} ms\n`);
+  return {
+    command: [...command],
+    status,
+    failingFiles: passed || unverified ? [] : failingTestFiles(output),
+    durationMs,
+    output,
+  };
+}
+
 export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
   cwd: string,
   logPath: string,
-): Promise<GateResult> {
+  execute: GateRunner = gateRunner(600_000),
+): Promise<GateResult & { failedCommand?: readonly string[] }> {
   // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
-  const execute = gateRunner(600_000);
   let output = '';
   let passed = true,
     timedOut = false;
+  let failedCommand: readonly string[] | undefined;
   const record = (command: readonly string[], result: GateResult, started: number) => {
     output += result.output;
+    if (!result.passed && !failedCommand) failedCommand = [...command];
     passed &&= result.passed;
     timedOut ||= result.timedOut;
     appendFileSync(
@@ -50,7 +135,7 @@ export async function runIntegrationChecks(
       `(${command.join(' ')}: ${result.passed ? 'passed' : 'failed'} in ${Math.round((Date.now() - started) / 1000)} s)\n`,
     );
   };
-  // Every check runs: while dev fails an earlier one, a later one is still the only test of its own errors. Installing
+  // Every check runs: a later check may be the only one that exercises its own errors. Installing
   // dependencies changes the tree the others read, so it runs first and alone; the remaining checks only read the tree
   // and run at once, each into its own log section, which keeps the landing as long as its slowest check.
   // A check that installs or generates writes the tree, so those run one at a time, before and after the read-only
@@ -83,7 +168,7 @@ export async function runIntegrationChecks(
     const started = Date.now();
     record(command, await execute(command, cwd, logPath), started);
   }
-  return { passed, output, timedOut };
+  return { passed, output, timedOut, ...(failedCommand ? { failedCommand } : {}) };
 }
 
 // While dev already fails a check, a branch is still refused for error lines that dev does not have. Source
@@ -173,7 +258,10 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
   }
 }
 
-function taskIntegrationTarget(stateDirectory: string, taskId: string): { target?: string; manager?: string } {
+function taskIntegrationTarget(
+  stateDirectory: string,
+  taskId: string,
+): { target?: string; manager?: string; goal?: string; base?: string } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
@@ -181,14 +269,39 @@ function taskIntegrationTarget(stateDirectory: string, taskId: string): { target
   try {
     const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
     if (!row) return {};
-    const brief = (JSON.parse(row.body) as { brief?: { target?: string; manager?: string } }).brief;
+    const task = JSON.parse(row.body) as {
+      base?: unknown;
+      brief?: { target?: unknown; manager?: unknown; goal?: unknown };
+    };
+    const brief = task.brief;
     return {
-      ...(brief?.target ? { target: brief.target } : {}),
-      ...(brief?.manager ? { manager: brief.manager } : {}),
+      ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
+      ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
+      ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
+      ...(typeof task.base === 'string' ? { base: task.base } : {}),
     };
   } finally {
     db.close();
   }
+}
+
+const CONTROL_PLANE_PATH = 'tools/goal/';
+const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
+  ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
+  ['bun', 'test', 'tools/goal/src'],
+];
+
+function isAncestor(cwd: string, ancestor: string, descendant: string): boolean {
+  return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
+}
+
+function changedPathsBetween(cwd: string, base: string, head: string): string[] {
+  const changed = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  if (changed.status !== 0) throw new Error(changed.stderr.trim() || 'Cannot read task changes');
+  return changed.stdout.split('\0').filter(Boolean);
 }
 
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
@@ -345,6 +458,8 @@ export type TrainOptions = {
   formatCommand?: string[];
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
+  /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
+  integration?: { batchSize?: number };
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -368,6 +483,20 @@ export type TrainOptions = {
   beforePromotionAdvance?: () => void;
 };
 
+type PreparedLanding = {
+  entry: LandingEntry;
+  result: GateOutcome;
+  base: string;
+  candidate: string;
+  commits: string[];
+  started: number;
+};
+type BatchLandingResult = {
+  outcomes: { entry: LandingEntry; outcome: GateOutcome }[];
+  deferredIds: number[];
+  skippedIds: number[];
+};
+
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
@@ -389,6 +518,7 @@ export class MergeTrain {
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
     let acquired = false;
+    const retryDeferred = new Set<number>();
     for (;;) {
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
@@ -401,6 +531,8 @@ export class MergeTrain {
         throw error;
       }
       acquired = true;
+      const roundHead = this.integrationHead();
+      const deferred = new Set<number>();
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
           await o.handOff?.();
@@ -411,17 +543,69 @@ export class MergeTrain {
             await o.handOff?.();
             return;
           }
-          const entry = o.queue.next();
+          const entry = o.queue.nextBatch(1, [...deferred])[0];
           if (!entry) break;
           try {
-            const outcome = entry.outcome ?? (await this.integrate(entry));
-            if (!entry.outcome) o.queue.finish(entry.id, outcome);
-            // Sink delivery is at least once; obsolete entries must never block the current attempt.
-            o.sink.onGateOutcome(outcome);
-            o.queue.acknowledge(entry.id);
+            if (entry.outcome) {
+              o.sink.onGateOutcome(entry.outcome);
+              o.queue.acknowledge(entry.id);
+              retryDeferred.delete(entry.id);
+              continue;
+            }
+            o.fence.assertCurrent(entry.request);
+            const batchSize = o.integration?.batchSize ?? 1;
+            const selected = o.queue.nextBatch(batchSize, [...deferred]);
+            const batch: LandingEntry[] = [];
+            for (const candidate of selected) {
+              if (candidate.outcome || !this.canBatch(candidate)) break;
+              try {
+                o.fence.assertCurrent(candidate.request);
+              } catch (error) {
+                if (!(error instanceof StaleAttemptError)) throw error;
+                o.queue.acknowledge(candidate.id);
+                retryDeferred.delete(candidate.id);
+                continue;
+              }
+              batch.push(candidate);
+            }
+            if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
+              const integrated = await this.integrateBatch(batch);
+              for (const id of integrated.skippedIds) {
+                o.queue.acknowledge(id);
+                retryDeferred.delete(id);
+              }
+              for (const id of integrated.deferredIds) {
+                deferred.add(id);
+                retryDeferred.add(id);
+              }
+              for (const { entry: member, outcome } of integrated.outcomes) {
+                try {
+                  o.queue.finish(member.id, outcome);
+                  o.sink.onGateOutcome(outcome);
+                  o.queue.acknowledge(member.id);
+                  retryDeferred.delete(member.id);
+                } catch (error) {
+                  if (!(error instanceof StaleAttemptError)) throw error;
+                  o.queue.acknowledge(member.id);
+                  retryDeferred.delete(member.id);
+                }
+              }
+            } else {
+              const outcome = await this.integrate(entry);
+              if (retryDeferred.has(entry.id) && outcome.stage === 'rebase' && outcome.conflictedFiles?.length) {
+                deferred.add(entry.id);
+                continue;
+              }
+              o.queue.finish(entry.id, outcome);
+              // Sink delivery is at least once; obsolete entries must never block the current attempt.
+              o.sink.onGateOutcome(outcome);
+              o.queue.acknowledge(entry.id);
+              retryDeferred.delete(entry.id);
+            }
           } catch (error) {
             if (!(error instanceof StaleAttemptError)) throw error;
             o.queue.acknowledge(entry.id);
+            retryDeferred.delete(entry.id);
           }
         }
         await o.beforeRelease?.();
@@ -434,7 +618,14 @@ export class MergeTrain {
         return;
       }
       // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
-      if (o.queue.next()) continue;
+      if (o.queue.nextBatch(1, [...deferred]).length) continue;
+      if (o.queue.next()) {
+        if (deferred.size) {
+          if (roundHead !== this.integrationHead()) continue;
+          return;
+        }
+        continue;
+      }
       await o.promote?.();
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
         await o.handOff?.();
@@ -444,18 +635,512 @@ export class MergeTrain {
     }
   }
 
+  private integrationHead(): string | undefined {
+    const branch = this.options.integrationBranch;
+    if (!branch) return undefined;
+    try {
+      return git(this.options.mainCheckout, 'rev-parse', `refs/heads/${branch}`);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private canBatch(entry: LandingEntry): boolean {
+    const o = this.options;
+    if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
+    if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
+    const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
+    return recorded.target !== 'stabilize' && recorded.goal !== 'control-plane';
+  }
+
+  private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
+    const o = this.options;
+    const outcomes = new Map<number, GateOutcome>();
+    const deferred = new Set<number>();
+    const skipped = new Set<number>();
+    let pending = [...entries];
+    const mainBranch = o.mainBranch ?? 'main';
+    const branch = o.integrationBranch!;
+    const targetRef = `refs/heads/${branch}`;
+    const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
+    const planner = o.fence as AttemptFence & {
+      planIntegration?: (ref: AttemptRef, base: string, commit: string, commits: readonly string[]) => void;
+    };
+
+    const createResult = (entry: LandingEntry, logPath: string): GateOutcome => ({
+      taskId: entry.request.taskId,
+      attempt: entry.request.attempt,
+      passed: false,
+      stage: 'setup',
+      logPath,
+      hostMs: 0,
+      changedFiles: [],
+      diffLines: 0,
+    });
+    const resetTo = (tree: string, commit: string) => {
+      try {
+        git(tree, 'rebase', '--abort');
+      } catch {}
+      git(tree, 'reset', '--hard', commit);
+      git(tree, 'clean', '-fdx');
+    };
+    const orderedOutcomes = () =>
+      entries.flatMap((entry) => {
+        const outcome = outcomes.get(entry.id);
+        return outcome ? [{ entry, outcome }] : [];
+      });
+
+    while (pending.length) {
+      const trainTree = resolve(o.worktreeRoot, `train-batch-${randomUUID()}`);
+      const logPaths = new Map<number, string>();
+      const memberStarted = new Map<number, number>();
+      const prepared: PreparedLanding[] = [];
+      const localOutcomes = new Map<number, GateOutcome>();
+      let base = '';
+      let previous = '';
+      let added = false;
+      let retry = false;
+      let committed = false;
+      let stale: LandingEntry | undefined;
+      try {
+        for (const entry of pending) {
+          const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
+          logPaths.set(entry.id, logPath);
+          memberStarted.set(entry.id, Date.now());
+          writeFileSync(logPath, '');
+        }
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+          throw new Error('The main checkout must already have main checked out');
+        base = target();
+        previous = base;
+        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
+        git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, base);
+        added = true;
+
+        for (const entry of pending) {
+          const request = entry.request;
+          const logPath = logPaths.get(entry.id)!;
+          const result = createResult(entry, logPath);
+          try {
+            o.fence.assertCurrent(request);
+          } catch (error) {
+            if (!(error instanceof StaleAttemptError)) throw error;
+            stale = entry;
+            break;
+          }
+          const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+          const originalBase = git(o.mainCheckout, 'merge-base', tip, base);
+          const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
+          git(trainTree, 'reset', '--hard', tip);
+          git(trainTree, 'clean', '-fdx');
+          const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
+          const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
+          const worked =
+            changedFrozenFiles(trainTree, frozenAtStart).length > 0 ||
+            git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
+              .split('\n')
+              .some((path) => path && !frozenPaths.has(path));
+          if (!worked) {
+            result.stage = 'rebase';
+            result.firstFailure = firstFailure(
+              'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
+            );
+            appendFileSync(logPath, `${result.firstFailure.assertion}\n`);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          try {
+            rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
+          } catch (error) {
+            const conflicts = unmergedFiles(trainTree);
+            if (conflicts.length) {
+              appendFileSync(
+                logPath,
+                `Deferred until a later batch round; rebase conflicts: ${conflicts.join(', ')}\n`,
+              );
+              deferred.add(entry.id);
+            } else {
+              result.stage = 'rebase';
+              result.firstFailure = firstFailure(String(error));
+              appendFileSync(logPath, `${String(error)}\n`);
+              localOutcomes.set(entry.id, result);
+            }
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
+          const changedFrozen = changedFrozenFiles(trainTree, frozen);
+          if (changedFrozen.length) {
+            result.stage = 'rebase';
+            result.conflictedFiles = changedFrozen;
+            result.firstFailure = firstFailure(`Frozen acceptance file changed: ${changedFrozen.join(', ')}`);
+            appendFileSync(logPath, `Frozen acceptance files changed: ${changedFrozen.join(', ')}\n`);
+            const mutable = o.fence as AttemptFence & {
+              updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown;
+            };
+            mutable.updateAttempt?.(request, (attempt) => {
+              attempt.escalation = 'rebase-conflict';
+            });
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          result.stage = 'scope';
+          result.changedFiles = changedFiles(trainTree, previous);
+          result.diffLines = diffLineCount(trainTree, previous);
+          result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+          result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
+          try {
+            this.checkScope(
+              result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+              request,
+              logPath,
+            );
+          } catch (error) {
+            result.firstFailure = firstFailure(String(error));
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+
+          const formatCommand = o.formatCommand ?? [
+            resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
+            ...FORMAT_FLAGS,
+          ];
+          const formatFiles = result.changedFiles.filter((path) => existsSync(join(trainTree, path)));
+          const formatterAvailable =
+            !formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!);
+          if (formatFiles.length && formatterAvailable) {
+            const formatted = spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...formatFiles], {
+              cwd: trainTree,
+              encoding: 'utf8',
+            });
+            const output = `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`;
+            appendFileSync(logPath, `$ ${[...formatCommand, ...formatFiles].join(' ')} (cwd: ${trainTree})\n${output}`);
+            if (formatted.status !== 0) {
+              result.stage = 'setup';
+              result.firstFailure = firstFailure(
+                `Formatter failed: ${output || formatted.error?.message || 'command failed'}`,
+              );
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+            if (spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
+              git(trainTree, 'add', '--', ...formatFiles);
+              git(trainTree, 'commit', '-m', `style: format ${request.taskId}`);
+            }
+            result.changedFiles = changedFiles(trainTree, previous);
+            result.diffLines = diffLineCount(trainTree, previous);
+            result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+            result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
+            try {
+              this.checkScope(
+                result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+                request,
+                logPath,
+              );
+            } catch (error) {
+              result.stage = 'scope';
+              result.firstFailure = firstFailure(String(error));
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+          }
+
+          const candidate = git(trainTree, 'rev-parse', 'HEAD');
+          const commits = git(trainTree, 'rev-list', '--reverse', `${previous}..${candidate}`)
+            .split('\n')
+            .filter(Boolean);
+          prepared.push({ entry, result, base: previous, candidate, commits, started: memberStarted.get(entry.id)! });
+          previous = candidate;
+        }
+
+        if (stale) {
+          skipped.add(stale.id);
+          pending = pending.filter((entry) => entry.id !== stale!.id);
+          retry = true;
+          continue;
+        }
+        if (target() !== base) {
+          retry = true;
+          continue;
+        }
+        if (!prepared.length) {
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          for (const outcome of localOutcomes.values()) {
+            try {
+              o.fence.assertCurrent(outcome);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              const staleEntry = pending.find((entry) => entry.request.taskId === error.ref.taskId);
+              if (staleEntry) {
+                skipped.add(staleEntry.id);
+                pending = pending.filter((entry) => entry.id !== staleEntry.id);
+                retry = true;
+                break;
+              }
+              throw error;
+            }
+          }
+          if (retry) continue;
+          for (const [id, outcome] of localOutcomes) {
+            outcome.hostMs = Date.now() - memberStarted.get(id)!;
+            outcomes.set(id, outcome);
+          }
+          for (const id of deferred) outcomes.delete(id);
+          return {
+            outcomes: orderedOutcomes(),
+            deferredIds: [...deferred],
+            skippedIds: [...skipped],
+          };
+        }
+
+        const configuredChecks =
+          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
+        const changed = [...new Set(prepared.flatMap((member) => member.result.changedFiles))].sort();
+        const integrationChecks = configuredChecks.filter((check) =>
+          changed.some((path) => matchesPath(path, check.paths)),
+        );
+        let failedBatch: { output: string; timedOut: boolean; failedCommand?: readonly string[] } | undefined;
+        let batchBaselineOutput = '';
+        if (integrationChecks.length) {
+          const commands = integrationChecks.map((check) =>
+            check.command.join(' ').includes('scripts/typecheck.ts')
+              ? ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, ...check.command]
+              : check.command,
+          );
+          const candidate = prepared[prepared.length - 1]!.candidate;
+          for (const member of prepared)
+            appendFileSync(member.result.logPath, `\nBatch integration check on ${candidate}, dev ${base}\n`);
+          const batchLog = logPaths.get(prepared[0]!.entry.id)!;
+          const checked = await runIntegrationChecks(commands, trainTree, batchLog);
+          for (const member of prepared)
+            appendFileSync(
+              member.result.logPath,
+              `Batch integration check ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
+            );
+          let staleAfterGate: LandingEntry | undefined;
+          for (const member of pending) {
+            try {
+              o.fence.assertCurrent(member.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleAfterGate = member;
+              break;
+            }
+          }
+          if (staleAfterGate) {
+            skipped.add(staleAfterGate.id);
+            pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (!checked.passed) {
+            const scoped = commands.some((command) => command[0] === 'env');
+            const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed.join('\n')).toString(16)}` : ''}`;
+            let baseline = o.queue.baseline(base, key);
+            o.queue.saveBaseline(candidate, key, checked);
+            if (!baseline) {
+              resetTo(trainTree, base);
+              const baselineLog = logPaths.get(prepared[0]!.entry.id)!;
+              appendFileSync(baselineLog, `\nIntegration check baseline on dev ${base}\n`);
+              baseline = await runIntegrationChecks(commands, trainTree, baselineLog);
+              o.queue.saveBaseline(base, key, baseline);
+              batchBaselineOutput = baseline.output;
+            }
+            for (const member of pending) {
+              try {
+                o.fence.assertCurrent(member.request);
+              } catch (error) {
+                if (!(error instanceof StaleAttemptError)) throw error;
+                staleAfterGate = member;
+                break;
+              }
+            }
+            if (staleAfterGate) {
+              skipped.add(staleAfterGate.id);
+              pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
+              retry = true;
+              continue;
+            }
+            if (target() !== base) {
+              retry = true;
+              continue;
+            }
+            const addedErrors = baseline.passed
+              ? ['candidate failed while dev passed']
+              : newErrorLines(checked.output, baseline.output);
+            if (addedErrors.length) failedBatch = checked;
+            else
+              for (const member of prepared)
+                appendFileSync(
+                  member.result.logPath,
+                  'dev already fails the integration check, with the same errors\n',
+                );
+          }
+        }
+
+        if (failedBatch) {
+          const note = `Batch integration check failed; falling back to single landings.\n${failedBatch.output}\n`;
+          let savedBaseline = false;
+          for (const entry of pending) {
+            if (deferred.has(entry.id)) continue;
+            try {
+              const outcome = await this.integrate(entry);
+              appendFileSync(
+                outcome.logPath,
+                `${note}${!savedBaseline && batchBaselineOutput ? `Batch baseline on dev ${base}:\n${batchBaselineOutput}\n` : ''}`,
+              );
+              savedBaseline ||= Boolean(batchBaselineOutput);
+              if (outcome.stage === 'rebase' && outcome.conflictedFiles?.length) deferred.add(entry.id);
+              else outcomes.set(entry.id, outcome);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              skipped.add(entry.id);
+            }
+          }
+          return {
+            outcomes: orderedOutcomes(),
+            deferredIds: [...deferred],
+            skippedIds: [...skipped],
+          };
+        }
+
+        for (const member of prepared) {
+          planner.planIntegration?.(member.entry.request, member.base, member.candidate, member.commits);
+          o.queue.candidate(member.entry.id, member.candidate);
+        }
+        if (target() !== base) {
+          retry = true;
+          continue;
+        }
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+          throw new Error('Main checkout HEAD changed while integrating');
+        const commitBatchMerge = o.fence.commitBatchMerge;
+        if (!commitBatchMerge) throw new Error('Attempt fence does not support atomic batch landing');
+        const head = prepared[prepared.length - 1]!.candidate;
+        const advanced = commitBatchMerge.call(
+          o.fence,
+          prepared.map((member) => ({ ...member.entry.request, commit: member.candidate })),
+          () => {
+            if (target() !== base) return '';
+            if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
+              throw new Error('Main checkout HEAD changed');
+            o.beforeIntegrationAdvance?.();
+            try {
+              git(o.mainCheckout, 'update-ref', targetRef, head, base);
+            } catch (error) {
+              if (target() !== base) return '';
+              throw error;
+            }
+            return head;
+          },
+        );
+        if (!advanced) {
+          retry = true;
+          continue;
+        }
+        committed = true;
+        for (const [id, outcome] of localOutcomes) {
+          outcome.hostMs = Date.now() - memberStarted.get(id)!;
+          outcomes.set(id, outcome);
+        }
+        for (const member of prepared) {
+          member.result.passed = true;
+          member.result.stage = 'merge';
+          member.result.mergedCommit = member.candidate;
+          member.result.hostMs = Date.now() - member.started;
+          this.notifyOwnersOfOutsideChanges(
+            member.entry.request,
+            outsideScope(
+              (member.result.changedFiles ?? []).filter(
+                (path) => !derivedForPath(path, o.derivedFiles ?? defaultDerivedFiles).length,
+              ),
+              member.entry.request.declaredPaths,
+            ),
+            member.candidate,
+            branch,
+            member.result.logPath,
+          );
+          outcomes.set(member.entry.id, member.result);
+        }
+        for (const id of deferred) outcomes.delete(id);
+        return {
+          outcomes: orderedOutcomes(),
+          deferredIds: [...deferred],
+          skippedIds: [...skipped],
+        };
+      } catch (error) {
+        if (committed) throw error;
+        if (error instanceof StaleAttemptError) {
+          const staleEntry = pending.find(
+            (entry) => entry.request.taskId === error.ref.taskId && entry.request.attempt === error.ref.attempt,
+          );
+          if (!staleEntry) throw error;
+          skipped.add(staleEntry.id);
+          pending = pending.filter((entry) => entry.id !== staleEntry.id);
+          retry = true;
+        } else {
+          const message = String(error);
+          for (const entry of pending) {
+            const logPath = logPaths.get(entry.id)!;
+            appendFileSync(logPath, `${message}\n`);
+            const result = createResult(entry, logPath);
+            result.stage = 'setup';
+            result.firstFailure = firstFailure(message);
+            result.hostMs = Date.now() - memberStarted.get(entry.id)!;
+            outcomes.set(entry.id, result);
+          }
+          for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+          return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
+        }
+      } finally {
+        if (added) {
+          try {
+            git(trainTree, 'rebase', '--abort');
+          } catch {}
+          try {
+            git(trainTree, 'merge', '--abort');
+          } catch {}
+          git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+        }
+      }
+      if (retry) continue;
+    }
+    return { outcomes: orderedOutcomes(), deferredIds: [...deferred], skippedIds: [...skipped] };
+  }
+
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {
     const o = this.options;
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
-    const stabilize = recorded.target === 'stabilize';
-    const targetBranch = stabilize
-      ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')
-      : (o.integrationBranch ?? mainBranch);
+    let integrationTarget: IntegrationTarget =
+      recorded.target === 'stabilize' ? 'stabilize' : o.integrationBranch !== undefined ? 'integration' : 'main';
+    let targetBranch =
+      integrationTarget === 'stabilize'
+        ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')
+        : integrationTarget === 'integration'
+          ? o.integrationBranch!
+          : mainBranch;
+    let targetRef = `refs/heads/${targetBranch}`;
+    let controlPlane = false;
+    let stabilize = integrationTarget === 'stabilize';
     // A stabilize task uses the same rebase, check and compare-and-swap path, aimed at the stabilize branch.
-    const integratesIntoDev = stabilize || o.integrationBranch !== undefined;
-    const targetRef = `refs/heads/${targetBranch}`;
+    let integratesIntoDev = integrationTarget !== 'main';
     const started = Date.now();
     const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
     writeFileSync(logPath, '');
@@ -473,32 +1158,46 @@ export class MergeTrain {
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
     const runGate = o.runGate ?? gateRunner();
+    const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
+    const recoverAlreadyIntegrated = (): boolean => {
+      if (!entry.candidate) return false;
+      try {
+        git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
+      } catch {
+        return false;
+      }
+      result.passed = true;
+      result.stage = 'merge';
+      result.mergedCommit = entry.candidate;
+      if (controlPlane) this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      else if (stabilize) {
+        mkdirSync(resolve(o.worktreeRoot), { recursive: true });
+        git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
+        added = true;
+        this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+      }
+      return true;
+    };
     try {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
-      // Recover an advance that committed before its outcome was saved.
-      let alreadyIntegrated = false;
-      if (entry.candidate) {
-        try {
-          git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
-          alreadyIntegrated = true;
-        } catch {}
-      }
-      if (alreadyIntegrated && entry.candidate) {
-        result.passed = true;
-        result.stage = 'merge';
-        result.mergedCommit = entry.candidate;
-        if (stabilize) {
-          mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-          git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
-          added = true;
-          this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
-        }
-        return result;
-      }
+      if (recoverAlreadyIntegrated()) return result;
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      // Use the task's recorded base so unrelated changes on its original integration branch do not affect routing.
+      if (recorded.goal === 'control-plane' && recorded.base && isAncestor(o.mainCheckout, recorded.base, tip)) {
+        const taskChanges = changedPathsBetween(o.mainCheckout, recorded.base, tip);
+        controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+      }
+      if (controlPlane) {
+        integrationTarget = 'main';
+        targetBranch = mainBranch;
+        targetRef = `refs/heads/${targetBranch}`;
+        stabilize = false;
+        integratesIntoDev = false;
+      }
+      // Recover an advance that committed before its outcome was saved.
+      if (recoverAlreadyIntegrated()) return result;
       const originalBase = git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
@@ -508,6 +1207,7 @@ export class MergeTrain {
         delete result.firstFailure;
         delete result.failsOnMain;
         delete result.timedOut;
+        delete result.failedCommand;
         const base = target();
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
@@ -551,7 +1251,7 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
         this.checkScope(scopeCheckedFiles, request, logPath);
-        if (integratesIntoDev) {
+        if (integratesIntoDev || controlPlane) {
           const formatCommand = o.formatCommand ?? [
             resolve(o.mainCheckout, 'node_modules/.bin/oxfmt'),
             ...FORMAT_FLAGS,
@@ -586,12 +1286,98 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        const affectedFailures: string[] = [];
+        for (const checked of request.affectedTests ?? []) {
+          if (checked.status === 'unverified') {
+            appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
+            continue;
+          }
+          if (checked.status === 'passed') continue;
+          stage = 'gate';
+          const key = `affected-test:${JSON.stringify(checked.command)}`;
+          let baseline = o.queue.baseline(base, key);
+          if (!baseline) {
+            // A base compared with itself selects no affected tests. Run the same command without that selection;
+            // its full result covers every failed file and can be reused by other attempts on this base.
+            const baselineTree = resolve(o.worktreeRoot, `affected-base-${randomUUID()}`);
+            git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+            try {
+              appendFileSync(logPath, `Affected test baseline on ${base}: ${checked.command.join(' ')}\n`);
+              const environment = {
+                ...gateEnvironment(process.env, o.stateDirectory),
+                KERNEL_CHECK_AFFECTED: '',
+                KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
+              };
+              // As with promotion's narrowed gates, a fresh local worktree needs its installed tools.
+              if (existsSync(join(baselineTree, 'package.json'))) {
+                const installed = await runAffectedTest(
+                  ['bun', 'install', '--frozen-lockfile'],
+                  baselineTree,
+                  logPath,
+                  environment,
+                );
+                if (installed.status !== 'passed')
+                  throw new Error(`Affected-test baseline install failed: ${installed.output}`);
+              }
+              const measured = await runAffectedTest(checked.command, baselineTree, logPath, environment);
+              if (measured.status === 'unverified') {
+                appendFileSync(logPath, 'Affected test baseline unverified (landing allowed)\n');
+                continue;
+              }
+              baseline = { passed: measured.status === 'passed', output: measured.output, timedOut: false };
+              o.queue.saveBaseline(base, key, baseline);
+            } finally {
+              git(o.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+            }
+          }
+          o.fence.assertCurrent(request);
+          if (target() !== base) break;
+          const baseFiles = new Set(failingTestFiles(baseline.output));
+          const added = checked.failingFiles.filter((file) => baseline.passed || !baseFiles.has(file));
+          // A compiler or setup error may stop the check before the test runner reports any files.
+          const errors = checked.failingFiles.length ? [] : newErrorLines(checked.output, baseline.output);
+          if (added.length || errors.length || (!checked.failingFiles.length && baseline.passed)) {
+            affectedFailures.push(...(added.length ? added : errors.length ? errors : [checked.output]));
+            result.failedCommand ??= [...checked.command];
+          } else appendFileSync(logPath, 'Base already shares the affected-test failures\n');
+        }
+        o.fence.assertCurrent(request);
+        if (target() !== base) continue;
+        if (affectedFailures.length) {
+          const report = `Affected tests introduced failures:\n${[...new Set(affectedFailures)].join('\n')}`;
+          appendFileSync(logPath, `${report}\n`);
+          result.firstFailure = {
+            ...firstFailure(report),
+            assertion: report,
+            fingerprint: createHash('sha256').update(report).digest('hex'),
+          };
+          result.failsOnMain = false;
+          result.stage = 'gate';
+          return result;
+        }
+        if (controlPlane) {
+          stage = 'gate';
+          appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
+          const checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (!checked.passed) {
+            result.timedOut = checked.timedOut;
+            result.firstFailure = firstFailure(checked.output);
+            if (checked.failedCommand) result.failedCommand = [...checked.failedCommand];
+            result.stage = stage;
+            return result;
+          }
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate)
+            throw new Error('Control-plane checks changed the candidate commit');
+          git(trainTree, 'diff', '--quiet', 'HEAD', '--');
+        }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const integrationChecks = configuredChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
-        if (integratesIntoDev && integrationChecks.length) {
+        if (!controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
           // The workspace typecheck covers only the workspaces this change can affect (scripts/typecheck.ts reads
@@ -612,6 +1398,7 @@ export class MergeTrain {
           if (!checked.passed) {
             result.timedOut = checked.timedOut;
             result.firstFailure = firstFailure(checked.output);
+            if (checked.failedCommand) result.failedCommand = [...checked.failedCommand];
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
               git(trainTree, 'reset', '--hard', base);
@@ -623,6 +1410,7 @@ export class MergeTrain {
             o.fence.assertCurrent(request);
             if (target() !== base) continue;
             if (baseline.passed) {
+              result.failsOnMain = false;
               result.stage = stage;
               return result;
             }
@@ -631,13 +1419,14 @@ export class MergeTrain {
               const report = `Errors that dev ${base} does not have:\n${added.join('\n')}`;
               appendFileSync(logPath, `${report}\n`);
               result.firstFailure = firstFailure(report);
+              result.failsOnMain = false;
               result.stage = stage;
               return result;
             }
             appendFileSync(logPath, 'dev already fails the integration check, with the same errors\n');
           }
         }
-        if (!integratesIntoDev) {
+        if (!integratesIntoDev && !controlPlane) {
           stage = 'gate';
           appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
           const gated = await runGate(request.gate, trainTree, logPath);
@@ -647,6 +1436,7 @@ export class MergeTrain {
           if (!gated.passed) {
             result.timedOut = gated.timedOut;
             result.firstFailure = firstFailure(gated.output);
+            result.failedCommand = [...request.gate];
             const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
@@ -683,7 +1473,7 @@ export class MergeTrain {
           if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
             throw new Error('Main checkout HEAD changed');
-          if (integratesIntoDev) {
+          if (integratesIntoDev || controlPlane) {
             o.beforeIntegrationAdvance?.();
             try {
               git(o.mainCheckout, 'update-ref', targetRef, candidate, base);
@@ -709,7 +1499,8 @@ export class MergeTrain {
           targetBranch,
           logPath,
         );
-        if (stabilize)
+        if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
+        else if (stabilize)
           this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return result;
       }
@@ -732,6 +1523,161 @@ export class MergeTrain {
         } catch {}
         git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
       }
+    }
+  }
+
+  /** Publish a checked control-plane commit through the candidate branches without moving a ref past its current head. */
+  private propagateControlPlaneCommit(
+    mainCommit: string,
+    taskId: string,
+    managerId: string | undefined,
+    logPath: string,
+  ): void {
+    const mainBranch = this.options.mainBranch ?? 'main';
+    const stabilizeBranch =
+      this.options.stabilizeBranch ?? localBranchSettings(this.options.mainCheckout).stabilizeBranch ?? 'stabilize';
+    const devBranch = this.options.integrationBranch ?? 'dev';
+    if (!this.commitIsAncestor(mainCommit, mainBranch)) {
+      appendFileSync(
+        logPath,
+        `Cannot propagate control-plane commit ${mainCommit}: it is no longer on ${mainBranch}.\n`,
+      );
+      return;
+    }
+
+    const stableRef = `refs/heads/${stabilizeBranch}`;
+    const stableHead = spawnSync('git', ['rev-parse', '--verify', stableRef], {
+      cwd: this.options.mainCheckout,
+      encoding: 'utf8',
+    });
+    let devSource = mainCommit;
+    let sourceBranch = mainBranch;
+    if (stableHead.status === 0) {
+      const merged = this.mergeCommitIntoBranch(mainCommit, mainBranch, stabilizeBranch, logPath);
+      if (merged.conflicts) {
+        this.notifyControlPlaneConflict(taskId, managerId, mainBranch, mainCommit, stabilizeBranch, merged.conflicts);
+        return;
+      }
+      if (merged.error) {
+        appendFileSync(logPath, `Cannot merge ${mainBranch} into ${stabilizeBranch}: ${merged.error}\n`);
+        return;
+      }
+      if (!merged.commit) return;
+      devSource = merged.commit;
+      sourceBranch = stabilizeBranch;
+    } else
+      appendFileSync(
+        logPath,
+        `No ${stabilizeBranch} branch exists; merging ${mainBranch} directly into ${devBranch}.\n`,
+      );
+
+    const merged = this.mergeCommitIntoBranch(devSource, sourceBranch, devBranch, logPath);
+    if (merged.conflicts) {
+      this.notifyControlPlaneConflict(taskId, managerId, sourceBranch, devSource, devBranch, merged.conflicts);
+      return;
+    }
+    if (merged.error) appendFileSync(logPath, `Cannot merge ${sourceBranch} into ${devBranch}: ${merged.error}\n`);
+  }
+
+  /** Build a non-fast-forward merge away from the checkout, then compare-and-swap the target ref. */
+  private mergeCommitIntoBranch(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    logPath: string,
+  ): { commit?: string; conflicts?: string[]; error?: string } {
+    const checkout = this.options.mainCheckout;
+    const targetRef = `refs/heads/${targetBranch}`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const targetResult = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+        cwd: checkout,
+        encoding: 'utf8',
+      });
+      if (targetResult.status !== 0)
+        return { error: `branch ${targetBranch} does not exist: ${targetResult.stderr.trim() || 'missing ref'}` };
+      const targetHead = targetResult.stdout.trim();
+      if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
+
+      const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
+      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+      try {
+        git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
+        const merged = spawnSync(
+          'git',
+          ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
+          { cwd: tree, encoding: 'utf8' },
+        );
+        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}`;
+        if (merged.status !== 0) {
+          const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+          try {
+            git(tree, 'merge', '--abort');
+          } catch {}
+          appendFileSync(
+            logPath,
+            `Merge ${sourceBranch} ${sourceCommit} into ${targetBranch} aborted${conflicts.length ? ` on ${conflicts.join(', ')}` : ''}: ${output}\n`,
+          );
+          return conflicts.length ? { conflicts } : { error: output.trim() || 'merge failed without conflict paths' };
+        }
+
+        const commit = git(tree, 'rev-parse', 'HEAD');
+        this.options.beforePromotionAdvance?.();
+        try {
+          git(checkout, 'update-ref', targetRef, commit, targetHead);
+          return { commit };
+        } catch (error) {
+          const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+            cwd: checkout,
+            encoding: 'utf8',
+          });
+          if (current.status === 0 && current.stdout.trim() !== targetHead) {
+            appendFileSync(logPath, `${targetBranch} moved during merge; retrying against ${current.stdout.trim()}.\n`);
+            continue;
+          }
+          return { error: String(error) };
+        }
+      } catch (error) {
+        return { error: String(error) };
+      } finally {
+        try {
+          git(checkout, 'worktree', 'remove', '--force', tree);
+        } catch {}
+      }
+    }
+    return { error: `${targetBranch} moved during all five merge attempts` };
+  }
+
+  private notifyControlPlaneConflict(
+    taskId: string,
+    managerId: string | undefined,
+    sourceBranch: string,
+    sourceCommit: string,
+    targetBranch: string,
+    files: readonly string[],
+  ): void {
+    const summary =
+      `Task ${taskId} ${sourceBranch} ${sourceCommit} conflicts with ${targetBranch}: ${files.join(', ')}. ${targetBranch} was left unchanged.`.replace(
+        /[\r\n]+/g,
+        ' ',
+      );
+    const supermanager =
+      this.options.supermanager ??
+      localBranchSettings(this.options.mainCheckout).supermanager ??
+      defaults.integration.supermanager;
+    const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      const inbox = new SqliteManagerInbox(
+        db,
+        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+      );
+      for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
+    } finally {
+      owned?.close();
     }
   }
 

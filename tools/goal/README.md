@@ -32,6 +32,41 @@ Failures return to the same profile, trigger one consultation, or reach the owni
 Each process records the Git object id for `main:tools/goal` when it starts. A stale train hands its queue to a detached
 current-code process, while a stale manager host restarts after finishing its active request and recovers persisted sessions.
 
+## Direct check-host routes
+
+`check-host-route.ts` bypasses the local TUN for each check host with a main-table `/32` route through the single
+physical default gateway. It reads only host names and IPv4 addresses (optionally `user@IPv4`), never identity fields
+or key files. Inspect the current TCP/22 routes without root first:
+
+```sh
+bun tools/goal/scripts/check-host-route.ts plan --hosts <hosts.json>
+```
+
+Between check runs, install once with the maintainer's sudo command:
+
+```sh
+sudo bun tools/goal/scripts/check-host-route.ts apply --hosts <hosts.json>
+```
+
+This writes root-owned `/etc/rezics-check-host-route.json` and
+`/etc/NetworkManager/dispatcher.d/90-rezics-check-host-route`, then reconciles immediately. The standalone Python 3
+hook follows live DHCP gateway changes on `up`, `reapply` and `dhcp4-change`; it removes its routes on `down` or a
+missing gateway. Routes use `proto static metric 42722`, reserved for this tool. Existing exact host routes are
+refused unless recorded in the managed state with that device, protocol and metric. Reapply refreshes the host set.
+
+Verify without root, supplying the current public home egress IPv4 address explicitly:
+
+```sh
+bun tools/goal/scripts/check-host-route.ts verify --hosts <hosts.json> --expected-peer <home-public-ip>
+```
+
+Every host must use the physical device and current gateway for TCP/22, and a fresh SSH probe with proxies disabled
+must report that peer in `SSH_CONNECTION` and matching sshd journal evidence for the client port and probe time.
+The SSH login must be able to read the `ssh.service` or `sshd.service` journal. Missing evidence fails verification.
+Remove the hook, state and only its recorded routes with `check-host-route.ts remove` under sudo; removal needs no
+hosts file or live gateway. Bun, Linux iproute2, NetworkManager and `/usr/bin/python3` are required for installation;
+verification also uses OpenSSH and the remote systemd journal.
+
 ## Local settings
 
 Tracked package defaults are in `defaults.json`. Routing profiles and experiments are in `routing.json`; path ownership
@@ -81,11 +116,16 @@ quota failure excludes all aliases of that allowance before selecting another pe
 purchase or reset-card redemption path.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
-`branchPrefix`, `terminationGraceMs`,
+`branchPrefix`, `terminationGraceMs`, `silenceMs`,
 `gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
-`integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
+`integrationBranch` defaults to `dev`; `integration.batchSize` defaults to `4` and limits how many queued dev landings
+share one integration check. Set it to `1` to keep one-at-a-time integration. A passing batch checks the combined tree
+once and fast-forwards dev through its members in queue order, recording each member's own integrated commit. If the
+combined check fails, the train retries the members individually so a passing member can still land. A member that
+cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
+`promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |
@@ -98,7 +138,7 @@ usage files and executable paths containing a slash resolve against the local fi
 The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
 The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
 `managerDirectory`, `inboxDirectory`, `managerSocket`, `tmuxSocket`, `tmuxCommand`, `termspacesCommand`, `tmuxSession`,
-`managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
+`batchSize`, `managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
 configuration, inbox signals and leases stay outside tracked source files. Unix manager sockets must fit the platform's
 socket-path length limit; use a short local override when needed.
 
@@ -199,6 +239,34 @@ formatting and scope validation, each check runs in order only when a changed fi
 changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
 kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
 dependency installation never run in the main checkout or the worker's checkout.
+
+The `affectedTests` setting independently lists `{ paths: string[], command: string[] }` checks, overridable in
+local settings (use `[]` to disable them). After a successful worker report, settlement commits any remaining work
+and runs matching commands in that attempt's worktree before requesting landing. Commands and other attempts run
+in parallel, outside the serial train. The default checks `services/kernel/**` with
+`bun run --cwd services/kernel check`, using `KERNEL_CHECK_AFFECTED=<task base>` and the worker's environment,
+including configured remote check hosts. Kernel is currently the only workspace with an affected check mode.
+
+Each command's status (`passed`, `failed`, or `unverified`), failing test files, duration in milliseconds and output
+are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.
+Kernel's final failed-file summaries, lane errors, Bun reporter failures and `FAIL <test-file>` lines identify
+failing files; passing headings and stack frames do not. A check-host transport failure is retried once; a second
+transport failure is unverified and lands with a note in the landing log. Waiting for a check-host slot has no wall timeout.
+
+Only recorded failures need a train baseline. The train reuses a cached result for the integration base and command,
+or runs that command in a separate base worktree, installing dependencies there when it has a package manifest.
+The baseline clears `KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the cached baseline reusable across attempts.
+A landing is refused only for newly failing test files, named in its gate failure; failures shared by the base are
+allowed. Errors before any test-file result use diagnostic-line comparison. An unverified baseline also allows
+landing with a log note. The train's existing integration checks are unchanged.
+
+A `control-plane` task whose actual changed files are all under `tools/goal/` rebases onto `main`, formats its changes,
+then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` before `main` advances. The train compare-and-
+swaps `main`, then merges the checked main commit into `stabilize` and merges that resulting stabilize head into the
+integration branch, also using compare-and-swap. A conflict aborts that merge, leaves its target branch unchanged, and
+notifies the task manager and supermanager. When no stabilize branch exists, the checked main commit merges directly
+into the integration branch. A control-plane task that changes a file outside `tools/goal/`, and tasks from other
+Goals, continue to integrate into the integration branch as before.
 
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until

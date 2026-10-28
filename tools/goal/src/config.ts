@@ -45,24 +45,27 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     return { path, stage: file.stage, command: [...file.command] };
   });
 }
-export function readIntegrationChecks(value: unknown = defaults.integrationChecks): IntegrationCheck[] {
-  if (!Array.isArray(value)) throw new Error('integrationChecks must be an array');
+export function readIntegrationChecks(
+  value: unknown = defaults.integrationChecks,
+  label = 'integrationChecks',
+): IntegrationCheck[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => {
-    const check = object(item, `integrationChecks[${index}]`);
-    keys(check, ['paths', 'command'], `integrationChecks[${index}]`);
+    const check = object(item, `${label}[${index}]`);
+    keys(check, ['paths', 'command'], `${label}[${index}]`);
     if (
       !Array.isArray(check.paths) ||
       !check.paths.length ||
       check.paths.some((part) => typeof part !== 'string' || !part)
     )
-      throw new Error(`integrationChecks[${index}].paths must be a path list`);
+      throw new Error(`${label}[${index}].paths must be a path list`);
     for (const path of check.paths) validatePath(path);
     if (
       !Array.isArray(check.command) ||
       !check.command.length ||
       check.command.some((part) => typeof part !== 'string' || !part)
     )
-      throw new Error(`integrationChecks[${index}].command must be a command array`);
+      throw new Error(`${label}[${index}].command must be a command array`);
     return { paths: [...check.paths], command: [...check.command] };
   });
 }
@@ -80,6 +83,11 @@ function positive(value: unknown, label: string, zero = false): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < (zero ? 0 : 1))
     throw new Error(`invalid ${label}`);
   return value;
+}
+function positiveInteger(value: unknown, label: string): number {
+  const parsed = positive(value, label);
+  if (!Number.isInteger(parsed)) throw new Error(`invalid ${label}`);
+  return parsed;
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label}.${key}`);
@@ -118,9 +126,11 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'promotionParallelism',
       'branchPrefix',
       'terminationGraceMs',
+      'silenceMs',
       'gate',
       'formatCommand',
       'integrationChecks',
+      'affectedTests',
       'codex',
       'routingFile',
       'riskAreasFile',
@@ -173,13 +183,21 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   if (!Array.isArray(poolValues)) throw new Error('pools must be an array');
   const pools: Pool[] = poolValues.map((raw: unknown) => {
     const pool = object(raw, 'pool');
-    keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'], 'pool');
+    keys(
+      pool,
+      ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'],
+      'pool',
+    );
     if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
     if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
     const policy = object(pool.policy, 'pool policy');
-    keys(policy, ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'], 'pool policy');
+    keys(
+      policy,
+      ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'],
+      'pool policy',
+    );
     if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
     const reservePercent = positive(policy.reservePercent, 'reservePercent', true);
     if (reservePercent >= 100) throw new Error('reservePercent must be less than 100');
@@ -224,10 +242,15 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     gate: gate as string[],
     formatCommand: formatCommand as string[],
     integrationChecks,
+    affectedTests: readIntegrationChecks(
+      local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
+      'affectedTests',
+    ),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
+    silenceMs: positive(local.silenceMs ?? defaults.silenceMs, 'silenceMs'),
     codex: {
       serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: {
@@ -251,6 +274,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       gateTimeoutMs: positive(integration.gateTimeoutMs, 'gateTimeoutMs'),
       managerDirectory: path(integration.managerDirectory, join(stateDirectory, 'managers')),
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
+      batchSize: positiveInteger(integration.batchSize, 'batchSize'),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
@@ -333,14 +357,19 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     worktreeRoot: settings.worktreeRoot,
     mainBranch: settings.mainBranch,
     integrationBranch: settings.integrationBranch,
+    integration: settings.integration,
     formatCommand: settings.formatCommand,
     integrationChecks: () => {
       const configured = (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [];
       // The local file is read for every landing, so checks can be switched off or on without restarting the train.
       try {
         const file = join(settings.stateDirectory, 'local.json');
-        const local = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown }) : {};
-        return local.integrationChecks === undefined ? readIntegrationChecks() : readIntegrationChecks(local.integrationChecks);
+        const local = existsSync(file)
+          ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown })
+          : {};
+        return local.integrationChecks === undefined
+          ? readIntegrationChecks()
+          : readIntegrationChecks(local.integrationChecks);
       } catch {
         return configured;
       }
@@ -358,12 +387,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   });
   function promoteNow(): Promise<void> {
     return promote({
-        settings,
-        job,
-        runGate: promotionGate,
-        derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-        ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
-      });
+      settings,
+      job,
+      runGate: promotionGate,
+      derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+      ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
+    });
   }
   const landing: IntegrationRuntime['landing'] = (taskId) => {
     const task = store.task(taskId),

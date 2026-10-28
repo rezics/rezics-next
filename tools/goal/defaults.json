@@ -3,17 +3,51 @@
   "mainBranch": "main",
   "branchPrefix": "worker/",
   "terminationGraceMs": 1500,
+  "silenceMs": 2400000,
+  "affectedTests": [
+    {
+      "paths": ["services/kernel/**"],
+      "command": ["bun", "run", "--cwd", "services/kernel", "check"]
+    }
+  ],
   "integrationChecks": [
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "install"]
     },
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "scripts/typecheck.ts"]
     },
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {
@@ -48,6 +82,7 @@
     }
   ],
   "integration": {
+    "batchSize": 4,
     "gateConcurrency": 1,
     "gateTimeoutMs": 1800000,
     "tmuxCommand": "tmux",

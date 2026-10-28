@@ -1,7 +1,19 @@
-import type { AttemptRecord, StepClass } from './types.ts';
+import type { AttemptRecord, StepClass, TaskClass } from './types.ts';
 
 type Percentiles = { count: number; p50: number | null; p90: number | null };
 type PoolReport = { attempts: number; passedTasks: number; input: number; cached: number; output: number };
+export type LandedUsageReport = {
+  taskClass: TaskClass;
+  model: string;
+  landedTasks: number;
+  attempts: number;
+  inputPerTask: number;
+  cachedInputPerTask: number;
+  outputPerTask: number;
+  reasoningPerTask: number;
+  rawPerTask: number;
+  compactionsPerTask: number;
+};
 
 export type Report = {
   attempts: number;
@@ -15,6 +27,8 @@ export type Report = {
   earlyStopRate: number | null;
   reworkInputTokens: Record<string, number>;
   stepShare: Record<StepClass, number | null>;
+  tokensPerLandedTask: LandedUsageReport[];
+  nonLandingSpend: { rawTokens: number; totalRawTokens: number; share: number | null };
 };
 
 const stepClasses: StepClass[] = ['decision', 'read', 'edit', 'wait', 'check', 'commit'];
@@ -31,7 +45,7 @@ function percentiles(values: number[]): Percentiles {
 
 /** Summarize measurements from completed attempt records, excluding attempts still waiting on a gate. */
 export function report(records: AttemptRecord[]): Report {
-  const measured = records.filter(record => record.outcome !== 'pending-gate');
+  const measured = records.filter((record) => record.outcome !== 'pending-gate');
   const byTask = new Map<string, AttemptRecord[]>();
   for (const record of measured) {
     const group = byTask.get(record.taskId) ?? [];
@@ -39,19 +53,88 @@ export function report(records: AttemptRecord[]): Report {
     byTask.set(record.taskId, group);
   }
 
-  const passedTasks = [...byTask.values()].filter(group => group.some(record => record.outcome === 'passed'));
+  const passedTasks = [...byTask.values()].filter((group) => group.some((record) => record.outcome === 'passed'));
+  const landedTotals = new Map<
+    string,
+    {
+      taskClass: TaskClass;
+      model: string;
+      landedTasks: number;
+      attempts: number;
+      input: number;
+      cached: number;
+      output: number;
+      reasoning: number;
+      raw: number;
+      compactions: number;
+    }
+  >();
+  for (const group of passedTasks) {
+    const winner = group.filter((record) => record.outcome === 'passed').sort((a, b) => b.attempt - a.attempt)[0]!;
+    const taskClass = winner.taskClass;
+    const model = winner.usage?.model ?? winner.profile.model;
+    const key = JSON.stringify([taskClass, model]);
+    const total = landedTotals.get(key) ?? {
+      taskClass,
+      model,
+      landedTasks: 0,
+      attempts: 0,
+      input: 0,
+      cached: 0,
+      output: 0,
+      reasoning: 0,
+      raw: 0,
+      compactions: 0,
+    };
+    total.landedTasks++;
+    total.attempts += group.length;
+    for (const record of group) {
+      const input = record.usage?.input ?? record.tokens.input;
+      const cached = record.usage?.cachedInput ?? record.tokens.cached;
+      const output = record.usage?.output ?? record.tokens.output;
+      total.input += input;
+      total.cached += cached;
+      total.output += output;
+      total.reasoning += record.usage?.reasoning ?? 0;
+      total.compactions += record.usage?.compactions ?? 0;
+      total.raw += input + output;
+    }
+    landedTotals.set(key, total);
+  }
+  const tokensPerLandedTask = [...landedTotals.values()]
+    .sort((a, b) => a.taskClass.localeCompare(b.taskClass) || a.model.localeCompare(b.model))
+    .map((total) => ({
+      taskClass: total.taskClass,
+      model: total.model,
+      landedTasks: total.landedTasks,
+      attempts: total.attempts,
+      inputPerTask: total.input / total.landedTasks,
+      cachedInputPerTask: total.cached / total.landedTasks,
+      outputPerTask: total.output / total.landedTasks,
+      reasoningPerTask: total.reasoning / total.landedTasks,
+      rawPerTask: total.raw / total.landedTasks,
+      compactionsPerTask: total.compactions / total.landedTasks,
+    }));
+  const rawTokens = (record: AttemptRecord) =>
+    (record.usage?.input ?? record.tokens.input) + (record.usage?.output ?? record.tokens.output);
+  const totalRawTokens = measured.reduce((sum, record) => sum + rawTokens(record), 0);
+  const nonLandingRawTokens = measured
+    .filter((record) => record.outcome !== 'passed')
+    .reduce((sum, record) => sum + rawTokens(record), 0);
   const attemptsPerPassedTask = passedTasks.length
     ? passedTasks.reduce((sum, group) => sum + group.length, 0) / passedTasks.length
     : null;
-  const firstAttemptPasses = [...byTask.values()].filter(group =>
-    group.some(record => record.attempt === 1 && record.outcome === 'passed')).length;
+  const firstAttemptPasses = [...byTask.values()].filter((group) =>
+    group.some((record) => record.attempt === 1 && record.outcome === 'passed'),
+  ).length;
 
   const criticalPathDurations: number[] = [];
   const otherDurations: number[] = [];
   for (const group of passedTasks) {
-    const passingRecord = group.filter(record => record.outcome === 'passed')
+    const passingRecord = group
+      .filter((record) => record.outcome === 'passed')
       .sort((a, b) => a.attempt - b.attempt)[0]!;
-    const earliestStart = Math.min(...group.map(record => Date.parse(record.startedAt)));
+    const earliestStart = Math.min(...group.map((record) => Date.parse(record.startedAt)));
     const duration = Date.parse(passingRecord.endedAt) - earliestStart;
     (passingRecord.criticalPath ? criticalPathDurations : otherDurations).push(duration);
   }
@@ -75,11 +158,16 @@ export function report(records: AttemptRecord[]): Report {
     for (const step of stepClasses) stepTotals[step] += record.stepClasses[step];
   }
 
-  const consulted = measured.filter(record => record.consulted);
-  const consultHits = consulted.filter(record => record.outcome === 'passed'
-    || byTask.get(record.taskId)?.some(next => next.attempt === record.attempt + 1 && next.outcome === 'passed')).length;
+  const consulted = measured.filter((record) => record.consulted);
+  const consultHits = consulted.filter(
+    (record) =>
+      record.outcome === 'passed' ||
+      byTask.get(record.taskId)?.some((next) => next.attempt === record.attempt + 1 && next.outcome === 'passed'),
+  ).length;
   const stepTotal = stepClasses.reduce((sum, step) => sum + stepTotals[step], 0);
-  const stepShare = Object.fromEntries(stepClasses.map(step => [step, stepTotal === 0 ? null : stepTotals[step] / stepTotal])) as Report['stepShare'];
+  const stepShare = Object.fromEntries(
+    stepClasses.map((step) => [step, stepTotal === 0 ? null : stepTotals[step] / stepTotal]),
+  ) as Report['stepShare'];
 
   return {
     attempts: records.length,
@@ -90,8 +178,31 @@ export function report(records: AttemptRecord[]): Report {
     wallClockToPassMs: { criticalPath: percentiles(criticalPathDurations), other: percentiles(otherDurations) },
     pools: Object.fromEntries(poolTotals),
     consultHitRate: consulted.length === 0 ? null : consultHits / consulted.length,
-    earlyStopRate: measured.length === 0 ? null : measured.filter(record => record.earlyStop).length / measured.length,
+    earlyStopRate:
+      measured.length === 0 ? null : measured.filter((record) => record.earlyStop).length / measured.length,
     reworkInputTokens: Object.fromEntries(reworkTotals),
     stepShare,
+    tokensPerLandedTask,
+    nonLandingSpend: {
+      rawTokens: nonLandingRawTokens,
+      totalRawTokens,
+      share: totalRawTokens === 0 ? null : nonLandingRawTokens / totalRawTokens,
+    },
   };
+}
+
+/** Human-readable usage figures shared by the goal report command and its tests. */
+export function formatUsageReport(result: Report): string[] {
+  const number = (value: number) => Math.round(value).toLocaleString('en-US');
+  const share = result.nonLandingSpend.share === null ? 'n/a' : `${(result.nonLandingSpend.share * 100).toFixed(1)}%`;
+  return [
+    'Tokens per landed task by class and winning model:',
+    ...(result.tokensPerLandedTask.length
+      ? result.tokensPerLandedTask.map(
+          (row) =>
+            `  ${row.taskClass} / ${row.model}: ${number(row.rawPerTask)} raw; ${number(row.inputPerTask)} input (${number(row.cachedInputPerTask)} cached); ${number(row.outputPerTask)} output; ${number(row.reasoningPerTask)} reasoning; ${number(row.compactionsPerTask)} compactions.`,
+        )
+      : ['  (no landed tasks)']),
+    `Spend on attempts that did not land: ${share} (${number(result.nonLandingSpend.rawTokens)} / ${number(result.nonLandingSpend.totalRawTokens)} raw tokens).`,
+  ];
 }

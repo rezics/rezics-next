@@ -1,6 +1,6 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './records.ts';
 import type { WorkerStore } from './store.ts';
 
@@ -14,11 +14,10 @@ const STABILIZE_BEHIND_MS = 30 * 60_000;
 const ALERT_EVERY_MS = 2 * 3_600_000;
 const FAILURE_WINDOW_MS = 30 * 60_000;
 const HOST_PROBE_EVERY_MS = 5 * 60_000;
-const HOST_PROBE_TIMEOUT_MS = 20_000;
 
 type CheckHost = { name: string; address: string; identity: string };
 export type CheckHostProbeResult = { status: number | null; stderr: string };
-export type CheckHostProbe = (host: CheckHost) => CheckHostProbeResult;
+export type CheckHostProbe = (host: CheckHost, complete: (result: CheckHostProbeResult) => void) => void;
 type State = {
   alerts: Record<string, string>;
   stabilizeBehindSince?: string;
@@ -35,20 +34,62 @@ const SIGNATURES = [
   { name: 'lease or lock timeouts', pattern: /Lease held|lease.*timeout|lock.*timeout|timeout.*(?:lease|lock)/i },
   {
     name: 'remote slot waits',
-    pattern: /remote-check:.*(?:slot.*wait|wait.*slot)|waiting for (?:a |every )?(?:remote )?(?:check )?slot|Waiting for host capacity/i,
+    pattern:
+      /remote-check:.*(?:slot.*wait|wait.*slot)|waiting for (?:a |every )?(?:remote )?(?:check )?slot|Waiting for host capacity/i,
   },
 ] as const;
 
-export function sshProbe(host: CheckHost): CheckHostProbeResult {
-  const result = spawnSync(
-    'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', host.identity, host.address, 'true'],
-    { encoding: 'utf8', timeout: HOST_PROBE_TIMEOUT_MS },
-  );
-  return {
-    status: result.status,
-    stderr: result.stderr || result.error?.message || (result.status === null ? 'SSH probe failed' : ''),
-  };
+let nextProbeRun = 0;
+const currentProbeRuns = new Map<string, number>();
+
+function firstLine(stderr: string): string {
+  return stderr.split(/\r?\n/, 1)[0]!.trim();
+}
+
+function probeFile(stateDirectory: string, host: CheckHost): string {
+  return join(stateDirectory, 'host-probes', `${encodeURIComponent(host.name)}.json`);
+}
+
+function invalidateRemovedProbeRuns(directory: string, retainedPaths: Set<string>): void {
+  const prefix = `${directory}${sep}`;
+  for (const path of currentProbeRuns.keys()) {
+    if (path.startsWith(prefix) && !retainedPaths.has(path)) currentProbeRuns.delete(path);
+  }
+}
+
+export function sshProbe(host: CheckHost, complete: (result: CheckHostProbeResult) => void, start = spawn): void {
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = start(
+      'ssh',
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', host.identity, host.address, 'true'],
+      { detached: true, stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+  } catch (error) {
+    complete({ status: null, stderr: error instanceof Error ? error.message : String(error) });
+    return;
+  }
+
+  let stderr = '';
+  let hasFirstLine = false;
+  let spawnError = '';
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    if (hasFirstLine) return;
+    const text = chunk.toString();
+    const newline = text.search(/[\r\n]/);
+    stderr += newline < 0 ? text : text.slice(0, newline);
+    hasFirstLine = newline >= 0;
+  });
+  child.once('error', (error) => {
+    spawnError = error.message;
+  });
+  child.once('close', (status) => {
+    complete({
+      status,
+      stderr: firstLine(stderr) || spawnError || (status === null ? 'SSH probe failed' : ''),
+    });
+  });
+  child.unref();
 }
 
 function checkHosts(stateDirectory: string): CheckHost[] {
@@ -76,6 +117,26 @@ function failureSignature(error: string): (typeof SIGNATURES)[number] | undefine
   return SIGNATURES.find((signature) => signature.pattern.test(error));
 }
 
+function reportsBlocked(result: string): boolean {
+  let end = result.lastIndexOf('}');
+  while (end >= 0) {
+    let start = result.lastIndexOf('{', end);
+    while (start >= 0) {
+      try {
+        const value = JSON.parse(result.slice(start, end + 1));
+        if (value && typeof value === 'object' && 'status' in value) return value.status === 'blocked';
+      } catch {
+        /* A result can wrap its final status object in prose. */
+      }
+      if (start === 0) break;
+      start = result.lastIndexOf('{', start - 1);
+    }
+    if (end === 0) break;
+    end = result.lastIndexOf('}', end - 1);
+  }
+  return false;
+}
+
 function failureIncidents(
   store: Pick<WorkerStore, 'attemptsEndedBetween'>,
   tasks: ReturnType<WorkerStore['tasks']>,
@@ -90,6 +151,7 @@ function failureIncidents(
   >();
   for (const attempt of store.attemptsEndedBetween(start, end)) {
     const result = typeof attempt.result === 'string' ? attempt.result : '';
+    if (!attempt.failureKind && !reportsBlocked(result)) continue;
     const blocker = typeof attempt.blocker === 'string' ? attempt.blocker : '';
     const error = [result, blocker].filter(Boolean).join('\n');
     const signature = failureSignature(error);
@@ -100,7 +162,10 @@ function failureIncidents(
       taskId: attempt.taskId,
       attempt: attempt.attempt,
       goal: taskById.get(attempt.taskId)?.brief.goal ?? attempt.taskId,
-      error: exampleError.slice(0, 200).replace(/[\r\n\t]/g, ' ').trim(),
+      error: exampleError
+        .slice(0, 200)
+        .replace(/[\r\n\t]/g, ' ')
+        .trim(),
     });
     grouped.set(signature.name, group);
   }
@@ -120,20 +185,50 @@ function failureIncidents(
   return found;
 }
 
+function savedProbeResult(path: string, sweepAt: string): CheckHostProbeResult | undefined {
+  try {
+    const result = JSON.parse(readFileSync(path, 'utf8')) as Partial<CheckHostProbeResult> & { sweepAt?: unknown };
+    if (
+      result.sweepAt === sweepAt &&
+      (typeof result.status === 'number' || result.status === null) &&
+      typeof result.stderr === 'string'
+    )
+      return { status: result.status, stderr: result.stderr };
+  } catch {
+    /* A missing, incomplete or malformed result is not a failed probe. */
+  }
+  return undefined;
+}
+
+function writeProbeResult(path: string, result: CheckHostProbeResult, sweepAt: string): void {
+  const temporary = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify({ status: result.status, stderr: result.stderr, sweepAt }));
+    renameSync(temporary, path);
+  } catch {
+    /* If the result cannot be saved, the next sweep treats it as no result. */
+  }
+}
+
 function probeCheckHosts(state: State, stateDirectory: string, now: number, probe: CheckHostProbe): string[] {
   const hosts = checkHosts(stateDirectory);
-  if (!hosts.length) return [];
+  const directory = join(stateDirectory, 'host-probes');
+  if (!hosts.length) {
+    delete state.lastHostProbeAt;
+    invalidateRemovedProbeRuns(directory, new Set());
+    return [];
+  }
   const last = state.lastHostProbeAt ? Date.parse(state.lastHostProbeAt) : Number.NaN;
   if (Number.isFinite(last) && now - last < HOST_PROBE_EVERY_MS) return [];
   const failures = (state.hostProbeFailures ??= {});
   const incidents: string[] = [];
+  const retainedPaths = new Set(hosts.map((host) => probeFile(stateDirectory, host)));
+  invalidateRemovedProbeRuns(directory, retainedPaths);
+  const hasPreviousSweep = Number.isFinite(last);
+  const previousSweepAt = state.lastHostProbeAt;
   for (const host of hosts) {
-    let result: CheckHostProbeResult;
-    try {
-      result = probe(host);
-    } catch (error) {
-      result = { status: null, stderr: error instanceof Error ? error.message : String(error) };
-    }
+    const result = hasPreviousSweep ? savedProbeResult(probeFile(stateDirectory, host), previousSweepAt!) : undefined;
+    if (!result) continue;
     if (result.status === 0) {
       delete failures[host.name];
       continue;
@@ -141,14 +236,43 @@ function probeCheckHosts(state: State, stateDirectory: string, now: number, prob
     const previous = failures[host.name] ?? 0;
     failures[host.name] = Math.min(previous + 1, 2);
     if (previous < 2 && failures[host.name] === 2) {
-      const firstLine = (result.stderr || 'SSH probe failed')
-        .replaceAll(host.identity, '[identity]')
-        .split(/\r?\n/, 1)[0]!
-        .trim();
-      incidents.push(`Incident: check host ${host.name.replace(/[\r\n]/g, ' ')} refuses SSH: ${firstLine}`);
+      const message = (result.stderr || 'SSH probe failed').replaceAll(host.identity, '[identity]').trim();
+      incidents.push(`Incident: check host ${host.name.replace(/[\r\n]/g, ' ')} refuses SSH: ${message}`);
     }
   }
-  state.lastHostProbeAt = new Date(now).toISOString();
+
+  mkdirSync(directory, { recursive: true });
+  try {
+    for (const name of readdirSync(directory)) if (name.endsWith('.json')) unlinkSync(join(directory, name));
+  } catch {
+    /* Missing or unreadable result files simply produce no result on the next sweep. */
+  }
+  const sweepAt = new Date(now).toISOString();
+  for (const host of hosts) {
+    const path = probeFile(stateDirectory, host);
+    const run = ++nextProbeRun;
+    currentProbeRuns.set(path, run);
+    let completed = false;
+    const complete = (result: CheckHostProbeResult) => {
+      if (completed) return;
+      completed = true;
+      if (currentProbeRuns.get(path) !== run) return;
+      writeProbeResult(
+        path,
+        {
+          status: result.status,
+          stderr: firstLine(result.stderr).replaceAll(host.identity, '[identity]'),
+        },
+        sweepAt,
+      );
+    };
+    try {
+      probe(host, complete);
+    } catch (error) {
+      complete({ status: null, stderr: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  state.lastHostProbeAt = sweepAt;
   state.hostProbeFailures = failures;
   return incidents;
 }
@@ -158,7 +282,10 @@ function isAncestor(checkout: string, ancestor: string, descendant: string): boo
 }
 
 function head(checkout: string, branch: string): string | undefined {
-  const result = spawnSync('git', ['rev-parse', '--verify', '-q', `refs/heads/${branch}`], { cwd: checkout, encoding: 'utf8' });
+  const result = spawnSync('git', ['rev-parse', '--verify', '-q', `refs/heads/${branch}`], {
+    cwd: checkout,
+    encoding: 'utf8',
+  });
   return result.status === 0 ? result.stdout.trim() : undefined;
 }
 
@@ -202,8 +329,7 @@ export function watch(
   stateDirectory: string,
   deliver: (summary: string) => void,
   now = Date.now(),
-  // Off until the probe runs outside the host's event loop: a synchronous SSH probe can block it for 40 seconds.
-  probe: CheckHostProbe = () => ({ status: 0, stderr: '' }),
+  probe: CheckHostProbe = sshProbe,
 ): number {
   const path = join(stateDirectory, 'watchdog.json');
   let state: State = { alerts: {} };
