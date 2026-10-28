@@ -68,8 +68,9 @@ Actual defect: `reviseOffer` authorizes the target but hashes only `unitAmountMi
 partition can therefore collide under one key; the second target can receive the first target's receipt. Its native
 command port needs the target in the digest; there is currently no HTTP revise route. `createOrder` already includes
 `offerId`, delist includes its ID, and [mark-paid](payouts.ts) includes statement ID and payment reference.
-Trusted refresh intent must include order and Session with a stable per-refresh receipt, rather than hashing a
-changing provider response; current `applyCheckoutSnapshot` hashes only order ID under its workflow-step key.
+Trusted refresh preserves the stable `wf:{id}:apply` key and digest `{orderId}` in `applyCheckoutSnapshot`.
+The immutable order/Session binding is verified natively; neither changing provider bytes nor a snapshot digest
+belongs in that stable intent. Admission separately binds order, Session and apply intent to a physical attempt.
 
 A public GET for a delisted offer, even by known ID and even by its seller, must match an unknown offer's `404`
 problem body apart from `request_id`. Conceal before reading its subject summary. Keep generic internal offer reads
@@ -90,35 +91,120 @@ bounds the body at 256 KiB and awaits durable enqueue before acknowledging. Inva
 valid payload claims about payment never substitute for a provider read. Event-ID dedupe uses the durable identity
 in [enqueue](enqueue.ts), independently of entitlement uniqueness and Balance Transaction accounting dedupe.
 
-Every trigger must resolve a Checkout Session ID: direct Session events, PaymentIntent-derived refund/dispute events,
-initial/expiry reconciliation, provider event recovery and explicit known-order repair. Serialize refreshes for that
-Session on the shared [DBOS `effects` queue](../work/queues.ts) with `partitionConcurrency: 1`, using a namespaced
-provider-account/mode/Session partition key. Each distinct trigger retains a distinct durable refresh identity;
-one permanent Session workflow would suppress later refunds. Different Sessions may progress concurrently.
-Resolvers/coordinators that await a child must not occupy that child's Session partition.
+### Receipt-aware native refresh admission (implementation pending)
 
-Serialize a fresh bounded provider read and idempotent apply as one retriable DBOS step; provider HTTP stays outside
-the SQL transaction. An unfinished retry must fetch current state, not reuse an old durable read. A committed apply
-is protected by its stable receipt if the process dies before step completion. Preserve atomic buyer-partition
-order, named transaction and entitlement updates. A business no-op changes no revision, outbox event or partition
-position; do not hide an observation write in a no-op or authorization finalizer. Neither local timestamps nor event
-creation order is last-writer authority. Multiple provider reads are not an atomic Stripe snapshot: later events
-and explicit repair supply convergence. A safe workflow-version cutover must prevent old cached readers remaining writers.
+Every trigger resolves an immutable Checkout Session/order binding: direct Session events, PaymentIntent-derived
+refund/dispute events, initial/expiry reconciliation, verified provider-event recovery and explicit known-order
+repair. All actual refresh children use the existing [DBOS `effects` queue](../work/queues.ts) with
+`partitionConcurrency: 1` and a namespaced provider-account/mode/Session `queuePartitionKey`. Each distinct trigger
+retains a distinct durable refresh identity; one permanent Session workflow would suppress later refunds.
+Different Sessions may progress concurrently. Resolver, event, order and expiry parents stay on `workflows`;
+no parent occupies effects capacity while awaiting its own effects child. No new queue, process, scheduler,
+catalogue mirror or global paid-order sweep is needed.
+
+Known-order resolution uses its routable ID and one native order key. Native Session lookup requires a route;
+there is no global Session-to-order index. Session-only events need an unexpanded provider Session locator,
+checking `client_reference_id`, metadata correlation and mode against the native recorded binding. PaymentIntent
+resolution also charges the existing filtered Session list. This narrow locator port is not implemented;
+a locator grants no buyer authority, and a pre-admission full read cannot become the later apply snapshot.
+
+Use one combined registered physical attempt: resolve the anchor, fresh native admission, fresh full provider
+read, native apply. Neither an admission token nor provider truth is a separately memoized prefix step.
+
+1. After normal service admission for the same immutable order/Session/apply intent, run a real short
+   buyer-partition command. Lock the bound order and check the stable apply intent's completion under that
+   same order lock, before any domain write, using the approved metadata-only
+   [`hasOwnCommandCompletion(tx, {kind, key, digest})`](../command/README.md#metadata-only-own-completion).
+   This helper is not implemented. Retain the original apply authorization policy; receipt ownership supplies
+   no authority for another action/resource. Matching completion returns read-only completion, with no revision
+   advance or provider read. It returns no historic response. Use native `noEffect` only if this transaction
+   wrote no domain data, or a rollback sentinel. Never use an unlocked peek or Commerce-local receipt SQL.
+   In particular, a completed retry A must not claim over admitted B and then replay A's old result.
+2. Only for an uncompleted intent, advance existing `order.revision` with a native conditional `UPDATE` under
+   the lock and emit the real existing `com.rezics.commerce.order.updated.v1` event, receipt and native envelope.
+   This is a visible coordination mutation even if payment/benefit state will be unchanged. Generate a fresh attempt identity
+   inside each physical invocation; native SQL retries reuse it, while a new physical retry claims anew.
+   Its admission digest binds order, Session and stable apply intent; obey the native receipt-key limit.
+   Preserve captured terms. Fail on revision overflow; never reset/recycle/expire authority or add a fence table
+   or column. An ambiguous admission commit must be resolved or abandoned before reading with its token.
+3. Commit admission and release the native connection before the fresh full Stripe read. Keep its bytes local
+   to this invocation. Revalidate full identity, Session, mode and captured terms; multiple provider GETs are
+   not one atomic Stripe snapshot. Later triggers provide convergence when provider state changes again.
+4. Apply retains `commerce.checkout.apply`, stable `wf:{id}:apply` and digest `{orderId}`. Native receipt replay
+   precedes the body and only acknowledges the old effect. In a fresh body, lock the order before deciding even
+   a no-op; require exactly the captured revision and Session through mutation/commit. Never replace that
+   revision with a later reread while retaining old provider bytes, including on SQL retry. A superseded apply
+   has no effect or apply receipt; a genuine retry needs new admission and a new full read. Business unchanged
+   may roll back apply, but its already committed admission remains. Remove timestamp/event-time ordering;
+   `observedAt` is metadata. Do not brand a domain write `noEffect` or hide it in an authorization finalizer.
+   Preserve atomic buyer-partition order, named transaction and entitlement changes with the receipt/outbox.
+
+The lock proof is local: later admission B and earlier apply A serialize on the same native order row. If B
+commits first, A fails the revision condition or its serializable transaction aborts; retrying with A's captured
+revision cannot authorize it. If A wins the lock, its commit precedes B's admission and B's subsequent provider
+read. Thus A cannot apply after later admission commits, even when B's business apply is unchanged, cancelled
+or fails. A newer no-op never returns authority to an older observation. Stable completion lookup under that
+same lock also prevents an older apply committing between the completion check and the revision claim.
+
+### SDK recovery, cutover and physical bounds
+
+The installed DBOS SDK is `5.4.6-preview`. Its queue admits one `PENDING` workflow per queue/Session key across
+executors, not one physically live body forever. Pending recovery re-enqueues on the stored queue and clears
+ownership; it does not certify physical death. Step timeout can abandon a promise and overlap its retry within
+the same workflow. DBOS ownership fences checkpoints, not the separately committed native command.
+
+- Resume preserves checkpoints and the stored partition key but defaults to the internal queue; explicitly use
+  `queueName: 'effects'`. `SUCCESS` and `ERROR` resume do not rerun. Cancelled and recovery-exhausted histories
+  can resume; use a supported fork/terminal rewind for an error, with actual `listWorkflowSteps().functionID` cuts.
+- Fork creates a new ID, copies outputs below the cut and leaves the source runnable. Rewind requires terminal
+  status, removes outputs at/after the cut and retains the ID. Both default to internal queue/null partition;
+  explicitly pass `effects` and the Session key. A fork before the combined step claims/reads afresh; copying
+  its completed output replays completion without another apply. Rewind cannot undo native receipts or money.
+- Cancellation and workflow deadlines can release durable queue occupancy while user code is alive.
+  Cancellation stays cooperative: bare DBOS status cancellation is not atomic exclusion from core commit and
+  does not roll back money. Without a later native claim an already admitted body can still commit. There is
+  no global cancel-to-commit contract. Parent cancellation does not cancel children by default; inspect actual
+  child deadlines and explicit cancellation options.
+
+Use the supported enqueue shape in [effects](../events/effects.ts): `DBOS.startWorkflow` takes the key inside
+`enqueueOptions`; `DBOSClient.enqueue` takes `queuePartitionKey` at top level. Recovery operations must preserve
+that routing. Existing split-step histories require compatible workflow-version cutover: physically drain old
+unfenced executors and explicitly drain histories, fork at a supported fresh boundary, or retain an adapter
+discarding cached snapshots and delegating with the original stable apply intent. Never replay old function IDs
+against an incompatible step graph. A cancelled status alone is not physical drain. Preserve completion metadata
+for supported replay lifetimes, coordinating minimization/retirement with shared retention owners.
+
+Bound provider, transport and native attempts physically, including abandoned promises. A shared process-local
+inflight admission may cap actually unsettled bodies; hold capacity until the real body settles and refuse excess
+instead of accumulating an unbounded waiting list. It supplies no durable authority or queue engine. Combine
+provider-unavailability and native command retry predicates with a finite attempt budget; spreading policies must
+not discard either predicate. Charge SDK network retries, including its special closed-connection retry.
+Propagate remaining deadlines through resolution, child admission, every provider page/retry and native attempts.
+Reuse Stripe's supported constructor `httpClient` and `Stripe.createFetchHttpClient(fetch)` hooks for abort and
+streamed byte limits, binding context per operation rather than a mutable shared deadline. Enforce input, nested
+expansion, fee-detail and response-byte bounds before buffering unbounded data. Timeouts alone do not prove those
+bounds; no numeric plan allowance is inferred. No native connection spans provider I/O.
 
 Actual [work implementation](work.ts) uses the unpartitioned `workflows` queue and Session-plus-event child IDs.
 It durably clocks, reads and applies in separate steps. Those identities deduplicate triggers but do not serialize
 Session refreshes. [Settlement](settlement.ts) rejects an older `observedAt`, while a newer business no-op is rolled
 back without retaining that observation. A delayed old pending-full-refund response with no Balance Transaction can
-therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Serialization,
-fresh retry reads and no-op/order-observation acceptance remain missing; the existing timestamp tests do not prove them.
+therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Receipt-aware
+admission, mandatory apply revision checks, fresh combined retries, Session routing, provider locator/transport
+bounds and compatible cutover remain unimplemented; neither existing timestamp tests nor the
+[current](../../../../docs/research/commerce-session-refresh-recovery-current.md) and
+[deep reports](../../../../docs/research/commerce-session-refresh-recovery-deep.md) prove runtime acceptance.
+
+### Paid-order recovery
 
 Paid orders remain repairable. Use bounded provider event recovery and bounded known-order/Session repair, including
 paid orders, through this same refresh path. No global paid-history sweep or paid-order exclusion is permitted.
 Recovery distinguishes unaccepted delivery (provider retry/resend or bounded outage-window event pages), accepted
 but failed work (DBOS recovery or fresh repair), and events outside provider retention (known-order repair).
-Batch continuations, exact event types and Event-ID dedupe must bound recovery. Current initial/expiry workflows
-exit for paid/failed orders; their completion shortcuts are not late-payment recovery. There is no current explicit
-known-order repair route or implemented bounded event-recovery path in Commerce.
+Batch continuations, exact event types and Event-ID dedupe must bound recovery. Each new named repair or verified
+event recovery uses a new trigger identity; never reuse a completed initial reconciliation identity. Current
+initial/expiry workflows exit for paid/failed orders; their completion shortcuts are not late-payment recovery.
+There is no current explicit known-order repair route or implemented bounded event-recovery path in Commerce.
 
 ### Settlement, benefits and accounting
 
@@ -132,6 +218,15 @@ An order once paid remains paid. Benefit access follows current provider state s
   inquiries and prevented disputes retain access under the existing policy.
 - At terminal buyer T, the fence always prevents benefit restoration or private reads, even when financial truth
   still needs reconciliation. Current trusted settlement does not implement that terminal-benefit fence.
+
+Before grant/restore, use the real [`shareAccount`](../access/account-share.ts) barrier in the same native
+transaction. Its account share lock serializes against tombstoning until commit; a plain account read does not.
+Acquire account before order consistently wherever both locks are needed, then retain the order lock and exact
+admission condition through apply. Catch only the actual `LifecycleDeniedError` to suppress benefit/private graph
+recreation and recompute the remaining decision; do not swallow availability failures or skip financial accounting.
+Financial truth survives terminal buyers and creators: permitted retained named transactions and incremental
+royalty statements still reconcile, without recreating private relations. This barrier is not the whole financial
+erasure participant and supplies no retention exemption.
 
 Pending refund revocation is REZICS access policy, not proof money moved. Financial accounting uses actual signed
 Balance Transactions once, including refund/dispute reversals, with separate currencies and integer shares.
@@ -200,6 +295,7 @@ schedule does not stop fixture, fence, coordinator or bounded cleanup implementa
 production kernel, real DBOS and official Stripe SDK against the signed loopback provider fixture.
 [The fixture](../../test/commerce/support/fake-stripe.ts) is a provider boundary substitute, not live qualification.
 Keep frozen outcomes intact and add missing native evidence; a documentation acceptance executes none of it.
+Use signed fixtures and API personas without live Stripe calls.
 
 Remaining proof must cover buyer, another buyer in the same route, refunded buyer, seller/other seller, creator/other
 creator, anonymous, suspended and terminal accounts, and an authorized/unauthorized repair operator. Require:
@@ -213,12 +309,25 @@ creator, anonymous, suspended and terminal accounts, and an authorized/unauthori
 - Exact signed-byte replay before/after processing and executor restart; wrong secret, tampering, missing header and
   stale signature produce no durable change. A validly signed false-paid payload and public return URL never grant
   unpaid access; enqueue failure remains retryable. Preserve valid controls in the existing outcomes/webhook suites.
-- Controlled barriers and executor drain prove one-Session exclusion, different-Session concurrency, distinct-event
-  and redelivery uniqueness, equal-clock independence, nullable pending-refund balance evidence, newer canceled
-  no-op followed by a delayed old effective observation, fresh read after failed-step resume, and crash after SQL
-  commit before step completion. A newer no-op leaves business revisions/events/position unchanged. Existing
-  [work tests](../../test/commerce/work.test.ts) explicitly assert unpartitioned work and cached-read recovery;
-  those historical assertions do not establish the adopted serialization contract.
+- Use actual `startWorker` with default `KERNEL_WORK_MODULES`, the installed SDK and native HTTP fixtures to prove
+  same-Session exclusion and different-Session concurrency, inspecting actual queue/key, provider reads and native
+  receipts/events. Barriers control timing and evidence, never implement queue/CAS/settlement policy or patch SDK
+  caches. Cover distinct
+  events and same-event redelivery, forged/foreign binding, metadata/mode mismatch and captured terms.
+- Exercise cached split-read histories, cancelled/resumed/forked histories, terminal rewind and completed-step
+  copies with actual SDK function IDs. `ERROR`/`SUCCESS` resume must remain a no-op. Live obsolete bodies,
+  workflow deadlines and timed-out abandoned attempts must lose native authority after later admission, including
+  bodies parked at the order lock. A newer no-op retains its real admission revision/event/receipt/envelope;
+  unchanged apply adds no business effect. Repeat with equal/backward clocks, null pending/failed refund balance
+  transactions, no-withdrawal dispute/win and later refund/dispute reversal; old truth cannot revoke or restore.
+- Crash before native commit requires fresh admission/full read on recovery; crash after commit/before DBOS
+  acknowledgement requires stable replay without duplicate financial/benefit effects. Retry completed A while B
+  is admitted: A must neither advance revision nor read provider truth nor suppress B. Confirm exact native commit
+  evidence before releasing acknowledgement barriers; process exit alone does not prove PostgreSQL rolled back.
+  Existing [work tests](../../test/commerce/work.test.ts) and
+  [checkout workflow tests](../../test/commerce/checkout-workflow.test.ts) assert cached reads and same-Session
+  concurrency. Their contract alignment needs explicit authorization before implementation; preserve frozen tests
+  and business assertions. Historical passes cannot establish the new contract.
 - A paid order with missed late full-refund/dispute notification is repaired through authorized known-order work;
   order remains paid, benefit becomes inactive, duplicate requests produce one durable request, and another account
   learns no private fields. A fresh later repair observes reversals; revoked operators cannot replay receipts.
@@ -233,6 +342,11 @@ creator, anonymous, suspended and terminal accounts, and an authorized/unauthori
   [royalty tests](../../test/commerce/royalty.test.ts) contain component evidence, not a fresh complete API run.
 - Native terminal-T read-fence, concurrent producer exclusion, late-webhook no-resurrection, every fixed participant's
   real completion/no-data acknowledgement, exact shared-copy cleanup and retained-field expiry.
+  Race real buyer tombstoning with grant/restore under the account share barrier and test terminal creator
+  finances: named financial deltas and reversals converge once while benefits/private graphs stay absent.
+- Measure real pool acquire/hold time, statement/buffer work, input and nested response bytes, provider retries,
+  physically unsettled bodies and DBOS dispatcher/history growth at three legal scales. Include first, replay,
+  superseded, no-op and completed-A paths, cancellation/timeouts and terminal races. These results are missing.
 
 The integrated review's historical focused 23-case pass does not prove current main, whole Commerce completion,
 payout lifecycle, erasure or the root gate. Record current candidate/check/promoted-main evidence through the
@@ -280,25 +394,28 @@ Settlement grants use the target subject captured on the order at creation and r
 Every successful command serializes on its partition-wide `core.partition.position` counter (not a single all-partitions counter), and creator-period-currency payout upserts also contend on one statement row.
 Parent/root authorization and royalty source reads are separate anchored checkouts rather than cross-partition joins, but the shared pool and shared DBOS system database in the current composition do not prove independently routed multi-machine execution costs.
 
-### Session refresh and known-order repair
+### Native refresh admission and application
 
-- Touches: one explicit Session/known order, its fresh bounded provider snapshot, buyer-partition order/entitlement
-  and named transaction changes, incremental creator accounting, current authority checks and shared DBOS queue/step
-  persistence. Add the command envelope, receipts, outbox, retries and payload bytes to the existing SQL derivations.
-- Bound: per-Session concurrency one; bounded named-key changes and repair batches, with no paid-history scan.
-  Current adapter caps are 100 refunds, 10 disputes and 256 Balance Transactions; excess fails visibly. Fee-detail
-  arrays and payload bytes still need explicit limits. Stripe steps currently allow five attempts and the SDK adds
-  network retries; fresh-refresh retry and total persistence budgets need evidence. HTTP array limits and constant
-  wrapper calls do not establish examined rows, shared blocks or DBOS database cost. Account/Session partitioning
-  does not replace current authority or the terminal fence.
+- Touches: one bound order lock and metadata-only stable completion PK lookup; if uncompleted, one real conditional
+  revision claim, order-updated event, attempt receipt and envelope. Release before bounded provider identity/full
+  reads. Apply adds native account share/order/benefit locks, named transaction probes/changes and stable receipt,
+  plus incremental creator accounting and shared DBOS persistence. No history/catalogue scan or cross-home held
+  connection; all retries, claims, no-ops, events, payload bytes and pool time are charged.
+- Bound: constant keyed claim/lookup work plus bounded named apply work, using existing maximum 256 transactions
+  and 257-key total-count lookahead. Current provider caps are 100 refunds and 10 disputes, with advancing-page
+  validation; source pagination, nested expansion/fee-detail bytes, total sends and remaining deadlines need real
+  enforced/measured bounds. Stripe steps currently allow five attempts plus SDK network retries; no combined
+  attempt budget is implemented. Shared DBOS partition walks/sorts, backlog and fork/rewind history work require
+  measurement; fixed wrappers or timeouts alone prove none of those bounds. No numeric plan allowance is invented.
 - Growth check: retain the existing named-key histories 1/64/255 and 256/257 boundary evidence in
   [growth transactions](../../test/commerce/growth-transactions.test.ts) and
-  [order bounds](../../test/commerce/order-bounds.test.ts). Require native first/deep known-order repair plus
-  concurrent and redelivered signed-event runs at three legal scales, for example 1/64/255 order transactions,
-  growing unrelated orders, creator history and queue history independently with the selected changes fixed.
-  Measure examined rows, buffers, statements, provider elements/bytes, authority and persistence including retries.
-  These refresh/repair measurements are absent. The old growth-orders “Webhook and commerce jobs” case measures
-  a known-order read, not a real signed-event queue run; its pass cannot fill this gap.
+  [order bounds](../../test/commerce/order-bounds.test.ts). Require real SDK/native first and replay/superseded/
+  no-op/completed-A attempts and named repair at three legal unrelated-data/history scales. Grow unrelated orders,
+  creator history, provider history, DBOS backlog and partition count independently with selected keys fixed;
+  include cancellation/timeouts and terminal races. Measure examined rows, buffers, statements, provider elements/
+  bytes, pool time and persistence, including abandoned work and retries. These measurements are absent and this
+  prose change executes none. The old growth-orders “Webhook and commerce jobs” case measures a known-order read,
+  not a real signed-event queue run; its pass cannot fill this gap.
 
 ### Financial erasure participation
 
