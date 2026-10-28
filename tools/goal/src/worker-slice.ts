@@ -1,11 +1,17 @@
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import type { AttemptRef } from './contracts.ts';
 
 export const WORKER_CPU_WEIGHT = 50;
 export const WORKER_IO_WEIGHT = 50;
 export const WORKER_SLICE = 'rezics-workers.slice';
+const GIB = 1024 ** 3;
+// Reserve 14 GiB for the check host's floor and the managers, control plane and containers.
+const WORKER_MEMORY_RESERVE_GIB = 14;
+const CHECK_SLICE = 'rezics-check.slice';
 
 type Run = (command: string, args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<Buffer>;
+type ReadMeminfo = () => string;
 
 function failure(result: SpawnSyncReturns<Buffer>): string | null {
   if (result.error) return result.error.message;
@@ -26,7 +32,10 @@ export class WorkerSlice {
   private configured = false;
   private configurationError: string | null = null;
 
-  constructor(private readonly run: Run = spawnSync) {}
+  constructor(
+    private readonly run: Run = spawnSync,
+    private readonly readMeminfo: ReadMeminfo = () => readFileSync('/proc/meminfo', 'utf8'),
+  ) {}
 
   launch(
     taskId: string,
@@ -67,6 +76,27 @@ export class WorkerSlice {
   }
 
   private configure(options: SpawnSyncOptions): string | null {
+    const env = options.env ?? process.env;
+    const override = env.REZICS_WORKER_MEMORY_HIGH_GIB;
+    let memoryHigh: number;
+    if (override !== undefined) {
+      if (!/^\d+$/.test(override) || Number(override) <= 0 || !Number.isSafeInteger(Number(override))) {
+        return 'REZICS_WORKER_MEMORY_HIGH_GIB must be a positive integer';
+      }
+      memoryHigh = Number(override);
+    } else {
+      const totalMatch = /^MemTotal:\s+(\d+)\s+kB$/m.exec(this.readMeminfo());
+      const totalGiB = totalMatch ? Math.floor((Number(totalMatch[1]) * 1024) / GIB) : 0;
+      const check = this.run(
+        'systemctl',
+        ['show', CHECK_SLICE, '-p', 'MemoryMax', '--value'],
+        { ...options, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      const checkValue = check.status === 0 && !check.error ? check.stdout?.toString().trim() : '';
+      const checkBytes = /^\d+$/.test(checkValue ?? '') ? Number(checkValue) : 0;
+      const checkGiB = Math.floor(checkBytes / GIB);
+      memoryHigh = Math.max(Math.ceil(totalGiB / 4), totalGiB - checkGiB - WORKER_MEMORY_RESERVE_GIB);
+    }
     const result = this.run(
       'systemctl',
       [
@@ -76,6 +106,7 @@ export class WorkerSlice {
         WORKER_SLICE,
         `CPUWeight=${WORKER_CPU_WEIGHT}`,
         `IOWeight=${WORKER_IO_WEIGHT}`,
+        `MemoryHigh=${memoryHigh}G`,
       ],
       { ...options, stdio: ['ignore', 'pipe', 'pipe'] },
     );
