@@ -84,7 +84,11 @@ async function available() {
        media_type='image/jpeg', sha256=$3 WHERE route=$1 AND media_id=$2`,
     [route, id, digest],
   );
-  await db.admin.query("UPDATE content.media SET state='available' WHERE route=$1 AND media_id=$2", [route, id]);
+  await db.admin.query(
+    `UPDATE content.media SET state='available', width=1200, height=1800,
+       thumbhash=decode('AQID','base64'), average_color='#5a4632' WHERE route=$1 AND media_id=$2`,
+    [route, id],
+  );
   return id;
 }
 async function read(id: string) {
@@ -146,6 +150,12 @@ test('available cover returns exact image rights and the original source tuple w
       attribution: '(c) Image Artist; via [Example Catalogue](https://catalogue.example.test/record/42)',
     },
     source: request.provenance,
+    credit: request.credit,
+    width: 1200,
+    height: 1800,
+    placeholder: { thumbhash: 'AQID', color: '#5a4632' },
+    variants: [],
+    focalPoint: null,
   };
   expect(await read(id)).toEqual(expected);
   expect(await read(id)).toEqual(expected);
@@ -382,9 +392,10 @@ async function coverClaimGrowth(beforeClaim?: (ids: string[], scale: number, rep
       await database.admin.query(
         `INSERT INTO content.media
            (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
-            actual_byte_count,sha256,state,key,transaction_id,source_url,credit,provenance)
+            actual_byte_count,sha256,state,key,transaction_id,source_url,credit,provenance,
+            width,height,thumbhash,average_color)
          SELECT $2,id,$3,$4,id::text,'cover','image/jpeg',256,256,$5,'available',
-           'm/'||id::text||'/original',id,$6,$7,$8
+           'm/'||id::text||'/original',id,$6,$7,$8,1200,1800,decode('AQID','base64'),'#5a4632'
          FROM unnest($1::uuid[]) AS ids(id)`,
         [added, route, containerId, uploaderId, digest, request.sourceUrl, request.credit, request.provenance],
       );
