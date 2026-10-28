@@ -1090,6 +1090,8 @@ in `test/semantic/authored-documents.test.ts`.
 - Bound: O(commands × log N). At most 100 commands. No path scans a partition or table, or grows with N, U×t or M beyond index depth.
 - Growth check: `test/semantic/growth-sourced-writes.test.ts`: `a sourced bulk write at a fixed batch has constant rows and statements as subjects, documents and fences grow`, scales `[1, 4, 16]`; fixed-fixture checks in `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document`.
 
+A fresh duplicate source resolution returns `noEffect({ status: 200, value })` through `runCommand`. It retains source-fence preparation and current authorization, including finalization, and pays the fixed receipt/fence cost of one receipt lookup and one no-effect partition fence with one receipt insert. It does not advance position or write an outbox or write-basis row. Replay authorizes before looking up the receipt and skips the body and fence.
+
 ### Source-fence disclosure
 
 - Touches: Subject views, candidate listings, and the search source read each issue one `readFences` statement per tuple partition among the candidates that read would show. The search source read adds the same per read.

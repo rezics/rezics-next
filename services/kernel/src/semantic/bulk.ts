@@ -5,11 +5,11 @@ import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import {
+  noEffect,
   runCommand,
   type CommandAttempt,
   type CommandAuthorization,
   type CommandTransaction,
-  type CommandOutcome,
 } from '../command/command.ts';
 import { appendImportedField } from '../content/imported-fields.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
@@ -17,7 +17,6 @@ import { claimMedia } from '../content/media.ts';
 import { requestDigest } from '../http/request.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { readPartition } from '../partition/partition.ts';
 import { EditorialConflictError, SubjectNotFoundError, writeProposal } from './candidates.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { SubjectInputError } from './item.ts';
@@ -39,13 +38,6 @@ export type BulkValue =
   | { candidate: string; revision: number }
   | { revision: number };
 type Value = { status: 200 | 201; value: BulkValue };
-
-/** A resolving write records its receipt at the existing fence, without a revision or an event. */
-class Resolved extends Error {
-  constructor(readonly outcome: CommandOutcome<Value>) {
-    super('Source record already resolved');
-  }
-}
 
 export function batchRoute(routeKey: Uint8Array, command: BatchCommand): number | null {
   const tuple = tupleRoute(routeKey, command.source.source, command.source.external_id);
@@ -162,270 +154,226 @@ export async function batchCommand(
   const partition = partitionOf(route);
   const kind = `subject.batch_${command.op}`;
   const digest = requestDigest(kind, actor, command);
-  try {
-    const outcome = await runCommand<Value>(
-      pool,
-      {
-        partition,
-        deadline: options.deadline,
-        clock: options.clock,
-        authorization: options.authorization,
-        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
-        receipt: { actorAccountId: actor.accountId, kind, key: command.key, digest },
-      },
-      async (tx, { transactionId }) => {
-        try {
-          // runCommand has already reauthorized and probed the receipt. A no-op has no
-          // outbox envelope to fence, so finish only its receipt in this transaction.
-          const resolve = async (value: BulkValue): Promise<never> => {
-            const state = await readPartition(tx, partition);
-            if (!state) throw new SubjectNotFoundError();
-            const result: Value = { status: 200, value };
-            await tx
-              .query(
-                `INSERT INTO core.receipt
-             (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
-              epoch, position, transaction_id, response)
-             SELECT partition_no, 'account', $2, $3, $4, $5, epoch, position, $6, $7
-             FROM core.partition WHERE partition_no = $1 AND write_state = 'active' AND epoch = $8 AND position = $9`,
-                [
-                  partition,
-                  actor.accountId,
-                  kind,
-                  command.key,
-                  digest,
-                  transactionId,
-                  JSON.stringify(result),
-                  state.epoch,
-                  state.position,
-                ],
-              )
-              .then((inserted) => {
-                if (inserted.rowCount !== 1)
-                  throw Object.assign(new Error('Partition fence changed'), { code: '40001' });
-              });
-            await tx.query('COMMIT AND CHAIN');
-            // This sentinel bypasses the event-producing completion. The runner's
-            // rollback closes the empty chained transaction and still releases its gate and time.
-            throw new Resolved({ ...state, partition, transactionId, replayed: false, value: result });
-          };
-          const source = command.source;
-          if (command.op === 'create') {
-            const claim = await readClaim.run(tx, {
-              route,
-              source: source.source,
-              external_id: source.external_id,
-            });
-            const id = claim?.subject_id;
-            if (id) {
-              const subject = await visibleSubject(tx, route, id);
-              if (subject.type !== command.subject.type) throw new EditorialConflictError();
-              return resolve({ id, revision: subject.revision });
-            }
-            const target = { route, id: newId(route) };
-            const written = await writeSubject(tx, transactionId, {
-              target,
-              item: command.subject,
-              release: options.release,
-              source,
-            });
-            await insertClaim.run(tx, {
-              route,
-              source: source.source,
-              external_id: source.external_id,
-              subject_id: target.id,
-              transaction_id: transactionId,
-            });
-            return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
-          }
-          const subject = await visibleSubject(tx, route, command.subject);
-          if (command.op === 'propose') {
-            const imported = source.field_group === 'summary' || source.field_group === 'cover';
-            const hash = importedStatementDigest(command.statement, source.field_group);
-            const key = {
-              route,
-              subject_id: command.subject,
-              source: source.source,
-              external_id: source.external_id,
-              field_group: source.field_group,
-              statement_digest: hash,
-            };
-            const existing = await readSourceCandidate.run(tx, key);
-            if (existing) return resolve({ candidate: existing.candidate_id, revision: subject.revision });
-            let written: Awaited<ReturnType<typeof writeProposal>>;
-            const proposal = {
-              subject: command.subject,
-              // Content installation rewrites the candidate body. Keep the
-              // original snapshot available to a transaction retry.
-              statement: imported ? structuredClone(command.statement) : command.statement,
-              release: options.release,
-              source,
-              allowContent: imported,
-            };
-            try {
-              written = await writeProposal(
-                tx,
-                transactionId,
-                imported
-                  ? {
-                      ...proposal,
-                      install: async ({ candidate, revision, body }) => {
-                        if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
-                        if (source.field_group === 'summary') {
-                          const content = body.value.content;
-                          if (!command.rights || !record(content) || typeof content.language !== 'string')
-                            throw new TypeError('Invalid imported summary');
-                          const stored = await appendImportedField(tx, {
-                            subject: command.subject,
-                            candidate,
-                            revision,
-                            language: content.language,
-                            document: content.document,
-                            source: {
-                              source: source.source,
-                              external_id: source.external_id,
-                              record_revision: source.record_revision,
-                              digest: source.digest,
-                              converter_revision: source.converter_revision,
-                              field_group: 'summary',
-                              references: command.statement.references,
-                            },
-                            rights: {
-                              license: command.rights.license,
-                              obligations: command.rights.obligations,
-                              attribution: command.rights.attribution,
-                            },
-                          });
-                          return {
-                            language: content.language,
-                            document: stored.id,
-                            digest: stored.digest,
-                          };
-                        }
-                        if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
-                        await claimMedia(tx, {
-                          mediaIds: [body.value.content],
-                          containerId: command.subject,
-                          author: actor,
-                          reference: {
-                            kind: 'semantic_candidate',
-                            subjectId: command.subject,
-                            candidateId: candidate,
-                            revision,
-                          },
-                        });
-                      },
-                    }
-                  : proposal,
-              );
-            } catch (error) {
-              if (imported && (error instanceof TypeError || error instanceof RangeError))
-                throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
-              throw error;
-            }
-            await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
-            return { value: { status: 201, value: written.value }, events: written.events };
-          }
-          const proposed = await readProposedSource.run(tx, {
+  const outcome = await runCommand<Value>(
+    pool,
+    {
+      partition,
+      deadline: options.deadline,
+      clock: options.clock,
+      authorization: options.authorization,
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      receipt: { actorAccountId: actor.accountId, kind, key: command.key, digest },
+    },
+    async (tx, { transactionId }) => {
+      try {
+        const resolve = (value: BulkValue) => noEffect<Value>({ status: 200, value });
+        const source = command.source;
+        if (command.op === 'create') {
+          const claim = await readClaim.run(tx, {
             route,
-            subject_id: command.subject,
-            candidate_id: command.candidate,
+            source: source.source,
+            external_id: source.external_id,
           });
-          if (!proposed) {
-            // Compact single-route candidates exist virtually before slot expansion.
-            // Their proposing revision has no imported source, so they cannot be retracted here.
-            const compact = await readCompactCandidate.run(tx, {
-              route,
-              subject_id: command.subject,
-              candidate_id: command.candidate,
-            });
-            if (compact) throw new EditorialConflictError();
-            throw new SubjectNotFoundError();
+          const id = claim?.subject_id;
+          if (id) {
+            const subject = await visibleSubject(tx, route, id);
+            if (subject.type !== command.subject.type) throw new EditorialConflictError();
+            return resolve({ id, revision: subject.revision });
           }
-          const origin = proposed.source as Source | null;
-          if (
-            !origin ||
-            origin.source !== source.source ||
-            origin.external_id !== source.external_id ||
-            origin.field_group !== source.field_group
-          )
-            throw new EditorialConflictError();
-          const revision = subject.revision + 1;
-          await insertRetractRevision.run(tx, {
-            route,
-            subject_id: command.subject,
-            revision,
-            release: options.release.digest,
-            transaction_id: transactionId,
+          const target = { route, id: newId(route) };
+          const written = await writeSubject(tx, transactionId, {
+            target,
+            item: command.subject,
+            release: options.release,
             source,
           });
-          await updateSubjectRelease.run(tx, {
+          await insertClaim.run(tx, {
             route,
-            subject_id: command.subject,
-            release: options.release.digest,
+            source: source.source,
+            external_id: source.external_id,
+            subject_id: target.id,
+            transaction_id: transactionId,
           });
-          await insertRetraction.run(tx, {
-            route,
-            subject_id: command.subject,
-            candidate_id: command.candidate,
-            revision,
-            references: command.references,
-          });
-          await deleteSourceCandidate.run(tx, {
+          return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
+        }
+        const subject = await visibleSubject(tx, route, command.subject);
+        if (command.op === 'propose') {
+          const imported = source.field_group === 'summary' || source.field_group === 'cover';
+          const hash = importedStatementDigest(command.statement, source.field_group);
+          const key = {
             route,
             subject_id: command.subject,
             source: source.source,
             external_id: source.external_id,
             field_group: source.field_group,
+            statement_digest: hash,
+          };
+          const existing = await readSourceCandidate.run(tx, key);
+          if (existing) return resolve({ candidate: existing.candidate_id, revision: subject.revision });
+          let written: Awaited<ReturnType<typeof writeProposal>>;
+          const proposal = {
+            subject: command.subject,
+            // Content installation rewrites the candidate body. Keep the
+            // original snapshot available to a transaction retry.
+            statement: imported ? structuredClone(command.statement) : command.statement,
+            release: options.release,
+            source,
+            allowContent: imported,
+          };
+          try {
+            written = await writeProposal(
+              tx,
+              transactionId,
+              imported
+                ? {
+                    ...proposal,
+                    install: async ({ candidate, revision, body }) => {
+                      if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
+                      if (source.field_group === 'summary') {
+                        const content = body.value.content;
+                        if (!command.rights || !record(content) || typeof content.language !== 'string')
+                          throw new TypeError('Invalid imported summary');
+                        const stored = await appendImportedField(tx, {
+                          subject: command.subject,
+                          candidate,
+                          revision,
+                          language: content.language,
+                          document: content.document,
+                          source: {
+                            source: source.source,
+                            external_id: source.external_id,
+                            record_revision: source.record_revision,
+                            digest: source.digest,
+                            converter_revision: source.converter_revision,
+                            field_group: 'summary',
+                            references: command.statement.references,
+                          },
+                          rights: {
+                            license: command.rights.license,
+                            obligations: command.rights.obligations,
+                            attribution: command.rights.attribution,
+                          },
+                        });
+                        return {
+                          language: content.language,
+                          document: stored.id,
+                          digest: stored.digest,
+                        };
+                      }
+                      if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
+                      await claimMedia(tx, {
+                        mediaIds: [body.value.content],
+                        containerId: command.subject,
+                        author: actor,
+                        reference: {
+                          kind: 'semantic_candidate',
+                          subjectId: command.subject,
+                          candidateId: candidate,
+                          revision,
+                        },
+                      });
+                    },
+                  }
+                : proposal,
+            );
+          } catch (error) {
+            if (imported && (error instanceof TypeError || error instanceof RangeError))
+              throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
+            throw error;
+          }
+          await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
+          return { value: { status: 201, value: written.value }, events: written.events };
+        }
+        const proposed = await readProposedSource.run(tx, {
+          route,
+          subject_id: command.subject,
+          candidate_id: command.candidate,
+        });
+        if (!proposed) {
+          // Compact single-route candidates exist virtually before slot expansion.
+          // Their proposing revision has no imported source, so they cannot be retracted here.
+          const compact = await readCompactCandidate.run(tx, {
+            route,
+            subject_id: command.subject,
             candidate_id: command.candidate,
           });
-          return {
-            value: { status: 200, value: { revision } },
-            events: [
-              {
-                type: SUBJECT_REVISED,
-                subject: command.subject,
-                data: { id: command.subject, revision, kind: 'retract' },
-              },
-              {
-                type: 'com.rezics.statement.retracted.v1',
-                subject: command.subject,
-                data: { candidate: command.candidate, revision },
-              },
-            ],
-          };
-        } catch (error) {
-          if (
-            typeof error === 'object' &&
-            error !== null &&
-            'code' in error &&
-            error.code === '23505' &&
-            'constraint' in error &&
-            [
-              'external_claim_pkey',
-              'source_candidate_pkey',
-              'receipt_pkey',
-              'revision_pkey',
-              'candidate_pkey',
-            ].includes(String(error.constraint))
-          )
-            error.code = '40001';
-          throw error;
+          if (compact) throw new EditorialConflictError();
+          throw new SubjectNotFoundError();
         }
-      },
-    );
-    return {
-      ...outcome.value,
-      component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
-    };
-  } catch (error) {
-    if (error instanceof Resolved) {
-      const outcome = error.outcome;
-      return {
-        ...outcome.value,
-        component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
-      };
-    }
-    throw error;
-  }
+        const origin = proposed.source as Source | null;
+        if (
+          !origin ||
+          origin.source !== source.source ||
+          origin.external_id !== source.external_id ||
+          origin.field_group !== source.field_group
+        )
+          throw new EditorialConflictError();
+        const revision = subject.revision + 1;
+        await insertRetractRevision.run(tx, {
+          route,
+          subject_id: command.subject,
+          revision,
+          release: options.release.digest,
+          transaction_id: transactionId,
+          source,
+        });
+        await updateSubjectRelease.run(tx, {
+          route,
+          subject_id: command.subject,
+          release: options.release.digest,
+        });
+        await insertRetraction.run(tx, {
+          route,
+          subject_id: command.subject,
+          candidate_id: command.candidate,
+          revision,
+          references: command.references,
+        });
+        await deleteSourceCandidate.run(tx, {
+          route,
+          subject_id: command.subject,
+          source: source.source,
+          external_id: source.external_id,
+          field_group: source.field_group,
+          candidate_id: command.candidate,
+        });
+        return {
+          value: { status: 200, value: { revision } },
+          events: [
+            {
+              type: SUBJECT_REVISED,
+              subject: command.subject,
+              data: { id: command.subject, revision, kind: 'retract' },
+            },
+            {
+              type: 'com.rezics.statement.retracted.v1',
+              subject: command.subject,
+              data: { candidate: command.candidate, revision },
+            },
+          ],
+        };
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === '23505' &&
+          'constraint' in error &&
+          [
+            'external_claim_pkey',
+            'source_candidate_pkey',
+            'receipt_pkey',
+            'revision_pkey',
+            'candidate_pkey',
+          ].includes(String(error.constraint))
+        )
+          error.code = '40001';
+        throw error;
+      }
+    },
+  );
+  return {
+    ...outcome.value,
+    component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
+  };
 }
