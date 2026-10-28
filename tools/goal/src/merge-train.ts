@@ -81,7 +81,7 @@ export async function runAffectedTest(
   const started = Date.now();
   let output = '';
   let passed = false;
-  let unverified = false;
+  let transportUnverified = false;
   for (let retry = 0; retry < 2; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
     const result = await new Promise<{ passed: boolean; output: string }>((done) => {
@@ -98,10 +98,12 @@ export async function runAffectedTest(
     });
     output = result.output;
     passed = result.passed;
-    unverified = !passed && checkTransportFailed(output);
-    if (!unverified) break;
+    transportUnverified = !passed && checkTransportFailed(output);
+    if (!transportUnverified) break;
     if (retry === 0) appendFileSync(logPath, 'Check-host transport failed; retrying once\n');
   }
+  const selectionUnverified = /^Affected mode: unverified, 0 of \d+ test files selected \(.+\)$/m.test(output);
+  const unverified = transportUnverified || (passed && selectionUnverified);
   const status = unverified ? 'unverified' : passed ? 'passed' : 'failed';
   const durationMs = Date.now() - started;
   appendFileSync(logPath, `Affected test: ${status} in ${durationMs} ms\n`);

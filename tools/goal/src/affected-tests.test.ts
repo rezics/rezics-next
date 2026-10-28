@@ -231,12 +231,33 @@ test('a successful transport retry records the verified result without stale fai
   }
 }, 60_000);
 
+test('an unplaceable affected selection is recorded unverified from its announcement', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const announcement = 'Affected mode: unverified, 0 of 4 test files selected (services/kernel/scripts/check.ts)';
+    h.settings.affectedTests = [{ paths: ['**'], command: command(`console.log(${JSON.stringify(announcement)})`) }];
+    const task = h.dispatch('feature');
+    await h.start(task);
+    const result = h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests![0]!;
+    expect(result.status).toBe('unverified');
+    expect(result.output).toContain(announcement);
+    await h.train(undefined, false);
+    expect(h.outcomes[0]!.passed).toBe(true);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
 test('affected-test settings use defaults, accept local overrides and reject malformed commands', () => {
   const h = integrationHarness();
   try {
     const settings = () => loadSettings({ cwd: h.root, env: {} });
     expect(settings().affectedTests).toEqual([
-      { paths: ['services/kernel/**'], command: ['bun', 'run', '--cwd', 'services/kernel', 'check'] },
+      {
+        paths: ['services/kernel/**'],
+        command: ['env', 'KERNEL_CHECK_AFFECTED_MAX=60', 'bun', 'run', '--cwd', 'services/kernel', 'check'],
+      },
     ]);
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
     local.affectedTests = [{ paths: ['**'], command: ['true'] }];
