@@ -217,86 +217,32 @@ checkpoint. Additional Context settings/extension, account-event replay, passage
 paused-worker tests remain required native acceptance for the respective implementation briefs;
 existing unavailable sitemap behavior is evidence only. No external product research was needed for this audit. The reference index was read; the contract and cited READMEs name no external reference implementation for this lifecycle surface.
 
-The following prior-run evidence predates the file split and aggregate reconciliation below. Its count
-expectations are historical observations, not current requirements.
-
-The corrected specification and independent state/locator tests were committed before native check-host waits.
-Root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks passed in the prior reconciliation
-and continuation. Prior native validation evidence is distinct from the corrected tests' required outcomes:
-
-| Attempt               | Observed evidence                                                                                                                                                                                       | Limit                                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Original audit        | Two account-agent invariants passed; the native inverse-count counterexample above failed honestly.                                                                                                     | Does not certify corrected account timing or the later independent state/locator tests. |
-| Reconciliation        | Host `a` acquired after 3983 seconds; workspace-upload SSH closure, rsync exit 255. Retry acquired host `b` after 166 seconds; upload SSH closure, rsync exit 12; remote directory cleanup also failed. | Neither run returned native test results.                                               |
-| Supplied continuation | Host `b` acquired after 276.133 seconds; upload SSH closure, rsync exit 12, `RemoteTransportError` for `workspace upload`.                                                                              | Runner exited 1 before returning native test results.                                   |
-
-Missing lifecycle routes, scoped withholding, state/retention adapters and the then-required public count
-assertion remained expected native reds, **not observed outcomes of those corrected-test attempts**. Neither
-512/4096 growth measurements nor account-at-confirmation cleanup, legal holds or replay results are claimed.
-A slot wait is queued work; the prior blockers were workspace-upload transport failures. No unrelated process,
-database or container was stopped or removed. No production file or existing acceptance assertion was changed.
-
-This continuation again passed root TC0 across every workspace and focused lint/format checks. The unchanged
-exact acceptance command acquired host `b` after 1354.640 seconds, uploaded successfully in 69.848 seconds,
-and completed with exit 1: two passes and seventeen failures across nineteen tests. Both account-agent invariants
-passed unchanged. Native missing DELETE/purge routes returned 404; compact and Context state tests reached the
-missing reader assertion after real setup. The account-erasure test committed its native terminal barrier at
-confirmation T and reached the missing retention adapter without advancing the clock. The paused-consumer
-counterexample again returned empty links with exact count 1 and `caught_up:true`.
-
-Three failures stopped earlier than the intended outcomes: proposal-author setup returned 503
-`deadline_exceeded`, locator-growth subject creation returned 503 `overloaded`, and scoped takedown's subject
-read returned 503 `deadline_exceeded`. These are observed validation limits, not proof of ownership ambiguity,
-scoped withholding, or growth bounds. Delete/restore and purge growth reached missing DELETE at their first
-scale; no 512/4096 budget result is claimed.
-
-The unchanged contract-file retry acquired host `a` after 104.918 seconds and uploaded in 21.896 seconds,
-then SSH closed during the remote command before a result (`RemoteTransportError`, `remote command`). It
-supplies no replacement outcome for the proposal-author or scoped-takedown 503s. The unchanged growth-file
-retry waited for its slot for 7759.647 seconds on host `a`, uploaded in 53.875 seconds, and completed with
-three expected failures and no 503 response: the locator reached the absent reader assertion after native
-setup and 64 proposals; delete/restore and purge reached missing DELETE. This resolves the locator-growth
-setup limit, but still establishes no growth bound. The complete exact run above returned native results;
-the later isolated transport failure does not erase those results or justify claiming the two remaining
-load-sensitive outcomes were observed. No further runtime result is inferred from static checks.
-
-This continuation preserved all corrected policy decisions and existing acceptance assertions: immediate
-account-confirmation handoff, individual 30-day restoration, lowerCamelCase `restoreDeleted`, Content source
-fence custody, legal-order-only destruction of takedown evidence with holds, read-only caller-RR/native-T
-owner evidence, and the then-pending foreign-count ABI (now superseded by
-[aggregate disclosure](aggregate-disclosure.md)). It changed only this validation documentation within the
-declared paths; there are no outside-path changes or new product decisions. Reference reading was limited
-to the read-only reference `INDEX.md`; no external implementation is named for this lifecycle surface.
-
 The native acceptance is split by production dependency:
 
 | File                                           | Required evidence                                                                                                                                                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `test/semantic/lifecycle-state.test.ts`        | Three unchanged proposal-author, compact-author and current Context-owner tests; native setup and cleanup, caller RR/native T, role revocation, mismatched locator and exact result assertions. No DELETE or retention prerequisite. |
-| `test/semantic/growth-lifecycle-state.test.ts` | Unchanged locator-only growth test and shared capture at 64/512/4096, one warmup and one repetition. No missing lifecycle routes.                                                                                                    |
+| `test/semantic/growth-lifecycle-state.test.ts` | Locator-only growth test with its original result assertions and shared capture at 64/512/4096, one warmup and one repetition. No missing lifecycle routes.                                                                          |
 | `test/semantic/deletion-contract.test.ts`      | Remaining delete/restore, purge/hold, account and field outcomes, plus the reconciled paused-consumer aggregate omission counterexample and retained internal counter.                                                               |
 | `test/semantic/growth-deletion.test.ts`        | Remaining delete/restore and retention/replay growth outcomes at their original scales and capture settings.                                                                                                                         |
 
 Each file owns its native fixture instance and cleanup through `test/semantic/support/deletion-fixture.ts`.
 The factory is extracted from the original actual fixtures; no test imports another registering test module,
-installs lifecycle truth or replaces Access with a callback. All lifecycle outcomes and assertions remain.
-The sole obsolete aggregate expectation is reconciled to the owning omission rule above. The first slice
-changes no roles, grants or action catalogues. Lifecycle authority integration must be explicit before any
-later change to frozen editorial catalogues.
+installs lifecycle truth or replaces Access with a callback. All nineteen tests remain. Clock assignments use
+an instance setter after extraction; growth tests obtain the same native resources from their own fixture.
+No lifecycle assertion is dropped. The sole obsolete aggregate expectation is reconciled to the owning
+omission rule above. The first slice changes no roles, grants or action catalogues. Lifecycle authority
+integration must be explicit before any later change to frozen editorial catalogues.
 
-The split-file validation passed root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks.
-The exact four-file managed acceptance command acquired host `b` after 614.882 seconds, uploaded successfully
-in 100.377 seconds and completed in 115.519 seconds with exit 1: two passes and seventeen expected native
-failures across all nineteen tests. No transport failure or 503 response occurred in this corrected run.
-
-All three `lifecycle-state.test.ts` tests reached the absent `readSemanticLifecycle` export after native setup;
-`growth-lifecycle-state.test.ts` independently reached it after 64 native proposals. These are missing-reader
-reds, not missing-route outcomes. Later result, mismatch and role-revocation assertions remain required but
-cannot execute past that first failure. No 512/4096 growth measurement is claimed.
+The last completed exact four-file managed acceptance ran all nineteen tests with two passes and seventeen
+expected native failures, without transport errors or 503 responses. All three state tests reached the absent
+`readSemanticLifecycle` export after native setup; locator growth independently reached it after 64 native
+proposals. These are missing-reader reds, not missing-route outcomes. Later result, mismatch and role-revocation
+assertions remain required but cannot execute past that first failure. No 512/4096 growth measurement is claimed.
 
 The original files separately reported ten missing-route failures, the missing retention adapter after native
 account confirmation at the unchanged T, and the scoped-field regression (the candidate was omitted instead
 of retaining its uncovered references). Both account-agent invariants passed. The paused-consumer regression
 verified raw internal count 1 and public `links:[]`, then failed because the backend still returned
-`count:{value:1,exact:true}` instead of omitting `count`. These production gaps already exist on the base;
-this specification changes no production behavior and does not certify the unexecuted later outcomes.
+`count:{value:1,exact:true}` instead of omitting `count`. These are production gaps, not implemented guarantees.
+Root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks passed for that split.
