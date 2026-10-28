@@ -30,6 +30,9 @@ Current implementation evidence is narrower than the capability:
 - Pin/kind columns, retained-entry/due storage, labels/reservations, source-head hooks and canonical tables exist.
   Entry/copy/session row adapters still use the fixed pre-profile values and omit accepted pins. Label DAOs provide
   metadata lifecycle and reservation admission, not HTTP commands, complete assignment undo/pages or automatic purge.
+- Neither `entry` nor `entry_deleted` has `owner_write_seq`; there is no owner state-write counter or allocator.
+  `entries.ts` and entry insert/update/delete SQL do not sequence state writes. `fact_source_head.generation` is an
+  existing source-hook stamp, not this ordering counter. Required producers are described below, not implemented.
 - Every method of `createCollectionSource` and the canonical-source-store factories throws `dependency_unavailable`.
   Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
 - `work-module.ts` registers `work.ts` Collection listing effects only. No integrated `purgeAccountFactsPage` export
@@ -75,11 +78,36 @@ owner-scoped reaction adapter. There is no following feed or public follower tot
 named tracked entries, never Everything.
 
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views
-use latest owner state with conflicts retained, union labels and preserve separate copies/sessions. Browsing emits
+select the live state with highest private `owner_write_seq` among merged originals, show conflicts, retain every
+original fact/reference/pin, union labels and preserve separate copies/sessions. Browsing emits
 one canonical card; the editor retains every occurrence/note/order. Canonical-ID indexes and shared serialized
-pending/published identity epochs establish ordering and uniqueness. Pending returns preparing; cursors restart on
-epoch change. No per-page identity-home sweep or identity-basis protocol. Original withheld support never becomes
+pending/published identity epochs establish browsing order and uniqueness. Pending returns preparing; cursors restart
+on epoch change. No per-page identity-home sweep or identity-basis protocol. Original withheld support never becomes
 public through terminal visibility; current original/terminal authorization remains required.
+
+### Native owner state-write sequencing (required; runtime incomplete)
+
+[Owner state-write order](../../../../docs/library-and-collections.md#owner-state-write-order) owns the rule. Entry
+create/update, physical clear and Undo restore must increment one per-account counter in the owner's partition,
+using `UPDATE ... SET seq=seq+1 RETURNING seq` in the same authorized transaction as the fact, receipt, source hooks
+and outbox. Initialization is part of the first authorized write, never GET. Live entries store the result as private
+`owner_write_seq`; all of an owner's entries share that partition and total order, with contention only among that
+owner's state writes. Do not derive this order from a global coordinator, clock/UUID sorting, max of unrelated
+per-slot revisions or an executor hook.
+
+Native receipt replay skips allocation. Failed/denied/CAS-stale/expired/occupied operations roll back counter changes
+with the fact; branded `noEffect` cannot persist a counter update. Successful state-setting writes allocate even if
+their value equals another row. Use native bigint for counter and stored sequence, no Number truncation, reset,
+wrap or client-selected value; overflow explicitly aborts the write. Physical payload purge and derived repair
+allocate nothing. Epoch maintenance consumes `owner_write_seq` and re-keys only derived indexes, never originals.
+The counter is private ordering data, never permission, an account lifecycle generation, a membership witness store
+or a disclosed aggregate.
+
+The allocator/counter storage, live/archive columns and row adapters, native set/clear/restore writers, bounded
+migration/cutover and readiness, epoch consumer and terminal cleanup are remaining producers. Existing unsequenced
+values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero. Explicit bounded
+migration/cutover must establish authoritative ordering before those values participate in ready canonical reads;
+fresh supported writers must set real sequences before advertising canonical readiness. No helper ABI is defined.
 
 ### Required filtering, actions and cross-owner dependencies
 
@@ -194,15 +222,19 @@ incarnation and never changes retained rows.
 The archive keeps the full pre-delete row: `route`, `account_id`, `subject_id`, `requested_subject_id`, `state`, the
 source `revision`, `created_at`, `updated_at`, original `transaction_id`, `activity_at`, `finished_at`, `type_id`,
 all `type_source_*` stamps, non-null `incarnation_id`, and the accepted `library_profile_pin` with its existing
-`library.library_profile_pin_valid` validation and the existing pin nullability rules. Add `deletion_id`,
+`library.library_profile_pin_valid` validation and the existing pin nullability rules. The required snapshot also
+retains the original `owner_write_seq`; this column is not yet present. Add `deletion_id`,
 `deleted_revision`, `deleted_at`, `restore_until`, and generated
 `partition_no = route >> 4`. The due index is exactly
 `(partition_no, restore_until, route, account_id, deletion_id)`. The source revision remains `r`, the deletion
-revision is `r + 1`, and a successful restore inserts the saved values at `r + 2`; reject deletion without mutation
-when `r > 2,147,483,644`. Restore inserts only into an empty live slot and consumes only the selected deletion after
+revision is `r + 1`, and a successful restore inserts the saved values at `r + 2` with a fresh higher
+`owner_write_seq`; reject deletion without mutation when `r > 2,147,483,644`. Restore inserts only into an empty
+live slot and consumes only the selected deletion after
 the insert succeeds. Occupancy or stale/expired state conflicts and leaves that archive row available. User dates,
-pin, stored subject/alias and source stamps survive unchanged; lifecycle time and the restore transaction are new
-command facts. Missing historical profiles use the actual legacy-null pin handling until the profile owner completes
+pin, stored subject/alias and source stamps survive unchanged; lifecycle time, the restore transaction and ordering
+metadata are new command facts. Undo does not copy the archive's old sequence into live state. Clear advances the
+owner counter without adding a live tombstone; archive/deleted rows never compete as current live state. Missing
+historical profiles use the actual legacy-null pin handling until the profile owner completes
 the retained-row cutover; never infer a historical accepting type from today's profile or shelf observation. A corrupt
 or unavailable non-null pinned release fails closed rather than guessing.
 
@@ -401,6 +433,11 @@ The account-owned native rows below live on the owner's route unless stated othe
 account-wide Library cascade. The current schema and the shelf/bulk contracts include applied rows and planned
 logical stores; a planned name without an applied table or exact locator is an implementation gap, not covered by
 workflow history.
+
+The required private owner counter (`seq`) and live/archive `owner_write_seq` fields are also terminal inventory,
+not applied schema. T fences their state writers immediately. Bounded Library participant cleanup erases ordering
+metadata after dependent private facts; fenced late repair must not recreate it. This counter is neither an account
+lifecycle generation nor a public activity total. Existing `fact_source_head` removal remains last after delete hooks.
 
 | Native data                                                                                                                                                                        | Required cleanup and current gap                                                                                                                                                                                                                                                                                                                   |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -640,6 +677,18 @@ Where a named test does not call the operation, or does not grow the rows that o
   public COMPLETE A versus pending B, producer races and no resurrection are required. Full graph/coordinator and
   exact shared-payload cleanup coverage are absent; entry/copy/follow-only evidence cannot establish them.
 
+### Owner state-write order (required; runtime incomplete)
+
+- Touches: one owner-partition counter primary-key update/lock plus the addressed entry/archive and existing account
+  authorization, receipt, source hooks and outbox transaction; no global counter or owner-history scan.
+- Bound: constant native counter rows/statements per actual state write plus indexed depth, including initialization,
+  bigint fields, rollback and contention. Serializes only that owner's state writes; no free ordering metadata or
+  hidden `noEffect` mutation. Existing Entry put/delete measurements below exclude this missing producer.
+- Growth check: require native same-kernel-time writes across two merged originals, concurrent same/different owners,
+  clear/Undo fresh order, denied/CAS/replay/overflow rollback and terminal no-resurrection, with three-scale
+  owner/entry/history captures. No such runtime/growth test is executed or claimed by this document task.
+  [Filtered lists](../../../../docs/filtered-lists.md) retains ownership of filter-plan numeric budgets.
+
 ### Command envelope
 
 - Touches: Every library `runCommand`. An attempt starts a serializable transaction, sets the lock timeout and the statement timeout, reads time with `transaction_timestamp()` and no relation, runs authorization, and probes at most one `core.receipt` by `(partition_no, principal_kind, principal_id, command_kind, idempotency_key)`. The fence is one statement. It updates one `core.partition` primary key, inserts one `core.outbox` row per event, zero or one `editorial.write_basis`, and zero or one `core.receipt`. Library bodies emit one event, or two when a public Collection also emits `listing.changed` or an in-progress entry also follows. A matching receipt commits and skips the body and the fence. Listing sync supplies a receipt and no write basis and no authorization callback. Own-account, trusted-account and Collection commands set a 5 second deadline. Listing sync leaves the deadline unset, so `runCommand` uses its 2 second default. Contention retries are deadline-dependent, not a fixed count.
@@ -739,7 +788,7 @@ Where a named test does not call the operation, or does not grow the rows that o
 ### Entry deletion retention and restore (storage exists; lifecycle incomplete)
 
 - Touches: The retained `library.entry_deleted` table and due DAO use `(route, account_id, deletion_id)` for the complete snapshot and a due index on `(partition_no, restore_until, route, account_id, deletion_id)`. The production delete command still uses physical delete SQL; ordinary restore HTTP/command and automatic purge are not wired. When implemented, delete and restore use exact target keys, preserve independent deletion occurrences, and reuse current authorization, receipts, events and shared durable-work owners.
-- Bound: The specified exact-key delete is one live-slot CAS plus one archive insert; restore is one archive point-read/delete plus one live-slot insert. The body target is `R = O(1)`, `B = O(L(N) + L(D))`, with `D` retained entry rows, plus authorization, receipt/event and existing shared work-owner costs. Due work materializes at most `100` raw source keys before later eligibility filters, or uses a proven partial due index. These are required query shapes; the complete runtime bound is not yet measured.
+- Bound: The specified exact-key delete is one live-slot CAS plus one archive insert; restore is one archive point-read/delete plus one live-slot insert. The body target is `R = O(1)`, `B = O(L(N) + L(D))`, with `D` retained entry rows, plus authorization, receipt/event and existing shared work-owner costs. Both additionally pay the required Owner state-write order counter cost above; payload purge allocates no sequence. Due work materializes at most `100` raw source keys before later eligibility filters, or uses a proven partial due index. These are required query shapes; the complete runtime bound is not yet measured.
 - Growth check: `specs/library-deletion-outcomes.test.ts` defines real-driver checks at `256/1024/4096` for actual source keys, SQL plans, rows, blocks, statements, page bounds, crash recovery and replay. The missing-driver verifier proves only that each scenario fails for the exact absent-driver message; it is not a product or growth result.
 
 ### Entry read

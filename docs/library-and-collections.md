@@ -59,15 +59,47 @@ resource grants and the account fence. Read authorization stays native; material
 Denied writes leave no storage. Opaque state references are discovery points, not permission or membership.
 
 Stored personal subject IDs and Collection occurrences are immutable and never rewritten by identity resolution;
-new writes address the terminal. Canonical views choose the owner's latest state write while retaining conflicting
-records, union labels, and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
+new writes address the terminal. Canonical views choose the live state with highest private `owner_write_seq` among
+merged originals, show conflicts and retain every original fact, stored subject reference and accepted pin. They
+union labels and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
 preserves every curated occurrence, note and order.
+
+### Owner state-write order
+
+Latest state means a native per-account write sequence in the owner's partition. Each successful state set, state
+clear and Undo restore increments that owner's counter row in the same authorized fact transaction with
+`UPDATE ... SET seq=seq+1 RETURNING seq`. First-row initialization belongs to that write too, never GET. A live
+entry stores the returned value as private `owner_write_seq`. All of one owner's entries share the owner partition,
+so this totally orders that owner's state writes and confines counter contention to that person's writes. No
+cross-partition coordinator, clock/UUID sorting, maximum of unrelated per-slot revisions or executor hook supplies
+the order. This ordering rule supersedes those alternatives.
+
+Undo is a new state write and obtains a fresh higher `owner_write_seq`, even when native state, subject IDs,
+accepted pin, source stamps and user dates are restored exactly. Existing native new-transaction and revision
+rules still apply. The archive retains the original state snapshot, including its original sequence; archived or
+deleted rows never compete as current live state. A clear advances the counter but keeps the exact retained-entry
+and physical-delete contract, including public status/body/headers; it creates no live state tombstone to hold a
+sequence. Physical payload purge and derived repair are not owner state writes.
+
+Native receipt replay allocates no sequence. Failed, denied, stale, expired or occupied operations roll back any
+counter change with the fact; branded `noEffect` cannot hide a persisted counter write. A successful state-setting
+write still allocates when its value equals another row: equality is not an idempotent receipt replay. Counter and
+stored sequence use native bigint without Number truncation or client-chosen values. Never reset or wrap the
+counter; overflow explicitly fails and rolls back the write.
+
+Existing values without authoritative sequences require explicit bounded migration, cutover and readiness gates.
+Do not fabricate ordering from dates, transaction UUIDs, source-type positions or zero. Fresh supported writers must
+store real sequences before their canonical capability is advertised ready; unsequenced existing values cannot
+silently compete in a ready canonical view. Allocator, schema, writer integration and migration remain required
+native producers, not implemented helpers or columns established by this document.
 
 Canonical indexes are keyed by canonical ID. Serialized durable identity maintenance marks the shared identity
 epoch pending, completes bounded mapping/index work, then publishes the epoch. Canonical reads return preparing
 while pending, and cursors restart on epoch change. No per-page sweep of identity homes or identity-basis protocol
-is required. Current authorization still covers original support and terminal: a withheld original never becomes
-public because its terminal is readable.
+is required. Epoch maintenance reads `owner_write_seq` and re-keys only derived data; it never allocates a state-write
+sequence or rewrites originals. The counter is private ordering data, never permission, an account lifecycle
+generation, a membership witness database or an aggregate count to disclose. Current authorization still covers
+original support and terminal: a withheld original never becomes public because its terminal is readable.
 
 ## Destinations and actions
 
@@ -127,6 +159,9 @@ PUBLIC at T retain de-identified published material. Dynamic output retains last
 evaluation of private facts; curated output preserves permitted published occurrences. No unlisted output survives.
 The module's [retention inventory](../services/kernel/src/library/README.md#retention-inventory) covers the whole graph;
 entry/copy/follow removal alone is not whole-graph erasure.
+The private owner counter and stored live/archive `owner_write_seq` belong to that inventory. T immediately fences
+state writers; bounded participant cleanup erases ordering metadata after its dependent private facts. Late repair
+must never recreate it. This adds neither account restore nor a public activity counter.
 
 ## Acceptance and cost evidence still required
 
@@ -144,3 +179,15 @@ witness work. Terminal measurements cover complete indexed child inventories and
 child-before-parent pages/checkpoints and finite workflow segments. Completion requires every phase and store-owner
 acknowledgement. Whole-graph crash/replay, public A/pending B, immediate concealment and no-resurrection evidence are
 required. Runtime and these measurements remain incomplete; documentation adoption runs no native checks.
+
+### Owner state-write order
+
+- Touches: one owner-partition counter primary-key update/lock, the addressed entry/archive, and existing account
+  authorization, receipt, source hooks and outbox transaction. No global counter or owner-history scan.
+- Bound: constant native counter rows/statements per actual state write plus indexed depth, including first-row
+  initialization and bigint fields. Only that owner's state writes serialize; charge rollback and contention.
+  Ordering metadata is not free, and `noEffect` must not conceal a mutation.
+- Growth check: require native same-kernel-time writes across two merged originals, concurrent same/different
+  owners, clear/Undo fresh order, denied/CAS/replay/overflow rollback and terminal no-resurrection, with three-scale
+  owner/entry/history captures. This document task executes or claims no such runtime/growth test. Filter-plan
+  numeric budgets remain owned by [filtered lists](filtered-lists.md).
