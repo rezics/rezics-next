@@ -812,7 +812,26 @@ export class WorkerTasks {
     }
   }
   async cancel(taskId: string): Promise<void> {
-    return this.stop(taskId, true);
+    await this.stop(taskId, true);
+    const dependency = this.store.task(taskId);
+    const heldByManager = new Map<string, string[]>();
+    for (const task of this.store.tasks()) {
+      if (task.state !== 'held' || !task.brief.after.includes(taskId)) continue;
+      const held = heldByManager.get(task.brief.manager) ?? [];
+      held.push(task.id);
+      heldByManager.set(task.brief.manager, held);
+    }
+    const inbox = new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory);
+    for (const [managerId, heldTasks] of heldByManager) {
+      const event = {
+        managerId,
+        taskId,
+        kind: 'instruction' as const,
+        summary: `Cancelled dependency ${taskId} is holding tasks ${heldTasks.join(', ')}; decide whether the dependency is still needed.`,
+      };
+      this.store.event({ taskId, attempt: dependency.currentAttempt }, 'cancelled-dependency-notice', event);
+      inbox.deliver(event);
+    }
   }
   /** Later integration follows the stabilize branch. A running attempt is left alone. */
   retarget(taskId: string, target: string): Task {

@@ -516,9 +516,33 @@ export class WorkerJob implements GateOutcomeSink {
     }
     return released;
   }
+  /** Surface pre-existing held tasks with cancelled dependencies once, across host sweeps. */
+  private reportCancelledDependencies(): void {
+    const store = this.tasks.store;
+    const tasks = store.tasks();
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    for (const task of tasks) {
+      if (task.state !== 'held') continue;
+      const cancelled = task.brief.after.filter((id) => byId.get(id)?.state === 'cancelled');
+      if (!cancelled.length) continue;
+      const event = {
+        managerId: task.brief.manager,
+        taskId: task.id,
+        kind: 'instruction' as const,
+        summary: `Held task ${task.id} has cancelled dependencies ${cancelled.join(', ')}; decide whether they are still needed.`,
+      };
+      store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
+        const alreadyReported = store.events(task.id).some((record) => record.kind === 'cancelled-dependency-reported');
+        if (alreadyReported) return;
+        store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', { cancelled, event });
+        this.inbox.deliver(event);
+      });
+    }
+  }
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    this.reportCancelledDependencies();
     if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
