@@ -4,6 +4,8 @@ import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { Persona } from '../../../../../specs/semantic-driver.ts';
+import { routeOf } from '../../../src/route/route.ts';
+import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
@@ -123,6 +125,9 @@ function supervise(parent: OutcomeRpc) {
   let exited = false;
   let stoppingWorker: Promise<void> | undefined;
   let operator: Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>> | undefined;
+  type Account = Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>>;
+  const votersByName = new Map<string, Promise<{ voter: string; accountId: string }>>();
+  const voters = new Map<string, { account: Account; session?: string }>();
   const prefix = `test-${randomBytes(12).toString('hex')}-`;
 
   const snapshot = () => structuredClone(observation);
@@ -349,6 +354,74 @@ function supervise(parent: OutcomeRpc) {
   }
 
   async function operate(method: string, params: unknown) {
+    if (method === 'nativeVoter') {
+      exact(params, ['name']);
+      if (
+        typeof params.name !== 'string' ||
+        !/^[a-z][a-z0-9_]{0,47}$/.test(params.name) ||
+        ['anonymous', 'editor', 'acceptor', 'steward', 'suspended', 'governor', 'search_operator'].includes(params.name)
+      )
+        throw new Error('Invalid native voter name');
+      const existing = votersByName.get(params.name);
+      if (existing) return existing;
+      // Reserve before provisioning; no token or caller-supplied owner crosses IPC.
+      const name = params.name;
+      const pending = Promise.resolve().then(async () => {
+        const fixtures = semantic!.fixtures;
+        const account = await fixtures.person(`nv_${randomBytes(8).toString('hex')}`, {
+          scopes: ['rating:vote', 'subject:read'],
+        });
+        // Own-account vote authorization uses the current account and rating:vote scope.
+        // A closed personal_library gate borrows that scope and checks this Global grant.
+        await fixtures.grantAccount(account, ['rating:vote'], account.accountId);
+        await fixtures.grantAccount(account, ['gate:personal_library']);
+        const voter = randomUUID();
+        voters.set(voter, { account });
+        return { voter, accountId: account.accountId };
+      });
+      votersByName.set(name, pending);
+      return pending;
+    }
+    if (method === 'nativeVote') {
+      exact(params, ['voter', 'targetId', 'units', 'options']);
+      const entry = typeof params.voter === 'string' ? voters.get(params.voter) : undefined;
+      if (!entry) throw new Error('Unknown native voter');
+      if (
+        typeof params.targetId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.targetId) ||
+        routeOf(params.targetId) === null ||
+        (params.units !== null &&
+          (typeof params.units !== 'number' ||
+            !Number.isInteger(params.units) ||
+            params.units < 0 ||
+            params.units > 20))
+      )
+        throw new Error('Invalid native vote');
+      let key = randomUUID() as string;
+      if (params.options !== undefined) {
+        if (
+          !record(params.options) ||
+          Object.keys(params.options).length !== 1 ||
+          typeof params.options.idempotencyKey !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,255}$/.test(params.options.idempotencyKey)
+        )
+          throw new Error('Invalid native vote options');
+        key = params.options.idempotencyKey;
+      }
+      const response = await semantic!.fixtures.send(
+        entry.account,
+        params.units === null ? 'DELETE' : 'PUT',
+        `/v1/subjects/${params.targetId}/ratings/${STANDARD_QUESTION_ID}/vote`,
+        params.units === null ? undefined : { units: params.units },
+        { 'Idempotency-Key': `"${key}"`, ...(entry.session ? { 'rezics-session-token': entry.session } : {}) },
+      );
+      const session = response.headers.get('rezics-session-token');
+      if (session) entry.session = session;
+      const headers: [string, string][] = [];
+      for (const [key, value] of response.headers) if (key.toLowerCase() !== 'set-cookie') headers.push([key, value]);
+      for (const value of response.headers.getSetCookie()) headers.push(['set-cookie', value]);
+      return { status: response.status, body: response.body, headers } satisfies WireResponse;
+    }
     if (method === 'request') {
       exact(params, ['persona', 'method', 'path', 'body', 'headers']);
       const personas: string[] = ['anonymous', 'editor', 'acceptor', 'steward', 'suspended'];
@@ -434,7 +507,11 @@ function supervise(parent: OutcomeRpc) {
         initialized = true;
         return (starting = init(endpoint.href));
       }
-      if (!['request', 'remove', 'indexing', 'searchNode', 'rebuild', 'inspect'].includes(method))
+      if (
+        !['request', 'remove', 'indexing', 'searchNode', 'rebuild', 'inspect', 'nativeVoter', 'nativeVote'].includes(
+          method,
+        )
+      )
         throw new Error(`Unknown control: ${method}`);
       if (!ready) throw new Error('Search supervisor is not initialized');
       const operation = operate(method, params);

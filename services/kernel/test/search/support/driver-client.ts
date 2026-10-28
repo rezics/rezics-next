@@ -1,6 +1,6 @@
 import { fork } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import type { SearchDriver } from '../../../../../specs/search-driver.ts';
+import type { HttpResponse, SearchDriver } from '../../../../../specs/search-driver.ts';
 import { createOutcomeRpc } from './outcome-rpc.ts';
 import type { OwnedResource, SupervisorObservation, SupervisorReady, WireResponse } from './outcome-supervisor.ts';
 
@@ -20,7 +20,19 @@ export interface DriverLedger {
   stderr: string;
   cleanup?: SupervisorObservation;
 }
+/** Private fixture controls only; keys are unquoted receipt values, 1..255 safe ASCII characters. */
+export interface NativeVoteOptions {
+  idempotencyKey: string;
+}
+export interface NativeVoter {
+  voter: string;
+  accountId: string;
+}
 export interface DriverClient {
+  /** Fixture-local names: 1..48 lowercase letters, digits or underscores; personas are reserved. */
+  nativeVoter(name: string): Promise<NativeVoter>;
+  /** An opaque local handle, routable target UUID and integer 0..20, or null for DELETE. */
+  nativeVote(voter: string, targetId: string, units: number | null, options?: NativeVoteOptions): Promise<HttpResponse>;
   init(): Promise<SearchDriver>;
   inspect(): Promise<SupervisorObservation>;
   ledger(): DriverLedger;
@@ -312,6 +324,16 @@ export function createDriverClient(endpoint = process.env.OPENSEARCH_URL): Drive
     close,
     ledger: () => structuredClone(ledger),
     inspect: () => admit<SupervisorObservation>('inspect'),
+    nativeVoter: (name) => admit<NativeVoter>('nativeVoter', { name }),
+    async nativeVote(voter, targetId, units, options) {
+      // JSON IPC must never turn a non-finite number into the DELETE sentinel null.
+      if (units !== null && (typeof units !== 'number' || !Number.isInteger(units) || units < 0 || units > 20))
+        throw new Error('Invalid native vote');
+      const response = await admit<WireResponse>('nativeVote', { voter, targetId, units, options });
+      const headers = new Headers();
+      for (const [key, value] of response.headers) headers.append(key, value);
+      return { status: response.status, body: response.body, headers };
+    },
     init() {
       return (initializing ??= (async () => {
         try {
