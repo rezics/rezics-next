@@ -65,6 +65,31 @@ policy. Imported proposals and media remain under those owners. The importer
 does not soft-delete, restore or purge authoritative user-owned records, expose
 parallel lifecycle routes, or use privileged SQL into those modules.
 
+Under the adopted terminal-erasure decision, Accounts owns one terminal
+workflow and a fixed, versioned participant list. Imports is a participant: it
+must acknowledge completed cleanup or attest that no applicable data exists
+for its scope. Successful dispatch alone is not an acknowledgement of
+completion.
+Confirmation time `T` is an immediate read, write and producer fence. An
+in-flight or delayed import must not recreate an erased account's data or
+benefits. The [Access account-deletion contract](../kernel/src/access/README.md#account-deletion-policy)
+currently specifies terminal deletion but does not yet document the fixed
+participant-list interface; that Accounts-owned contract must adopt it before
+an importer integration can be implemented. The [common deletion
+policy](../../docs/deletion.md) remains the shared lifecycle policy. This
+README does not define a second workflow or receipt format.
+
+The current importer has no terminal-erasure participant or account-scoped
+locator integration. Its run journal and source records are operator-managed
+source coordination state, not by themselves a user's personal-library
+import. Shared copies, if a producer creates any, are found through that
+producer's exact locators and minimized by the owning store. Imported
+catalogue facts and communal subjects, and externally managed source
+journals, are not thereby classified as personal user data. Personal-library
+imports are not inferred from source mappings and remain outside first public
+scope unless separately specified. No cleanup job, retention interval,
+no-data attestation format or locator mechanism is claimed here.
+
 In [`importer.ts`](src/importer.ts), source disappearance and replacement reconcile
 provenance by publicly bulk-retracting the actual returned source candidate IDs.
 This does not delete a communal subject, another contributor's adoption or media
