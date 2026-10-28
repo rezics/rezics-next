@@ -624,6 +624,15 @@ export async function placeKernelCheck(
   locations: { root: string; cwd: string } = { root: resolve(directory, '../..'), cwd: directory },
 ): Promise<number | null> {
   if (plan.files?.length === 0) return null;
+  let estimateMs: number | undefined;
+  if (plan.files !== null) {
+    const latest = readLatest(timingsDirectory(directory, env));
+    const timings = plan.files.map((file) => latest[file]);
+    if (timings.every((timing) => timing !== undefined && Number.isFinite(timing.wall) && timing.wall >= 0)) {
+      const estimate = Math.ceil(timings.reduce((total, timing) => total + timing!.wall, 0) * 1000);
+      if (Number.isSafeInteger(estimate)) estimateMs = estimate;
+    }
+  }
   const forwardedEnv: string[] = [];
   const skipCleanup = env.KERNEL_CHECK_SKIP_STALE_CLEANUP === '1';
   if (skipCleanup) forwardedEnv.push('KERNEL_CHECK_SKIP_STALE_CLEANUP=1');
@@ -642,6 +651,7 @@ export async function placeKernelCheck(
         'scripts/check.ts',
         ...(plan.files ?? []),
       ],
+      ...(estimateMs === undefined ? {} : { estimateMs }),
     },
     env,
   );

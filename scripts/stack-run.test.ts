@@ -36,9 +36,17 @@ const count = (name: string) => {
   return seen;
 };
 if (script.includes('MemAvailable')) {
-  log({ kind: 'probe' });
+  const slots = config.slots ?? 2;
+  const ordinarySlotsUsed = Array.from({ length: Math.max(0, slots - 1) }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
+  const expressSlotUsed = existsSync(dir + '/' + hostKey + '.slot.express');
+  log({ kind: 'probe', ordinarySlotsUsed, expressSlotUsed });
   if (config.down) process.exit(255);
-  console.log('AVAILABLE ' + config.available);
+  console.log(
+    'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM ' + (config.available ?? 16 * 2 ** 30) +
+      '\\nPROCESSORS 16\\nSLICE_PROCESSORS ' + ((config.cpuQuotaPercent ?? 800) / 100) +
+      '\\nLOAD 0\\nORDINARY_SLOTS_USED ' + ordinarySlotsUsed +
+      '\\nEXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0) + '\\nGATE_WAITING 0',
+  );
 } else if (script.includes('REMOTE_CHECK_RESERVATION')) {
   const lock = dir + '/' + hostKey + '.reservation';
   let announcedWait = false;
@@ -67,46 +75,44 @@ if (script.includes('MemAvailable')) {
   process.on('SIGHUP', release);
   process.stdin.resume();
 } else if (script.includes('REMOTE_CHECK_SLOT_') || script.includes('flock')) {
-  const mode = script.includes('REMOTE_CHECK_SLOT_RESERVED') ? 'reserved' : 'single';
-  const reserved = dir + '/' + hostKey + '.reservation';
+  const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
+  const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
-  if (mode === 'single' && existsSync(reserved)) {
-    log({ kind: 'slot', granted: false, reason: 'reserved', mode });
-    process.exit(75);
-  }
   if (call < (config.busy ?? 0)) {
-    log({ kind: 'slot', granted: false, reason: 'busy', mode });
+    log({ kind: 'slot', granted: false, reason: 'busy', slotClass, script });
     process.exit(75);
   }
   const grants = existsSync(dir + '/' + hostKey + '.granted')
     ? Number(readFileSync(dir + '/' + hostKey + '.granted', 'utf8'))
     : 0;
   if (config.grantOnly !== undefined && grants >= config.grantOnly) {
-    log({ kind: 'slot', granted: false, reason: 'grant-limit', mode });
+    log({ kind: 'slot', granted: false, reason: 'grant-limit', slotClass, script });
     process.exit(75);
   }
-  const capacity = Number(script.match(/i -lt (\\d+)/)?.[1] ?? config.slots ?? 1);
-  let slot = -1;
-  for (let index = 0; index < capacity; index++) {
-    try {
-      mkdirSync(dir + '/' + hostKey + '.slot.' + index);
-      slot = index;
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-  }
-  if (slot < 0) {
-    log({ kind: 'slot', granted: false, reason: 'occupied', mode });
+  const capacity = config.slots ?? 2;
+  const ordinaryCapacity = Number(
+    script.match(/# REMOTE_CHECK_ORDINARY_COUNT (\\d+)/)?.[1] ?? Math.max(0, capacity - 1),
+  );
+  const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity);
+  const occupied = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
+  const expressOccupied = existsSync(dir + '/' + hostKey + '.slot.express');
+  const freeOrdinary = Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => !occupied.includes(index));
+  const free = slotClass === 'short' ? [...freeOrdinary, ...(expressOccupied ? [] : ['express' as const])] : freeOrdinary;
+  const limitedOccupied = occupied.length + (slotClass === 'short' && expressOccupied ? 1 : 0);
+  if (limitedOccupied + requested > slotLimit || free.length < requested) {
+    log({ kind: 'slot', granted: false, reason: 'occupied', slotClass, script });
     process.exit(75);
   }
-  writeFileSync(dir + '/' + hostKey + '.granted', String(grants + 1));
-  const lock = dir + '/' + hostKey + '.slot.' + slot;
-  log({ kind: 'slot', granted: true, mode, slot });
-  console.log('SLOT ' + slot);
+  const selected = free.slice(0, requested);
+  for (const slot of selected) mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
+  writeFileSync(dir + '/' + hostKey + '.granted', String(grants + selected.length));
+  for (const slot of selected) log({ kind: 'slot', granted: true, slotClass, script, slot });
+  console.log('SLOTS ' + requested);
   const release = () => {
-    rmSync(lock, { recursive: true, force: true });
-    log({ kind: 'release', mode, slot });
+    for (const slot of selected) {
+      rmSync(dir + '/' + hostKey + '.slot.' + slot, { recursive: true, force: true });
+      log({ kind: 'release', slot });
+    }
     process.exit(0);
   };
   process.stdin.on('end', release);
@@ -297,6 +303,33 @@ test("a stack run goes to a free check host and returns the command's exit code"
   expect(existsSync(lease)).toBe(false);
 }, 30_000);
 
+test('stack-run passes --estimate-ms through to remote placement and refuses invalid values', async () => {
+  const valid = scenario({ a: { available: 20e9, slots: 2 } });
+  const completed = await stack(valid.env, ['true'], ['--estimate-ms', '120000']);
+  expect(completed.code).toBe(0);
+  expect(valid.events().find((event) => event.kind === 'slot' && event.granted)).toMatchObject({
+    slotClass: 'short',
+    slot: 0,
+  });
+  expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS 120000',
+  );
+
+  for (const estimate of ['-1', '1.5', '9007199254740992', 'Infinity']) {
+    const invalid = scenario({ a: { available: 20e9 } });
+    const refused = await stack(invalid.env, ['true'], ['--estimate-ms', estimate]);
+    expect(refused.code, estimate).toBe(2);
+    expect(refused.stderr, estimate).toContain('--estimate-ms');
+    expect(invalid.events(), estimate).toEqual([]);
+  }
+
+  const missing = scenario({ a: { available: 20e9 } });
+  const refused = await stack(missing.env, ['true'], ['--estimate-ms']);
+  expect(refused.code).toBe(2);
+  expect(refused.stderr).toContain('--estimate-ms');
+  expect(missing.events()).toEqual([]);
+});
+
 test('a stack run runs locally when no check host answers, and when no host has enough slots', async () => {
   const down = scenario({ a: { down: true }, b: { down: true } });
   const first = await stack(down.env, local);
@@ -312,8 +345,8 @@ test('a stack run runs locally when no check host answers, and when no host has 
   // No host has two slots, so the run never asks one.
   const small = scenario({ a: { available: 4e9, slots: 1 } });
   const third = await stack(small.env, local, ['--slots', '2']);
-  expect(third.code).toBe(3);
-  expect(third.stderr).toContain('No check host has 2 slots');
+  expect(third.code).toBe(1);
+  expect(third.stderr).toContain('requested 2 slots exceeds the cap of 1');
   expect(small.events().filter((event) => event.kind === 'slot')).toEqual([]);
 }, 30_000);
 
@@ -387,7 +420,7 @@ test('a worker does not run locally after a reachable host fails during workspac
   const result = await stack({ ...env, GOAL_TASK_ID: 'worker', FAKE_RSYNC_FAIL: '1' }, local);
 
   expect(result.code).toBe(1);
-  expect(result.stderr).toContain('rsync to a failed with exit code 12');
+  expect(result.stderr).toContain('connection to a failed during workspace upload before a result');
   expect(result.stderr).not.toContain('stack-run: the run local');
   expect(result.stdout).not.toContain('local slot');
   expect(events().some((event) => event.kind === 'probe')).toBe(true);

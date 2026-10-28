@@ -17,7 +17,14 @@
  */
 import { accessSync, constants } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { Aborted, answeringHosts, readHosts, remoteCheckUnlessUnreachable, ROOT } from './remote-check.ts';
+import {
+  Aborted,
+  answeringHosts,
+  readHosts,
+  remoteCheckUnlessUnreachable,
+  ROOT,
+  validateEstimateMs,
+} from './remote-check.ts';
 import { withStackSlot } from './stack-lease.ts';
 
 export type StackRun = {
@@ -29,6 +36,7 @@ export type StackRun = {
   command: string[];
   /** Host slots the run holds, for a run whose peak memory exceeds a host's per-slot share. Default 1. */
   slots?: number;
+  estimateMs?: number;
   /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it stays local unless it
    * declares returned paths.
    */
@@ -153,6 +161,7 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
  * when the run belongs on this machine. The null is a placement, never an exit code.
  */
 export async function runOnCheckHost(run: StackRun, env: Environment = process.env): Promise<number | null> {
+  validateEstimateMs(run.estimateMs);
   const reason = localReason(run, env);
   if (typeof reason === 'string') {
     console.error(`stack-run: ${run.label} local, ${reason}`);
@@ -179,6 +188,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
         command: run.command,
         ...(run.slots === undefined ? {} : { slots: run.slots }),
+        ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
         ...(interval === undefined ? {} : { pollMs: interval }),
         ...(run.returns === undefined ? {} : { returns: run.returns }),
         answered: () => {
@@ -218,10 +228,11 @@ export async function stackRun(
 
 if (import.meta.main) {
   const usage =
-    'Usage: bun scripts/stack-run.ts [--keeps-files] [--returns <path>]... [--slots <n>] <label> <root> <cwd> -- <command...>';
+    'Usage: bun scripts/stack-run.ts [--keeps-files] [--returns <path>]... [--slots <n>] [--estimate-ms <n>] <label> <root> <cwd> -- <command...>';
   const rest = process.argv.slice(2);
   let keepsFiles = false;
   let slots: number | undefined;
+  let estimateMs: number | undefined;
   let returns: string[] | undefined;
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
@@ -230,10 +241,14 @@ if (import.meta.main) {
       returns ??= [];
       returns.push(rest.shift()!);
     } else if (flag === '--slots' && rest.length > 0) slots = Number(rest.shift());
+    else if (flag === '--estimate-ms') estimateMs = Number(rest.shift());
     else throw new Error(`Unknown option: ${flag}\n${usage}`);
   }
   const [label, root, cwd, separator, ...command] = rest;
-  if (!label || !root || !cwd || separator !== '--' || command.length === 0) {
+  if (estimateMs !== undefined && (!Number.isSafeInteger(estimateMs) || estimateMs < 0)) {
+    console.error(`--estimate-ms must be a non-negative safe integer\n${usage}`);
+    process.exitCode = 2;
+  } else if (!label || !root || !cwd || separator !== '--' || command.length === 0) {
     console.error(usage);
     process.exitCode = 2;
   } else if (slots !== undefined && (!Number.isSafeInteger(slots) || slots < 1)) {
@@ -250,6 +265,7 @@ if (import.meta.main) {
           keepsFiles,
           ...(returns === undefined ? {} : { returns }),
           ...(slots === undefined ? {} : { slots }),
+          ...(estimateMs === undefined ? {} : { estimateMs }),
         },
         async (env) => {
           const child = Bun.spawn(command, {

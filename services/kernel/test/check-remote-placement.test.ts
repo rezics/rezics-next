@@ -17,10 +17,11 @@ const address = args.at(-2) ?? '';
 const log = (event) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, ...event }) + '\\n');
 if (script.includes('MemAvailable')) {
   log({ kind: 'probe' });
-  console.log('AVAILABLE 30000000000');
-} else if (script.includes('REMOTE_CHECK_SLOT_') || script.includes('flock')) {
-  log({ kind: 'slot', granted: true });
-  console.log('SLOT 0');
+  console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 30000000000\\nPROCESSORS 16\\nSLICE_PROCESSORS 8\\nLOAD 0\\nORDINARY_SLOTS_USED 0\\nEXPRESS_SLOT_USED 0\\nGATE_WAITING 0');
+} else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
+  const count = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
+  log({ kind: 'slot', granted: true, script });
+  console.log('SLOTS ' + count);
   const release = () => {
     log({ kind: 'release' });
     process.exit(0);
@@ -101,6 +102,9 @@ function prepare(): { directory: string; env: Record<string, string>; workspace:
   git('init', '-q');
   git('add', '.');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
+  const timings = join(directory, 'timings');
+  mkdirSync(timings);
+  writeFileSync(join(timings, 'latest.json'), '{}');
   return {
     directory,
     workspace,
@@ -113,8 +117,24 @@ function prepare(): { directory: string; env: Record<string, string>; workspace:
       GOAL_TASK_ID: 'worker',
       KERNEL_CHECK_CONCURRENCY: '2',
       REMOTE_CHECK_POLL_MS: '20',
+      KERNEL_CHECK_TIMINGS: timings,
     },
   };
+}
+
+function writeLatest(directory: string, files: Record<string, number>): void {
+  const path = join(directory, 'timings/latest.json');
+  writeFileSync(
+    path,
+    JSON.stringify({
+      files: Object.fromEntries(
+        Object.entries(files).map(([file, wall]) => [
+          file,
+          { wall, create: 0, drop: 0, outsideTests: 0, result: 'pass', tests: [] },
+        ]),
+      ),
+    }),
+  );
 }
 
 // A fresh process, so its ssh lookup sees the fake at the front of PATH. Bun keeps the PATH it started with.
@@ -181,4 +201,46 @@ test('the kernel check uses the shared placement decision', async () => {
   const empty = await placed(env, { files: [], tests: [] }, workspace, join(workspace, 'src'));
   expect(empty.code).toBeNull();
   expect(eventsOf(directory).filter((event) => event.kind === 'run')).toHaveLength(1);
+}, 30_000);
+
+test('the kernel check estimates only a fully timed named plan', async () => {
+  const { directory, env, workspace } = prepare();
+  writeLatest(directory, { 'test/check-remote-placement.test.ts': 12.345 });
+  await placed(
+    env,
+    { files: ['test/check-remote-placement.test.ts'], tests: ['test/check-remote-placement.test.ts'] },
+    workspace,
+    join(workspace, 'src'),
+  );
+  expect(eventsOf(directory).find((event) => event.kind === 'slot')?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS 12345',
+  );
+
+  const allTimed = prepare();
+  writeLatest(allTimed.directory, { 'test/a.test.ts': 2.25, 'test/b.test.ts': 3.5 });
+  const selected = {
+    files: ['test/a.test.ts', 'test/b.test.ts'],
+    tests: ['test/a.test.ts', 'test/b.test.ts'],
+  };
+  await placed(allTimed.env, selected, allTimed.workspace, join(allTimed.workspace, 'src'));
+  expect(eventsOf(allTimed.directory).find((event) => event.kind === 'slot')?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS 5750',
+  );
+
+  writeLatest(allTimed.directory, { 'test/a.test.ts': 2.25 });
+  await placed(allTimed.env, selected, allTimed.workspace, join(allTimed.workspace, 'src'));
+  expect(eventsOf(allTimed.directory).filter((event) => event.kind === 'slot')[1]?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS none',
+  );
+
+  writeLatest(allTimed.directory, { 'test/a.test.ts': 2.25, 'test/b.test.ts': 3.5 });
+  await placed(
+    allTimed.env,
+    { files: null, tests: selected.tests },
+    allTimed.workspace,
+    join(allTimed.workspace, 'src'),
+  );
+  expect(eventsOf(allTimed.directory).filter((event) => event.kind === 'slot')[2]?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS none',
+  );
 }, 30_000);
