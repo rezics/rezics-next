@@ -48,8 +48,14 @@ export interface Target {
   ownerId: string;
   subjectId: string;
   collectionId: string | null;
-  /** Stable source incarnation distinguishes replacement of an owner/subject slot. */
+  /** Stable source incarnation distinguishes replacement of an owner/subject slot; fresh revisioned entry
+   * PUT/DELETE calls bind it as `incarnationId`.
+   */
   incarnation: string;
+  /** Optional on live/non-entry targets; a retained ENTRY MUST carry the opaque native delete transaction ID
+   * copied from DELETE metadata or an authorized retained-point read, never a reconstructed value.
+   */
+  deletionId?: string;
   revision: number;
   generation: number;
   deletedAt: string | null;
@@ -120,6 +126,9 @@ export interface LibraryDeletionDriver {
   /** Current kernel clock, shared by command, Access and due worker. */
   now(): Promise<string>;
   setTime(instant: string): Promise<void>;
+  /** Fresh entry deletes bind target.incarnation and revision to the actual request precondition; exact receipts
+   * keep their original canonical input.
+   */
   delete(actor: Persona, target: Target, key: string): Promise<Reply<Target>>;
   restore(actor: Persona, target: Target, key: string): Promise<Reply<Target>>;
   /** Separate explicit route/parameter, never the default delete path. */
@@ -143,6 +152,13 @@ export interface LibraryDeletionDriver {
   holdNextPurge(
     stage?: 'before-guard' | 'after-durable-capture',
   ): Promise<{ reached: Promise<void>; resume(): Promise<void> }>;
+  /** Park one exact retained-entry deletion at the actual worker barrier. The returned locator is observed from
+   * that native task, never copied from a fixture payload.
+   */
+  holdEntryPurge(
+    target: Target,
+    stage?: 'before-guard' | 'after-durable-capture',
+  ): Promise<{ deletionId: string; reached: Promise<void>; resume(): Promise<void> }>;
   /** Production operations create a collision; never mutate tombstones directly. */
   createConflict(fixture: Fixture, kind: 'replacement' | 'ordinal' | 'capacity' | 'name'): Promise<Target>;
   removeCurrentProfile(fixture: Fixture): Promise<void>;

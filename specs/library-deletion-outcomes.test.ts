@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Fixture, Kind, LibraryDeletionDriver, Reply, Surface, Target } from './library-deletion-driver.ts';
+import type {
+  Fixture,
+  Inspection,
+  Kind,
+  LibraryDeletionDriver,
+  Reply,
+  Surface,
+  Target,
+  Values,
+} from './library-deletion-driver.ts';
 
 setDefaultTimeout(240_000);
 let driver: LibraryDeletionDriver;
@@ -380,4 +389,234 @@ test('real SQL examined rows blocks and statements stay bounded at three legal g
   expect(Math.max(...samples.map((s) => s.rows))).toBeLessThanOrEqual(Math.min(...samples.map((s) => s.rows)) + 100);
   expect(new Set(samples.map((s) => s.statements)).size).toBe(1);
   expect(samples[2]!.blocks).toBeLessThanOrEqual(samples[0]!.blocks * 4); // 16x population, fixed page
+});
+
+const entrySnapshotColumns = [
+  'route',
+  'account_id',
+  'subject_id',
+  'requested_subject_id',
+  'state',
+  'revision',
+  'created_at',
+  'updated_at',
+  'transaction_id',
+  'activity_at',
+  'finished_at',
+  'type_id',
+  'type_source_id',
+  'type_source_partition',
+  'type_source_epoch',
+  'type_source_position',
+  'incarnation_id',
+  'library_profile_pin',
+] as const;
+
+function nativeEntryRow(inspection: Inspection, subjectId: string) {
+  const rows = inspection.rows.filter((row) => row.relation === 'library.entry' && row.id === subjectId);
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
+}
+
+function nativeDeletedEntryRow(inspection: Inspection, deletionId: string) {
+  const rows = inspection.rows.filter((row) => row.relation === 'library.entry_deleted' && row.id === deletionId);
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
+}
+
+function expectDeleteTransactionIdentity(inspection: Inspection, key: string, deletionId: string) {
+  const receipts = inspection.receipts.filter((receipt) => receipt.key === key);
+  expect(receipts).toHaveLength(1);
+  expect(receipts[0]!.transactionId).toBe(deletionId);
+}
+
+function expectEntrySnapshot(source: Values, retained: Values) {
+  for (const column of entrySnapshotColumns) expect(retained[column]).toEqual(source[column]);
+}
+
+async function deleteEntryWithMetadata(target: Target, key: string) {
+  const reply = await driver.delete('owner', target, key);
+  expect(reply.response.status).toBe(204);
+  expect(await reply.response.clone().text()).toBe('');
+  const value = success(reply);
+  const deletionId = reply.response.headers.get('Library-Entry-Deletion-Id');
+  const deletionRevision = reply.response.headers.get('Library-Entry-Deletion-Revision');
+  expect(deletionId).not.toBeNull();
+  expect(deletionRevision).not.toBeNull();
+  expect(value.deletionId).toBe(deletionId);
+  expect(value.revision).toBe(Number(deletionRevision));
+  return { reply, value, deletionId: deletionId!, deletionRevision: Number(deletionRevision) };
+}
+
+async function expectDeleteMetadataReplay(
+  original: Response,
+  replay: Reply<Target>,
+  deletionId: string,
+  deletionRevision: number,
+) {
+  expect(replay.response.status).toBe(204);
+  expect(await replay.response.clone().text()).toBe('');
+  expect(replay.response.headers.get('Library-Entry-Deletion-Id')).toBe(deletionId);
+  expect(replay.response.headers.get('Library-Entry-Deletion-Revision')).toBe(String(deletionRevision));
+  expect(original.headers.get('Library-Entry-Deletion-Id')).toBe(deletionId);
+  expect(original.headers.get('Library-Entry-Deletion-Revision')).toBe(String(deletionRevision));
+}
+
+test('entry undo contracts adopt independent deletion addresses replacement-safe incarnation CAS and unchanged authorized replay', async () => {
+  const f = await driver.seed('entry');
+  const deleteKey = 'entry-delete-a';
+  const first = await deleteEntryWithMetadata(f.target, deleteKey);
+  const d1 = first.value;
+  expect(d1.incarnation).toBe(f.target.incarnation);
+
+  const replacement = await driver.createConflict(f, 'replacement');
+  expect(replacement.subjectId).toBe(f.target.subjectId);
+  expect(replacement.incarnation).not.toBe(f.target.incarnation);
+  expect(replacement.revision).toBe(f.target.revision);
+  const afterRefill = await driver.inspect(f);
+  expect(afterRefill.target).toEqual(replacement);
+  expectDeleteTransactionIdentity(afterRefill, deleteKey, first.deletionId);
+
+  const replay = await driver.delete('owner', f.target, deleteKey);
+  await expectDeleteMetadataReplay(first.reply.response, replay, first.deletionId, first.deletionRevision);
+  expect(await driver.inspect(f)).toEqual(afterRefill);
+
+  const staleADelete = await driver.delete('owner', f.target, 'entry-delete-stale-a');
+  expect(staleADelete.response.status).toBe(409);
+  expect(await driver.inspect(f)).toEqual(afterRefill);
+
+  const occupiedRestore = await driver.restore('owner', d1, 'entry-restore-occupied');
+  expect(occupiedRestore.response.status).toBe(409);
+  expect(await driver.inspect(f)).toEqual(afterRefill);
+  const retainedD1 = success(await driver.deletionState('owner', d1));
+  expect(retainedD1.deletionId).toBe(first.deletionId);
+  expect(retainedD1.values).toEqual(f.target.values);
+  expect(retainedD1.profilePin).toEqual(f.target.profilePin);
+  for (const actor of ['other', 'anonymous', 'suspended', 'platform'] as const)
+    denied(await driver.deletionState(actor, d1));
+  expect(await driver.inspect(f)).toEqual(afterRefill);
+
+  await driver.revokeOwner();
+  denied(await driver.delete('owner', f.target, deleteKey));
+  denied(await driver.restore('owner', d1, 'entry-restore-occupied'));
+  expect(await driver.inspect(f)).toEqual(afterRefill);
+});
+
+test('entry deletions retain independent complete snapshots and restore only the addressed occurrence', async () => {
+  const f = await driver.seed('entry');
+  const beforeA = await driver.inspect(f);
+  const sourceA = nativeEntryRow(beforeA, f.target.subjectId);
+  const first = await deleteEntryWithMetadata(f.target, 'entry-delete-a-independent');
+  const d1 = first.value;
+
+  const replacement = await driver.createConflict(f, 'replacement');
+  const beforeB = await driver.inspect(f);
+  const sourceB = nativeEntryRow(beforeB, replacement.subjectId);
+  const second = await deleteEntryWithMetadata(replacement, 'entry-delete-b-independent');
+  const d2 = second.value;
+  expect(second.deletionId).not.toBe(first.deletionId);
+  expect(d2.incarnation).toBe(replacement.incarnation);
+
+  const withBoth = await driver.inspect(f);
+  expectDeleteTransactionIdentity(withBoth, 'entry-delete-a-independent', first.deletionId);
+  expectDeleteTransactionIdentity(withBoth, 'entry-delete-b-independent', second.deletionId);
+  const storedD1 = nativeDeletedEntryRow(withBoth, first.deletionId);
+  const storedD2 = nativeDeletedEntryRow(withBoth, second.deletionId);
+  expect(storedD1.payload.deletion_id).toBe(first.deletionId);
+  expect(storedD1.payload.deleted_revision).toBe(first.deletionRevision);
+  expect(storedD2.payload.deletion_id).toBe(second.deletionId);
+  expect(storedD2.payload.deleted_revision).toBe(second.deletionRevision);
+  expectEntrySnapshot(sourceA.payload, storedD1.payload);
+  expectEntrySnapshot(sourceB.payload, storedD2.payload);
+  expect(success(await driver.deletionState('owner', d1)).profilePin).toEqual(f.target.profilePin);
+  expect(success(await driver.deletionState('owner', d2)).profilePin).toEqual(replacement.profilePin);
+
+  const restoredA = success(await driver.restore('owner', d1, 'entry-restore-a-independent'));
+  sameValues(f.target, restoredA);
+  expect(restoredA.revision).toBe(first.deletionRevision + 1);
+  const afterRestore = await driver.inspect(f);
+  const restoredRow = nativeEntryRow(afterRestore, f.target.subjectId);
+  for (const column of entrySnapshotColumns) {
+    if (column === 'revision') expect(restoredRow.payload[column]).toBe(Number(sourceA.payload.revision) + 2);
+    else if (column === 'transaction_id') expect(restoredRow.payload[column]).not.toBe(sourceA.payload[column]);
+    else expect(restoredRow.payload[column]).toEqual(sourceA.payload[column]);
+  }
+  expect(success(await driver.deletionState('owner', d2)).values).toEqual(replacement.values);
+
+  const exactRestoreReplay = await driver.restore('owner', d1, 'entry-restore-a-independent');
+  expect(success(exactRestoreReplay)).toEqual(restoredA);
+  expect(await driver.inspect(f)).toEqual(afterRestore);
+  const freshRestoreOfConsumedD1 = await driver.restore('owner', d1, 'entry-restore-a-again');
+  expect(freshRestoreOfConsumedD1.response.status).toBe(404);
+  expect(await driver.inspect(f)).toEqual(afterRestore);
+});
+
+test('an exact parked D1 purge cannot consume D3 after restoring and clearing the same incarnation again', async () => {
+  const f = await driver.seed('entry');
+  const first = await deleteEntryWithMetadata(f.target, 'entry-delete-a-first-life');
+  const d1 = first.value;
+  const parked = await driver.holdEntryPurge(d1, 'after-durable-capture');
+  expect(parked.deletionId).toBe(first.deletionId);
+  await parked.reached;
+
+  const restoreKey = 'entry-restore-a-first-life';
+  const restoredA = success(await driver.restore('owner', d1, restoreKey));
+  expect(restoredA.incarnation).toBe(f.target.incarnation);
+  expect(restoredA.revision).toBe(first.deletionRevision + 1);
+  await driver.setTime(at(d1.deletedAt!, 1));
+
+  const third = await deleteEntryWithMetadata(restoredA, 'entry-delete-a-third-life');
+  const d3 = third.value;
+  expect(third.deletionId).not.toBe(first.deletionId);
+  expect(d3.incarnation).toBe(d1.incarnation);
+  const replacement = await driver.createConflict(f, 'replacement');
+  expect(replacement.incarnation).not.toBe(d3.incarnation);
+  const beforeOldReplayAndPurge = await driver.inspect(f);
+
+  const restoreReplay = await driver.restore('owner', d1, restoreKey);
+  expect(success(restoreReplay)).toEqual(restoredA);
+  expect(await driver.inspect(f)).toEqual(beforeOldReplayAndPurge);
+  const deleteReplay = await driver.delete('owner', f.target, 'entry-delete-a-first-life');
+  await expectDeleteMetadataReplay(first.reply.response, deleteReplay, first.deletionId, first.deletionRevision);
+  expect(await driver.inspect(f)).toEqual(beforeOldReplayAndPurge);
+
+  await driver.setTime(d1.restoreUntil!);
+  await parked.resume();
+  await driver.drain();
+  const afterOldPurge = await driver.inspect(f);
+  expect(afterOldPurge.target).toEqual(replacement);
+  expect(success(await driver.deletionState('owner', d3)).values).toEqual(restoredA.values);
+  expect(await driver.inspect(f)).toEqual(afterOldPurge);
+
+  await driver.revokeOwner();
+  denied(await driver.restore('owner', d1, restoreKey));
+  denied(await driver.delete('owner', f.target, 'entry-delete-a-first-life'));
+  expect(await driver.inspect(f)).toEqual(afterOldPurge);
+});
+
+test('entry undo preserves user dates and provenance and permits an old pinned clear and undo without its current profile', async () => {
+  const f = await driver.seed('entry');
+  const source = nativeEntryRow(await driver.inspect(f), f.target.subjectId);
+  await driver.removeCurrentProfile(f);
+  const beforeRejectedWrite = await driver.inspect(f);
+  const newValue = await driver.writeNewProfiledValue(f);
+  expect([400, 409, 422]).toContain(newValue.response.status);
+  expect(await driver.inspect(f)).toEqual(beforeRejectedWrite);
+
+  const deletion = await deleteEntryWithMetadata(f.target, 'entry-delete-profile-absent');
+  const d1 = deletion.value;
+  const retained = nativeDeletedEntryRow(await driver.inspect(f), deletion.deletionId);
+  expectEntrySnapshot(source.payload, retained.payload);
+  expect(retained.payload.library_profile_pin).toEqual(source.payload.library_profile_pin);
+  expect(success(await driver.deletionState('owner', d1)).profilePin).toEqual(f.target.profilePin);
+
+  const restored = success(await driver.restore('owner', d1, 'entry-restore-profile-absent'));
+  sameValues(f.target, restored);
+  expect(restored.revision).toBe(deletion.deletionRevision + 1);
+  const live = nativeEntryRow(await driver.inspect(f), f.target.subjectId);
+  for (const column of entrySnapshotColumns) {
+    if (column === 'revision') expect(live.payload[column]).toBe(Number(source.payload.revision) + 2);
+    else if (column === 'transaction_id') expect(live.payload[column]).not.toBe(source.payload[column]);
+    else expect(live.payload[column]).toEqual(source.payload[column]);
+  }
 });

@@ -27,8 +27,9 @@ Events about private state use the account or Collection id as `subject`, never 
 
 [Shared deletion policy](../../../../docs/deletion.md) is authoritative. This section specifies its first-public
 Library application; the Cost section below describes today's implementation, including physical deletes. No
-Library restore command, due-purge worker, or native deletion-outcome driver is implemented. User-saved dynamic
-queries remain deferred by [scope](../../../../docs/scope.md); only built-in dynamic Collections are in scope.
+Library entry delete writer, restore command/route, due-purge consumer, transactional hold guard, evidence-custody
+adapter or native deletion-outcome driver is implemented. User-saved dynamic queries remain deferred by
+[scope](../../../../docs/scope.md); only built-in dynamic Collections are in scope.
 
 Delete commits a tombstone at kernel command time `deletedAt`; `restoreUntil = deletedAt + 30 * 24 hours` in UTC.
 An authorized undo is allowed only while kernel time is strictly less than `restoreUntil`: day 29 succeeds, the
@@ -63,6 +64,84 @@ A stale revision or changed identity conflicts without overwriting a newer fact.
 | `published_log` / `DELETE /v1/publishedLogs/:logId`                              | The owner retracts the public snapshot immediately. A permitted reference exposes only log identity and deleted state, never deleted note, session state or personal times. Undo preserves log ID and original publication values/times and note; it never recopies current session state.                                                                                                                                                              | `published-log-delete.sql` physically deletes; no tombstone, expiry or undo exists. The source pointer is nullable in schema/store, but no detachment/cleanup consumer is registered.                                                                                                                                   | Erase note, owner/source-session links, session state and personal times. Retain only a permitted public structural log tombstone/subject relation with no second aggregate decrement; erase the whole row if that relation itself is personal.                                                                                                      |
 | Session, units, change history, progress head / start, record, complete, abandon | The account owner reads these through existing progress commands/pages while the account is active. Completion and abandonment are factual transitions, not deletion. Entry deletion leaves them available to the owner and a session may continue to support a subject in Everything. Unit removal is an existing progress record with history. There is no independent deleted reference or undo operation for these audit/history rows.              | No session/history delete API is promised. Account deletion is terminal at T and must conceal the private graph; there is no account restore to reopen it. The account-private Library purge consumer is absent, and history is unbounded even with the 20000-unit cap.                                                 | Under account erasure, erase private units/history before sessions and heads. A removed progress unit follows existing correction history until account erasure; do not invent a separate history-row delete API.                                                                                                                                    |
 | Follow / follow, unfollow                                                        | The owner controls only their outgoing follow. Unfollow is a subscription state change, not deletion or a reason to remove another person's inbound preference. It has no deleted tombstone or undo operation. Account deletion is terminal and immediately ends the owner's access to outgoing state.                                                                                                                                                  | `follow-store-apply.sql` retains unfollowed rows; the account-private purge consumer for every state/reason is absent.                                                                                                                                                                                                  | Erase every outgoing private follow state/reason and account-to-target relation; do not remove another account's inbound follow preference.                                                                                                                                                                                                          |
+
+#### Entry deletion identity and restoration
+
+**Adopted requirements.** Keep `library.entry` as the live owner/subject slot with its existing primary key
+`(route, account_id, subject_id)`. Each successful clear moves the complete typed persisted row into a separate
+private `library.entry_deleted` row. Its primary key is `(route, account_id, deletion_id)`, and `deletion_id` is
+the successful native delete command's `transactionId`. This is an opaque exact locator, not authority or a routed
+subject/account ID: derive `route` and `account_id` from the authorized owner, never from the locator. Do not add a
+live-slot foreign key or cascade, a subject uniqueness constraint, a generic trash/version-history engine, or an
+archive union in ordinary reads. Every deletion occurrence remains independent; a refill creates a new live
+incarnation and never changes retained rows.
+
+The archive keeps the full pre-delete row: `route`, `account_id`, `subject_id`, `requested_subject_id`, `state`, the
+source `revision`, `created_at`, `updated_at`, original `transaction_id`, `activity_at`, `finished_at`, `type_id`,
+all `type_source_*` stamps, non-null `incarnation_id`, and the accepted `library_profile_pin` with its existing
+`library.library_profile_pin_valid` validation and the existing pin nullability rules. Add `deletion_id`,
+`deleted_revision`, `deleted_at`, `restore_until`, and generated
+`partition_no = route >> 4`. The due index is exactly
+`(partition_no, restore_until, route, account_id, deletion_id)`. The source revision remains `r`, the deletion
+revision is `r + 1`, and a successful restore inserts the saved values at `r + 2`; reject deletion without mutation
+when `r > 2,147,483,644`. Restore inserts only into an empty live slot and consumes only the selected deletion after
+the insert succeeds. Occupancy or stale/expired state conflicts and leaves that archive row available. User dates,
+pin, stored subject/alias and source stamps survive unchanged; lifecycle time and the restore transaction are new
+command facts. Missing historical profiles use the actual legacy-null pin handling until the profile owner completes
+the retained-row cutover; never infer a historical accepting type from today's profile or shelf observation. A corrupt
+or unavailable non-null pinned release fails closed rather than guessing.
+
+DELETE keeps status `204` and an empty body. Its minimal native command outcome supplies
+`Library-Entry-Deletion-Id` and `Library-Entry-Deletion-Revision`; the latter is `r + 1`. Do not add an expiry
+header unless its owner explicitly requires and documents it. A new
+`POST /v1/libraryEntries/:subjectId/restore` accepts only the closed body `{ deletionId, revision }`, uses its own
+`Idempotency-Key`, and returns the normal entry response. `revision` binds the deletion revision in the header.
+Restore uses the exact stored `subject_id` and current source-read eligibility; redirects affect eligibility only and
+never rewrite `subject_id` or `requested_subject_id`. Reuse existing native scopes, gates and pin validation; add no
+profile, permission or cache authority. Use the existing `library_entry:update` owner authority and `shareAccount`
+barrier for restore; delete keeps `library_entry:delete`. The locator is not permission. Missing or foreign handles remain concealed; occupied,
+stale or expired restores return `409`. A successful restore consumes exactly that archive row. An exact authorized
+restore replay is acknowledgement of its committed result, never a second insert; a fresh key cannot restore a
+consumed row. There is no unauthenticated receipt endpoint, latest-deletion search or trash list.
+
+Current authorization and account fencing precede exact receipt lookup on delete, restore and replay. Remove the
+ordinary live-row pre-read from DELETE admission so a same-key request can replay after refill or restore. An exact
+authorized replay returns its original deletion ID/revision metadata without touching the current slot. A receipt
+created by the pre-retention physical-delete path may still acknowledge `204` with an empty body, but cannot claim
+archive metadata that was never written. DELETE receipts store only the descriptor needed for replay, not the deleted
+entry or pin.
+The retained-point lookup for undo is exact and owner-authorized; it is not a new public state reader. A missing
+current profile does not prevent clearing or undoing the identical previously accepted pinned value, while a fresh
+profiled value still requires current profile validation after receipt handling.
+
+Take `shareAccount` in the command authorization path before receipt lookup for entry create, update, delete and
+restore, so both fresh writes and authorized replay serialize with terminal account deletion. Due work selects at
+most 100 raw archive keys before hold/pending filters and advances after the last examined key. The destructive
+transaction rechecks the exact `(route, account_id, deletion_id)`, authoritative due time or terminal account time,
+and the current legal hold; an absent or consumed deletion is a no-op. Purge removes only that retained snapshot,
+never a live row by subject, and never applies a second live-counter decrement. Hold release makes due work runnable
+without extending undo. Register it through shared durable work; do not add a Library-local timer. Exact receipt,
+outbox and workflow locators and custody acknowledgement remain required before making any broader erasure claim.
+
+For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
+body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.
+After the writer/backfill cutover, a fresh revisioned request missing this precondition conflicts with no effects.
+A create without `revision` remains valid and allocates a real non-null incarnation through the existing `newId`
+allocator; updates preserve their incarnation. Parsers may admit an omitted `incarnationId` only far enough to
+authorize and find an old exact receipt. Preserve that receipt's old canonical digest/input branch; do not reject
+it in the schema or run current profile/input validation before the receipt. Fresh commands enforce the strong
+precondition after a receipt miss. Backfill at most 100 raw live primary keys per page before null/pending filters,
+using CAS on the observed revision, transaction identity and `incarnation_id IS NULL`; preserve values, revision,
+pins and timestamps. Do not stamp on GET. Enable the new ABI/writer only after new fills are non-null, bounded
+backfill is exhausted, and the profile owner has completed the required retained-row readiness gate.
+
+**Current implementation gaps.** The existing `Entry` model and response omit `incarnation_id`; insert SQL does not
+allocate it; update/delete compare only the slot and revision; delete physically
+removes a limited projection that omits the shelf, pin and incarnation columns. Both `entries.ts` preparation and
+`personal-routes.ts` currently pre-read before receipt lookup. No entry archive writer, restore route/command,
+automatic due worker, legal-hold transaction guard, or complete receipt/outbox/workflow custody exists. A
+structural archive table/index alone does not supply those lifecycle guarantees. Existing first-scope concealment,
+Everything support from other live facts, the 18 legacy outcome pairs, and public/private policy stay unchanged.
 
 A deleted fact or curated member must immediately disappear from **all** ordinary point/pages, entries, state tabs,
 Everything and Continue, Search, ItemList exports, sitemap discovery/output, public membership pairs/counts and any
@@ -488,6 +567,12 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Touches: Own-account `library_entry:delete` and one primary-key delete matching account, subject and revision. The event subject is the account id. Copies are left in place.
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus authorization and the envelope.
 - Growth check: `test/library/growth-personal-writes.test.ts`: `Entry delete has constant rows and statements as entries grow` checks the whole command at scales 1, 4 and 16 while the owner's entries, other accounts' entries in the same and another partition, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation. `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries` still checks delete statement counts at 1, 8 and 64.
+
+### Entry deletion retention and restore (specified, not implemented)
+
+- Required exact-key work: deletion authorizes and checks its receipt, compares the live slot by revision and incarnation, writes the complete snapshot under the native deletion ID, and removes only that live row in the same transaction. Restore point-reads one `(route, account_id, deletion_id)`, checks deadline/authority/source eligibility, inserts into the unchanged live primary key, and consumes only that archive row after a successful insert. Neither operation searches the subject's deletion history.
+- Expected bound: one live-slot CAS plus one archive primary-key insert and due-index insert for delete; one archive primary-key read/delete plus one live primary-key insert for restore. Library body work remains a constant number of indexed rows/statements, `R = O(1)` and `B = O(L(N) + L(D))`, where `D` is retained entry count, plus authorization, receipt, event and shared work/evidence costs. The due index orders by partition and restore deadline; every page must materialize no more than 100 raw source keys before hold/pending filters. This is a required query shape, not a measured PostgreSQL plan.
+- Verification status: no production delete writer, restore route/command, due consumer or real deletion driver currently proves this bound. `specs/library-deletion-outcomes.test.ts` is required to remain red with its exact missing-driver guard until a real production driver passes it; the specification verifier only proves executable red.
 
 ### Entry read
 
