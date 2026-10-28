@@ -332,6 +332,7 @@ test('native admission all-pool SQL plans remain bounded at 64 512 4096 inactive
           ),
         ),
       });
+      console.info(JSON.stringify({ scale, evidence: evidence.get(scale) }));
     },
     operation: admissionOperation,
   });
