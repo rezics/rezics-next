@@ -14,8 +14,8 @@ const catalogues = Object.fromEntries(
   ),
 ) as Record<string, Record<string, string>>;
 
-mock.module('../src/paraglide/messages.js', () =>
-  new Proxy(
+mock.module('../src/paraglide/messages.js', () => ({
+  m: new Proxy(
     {},
     {
       get(_target, key) {
@@ -27,7 +27,7 @@ mock.module('../src/paraglide/messages.js', () =>
       },
     },
   ),
-);
+}));
 
 test('one shared progress formatter uses the localized unit forms and shares', async () => {
   const { progressView } = await import('../src/library/progress-label.ts');
@@ -114,6 +114,21 @@ test('the signed-in home story renders one Continue card for every recorded acti
   const active = continueEntries.libraryEntries.filter((entry) => entry.state === 'in_progress');
   const recorded = continueSessions.progressSessions.filter((session) => session.state === 'active');
   expect(active).toHaveLength(recorded.length);
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake.ts');
+  const storyFetch = createStoryRecordedKernelFetch();
+  const entriesResponse = await storyFetch('http://kernel.test/v1/libraryEntries?view=FULL&limit=6&state=in_progress');
+  expect(entriesResponse.status).toBe(200);
+  const storyEntries = (await entriesResponse.json()) as { libraryEntries: { subjectId: string }[] };
+  expect(storyEntries.libraryEntries).toHaveLength(active.length);
+  expect(storyEntries.libraryEntries.length).toBeLessThanOrEqual(6);
+  const storySessions = await Promise.all(
+    storyEntries.libraryEntries.map(async ({ subjectId }) => {
+      const response = await storyFetch(`http://kernel.test/v1/progressSessions?subjectId=${subjectId}&limit=5`);
+      expect(response.status).toBe(200);
+      return (await response.json()) as { progressSessions: Record<string, unknown>[] };
+    }),
+  );
+  expect(storySessions.flatMap(({ progressSessions }) => progressSessions)).toHaveLength(active.length);
   const bySubject = new Map(recorded.map((session) => [session.subjectId, session]));
   const { progressView } = await import('../src/library/progress-label.ts');
   const rows = active.map((entry) => {
@@ -156,6 +171,7 @@ test('progress page state, completed-unit empty state, and published logs keep t
   expect(sessionHeader).not.toContain('modeLabel(session.mode)');
   expect(sessionHeader).not.toContain('unitLabel(session.unit)');
   expect(index).toContain('modeChoices.map');
+  expect(session).not.toMatch(/m\.library_progress_mode_(?:amount|cursor|units)\(\)/);
   expect(session).toContain('m.library_progress_units_empty()');
   expect(session).not.toContain('m.library_progress_empty()');
 
@@ -173,6 +189,8 @@ test('progress page state, completed-unit empty state, and published logs keep t
       string,
       string
     >;
+    expect(messages.library_progress_changes_empty, locale).toBeTruthy();
     expect(messages.library_progress_units_empty, locale).toBeTruthy();
   }
+  expect(catalogues.en.library_progress_units_empty).toBe('No units have been completed yet.');
 });

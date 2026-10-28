@@ -7,50 +7,8 @@ import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
-import type { ContinueEntry, ContinueProgress } from './continue-read';
-
-/** `text` is the label of the one progress row; `percent` draws its bar, and is null where the kernel gives no total. */
-type ProgressView = { text: string; percent: number | null };
-
-function amountOf(value: string | null): number | null {
-  if (value === null) return null;
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount >= 0 ? amount : null;
-}
-
-/**
- * The progress the kernel returned, in the reader's language: the unit form of an amount and its total ("Ep 3/12",
- * "p. 120/310") or of the count of completed units, with the share of the total as the bar when there is one. A
- * reading position has no human-readable form, and neither has a session that holds no amount yet, so each says
- * only that it is in progress.
- */
-export function progressView(progress: ContinueProgress | null, locale: string): ProgressView | null {
-  if (!progress) return null;
-  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
-  const options = { locale: locale as Locale };
-  const inProgress = {
-    text: m.home_continue_in_progress({}, options),
-    percent: null,
-  };
-  if (progress.mode === 'cursor_position') return inProgress;
-  const amount = progress.mode === 'completed_units' ? progress.completedUnitCount : amountOf(progress.amount);
-  if (amount === null) return inProgress;
-  const total = progress.mode === 'scalar_amount' ? amountOf(progress.total) : null;
-  const shown = { amount: number.format(amount) };
-  const withTotal =
-    total !== null && total > 0 && progress.unit !== 'percent' ? { ...shown, total: number.format(total) } : null;
-  const text =
-    progress.unit === 'percent'
-      ? m.home_continue_percent(shown, options)
-      : withTotal
-        ? m[`home_continue_${progress.unit}_of`](withTotal, options)
-        : m[`home_continue_${progress.unit}`](shown, options);
-  const share = progress.unit === 'percent' ? amount : total !== null && total > 0 ? (amount / total) * 100 : null;
-  return {
-    text,
-    percent: share === null ? null : Math.min(100, Math.max(0, share)),
-  };
-}
+import { progressView } from './progress-label';
+import type { ContinueEntry } from './continue-read';
 
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched

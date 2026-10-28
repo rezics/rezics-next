@@ -4,19 +4,15 @@ import type { SubjectSummary } from '../media/summary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { readEntryPage } from './entries-read';
+import type { ProgressLabelInput } from './progress-label';
 import { libraryLabel } from './reads';
 
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;
 
 /** The progress read of one subject's active session: what unit it counts and how far it has come. */
-export type ContinueProgress = {
+export type ContinueProgress = ProgressLabelInput & {
   sessionId: string;
-  mode: 'scalar_amount' | 'cursor_position' | 'completed_units';
-  unit: 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
-  amount: string | null;
-  total: string | null;
-  completedUnitCount: number;
 };
 
 export type ContinueEntry = {
@@ -69,6 +65,7 @@ export async function readProgress(
       amount: session.amount,
       total: session.total,
       completedUnitCount: session.completedUnitCount,
+      locator: session.locator,
     };
   } catch {
     return null;

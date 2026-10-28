@@ -697,6 +697,94 @@ async function recordLibrary(input: {
   await read('library-published-log', null, `/v1/publishedLogs/${log}?view=FULL`);
   await read('library-published-logs', tokens.me, `/v1/publishedLogs?${page}&accountId=${me}`);
 
+  if (writes('library-continue-entries', 'library-continue-progress-sessions')) {
+    const continueSessions = [
+      {
+        key: 'genji',
+        mode: 'scalar_amount',
+        unit: 'episode',
+        total: '12',
+        record: { amount: '3' },
+      },
+      {
+        key: 'cat',
+        mode: 'scalar_amount',
+        unit: 'page',
+        record: { amount: '118' },
+      },
+      {
+        key: 'norwegian-wood',
+        mode: 'scalar_amount',
+        unit: 'percent',
+        record: { amount: '64' },
+      },
+      {
+        key: 'prince',
+        mode: 'completed_units',
+        unit: 'chapter',
+        record: { add: ['chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5'] },
+      },
+    ] as const;
+    for (const item of continueSessions) {
+      const created = objectBody(
+        (
+          await call(`progress session ${item.key}`, tokens.me, 'POST', '/v1/progressSessions', 201, {
+            subjectId: subject(item.key),
+            mode: item.mode,
+            unit: item.unit,
+            ...('total' in item ? { total: item.total } : {}),
+          })
+        ).progressSession,
+        `progress session ${item.key}`,
+      );
+      const continuedId = created.id;
+      if (typeof continuedId !== 'string' || typeof created.revision !== 'number')
+        throw new Error(`Progress session ${item.key} is malformed: ${JSON.stringify(created)}`);
+      await call(`progress record ${item.key}`, tokens.me, 'POST', `/v1/progressSessions/${continuedId}:record`, 200, {
+        revision: created.revision,
+        ...item.record,
+      });
+    }
+  }
+
+  if (writes('library-continue-entries')) {
+    const currentEntries = recordedLibrary.get('library-entries')?.libraryEntries;
+    if (!Array.isArray(currentEntries)) throw new Error('The library entries recording is malformed.');
+    for (const value of currentEntries) {
+      const entry = objectBody(value, 'library entry');
+      if (typeof entry.subjectId !== 'string' || typeof entry.revision !== 'number')
+        throw new Error(`The library entry is malformed: ${JSON.stringify(entry)}`);
+      await call(`continue entry ${entry.subjectId}`, tokens.me, 'PUT', `/v1/libraryEntries/${entry.subjectId}`, 200, {
+        state: 'in_progress',
+        revision: entry.revision,
+      });
+    }
+    await read('library-continue-entries', tokens.me, `/v1/libraryEntries?${page}&state=in_progress`);
+  }
+  if (writes('library-continue-progress-sessions')) {
+    const continueEntries =
+      recordedLibrary.get('library-continue-entries')?.libraryEntries ??
+      recordedLibrary.get('library-entries')?.libraryEntries;
+    if (!Array.isArray(continueEntries)) throw new Error('The Continue entries recording is malformed.');
+    const progressSessions: unknown[] = [];
+    for (const value of continueEntries) {
+      const entry = objectBody(value, 'Continue entry');
+      if (typeof entry.subjectId !== 'string')
+        throw new Error(`The Continue entry is malformed: ${JSON.stringify(entry)}`);
+      const response = await call(
+        'Continue progress sessions',
+        tokens.me,
+        'GET',
+        `/v1/progressSessions?${page}&subjectId=${encodeURIComponent(entry.subjectId)}`,
+        200,
+      );
+      if (!Array.isArray(response.progressSessions))
+        throw new Error(`The Continue progress sessions are malformed: ${JSON.stringify(response)}`);
+      progressSessions.push(...response.progressSessions);
+    }
+    recordedLibrary.set('library-continue-progress-sessions', { status: 200, progressSessions, next: null });
+  }
+
   const entries = recordedLibrary.get('library-entries')?.libraryEntries;
   const shelfMembers = recordedLibrary.get('library-collection-members')?.members;
   const shelfSubjects = Array.isArray(shelfMembers)

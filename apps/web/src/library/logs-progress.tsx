@@ -5,20 +5,13 @@ import { useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
-import type { PublishedLog, PublishedLogPage } from './logs-read';
+import type { PublishedLogPage } from './logs-read';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
-import { rowRatio, SubjectIdentity } from './subject-row';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
-
-function stateLabel(state: PublishedLog['sessionState']): string {
-  if (state === 'completed') return m.library_progress_state_completed();
-  if (state === 'abandoned') return m.library_progress_state_abandoned();
-  return m.library_progress_state_active();
-}
 
 export function RelativeTime({ value }: { value: string }) {
   const locale = getLocale();
@@ -118,7 +111,6 @@ function PublishedLogs({
 }) {
   if (!page.signedIn) return null;
   const headingId = 'published-logs-heading';
-  const ratio = rowRatio(page.logs.map((log) => log.subject));
 
   return (
     <section role="region" aria-labelledby={headingId} className="space-y-3">
@@ -128,23 +120,23 @@ function PublishedLogs({
       {page.logs.length ? (
         <ol className="divide-y divide-border/60 border-y border-border/60">
           {page.logs.map((log) => (
-            <li key={log.id} className="space-y-2 py-4">
-              <p className="flex flex-wrap items-baseline gap-2">
+            <li key={log.id} className="space-y-2 py-3">
+              <p className="flex min-w-0 items-baseline gap-2 overflow-hidden text-sm whitespace-nowrap">
                 {log.account ? (
                   <>
-                    {log.account.displayName ? <span>{log.account.displayName}</span> : null}
-                    {log.account.handle ? <span className="text-muted-foreground">@{log.account.handle}</span> : null}
+                    {log.account.displayName ? (
+                      <span className="truncate font-medium">{log.account.displayName}</span>
+                    ) : null}
+                    {log.account.handle ? (
+                      <span className="shrink-0 text-muted-foreground">@{log.account.handle}</span>
+                    ) : null}
                   </>
                 ) : (
-                  <span>{m.library_account_deleted()}</span>
+                  <span className="truncate font-medium">{m.library_account_deleted()}</span>
                 )}
-              </p>
-              <div className="flex items-center gap-3">
-                <SubjectIdentity subject={log.subject} ratio={ratio} />
-              </div>
-              <p>{stateLabel(log.sessionState)}</p>
-              <p>
-                <RelativeTime value={log.publishedAt} />
+                <span className="shrink-0 text-muted-foreground">
+                  <RelativeTime value={log.publishedAt} />
+                </span>
               </p>
               {log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
               <p>

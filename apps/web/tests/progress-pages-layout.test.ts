@@ -728,7 +728,7 @@ function layoutSeed(size = 5) {
 const main = (page: Page) => page.locator('main');
 
 test(
-  "the progress index shows each session as one row: cover, title, type label, the state and unit on one line, and a ProgressRow; the row links to its session and the subject page is in the row's menu",
+  "the progress index shows each session as one row: cover, title, type label, state and a ProgressRow; the row links to its session and the subject page is in the row's menu",
   async () => {
     layoutSeed();
     const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
@@ -738,8 +738,9 @@ test(
       const row = rows.first();
       expect(await row.locator('[data-slot="cover"]').count()).toBe(1);
       expect(await row.innerText()).toContain('Book');
-      expect(await row.getByText('Active · Chapter', { exact: true }).count()).toBe(1);
-      expect(await row.getByRole('progressbar').count()).toBe(1);
+      expect(await row.getByText('Active', { exact: true }).count()).toBe(1);
+      expect(await row.getByText('Part 2, chapter 14', { exact: true }).count()).toBe(1);
+      expect(await row.getByRole('progressbar').count()).toBe(0);
       expect(await row.getByRole('link').count()).toBe(1);
       expect(await row.getByRole('link').getAttribute('href')).toContain(`/library/progress/${id(20)}`);
       expect(await row.getByRole('link').innerText()).toContain('Night watch');
@@ -813,8 +814,9 @@ test(
     try {
       const header = main(page).locator('article > header');
       expect(await header.locator('[data-slot="cover"] img').getAttribute('src')).toContain(cover.media);
-      expect(await header.getByText('Active · Cursor position · Chapter', { exact: true }).count()).toBe(1);
-      expect(await header.getByRole('progressbar').count()).toBe(1);
+      expect(await header.getByText('Active', { exact: true }).count()).toBe(1);
+      expect(await header.getByText('Part 2, chapter 14', { exact: true }).count()).toBe(1);
+      expect(await header.getByRole('progressbar').count()).toBe(0);
       expect(await main(page).getByRole('heading', { level: 2 }).allTextContents()).toEqual([
         'Record progress',
         'Change history',
@@ -829,6 +831,8 @@ test(
       expect(await changes.locator('dd').allTextContents()).toEqual(['Part 2, chapter 14', '42']);
       const empty = main(page).getByRole('region', { name: 'Completed units', exact: true });
       expect(await empty.locator('p').getAttribute('class')).toContain('text-muted-foreground');
+      expect(await empty.innerText()).toContain('No units have been completed yet.');
+      expect(await empty.innerText()).not.toContain('No progress sessions');
       const gap = await empty.evaluate(
         (el) => el.nextElementSibling!.getBoundingClientRect().top - el.getBoundingClientRect().bottom,
       );
@@ -837,6 +841,16 @@ test(
       expect(await main(page).getByText('@mira', { exact: true }).getAttribute('class')).toContain(
         'text-muted-foreground',
       );
+      const published = main(page).getByRole('region', { name: 'Published logs', exact: true }).locator('ol > li');
+      const log = published.first();
+      const byline = log.locator('p').first();
+      expect(await byline.evaluate((el) => getComputedStyle(el).display)).toBe('flex');
+      expect(await byline.evaluate((el) => getComputedStyle(el).flexWrap)).toBe('nowrap');
+      expect(await byline.locator('time').count()).toBe(1);
+      expect(await log.locator('[data-slot="cover"]').count()).toBe(0);
+      expect(await log.getByText('Night watch', { exact: true }).count()).toBe(0);
+      expect(await log.innerText()).toContain('A quiet chapter.');
+      expect(await log.getByRole('link', { name: 'Read log', exact: true }).count()).toBe(1);
     } finally {
       await page.context().close();
     }

@@ -745,8 +745,12 @@ test(
     expectImage(header);
     expect(text(header)).toContain('Zebra story');
     expect(text(header)).toContain('Book');
-    // The published logs on the same page show the subject's cover too.
-    expectImage(withTitle(rows(sessionPage.html), 'Halfway'));
+    const publishedLog = withTitle(rows(sessionPage.html), 'Halfway');
+    expect(covers(publishedLog)).toBe(0);
+    expect(text(publishedLog)).not.toContain('Zebra story');
+    expect(text(publishedLog)).toContain('Ada Lovelace');
+    expect(publishedLog.replaceAll('<!-- -->', '')).toContain('>@ada</span>');
+    expect(text(publishedLog)).toContain('Read log');
 
     const progressPageChinese = await readPage(`/zh-Hans/library/progress?subjectId=${zebra.id}`, cookie);
     expect(text(rows(progressPageChinese.html)[0]!)).toContain('书籍');

@@ -17,35 +17,13 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
-import {
-  parseUnitBatch,
-  type ProgressChange,
-  type ProgressMode,
-  type ProgressSessionPage,
-  type ProgressState,
-  type ProgressUnit,
-} from './progress-reads';
+import { parseUnitBatch, type ProgressChange, type ProgressSessionPage, type ProgressState } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
-import { progressValue } from './progress-page';
+import { progressView } from './progress-label';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
-
-function modeLabel(mode: ProgressMode): string {
-  if (mode === 'cursor_position') return m.library_progress_mode_cursor();
-  if (mode === 'completed_units') return m.library_progress_mode_units();
-  return m.library_progress_mode_amount();
-}
-
-function unitLabel(unit: ProgressUnit): string {
-  if (unit === 'chapter') return m.library_progress_unit_chapter();
-  if (unit === 'episode') return m.library_progress_unit_episode();
-  if (unit === 'volume') return m.library_progress_unit_volume();
-  if (unit === 'minute') return m.library_progress_unit_minute();
-  if (unit === 'percent') return m.library_progress_unit_percent();
-  return m.library_progress_unit_page();
-}
 
 function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
@@ -259,6 +237,7 @@ function SessionEditor({
   }
 
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
+  const progress = progressView(session, getLocale());
 
   return (
     <article className="max-w-4xl space-y-10 text-foreground">
@@ -288,11 +267,11 @@ function SessionEditor({
               ) : null}
             </div>
             <p className="text-sm text-muted-foreground">
-              <span data-progress-state={session.state}>{stateLabel(session.state)}</span> · {modeLabel(session.mode)} ·{' '}
-              {unitLabel(session.unit)}
+              <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
             </p>
             <ProgressRow
-              {...progressValue(session)}
+              value={progress?.percent == null ? null : progress.percent / 100}
+              label={progress?.text ?? m.home_continue_in_progress()}
               menu={
                 session.state === 'active' ? (
                   <DropdownMenu>
@@ -313,14 +292,9 @@ function SessionEditor({
                 ) : undefined
               }
             />
-            {session.total && !progressValue(session).label ? (
+            {session.total && session.mode === 'scalar_amount' && session.amount === null ? (
               <p className="text-sm text-muted-foreground">
                 {m.library_progress_total()}: {session.total}
-              </p>
-            ) : null}
-            {session.mode === 'cursor_position' && session.locator ? (
-              <p className="text-sm text-muted-foreground">
-                {m.library_progress_locator()}: {session.locator}
               </p>
             ) : null}
           </div>
@@ -473,7 +447,7 @@ function SessionEditor({
             ))}
           </ol>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+          <p className="text-muted-foreground">{m.library_progress_changes_empty()}</p>
         )}
         {session.changesNext ? (
           <Link
@@ -502,7 +476,7 @@ function SessionEditor({
             ))}
           </ul>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+          <p className="text-muted-foreground">{m.library_progress_units_empty()}</p>
         )}
         {session.unitsNext ? (
           <Link

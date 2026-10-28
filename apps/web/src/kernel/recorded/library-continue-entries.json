@@ -1,0 +1,81 @@
+{
+  "libraryEntries": [
+    {
+      "subjectId": "01a17ff1-7bf0-727b-b8b0-dd59cf6e7a7f",
+      "state": "in_progress",
+      "revision": 2,
+      "createdAt": "2026-10-28T00:38:38.187Z",
+      "updatedAt": "2026-10-28T00:38:41.545Z",
+      "subject": {
+        "id": "01a17ff1-7bf0-727b-b8b0-dd59cf6e7a7f",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "subjectId": "01a17ff1-d6a1-7302-b992-e5a5a68a35f4",
+      "state": "in_progress",
+      "revision": 2,
+      "createdAt": "2026-10-28T00:38:38.411Z",
+      "updatedAt": "2026-10-28T00:38:41.531Z",
+      "subject": {
+        "id": "01a17ff1-d6a1-7302-b992-e5a5a68a35f4",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Norwegian Wood", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "subjectId": "01a17ff1-d6b9-76c5-b107-1a9645f15f80",
+      "state": "in_progress",
+      "revision": 2,
+      "createdAt": "2026-10-28T00:38:38.510Z",
+      "updatedAt": "2026-10-28T00:38:41.514Z",
+      "subject": {
+        "id": "01a17ff1-d6b9-76c5-b107-1a9645f15f80",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "The Tale of Genji", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "subjectId": "01a17ff1-d6cd-7761-b3ee-ac88a44ef1b2",
+      "state": "in_progress",
+      "revision": 2,
+      "createdAt": "2026-10-28T00:38:38.587Z",
+      "updatedAt": "2026-10-28T00:38:41.497Z",
+      "subject": {
+        "id": "01a17ff1-d6cd-7761-b3ee-ac88a44ef1b2",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "I Am a Cat", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "subjectId": "01a17ff1-d687-75b6-ac1f-86c0da7a09ef",
+      "state": "in_progress",
+      "revision": 3,
+      "createdAt": "2026-10-28T00:38:38.296Z",
+      "updatedAt": "2026-10-28T00:38:41.482Z",
+      "subject": {
+        "id": "01a17ff1-d687-75b6-ac1f-86c0da7a09ef",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Kokoro", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

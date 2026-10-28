@@ -46,10 +46,12 @@ import libraryCollectionRecording from './recorded/library-collection.json';
 import libraryCollectionsRecording from './recorded/library-collections.json';
 import libraryCopiesRecording from './recorded/library-copies.json';
 import libraryEntriesRecording from './recorded/library-entries.json';
+import libraryContinueEntriesRecording from './recorded/library-continue-entries.json';
 import libraryFollowsRecording from './recorded/library-follows.json';
 import libraryProgressChangesRecording from './recorded/library-progress-changes.json';
 import libraryProgressSessionRecording from './recorded/library-progress-session.json';
 import libraryProgressSessionsRecording from './recorded/library-progress-sessions.json';
+import libraryContinueProgressSessionsRecording from './recorded/library-continue-progress-sessions.json';
 import libraryProgressUnitsRecording from './recorded/library-progress-units.json';
 import libraryPublishedLogRecording from './recorded/library-published-log.json';
 import libraryPublishedLogsRecording from './recorded/library-published-logs.json';
@@ -303,6 +305,30 @@ async function selectRecording(
   const moduleRecording = await answerFakeRoute('story', request, recordings);
   if (moduleRecording) return moduleRecording;
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
+    const url = new URL(request.url);
+    const continueEntries = recordings['library-continue-entries'];
+    if (url.searchParams.get('state') === 'in_progress' && continueEntries) return continueEntries;
+  }
+  if (request.method === 'GET' && pathname === '/v1/progressSessions') {
+    const url = new URL(request.url);
+    const continueSessions = recordings['library-continue-progress-sessions'];
+    if (
+      url.searchParams.has('subjectId') &&
+      url.searchParams.get('limit') === '5' &&
+      !url.searchParams.has('view') &&
+      continueSessions &&
+      Array.isArray(continueSessions.progressSessions)
+    ) {
+      const subjectId = url.searchParams.get('subjectId');
+      return {
+        ...continueSessions,
+        progressSessions: continueSessions.progressSessions.filter(
+          (session) => isRecord(session) && session.subjectId === subjectId,
+        ),
+      };
+    }
+  }
+  if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     // A shelf reads one status at a time; the recording holds every status, so the answer keeps the asked one.
     const state = new URL(request.url).searchParams.get('state');
     const recorded = recordings['library-entries'];
@@ -404,10 +430,12 @@ function libraryStoryRecordings(): Record<string, KernelRecording> {
     'library-collections': libraryCollectionsRecording,
     'library-copies': libraryCopiesRecording,
     'library-entries': libraryEntriesRecording,
+    'library-continue-entries': libraryContinueEntriesRecording,
     'library-follows': libraryFollowsRecording,
     'library-progress-changes': libraryProgressChangesRecording,
     'library-progress-session': libraryProgressSessionRecording,
     'library-progress-sessions': libraryProgressSessionsRecording,
+    'library-continue-progress-sessions': libraryContinueProgressSessionsRecording,
     'library-progress-units': libraryProgressUnitsRecording,
     'library-published-log': libraryPublishedLogRecording,
     'library-published-logs': libraryPublishedLogsRecording,

@@ -21,6 +21,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
+import { progressView } from './progress-label';
 import { finishProgressSession, startProgressSession } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
 
@@ -47,31 +48,6 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
   if (state === 'completed') return m.library_progress_state_completed();
   if (state === 'abandoned') return m.library_progress_state_abandoned();
   return m.library_progress_state_active();
-}
-
-export function progressValue(session: ProgressIndex['sessions'][number]): { value: number | null; label: string } {
-  const amount =
-    session.mode === 'completed_units'
-      ? String(session.completedUnitCount)
-      : session.mode === 'cursor_position'
-        ? session.position
-        : session.amount;
-  if (amount == null || amount === '') return { value: null, label: '' };
-  if (session.unit === 'percent') return { value: Number(amount) / 100, label: `${amount}%` };
-  if (!session.total || Number(session.total) <= 0 || !Number.isFinite(Number(amount)))
-    return { value: null, label: amount };
-  const prefixes: Record<ProgressUnit, string> = {
-    page: 'p.',
-    episode: 'Ep',
-    chapter: 'Ch',
-    volume: 'Vol',
-    minute: 'min',
-    percent: '%',
-  };
-  return {
-    value: Number(amount) / Number(session.total),
-    label: `${getLocale() === 'en' ? prefixes[session.unit] : unitLabel(session.unit)} ${amount}/${session.total}`,
-  };
 }
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
@@ -267,6 +243,7 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const [key, setKey] = useState(() => crypto.randomUUID());
+  const progress = progressView(session, getLocale());
   async function finish(action: 'complete' | 'abandon') {
     if (pending) return;
     setPending(true);
@@ -307,11 +284,10 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
             <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
           ) : null}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {stateLabel(session.state)} · {unitLabel(session.unit)}
-        </p>
+        <p className="text-sm text-muted-foreground">{stateLabel(session.state)}</p>
         <ProgressRow
-          {...progressValue(session)}
+          value={progress?.percent == null ? null : progress.percent / 100}
+          label={progress?.text ?? m.home_continue_in_progress()}
           menu={
             <DropdownMenu>
               <DropdownMenuTrigger
