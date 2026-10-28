@@ -520,21 +520,14 @@ function rankHost(
   let freeSlots: number;
   let slotLimit: number;
   if (shortRun) {
-    const ordinaryFreeSlots = Math.min(
-      resourceSlots,
-      Math.max(0, ordinaryAdmissionLimit - probe.ordinarySlotsUsed),
-    );
+    const ordinaryFreeSlots = Math.min(resourceSlots, Math.max(0, ordinaryAdmissionLimit - probe.ordinarySlotsUsed));
     const expressFree = !probe.expressSlotUsed && resourceSlots > 0;
     const selected = selectSlotClass(ordinaryFreeSlots, expressFree, slots, estimateMs, gate);
     const occupied = probe.ordinarySlotsUsed + Number(probe.expressSlotUsed);
     freeSlots = selected === null ? 0 : Math.min(resourceSlots, Math.max(0, capacity - occupied));
     slotLimit = Math.min(capacity, occupied + resourceSlots);
   } else {
-    const admissionLimit = gate
-      ? probe.gateWaiting
-        ? ordinaryCapacity
-        : gateCapacity
-      : ordinaryAdmissionLimit;
+    const admissionLimit = gate ? (probe.gateWaiting ? ordinaryCapacity : gateCapacity) : ordinaryAdmissionLimit;
     freeSlots = Math.min(resourceSlots, Math.max(0, admissionLimit - probe.ordinarySlotsUsed));
     slotLimit = Math.min(admissionLimit, probe.ordinarySlotsUsed + resourceSlots);
   }

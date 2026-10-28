@@ -320,7 +320,8 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
   );
   for (const [name, config] of Object.entries(hosts)) {
     const hostKey = `ops@${name}.test`.replace(/[^a-z0-9]/gi, '_');
-    const occupiedSlots = config.ordinaryBusySlots ?? Array.from({ length: config.ordinaryBusy ?? 0 }, (_, index) => index);
+    const occupiedSlots =
+      config.ordinaryBusySlots ?? Array.from({ length: config.ordinaryBusy ?? 0 }, (_, index) => index);
     for (const index of occupiedSlots) mkdirSync(join(dir, `${hostKey}.slot.${index}`));
     if (config.expressBusy) mkdirSync(join(dir, `${hostKey}.slot.express`));
   }
@@ -1390,27 +1391,28 @@ test('a gate wait is bounded by its original slot holders with 1, 10 and 100 que
       b: { available: 20e9, slots: 4, runDurationMs: durationMs },
     });
     const workspaceDirectory = workspace();
-    const holders = Array.from({ length: 2 }, () =>
-      startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']),
-    );
+    const holders = Array.from({ length: 2 }, () => startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder']));
     let gate: ReturnType<typeof startRemote> | undefined;
     const queued: ReturnType<typeof startRemote>[] = [];
     try {
       await waitFor(
-        () => events().filter((event) => event.kind === 'run' && String(event.script).includes('echo holder')).length === 2,
+        () =>
+          events().filter((event) => event.kind === 'run' && String(event.script).includes('echo holder')).length === 2,
         15_000,
       );
       const originalHolders = events().filter(
         (event) => event.kind === 'run' && String(event.script).includes('echo holder'),
       );
-      const latestOriginalFinish = Math.max(...originalHolders.map((event) => Number(event.fakeStartedAt) + durationMs));
+      const latestOriginalFinish = Math.max(
+        ...originalHolders.map((event) => Number(event.fakeStartedAt) + durationMs),
+      );
 
       gate = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo gate-run'], ['--gate', '--slots', '2']);
       await waitFor(() => events().some((event) => event.kind === 'gate-marker' && event.address === 'ops@b.test'));
       const marker = events().find((event) => event.kind === 'gate-marker')!;
       const gateWaitingBeganAt = Number(marker.fakeStartedAt);
-      await waitFor(
-        () => events().some((event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.gateWaiting),
+      await waitFor(() =>
+        events().some((event) => event.kind === 'probe' && event.address === 'ops@b.test' && event.gateWaiting),
       );
 
       for (let index = 0; index < queueLength; index += 1) {
