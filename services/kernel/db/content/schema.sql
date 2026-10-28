@@ -1439,17 +1439,17 @@ CREATE INDEX notice_recipient_created_idx ON content.notice USING btree (route, 
 
 
 --
--- Name: notice_recipient_kind_source_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE UNIQUE INDEX notice_recipient_kind_source_idx ON content.notice USING btree (route, recipient_id, kind, source_id);
-
-
---
 -- Name: notice_route_created_idx; Type: INDEX; Schema: content; Owner: -
 --
 
 CREATE INDEX notice_route_created_idx ON content.notice USING btree (route, created_at, notice_id);
+
+
+--
+-- Name: notice_route_kind_source_recipient_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx ON content.notice USING btree (route, kind, source_id, recipient_id);
 
 
 --

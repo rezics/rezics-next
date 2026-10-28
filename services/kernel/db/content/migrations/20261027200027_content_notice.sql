@@ -16,8 +16,8 @@ CREATE TABLE content.notice (
   CHECK (route = get_byte(uuid_send(notice_id), 10) * 256 + get_byte(uuid_send(notice_id), 11))
 );
 
-CREATE UNIQUE INDEX notice_recipient_kind_source_idx
-  ON content.notice (route, recipient_id, kind, source_id);
+CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx
+  ON content.notice (route, kind, source_id, recipient_id);
 CREATE INDEX notice_recipient_created_idx
   ON content.notice (route, recipient_id, created_at DESC, notice_id DESC);
 CREATE INDEX notice_route_created_idx
