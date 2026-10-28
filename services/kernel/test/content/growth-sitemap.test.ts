@@ -4,7 +4,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId } from '../../src/route/route.ts';
-import { sealSitemapPosition } from '../../src/content/sitemap.ts';
+import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
@@ -38,13 +38,13 @@ async function page(feed: Feed, values: Record<string, string>) {
 }
 
 /** A cursor that starts a walk at the first board of a route, as an earlier page of the same feed would. */
-function cursorAtRoute(feed: Feed, route: number): string {
+async function cursorAtRoute(feed: Feed, route: number): Promise<string> {
   const id = `00000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}00000000`;
-  return sealSitemapPosition(
+  return encodeListCursor(
     tokens,
-    { operation: `sitemap.${feed}.list`, parameters: {} },
-    `content.sitemap.${feed}.cursor.encryption.v1`,
-    { boardId: id, scanning: false, thread: null },
+    { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} },
+    { epoch: 1, after: [id, 0, '', ''] },
+    new Date(createdAt),
   );
 }
 
@@ -207,7 +207,7 @@ for (const feed of ['boards', 'threads'] as const) {
   test(`${feed} sitemap page stays within its bound as listed items grow`, async () => {
     const listed = population(`listed-${feed}`, listedPartition[feed], null);
     // Each test grows its own region and starts its walk there.
-    const cursor = cursorAtRoute(feed, listedPartition[feed] * 16);
+    const cursor = await cursorAtRoute(feed, listedPartition[feed] * 16);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, listed items`,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -226,7 +226,7 @@ for (const feed of ['boards', 'threads'] as const) {
     const partition = protectedPartition[feed];
     const hidden = population(`protected-${feed}`, partition, 'protected');
     // The walk reaches the protected content first, so each page scans only that.
-    const cursor = cursorAtRoute(feed, partition * 16);
+    const cursor = await cursorAtRoute(feed, partition * 16);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, protected Realm content`,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
