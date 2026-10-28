@@ -47,7 +47,7 @@ import { withConnection } from '../../src/database/pool.ts';
 import type { AccountActor, Resource } from '../../src/request/access.ts';
 import type { PublicGrantSubject } from '../../src/access/grant-subject.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
-import type { FixtureResources } from '../content/support/erasure-operation-fixtures.ts';
+import { buildBoardAndThreads, type FixtureResources } from '../content/support/erasure-operation-fixtures.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 
 const barrierTable = 'content.erasure_operation_test_barrier';
