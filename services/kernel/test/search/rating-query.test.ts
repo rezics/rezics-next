@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
@@ -17,8 +19,6 @@ if (!url) throw new Error("OPENSEARCH_URL must name the check's OpenSearch node"
 const search = createOpenSearch(url);
 const prefix = `test-rating-${crypto.randomUUID().slice(0, 8)}-`;
 const index = subjectIndexName(prefix, 1);
-// The public literal is forthcoming; keep this staged specification out of product interfaces.
-const rating = 'rating' as SearchPlan['sort'];
 const id = (n: number) =>
   `018f0000-0000-7000-8000-${((10 + n) * 16).toString(16).padStart(4, '0')}${String(n).padStart(8, '0')}`;
 
@@ -55,8 +55,11 @@ const expected = [id(8), id(3), id(6), id(2), id(1), id(4), id(9), id(7), id(5)]
 const plan = {
   query: { match: { search_text: { query: 'rating', operator: 'and', _name: 't0' } } },
   filter: { terms: { type: ['schema:Book'], _name: 'f0' } },
-  sort: rating,
-};
+  sort: 'rating',
+  // Trusted native context, supplied internally rather than selected by a public request body.
+  rating: { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: 1 },
+  generation: 1,
+} satisfies Omit<SearchPlan, 'size'>;
 
 async function removeOwnedResources(): Promise<void> {
   const paths = [
@@ -85,6 +88,7 @@ beforeAll(async () => {
     await search.request('PUT', `/${index}/_mapping`, {
       properties: {
         rating_score: { type: 'double', doc_values: true },
+        rating_prior_epoch: { type: 'long', doc_values: true },
         rating_mean: { type: 'double', doc_values: true },
         rating_count: { type: 'long', doc_values: true },
       },
@@ -98,6 +102,7 @@ beforeAll(async () => {
         if (action.op !== 'index') throw new Error('Expected a visible subject document');
         Object.assign(action.document, {
           ...(fixture.score === undefined ? {} : { rating_score: fixture.score }),
+          ...(typeof fixture.score === 'number' ? { rating_prior_epoch: 1 } : {}),
           rating_mean: fixture.mean,
           rating_count: fixture.count,
         });
@@ -117,6 +122,7 @@ beforeAll(async () => {
 
 afterAll(removeOwnedResources);
 
+// Exact totals describe only the nine internal indexed candidates in this fixed fixture, not public totals.
 // These are engine ranking and internal search_after tests, not proof of native-vote or
 // public-figure privacy, population admission, current disclosure, prior updates, or signed HTTP cursors.
 test('rating orders published scores descending, zero before null/missing, then normalized name and id', async () => {
@@ -129,10 +135,21 @@ test('rating orders published scores descending, zero before null/missing, then 
     [8.25, 'rating alpha', id(6)],
     [8.25, 'rating beta', id(2)],
     [0, 'rating zulu', id(1)],
-    [null, 'rating alpha', id(4)],
-    [null, 'rating alpha', id(9)],
-    [null, 'rating beta', id(7)],
-    [null, 'rating zulu', id(5)],
+    ['rating alpha', id(4)],
+    ['rating alpha', id(9)],
+    ['rating beta', id(7)],
+    ['rating zulu', id(5)],
+  ]);
+  expect(result.hits.map((hit) => hit.ratingPhase)).toEqual([
+    'scored',
+    'scored',
+    'scored',
+    'scored',
+    'scored',
+    'unscored',
+    'unscored',
+    'unscored',
+    'unscored',
   ]);
   for (const hit of result.hits) {
     expect(hit.index).toBe(index);
@@ -146,19 +163,43 @@ test('rating orders published scores descending, zero before null/missing, then 
 
 test('rating search_after page1/page2/page3 consume each id once across numeric and null boundaries', async () => {
   const page1 = await searchSubjects(search, prefix, { ...plan, size: 3 });
-  const after1 = page1.hits.at(-1)!.sort;
-  const page2 = await searchSubjects(search, prefix, { ...plan, size: 3, after: after1 });
-  const after2 = page2.hits.at(-1)!.sort;
-  const page3 = await searchSubjects(search, prefix, { ...plan, size: 3, after: after2 });
-  const after3 = page3.hits.at(-1)!.sort;
-  const exhausted = await searchSubjects(search, prefix, { ...plan, size: 3, after: after3 });
+  const last1 = page1.hits.at(-1)!;
+  if (last1.ratingPhase === undefined) throw new Error('Expected a native rating phase');
+  const after1 = last1.sort;
+  const page2 = await searchSubjects(search, prefix, {
+    ...plan,
+    size: 3,
+    after: after1,
+    ratingPhase: last1.ratingPhase,
+  });
+  const last2 = page2.hits.at(-1)!;
+  if (last2.ratingPhase === undefined) throw new Error('Expected a native rating phase');
+  const after2 = last2.sort;
+  const page3 = await searchSubjects(search, prefix, {
+    ...plan,
+    size: 3,
+    after: after2,
+    ratingPhase: last2.ratingPhase,
+  });
+  const last3 = page3.hits.at(-1)!;
+  if (last3.ratingPhase === undefined) throw new Error('Expected a native rating phase');
+  const after3 = last3.sort;
+  const exhausted = await searchSubjects(search, prefix, {
+    ...plan,
+    size: 3,
+    after: after3,
+    ratingPhase: last3.ratingPhase,
+  });
 
   expect(page1.hits.map((hit) => hit.id)).toEqual([id(8), id(3), id(6)]);
   expect(page2.hits.map((hit) => hit.id)).toEqual([id(2), id(1), id(4)]);
   expect(page3.hits.map((hit) => hit.id)).toEqual([id(9), id(7), id(5)]);
+  expect(last1.ratingPhase).toBe('scored');
+  expect(last2.ratingPhase).toBe('unscored');
+  expect(last3.ratingPhase).toBe('unscored');
   expect(after1).toEqual([8.25, 'rating alpha', id(6)]);
-  expect(after2).toEqual([null, 'rating alpha', id(4)]);
-  expect(after3).toEqual([null, 'rating zulu', id(5)]);
+  expect(after2).toEqual(['rating alpha', id(4)]);
+  expect(after3).toEqual(['rating zulu', id(5)]);
   const seen = [...page1.hits, ...page2.hits, ...page3.hits].map((hit) => hit.id);
   expect(seen).toEqual(expected);
   expect(new Set(seen).size).toBe(expected.length);
