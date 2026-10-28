@@ -12,14 +12,20 @@ function write(path: string, text = ''): void {
   writeFileSync(join(root, path), text);
 }
 
+function names(selection: ReturnType<typeof affectedTests>) {
+  return selection.kind === 'tests'
+    ? { kind: selection.kind, tests: selection.tests.map(({ file }) => file) }
+    : selection;
+}
+
 function select(...changed: string[]) {
-  return affectedTests(root, join(root, kernel), changed);
+  return names(affectedTests(root, join(root, kernel), changed));
 }
 
 type Reach = { module: string; site: string; globs: string[] }[];
 
 function selectWith(reach: Reach, ...changed: string[]) {
-  return affectedTests(root, join(root, kernel), changed, reach);
+  return names(affectedTests(root, join(root, kernel), changed, reach));
 }
 
 beforeEach(() => {
@@ -66,6 +72,17 @@ describe('affected test selection', () => {
     });
   });
 
+  test('selected tests include their shortest import distance from the changed file', () => {
+    expect(affectedTests(root, join(root, kernel), ['services/kernel/src/b.ts'])).toEqual({
+      kind: 'tests',
+      tests: [{ file: 'test/a.test.ts', distance: 2 }],
+    });
+    expect(affectedTests(root, join(root, kernel), ['services/kernel/test/leaf.test.ts'])).toEqual({
+      kind: 'tests',
+      tests: [{ file: 'test/leaf.test.ts', distance: 0 }],
+    });
+  });
+
   test('a test file with a computed dynamic import is selected beside any code change', () => {
     write('services/kernel/test/computed.test.ts', 'await import(process.env.TARGET!);\n');
     write('services/kernel/test/url.test.ts', "await import(new URL('../src/c.ts', import.meta.url).href);\n");
@@ -77,6 +94,18 @@ describe('affected test selection', () => {
       kind: 'tests',
       tests: ['test/computed.test.ts', 'test/nested/b.test.ts', 'test/url.test.ts'],
     });
+    const distances = affectedTests(root, join(root, kernel), ['services/kernel/src/c.ts']);
+    expect(distances.kind).toBe('tests');
+    if (distances.kind === 'tests') {
+      expect(distances.tests.find(({ file }) => file === 'test/computed.test.ts')).toEqual({
+        file: 'test/computed.test.ts',
+        distance: null,
+      });
+      expect(distances.tests.find(({ file }) => file === 'test/nested/b.test.ts')).toEqual({
+        file: 'test/nested/b.test.ts',
+        distance: 1,
+      });
+    }
     expect(select('services/kernel/README.md')).toEqual({ kind: 'tests', tests: [] });
   });
 
@@ -262,9 +291,17 @@ describe('affected test selection on the repository', () => {
     console.log(`affected: one repository selection took ${Math.round(elapsed)} ms`);
     if (leaf.kind !== 'tests' || other.kind !== 'tests') throw new Error('expected test selections');
 
-    expect(leaf).toEqual({ kind: 'tests', tests: ['test/log.test.ts'] });
-    expect(leaf.tests.filter((file) => !other.tests.includes(file))).toEqual(['test/log.test.ts']);
-    expect(other.tests.filter((file) => !leaf.tests.includes(file))).toEqual(['test/receipt.test.ts']);
+    expect(leaf.tests.map(({ file }) => file)).toEqual(['test/log.test.ts']);
+    expect(
+      leaf.tests
+        .filter(({ file }) => !other.tests.some((candidate) => candidate.file === file))
+        .map(({ file }) => file),
+    ).toEqual(['test/log.test.ts']);
+    expect(
+      other.tests
+        .filter(({ file }) => !leaf.tests.some((candidate) => candidate.file === file))
+        .map(({ file }) => file),
+    ).toEqual(['test/receipt.test.ts']);
     expect(leaf.tests.length).toBeLessThan(40);
   }, 30_000);
 });

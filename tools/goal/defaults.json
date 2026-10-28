@@ -7,7 +7,7 @@
   "affectedTests": [
     {
       "paths": ["services/kernel/**"],
-      "command": ["bun", "run", "--cwd", "services/kernel", "check"]
+      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     }
   ],
   "integrationChecks": [

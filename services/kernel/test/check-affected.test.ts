@@ -57,28 +57,130 @@ describe('affected mode', () => {
   test('affected mode runs exactly the selected test files, and the whole suite when the selector says all', async () => {
     const selected = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, ['services/kernel/src/a.ts']);
     expect(selected.plan).toEqual(checkPlan(['test/a.test.ts', 'test/nested/c.test.ts'], kernel));
-    expect(selected.announcement).toBe('Affected mode: tests, 2 of 4 test files selected');
+    expect(selected.announcement).toBe('Affected mode: tests, 2 of 4 test files selected (2 reachable, cap 60)');
     expect(await ran(selected.plan.tests)).toEqual(['test/a.test.ts', 'test/nested/c.test.ts']);
 
     const everything = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, ['services/kernel/scripts/check.ts']);
-    expect(everything.plan).toEqual(checkPlan([], kernel));
-    expect(everything.plan.files).toBeNull();
+    expect(everything.plan).toEqual({ files: [], tests: [] });
     expect(everything.announcement).toBe(
-      'Affected mode: all, 4 of 4 test files selected (services/kernel/scripts/check.ts)',
+      'Affected mode: unverified, 0 of 4 test files selected (services/kernel/scripts/check.ts)',
     );
-    expect(await ran(everything.plan.tests)).toEqual([
-      'test/a.test.ts',
-      'test/b.test.ts',
-      'test/leaf.test.ts',
-      'test/nested/c.test.ts',
-    ]);
+    expect(await ran(everything.plan.tests)).toEqual([]);
   });
 
   test('an empty selection keeps the argument-run steps and runs no test file', async () => {
     const none = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, ['README.md']);
     expect(none.plan).toEqual({ files: [], tests: [] });
-    expect(none.announcement).toBe('Affected mode: tests, 0 of 4 test files selected');
+    expect(none.announcement).toBe('Affected mode: tests, 0 of 4 test files selected (0 reachable, cap 60)');
     expect(await ran(none.plan.tests)).toEqual([]);
+  });
+
+  test('a wide change selects no more than the cap at 100, 800 and 6,400 test files', () => {
+    const shared = 'services/kernel/src/shared.ts';
+    write(shared, 'export const shared = true;\n');
+    for (const total of [100, 800, 6_400]) {
+      rmSync(join(kernel, 'test'), { recursive: true, force: true });
+      for (let index = 0; index < total; index += 1) {
+        write(`services/kernel/test/case-${String(index).padStart(4, '0')}.test.ts`, "import '../src/shared.ts';\n");
+      }
+      const wide = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, [shared]);
+      expect(wide.plan.tests).toHaveLength(Math.min(60, total));
+      expect(wide.announcement).toBe(
+        `Affected mode: tests, ${Math.min(60, total)} of ${total} test files selected (${total} reachable, cap 60)`,
+      );
+    }
+  }, 30_000);
+
+  test('a capped selection ranks direct importers first, then shorter times, paths and opaque imports', () => {
+    const changed = 'services/kernel/src/shared.ts';
+    write(changed, 'export const shared = true;\n');
+    write('services/kernel/src/bridge.ts', "import './shared.ts';\n");
+    for (const file of ['direct-a', 'direct-b', 'direct-c', 'direct-slow', 'direct-unrecorded']) {
+      write(`services/kernel/test/${file}.test.ts`, "import '../src/shared.ts';\n");
+    }
+    write('services/kernel/test/indirect.test.ts', "import '../src/bridge.ts';\n");
+    write('services/kernel/test/opaque.test.ts', 'await import(process.env.TARGET!);\n');
+    write(
+      'timings/latest.json',
+      JSON.stringify({
+        files: {
+          'test/direct-a.test.ts': { wall: 3 },
+          'test/direct-b.test.ts': { wall: 2 },
+          'test/direct-c.test.ts': { wall: 3 },
+          'test/direct-slow.test.ts': { wall: 8 },
+          'test/indirect.test.ts': { wall: 0.1 },
+          'test/opaque.test.ts': { wall: 0.001 },
+        },
+      }),
+    );
+    const ranked = plan(
+      [],
+      {
+        KERNEL_CHECK_AFFECTED: 'main',
+        KERNEL_CHECK_AFFECTED_MAX: '2',
+        KERNEL_CHECK_TIMINGS: join(root, 'timings'),
+      },
+      [changed],
+    );
+    expect(ranked.plan.tests).toEqual(['test/direct-a.test.ts', 'test/direct-b.test.ts']);
+    expect(ranked.announcement).toBe('Affected mode: tests, 2 of 11 test files selected (7 reachable, cap 2)');
+
+    const noMissingTime = plan(
+      [],
+      {
+        KERNEL_CHECK_AFFECTED: 'main',
+        KERNEL_CHECK_AFFECTED_MAX: '4',
+        KERNEL_CHECK_TIMINGS: join(root, 'timings'),
+      },
+      [changed],
+    );
+    expect(noMissingTime.plan.tests).toEqual([
+      'test/direct-a.test.ts',
+      'test/direct-b.test.ts',
+      'test/direct-c.test.ts',
+      'test/direct-slow.test.ts',
+    ]);
+
+    const beforeOpaque = plan(
+      [],
+      {
+        KERNEL_CHECK_AFFECTED: 'main',
+        KERNEL_CHECK_AFFECTED_MAX: '6',
+        KERNEL_CHECK_TIMINGS: join(root, 'timings'),
+      },
+      [changed],
+    );
+    expect(beforeOpaque.plan.tests).toEqual([
+      'test/direct-a.test.ts',
+      'test/direct-b.test.ts',
+      'test/direct-c.test.ts',
+      'test/direct-slow.test.ts',
+      'test/direct-unrecorded.test.ts',
+      'test/indirect.test.ts',
+    ]);
+  });
+
+  test('the affected cap defaults to 60 and accepts only positive integers', () => {
+    const defaultCap = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, ['services/kernel/src/a.ts']);
+    expect(defaultCap.announcement).toContain('(2 reachable, cap 60)');
+    const configured = plan([], { KERNEL_CHECK_AFFECTED: 'main', KERNEL_CHECK_AFFECTED_MAX: '3' }, [
+      'services/kernel/src/a.ts',
+    ]);
+    expect(configured.announcement).toContain('(2 reachable, cap 3)');
+    for (const value of ['', '0', '-1', '1.5', 'NaN', '9007199254740992']) {
+      expect(() =>
+        plan([], { KERNEL_CHECK_AFFECTED: 'main', KERNEL_CHECK_AFFECTED_MAX: value }, ['services/kernel/src/a.ts']),
+      ).toThrow('KERNEL_CHECK_AFFECTED_MAX');
+    }
+  });
+
+  test('a change the selector cannot place runs no tests and announces unverified', () => {
+    write('services/kernel/src/orphan.ts', 'export {};\n');
+    const unknown = plan([], { KERNEL_CHECK_AFFECTED: 'main' }, ['services/kernel/src/orphan.ts']);
+    expect(unknown.plan).toEqual({ files: [], tests: [] });
+    expect(unknown.announcement).toBe(
+      'Affected mode: unverified, 0 of 4 test files selected (services/kernel/src/orphan.ts)',
+    );
   });
 
   test('the flag wins over the environment and both name the revision', () => {

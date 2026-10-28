@@ -2,7 +2,9 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { REACH, type ReachEntry } from './affected-reach.ts';
 
-export type Affected = { kind: 'tests'; tests: string[] } | { kind: 'all'; reason: string };
+export type Affected =
+  | { kind: 'tests'; tests: { file: string; distance: number | null }[] }
+  | { kind: 'all'; reason: string };
 
 type Package = { directory: string; exports: unknown; main: string | undefined };
 type Graph = {
@@ -488,9 +490,9 @@ export function affectedTests(
 
   let graph: Graph | null = null;
   let importers: Map<string, string[]> | null = null;
-  let participates = false;
+  const changedModules: string[] = [];
+  let changedNonTest = false;
   const testSet = new Set(tests);
-  const selected = new Set<string>();
 
   for (const path of paths) {
     const name = path.slice(path.lastIndexOf('/') + 1);
@@ -514,28 +516,34 @@ export function affectedTests(
       if (inData && !CODE.test(path) && !SQL.test(path)) return { kind: 'all', reason: path };
       continue;
     }
-    participates = true;
-    const pending = [absolute];
-    const seen = new Set(pending);
+    changedModules.push(absolute);
+    if (!TEST.test(normalize(relative(repository, absolute)))) changedNonTest = true;
+  }
+
+  const distances = new Map<string, number | null>();
+  if (changedModules.length > 0 && graph) {
+    const pending = Array.from(new Set(changedModules));
+    const reached = new Map(pending.map((file) => [file, 0]));
     for (let index = 0; index < pending.length; index += 1) {
       const file = pending[index]!;
+      const distance = reached.get(file)!;
       const rel = normalize(relative(repository, file));
-      if (testSet.has(rel)) selected.add(rel);
+      if (testSet.has(rel)) distances.set(rel, distance);
       for (const importer of importers!.get(file) ?? []) {
-        if (seen.has(importer)) continue;
-        seen.add(importer);
+        if (reached.has(importer)) continue;
+        reached.set(importer, distance + 1);
         pending.push(importer);
       }
     }
   }
 
-  if (participates && graph) {
+  if (changedNonTest && graph) {
     const pending = [...graph.opaque];
     const seen = new Set(pending);
     for (let index = 0; index < pending.length; index += 1) {
       const file = pending[index]!;
       const rel = normalize(relative(repository, file));
-      if (testSet.has(rel)) selected.add(rel);
+      if (testSet.has(rel) && !distances.has(rel)) distances.set(rel, null);
       for (const importer of importers!.get(file) ?? []) {
         if (seen.has(importer)) continue;
         seen.add(importer);
@@ -546,8 +554,9 @@ export function affectedTests(
 
   return {
     kind: 'tests',
-    tests: Array.from(selected)
-      .map((path) => normalize(relative(modulePath, path)))
-      .sort(),
+    tests: Array.from(distances, ([path, distance]) => ({
+      file: normalize(relative(modulePath, path)),
+      distance,
+    })).sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)),
   };
 }

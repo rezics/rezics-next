@@ -25,6 +25,7 @@ import {
   type FileRunner,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
+import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
@@ -46,6 +47,16 @@ type CheckPlan = { files: string[] | null; tests: string[] };
 
 function moduleTests(moduleDirectory: string): string[] {
   return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
+}
+
+function affectedMaximum(env: NodeJS.ProcessEnv): number {
+  const value = env.KERNEL_CHECK_AFFECTED_MAX;
+  if (value === undefined) return 60;
+  const maximum = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(maximum)) {
+    throw new Error('KERNEL_CHECK_AFFECTED_MAX must be a positive integer');
+  }
+  return maximum;
 }
 
 function pathIsWithin(parent: string, candidate: string): boolean {
@@ -154,17 +165,39 @@ export function planCheck(
 
   const root = resolve(moduleDirectory);
   const total = moduleTests(root).length;
+  const env = options.env ?? process.env;
+  const cap = affectedMaximum(env);
   const changed = (options.changed ?? gitChangedPaths)(revision);
   const selection = affectedTests(resolve(root, '../..'), root, changed);
   if (selection.kind === 'all') {
     return {
-      plan: checkPlan([], moduleDirectory),
-      announcement: `Affected mode: all, ${total} of ${total} test files selected (${selection.reason})`,
+      plan: { files: [], tests: [] },
+      announcement: `Affected mode: unverified, 0 of ${total} test files selected (${selection.reason})`,
     };
   }
+  let latest: Record<string, FileTiming> = {};
+  try {
+    latest = readLatest(timingsDirectory(moduleDirectory, env));
+  } catch {
+    // A synthetic module tree or missing Git metadata has no shared timing directory; unknown times rank last.
+  }
+  const wall = (file: string): number => {
+    const value = latest[file]?.wall;
+    return typeof value === 'number' && Number.isFinite(value) ? value : Infinity;
+  };
+  const ranked = selection.tests.sort((a, b) => {
+    const distanceA = a.distance ?? Infinity;
+    const distanceB = b.distance ?? Infinity;
+    if (distanceA !== distanceB) return distanceA < distanceB ? -1 : 1;
+    const wallA = wall(a.file);
+    const wallB = wall(b.file);
+    if (wallA !== wallB) return wallA < wallB ? -1 : 1;
+    return a.file < b.file ? -1 : a.file > b.file ? 1 : 0;
+  });
+  const selected = ranked.slice(0, cap).map(({ file }) => file);
   return {
-    plan: selection.tests.length > 0 ? checkPlan(selection.tests, moduleDirectory) : { files: [], tests: [] },
-    announcement: `Affected mode: tests, ${selection.tests.length} of ${total} test files selected`,
+    plan: selected.length > 0 ? checkPlan(selected, moduleDirectory) : { files: [], tests: [] },
+    announcement: `Affected mode: tests, ${selected.length} of ${total} test files selected (${ranked.length} reachable, cap ${cap})`,
   };
 }
 
@@ -617,6 +650,7 @@ export async function placeKernelCheck(
 async function main(): Promise<void> {
   const { plan, announcement } = planCheck(process.argv.slice(2), directory);
   if (announcement) console.log(announcement);
+  if (announcement?.startsWith('Affected mode: unverified,')) return;
   const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrationFiles, new Date());
 

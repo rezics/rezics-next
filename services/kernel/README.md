@@ -225,14 +225,27 @@ The full `bun run check` is what the gate runs.
 A test file whose every failure is a growth bound error is rerun alone once after the suite, under a stack slot; a file that
 passes alone is reported as load-sensitive and does not fail the run.
 
-Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), runs only the test
-files that import a path changed since `<rev>` (committed, staged, unstaged or untracked), or the whole suite when the
-selector cannot place a change, and prints its selection first; named files ignore it. The full run stays the gate for
-promotion.
+Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), considers test files
+that import a path changed since `<rev>` (committed, staged, unstaged or untracked). It selects at most
+`KERNEL_CHECK_AFFECTED_MAX` files, which defaults to 60 and must be a positive integer. When the reachable set is larger,
+tests rank by shortest import distance from a changed file (a direct importer has distance 1), then by shorter recorded
+wall time in `latest.json`, then by path. Tests reached only through an opaque computed-import walk rank after every
+test with a distance. A change the selector cannot place, including a whole-suite name, forced prefix, unknown path or
+stale reach entry, selects no test file, prints `Affected mode: unverified, 0 of <total> test files selected (<reason>)`
+and exits 0; the merge train records it as unverified. The full run stays the gate for promotion, and named files ignore
+affected mode.
+
+| Item | Bound                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------ |
+| Cost | Selection is linear in the import graph, and at most the configured cap of test files run. |
+
+The default cap follows the observed check load: at about 20 kernel landings an hour, 60 files at 7.5 seconds each cost
+at most 7.5 slot-minutes per landing, or 150 slot-minutes an hour (about 2.5 of the 12 check slots on hosts a and b).
+The cap still covers all observed narrow changes, which selected 37 to 56 files.
 
 A computed dynamic import hides what it loads from the selector. `scripts/affected-reach.ts` lists, for each such site,
 the files it can load; a site listed there depends on those files, and an unlisted computed import still runs its tests
-on every change. An entry that no longer matches the code selects the whole suite.
+on every non-test code or data change. An entry that no longer matches the code makes the selection unverified.
 
 Each check run writes every test file's wall, database create and drop, and per-test times to
 `.temp/kernel-check/timings/<UTC timestamp>.json` in the main checkout (`KERNEL_CHECK_TIMINGS` overrides the directory)
