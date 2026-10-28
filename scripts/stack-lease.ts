@@ -32,6 +32,7 @@ import { basename, join } from 'node:path';
 export interface StackSlot {
   readonly index: number | null;
   readonly capacity: number;
+  readonly weight: number;
   readonly waitedMs: number;
   readonly env: Record<string, string>;
   release(): Promise<void>;
@@ -145,12 +146,15 @@ function busy(file: string): boolean {
 export async function acquireStackSlot(
   label: string,
   env: Record<string, string | undefined> = process.env,
+  weight = 1,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
+  if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity) throw new Error(`Lease weight must be between 1 and capacity (${capacity}), received ${weight}`);
   if (env.REZICS_STACK_LEASE === 'off' || env.REZICS_STACK_SLOT !== undefined) {
     return {
       index: null,
       capacity,
+      weight,
       waitedMs: 0,
       env: env.REZICS_STACK_SLOT === undefined ? {} : { REZICS_STACK_SLOT: env.REZICS_STACK_SLOT },
       async release() {},
@@ -215,34 +219,39 @@ export async function acquireStackSlot(
           })
           .sort((a, b) => (BigInt(a.slice(7)) < BigInt(b.slice(7)) ? -1 : 1));
         const ahead = live.indexOf(basename(ticket));
-        let held = 0;
+        const heldSlots: number[] = [];
         for (let index = 1; index <= capacity; index++) {
-          const file = join(directory, `slot-${index}.lock`);
-          if (ahead === 0) {
-            const slotLock = await lock(file);
-            if (slotLock) {
-              await ticketLock.release();
-              ticketLock = undefined;
-              unlinkSync(ticket);
-              const waitedMs = Math.floor(performance.now() - started);
-              console.error(`stack-lease: ${label} slot ${index}/${capacity} after ${waitedMs} ms`);
-              let released: Promise<void> | undefined;
-              return {
-                index,
-                capacity,
-                waitedMs,
-                env: { REZICS_STACK_SLOT: `${index}/${capacity}` },
-                release() {
-                  return (released ??= (async () => {
-                    await slotLock.release();
-                    writeFileSync(join(directory, 'wake'), '');
-                  })());
-                },
-              };
-            }
-            held++;
-          } else if (busy(file)) held++;
+          if (busy(join(directory, `slot-${index}.lock`))) heldSlots.push(index);
         }
+        if (ahead === 0 && capacity - heldSlots.length >= weight) {
+          const acquired: { index: number; lock: Lock }[] = [];
+          for (let index = 1; index <= capacity && acquired.length < weight; index++) {
+            if (heldSlots.includes(index)) continue;
+            const slotLock = await lock(join(directory, `slot-${index}.lock`));
+            if (slotLock) acquired.push({ index, lock: slotLock });
+          }
+          if (acquired.length === weight) {
+            await ticketLock.release();
+            ticketLock = undefined;
+            unlinkSync(ticket);
+            const waitedMs = Math.floor(performance.now() - started);
+            const indexes = acquired.map((entry) => entry.index);
+            console.error(weight === 1 ? `stack-lease: ${label} slot ${indexes[0]}/${capacity} after ${waitedMs} ms` : `stack-lease: ${label} slots ${indexes.join(',')} (${weight}/${capacity}) after ${waitedMs} ms`);
+            let released: Promise<void> | undefined;
+            return {
+              index: indexes[0]!, capacity, weight, waitedMs,
+              env: { REZICS_STACK_SLOT: `${indexes[0]}/${capacity}` },
+              release() {
+                return (released ??= (async () => {
+                  await Promise.all(acquired.map((entry) => entry.lock.release()));
+                  writeFileSync(join(directory, 'wake'), '');
+                })());
+              },
+            };
+          }
+          await Promise.all(acquired.map((entry) => entry.lock.release()));
+        }
+        const held = heldSlots.length;
         if (performance.now() - lastLog >= 60_000) {
           console.error(`stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`);
           lastLog = performance.now();
