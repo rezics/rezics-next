@@ -50,7 +50,16 @@ alone contribute nothing. Clearing state leaves other facts intact; removing the
 Labels need no profile lookup or binding. Only live entry and retained copy/session facts with actual accepted pins
 support an in-use state set and all sibling state views, even empty siblings. Labels and soft-deleted snapshots support
 none. Do not infer a historical/current type. Accepted pins keep immutable meaning; support data is derived, never a
-second source of authority. A release digest's lexical order is not semantic chronology or precedence.
+second source of authority.
+
+For presentation and labels only, an unmaterialized PRIVATE state view selects the lexicographically smallest
+currently supported accepted release digest containing that state. Discovery unions all supported sibling identities,
+including empty states; each native fact retains its own accepted pin and meaning. Digest order expresses neither
+chronology nor semantic compatibility. A materialized header keeps its accepted meaning, a completed public generation
+keeps its own meaning, and an explicit owner rename wins. Public DTOs expose no private pins, predicates or digests.
+[Dynamic Collections](../../../../docs/dynamic-collections.md) owns the detailed contract. Native selection requires
+its own indexed support access path and later performance proof, never a scan over an owner's releases; that path
+is not implemented.
 
 Built-ins have stable deterministic identities and private defaults. Empty logical Everything and owner state
 reference discovery need no stored header or write scope. Dynamic DTOs omit curated count, creation/update times,
@@ -200,8 +209,9 @@ or unavailable non-null pinned release fails closed rather than guessing.
 DELETE keeps status `204` and an empty body. Its minimal native command outcome supplies
 `Library-Entry-Deletion-Id` and `Library-Entry-Deletion-Revision`; the latter is `r + 1`. Do not add an expiry
 header unless its owner explicitly requires and documents it. A new
-`POST /v1/libraryEntries/:subjectId/restore` accepts only the closed body `{ deletionId, revision }`, uses its own
+`POST /v1/libraryEntries/{subjectId}:restore` accepts only the closed body `{ deletionId, revision }`, uses its own
 `Idempotency-Key`, and returns the normal entry response. `revision` binds the deletion revision in the header.
+Register it with `customMethod` as required by the [HTTP contract](../../README.md#http-contract).
 Restore uses the exact stored `subject_id` and current source-read eligibility; redirects affect eligibility only and
 never rewrite `subject_id` or `requested_subject_id`. Reuse existing native scopes, gates and pin validation; add no
 profile, permission or cache authority. Use the existing `library_entry:update` owner authority and `shareAccount`
