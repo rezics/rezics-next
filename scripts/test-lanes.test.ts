@@ -76,28 +76,40 @@ test('each check names its clones, timings and variables after its service', () 
   ]);
 });
 
-function loadFailureFixture(messages: string[]) {
-  const xml = (text: string) => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
-  const output = messages.map((message, index) => `${message}\n(fail) failure ${index}\n`).join('');
+type FixtureFailure = { title: string; message: string; type?: string; duration?: string };
+
+function loadFailureFixture(input: Array<string | FixtureFailure>) {
+  const failures = input.map((failure, index): FixtureFailure =>
+    typeof failure === 'string' ? { title: `failure ${index}`, message: failure } : failure,
+  );
+  const xml = (text: string) =>
+    text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const output = failures
+    .map(({ title, message, duration }) => `(fail) ${title} [${duration ?? '1.23ms'}]\n${message}\n`)
+    .join('');
   const reports = [
     undefined,
     ...['attribute', 'body'].map(
       (format) =>
-        `<testsuites failures="${messages.length}" errors="0"><testsuite>` +
-        messages
+        `<testsuites failures="${failures.length}" errors="0"><testsuite>` +
+        failures
           .map(
-            (message, index) =>
-              `<testcase name="failure ${index}">` +
+            ({ title, message, type }) =>
+              `<testcase name="${xml(title)}">` +
               (format === 'attribute'
-                ? `<failure type="Error" message="${xml(message)}"/>`
-                : `<failure><![CDATA[${message}]]></failure>`) +
+                ? `<failure type="${xml(type ?? 'Error')}" message="${xml(message)}"/>`
+                : `<failure type="${xml(type ?? 'Error')}"><![CDATA[${message}]]></failure>`) +
               '</testcase>',
           )
           .join('') +
         '</testsuite></testsuites>',
     ),
   ];
-  return { outcome: { file: 'test/load.test.ts', database: 'fixture_test_1', error: new Error(output) }, reports };
+  return {
+    outcome: { file: 'test/load.test.ts', database: 'fixture_test_1', error: new Error(output) },
+    output,
+    reports,
+  };
 }
 
 async function expectLoadFailureRetry(messages: string[]) {
@@ -120,10 +132,58 @@ async function expectLoadFailureRetry(messages: string[]) {
   }
 }
 
-test('a file that failed only on database overload is rerun alone', async () => {
+test('a file with any load failure is rerun alone and its other failures are cascades', async () => {
+  const { outcome, reports } = loadFailureFixture([
+    {
+      title: 'retry exhaustion',
+      message:
+        'Error: Step content.import.step has exceeded its maximum of 100 retries. Previous errors: ... Command unavailable for partition 976: overloaded',
+    },
+    {
+      title: 'problem body',
+      message:
+        'Error: Setup POST http://127.0.0.1:41234/v1/grants failed (503): {"type":"about:blank","title":"Service Unavailable","status":503,"code":"overloaded"}',
+    },
+    { title: 'workflow cascade', message: 'Error: Account workflow step failed: pending-account' },
+    { title: 'public helper', message: 'Error: Public /v1/grants subject:create: HTTP 503' },
+    { title: 'assertion cascade', message: 'Error: expect(received).toBe(expected)' },
+  ]);
+  for (const report of reports) {
+    const classified = report
+      ? classifyLoadInducedFailures(outcome, report)
+      : classifyLoadInducedOutput(outcome.error!.message);
+    expect(classified?.map((failure) => failure.kind)).toEqual(['load', 'load', 'cascade', 'load', 'cascade']);
+
+    const reruns: string[] = [];
+    let printed = '';
+    const result = await rerunLoadFailures(
+      [outcome],
+      async (file) => {
+        reruns.push(file);
+        return { file, database: 'fixture_retry_1' };
+      },
+      (failure) => classifyLoadInducedFailures(failure, report),
+      (text) => void (printed += text),
+    );
+    expect(reruns).toEqual([outcome.file]);
+    expect(result.failed).toEqual([]);
+    expect(printed).toContain('Load-sensitive tests (passed alone): 5');
+    expect(printed).toContain('workflow cascade :: Error: Account workflow step failed: pending-account (cascade)');
+    expect(printed).toContain('assertion cascade :: Error: expect(received).toBe(expected) (cascade)');
+  }
+});
+
+test('wrapped overload signals are recognized in console and JUnit messages', async () => {
   await expectLoadFailureRetry([
     'AccessUnavailableError: Access unavailable: overloaded\n reason: "overloaded",',
+    'Access unavailable: deadline',
     'CommandUnavailableError: Command unavailable for partition 1315: overloaded\n    reason: "overloaded",\n partition: 1315,\n   movedTo: null,',
+    'Command unavailable for partition 976: deadline',
+    'Step content.import.step has exceeded its maximum of 100 retries. Previous errors: Command unavailable for partition 976: overloaded',
+    'Setup POST http://127.0.0.1:41234/v1/grants failed (503): {"type":"about:blank","title":"Service Unavailable","status":503,"code":"overloaded"}',
+    'Public /v1/grants subject:create: HTTP 503',
+    '{"type":"about:blank","title":"Service Unavailable","status":503,"code":"deadline_exceeded"}',
+    "{ type: 'about:blank', title: 'Unavailable', status: 503, code: 'transaction_retry_exhausted' }",
   ]);
 });
 
@@ -140,7 +200,7 @@ test('a file that failed only on database storage or connection refusal is rerun
   ]);
 });
 
-test('a passing test whose title names a SQLSTATE does not make a failure load-induced', () => {
+test('source excerpts, stack frames, Expected lines and passing tests do not make failures load-induced', () => {
   const passing = [
     '(pass) eligibility prepare: 53300 closes the request without effects [1.83ms]',
     '(pass) eligibility prepare: 57P03 closes the request without effects [2.59ms]',
@@ -149,12 +209,113 @@ test('a passing test whose title names a SQLSTATE does not make a failure load-i
     '(pass) handles AccessUnavailableError: Access unavailable: overloaded',
     '(pass) handles this test timed out after 60000ms',
   ].join('\n');
-  const { outcome, reports } = loadFailureFixture([`${passing}\nError: unexpected result\n${passing}`]);
-  expect(classifyLoadInducedOutput(outcome.error.message)).toBeNull();
+  const noise = [
+    '12 | AccessUnavailableError: Access unavailable: overloaded',
+    '    at AccessUnavailableError: Access unavailable: overloaded',
+    'Expected: CommandUnavailableError: Command unavailable for partition 976: overloaded',
+    passing,
+    'Error: unexpected result',
+  ].join('\n');
+  const { outcome, reports } = loadFailureFixture([noise]);
+  expect(classifyLoadInducedOutput(outcome.error!.message)).toBeNull();
   for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
 });
 
-test('overload does not hide another failure or make bare SQLSTATE numbers retryable', () => {
+test('a file whose only failures have no load signal is not rerun', async () => {
+  const { outcome, reports } = loadFailureFixture(['Error: expect(received).toBe(expected)\nExpected: 1\nReceived: 2']);
+  for (const report of reports) {
+    const reruns: string[] = [];
+    const result = await rerunLoadFailures(
+      [outcome],
+      async (file) => {
+        reruns.push(file);
+        return { file, database: 'fixture_retry_1' };
+      },
+      (failure) => classifyLoadInducedFailures(failure, report),
+      () => undefined,
+    );
+    expect(reruns).toEqual([]);
+    expect(result.failed).toEqual([outcome]);
+  }
+});
+
+test('an unhandled overload error makes a file eligible in console and JUnit output', async () => {
+  const output = '# Unhandled error: Command unavailable for partition 976: overloaded';
+  const outcome = { file: 'test/unhandled.test.ts', database: 'fixture_test_1', error: new Error(output) };
+  const reports = [
+    undefined,
+    '<testsuites failures="0" errors="1"><testsuite><error type="Error" message="Command unavailable for partition 976: overloaded"/></testsuite></testsuites>',
+  ];
+  for (const report of reports) {
+    const reruns: string[] = [];
+    const result = await rerunLoadFailures(
+      [outcome],
+      async (file) => {
+        reruns.push(file);
+        return { file, database: 'fixture_retry_1' };
+      },
+      (failure) => classifyLoadInducedFailures(failure, report),
+      () => undefined,
+    );
+    expect(reruns).toEqual([outcome.file]);
+    expect(result.failed).toEqual([]);
+  }
+});
+
+test('database cleanup failures keep a file ineligible even when a test reported overload', () => {
+  const { outcome, reports } = loadFailureFixture(['Access unavailable: overloaded']);
+  const cleanupFailure = {
+    ...outcome,
+    error: new Error(`${outcome.error!.message}\nDatabase cleanup failed: fixture_test_1`),
+  };
+  expect(classifyLoadInducedOutput(cleanupFailure.error!.message)).toBeNull();
+  for (const report of reports) expect(classifyLoadInducedFailures(cleanupFailure, report)).toBeNull();
+});
+
+test('a Received line carrying an overload signal makes its failure eligible', async () => {
+  const { outcome, reports } = loadFailureFixture([
+    {
+      title: 'wrong received value',
+      message:
+        'Error: expect(received).toBe(expected)\nExpected: successful response\nReceived: CommandUnavailableError: Command unavailable for partition 976: overloaded',
+    },
+  ]);
+  for (const report of reports) {
+    const classified = report
+      ? classifyLoadInducedFailures(outcome, report)
+      : classifyLoadInducedOutput(outcome.error!.message);
+    expect(classified?.map((failure) => failure.kind)).toEqual(['load']);
+  }
+});
+
+test('a timeout printed after its fail line belongs to that failure and JUnit timeouts are load failures', async () => {
+  const { outcome, reports } = loadFailureFixture([
+    {
+      title: 'times out',
+      message: '  ^ this test timed out after 180000ms.',
+      type: 'TimeoutError',
+      duration: '180000.12ms',
+    },
+    { title: 'following assertion', message: 'Error: expect(received).toBe(expected)' },
+  ]);
+  expect(outcome.error!.message).toContain('(fail) times out [180000.12ms]\n  ^ this test timed out after 180000ms.');
+  for (const report of reports) {
+    const classified = report
+      ? classifyLoadInducedFailures(outcome, report)
+      : classifyLoadInducedOutput(outcome.error!.message);
+    expect(classified?.map((failure) => failure.kind)).toEqual(['load', 'cascade']);
+  }
+  const junitTimeout =
+    '<testsuites failures="1" errors="1"><testsuite>' +
+    '<testcase name="times out"><failure type="Error" message="no failure detail"/></testcase>' +
+    '<error type="TimeoutError" message="this test timed out after 180000ms"/>' +
+    '</testsuite></testsuites>';
+  expect(classifyLoadInducedFailures(outcome, junitTimeout)?.map((failure) => [failure.title, failure.kind])).toEqual([
+    ['times out', 'load'],
+  ]);
+});
+
+test('an overload does not make unrelated SQLSTATEs or errors load-induced by themselves', () => {
   for (const other of [
     'GrowthBoundError: query count exceeded its bound',
     'Error: unexpected result',
@@ -163,10 +324,9 @@ test('overload does not hide another failure or make bare SQLSTATE numbers retry
     'AccessUnavailableError: Access unavailable: contention',
     'CommandUnavailableError: Command unavailable for partition 1315: fenced',
   ]) {
-    for (const messages of [[other], ['AccessUnavailableError: Access unavailable: overloaded', other]]) {
-      const { outcome, reports } = loadFailureFixture(messages);
-      for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
-    }
+    const { outcome, reports } = loadFailureFixture([other]);
+    expect(classifyLoadInducedOutput(outcome.error!.message)).toBeNull();
+    for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
   }
 });
 
@@ -429,7 +589,7 @@ test('a load-induced failure that fails again alone fails the run', async () => 
   });
 });
 
-test('a file with any other failure is not rerun', async () => {
+test('another failure does not prevent a timeout file from being rerun alone', async () => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');
     const attempts = resolve(directory, 'attempts.txt');
@@ -461,11 +621,31 @@ test('a file with any other failure is not rerun', async () => {
         env,
       });
       expect(result.failed).toEqual(['test/retry.test.ts']);
-      expect(readFileSync(attempts, 'utf8')).toBe('1');
+      expect(readFileSync(attempts, 'utf8')).toBe('2');
     } finally {
       process.stderr.write = originalWrite;
     }
   });
+});
+
+test('the rerun summary reports attempted files, elapsed seconds and passes', async () => {
+  const outcomes = ['a', 'b', 'c'].map((file) => ({
+    file: `test/${file}.test.ts`,
+    database: `fixture_${file}`,
+    error: new Error('failed in the suite'),
+  }));
+  const printed: string[] = [];
+  const result = await rerunLoadFailures(
+    outcomes,
+    async (file) =>
+      file === 'test/b.test.ts'
+        ? { file, database: 'fixture_b_alone', error: new Error('still fails alone') }
+        : { file, database: `${file}_alone` },
+    () => [{ title: 'overloaded', message: 'Access unavailable: overloaded', kind: 'load' }],
+    (text) => void printed.push(text),
+  );
+  expect(result.failed).toEqual([outcomes[1]]);
+  expect(printed.join('')).toMatch(/Load reruns: 3 files, \d+(?:\.\d+)? s alone \(2 passed alone\)/);
 });
 
 test('the web check reruns load-induced browser failures alone', async () => {

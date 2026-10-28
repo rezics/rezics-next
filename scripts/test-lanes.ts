@@ -48,7 +48,7 @@ function attribute(tag: string, name: string): string | undefined {
 
 type GrowthFailure = { title: string; message: string };
 type ReportedFailure = GrowthFailure & { type: string };
-export type RetriableTestFailure = GrowthFailure & { kind?: 'growth' | 'load' };
+export type RetriableTestFailure = GrowthFailure & { kind?: 'growth' | 'load' | 'cascade' };
 
 /** Growth errors and their test titles, when the JUnit report includes complete per-failure metadata. */
 function junitFailures(xml: string): ReportedFailure[] | null {
@@ -81,7 +81,7 @@ function junitFailures(xml: string): ReportedFailure[] | null {
 
   // Every reported failure must belong to a test case and have type and message attributes.
   const allFailureTags = Array.from(xml.matchAll(/<(?:failure|error)\b/g));
-  if (allFailureTags.length !== expectedCount || results.length !== expectedCount) return null;
+  if (allFailureTags.length !== expectedCount) return null;
   if (
     allFailureTags.some(
       (failure) => !testcaseRanges.some(([start, end]) => failure.index! > start && failure.index! < end),
@@ -114,8 +114,8 @@ function outputGrowthFailures(output: string): GrowthFailure[] | null {
 }
 
 /**
- * Reruns each eligible file once, in order. Every reported failure must be classified as the same retryable kind;
- * failed files that cannot be classified this way or fail again remain in the result.
+ * Reruns each eligible file once, in order. Load signals make a file eligible even when it also has cascade failures;
+ * files that cannot be classified or fail again alone remain in the result.
  */
 export async function rerunGrowthFailures<T>(
   outcomes: FileOutcome<T>[],
@@ -126,6 +126,9 @@ export async function rerunGrowthFailures<T>(
   const failed: FileOutcome<T>[] = [];
   const growthSensitive: string[] = [];
   const loadSensitive: string[] = [];
+  let rerunFiles = 0;
+  let rerunSeconds = 0;
+  let passedAlone = 0;
   for (const outcome of outcomes) {
     if (!outcome.error) continue;
     const failures = classify(outcome);
@@ -133,17 +136,22 @@ export async function rerunGrowthFailures<T>(
       failed.push(outcome);
       continue;
     }
+    const started = performance.now();
     const again = await rerun(outcome.file);
+    rerunFiles += 1;
+    rerunSeconds += (performance.now() - started) / 1000;
     if (again.error) {
       write(`${outcome.error.message}\n${outcome.file}: failed again alone:\n${again.error.message}\n`);
       failed.push(outcome);
       continue;
     }
+    passedAlone += 1;
     for (const failure of failures) {
       const message = failure.message.split('\n')[0]!;
       const item = `${outcome.file} :: ${failure.title} :: ${message}`;
-      if (failure.kind === 'load') loadSensitive.push(`load-sensitive test: ${item}`);
-      else growthSensitive.push(`load-sensitive growth check: ${item}`);
+      if (failure.kind === 'load' || failure.kind === 'cascade') {
+        loadSensitive.push(`load-sensitive test: ${item}${failure.kind === 'cascade' ? ' (cascade)' : ''}`);
+      } else growthSensitive.push(`load-sensitive growth check: ${item}`);
     }
   }
   if (growthSensitive.length > 0) {
@@ -152,6 +160,7 @@ export async function rerunGrowthFailures<T>(
   if (loadSensitive.length > 0) {
     write(`Load-sensitive tests (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
   }
+  write(`Load reruns: ${rerunFiles} files, ${round(rerunSeconds)} s alone (${passedAlone} passed alone)\n`);
   return { failed };
 }
 
@@ -169,35 +178,49 @@ function classifyGrowthFailures(outcome: FileOutcome<string>, report: string | u
   return outputGrowthFailures(outcome.error.message);
 }
 
-type LoadFailure = GrowthFailure & { kind: 'load' };
+type LoadFailure = GrowthFailure & { kind: 'load' | 'cascade' };
 
 const loadFailurePatterns = [
-  /\bthis test timed out after \d+ms\b/i,
+  /\b(?:this )?test timed out after \d+ms\b/i,
+  /\bTimeoutError\b/i,
   /\ba (?:beforeEach|afterEach|beforeAll|afterAll) hook timed out\b/i,
   /\bTimeoutError:\s*.+?:\s*Timeout \d+ms exceeded\b/i,
-  /\bAccessUnavailableError:\s*Access unavailable: deadline\b/i,
-  /\bAccessUnavailableError:\s*Access unavailable: overloaded\b/i,
-  /\bCommandUnavailableError:\s*Command unavailable for partition \d+: overloaded\b/i,
+  /\bAccess unavailable:\s*(?:deadline|overloaded)\b/i,
+  /\bCommand unavailable for partition \d+:\s*(?:overloaded|deadline)\b/i,
+  /\bhas exceeded its maximum of \d+ retries\b/i,
+  /\bcode["']?\s*:\s*["']?(?:overloaded|deadline_exceeded|transaction_retry_exhausted)(?=["']|\b)/i,
+  /\bdeadline_exceeded\b/i,
+  /\bHTTP\s+503\b|\(503\)/i,
   /\bsorry, too many clients already\b/i,
   /\btoo many connections for database\b/i,
   /\bremaining connection slots are reserved\b/i,
   /\bthe database system is (?:starting up|shutting down)\b/i,
   /\bcould not extend file\b/i,
   /\bNo space left on device\b/i,
-  /\bcode:\s*["'](?:53300|53100|57P03)["']/i,
-  /\bdeadline_exceeded\b/i,
+  /\bcode["']?\s*:\s*["']?(?:53300|53100|57P03)(?=["']|\b)/i,
 ];
 
-function withoutPassingTestLines(text: string): string {
+function failureMessageText(text: string): string {
   return text
     .split(/\r\n?|\n/)
-    .filter((line) => !/^\s*\(pass\)/.test(line))
+    .filter(
+      (line) =>
+        !/^\s*\(pass\)/.test(line) &&
+        !/^\s*\d+\s*\|/.test(line) &&
+        !/^\s*at\s/.test(line) &&
+        !/^\s*Expected:/.test(line),
+    )
     .join('\n');
 }
 
 function isLoadInducedFailure(text: string): boolean {
-  const failureText = withoutPassingTestLines(text);
+  const failureText = failureMessageText(text);
   return loadFailurePatterns.some((pattern) => pattern.test(failureText));
+}
+
+function classifyFailureMessages(failures: GrowthFailure[]): LoadFailure[] | null {
+  if (failures.length === 0 || !failures.some((failure) => isLoadInducedFailure(failure.message))) return null;
+  return failures.map((failure) => ({ ...failure, kind: isLoadInducedFailure(failure.message) ? 'load' : 'cascade' }));
 }
 
 /** Parse complete JUnit failure details, including implementations that put the error in the element body. */
@@ -211,6 +234,7 @@ function junitLoadFailures(xml: string): GrowthFailure[] | null {
   if (!Number.isInteger(expectedCount)) return null;
 
   const results: GrowthFailure[] = [];
+  const testcaseFailures: Array<{ end: number; result: number }> = [];
   const testcaseRanges: Array<[number, number]> = [];
   const testcases = /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase\s*>)/g;
   for (const match of xml.matchAll(testcases)) {
@@ -228,55 +252,102 @@ function junitLoadFailures(xml: string): GrowthFailure[] | null {
         .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
         .replace(/<[^>]*>/g, ' ')
         .trim();
-      const combined = [type, message, detail].map(withoutPassingTestLines).filter(Boolean).join(': ');
-      if (!combined) return null;
-      results.push({ title: suite ? `${suite} ${name}` : name, message: combined });
+      const combined = failureMessageText(
+        [isLoadInducedFailure(type) ? type : '', message, detail].filter(Boolean).join('\n'),
+      ).trim();
+      results.push({ title: suite ? `${suite} ${name}` : name, message: combined || '(no failure message)' });
+      testcaseFailures.push({ end: match.index! + match[0].length, result: results.length - 1 });
     }
   }
 
-  const allFailureTags = Array.from(xml.matchAll(/<(?:failure|error)\b/g));
-  if (allFailureTags.length !== expectedCount || results.length !== expectedCount) return null;
-  if (
-    allFailureTags.some(
-      (failure) => !testcaseRanges.some(([start, end]) => failure.index! > start && failure.index! < end),
-    )
-  ) {
-    return null;
+  const allFailureTags = Array.from(xml.matchAll(/<(failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1\s*>)/g));
+  if (allFailureTags.length !== expectedCount) return null;
+  let mergedTimeouts = 0;
+  for (const failure of allFailureTags) {
+    if (testcaseRanges.some(([start, end]) => failure.index! > start && failure.index! < end)) continue;
+    if (failure[1] !== 'error') return null;
+    const tag = `<error ${failure[2]}>`;
+    const type = attribute(tag, 'type') ?? '';
+    const errorMessage = attribute(tag, 'message') ?? '';
+    const detail = (failure[3] ?? '')
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+      .replace(/<[^>]*>/g, ' ')
+      .trim();
+    const message = failureMessageText(
+      [isLoadInducedFailure(type) ? type : '', errorMessage, detail].filter(Boolean).join('\n'),
+    ).trim();
+    const isTimeout = /\bTimeoutError\b/i.test(type) || /\b(?:this )?test timed out after \d+ms\b/i.test(message);
+    const previousTestFailure = [...testcaseFailures].reverse().find((testcase) => testcase.end <= failure.index!);
+    if (isTimeout && previousTestFailure) {
+      const previous = results[previousTestFailure.result]!;
+      previous.message = [previous.message, message].filter(Boolean).join('\n');
+      mergedTimeouts += 1;
+    } else {
+      results.push({ title: 'Unhandled error', message: message || '(no error message)' });
+    }
   }
-  return results;
+  return results.length + mergedTimeouts === expectedCount ? results : null;
 }
 
 /** Bun console output fallback when a JUnit report does not carry complete failure messages. */
-export function classifyLoadInducedOutput(output: string): GrowthFailure[] | null {
+export function classifyLoadInducedOutput(output: string): LoadFailure[] | null {
+  if (output.includes('Database cleanup failed:')) return null;
   const lines = output.replace(/\u001b\[[0-9;]*m/g, '').split(/\r\n?|\n/);
+  const end = lines.findIndex(
+    (line) =>
+      /^\s*\d+ tests? failed:\s*$/.test(line) ||
+      /^\s*\d+ (?:pass|fail|skip|todo)\b/.test(line) ||
+      line.startsWith('Ran '),
+  );
+  const outputLines = lines.slice(0, end < 0 ? lines.length : end);
   const failures: Array<{ title: string; line: number }> = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!;
-    if (/^\s*\d+ tests? failed:\s*$/.test(line) || /^\s*\d+ (?:pass|fail|skip|todo)\b/.test(line)) break;
-    const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
+  for (let index = 0; index < outputLines.length; index += 1) {
+    const failure = outputLines[index]!.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
     if (failure) failures.push({ title: failure[1]!, line: index });
   }
-  if (failures.length === 0) return null;
 
-  const classified = failures.map((failure, index) => {
+  const beforeFailure = failures.length > 0 ? outputLines.slice(0, failures[0]!.line) : [];
+  const preFailureFormat =
+    isLoadInducedFailure(beforeFailure.join('\n')) ||
+    beforeFailure.some((line) => /^\s*(?:Error:|error:|#\s*Unhandled|Expected:|Received:|\d+\s*\||at\s)/i.test(line));
+  const timeoutLine = (line: string): boolean => /\b(?:this )?test timed out after \d+ms\b/i.test(line);
+  const assignedLines = new Set<number>();
+  const records: GrowthFailure[] = failures.map((failure, index) => {
     const previous = failures[index - 1]?.line ?? -1;
-    const next = failures[index + 1]?.line ?? lines.length;
-    const lower = index === 0 ? previous + 1 : Math.floor((previous + failure.line) / 2) + 1;
-    const upper = index === failures.length - 1 ? next - 1 : Math.floor((failure.line + next) / 2);
-    const messages = lines.slice(lower, upper + 1);
-    return { ...failure, messages };
+    const next = failures[index + 1]?.line ?? outputLines.length;
+    let messageLines: string[];
+    if (preFailureFormat) {
+      const preceding = outputLines.slice(previous + 1, failure.line);
+      for (let line = previous + 1; line < failure.line; line += 1) {
+        if (index === 0 || !timeoutLine(outputLines[line]!)) assignedLines.add(line);
+      }
+      const timedOutAfter = outputLines.slice(failure.line + 1, next).filter(timeoutLine);
+      for (let line = failure.line + 1; line < next; line += 1) {
+        if (timeoutLine(outputLines[line]!)) assignedLines.add(line);
+      }
+      messageLines = [...(index === 0 ? preceding : preceding.filter((line) => !timeoutLine(line))), ...timedOutAfter];
+    } else {
+      messageLines = outputLines.slice(failure.line + 1, next);
+      for (let line = failure.line + 1; line < next; line += 1) assignedLines.add(line);
+    }
+    const message = failureMessageText(messageLines.join('\n')).trim();
+    return {
+      title: failure.title,
+      message: message || '(no failure message)',
+    };
   });
 
-  for (const failure of classified) {
-    if (!failure.messages.some((line) => isLoadInducedFailure(line))) return null;
-    if (failure.messages.some((line) => /^(?:error:|# Unhandled)/.test(line) && !isLoadInducedFailure(line))) {
-      return null;
-    }
+  const unhandledStarts = outputLines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^\s*(?:error:|#\s*Unhandled\b)/i.test(line));
+  for (const { line, index } of unhandledStarts) {
+    if (assignedLines.has(index)) continue;
+    const next = unhandledStarts.find((candidate) => candidate.index > index)?.index ?? outputLines.length;
+    const message = failureMessageText(outputLines.slice(index, next).join('\n')).trim();
+    records.push({ title: 'Unhandled error', message: message || line.trim() });
   }
-  return classified.map(({ title, messages }) => ({
-    title,
-    message: messages.find((line) => isLoadInducedFailure(line))!.trim(),
-  }));
+
+  return classifyFailureMessages(records);
 }
 
 export function classifyLoadInducedFailures(
@@ -287,26 +358,24 @@ export function classifyLoadInducedFailures(
   if (report) {
     const failures = junitLoadFailures(report);
     if (failures !== null) {
-      return failures.length > 0 && failures.every((failure) => isLoadInducedFailure(failure.message))
-        ? failures.map((failure) => ({ ...failure, kind: 'load' as const }))
-        : null;
+      const classified = classifyFailureMessages(failures);
+      if (classified !== null) return classified;
     }
   }
-  const failures = classifyLoadInducedOutput(outcome.error.message);
-  return failures?.map((failure) => ({ ...failure, kind: 'load' })) ?? null;
+  return classifyLoadInducedOutput(outcome.error.message);
 }
 
 /** Retry only load-induced failures, once each, after their original lane run has finished. */
 export async function rerunLoadFailures<T>(
   outcomes: FileOutcome<T>[],
   rerun: (file: string) => Promise<FileOutcome<T>>,
-  classify: (outcome: FileOutcome<T>) => GrowthFailure[] | null,
+  classify: (outcome: FileOutcome<T>) => RetriableTestFailure[] | null,
   write: (text: string) => void = (text) => void process.stderr.write(text),
 ): Promise<{ failed: FileOutcome<T>[] }> {
   return rerunGrowthFailures(
     outcomes,
     rerun,
-    (outcome) => classify(outcome)?.map((failure) => ({ ...failure, kind: 'load' })) ?? null,
+    (outcome) => classify(outcome)?.map((failure) => ({ ...failure, kind: failure.kind ?? 'load' })) ?? null,
     write,
   );
 }
