@@ -182,7 +182,7 @@ async function contents(id: string) {
   const client = await reader.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const args = { route: routeOf(owner.actor.accountId)!, session_id: id, has_cursor: false, limit: 101 };
+    const args = { route: routeOf(owner.actor.accountId)!, session_id: id, has_cursor: false, limit: 20_001 };
     const units = await unitPage.run(client, { ...args, after_unit_id: '' });
     const changes = await changePage.run(client, { ...args, after_change_no: 0 });
     await client.query('COMMIT');
