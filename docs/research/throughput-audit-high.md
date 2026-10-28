@@ -81,16 +81,16 @@ creation and the latest dependency integration, capped by first launch. The
 remaining prelaunch interval is admission/release overhead, an upper bound on
 capacity waiting. Retry gaps include judgment, recovery and admission. [Q4]
 
-| Component | Mean minutes | P50 | P90 | Summed task-hours |
-| --- | ---: | ---: | ---: | ---: |
-| Dependency wait, reconstructed | 49.28 | 0.00 | 117.93 | 339.18 |
-| Capacity/release/setup residual before first launch | 11.36 | 0.006 | 6.30 | 78.20 |
-| Worker attempt lifetimes, including tool/check waits | 93.52 | 31.35 | 245.71 | 643.74 |
-| Gaps between attempts | 21.18 | 0.00 | 53.25 | 145.82 |
-| Final exit to landing request: settlement/affected checks | 0.004 | 0.002 | 0.008 | 0.03 |
-| Landing request to inferred service start | 33.94 | 26.09 | 76.38 | 233.65 |
-| Final recorded train service | 1.96 | 1.56 | 3.37 | 13.49 |
-| **Creation to integration** | **211.25** | **109.62** | **455.88** | **1,454.12** |
+| Component                                                 | Mean minutes |        P50 |        P90 | Summed task-hours |
+| --------------------------------------------------------- | -----------: | ---------: | ---------: | ----------------: |
+| Dependency wait, reconstructed                            |        49.28 |       0.00 |     117.93 |            339.18 |
+| Capacity/release/setup residual before first launch       |        11.36 |      0.006 |       6.30 |             78.20 |
+| Worker attempt lifetimes, including tool/check waits      |        93.52 |      31.35 |     245.71 |            643.74 |
+| Gaps between attempts                                     |        21.18 |       0.00 |      53.25 |            145.82 |
+| Final exit to landing request: settlement/affected checks |        0.004 |      0.002 |      0.008 |              0.03 |
+| Landing request to inferred service start                 |        33.94 |      26.09 |      76.38 |            233.65 |
+| Final recorded train service                              |         1.96 |       1.56 |       3.37 |             13.49 |
+| **Creation to integration**                               |   **211.25** | **109.62** | **455.88** |      **1,454.12** |
 
 Check-slot time is a **subset of worker time**, not another row to add. The
 available worker stream has no universal timestamps on command starts/finishes,
@@ -150,28 +150,28 @@ that winner even if the predecessor used another model. Input/cached are
 millions per landing; output is thousands per landing. Small cells are not
 routing experiments. [Q5]
 
-| Winning model | Class | Landings | Attempts/landing | Input M | Cached M | Output k |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Claude Sonnet 5.5 | claim | 13 | 1.46 | 13.653 | 13.477 | 66.15 |
-| Claude Sonnet 5.5 | implementation | 3 | 1.33 | 0.696 | 0.657 | 8.56 |
-| Claude Sonnet 5.5 | interface | 11 | 1.91 | 13.000 | 12.788 | 53.87 |
-| Claude Sonnet 5.5 | specification | 1 | 1.00 | 0.955 | 0.908 | 7.13 |
-| Luna | bulk-text | 6 | 1.50 | 3.687 | 3.526 | 37.57 |
-| Luna | claim | 40 | 3.15 | 58.206 | 57.292 | 212.62 |
-| Luna | critical-path | 1 | 1.00 | 1.096 | 1.044 | 12.28 |
-| Luna | implementation | 76 | 1.71 | 17.084 | 16.796 | 72.14 |
-| Luna | interface | 12 | 1.50 | 34.172 | 33.717 | 106.28 |
-| Luna | research | 3 | 1.33 | 6.878 | 6.460 | 76.36 |
-| Sol | bulk-text | 1 | 1.00 | 0.725 | 0.660 | 3.55 |
-| Sol | claim | 104 | 1.80 | 17.570 | 17.305 | 57.63 |
-| Sol | critical-path | 6 | 1.67 | 11.007 | 10.830 | 31.01 |
-| Sol | implementation | 14 | 1.36 | 4.292 | 4.196 | 20.16 |
-| Sol | interface | 8 | 3.38 | 70.174 | 69.129 | 210.03 |
-| Sol | research | 29 | 1.07 | 3.029 | 2.879 | 25.46 |
-| Sol | specification | 63 | 1.46 | 10.525 | 10.362 | 28.06 |
-| Terra | claim | 1 | 1.00 | 0.344 | 0.294 | 6.33 |
-| Terra | interface | 15 | 1.67 | 13.112 | 12.851 | 24.90 |
-| Terra | research | 6 | 1.00 | 0.743 | 0.677 | 6.98 |
+| Winning model     | Class          | Landings | Attempts/landing | Input M | Cached M | Output k |
+| ----------------- | -------------- | -------: | ---------------: | ------: | -------: | -------: |
+| Claude Sonnet 5.5 | claim          |       13 |             1.46 |  13.653 |   13.477 |    66.15 |
+| Claude Sonnet 5.5 | implementation |        3 |             1.33 |   0.696 |    0.657 |     8.56 |
+| Claude Sonnet 5.5 | interface      |       11 |             1.91 |  13.000 |   12.788 |    53.87 |
+| Claude Sonnet 5.5 | specification  |        1 |             1.00 |   0.955 |    0.908 |     7.13 |
+| Luna              | bulk-text      |        6 |             1.50 |   3.687 |    3.526 |    37.57 |
+| Luna              | claim          |       40 |             3.15 |  58.206 |   57.292 |   212.62 |
+| Luna              | critical-path  |        1 |             1.00 |   1.096 |    1.044 |    12.28 |
+| Luna              | implementation |       76 |             1.71 |  17.084 |   16.796 |    72.14 |
+| Luna              | interface      |       12 |             1.50 |  34.172 |   33.717 |   106.28 |
+| Luna              | research       |        3 |             1.33 |   6.878 |    6.460 |    76.36 |
+| Sol               | bulk-text      |        1 |             1.00 |   0.725 |    0.660 |     3.55 |
+| Sol               | claim          |      104 |             1.80 |  17.570 |   17.305 |    57.63 |
+| Sol               | critical-path  |        6 |             1.67 |  11.007 |   10.830 |    31.01 |
+| Sol               | implementation |       14 |             1.36 |   4.292 |    4.196 |    20.16 |
+| Sol               | interface      |        8 |             3.38 |  70.174 |   69.129 |   210.03 |
+| Sol               | research       |       29 |             1.07 |   3.029 |    2.879 |    25.46 |
+| Sol               | specification  |       63 |             1.46 |  10.525 |   10.362 |    28.06 |
+| Terra             | claim          |        1 |             1.00 |   0.344 |    0.294 |     6.33 |
+| Terra             | interface      |       15 |             1.67 |  13.112 |   12.851 |    24.90 |
+| Terra             | research       |        6 |             1.00 |   0.743 |    0.677 |     6.98 |
 
 Exact model strings are `claude-sonnet-5-5`, `gpt-6-luna`, `gpt-6.1-sol` and
 `gpt-6.1-terra`. The ended-window cohort separately contains 46, 316, 456, 45
@@ -189,22 +189,22 @@ Final observable outcomes for the **877 ended attempts** are below. Window
 worker-hours are occupied time, not necessarily discarded work: later attempts
 can retain commits. Input is millions, with the same telemetry caveats. [Q3]
 
-| Observable final class | Attempts | Window worker-hours | Input M |
-| --- | ---: | ---: | ---: |
-| Landed successfully | 411 | 326.89 | 3,935.91 |
-| Reported success, still queued | 29 | 79.31 | 1,009.27 |
-| Other exit-0 without final classification | 3 | 0.71 | 15.49 |
-| Rebase-stage failure | 73 | 123.80 | 1,740.51 |
-| Environment exit classification, excluding explicit silence | 105 | 88.83 | 1,021.03 |
-| Superseded record without classified failure: reshape proxy | 76 | 83.93 | 749.21 |
-| Explicit spec-conflict exit | 73 | 59.38 | 986.70 |
-| No final event sufficient to assign a cause | 35 | 57.72 | 801.56 |
-| Explicit silent timeout | 15 | 34.05 | 397.19 |
-| Scope growth, exit or gate | 25 | 30.40 | 650.92 |
-| Cancelled without an earlier classified outcome | 20 | 26.28 | 237.07 |
-| Gate classified early-stop | 8 | 8.51 | 79.71 |
-| Stopped, remaining | 2 | 2.46 | 5.54 |
-| Repeated assertion | 2 | 0.46 | 4.90 |
+| Observable final class                                      | Attempts | Window worker-hours |  Input M |
+| ----------------------------------------------------------- | -------: | ------------------: | -------: |
+| Landed successfully                                         |      411 |              326.89 | 3,935.91 |
+| Reported success, still queued                              |       29 |               79.31 | 1,009.27 |
+| Other exit-0 without final classification                   |        3 |                0.71 |    15.49 |
+| Rebase-stage failure                                        |       73 |              123.80 | 1,740.51 |
+| Environment exit classification, excluding explicit silence |      105 |               88.83 | 1,021.03 |
+| Superseded record without classified failure: reshape proxy |       76 |               83.93 |   749.21 |
+| Explicit spec-conflict exit                                 |       73 |               59.38 |   986.70 |
+| No final event sufficient to assign a cause                 |       35 |               57.72 |   801.56 |
+| Explicit silent timeout                                     |       15 |               34.05 |   397.19 |
+| Scope growth, exit or gate                                  |       25 |               30.40 |   650.92 |
+| Cancelled without an earlier classified outcome             |       20 |               26.28 |   237.07 |
+| Gate classified early-stop                                  |        8 |                8.51 |    79.71 |
+| Stopped, remaining                                          |        2 |                2.46 |     5.54 |
+| Repeated assertion                                          |        2 |                0.46 |     4.90 |
 
 The 411 ended-and-landed attempts differ from 413 landing events because two
 winning workers ended before the window. Raw `escalation` grouping would instead
@@ -351,13 +351,13 @@ It includes useful retained edits and waiting; it is a ceiling on recovery at
 unchanged winning service cost, not a throughput forecast. Check waiting overlaps
 other rows. Savings below are **separate pilot scenarios**, never a sum. [Q5]
 
-| Rank | Measured exposure | Landing/hour-equivalent | Concrete change and pilot effect | Estimated cost |
-| --- | --- | ---: | --- | --- |
-| 1 | Rebase failures, 123.80 h | 6.47 | Coordinate simultaneous writers to the same non-derived files; preserve committed deltas and route conflicts into a bounded resolution phase instead of a fresh broad implementation brief. Refresh released worktree bases as already supported. Target 25–50% less exposure: **1.62–3.23/hour** capacity equivalent. | 1–2 engineering days plus manager path planning; can reduce apparent concurrency. |
-| 2 | Proven slot waiting, ≥118.98 h | ≥6.22 | Persist check enqueue/acquire/finish identity across adoption; a queued check keeps the attempt alive without model polling. Admit against measured slot/memory demand; share exact-tree check results and avoid voluntary full sweeps for pure source-type tasks. Preserve every contracted and affected-file check. Target 30–50% of the measured bound: **1.87–3.11/hour**. | 1–2 engineering days for lifecycle/timing and one scheduler pilot; extra host cost only after measuring real resource demand. |
-| 3 | Environment exits, 88.83 h | 4.64 | Separate transport/storage/provider incidents from assertions, park/retry the same committed attempt with the contract's bounded retry policy, and circuit-break the affected host/allowance. Run infrastructure baseline comparisons outside the serial train and attach exact evidence. Target half the exposure: **2.32/hour**, plus reduced landing blockage. | About one engineering day plus operational route/storage verification; deploy existing fixes first. |
-| 4 | Supersession churn proxy, 83.93 h | 4.39 | Store a brief revision/hash and reshape reason; avoid restarting a live task for status or an unchanged contract. Send decision deltas once, preserve evidence/commits and group dependent interface decisions before launch. Target 25%: **1.10/hour**. Confirm the proxy really represents avoidable churn first. | Half to one engineering day and a brief-review practice change. |
-| 5 | Explicit specification exits, 59.38 h | 3.10 | Preflight named test existence, frozen hashes, native fixture APIs and cross-owner exports before dispatch; return research decisions to the owning brief before resuming. Split matrices by independent mutation families when the contract allows, preserving all cases. Target half: **1.55/hour**. | Half to one engineering day, then review time per brief; dependency delay may trade against fewer failures. |
+| Rank | Measured exposure                     | Landing/hour-equivalent | Concrete change and pilot effect                                                                                                                                                                                                                                                                                                                                               | Estimated cost                                                                                                                |
+| ---- | ------------------------------------- | ----------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Rebase failures, 123.80 h             |                    6.47 | Coordinate simultaneous writers to the same non-derived files; preserve committed deltas and route conflicts into a bounded resolution phase instead of a fresh broad implementation brief. Refresh released worktree bases as already supported. Target 25–50% less exposure: **1.62–3.23/hour** capacity equivalent.                                                         | 1–2 engineering days plus manager path planning; can reduce apparent concurrency.                                             |
+| 2    | Proven slot waiting, ≥118.98 h        |                   ≥6.22 | Persist check enqueue/acquire/finish identity across adoption; a queued check keeps the attempt alive without model polling. Admit against measured slot/memory demand; share exact-tree check results and avoid voluntary full sweeps for pure source-type tasks. Preserve every contracted and affected-file check. Target 30–50% of the measured bound: **1.87–3.11/hour**. | 1–2 engineering days for lifecycle/timing and one scheduler pilot; extra host cost only after measuring real resource demand. |
+| 3    | Environment exits, 88.83 h            |                    4.64 | Separate transport/storage/provider incidents from assertions, park/retry the same committed attempt with the contract's bounded retry policy, and circuit-break the affected host/allowance. Run infrastructure baseline comparisons outside the serial train and attach exact evidence. Target half the exposure: **2.32/hour**, plus reduced landing blockage.              | About one engineering day plus operational route/storage verification; deploy existing fixes first.                           |
+| 4    | Supersession churn proxy, 83.93 h     |                    4.39 | Store a brief revision/hash and reshape reason; avoid restarting a live task for status or an unchanged contract. Send decision deltas once, preserve evidence/commits and group dependent interface decisions before launch. Target 25%: **1.10/hour**. Confirm the proxy really represents avoidable churn first.                                                            | Half to one engineering day and a brief-review practice change.                                                               |
+| 5    | Explicit specification exits, 59.38 h |                    3.10 | Preflight named test existence, frozen hashes, native fixture APIs and cross-owner exports before dispatch; return research decisions to the owning brief before resuming. Split matrices by independent mutation families when the contract allows, preserving all cases. Target half: **1.55/hour**.                                                                         | Half to one engineering day, then review time per brief; dependency delay may trade against fewer failures.                   |
 
 Silent stops add **1.78/hour-equivalent**, scope growth **1.59**, cancellation
 **1.37**, and early-stop classification **0.44**; unassigned final events expose
