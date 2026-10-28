@@ -490,7 +490,7 @@ test(
       calls.length = 0;
       const page = await open(`/${locale}/offers/${id(1)}`);
       try {
-        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(bookLabels[locale]);
         const price = new Intl.NumberFormat(locale, { style: 'currency', currency: offer.offer.currency }).format(
           offer.offer.unitAmountMinor / 100,
         );
@@ -719,7 +719,7 @@ test(
       expect(starts()).toHaveLength(0);
       await back.click();
       expect(page.url()).toBe(`${await site()}${offerPath()}`);
-      expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+      expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(bookLabels.en);
       expect(starts()).toHaveLength(0);
     } finally {
       await page.context().close();
@@ -762,7 +762,7 @@ test(
       calls.length = 0;
       const page = await open(`/${locale}/offers/${id(1)}`);
       try {
-        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(bookLabels[locale]);
         const sources = page.locator('main picture source');
         expect(await sources.count()).toBe(2);
         expect(await sources.nth(0).getAttribute('type')).toBe('image/avif');
@@ -800,7 +800,9 @@ test(
       calls.length = 0;
       const page = await open(offerPath(n), auth.value);
       try {
-        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(offer.offer.title);
+        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(
+          linked ? bookLabels.en : offer.offer.title,
+        );
         const cover = page.locator('main [data-slot="cover"]');
         expect(await cover.count()).toBe(1);
         expect(await cover.getAttribute('data-state')).toBe('placeholder');
@@ -845,7 +847,7 @@ test(
 );
 
 test(
-  "the return page shows the order's title and the subject's cover in every settlement state",
+  "the return page shows the subject's localized title and cover in every settlement state",
   async () => {
     const auth = await signIn();
     for (const [n, locale] of [
@@ -860,7 +862,7 @@ test(
       settlePending = false;
       const page = await open(`/${locale}/orders/${id(n)}?checkout=success`, auth.value);
       try {
-        expect(await page.locator('main').innerText()).toContain(offer.offer.title);
+        expect(await page.locator('main').innerText()).toContain(bookLabels[locale]);
         const sources = page.locator('main picture source');
         expect(await sources.count()).toBe(2);
         expect(await sources.nth(0).getAttribute('srcset')).toMatch(new RegExp(`/media/${coverMedia}/avif-\\d+ `));
@@ -878,7 +880,7 @@ test(
             /paid|confirmed|payment received/i.test(document.querySelector('main')?.textContent ?? ''),
           );
           expect(await page.locator('main picture img').getAttribute('data-kept')).toBe('yes');
-          expect(await page.locator('main').innerText()).toContain(offer.offer.title);
+          expect(await page.locator('main').innerText()).toContain(bookLabels[locale]);
         }
       } finally {
         settlePending = true;

@@ -554,7 +554,11 @@ test(
         const opened = await openStory('offer', name, locale);
         try {
           const main = opened.page.getByRole('main');
-          expect((await main.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(recording.offer.title);
+          const subject = await Bun.file(join(recorded, 'subject.json')).json();
+          const labels = subject.subject.labels as Record<string, string>;
+          expect((await main.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
+            labels[locale] ?? labels.en,
+          );
           await main.getByText(price(locale, recording), { exact: true }).waitFor();
           expect(await main.getByRole('button', { name: own.offer_buy, exact: true }).isEnabled()).toBe(true);
           expect(await main.locator('img').count(), 'a missing cover leaves no broken image').toBe(0);

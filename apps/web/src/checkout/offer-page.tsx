@@ -72,40 +72,44 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           : null;
 
   return (
-    <article className="max-w-xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
-      <header className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+    <article className="max-w-3xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
+      <header className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-8">
         <SubjectCover data={offer.subject} size="md" priority />
         <div className="min-w-0 space-y-4">
-          <PageHeading className="text-foreground">{offer.title}</PageHeading>
+          <PageHeading className="break-words text-foreground">{offer.subject.subject.title}</PageHeading>
+          <p className="break-words text-base leading-relaxed text-foreground">
+            <span className="font-medium">{m.offer_receives()}: </span>
+            {offer.title}
+          </p>
           <p className="space-y-1">
             <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
             <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>
           </p>
+          {note && (
+            <Alert role="status">
+              <AlertDescription className="text-foreground">{note}</AlertDescription>
+            </Alert>
+          )}
+          <Exposure operation="order.create">
+            <div className="pt-2">
+              {phase === 'retry' ? (
+                <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
+                  {m.offer_retry()}
+                </Button>
+              ) : phase === 'closed' ? null : (
+                <Button
+                  size="lg"
+                  className="w-full sm:w-auto"
+                  disabled={phase !== 'ready' || session === 'unknown'}
+                  onClick={() => void start()}
+                >
+                  {m.offer_buy()}
+                </Button>
+              )}
+            </div>
+          </Exposure>
         </div>
       </header>
-      {note && (
-        <Alert role="status">
-          <AlertDescription className="text-foreground">{note}</AlertDescription>
-        </Alert>
-      )}
-      <Exposure operation="order.create">
-        <div>
-          {phase === 'retry' ? (
-            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
-              {m.offer_retry()}
-            </Button>
-          ) : phase === 'closed' ? null : (
-            <Button
-              size="lg"
-              className="w-full sm:w-auto"
-              disabled={phase !== 'ready' || session === 'unknown'}
-              onClick={() => void start()}
-            >
-              {m.offer_buy()}
-            </Button>
-          )}
-        </div>
-      </Exposure>
     </article>
   );
 }

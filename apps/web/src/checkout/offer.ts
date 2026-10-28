@@ -6,6 +6,7 @@ import type { SubjectCoverData } from './subject-cover';
 
 export type OfferPageData = {
   id: string;
+  /** The offer read's only description of what the buyer receives. */
   title: string;
   currency: string;
   unitAmountMinor: number;

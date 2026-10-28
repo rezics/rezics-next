@@ -10,6 +10,8 @@ export type OrderPageData = {
   offerId: string;
   title: string;
   settlement: Settlement;
+  /** Creation time is present in the order read; it is not a payment-settlement time. */
+  createdAt: string;
   subject: SubjectCoverData;
 };
 

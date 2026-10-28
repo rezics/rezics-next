@@ -1,6 +1,7 @@
 import { Cover, type CoverSize, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
+import { pageText } from '../features/pages/shared';
 
 /** The subject summary the kernel returns with an offer or an order, or null when the reader cannot see the subject. */
 export type SubjectSummary = {
@@ -20,10 +21,13 @@ export function subjectCover(
   summary: SubjectSummary,
 ): SubjectCoverData {
   const id = summary?.id ?? targetSubjectId;
+  const title = summary?.label
+    ? pageText({ [summary.label.language]: summary.label.value }, locale, summary.label.language).text || fallbackTitle
+    : fallbackTitle;
   return {
-    subject: { id, title: summary?.label?.value ?? fallbackTitle, types: summary?.types ?? [] },
+    subject: { id, title, types: summary?.types ?? [] },
     cover: summary?.cover ?? null,
-    href: summary ? subjectHref({ id, label: summary.label?.value ?? fallbackTitle }, locale).href : null,
+    href: summary ? subjectHref({ id, label: title }, locale).href : null,
   };
 }
 
@@ -46,7 +50,7 @@ export function SubjectCover({
     <a
       href={href}
       aria-label={subject.title}
-      className="block max-w-full shrink-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="block max-w-full shrink-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       {drawn}
     </a>

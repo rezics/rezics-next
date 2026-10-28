@@ -170,14 +170,16 @@ export async function threadReady(context: { canvasElement: HTMLElement }) {
   await expect(view.getByText('The rose was unique')).toBeVisible();
 }
 
-/** The offer page shows the recorded title and price, and the one control that starts checkout. */
+/** The offer page shows its locale's subject label, the read's price and one checkout control. */
 function offerReady(recording: typeof offerRecording, available: boolean) {
   return async (context: { canvasElement: HTMLElement }) => {
     await pageReady(context);
     const view = viewOf(context);
     const { currency, title, unitAmountMinor } = recording.offer;
     const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
-    await view.findByRole('heading', { level: 1, name: title });
+    const subjectLabels = subjectRecording.subject.labels as Record<string, string>;
+    await view.findByRole('heading', { level: 1, name: subjectLabels[getLocale()] ?? subjectLabels.en });
+    await view.findByText(title, { exact: false });
     await view.findByText(
       new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(unitAmountMinor / 10 ** (digits ?? 2)),
     );
@@ -204,13 +206,30 @@ function orderReady(heading: () => string, note?: () => string) {
   };
 }
 
-export const orderPaidReady = orderReady(() => m.order_paid());
-export const orderPendingReady = orderReady(() => m.order_pending());
-export const orderCanceledReady = orderReady(
+export const orderPaidReady = async (context: { canvasElement: HTMLElement }) => {
+  await orderReady(() => m.order_paid())(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 2, name: m.order_receipt() });
+  await view.findByRole('link', {
+    name: subjectRecording.subject.labels[getLocale()] ?? subjectRecording.subject.labels.en,
+  });
+  await view.findByRole('link', { name: m.order_open_library() });
+};
+export const orderPendingReady = orderReady(
   () => m.order_pending(),
-  () => m.order_canceled(),
+  () => m.order_confirming(),
 );
-export const orderFailedReady = orderReady(() => m.order_failed());
+export const orderCanceledReady = async (context: { canvasElement: HTMLElement }) => {
+  await orderReady(
+    () => m.order_pending(),
+    () => m.order_canceled(),
+  )(context);
+  await viewOf(context).findByRole('link', { name: m.order_back() });
+};
+export const orderFailedReady = async (context: { canvasElement: HTMLElement }) => {
+  await orderReady(() => m.order_failed())(context);
+  await viewOf(context).findByRole('link', { name: m.order_back() });
+};
 
 /** The new-thread page asks for a title and a body, and cannot send until both are filled. */
 export async function newThreadReady(context: { canvasElement: HTMLElement }) {

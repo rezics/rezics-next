@@ -36,6 +36,7 @@ async function readOnce(request: Request, id: string, locale: string | undefined
       offerId: order.offerId,
       title: order.title,
       settlement,
+      createdAt: order.createdAt,
       subject: subjectCover(locale ?? '', order.targetSubjectId, order.title, order.subject),
     },
   };

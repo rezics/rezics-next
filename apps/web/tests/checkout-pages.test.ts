@@ -32,6 +32,7 @@ const paidOrder: OrderPageData = {
   offerId,
   title: 'Book edition',
   settlement: 'paid',
+  createdAt: '2026-10-26T23:09:56.659Z',
   subject,
 };
 
@@ -42,13 +43,29 @@ const text = (html: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-test('an offer shows its subject cover and localized subject title, price, included item, terms when present, and one buy action', () => {
+test('an offer shows its subject cover and localized subject title, price, included item, and one buy action', () => {
   const html = renderToString(createElement(OfferPage, { offer }));
   expect(html).toContain('data-slot="cover"');
   expect(text(html)).toContain(title);
   expect(text(html)).toContain(formatOfferPrice('en', 'usd', 1299));
+  expect(text(html)).toContain('You receive');
   expect(text(html)).toContain(offer.title);
+  expect(html.match(/<h1\b/g)).toHaveLength(1);
   expect(html.match(/<button\b/g)).toHaveLength(1);
+});
+
+test('the displayed title and subject link use the label selected for the page locale', () => {
+  const localizedSubject = subjectCover('zh-Hans', subjectId, offer.title, {
+    id: subjectId,
+    types: ['schema:Book'],
+    label: { value: '小王子', language: 'zh-Hans' },
+    cover: null,
+  });
+  const html = renderToString(createElement(OfferPage, { offer: { ...offer, subject: localizedSubject } }));
+  expect(html).toContain('<h1');
+  expect(text(html)).toContain('小王子');
+  expect(html).toContain('/zh-Hans/subjects/');
+  expect(html).not.toMatch(/<h1[^>]*>[^<]*註解/);
 });
 
 test('a paid order shows a linked receipt and next steps without an ISO timestamp', () => {
@@ -57,7 +74,13 @@ test('a paid order shows a linked receipt and next steps without an ISO timestam
   expect(html).toContain(`/en/subjects/${subjectId}/the-little-prince`);
   expect(html).toContain(`/en/offers/${offerId}`);
   expect(html).toContain('/en/library');
+  expect(html).toContain('>Receipt</h2>');
+  expect(html).toContain('>Order placed</dt>');
+  expect(text(html)).toContain(
+    new Intl.DateTimeFormat('en', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(paidOrder.createdAt)),
+  );
   expect(text(html)).toContain(orderId);
+  expect(html.match(/<h1\b/g)).toHaveLength(1);
   expect(html).not.toMatch(/\d{4}-\d\d-\d\dT\d\d:\d\d/);
 });
 

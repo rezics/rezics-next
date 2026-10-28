@@ -60,6 +60,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
   }, [order.id, order.settlement]);
 
   const pending = openSettlement.has(order.settlement);
+  const locale = getLocale();
   const heading =
     order.settlement === 'paid'
       ? m.order_paid()
@@ -70,19 +71,100 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           : m.order_failed();
 
   return (
-    <article className="max-w-xl min-w-0 space-y-6 text-foreground">
+    <article className="max-w-3xl min-w-0 space-y-8 text-foreground">
       <PageHeading className="text-foreground">{heading}</PageHeading>
-      <div className="flex min-w-0 items-start gap-4">
-        <SubjectCover data={order.subject} size="sm" priority />
-        <p className="min-w-0 pt-1 font-serif text-xl text-foreground">{order.title}</p>
-      </div>
+      {order.settlement === 'paid' ? (
+        <section
+          aria-labelledby="receipt-heading"
+          className="space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6"
+        >
+          <h2 id="receipt-heading" className="text-xl font-semibold">
+            {m.order_receipt()}
+          </h2>
+          <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+            <SubjectCover data={order.subject} size="sm" priority />
+            <div className="min-w-0 space-y-4">
+              {order.subject.href ? (
+                <a
+                  href={order.subject.href}
+                  className="block break-words text-lg font-medium text-primary underline underline-offset-4"
+                >
+                  {order.subject.subject.title}
+                </a>
+              ) : (
+                <p className="break-words text-lg font-medium">{order.subject.subject.title}</p>
+              )}
+              <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
+                <dt className="text-muted-foreground">{m.order_reference()}</dt>
+                <dd className="break-all font-mono">{order.id}</dd>
+                <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
+                <dd>
+                  <time>
+                    {new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(
+                      new Date(order.createdAt),
+                    )}
+                  </time>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-4">
+          <SubjectCover data={order.subject} size="sm" priority />
+          <p className="min-w-0 break-words pt-1 font-serif text-xl text-foreground">{order.subject.subject.title}</p>
+        </div>
+      )}
+      {pending && (
+        <Alert role="status">
+          <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
+        </Alert>
+      )}
+      {order.settlement === 'failed' && !checkout && (
+        <Alert role="status">
+          <AlertDescription className="space-y-3 text-foreground">
+            <p>{m.order_failed_detail()}</p>
+            <Exposure operation="offer.get">
+              <a
+                href={`/${locale}/offers/${order.offerId}`}
+                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+              >
+                {m.order_back()}
+              </a>
+            </Exposure>
+          </AlertDescription>
+        </Alert>
+      )}
+      {order.settlement === 'paid' && (
+        <section aria-labelledby="next-step-heading" className="space-y-3">
+          <h2 id="next-step-heading" className="text-xl font-semibold">
+            {m.order_next_step()}
+          </h2>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            {order.subject.href && (
+              <a
+                href={order.subject.href}
+                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+              >
+                {m.order_open_subject()}
+              </a>
+            )}
+            <a
+              href={`/${locale}/library`}
+              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_open_library()}
+            </a>
+          </div>
+        </section>
+      )}
       {checkout === 'canceled' && (
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
             <p role="note">{m.order_canceled()}</p>
             <Exposure operation="offer.get">
               <a
-                href={`/${getLocale()}/offers/${order.offerId}`}
+                href={`/${locale}/offers/${order.offerId}`}
                 className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
               >
                 {m.order_back()}
