@@ -540,7 +540,7 @@ test('native guards conceal sessions and source failures and fence old receipts 
     if (fence === 'suspension')
       await expect(commands.readSession(actor.actor, id)).rejects.toBeInstanceOf(GrantDeniedError);
   }
-  const limited = await native.identity(['progress_session:create']);
+  const limited = await native.identity(['subject:read']);
   await noEffects(async () => {
     const denied = await send('POST', '/v1/progressSessions', create(subject), entryKey(), limited.bearer);
     expect([403, 404]).toContain(denied.status);
