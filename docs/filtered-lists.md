@@ -197,9 +197,8 @@ required; typed schemas, immutable loaders and cursor-capacity helpers prove onl
   work and output-slot counters. These are not public fields or private-count disclosure. The shared harness
   separately captures examined/removed rows, buffers, statements, connections per backend and request/response bytes.
   No executable counter ABI is selected here; native owner specifications must bind actual counters before acceptance.
-- Growth check: real API/native captures at three geometric scales, first/deep pages and sparse matches, all owner
-  pools, unrelated history/population and alias/duplicate axes. Performance supplies numeric limits and executable
-  captures; existing 256-proof tests do not verify this replacement.
+- Growth check: real API/native captures meet [Budgets](#budgets) and [Three-scale checks](#three-scale-checks),
+  including first/deep pages, sparse matches, owner pools, unrelated history/population and alias/duplicate axes.
 
 ### Preparation and index maintenance
 
@@ -208,5 +207,129 @@ required; typed schemas, immutable loaders and cursor-capacity helpers prove onl
 - Bound: finite total work may follow relevant finite input and changed dependencies. Each step separately admits
   rows, keys, points, bytes, statements and engine operations and retains progress. Charge failures, discarded work
   and rereads. Derived results never store reusable permission. No new scheduler or unbounded synchronous fanout.
-- Growth check: three-scale native captures with interruption/replay, concurrent privacy change and terminal
-  fencing. Verify complete activation/catch-up and useful pages; permanent preparation is failure.
+- Growth check: [Three-scale checks](#three-scale-checks) enforce the step and total-work limits in
+  [Budgets](#budgets), with interruption/replay, concurrent privacy change and terminal fencing. Verify complete
+  activation/catch-up and useful pages; permanent preparation is failure.
+
+### Budgets
+
+Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct reads of one common page
+(`R ≤ 16`, with `Σs ≤ 128`), `c` the candidates a read actually examined, and `ℓ` the admitted filter leaves
+(`ℓ ≤ 32`). Count duplicates, rejected rows and lookahead as candidates, including discarded work and rereads.
+
+1. **Direct plans: direct catalogue index and direct owner index.** Each read within a page has these ceilings:
+
+   | Unit | Per-read ceiling |
+   | ---- | ---------------- |
+   | Candidates | `min(600, 6s + 3)` |
+   | Catalogue index reads | 6 engine searches, including count-only searches; at most two per refill round |
+   | Owner index reads | 3 keyset seeks; at most one per refill round |
+   | Access and dependency points | `16 + 8c` |
+   | PostgreSQL examined rows, including removed rows | `64 + 16c` |
+   | Shared blocks | Six per budgeted examined row |
+   | Response bytes, PostgreSQL and engine together | `16 KiB + 4 KiB × c` |
+   | Request bytes, PostgreSQL and engine together | `64 KiB + 1 KiB × c` |
+
+   Use at most three refill rounds, each asking for at most `2 × remaining slots + 1`, the existing Search refill
+   quota. A read that neither fills its page nor proves exhaustion within these ceilings returns preparation,
+   never a short page. Per-candidate points cover original and terminal eligibility, source Access and tuple fence,
+   viewer Access, consent and foreign target; per-read points cover the Zone or Collection, source, epoch and
+   safety state. A one-read page uses at most 12 statements per PostgreSQL backend. Each page uses one connection
+   per backend, shared by all its reads.
+
+   Catalogue engine work is measured in checks as iterator steps: sum `next_doc_count` and `advance_count` from
+   the query profile over the whole query tree and all shards. These are the pinned OpenSearch 3.9.0 breakdown
+   field names, as verified in its
+   [query timing types](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/profile/query/QueryTimingType.java)
+   and [timer serialization](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/profile/Timer.java).
+   This work has a growth bound only: constant or logarithmic in the population and in the number of matching
+   documents for fixed `s` and `ℓ`. Sorting or counting every match fails that bound; such a plan is prepared,
+   not direct.
+
+2. **Ready-result plans: prepared public result and prepared owner result.** Each read within a page examines at
+   most `2s + 2` candidates and performs at most 2 index reads. Ready rows are already filtered and canonical;
+   rejects arise only from disclosure changes since preparation, plus one lookahead. Beyond this budget the read
+   returns preparation and the result is repaired, never a short page. Points, examined rows, blocks, bytes,
+   statements and connections have the same ceilings as direct plans, using the read's actual `c`.
+
+3. **Composed common page.** Sum the per-read budgets using each read's actual `s`. Share fixed per-page work:
+   epoch and control read, safety observation before execution and revalidation before disclosure, one disclosure
+   batch per round across reads, and one summaries read. Statements per PostgreSQL backend are at most `8 + 4R`.
+   At the limits of 16 reads and 128 slots, all direct, the page ceilings are:
+
+   | Unit | Composed-page ceiling |
+   | ---- | --------------------- |
+   | Candidates | 816 |
+   | Access and dependency points | 6,784 |
+   | PostgreSQL examined rows | 14,080 |
+   | Statements per PostgreSQL backend | 72 |
+   | Engine searches | 96 |
+   | Connections per backend | 1 |
+
+   Reject a page whose summed budget exceeds these ceilings at admission with `422 unsupported_query`, or
+   prepare the reads that put it over. Sixteen reads at 100 slots each are never admitted: slots, not reads,
+   carry the per-slot budgets.
+
+   Charge the query-level privacy observation once per page, shared by all reads: record the privacy-reduction
+   heads a public read starts from and revalidate them before disclosure. Coverage includes every home across the
+   fixed 4,096 partitions, never only homes of returned candidates. Its ceiling is 2 statements and
+   `64 + 2 × (homes with an unacknowledged reduction + homes whose head changed since the start)` examined rows.
+   Reading all 4,096 heads at each observation (8,192 rows per page) is not admitted. Complete coverage must use
+   an access path proportional to homes that are behind or changed.
+
+4. **Preparation.** Each durable step has these ceilings:
+
+   | Unit | Per-step ceiling |
+   | ---- | ---------------- |
+   | Input candidates or keys read | 1,000 |
+   | Result rows written | 1,000 |
+   | Retained-frontier writes | 1 |
+   | Access and dependency points | 8 per input candidate |
+   | PostgreSQL examined rows, including removed rows | `64 + 16 × input` |
+   | Statements per backend | 16 |
+   | Engine searches | 4 |
+   | Connections per backend | 1 |
+   | Response bytes | 4 MiB |
+
+   In total, read each relevant input item once per build; replay rereads at most one step's input. A source
+   change touches only prepared results whose admitted leaves it affects, found through an index, never by
+   scanning results or definitions. Admit at most 32 live prepared owner results per owner, evicting the least
+   recently read first. An idle prepared result expires after 24 hours. A public prepared result keeps one
+   current and one building generation per admitted read definition.
+
+5. **Authority.** These numbers are ceilings for admission and checks. Performance changes a number only from
+   capture evidence; an owner needing more sends Performance the capture.
+
+### Three-scale checks
+
+Use three geometric scales, **64, 512 and 4,096** (ratio 8; 4,096 is the growth harness cap). Seed growing relations
+with production-shaped rows as the kernel README's [Growth checks](../services/kernel/README.md#growth-checks)
+describes. Keep the page's own neighbourhood fixed and write one check per axis:
+
+- Catalogue population.
+- Matching population: matches grow while `s` stays fixed.
+- Sparse matches: `s + 1` matches behind growing non-matches.
+- Unrelated history: revisions, retractions and suppressions.
+- Owner pools: owners, and one owner's entries, states, labels and holdings.
+- Aliases and duplicates: canonical groups up to 4,096 originals at the largest scale (the group admission limit),
+  and duplicates on the page.
+- Page depth: a deep page reached by cursor.
+- Privacy reductions arriving at a rate that grows with population, each acknowledged after its actual repair.
+
+Cover first, deep and sparse pages for each plan kind, plus one composed page with 16 reads and 128 slots.
+Every counted unit (candidates, points, index reads, statements, connections, output slots and bytes) must stay
+within its number at every scale, with **no slack**. Examined rows must be constant, shared blocks logarithmic,
+statements constant, bytes constant in the population, and engine work constant or logarithmic. Each preparation
+step must fit its step budget, total preparation work must be linear in relevant input, and an interrupted build
+must resume from its retained frontier, rereading at most one step's input. The sparse case must end in a useful
+page.
+
+Under the growing privacy-reduction rate, the share of public reads served rather than answered with preparation
+must not fall from one scale to the next. If every unacknowledged reduction anywhere blocks every public read,
+the served share is about `e^(-λτ)` for reduction rate `λ` and acknowledgement time `τ`; it tends toward zero as
+`λ` grows. That is permanent preparation and fails this contract.
+
+Search writes the direct catalogue and prepared public checks; Commerce writes the direct owner and prepared
+owner checks; the owner of `POST /v1/zones/{id}:readPage` writes the composed-page check, each using its native
+plan. Performance owns the harness enforcing these counted-unit ceilings and reviews the checks. The old
+256-proof tests do not count.
