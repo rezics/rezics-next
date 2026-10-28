@@ -133,6 +133,7 @@ function matches(filter: FilterDocument, type: string | undefined, facts: Fact[]
   if ('not' in filter) return !matches(filter.not, type, facts);
   if ('type' in filter) return type !== undefined && filter.type.in.includes(type);
   if ('saved' in filter) throw new Error('Fixtures use admitted filters');
+  if ('owner' in filter) throw new Error('Catalogue fixtures do not support owner predicates');
   const statement = filter.statement;
   return facts.some((fact) => {
     if (fact.property !== statement.property) return false;
