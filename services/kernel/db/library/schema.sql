@@ -251,6 +251,54 @@ CREATE TABLE library.bulk_target (
 
 
 --
+-- Name: canonical_source_fact; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.canonical_source_fact (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    basis_digest text NOT NULL,
+    canonical_subject_id uuid NOT NULL,
+    stored_subject_id uuid NOT NULL,
+    driver text NOT NULL COLLATE pg_catalog."C",
+    fact_id uuid NOT NULL,
+    CONSTRAINT canonical_source_fact_basis_digest_check CHECK (((octet_length(convert_to(basis_digest, 'UTF8'::name)) >= 1) AND (octet_length(convert_to(basis_digest, 'UTF8'::name)) <= 256))),
+    CONSTRAINT canonical_source_fact_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT canonical_source_fact_driver_check CHECK ((driver = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text]))),
+    CONSTRAINT canonical_source_fact_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: canonical_source_state; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.canonical_source_state (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    ready_generation uuid,
+    ready_basis text,
+    working_generation uuid,
+    working_basis text,
+    after_subject_id uuid,
+    after_driver text COLLATE pg_catalog."C",
+    after_fact_id uuid,
+    source_exhausted boolean DEFAULT false NOT NULL,
+    pending_mapping boolean DEFAULT false NOT NULL,
+    CONSTRAINT canonical_source_state_after_driver_check CHECK ((after_driver = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text]))),
+    CONSTRAINT canonical_source_state_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT canonical_source_state_check1 CHECK (((ready_generation IS NULL) = (ready_basis IS NULL))),
+    CONSTRAINT canonical_source_state_check2 CHECK (((working_generation IS NULL) = (working_basis IS NULL))),
+    CONSTRAINT canonical_source_state_check3 CHECK (((after_subject_id IS NULL) = (after_driver IS NULL))),
+    CONSTRAINT canonical_source_state_check4 CHECK (((after_subject_id IS NULL) = (after_fact_id IS NULL))),
+    CONSTRAINT canonical_source_state_ready_basis_check CHECK (((octet_length(convert_to(ready_basis, 'UTF8'::name)) >= 1) AND (octet_length(convert_to(ready_basis, 'UTF8'::name)) <= 256))),
+    CONSTRAINT canonical_source_state_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT canonical_source_state_working_basis_check CHECK (((octet_length(convert_to(working_basis, 'UTF8'::name)) >= 1) AND (octet_length(convert_to(working_basis, 'UTF8'::name)) <= 256)))
+);
+
+
+--
 -- Name: collection; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -277,6 +325,7 @@ CREATE TABLE library.collection (
     builtin_profile_id text,
     builtin_state_set_id text,
     builtin_state_id text,
+    source_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT collection_active_deletion CHECK (((state <> 'active'::text) OR (deleted_at IS NULL))),
     CONSTRAINT collection_builtin_identity_check CHECK (
 CASE membership_kind
@@ -300,6 +349,7 @@ END),
     CONSTRAINT collection_order_epoch_check CHECK ((order_epoch >= 0)),
     CONSTRAINT collection_revision_check CHECK ((revision >= 1)),
     CONSTRAINT collection_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT collection_source_generation_check CHECK ((source_generation >= 0)),
     CONSTRAINT collection_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text]))),
     CONSTRAINT collection_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
     CONSTRAINT collection_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
@@ -1030,6 +1080,30 @@ ALTER TABLE ONLY library.bulk_target
 
 
 --
+-- Name: canonical_source_fact canonical_source_fact_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_pkey PRIMARY KEY (route, collection_id, generation, basis_digest, canonical_subject_id, stored_subject_id, driver, fact_id);
+
+
+--
+-- Name: canonical_source_fact canonical_source_fact_route_collection_id_generation_basis__key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_route_collection_id_generation_basis__key UNIQUE (route, collection_id, generation, basis_digest, stored_subject_id, driver, fact_id);
+
+
+--
+-- Name: canonical_source_state canonical_source_state_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_state
+    ADD CONSTRAINT canonical_source_state_pkey PRIMARY KEY (route, collection_id);
+
+
+--
 -- Name: collection_listing_history collection_listing_history_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -1381,7 +1455,7 @@ CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btre
 -- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id);
+CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id);
 
 
 --
@@ -1676,6 +1750,22 @@ CREATE TRIGGER subject_collection_version_order BEFORE UPDATE ON library.subject
 --
 
 CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_preparation_header FOR EACH ROW EXECUTE FUNCTION library.guard_type_preparation_header();
+
+
+--
+-- Name: canonical_source_fact canonical_source_fact_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: canonical_source_state canonical_source_state_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_state
+    ADD CONSTRAINT canonical_source_state_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
 
 
 --
