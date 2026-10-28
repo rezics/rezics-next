@@ -14,7 +14,7 @@ test('unsupported Library capability is a closed nonretryable RFC9457 write fail
   expect(body.retryable).toBe(false);
   expect(body.request_id).toBe('profile-operation');
   const schemas = problemSchema('unsupported_library_profile');
-  expect(Value.Check(schemas[422]!, body)).toBe(true);
+  expect(Value.Check(schemas, body)).toBe(true);
   expect(body).not.toHaveProperty('stack');
   expect(body).not.toHaveProperty('pin');
 });
