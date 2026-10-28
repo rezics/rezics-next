@@ -469,6 +469,7 @@ test("an authored field is admitted under a Global Context authorization when th
   await eraseAuthoredField({ pool: db.pool, access: creationAccess }, creationActor, stored.id, {
     deadline: Date.now() + 10_000,
     idempotencyKey: crypto.randomUUID(),
+    requestId: crypto.randomUUID(),
   });
   expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({
     anchor,
