@@ -4,7 +4,8 @@ WITH input AS NOT MATERIALIZED (
          :time::timestamptz AS time, :transaction_id::uuid AS transaction_id
 ), parent AS (
   UPDATE library.collection AS collection
-  SET member_count = member_count + 1, updated_at = input.time, transaction_id = input.transaction_id
+  SET member_count = member_count + 1, source_generation = source_generation + 1,
+      updated_at = input.time, transaction_id = input.transaction_id
   FROM input
   WHERE collection.route = input.route AND collection.collection_id = input.collection_id AND collection.member_count < 5000
   RETURNING collection.route, collection.collection_id

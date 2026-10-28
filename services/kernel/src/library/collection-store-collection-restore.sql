@@ -1,6 +1,7 @@
 WITH input AS NOT MATERIALIZED (SELECT :time::timestamptz AS time)
 UPDATE library.collection
 SET state = 'active', deleted_at = NULL, purge_after = NULL, revision = revision + 1,
+    source_generation = source_generation + 1,
     updated_at = input.time, transaction_id = :transaction_id
 FROM input
 WHERE route = :route AND collection_id = :id AND state = 'deleted' AND revision = :revision
