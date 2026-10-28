@@ -26,7 +26,7 @@ import { R2Storage } from '../../src/content/r2-storage.ts';
 import { collectPartition } from '../../src/content/collection-job.ts';
 import { eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { decideDownload } from '../../src/content/media.ts';
-import { runCommand } from '../../src/command/command.ts';
+import { runCommand, type CommandOutcome } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
@@ -238,56 +238,81 @@ if (process.argv.includes('--content-worker')) {
     pool: pg.Pool,
     store: Store,
     bytes: Uint8Array,
+    targetRoute?: number,
+    reservation?: { mediaId: string; containerId: string; uploaderId: string },
+    options?: { events?: true },
+  ): Promise<UploadedFixture>;
+  async function uploaded(
+    pool: pg.Pool,
+    store: Store,
+    bytes: Uint8Array,
+    targetRoute: number,
+    reservation: { mediaId: string; containerId: string; uploaderId: string } | undefined,
+    options: { events: false },
+  ): Promise<UploadedFixtureWithoutEvents>;
+  async function uploaded(
+    pool: pg.Pool,
+    store: Store,
+    bytes: Uint8Array,
     targetRoute = route,
     reservation?: { mediaId: string; containerId: string; uploaderId: string },
     options: { events?: boolean } = {},
-  ) {
+  ): Promise<UploadedFixture | UploadedFixtureWithoutEvents> {
     const mediaId = reservation?.mediaId ?? newId(targetRoute);
     const containerId = reservation?.containerId ?? newId(targetRoute);
     const key = `m/${mediaId}/original`;
     const uploaderId = reservation?.uploaderId ?? newId(targetRoute + 1);
     store.objects.set(key, bytes);
+    const insert = `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
+        VALUES ($1,$2,$3,$4,$5,'post-image','image/png',$6,$6,$7,'uploaded',$8,$9)
+ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EXCLUDED.actual_byte_count,sha256=EXCLUDED.sha256,transaction_id=EXCLUDED.transaction_id`;
+    const values = (transactionId: string) => [
+      targetRoute,
+      mediaId,
+      containerId,
+      uploaderId,
+      randomUUID(),
+      bytes.byteLength,
+      sha(bytes),
+      key,
+      transactionId,
+    ];
+    if (options.events === false) {
+      // runCommand requires at least one event, so eventless collection fixtures are inserted directly.
+      await pool.query(insert, values(randomUUID()));
+      return { mediaId, key, targetRoute };
+    }
     const command = await runCommand(
       pool,
       { partition: partitionOf(targetRoute), deadline: Date.now() + 10_000 },
       async (tx, context) => {
-        await tx.query(
-          `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
-        VALUES ($1,$2,$3,$4,$5,'post-image','image/png',$6,$6,$7,'uploaded',$8,$9)
-ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EXCLUDED.actual_byte_count,sha256=EXCLUDED.sha256,transaction_id=EXCLUDED.transaction_id`,
-          [
-            targetRoute,
-            mediaId,
-            containerId,
-            uploaderId,
-            randomUUID(),
-            bytes.byteLength,
-            sha(bytes),
-            key,
-            context.transactionId,
-          ],
-        );
+        await tx.query(insert, values(context.transactionId));
         return {
           value: mediaId,
-          events:
-            options.events === false
-              ? []
-              : [
-                  {
-                    type: 'com.rezics.content.media.uploaded.v1',
-                    subject: mediaId,
-                    data: { mediaId, containerId, actorId: uploaderId },
-                  },
-                ],
+          events: [
+            {
+              type: 'com.rezics.content.media.uploaded.v1',
+              subject: mediaId,
+              data: { mediaId, containerId, actorId: uploaderId },
+            },
+          ],
         };
       },
     );
     return { mediaId, key, command, targetRoute };
   }
 
+  type UploadedFixture = {
+    mediaId: string;
+    key: string;
+    command: CommandOutcome<string>;
+    targetRoute: number;
+  };
+  type UploadedFixtureWithoutEvents = Omit<UploadedFixture, 'command'>;
+
   async function enqueue(
     client: Awaited<ReturnType<typeof createWorkClient>>,
-    fixture: Awaited<ReturnType<typeof uploaded>>,
+    fixture: UploadedFixture,
     kind: 'image' | 'purge',
   ) {
     const source = contentWorkSource(
