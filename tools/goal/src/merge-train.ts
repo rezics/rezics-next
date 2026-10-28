@@ -607,10 +607,14 @@ export class MergeTrain {
             }
             o.fence.assertCurrent(entry.request);
             const batchSize = o.integration?.batchSize ?? 1;
-            const selected = o.queue.nextBatch(batchSize, [...deferred], lane);
             const batch: LandingEntry[] = [];
-            for (const candidate of selected) {
-              if (candidate.outcome || !this.canBatch(candidate)) break;
+            const scanned = new Set<number>([entry.id]);
+            if (this.canBatch(entry)) batch.push(entry);
+            while (batch.length < batchSize && batch.length > 0) {
+              const candidate = o.queue.nextBatch(1, [...deferred, ...scanned], lane)[0];
+              if (!candidate) break;
+              scanned.add(candidate.id);
+              if (candidate.outcome || !this.canBatch(candidate)) continue;
               try {
                 o.fence.assertCurrent(candidate.request);
               } catch (error) {

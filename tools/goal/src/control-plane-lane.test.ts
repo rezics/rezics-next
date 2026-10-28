@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AttemptFence, GateOutcome } from './contracts.ts';
+import type { AttemptFence, GateOutcome, LandingRequest } from './contracts.ts';
 import { openDb } from './db.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { git } from './merge.ts';
-import { repository } from './test-support.ts';
+import { repository, temporaryDirectory } from './test-support.ts';
 
 function setup() {
   const repo = repository();
@@ -161,3 +161,56 @@ test('two control-plane landings targeting main are serialized within the main l
     s.close();
   }
 }, 60000);
+
+test('main-lane routing preserves dev queue priority and FIFO order within each priority', () => {
+  const temporary = temporaryDirectory();
+  const db = openDb(join(temporary.path, 'goal.sqlite'));
+  db.run(
+    'CREATE TABLE worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL)',
+  );
+  const fence: AttemptFence = {
+    assertCurrent() {},
+    commitMerge(_ref, merge) {
+      return merge();
+    },
+  };
+  const queue = new SqliteLandingQueue(db, fence);
+  let sequence = 0;
+  function enqueue(id: string, brief: { goal?: string; target?: string; criticalPath?: boolean }, paths = [`${id}.ts`]) {
+    sequence++;
+    db.run('INSERT INTO worker_tasks VALUES (?, ?, 1, ?)', [id, sequence, JSON.stringify({ brief })]);
+    queue.enqueue({
+      taskId: id,
+      attempt: 1,
+      branch: id,
+      worktree: id,
+      declaredPaths: paths,
+      gate: ['true'],
+    } satisfies LandingRequest);
+  }
+
+  try {
+    enqueue('dev-first', { goal: 'web' });
+    enqueue('affected-failure', { goal: 'web' });
+    enqueue('dev-second', { goal: 'web' });
+    enqueue('main-control-plane', { goal: 'control-plane' }, ['tools/goal/train.ts']);
+    enqueue('dev-control-plane', { goal: 'control-plane' });
+    enqueue('stabilize', { goal: 'web', target: 'stabilize' });
+    enqueue('main-target', { goal: 'web', target: 'main' });
+
+    expect(queue.nextBatch(10, [], 'main').map(({ request }) => request.taskId)).toEqual([
+      'main-control-plane',
+      'main-target',
+    ]);
+    expect(queue.nextBatch(10, [], 'dev').map(({ request }) => request.taskId)).toEqual([
+      'dev-control-plane',
+      'stabilize',
+      'dev-first',
+      'affected-failure',
+      'dev-second',
+    ]);
+  } finally {
+    db.close();
+    temporary.close();
+  }
+});
