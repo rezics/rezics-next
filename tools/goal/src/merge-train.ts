@@ -781,12 +781,21 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
-            if (conflicts.length) {
+            // Deferral is for a conflict with an earlier member of this batch. First in its batch, the landing
+            // conflicts with dev itself and only its worker can resolve that: deferred again every round, a busy
+            // queue kept one landing waiting 3 h 41 min with no outcome.
+            if (conflicts.length && previous !== base) {
               appendFileSync(
                 logPath,
                 `Deferred until a later batch round; rebase conflicts: ${conflicts.join(', ')}\n`,
               );
               deferred.add(entry.id);
+            } else if (conflicts.length) {
+              result.stage = 'rebase';
+              result.conflictedFiles = conflicts;
+              result.firstFailure = firstFailure(String(error));
+              appendFileSync(logPath, `Rebase conflicts with dev: ${conflicts.join(', ')}\n`);
+              localOutcomes.set(entry.id, result);
             } else {
               result.stage = 'rebase';
               result.firstFailure = firstFailure(String(error));

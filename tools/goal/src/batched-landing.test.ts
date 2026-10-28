@@ -84,7 +84,7 @@ test('a failing batch falls back to single landings and refuses only its failing
   }
 });
 
-test('a member that conflicts with earlier batch members stays queued while later members land', async () => {
+test('a member that conflicts with an earlier batch member is deferred past it, then gets a rebase outcome against dev', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -103,14 +103,47 @@ test('a member that conflicts with earlier batch members stays queued while late
 
     await h.train();
 
-    expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
-      [first.id, true],
-      [later.id, true],
+    // Deferred past the member it conflicts with, it then conflicts with dev itself, which only its worker can resolve.
+    expect(h.outcomes.map(({ taskId, passed, stage }) => [taskId, passed, passed ? undefined : stage])).toEqual([
+      [first.id, true, undefined],
+      [later.id, true, undefined],
+      [conflict.id, false, 'rebase'],
     ]);
     expect(readFileSync(runs, 'utf8').trim().split('\n')).toHaveLength(1);
     expect(git(h.root, 'show', 'dev:shared.txt')).toBe('shared.txt');
     expect(git(h.root, 'show', 'dev:later.txt')).toBe('later.txt');
-    expect(h.queue.next()?.request.taskId).toBe(conflict.id);
+    // The rebase outcome starts the worker's conflict-resolution attempt, which lands again.
+    expect(h.queue.next()?.request).toMatchObject({ taskId: conflict.id, attempt: 2 });
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a landing that conflicts with dev itself, first in its batch, gets a rebase outcome instead of staying deferred', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
+    const first = h.dispatch('shared.txt');
+    const conflict = h.dispatch('shared.txt');
+    writeFileSync(
+      join(conflict.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'shared.txt', content: 'conflicting change' }),
+    );
+    await h.start(first);
+    await h.start(conflict);
+    await h.train();
+
+    // A busy queue puts the conflicting landing first in every later batch: it was deferred forever (3 h 41 min).
+    const next = h.dispatch('next.txt');
+    await h.start(next);
+    await h.train();
+
+    const outcome = h.outcomes.find(({ taskId }) => taskId === conflict.id);
+    expect(outcome?.passed).toBe(false);
+    expect(outcome?.stage).toBe('rebase');
+    expect(outcome?.conflictedFiles).toEqual(['shared.txt']);
+    expect(h.outcomes.find(({ taskId }) => taskId === next.id)?.passed).toBe(true);
   } finally {
     h.dispose();
   }
