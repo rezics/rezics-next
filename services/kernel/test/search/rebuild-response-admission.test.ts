@@ -294,7 +294,11 @@ for (const fault of faults) {
         `/${subjectIndexName(prefix, 2)}/_mapping`,
       );
       // Inspect errors without putting the intercepted payload in assertion output or operator diagnostics.
-      const diagnostics = Bun.inspect(outcome.error, { depth: 10 });
+      const diagnostics = [
+        Bun.inspect(outcome.error, { depth: 10 }),
+        // The existing operator CLI serializes rebuild partitions, which Error inspection omits.
+        JSON.stringify(outcome.error),
+      ].join('\n');
       expect(diagnostics.includes(hidden)).toBe(false);
       expect({
         activeIndices: Object.keys(actualAlias.body),
