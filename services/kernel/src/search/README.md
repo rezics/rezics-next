@@ -29,11 +29,11 @@ Search stores distinct record classes:
   cleanup job or user delete/purge route. This retention differs from generation retirement.
 
 `disclosure/check.ts` rejects missing, hidden, redirected or security-revision-mismatched candidates and evaluates
-current filter evidence before returning hits; hit data is projected from the current source snapshot. Suggestions
+current filter evidence in the existing partial implementation; hit data is projected from the current source snapshot. Suggestions
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
-subject to the pending real-source/composition proof in [Visibility, completeness and convergence](#visibility-completeness-and-convergence).
+subject to the pending real-source/composition proof in [Indexed membership, current disclosure and convergence](#indexed-membership-current-disclosure-and-convergence).
 It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include
-stale source subjects despite current hit/value checks. This is a known gap pending policy alignment with
+stale source subjects despite current hit/value checks. This is an implementation gap: unsafe engine totals and facet counts must be omitted under [Filtered lists](../../../../docs/filtered-lists.md), without approximate/as_of, zero or row-length fallback. The immediate suppression authority remains
 [Deletion](../../../../docs/deletion.md), whose immediate suppression requirement remains authoritative. The existing
 relation-facet lower-bound behavior does not resolve general totals or bucket counts.
 
@@ -59,162 +59,89 @@ Physical cleanup uses existing operations only; there is no separate Search 30-d
 
 These lifecycle rules add no operation and preserve the Cost bounds below.
 
-## Visibility, completeness and convergence
+## Indexed membership, current disclosure and convergence
 
-Search separates candidate discovery from current disclosure checks. Evidence from [OpenFGA, SpiceDB and
-Sourcegraph](../../../../docs/research/search-visibility-witnesses.md) supports separating those stages, batching
-checks, making consistency boundaries explicit and repairing derived state durably. It does not standardize Search's
-resource limits: the 128 sampled values per property, one saved plus at most 32 alternative witnesses, 256 probes
-per source call and at most three candidate rounds are local budgets. The [Semantic witness and dependency
-design](../semantic/relation-facets-design.md) and [durable rebuild design](../semantic/relation-facet-rebuilds-design.md)
-own witness selection, current evidence, invalidation routing and repair storage. Search owns candidate handling and
-the integration behavior described here.
+[Filtered lists](../../../../docs/filtered-lists.md) owns the shared list contract. Search owns compilation,
+preparation and freshness over existing OpenSearch/PostgreSQL machinery. Semantic supplies complete public facet
+projections and disclosure dependencies; Commerce owns owner-local private plans; Performance sets numeric budgets.
+State, labels, progress and holdings never enter public Search. The shared pure matcher remains the conformance
+reference; mandatory request-time raw-fact replay is superseded. Typed, parameterized SQL ranges/qualifiers may
+execute the same released semantics. Same-statement qualifiers, datatypes/units and unknown under NOT remain.
 
-For relation predicates, `true` and `false` are definitive current results; `not_proven` is unknown, not false.
-Boolean evaluation preserves that three-valued meaning through AND, OR and NOT, and only a complete current `true`
-result may be disclosed. A candidate with no current proof is dropped and refilled, never returned. Candidate
-discovery and current disclosure are separate guarantees: a safe check can reject stale candidates without proving
-complete recall, a full page, or fresh indexed counts. In particular, bounded snapshots can underfill while repair
-is pending. Absence from a nonoverflow snapshot may count as complete absence only after integration proves that the
-snapshot is complete; this focused completeness proof/fix belongs to Semantic after its source task. Do not document
-underfill as complete absence or broaden this into a redesign of all negative filters.
+Membership uses a complete, identified index observation for the admitted population/predicate, not a sample or
+possible-witness hint. Ordinary catalogue edits become filterable within 60 seconds in healthy operation. More than
+five minutes of actual source-to-searchable lag gives readiness. Engine refresh alone is not pipeline freshness.
+Owner writes appear on the owner's next read. Privacy reductions, takedowns, consent/source revocation have no lag.
 
-Index counts, including counts reported with `as_of`, describe indexed progress; do not call them live-authorized
-exact cardinalities. Candidate supersets are not lower bounds on current matches. The existing `lower_bound` policy
-for facet results is the separate policy in [Facet counts](#facet-counts); it does not introduce a count API or a
-leak-protection guarantee. Keyset continuation consumes rejected and unproven candidates, including rejected
-lookahead, before advancing, but does not promise an OpenSearch point-in-time snapshot. Whole-index replay and witness
-repair may do work proportional to their finite input; there is no constant whole-rebuild cost or wall-clock
-convergence SLA.
-Finite convergence assumes writes stop, the affected identity and output sets are finite, invalidation routing is
-complete, I/O eventually succeeds and durable cursors progress fairly. The real-source and default-worker
-composition proof remains pending; the [outcome harness contract](../../test/search/README.md) defines the required
-verification and does not claim it has passed.
+### Query-level privacy safety
 
-## Scope source
+Current disclosure covers membership, exclusion, order, fields, source metadata and cursor-visible information.
+Check current source/Collection authority, original AND terminal eligibility, Access, consent, foreign targets and
+tuple fences. An index revision, prepared result or completed identity epoch is never permission.
 
-`scope-source.ts` exports the additive `createSearchScopeSource` admission scaffold. Public Search and
-`SubjectSource` remain unchanged. This is a contract and honest unavailable stub, not production prefix,
-identity or leaf execution. Preparation parses, expands and admits the filter, requires a positive anchor and
-calls the existing `compileFilter` once, then currently throws retryable `semantic_not_ready`. No prepared handle
-or positive capability is minted. Valid native requests are not specified to remain unavailable forever.
+Query-level privacy-reduction invalidation and acknowledgement is required **in addition to candidate checks**.
+Local reductions invalidate public use in their authoritative transaction. Foreign source-fence, target, consent
+and Collection reductions invalidate affected public use immediately. Acknowledgement covers actual refresh-visible
+projection repair including dependent foreign repair. Observe required current safety state before execution and
+revalidate before disclosure. Unsafe, changed, missing or pending acknowledgement means preparation/readiness,
+never stale exclusion/order/results. Ordinary checkpoints, `securityRevision`, complete ordinary generations,
+returned-ID checks and omitted counts cannot certify this seam.
 
-The factory takes `{pool: Pool, client: OpenSearch, prefix: string, source: SubjectSource,
-release?: () => Promise<FilterRelease | null>, evidence?: LeafOptions}`. The default release reader is
-`readSearchScopeRelease(pool)` from `scope-release.ts`. It delegates to Semantic's immutable `activeRelease` and
-`readRelease` functions and returns `{digest, release}`. A supplied canonical `sha256:` plus 64 lowercase hex digest
-selects that stored immutable release; malformed or missing pins return null and never fall back to active. The
-additive `ScopePrepareOptions` carries `releaseDigest` on `prepare(filter, options?)`; an injected `release` callback
-continues to supply the current body when no pin is given. Saved references expand, admit and compile under the
-selected body using the existing filter implementation. When native readiness lands, that same selected digest
-must become `ScopeBasis.release`. The pin controls saved-filter meaning only: current source, target, Access and
-release capability checks remain current. A changed active digest alone does not invalidate an old expansion;
-an incompatible current capability must remain unavailable until republish. This lookup does not establish Scope
-readiness. `LeafOptions` is imported directly from Semantic's `scope-leaf-evidence.ts`: the actual
-`access`, `actor`, `routeKey`, `deadline` and optional `nativeT` closure used by the point reader. Neither a source
-nor a principal string supplies an actor; there is no anonymous fallback. Raw prefix capability is independent
-of missing point context. There are no pretend `SearchScopeNative` basis/identity/leaves callbacks. Following
-runtime work must import actual `readIdentityBasis`, `readTerminalSubjectIdentity`, `readSubjectAliasGroup` and
-`readScopeLeafEvidence` exports. A native evidence stub returning `not_ready` is not positive capability.
+Withholding a harem tag must protect positive harem results and **NOT harem**: returned-row checks miss the subject
+excluded by a stale tag. Paused-indexer negative/order/count cases must stay preparing until acknowledgement covers
+the local reduction and all affected foreign repair. This is a required abstract producer/consumer contract, not a
+certificate store, safety-token ABI, new permission authority or global identity/home sweep. Current native ports
+do not yet implement the complete seam. Omit unsafe engine totals/facet counts over unchecked populations; neither
+approximate/as_of labels nor zero/row-length substitutes repair privacy.
 
-The exported method signatures are:
+### Scope and composed-page admission
 
-- `prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope>`.
-- `prefix(prepared, {afterSubject: string | null, quota: number, budget: number}): Promise<SearchScopePrefix>`.
-- `evaluate(prepared, subjects: readonly string[], reservation: ScopeEvaluationReservation): Promise<SearchScopeEvaluation>`.
+Admit filter + source + order together. The prose plan names are direct catalogue index, direct owner index,
+prepared public result and prepared owner result; they are not new executable discriminants. A direct plan requires
+a page-derived work bound, including engine work. Otherwise use bounded retained preparation on existing stores and
+durable work, with finite input progress, quota and expiry; otherwise reject with 422 before enumeration. A composed
+Zone page has aggregate admission, at most 16 distinct reads and 128 TOTAL output slots. No LIMIT or timeout proves
+an engine bound. Current source checks remain required for ready results.
 
-`PreparedSearchScope` is opaque factory-local state with `readiness: 'ready'` and `basis: ScopeBasis`, never an
-allow claim. `ScopeBasis` has `release`, `query`, `profile`, `canonical`, `generation` and `index`. Preparation
-pins the physical index and generation even with zero hits. Missing native/index readiness is
-`semantic_not_ready`/`index_not_ready`; changed generation or basis is `search_restart_required`, never silent
-repinning. Ordinary partition positions are not structural identity generations.
+Successful pages fill the requested size or are genuinely exhausted final pages. If admitted work cannot establish
+either, return explicit preparation/readiness. Sparse matches must produce useful pages after finite preparation;
+no successful short/empty-page chain over raw nonmatches and no permanent preparing on finite ready input. Preserve
+settled work after crash/replay; an essential unknown cannot become false, EOF or a silently skipped interval.
 
-`ScopeNativeBudget = Omit<LeafWork, 'keys'>` reuses Semantic's actual type: independent nonnegative safe-integer
-`points`, `witnesses`, `rows`, `bytes`, `emptySeeks`. None is a raw candidate allowance.
-`ScopeEvaluationReservation` has required `rawKeys: number`, required `native: ScopeNativeBudget` and optional
-`progress?: ScopeEvaluationProgress | null`. `rawKeys` is the caller's explicit REMAINING shared reservation,
-0..256, never a per-source default256. Zero remaining is valid and starts no native key work. IDs (including
-duplicates), points, witnesses and rows cannot imply keys. Malformed, negative, noninteger and overlarge
-reservations reject before I/O. Each native call receives only reserved remaining keys, hard maximum101,
-and available native axes; actual `usage.keys` is subtracted before another call. Native calls require their
-own positive axes and at most100 witnesses. Prefix candidates, alias windows and leaf/internal driver keys
-all debit the SAME outer ledger, including rereads, discarded keys and reserved unused lookahead.
+The service-bound Scope runtime must use the same real Search service/compiler and immutable released meaning,
+including pin A after activation of B. Collection candidates are not fabricated Search Hits and Commerce does not
+supply a second interpreter. Full native execution/default composition/growth remain required. Current
+`scope-source.ts`, `service-scope.ts`, `scope-progress.ts` and leaf/final-replay exports are superseded unavailable
+scaffolding, not evidence of indexed/prepared capability. Existing code and frozen tests remain until replacement
+native acceptance permits removal. The old universal 256 raw-key ledger, whole-selected-slot observation,
+one-pending-leaf final replay and bans on derived query/index state or typed SQL are removed as list rules.
+Unrelated native batch/string/byte/cursor limits remain in force.
 
-`SearchScopePrefix` returns `hits`, `basis`, `coveredThrough`, `exhausted`, `usage: {candidates: number}`. Hits
-reuse actual engine `SearchHit`, including `matched`, index, partition, security revision and sort, rather than
-public DTOs. Prefix is ascending stored canonical UUID order above `afterSubject`, before current filtering.
-Reserve quota plus one lookahead (quota1..100, budget<=256); at most quota entries are covered. Unused lookahead
-cannot advance `coveredThrough`. No hidden refill, synthesized hit or raw-ID normalization. Partial shards,
-timeouts and failures are errors, never empty/exhausted. Empty nonexhausted output needs covered progress or
-readiness/error. Raw private candidates remain service-internal.
+### Canonical lists and transport
 
-`SearchScopeEvaluation` returns `values`, `basis`, `usage: {keys: number, native: ScopeNativeBudget}`, `evidence`
-and required `progress: ScopeEvaluationProgress | null`. `values` aligns `true | false | 'not_proven'` with every
-requested subject, including duplicates and engine misses. Evidence is request-local native references for
-fresh final revalidation, never allow tokens. Runtime shares the complete admitted Boolean evaluator from
-`disclosure/check.ts`; no fabricated Hit, separate interpreter, full renderer or unqualified snapshot can supply
-current native evidence. AND/OR/NOT preserve unknown, and genuine matched queries only prioritize work. Partial
-nonmatching facts cannot prove false without native coverage; unknown remains unknown under NOT. Original and
-terminal authority and every earlier positive require fresh current checks before disclosure.
+Maintain canonical-ID indexes, one public terminal document and unique prepared result rows per generation and
+canonical ID. The shared identity epoch stays pending throughout serialized durable merge/unmerge/repoint work;
+lists prepare while pending and cursors restart after publication changes. Group admission is at most 4,096
+originals before effects, with direct published redirects to active terminals. Do not walk all aliases or repeat
+all-home identity-basis sweeps at request time. Original and terminal disclosure still applies. Stored personal
+IDs/notes/multiplicity remain; canonical browsing and occurrence editing have distinct obligations under the
+[identity authority](../semantic/README.md#identity).
 
-`ScopeEvaluationProgress` has exactly `subject`, `basis`, `leafOrdinal`, `phase`, `valueOrdinal`, `after`.
-`subject` is the actual requested original, `basis` the composite owner digest. The structural slice reuses
-`ScopeLeafPosition.leafOrdinal` and actual `LeafProgress` phase/value ordinal/after types, with deterministic
-admitted leaf/value order. It carries ONE pending subject/leaf only; later unexamined values stay unknown.
-There is no growing continuation vector, historical verdict, allow cache, native witness receipt vector or
-serialized native basis. A CHARGED current leaf probe reconstructs the native leaf basis needed to recompute
-and check the owner digest before resume; the composite digest cannot substitute for native `LeafProgress.basis`.
+Preserve Search's encrypted cursor profile, stable request/viewer binding, exact native tuples and fresh-start
+behavior for unusable Zone POST progress. Reauthorize the principal and sources on every continuation. Zone POST
+uses the existing transport: complete common page 200, explicit preparation 202 `{next}`, or no-progress/unavailable
+503 Problem + Retry-After without cursor. No partial common page. Web follows at most four 202 steps then renders
+private/no-store preparing with continuation retained. Progress names retained preparation/current generation,
+never cached permissions, per-leaf verdicts or a client result vector. No schema/codec/status change is selected.
+Suspended valid bearers receive 403 `account_suspended`, including public/unlisted reads; missing/invalid/revoked
+credentials retain 401 where required and never downgrade silently.
 
-`sourceAfter` packs the agreed18-byte raw record through `scope-progress.ts` inside the existing encrypted list
-position, with no new token codec. Version1/leaf ordinal occupy byte0, phase/value ordinal byte1; the remaining16
-bytes hold sequence n+1 (zero means null) with zero padding, or a real witness UUID. Wirephase3 with allzero payload
-means witness-start null, distinct from a nil UUID in phase2. Empty sourceAfter means whole null progress.
-`aliasAfter` retains the actual original under evaluation: resume that original FIRST with current identity/source
-checks, then resume the alias group strictly after it only once settled. No ninth position field or nested token.
-
-Fixed-home identity basis work is separately charged at preparation, continuation and final phases: each
-basis read pays two4096-home sweeps (8192 metadata rows plus core observations), never a per-subject free sweep or
-hidden leaf usage. The canonical coverage reader below additionally charges its bracketing reads and home comparisons. Physical captures must identify actual operation phases when measuring these separately; no statement
-exclusion or slack change may disguise the work.
-
-### Final-proof status and cost evidence
-
-The current Scope and leaf scaffolds remain unavailable, and production liveness for a worst admitted positive is
-unproved. The independent analysis in
-[`search-multileaf-final-proof-independent.md`](../../../../docs/research/search-multileaf-final-proof-independent.md)
-validated a legal example with nine distinct material properties, 32 selected statements per property, nine
-facets, and 289 total facts including one label. Each property's only matching statement is last in native
-forward traversal. Fresh replay therefore has a conservative lower bound of 288 raw selected keys. Even granting
-one ideally retained positive identity and one exact current reread, the other eight properties plus that reread
-cost at least 257 keys, before candidate, alias, lookahead, or other final work. These are strategy lower bounds
-for the specified access paths, not measured Scope SQL costs or an impossibility proof for every future access
-layout. Request-local reuse and fused final reads are valid, but cannot share facts across these nine distinct
-properties.
-
-The owner has committed an actual coalesced relation-repair implementation, reviewed in the independent report;
-it is absent from this development checkout. It maintains relation-pair hints, not material, range, code, or
-qualifier matching hints, and does not provide universal final proof. A repaired relation hint or finite progress
-through one leaf therefore does not establish finite composed proof. Foreign source/target authority, fences,
-the original and terminal identities, and every earlier positive still require current checks; a native basis is
-not a foreign-authority snapshot. Unknown remains unknown under NOT.
-
-No source, storage, or policy remedy is adopted here. A production universal-liveness claim requires agreement on
-a source-owned bounded-final-evidence capability and an actual cost proof for it. Any durable source-row or access
-design remains a proposal until its native writes, rebuild/completeness behavior, foreign-proof obligations, and
-all cost axes are implemented and measured. A batch wrapping 32 point reads still charges each key. Preserve the
-256 shared-key ledger, full current admission, one 18-byte pending-leaf progress record, no serialized truth,
-witness vector, allow cache, or PIT, and Search's sole Boolean/filter matcher. Do not exempt ledger work, reduce
-admission, or treat readiness as successful completion.
-
-Required native acceptance must prove a legal worst-admitted multi-leaf final `true` within 256 actual keys,
-including points, witnesses, rows, bytes, and empty seeks, under finite quiescence, repair, and advancing
-continuations. It must also cover 257- and 4096-alias groups with only the last original readable, current
-revocation, and all source/target and original/terminal rechecks. Existing lower-level cases in
-[`scope-leaf-evidence.test.ts`](../../test/semantic/scope-leaf-evidence.test.ts) cover relation witness bounds,
-last-survivor discovery, current fences, typed range/qualifier matching, and candidate adoption; they do not
-measure the multi-leaf composed 256-key proof. The supplemental analysis
-[`search-multileaf-final-proof-deep.md`](../../../../docs/research/search-multileaf-final-proof-deep.md) is
-additional evidence only. These native owner acceptance cases remain required; neither report claims they pass.
+The [integration audit](../../../../docs/research/semantic-integration-audit-zone-composition.md) establishes the
+resource substrate, not actual membership/page/default execution or Zone-specific withholding/purge/account/
+scheduler completion. Typed schemas, loaders, cursor capacity and helper setup prove their own boundaries only.
+Preserve native two-release pins, canonical cross-page ordering, current grant/source/fact revocation, cursor
+restart/session/cache, persona/API/default composition and growth requirements. Old SAME256, final replay,
+alias-window and home-certificate remedies in evidence reports are superseded by indexed/prepared/epoch behavior.
 
 ## Global rating order
 
@@ -255,24 +182,21 @@ restarts with HTTP 409; unavailable evidence fails closed. A null epoch at both 
 ordering rule is unscored at both reads: it does not prove that no eligible interval occurred between them. No
 transition-history field is introduced.
 
-Each refill round uses at most two native searches, including any count-only search. A shared raw-hit budget
+The existing phase implementation below retains its native request quotas; these do not admit a complete list
+plan or replace Performance allowances. Each refill round uses at most two native searches, including any count-only search. A shared raw-hit budget
 `q = min(200, 2 * remaining_page_slots + 1)` applies across A and B; the page uses at most three rounds and 600
 raw hits. Search advances from the last consumed native hit, including stale or rejected hits, and leaves an
 acceptable lookahead unconsumed. Do not advance through an unconsumed A hit, strip the score from an A tuple to
 make a B tuple, or synthesize a sort sentinel. A's raw tuple is `[score, name_sort|null, id]`; B's is
-`[name_sort|null, id]`. Preserve the engine's null exactly. A short or empty successful response proves exhaustion
-only for that phase after its tuple; timeouts, failed shards, partial responses or early termination do not prove
+`[name_sort|null, id]`. Preserve the engine's null exactly. An engine short or empty response proves exhaustion only for that phase after its tuple; the API must still fill the requested page, establish final exhaustion or return preparation/readiness; timeouts, failed shards, partial responses or early termination do not prove
 order or exhaustion. OpenSearch checks tuple arity against the selected sort and preserves returned null sort values
 ([`SearchAfterBuilder`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/searchafter/SearchAfterBuilder.java#L124-L149),
 [`SearchSortValues`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/SearchSortValues.java#L70-L110)).
 
 Current-source rejection consumes and drops an unsafe hit; Search never exposes its old score, relabels it as
-unscored in place or reranks it. The result is a safe ordered subsequence of the indexed candidates, not a complete
-current-native order. There is no current top-N, PIT, snapshot traversal, duplicate-free traversal or completeness
-promise while publication and index updates move keys. A/B phase totals are internal indexed observations under a
-fixed-state theorem only. A rating-sort response's public `total` is always a `lower_bound` from unique, currently
-verified and disclosed hits; never expose a sum of live phase counts as a public exact count or lower bound, since a
-subject can move between phases between searches even when epoch and generation are unchanged.
+unscored in place or reranks it. This phase behavior alone does not establish query-level privacy or complete
+current-native order; the required safety observation and acknowledgement govern disclosure. This existing phase implementation does not prove current top-N or complete canonical traversal. Adopted lists require canonical cross-page uniqueness and epoch restart, with preparation where the direct plan cannot establish useful pages. A/B phase totals are internal indexed observations under a
+fixed-state theorem only. Unsafe rating totals must be omitted under the shared aggregate rule; neither live phase counts nor a disclosed-hit row-length fallback supplies a safe aggregate. A subject can move between phases between searches even when epoch and generation are unchanged.
 
 Keep released `subjects-search-v2` source and ID unchanged. Reuse it if the fixed server-built phase filters, sorts,
 physical target and zero-size count request fit its existing template contract; introduce a new template version
@@ -312,6 +236,12 @@ Existing oversized indexed keys require replay into a real new generation before
 update does not rewrite existing terms.
 
 ## Cost
+
+This inventory describes existing native components and their partial implementation bounds, not admission of a
+complete list plan. Old refill/drop behavior, sampled facets and counts described as current below do not satisfy
+[Filtered lists](../../../../docs/filtered-lists.md). Production list admission must bind the actual internal cost
+object, shared harness counters, useful-page behavior and query-level privacy acknowledgement before acceptance.
+Native batch limits keep their units; there is no universal 256-key page allowance.
 
 These are derivations from `src/search/`, `src/events/`, the called Access SQL, `db/search/` and the core/semantic
 schema, not measurements or guaranteed PostgreSQL plans. Search owns the engine candidate and recheck contract.
@@ -510,64 +440,28 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Facet counts
 
-- Touches: One active release lookup and one stored-template OpenSearch query; each of at most 8 facets samples
-  matching subjects (`facetSample`, default 10,000), traverses their facts and asks for at most 40 terms for a
-  requested size <= 20; the API returns at most the requested size. Item values are read back through the source;
-  code values are not subjects. Type facets aggregate the keyword `type` inside the same bounded sample and ask for
-  at most 40 buckets.
-- Bound: The request has one engine aggregation. Item facets read at most 8 × 40 = 320 distinct value subjects;
-  only visible, nonredirected anchors are returned. Code facets cost what item facets cost, minus value-subject
-  reads; their values carry empty labels and are not read as subjects. `reverse_nested` counts subjects. When a
-  filter can match overflow-marked relation candidates, the aggregation excludes every candidate carrying an
-  overflow marker for any relation property in that filter and counts only the remaining definite contribution.
-  Raw candidate-superset totals are not a lower bound after false positives. The total relation is `lower_bound`
-  (“at least”) when filter candidates remain unresolved or the total exceeds the sample. Each facet relation is
-  `lower_bound` when the total is lower-bound or that facet has overflow; otherwise it is exact. Per-facet overflow
-  is checked outside the sampler, so an omitted
-  sampled value cannot make a truncated facet look complete. Counts converge as source rebuilds update the sample
-  and overflow marker. Rows and statements per request are constant in N and H; enumeration never grows beyond
-  the sample.
-- Growth check: [test/search/overflow-counts.test.ts](../../test/search/overflow-counts.test.ts): “facet counts with
-  truncation are honest lower bounds and exclude unresolved filter candidates”; [test/search/overflow-service.test.ts](../../test/search/overflow-service.test.ts):
-  “overflow facets exclude unresolved filter candidates and keep at-least counts” and “overflow service work stays
-  bounded at stored degrees 128, 512 and 2048”; [test/search/growth-facets.test.ts](../../test/search/growth-facets.test.ts):
-  “Facet counts stays within its bound as N grows” and “type facet stays within its bound as subjects grow”, both at
-  scale units `[1, 4, 16]`.
+- Touches: existing aggregation machinery samples matching subjects and reads item value labels through the native
+  source. Those label checks do not check every contributing subject or fact.
+- Bound: omit unsafe engine totals and facet counts over unchecked populations. Existing sample/overflow lower-bound
+  behavior describes partial implementation, not a privacy-safe aggregate; approximate/as_of and zero/row-length
+  substitutes are not permitted. Future safe aggregates require separately admitted complete disclosure dependencies
+  and query-level privacy acknowledgement. No new response schema is selected here.
+- Growth check: existing facet/overflow tests retain their scoped evidence. Native paused-indexer local/foreign
+  reduction, NOT and order/count cases and three-scale engine/native captures remain required before safe aggregate
+  claims; the shared matrix in [Filtered lists](../../../../docs/filtered-lists.md#shared-acceptance-matrix) owns outcomes.
 
 ### Disclosure and result projection
 
-- Touches: `checkHits` rejects invalid anchors without reads, groups/deduplicates IDs by UUID partition, and reads
-  each group once per round with concurrency <= 8. It checks current visibility, redirect, security revision and
-  the complete filter truth. Every positive relation leaf gets a live unqualified point check even when its value
-  is in the sampled prefix; a negative relation leaf gets the same check when its property overflows. Search sends
-  anchor-partition batches of at most 256 probes and performs no relation-degree scan or qualifier Cartesian
-  expansion. Semantic checks the stored witness and at most 32 further witnesses; if bounded evidence cannot prove
-  membership, it returns `not_proven` and enqueues the registered
-  `com.rezics.subject.relation_facet_changed.v1` event for the affected SOURCE. The adopted Semantic contract checks
-  one saved witness and at most 32 alternatives, then rebuilds durable finite witness pages. Existing `subject.*`
-  indexing consumes that source-partition event with external partition versions and
-  `refresh=wait_for` checkpoint advancement. Search does not enqueue a second repair or rebuild the target's inbound
-  neighborhood. Semantic owns current witness/fence truth and event/rebuild SQL details; see the linked design.
-- Bound: A candidate page checks at most 200 hits per round and at most three rounds; any partition point call has
-  at most 256 probes and concurrency is bounded. The source port returns aligned `true`, `false` or `not_proven`
-  results. `true` and `false` are definitive; `not_proven` remains unknown
-  through AND, OR and NOT, is dropped/refilled, and is never coerced to false or returned as a 503 merely because
-  bounded evidence is uncertain. Only proven complete Boolean truth is disclosed. Search totals use only proved hits
-  as a `lower_bound` when overflow or live rejection makes raw candidate totals unsafe; totals converge as the source
-  rebuild updates the index. Actual I/O failures or malformed proof results remain retryable unavailable; a failed
-  proof fails the whole response without a successful partial page. Per-hit result projection reads no new subject;
-  labels/descriptions come from the checked snapshot.
-- Growth check: [test/search/live-relation-facets.test.ts](../../test/search/live-relation-facets.test.ts): “positive
-  relation matches are checked live even within the sampled prefix”, “AND OR nested NOT and shared positive and
-  negative leaves use complete live Boolean evaluation”, and “fixed page and filter have constant read and point
-  work at degrees 128 512 and 2048”; [test/search/not-proven-rechecks.test.ts](../../test/search/not-proven-rechecks.test.ts):
-  “not-proven relation points are dropped and refilled without becoming negative matches”, “not-proven points
-  preserve three-valued filter truth and keyset continuation”, “not-proven search work stays constant at stored
-  degrees 128 512 and 2048” and “uncertain point batches retain the existing 256 bound and deduplicate shared
-  leaves”. Semantic verification requirements (not completed measurements): [test/semantic/relation-facet-source.test.ts](../../test/semantic/relation-facet-source.test.ts),
-  “relation facet point probe I/O failure remains typed unavailable” and “a bounded witness probe suppresses hidden
-  evidence and schedules finite rebuild convergence”; [test/semantic/growth-relation-facet-source.test.ts](../../test/semantic/growth-relation-facet-source.test.ts),
-  the source/probe and durable-page tests at `[64, 512, 4096]`, one warmup and three repetitions.
+- Touches: current source/Collection, original and terminal eligibility and Access; complete fact/source/target/
+  consent/fence dependencies; summary fields; query-level safety observation before execution and before disclosure.
+- Bound: derive per admitted direct/prepared plan, charging duplicates, rejects, lookahead, rereads, all dependency
+  points and backend work. Existing per-call Source caps remain. The current `checkHits` sampled-witness/drop/refill
+  path is partial implementation; it cannot certify query exclusions/order or useful pages. Missing, changed,
+  unsafe or pending privacy acknowledgement means preparation/readiness. No cached permission or mandatory whole
+  raw-fact replay is required by the replacement contract.
+- Growth check: actual native/API first/deep/sparse pages at three scales, current fact/source/grant revocation,
+  paused indexer with NOT/order/counts, dependent foreign repair, current cursor reauthorization and all owner pools.
+  Existing relation-witness tests remain scoped evidence, not proof of the new complete list contract.
 
 ### Cursor and continuation
 
@@ -579,8 +473,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Bound: Zero SQL or engine I/O in the cursor codec; at most 8 tuple keys, 2,560 UTF-8 bytes per key, 3,072
   aggregate string bytes, 3,584 serialized bytes and 4,864 token characters. Position encryption uses a fresh random
   salt, a 15-minute lifetime including anonymous viewers and a 60-second future allowance. Codec and tuple size are
-  independent of page depth; page consumption is `O(h)`. No kernel `O(d*s)` read from the start. Dropped or
-  unproven candidates are consumed before the next keyset continuation, while acceptable lookahead stays unconsumed.
+  independent of page depth; page consumption is `O(h)`. No kernel `O(d*s)` read from the start. Only settled result positions advance; an unresolved interval requires retained preparation/readiness.
+  Acceptable lookahead stays unconsumed.
 - Growth check: [test/search/service.test.ts](../../test/search/service.test.ts): “pages continue through signed tokens
   bound to the request and the principal” and “each request makes at most three index requests and reads only the
   partitions of examined hits” for the existing path. Encrypted-profile confidentiality and native phase cursor
@@ -738,28 +632,17 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   no mapping field”; [test/search/relation-overflow-mapping.test.ts](../../test/search/relation-overflow-mapping.test.ts):
   “overflow markers are fixed keyword fields and declared relation values retain statement and qualifier matching”.
 
-### Scope raw prefix
+### Scope direct and prepared plans
 
-- Touches: currently admission only, zero engine/source reads after an injected release. Future preparation reads
-  the active release, native fixed-home basis and physical index metadata, including on zero hits; one prefix
-  dispatch reads the pinned engine generation, with no refill. Grow indexed subjects/history with quota fixed.
-- Bound: integer `1 <= quota <= 100`, aggregate caller candidate reservation `<= 256`; reserve `quota + 1 <= budget`
-  before dispatch. Charge every examined raw key including lookahead, duplicates, rejects, rereads and internal
-  keys. The caller reserves across sources; per-call validation cannot enforce aggregate accounting. Candidate
-  bounds do not prove physical postings, latency or native SQL bounds.
-- Growth check: `test/search/scope-source-contract.test.ts` permanently checks negative admission and reservations;
-  native prefix/generation/partial-response positive and growth proofs are separate specification tasks, pending.
-
-### Scope current points
-
-- Touches: currently no native point reads. Future evaluation reads only admitted native identity/leaf evidence
-  for explicit IDs and final revalidation; alias groups resume bounded windows. Grow aliases/witness history with
-  the independent reservation fixed; no whole-subject render or enumeration hidden behind point calls.
-- Bound: `ScopeNativeBudget` independently admits nonnegative safe-integer points, witnesses, rows, bytes and
-  emptySeeks; returned usage uses those units. Every explicit ID, including duplicates, reserves a point. It does
-  not multiply or borrow candidate256. Exhaustion yields unknown/readiness unless definitive evidence settles truth.
-- Growth check: `test/search/scope-source-contract.test.ts` checks invalid native budgets and duplicate charging
-  admission. Native witness/absence, alias-window and EXPLAIN/growth evidence remain required, not delivered.
+- Touches: named indexed matching streams or ready unique result rows, generation/control/epoch and privacy safety
+  state, current source and disclosure dependencies, summaries, preparation frontier/result writes when needed.
+- Bound: derive page work for filter + source + order, then aggregate the composed page (16 distinct reads,
+  128 total output slots). Each page/step supplies the internal cost object and harness evidence specified by
+  [Filtered lists](../../../../docs/filtered-lists.md#cost). Otherwise use admitted bounded preparation or reject
+  before enumeration. No raw candidate256 or fixed-home sweep requirement is carried forward.
+- Growth check: real same-service native API/default composition at three scales, first/deep/sparse results,
+  two-release pins, epoch pending/restart, current foreign disclosure, interruption/replay and finite useful pages.
+  Existing Scope admission/reservation tests describe superseded scaffolding and do not prove native execution.
 
 ### Hit label choice
 
@@ -769,415 +652,48 @@ Search hits, item facts, facet values and suggestions use the same label choice.
 - Bound: no read, statement or engine request added; per returned subject, work linear in R ranges (at most 8) times its labels and descriptions.
 - Growth check: none; no read changes. `test/search/facet-counts.test.ts`: "facet value labels follow the reader's language chain" and `test/search/service.test.ts`: "typeahead labels follow the reader's language chain" prove the choice.
 
-## Canonical index coverage producer
+## Producer integrity and remaining native delivery
 
-Status: adopted specification with unavailable stubs in `coverage.ts` and `coverage-projection.ts`,
-and staged native acceptance in `test/search/canonical-coverage.test.ts` and
-`test/search/coverage-projection.test.ts`. Formatting acceptance does not establish native runtime delivery.
-The existing source, indexer, lifecycle and default worker have not acquired this protocol through these types.
-The original raw-prefix and scope admission tests remain unchanged. Search owns derived per-home coverage,
-apply attempts and physical lineage; Semantic's current generation/pending/obligations remain the sole identity
-owner. No identity SQL, permission engine, query engine or new native public signature is introduced.
+The prior identity-home certificate/coverage storage, coordinator and no-write settlement exports are superseded
+scaffolding, not the authority for the adopted indexed/prepared/identity-epoch lifecycle. Existing code and frozen
+acceptance remain until reviewed native replacement acceptance permits removal. No repeated 8192-row basis sweeps,
+per-page original walking or cancelled certificate ABI is required. Storage observations, helpers and format/type
+checks do not prove complete identified population, current query privacy or actual default composition.
 
-A certificate means this physical index's stored original IDs are canonical under a real native structural
-basis. It does not promise current visibility, complete ordinary recall or current matching facts. A legally
-indexed B can remain a raw hit after an ordinary hide; current disclosure rejects it. Ordinary partition
-positions witness catch-up only and never enter structural equality or the identity digest. A newer source
-snapshot does not prove that the consumer visited all earlier structural anchor events.
+The following producer gaps remain required, independent of that superseded architecture:
 
-### API and current schema
+- Complete Source chunking at **at most 256 IDs per native call**, including every tail and exact per-chunk source
+  external version. No checkpoint before all actual writes are refresh-visible; later-chunk failure/replay cannot
+  silently lose earlier or remaining work. The 64-envelope batch remains a separate native limit.
+- Exact keyed sink operation results, rejecting wrong keys and success-with-error bodies. A 409 alone cannot prove
+  visible success: establish the real superseding winner's refresh visibility and shard success before checkpoint.
+- Actual bounded native name normalization in every default writer and replay/rebuild, preserving full display
+  names, exact source versions and null/missing-last ordering for oversized normalized keys. Helper and cursor
+  capacity proof does not establish default wiring or analyzer/ICU behavior.
+- The canonical routeKey and current source-fence filtering in default worker, CLI and rebuild. Default composition
+  must actually start the Semantic producer; no fake source or no-op module starter establishes that integration.
+- No late older-write resurrection after real native delete-version pruning. A lost core CAS does not undo an
+  external sink effect. Native competing-worker, ambiguous-response, crash/replay and actual pruning schedules must
+  prove fencing under the adopted epoch/index lifecycle; do not invent a safety-token store to fill this gap.
+- Complete identified new-generation population before atomic alias publication, including missing and extra keys,
+  native partitions and actual physical identity. Empty targets or equal metadata counts do not prove correct keys.
+  Preserve actual engine UUID, generation/name lifecycle and prevention of late accidental auto-creation. Keep
+  per-partition reconciliation; counts alone cannot certify population.
 
-The independent Search exports are `initializeSubjectIncarnation(options, generation)`,
-`createSubjectProjectionCoordinator(options)`, `readSubjectCoverage(options, { deadline })` and
-`activateSubjectIncarnation(options, incarnation)` and `retireSubjectIncarnation(options, incarnation)`. Coordinator methods are `run(incarnation, partition)`,
-`populate(incarnation)` and `certify(incarnation, { deadline })`. They accept actual pool/engine/source/listing
-composition, never ready callbacks, supplied certificates, source bodies or invented checkpoint outcomes.
-The stub throws `index_not_ready`; implementations may return `not_ready` only after actual observations.
-The reader performs no population, replay, worker drain or raw search.
+`coverage.ts`/`coverage-projection.ts` unavailable exports and existing `coverage-store.ts` do not close these gaps.
+Actual native acceptance/default composition/growth remain required through real commands, Access, source, engine,
+worker and production rebuild, including pause/drain/restart/retirement and all owner pools. Existing adversarial
+outcomes remain useful evidence; old protocol-specific home-certificate proof is not the replacement gate.
 
-The storage slice implements two current-row tables and one bounded prefix allocator, without identity-table writes:
+### Producer and generation maintenance cost
 
-- `search.index_prefix_control`: primary key `(partition_no, prefix)`, `CHECK (partition_no = 0)`; monotonic `revision` and `issued_generation`, matching
-  `CoveragePrefixControl`. Allocate only strictly increasing safe-integer generation numbers; retain this one
-  fence when retired generation rows are reclaimed. No per-retired-name history is needed.
-- `search.index_incarnation`: primary key `(partition_no, consumer, index_uuid)`, `CHECK (partition_no = 0)`, unique retained
-  `(partition_no, prefix, generation)`;
-  `index_name`, `protocol`, monotonic `revision`, `state`, `origin`, `population_partition`,
-  `population_after`, `population_complete`. These are the fields of `IndexIncarnation` and
-  `PopulationLineage`. The partition/keyset frontier is singular, bounded and durable.
-- `search.index_home_coverage`: primary key `(partition_no, consumer, index_uuid)`; monotonic `revision`,
-  nullable `current`, `fence`, `verified`, `covered_through`, `attempt`, with fixed shapes matching
-  `HomeCoverage`. Add consumer/incarnation-leading retirement access. Tuple fields use bounded JSON objects;
-  bigint fields encode canonical nonnegative decimal strings, with validated shapes and no arrays/history.
-  Physical UUID/protocol are joined from the lifecycle row, never guessed from names or engine hits.
-
-One current attempt occupies the home row. Competing writers return busy or wait without enrolling another
-attempt; there is no persistent queue/history of attempts. Attempt identity is a UUID. Store its original
-checkpoint range, actual observed source tuple, visible/ambiguous/completed outcome and checkpoint
-pending/advanced/lost/stopped result. Native pending is checked live and is never cached as permission to publish.
-Missing epoch/home/tuple/fence/provenance is unavailable, never inferred as zero or self. At most 4096 rows per live physical
-generation and three live generations are admitted per prefix: 12,288 home rows plus bounded lifecycle control.
-No actor, record, subject, filter or historical basis rows are retained. A single monotonic allocation fence per
-prefix prevents generation/name reuse after retired rows are reclaimed; it is bounded control, not a tombstone
-per historical generation.
-
-`coverage-store.ts` exports only `createCoverageStore(pool)`, `CoverageStore`, `CoverageGuard`, `HomeGuard`
-and `CoverageObservation`. The factory implements durable current state in PostgreSQL with short transactions,
-closed bigint codecs and conditional lifecycle/home writes. `test/search/coverage-store.test.ts` exercises the
-actual migrated database. These tests supply storage observations, not native readiness certificates. Native
-Scope run/populate/certify remain unavailable until the actual producer lands.
-
-The store methods are `readPrefix`, `allocate`, `readLineage`, `register`, `population`, `transition`, `reclaim`,
-`readHome`, `enroll`, `outcome`, `complete` and `promote`, plus the unavailable `settleNoWrite` correction
-specified below; their exact signatures are in `CoverageStore`.
-All writes atomically compare full incarnation identity (prefix, generation, index, UUID, protocol, consumer) and
-lifecycle revision; home writes additionally compare partition and home revision. Revisions start at 1, missing
-rows compare as revision 0, and every successful mutation increments its row revision. CAS loss/absent or
-ineligible state returns null (reclaim returns false), malformed input rejects without mutation. Reads of absent
-or differently bound identities return null. Only `subject-coverage-v1` is valid. Control partition zero is internal,
-never an additional caller field. Every authoritative primary/unique key starts with `partition_no`; secondary
-retirement access is not a second authority. All mutation guards are checked inside the same short transaction,
-including the prefix lock that serializes admission and retained-row counting.
-
-Allocation accepts positive safe-integer generations strictly greater than the issued fence, without requiring
-contiguity. Register requires the exact latest control revision/generation, never an arbitrary old allocation;
-failed registration leaves the allocation fence advanced. Retrying an unbound latest allocation is allowed;
-a preexisting physical index still requires actual replay/audit provenance. Initial lineage is populating, revision 1, partition 0, after null,
-complete false. At most three retained lineage rows (including quarantined/retiring) per prefix are admitted;
-reclamation deletes the retiring lineage rather than retaining retired history. Population advances a singular
-monotonic partition/UUID keyset frontier, cannot regress or reopen completion, and completes only at partition
-4096 with after null. It records the coordinator's actual replay/audit result; storage cannot establish provenance.
-Only complete populating lineage can become live. Populating/live may become quarantined; any nonretired state
-may become retiring. Retiring blocks enrollment, outcome, completion and promotion before cleanup. Reclaim compares
-its revision, deletes at most 4096 homes and its lineage atomically, retains the prefix fence, and never performs
-engine deletion or deletes core checkpoints. The lifecycle owner separately owns those external operations.
-
-The following enrollment/outcome rules describe the existing runtime; the staged additive correction below
-changes replacement and nullable-fence validation only when implemented.
-Enrollment accepts only an enrolled/pending attempt with null source, a fresh UUID and ordered same-epoch
-checkpoint range; its initial home has null current/fence/verified/coveredThrough. Only populating/live can enroll.
-A completed slot may be replaced; any other slot blocks replacement indefinitely. Enrollment on an existing home
-preserves current/fence and verified/coveredThrough. The durable slot and home/lifecycle revision CAS require
-enrollment before source observation and prevent promotion across an unresolved prior attempt; the coordinator
-must independently ensure that the new snapshot does not predate the verified tuple. Same-basis pending ordinary
-work retains the existing certificate without proving a new basis. The reader still compares CURRENT native
-tuple/pending against verified; a later structural generation invalidates it. Outcome records actual post-read source/fence observations and marks
-enrolled as visible or ambiguous; ambiguous may become visible only on actual resolution, never expiry. A visible
-outcome requires nonnull source/fence, matching partition/epoch/generation; a newer committed fence may exceed this batch through position,
-which blocks promotion until a later completed attempt covers it;
-ambiguous may retain null observations. An already recorded nonnull source/fence cannot be changed on resolution.
-Outcome copies source/fence into current/fence and the attempt source. A different source tuple or fence generation
-clears verified/coveredThrough; a same-basis outcome preserves them. An ambiguous/null outcome never creates
-evidence, and neither timeout nor starting another attempt can verify an unknown older attempt.
-Complete requires visible and the exact
-attempt ID; it records advanced/lost/stopped from the real checkpoint operation and marks completed, without
-advancing core itself. Completed attempts with any of those results may promote only after the coordinator has
-independently established catch-up: live revision, matching observed source/current/fence generation and positive epoch,
-matching home partition, coveredThrough equal to attempt through and at or beyond the committed fence. It cannot
-promote across a changed tuple, unresolved slot or stale revision/attempt. Promotion writes verified and
-coveredThrough atomically. None of these operations creates an allow cache or native identity authority.
-
-Input and durable JSON objects are closed, with exactly the fields in the existing coverage types, nullable only
-where those types permit; no arrays or additional fields. All bigint values are nonnegative PostgreSQL bigint
-range (0..9223372036854775807), preserved as bigint at the TypeScript boundary and canonical decimal strings in
-JSON (`0` or a nonzero digit followed by digits), never Number. Revisions are positive persisted bigints. Positions
-may be zero. `CoverageHome.generation` and `StructuralFence.generation` accept observed native values
-0..9223372036854775807, including actual generation 0 with pending 0 from the ready native producer.
-Missing metadata or coverage remains unavailable; never infer zero from missing data. These storage observations
-do not establish native Scope readiness: the producer and reader independently establish actual zero provenance.
-Partitions are integers 0..4095 except the population completion sentinel. Physical `IndexIncarnation.generation`
-and epochs remain positive safe integers (epochs fit PostgreSQL integer). Attempt IDs are lowercase UUIDs;
-home/node identifiers and engine UUIDs are opaque nonempty UTF-8 strings <=128 bytes, preserving native spelling. Prefix and generation must satisfy existing
-`subjectIndexName` validation. Index/consumer strings are bounded at 255/63 UTF-8 bytes; registration requires
-exact existing `subjectIndexName` and `subjectConsumer` results. Well-shaped different names in read/mutation
-guards return null as identity mismatches. Never bind a new generation to an old physical name.
-Population after is a UUID or null. Validate nested shapes,
-range ordering and these bounds on input and decode; malformed stored state fails closed, never coerces.
-
-The storage implementation uses the owning migration/schema snapshot, `coverage-store.ts`, a closed codec
-module and five typed point SQL modules for allocation, registration, home reads, attempts and promotion. Prefix
-row locks serialize allocation/admission; a current allocation-bound bit prevents rebinding the last issued
-name after its lineage is reclaimed, without retaining historical targets. Lifecycle row locks fence home CAS
-and reclamation. Home reads also
-bracket their point read with the lifecycle lock. Transactions contain database work only and release the
-connection before any caller can perform engine I/O. The coordinator, reader and engine lifecycle remain
-unavailable specification stubs; durable observations alone cannot certify native coverage.
-
-### Event fence and producer state machine
-
-Semantic owns `SUBJECT_IDENTITY_CHANGED` in `semantic/events.ts`, with type
-`com.rezics.subject.identity.changed.v1`. Its subject is the actual changed original in its own home;
-closed data is ONLY `{ generation: string }`, matching `^(0|[1-9][0-9]*)$`. The generation is the actual
-`recordIdentityMutation` obligation version. Redirect insertion/removal/repoint, generation/pending and this
-event commit in the same command transaction. Envelope epoch/position is the committed structural fence.
-Merge, verify, unverify, removal and inherited repoint emit on actual mutations; no-op, receipt replay and
-rollback emit none. Existing events remain. Schema registration is part of that native producer's delivery.
-Search selects the original by this event's actual route/type, not by a survivor or `data.subjects` in link events.
-No Number conversion or new native position API is needed.
-
-1. Initialization creates a genuinely new physical name, reads its actual engine UUID, binds protocol and fresh
-   consumer lineage, and establishes controlled writers before any source snapshot/HTTP. An already-existing
-   index is not known empty, even with zero documents. Unknown old instances stay unavailable until complete
-   retained replay or bounded source/index audit establishes missing AND extra key coverage. Equal counts are
-   diagnostic only. Population completeness records its actual creation-log/retention boundary and advancing
-   frontier; a gap stops progress. Imported anchors without complete creation provenance require audit.
-2. `run` enrolls a durable home attempt conditionally on the live incarnation/revision BEFORE obtaining source
-   snapshots or sending HTTP. A shared database guard serializes all participating processes, helpers and workers.
-   Transactions are short; no database client, transaction or lock-holding connection spans external I/O.
-   Native source home/epoch/generation are observed around the actual snapshot; changes require retry/unavailability,
-   never stamping the newer tuple on an earlier batch. Every selected original is still checked natively.
-3. Use the existing event runtime and document producer. Deduplicate actual event anchors; split source reads into
-   at most 256 IDs, respecting the source's unchanged cap. All chunk actions must become refresh-visible before
-   checkpoint completion. Preserve the 64-envelope cap and core `projectBatch` protocol. Enrollment and checkpoint
-   outcome must be integrated around that existing runtime; no second worker or hand-written forced checkpoint.
-   A 409 alone is insufficient: verify visibility of the superseding winner by a checked physical refresh before
-   completing the attempt. Validate refresh shard completion and all bulk item outcomes, including missing deletes.
-4. On confirmed visible work, record actual checkpoint CAS outcome, including CAS loss. CAS loss cannot erase an
-   external effect. An ambiguous request keeps its attempt unresolved. No elapsed timeout, lease, dead process or
-   checkpoint successor certifies completion. Same-tuple ordinary work may preserve an existing verified tuple;
-   older/unknown-source work blocks new certification until genuinely resolved. A verified tuple cannot coexist
-   with an unresolved write that may restore an older structural original beyond delete retention.
-5. Certification obtains a real ready `readIdentityBasis` before and after capturing all native home tuples through
-   existing `readIdentityHome`, each on a released same-client RR snapshot with the exact core position observation.
-   These frozen catch-up barriers include committed structural events; known event generations must agree with
-   their committed fences, not just a recent snapshot head. Catch up through every required fence/barrier using
-   complete population/event provenance. Then independently revalidate the full basis, live UUID/protocol, all
-   native pending/home/epoch checks and absence of dangerous attempts before conditional promotion. Reuse matching
-   home evidence despite ordinary lag. This conservative three-basis-read capture uses unchanged native ports;
-   no duplicate digest implementation or unreviewed native vector-returning handoff.
-6. Activation independently checks certified coverage, exact UUID/protocol and live lifecycle revision before
-   switching the actual alias. It cannot activate an incomplete population or a quarantined/retired target.
-   Readers bracket all 4096 coverage-row observations with two actual full native basis reads. Between them,
-   read each actual native home tuple through the unchanged home port and compare it with the verified row,
-   including native pending/epoch/home. Equal ready bracketing bases and the physical incarnation are required.
-   Preparation, continuation, engine-result bracketing and final use perform the required independent rechecks,
-   including zero hits. Structural or alias/UUID change restarts a prepared traversal; pending/unavailable evidence
-   fails readiness. No post-fetch canonical rewrite, reorder, drop-to-repair or per-candidate global sweep.
-7. Quarantine ambiguous old targets; recovery creates a fresh controlled generation and completes real population.
-   Retirement conditionally fences enrollment/publication before draining confirmed writes and deleting the engine
-   index plus bounded coverage/checkpoint rows. Late completion cannot recreate retired control. Names of unresolved
-   targets are never reused; automatic index creation must be disabled for those write targets and verified in
-   deployment acceptance. Physical UUID checking alone does not prevent a late name-targeted write. This protocol
-   introduces neither permanent public tombstone documents nor a silent change to external-version deletes.
-
-### Internal projection seam and pending store correction
-
-`coverage-projection.ts` exports exactly `createCoverageProjection(options: ProjectionOptions):
-Pick<SubjectProjectionCoordinator, 'run'>`. Its `run(incarnation: IndexIncarnation, partition: number):
-Promise<BatchResult>` is the internal producer entry. `coverage.ts` constructs it once and delegates `run`;
-`populate` and `certify` remain unavailable. All imports from the public coverage module into the internal
-module are type-only. The factory currently throws retryable `index_not_ready` with `Retry-After: 1`;
-it does not allocate, enroll, observe native identity, call the engine or claim readiness.
-
-The only new indexer option is optional `aroundApply?: SubjectApplyGuard`, exported from `indexer.ts`:
-`(partition: number, envelopes: readonly Envelope[], apply: () => Promise<void>) => Promise<void>`.
-It runs INSIDE the existing `projectBatch.apply`, before the existing anchor selection/source/listing/document/
-bulk body. The callback executes that same body. With no hook, the existing path remains unchanged.
-There is no other envelope read, parser, event filter, document builder or worker. Admission rejects on busy
-or unavailable state; it must never return successfully without applying. The callback is single-use and cannot
-start after the guard returns. Duplicate invocation rejects the batch even if the guard catches that error;
-omitting apply also rejects. A successful guard cannot advance the checkpoint before its apply promise settles.
-These checks prevent accidental double application; they supply no durable coverage proof themselves.
-
-The actual producer will compose `createSubjectIndexer` with one guard and the real `createCoverageStore`.
-All authoritative controlled helper/runner/worker writers must eventually use that composition. The coordinator
-retains its enrolled attempt outside the guard so that it can record the actual returned `projectBatch` result.
-No apply invocation plus `busy` means checkpoint snapshot contention, with no new slot. Guard admission contention
-must return busy without advancing core; the coordinator handles its own internal admission rejection. After a
-visible apply, returned `busy` means lost checkpoint CAS, and completes that exact visible attempt as `lost`.
-A returned stopped valid prefix records `stopped`; the invalid tail is never included. Exceptions during apply
-or checkpoint settlement propagate and retain the actual known state, never an invented CAS result. A failed
-checkpoint call after visibility leaves a visible/pending slot for actual reconciliation, not safely aborted work.
-
-The first parsed envelope is checkpoint+1: `read-log.sql` generates every position and `parseRows` stops at a
-missing/invalid envelope or epoch transition. Enroll one durable slot before invoking the shared body, with
-`from = { epoch: first.epoch, position: first.position - 1n }` and `through` from the actual last parsed envelope
-in that SAME epoch. Never reread a moving checkpoint to reconstruct this range. Empty batches do not invoke the
-guard and allocate nothing. Nonempty batches without selected anchors still enroll before the shared body,
-then settle as no effect after the actual checkpoint result; they do not fabricate a source tuple or fence.
-
-**Required minimal additive storage correction, before implementing this producer:** the current store cannot
-release an enrolled slot when no engine write was sent, or complete a no-anchor apply without a source/fence.
-`outcome(visible)` requires both, `complete` requires visible, and every noncompleted slot blocks replacement.
-Marking these cases ambiguous would permanently strand ordinary native-pending retries. Add terminal
-`ApplyAttempt.outcome` values `aborted` and `skipped`, and one home/lifecycle/attempt-ID CAS method:
-`settleNoWrite(guard: HomeGuard, attemptId: string, result:
-{ outcome: 'aborted'; checkpoint: 'pending' } |
-{ outcome: 'skipped'; checkpoint: 'advanced' | 'lost' | 'stopped' }): Promise<HomeCoverage | null>`.
-It accepts enrolled/pending/null-source only, retains null attempt source, preserves existing current/fence/verified/
-coveredThrough, and makes the slot replaceable without authorizing promotion. `aborted` means positive local
-knowledge that NO mutating engine request started; `skipped` means the shared body selected no actions and the
-actual core outcome is known. The additive types and method are now staged: only `settleNoWrite` throws the existing retryable
-`index_not_ready` with `Retry-After: 1`. Every preexisting store method, SQL path and codec remains unchanged.
-`test/search/coverage-no-write.test.ts` stages real migrated-pool CAS, replacement, reopen and evidence tests;
-these are implementation acceptance, currently red, not native readiness evidence. Formatting and root type
-checking alone validate this specification stage. The actual store correction remains a build dependency
-before the producer uses it. Also allow the already nullable `outcome(visible).fence` to remain null
-when the real source tuple is known but no committed structural event fence has been observed. Visible sink
-completion and core CAS settlement must be recordable without inventing that fence. Such a row cannot promote;
-retain an existing matching committed fence when available, and never replace it with a source snapshot head.
-A different source tuple clears old verified/coveredThrough evidence even when the new fence is absent.
-The result is a closed discriminated shape: abort with a terminal checkpoint, skip with pending, unknown
-fields and other malformed combinations reject without writes. Settlement compares the exact physical identity,
-home, attempt ID, lifecycle revision and home revision in the same short atomic CAS as existing mutations.
-Only an enrolled slot can settle; ambiguous, visible, completed or non-null-source attempts cannot be relabeled.
-Terminal no-write slots admit a different attempt ID, never the same ID.
-This relaxes only storage observation validation, not the requirement for genuine certification provenance.
-Cost: one exact lineage guard and one exact home/attempt row, O(1) rows/statements using the existing
-partition-leading indexed keys and one current slot; no queue, history or TTL scan. Existing native storage/growth
-probes plus the fixed CAS/slot/reopen tests cover storage. Native producer and all-pool growth proofs remain
-independently mandatory and are never implied by staged formatting.
-A process crash before recording safe abort remains conservatively enrolled;
-no lease or timeout proves that a request was never sent.
-
-Native unavailability, source/listing/normalization failure or changed native metadata before ANY mutating engine
-request permits safe abort and retry. After any chunk may have been submitted, failure/response loss is ambiguous,
-even if earlier chunks were confirmed visible. A throwing transport cannot prove non-dispatch. Partial writes,
-failed refreshes and uncertain later chunks cannot be safely aborted. Analysis/read-only metadata requests do not
-constitute document writes. All actual source chunks stay <=256; every chunk and any conflict winner must become
-visible before settling the envelope range. A 409 requires a checked refresh of the physical target and successful
-shard results; accepting the conflict status alone is insufficient.
-
-Within admission, use unchanged real `readIdentityHome` observations before and after EACH actual native source
-snapshot, on released home observations; compare partition/epoch/home/generation and require current pending zero.
-If they differ, discard those actions before HTTP and safely abort if no earlier chunk was submitted. Retain the
-actual source snapshot position only as the external version. A current native tuple observed at snapshot head
-cannot supply the committed structural fence: only genuine parsed `SUBJECT_IDENTITY_CHANGED` envelopes with
-own-home original and closed lossless decimal generation supply event fences. Match a known fence to its exact
-generation; if that fence is not known yet, record the actual source with a null fence and require later contiguous
-catch-up before promotion. Do not stamp a newer native generation onto earlier selected anchors, guess a fence
-from source head, or create a Source wrapper that purports to supply native identity. No native/core public signature changes and
-no database client/transaction held across source or HTTP I/O are needed.
-
-`test/search/coverage-projection.test.ts` specifies the real hook boundary and coordinator: durable slot observable
-before source/bulk, separate competing instances, unrefreshed real 409 winner, safe source failure versus actual
-applied/response-lost ambiguity, real CAS loss via a competing unguarded apply, empty/link-only batches, stopped
-valid prefixes at gaps/invalid data, all >256 native anchors, and structural mutation around a real snapshot.
-Setup observes an actual physical UUID and uses real allocation/register for **populating** lineage only; it
-never supplies verified fields, promotes lineage, calls a readiness callback or claims Scope ready. The shared
-fixture first validates real commands/Access/source/engine. Missing native identity or producer/storage code
-leaves these exact tests red; formatting and typechecks are not evidence of runtime completion.
-
-The smallest implementation surface is `coverage-projection.ts` plus the existing `indexer.ts` apply body for
-phase observations, bounded chunking and checked write visibility; `coverage.ts` already delegates. Dependencies
-are the actual CoverageStore including the correction above, unchanged native home observations and atomic
-`SUBJECT_IDENTITY_CHANGED` producer/catalogue, existing `projectBatch`, native source/listing and shared engine
-write helpers. Runner/work/helper composition, population/lifecycle, certificate reader and native identity
-implementation remain separate follow-ups; this seam implements none of them.
-
-### Helper setup and implementation slices
-
-The existing raw-prefix setup's direct `client.bulk(documentActions(...))` has no coverage provenance. The concrete
-replacement setup, for the later fixture-composition slice, is: create A/B/C with real commands; call
-`initializeSubjectIncarnation`; repeatedly call the shared coordinator's bounded `populate`; obtain real `certify`
-ready; call `activateSubjectIncarnation` and install the existing templates; capture genuine raw hits; pause this
-producer; THEN hide B. All original assertions, lookahead/reservations, sort and matched data remain. The empty
-fixture also uses real initialization and population before pinning. Arbitrary bulk writes never acquire lineage
-retroactively. Prepare does not replay or drain B. This task leaves those existing tests untouched.
-
-Implementation is split into bounded subsequent slices:
-
-- Coverage storage: the current tables and prefix allocation fence, typed point SQL, CAS enrollment/promotion/retirement and bounded cleanup.
-- Actual producer: shared coordinator around indexer source/bulk/checkpoint phases; integrate `runner.ts`,
-  `work.ts` and actual helper population, with no second event consumer implementation.
-- Lifecycle: `indices.ts`, `generations.ts` and retirement establish UUID/protocol, explicit replay/audit completion,
-  activation, restart and fresh-target recovery. Counts do not certify.
-- Scope composition: certificate reader, charged actual native basis checks and shared pinned engine dispatch.
-  Existing native identity/alias/terminal/sealed-original signatures stay unchanged. A genuinely new internal/native
-  handoff must first be proposed to the manager; none is required by this unchanged-port capture.
-
-The staged native tests use migrated DB, real commands/Access/source/engine before checking any missing capability.
-They require helper AND actual default-worker certificates, ordinary hidden raw B, structural lag, larger-survivor
-merge/repoint, reversal events/replay, unknown UUID, source cap, concurrent writes, ambiguous timeout/recovery and
-retirement/restart. They are red specifications, not evidence those prerequisites have landed. This base lacks
-native identity-basis/maintenance modules and the agreed event export/schema; Search must not patch them by hand.
-
-Focused additional executable acceptance belongs at `test/search/coverage-writers.test.ts` (409 before winner
-refresh, all >256-ID chunks, old live write after real tombstone pruning, two actual worker processes and ambiguous
-process exit), `test/search/coverage-lifecycle.test.ts` (known-empty DB, equal-count wrong-key audit, log gaps,
-UUID/name reuse, late publication/retirement, home/epoch move), `test/search/growth-coverage.test.ts` (measured
-native and storage work), and `test/semantic/identity-invalidation.test.ts` (atomic generation/route/schema,
-rollback/no-op/replay and every actual writer). These slices exceed the four-file specification scope. The staged
-short-retention schedule is a guard regression; final acceptance must force real engine tombstone pruning rather
-than treat a short sleep as proof. Default-worker A/B/C certification is independently required even after helper
-composition passes. Original frozen assertions and the existing thirteen plus six cases remain untouched.
-
-### Independent default coverage composition acceptance
-
-Both `test/search/coverage-lifecycle.test.ts` and `test/search/coverage-default-worker.test.ts` remain mandatory.
-The focused lifecycle file retains bootstrap, UUID/lineage, activation and retirement races. Its implementation
-acceptance does not depend on default registration or production rebuild. The independent default-worker file owns
-the complete real-worker A/B/C certification and ordinary-hide case formerly in the lifecycle file, plus Search-only
-pause/drain/restart, current API withholding, production rebuild and resource-ledger cleanup. Neither file imports
-or registers the other. The existing canonical, writer and growth acceptances remain independently required.
-
-Status: staged native specification, honestly red until production coverage composition exists. Its own
-`createCoverageFixture` setup first proves real commands, source and engine baseline; it then uses the shared
-`support/driver-client.ts` supervisor and actual default worker. Formatting and root typecheck stage this split;
-they establish no native runtime, growth or default-worker pass. No manually driven coordinator or separate consumer
-can satisfy the independent default-worker proof. Canonical coverage, current disclosure and estimated engine total
-metadata are separate observations: a paused ordinary hide leaves raw B and its structural certificate unchanged,
-withholds B through the real API, and requires the resumed worker to remove B and drain actual checkpoints.
-
-Green native evidence requires `coverage.ts` lifecycle/population/certification/read delivery,
-`coverage-projection.ts` guarded production apply and `indexer.ts` visibility/checkpoint integration on the existing
-`coverage-store.ts` and core event runtime. Production `runner.ts` and `work.ts` must mount that coordinator, create
-and certify the fresh controlled target before registration acknowledges readiness, and drain all owned work.
-`generations.ts` must use the same guarded replay, reconcile native source partitions, certify a genuinely new
-UUID/lineage and only then atomically publish. These depend on Semantic's actual `identity-basis.ts`
-`readIdentityBasis(pool, { deadline })` / `readIdentityHome(client, partition)`, `semantic/identity-maintenance.ts`
-metadata/hooks and `semantic/events.ts` identity invalidation, plus the unchanged `semantic/search-source.ts`,
-`rating-source.ts` / `rating-subject-source.ts`, `library/listing-counts.ts` and structural-fence sources. `worker.ts`,
-`work/modules.ts` and `work/registry.ts` provide real default mounting and the shared clock. The existing
-`support/outcome-worker.ts`, `support/runner-slot.ts` and `support/outcome-supervisor.ts` must retain that composition
-through actual pause/resume/rebuild/close; `SearchDriver.rebuild()` returns only `{ generation }`. The test adds no
-fixture/control port or native/shared ABI. See [Default coverage composition proof](#cost-default-coverage-composition-proof)
-for the independently charged composition work.
-
-### Cost: default coverage composition proof
-
-- Touches: actual default worker, guarded coordinator and production rebuild, isolated real runtime pools and
-  actual engine target. Reuse the existing producer; no duplicate event consumer/indexer.
-- Bound: production batches remain 64 envelopes, source chunks 256 IDs, at most three generations and 4096 fixed
-  homes, with bounded discovery concurrency. Observe all current metadata and external-write work honestly;
-  readiness is not a free callback. Replay, native partition reconciliation, certification and physical deletion
-  retain their source/index population costs.
-- Growth check: existing native coverage, writer and growth suites remain independently required. The default-worker
-  file establishes production mounting/lifecycle, not postings or latency; stage formatting is not a growth/runtime
-  pass. The [coverage writes and lifecycle](#cost-coverage-writes-and-lifecycle) bounds also apply.
-
-### Cost: canonical coverage observation
-
-- Touches: at each required prepare, continuation, engine-result bracket and final observation, one actual native
-  basis read costs **8192 metadata observations plus core epoch/home observations**; charge rows, points, statements,
-  transaction controls, empty/unavailable seeks, blocks and bytes. Separately charge 4096 coverage points, physical
-  UUID/alias/protocol/control reads and response bytes. The reader brackets with two full basis reads
-  (16,384 metadata observations plus core), and its unchanged-port comparison adds 4096 native home/core
-  observations. No free vector hidden behind a digest.
-- Bound: fixed-home O(4096) per independent observation plus indexed lookup depth, independent of candidates or
-  unrelated subject history. Conservative cold certification reads three full bases (24,576 metadata observations
-  plus core), an additional 4096 home/core-position capture, and up to 4096 checkpoint/coverage points per poll.
-  Publication is separately bounded home work. Polling may repeat indefinitely under perpetual structural change.
-- Growth check: `test/search/growth-coverage.test.ts` must measure all these axes at prepare, continuation and final,
-  including zero-hit/error/empty seeks, while growing unrelated subjects/history and ordinary lag independently.
-  Constant returned candidates are not evidence of constant native I/O.
-
-### Cost: coverage writes and lifecycle
-
-- Touches: store allocation/admission serializes bounded prefix controls and at most three retained lifecycle
-  rows; point home mutations lock/read one lifecycle row and one home, then conditionally write that home.
-  Each mutation includes BEGIN/COMMIT (or rollback); reclamation holds the prefix and lifecycle locks while
-  deleting at most 4096 homes and the lineage. No transaction holds a connection across HTTP. Each real attempt
-  performs enrollment, native source observations, bounded source chunks, actual bulk
-  and refresh, checkpoint CAS outcome and conditional completion/promotion. Charge checkpoint, incarnation and
-  attempt reads/writes separately, including failed/CAS-lost/ambiguous attempts. Source payload/history and physical
-  engine work retain their existing costs.
-- Bound: O(event anchors + payload + engine writes) per apply, source chunks at most 256 and batches at most 64
-  envelopes; current storage O(4096 × live generations), at most 12,288 rows plus bounded lifecycle control.
-  Replay/audit is O(retained log + source/index population) total in bounded steps. Retirement removes at most
-  4096 home rows in store reclamation and separately at most 4096 checkpoint rows in lifecycle cleanup per
-  generation; physical deletion/refresh is not constant work. A raw window's
-  quota plus one bounds fetched keys only, not postings, sort work, latency or source history.
-- Growth check: `test/search/coverage-writers.test.ts`, `test/search/coverage-lifecycle.test.ts` and
-  `test/search/growth-coverage.test.ts` must independently grow actual changed anchors, source history, extra-index
-  population, ordinary backlog and one through three generations, with fixed source chunk and candidate allowance.
+- Touches: shared outbox/runtime, actual bounded source chunks, normalization, keyed sink actions and refresh,
+  checkpoint settlement, complete population/reconciliation, identity-epoch mapping/index maintenance and retirement.
+- Bound: retain 64-envelope batches, 256 IDs per Source call and at most three live generations per prefix.
+  Separately admit each step's actual keys, points, rows, statements/connections, bytes and engine operations and
+  retain durable progress. Total replay/audit may follow finite source/log/index input; refresh/deletion are engine
+  work, not constant metadata operations. No transaction holds a database connection across external I/O.
+- Growth check: three geometric scales with real native/default-worker/API captures, all pools, first/deep/sparse
+  pages, history/alias/duplicate axes, source tails, wrong-key outcomes, actual winner refresh, late writes after
+  pruning, crash/replay and privacy changes. Performance supplies numeric allowances and captures. Existing
+  certificate storage, helper or 256-proof checks do not establish this acceptance.

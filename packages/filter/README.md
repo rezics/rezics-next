@@ -63,6 +63,36 @@ Pass `{ saved: false }` to reject saved leaves, including for validation of rele
 other saved filters. `validateFilter` combines parsing and admission and returns either no errors or the first field
 error without throwing.
 
+## Execution admission and conformance
+
+[Filtered lists](../../docs/filtered-lists.md) owns list execution, freshness, current disclosure and cost. This
+package admits released **meaning**; `admitFilter` does not establish an executable page plan. Search/Commerce admit
+filter + source + order together as direct catalogue index, direct owner index, prepared public result or prepared
+owner result plans. These are prose responsibility names, not new executable discriminants. A composed Zone page
+also needs aggregate admission. Direct work needs a page-derived bound including engine work; otherwise use bounded
+retained preparation on existing infrastructure, or reject 422 before enumeration.
+
+Complete identified indexed observations may execute the same grammar in OpenSearch or typed, parameterized SQL,
+including admitted ranges/qualifiers. Preserve release pins, datatypes/units, same-statement qualifier association
+and unknown under NOT. The Search pure matcher is the conformance reference, not mandatory request-time raw-fact
+replay. A partial sample cannot prove a negative. No universal 256-key proof or whole-selected-slot observation
+restricts list execution; existing grammar, scalar and native batch limits retain their units and scope.
+
+Everything disclosed, including membership, NOT harem exclusion, order, fields, source metadata and cursors,
+requires current native disclosure and complete dependencies. Query-level privacy-reduction invalidation and
+acknowledgement is required in addition to candidate checks. It covers actual refresh-visible local AND dependent
+foreign repair; observe safety before execution and revalidate before disclosure. Missing/pending/changed/unsafe
+acknowledgement means preparation/readiness. Ordinary checkpoints/securityRevision/generations and returned-ID
+checks or omitted counts cannot certify this abstract seam. No certificate store or safety-token ABI is selected.
+
+Successful lists fill the requested page or are genuinely exhausted; sparse inputs use finite retained preparation,
+not short/empty success chains. Catalogue healthy lag is 60 seconds, readiness over five minutes of actual pipeline
+lag; privacy reductions are immediate and owner writes appear on the owner's next read. The shared acceptance
+matrix covers harem light novels, Book wordCount > 1,000,000 (exact threshold/absent excluded), combined, public
+Zone/Collection and own library without/with own state. Released Concepts and genuine word/character mappings remain
+separate data-producer prerequisites. Owner-only NOT state X includes no entry within the admitted owner population.
+These requirements do not claim the current native planner/projection/privacy seam is implemented or tested.
+
 ## Cost
 
 Parsing is linear in the input and bounded by the limits: at most 32 leaves, each with at most 64 values and 4

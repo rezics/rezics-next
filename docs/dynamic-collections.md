@@ -1,7 +1,11 @@
 # Dynamic Collections
 
 This specification extends [Library and Collections](library-and-collections.md). It is specification-only: it adds no runtime route, schema, worker, definition, local query engine or parallel shelf implementation.
-The first implementation scope is built-in dynamic Collections and the shared Collection members page. User-saved query runtime follows after that scope; its bounded language is specified here so later work has a closed contract.
+The first implementation scope is built-in dynamic Collections and the shared Collection members page. User-saved query runtime follows after that scope and uses the shared filter grammar with reviewed native plan admission.
+
+[Filtered lists](filtered-lists.md) owns the shared complete indexed observation, current disclosure, direct/prepared
+admission, useful pages, freshness, canonical-list identity and cost contract. Required behavior below is distinct
+from the current incomplete dynamic runtime, source factories and publication integration.
 
 ## Model and identity
 
@@ -21,8 +25,7 @@ The first-scope built-ins are:
 Built-ins are logical on reads and private by default; account setup creates no state-view fanout. Every Collection GET uses
 `readOnly(pool)` and creates no header, grant, receipt, event, work intent, or other lazy write.
 The private owner list `GET /v1/collections?curatorAccountId=...` includes logical Everything and proven in-use state tuples before stored rows exist, without `collection:create` or a write scope. `GET /v1/accounts/:accountId/collections` remains public-profile disclosure and honors `public_views.collections`, even for the curator.
-A state set is in use when a retained personal fact's subject refers to that profile and state set; resolve its bounded states
-from the exact pinned release. Retirement blocks new bindings but retained facts keep old pinned identities resolvable, including for undo.
+A state set is in use through live entries or retained session/holding facts with actual accepted pins. Labels and trash do not establish state-set support. Discovery unions the supported sibling state identities; each contributing fact retains its own accepted pin and meaning. Retirement blocks new bindings but retained facts keep old pinned identities resolvable, including for undo.
 Soft-deleted facts can keep identities resolvable for undo but never contribute membership. State listing is paged and creates no fanout.
 
 ### Logical identity and first-write materialization
@@ -51,7 +54,13 @@ Definitions remain the canonical registry. Resolve the accepted `type.profileId`
 The semantic key for a state view is the scoped state identity `(profileId, stateSetId, stateId)`; stored provenance/pins identify the accepting immutable `releaseDigest`, the sole revision address.
 Localized labels are presentation only and never form the key.
 
-The persisted Collection ID is stable for the curator and built-in key; its opaque query basis pins the accepting release. A label-only release change preserves state identity and membership; no meaningRevision/profileRevision field or provider exists.
+The persisted Collection ID is stable for the curator and built-in key. For an UNMATERIALIZED PRIVATE state view,
+presentation selects the lexicographically smallest CURRENTLY SUPPORTED immutable release digest CONTAINING THAT
+STATE. This selects presentation only; digest order is neither chronology nor compatibility. Discovery unions
+supported sibling state identities and each fact keeps its own accepted pin and meaning. A materialized header's
+accepted meaning and a public complete generation's accepted meaning stay FIXED; an owner's rename wins. Later
+support/reader selection uses indexed seeks, never a scan of all supported releases/history. The opaque query basis
+binds actual accepted meaning; this policy introduces no runtime ABI or replacement native fact authority. A label-only release change preserves state identity and membership; no meaningRevision/profileRevision field or provider exists.
 A meaning change requires an explicit bounded profile migration or a distinct state identity. Existing fixed-key state values map without semantic loss to the canonical compatibility profile by explicit migration in pages of at most `P`; labels never choose or rewrite state identities.
 A retired profile is not rebound: retained facts and their state Collections keep their old pin and identity, and a profile with no retained facts creates no state views. If a pinned release is unavailable, reads fail closed for restart or repair; activation or retirement invalidates affected cursors without synchronously rewriting every account.
 
@@ -64,25 +73,29 @@ Collection list and detail reads include built-ins visible to the curator. Curat
 behavior remain intact. Both kinds use the same page envelope, page-size limit, filter and sort validation, subject summary
 resolver, cursor codec, follow target, export, and Zone-mount identity.
 
-| Page behavior                   | Curated                                                              | Dynamic                                                                          |
-| ------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Returned identity               | one row per occurrence; duplicate `subjectId` values remain distinct | one row per unique `subjectId`                                                   |
-| Default order                   | Existing Collection ordinal and occurrence-ID keyset                 | Stable subject-ID keyset                                                         |
-| Note, occurrence ID, added time | Present as today                                                     | Absent                                                                           |
-| Exact member total              | Existing curated `memberCount` remains exact within its cap          | Absent                                                                           |
-| Membership edits                | Add, remove, move, and note edit as today                            | Add, remove, move, and note edits fail with `409 dynamic_membership_immutable`   |
-| Collection metadata             | Existing title, description, visibility and revision rules           | Same rules; built-in query identity is immutable and built-ins cannot be deleted |
+| Page behavior                   | Curated                                                                  | Dynamic                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Returned identity               | one card per canonical subject; editor retains all occurrences           | one row per unique `subjectId`                                                   |
+| Default order                   | Admitted canonical browsing order; editor keeps ordinal/occurrence order | Stable subject-ID keyset                                                         |
+| Note, occurrence ID, added time | Preserved in occurrence editing                                          | Absent                                                                           |
+| Exact member total              | Stored occurrence count retains its contract; never a filtered total     | Absent                                                                           |
+| Membership edits                | Add, remove, move, and note edit as today                                | Add, remove, move, and note edits fail with `409 dynamic_membership_immutable`   |
+| Collection metadata             | Existing title, description, visibility and revision rules               | Same rules; built-in query identity is immutable and built-ins cannot be deleted |
 
-The page size is `P`, `1 <= P <= 100`; a request returns at most `P` items. If bounded candidate work is exhausted first,
-`members` may be empty while `next` is non-null; the cursor resumes after the last candidate examined to avoid repeating filtered
-or unreadable candidates. A null cursor means exhaustion. Dynamic results promise neither a global count nor a full page.
+The page size is `P`, `1 <= P <= 100`. Success fills the requested page or establishes a genuinely exhausted
+final page. If admitted work cannot establish either, return explicit preparation/readiness with retained progress.
+Never expose successful short/empty raw-candidate windows as pages. Dynamic results expose no global count.
 
-The common filter is the existing closed shared Search/semantic filter document. A filter is accepted only when its current semantic
-plan can use an indexed seek or a bounded anchored probe for each candidate. Existing integrated shelf-index helpers may supply
+The common filter is the existing closed shared Search/semantic filter document. Admission covers filter + source +
+order, with shared release/datatype/unit and same-statement qualifier semantics. Unknown stays unknown under NOT.
+Commerce owns direct owner index and prepared owner result plans; Search owns catalogue compilation, preparation
+and freshness. These prose plan names introduce no executable discriminants. A direct plan needs a page-derived
+bound including engine work; otherwise prepare an indexed result in bounded steps retaining settled work, or reject
+422 before enumeration. Typed parameterized range/qualifier SQL may execute the shared meaning. Existing integrated shelf-index helpers may supply
 bounded facts as adapters, but they do not own Collection membership or establish a second list authority. The Collection layer does
 not define a second property whitelist, copy private facts into Search, or add a private catalogue-holder directory. Unsupported
-filter or sort shapes return `422 unsupported_query`; they never fall back to a scan, cross-partition SQL join, or full-account
-sort. A sort must have a shared native order key and a stable subject-ID tiebreaker. Layout (`grid`, `list`, or `table`) is
+filter or sort shapes return `422 unsupported_query`; they never fall back to an unadmitted request-time scan, cross-partition SQL join, or full-account
+sort. Bounded retained preparation follows the shared contract. A sort must have a shared native order key and a stable subject-ID tiebreaker. Layout (`grid`, `list`, or `table`) is
 presentation state; it does not change membership, authorization, or server paging.
 
 Bulk selection, export, follow, and Zone mounting use the same Collection ID and shared kernel protocols. Dynamic selection
@@ -93,12 +106,11 @@ Collection cannot become public through follow or mount; existing Zone rules dec
 ## Access and disclosure
 
 Every dynamic Collection is private until its curator explicitly changes visibility. Reads authorize the Collection before searching
-candidates. A private or unknown Collection has the same not-found response for another account and an anonymous viewer. Suspended
-accounts fail closed. Changing visibility uses the existing Collection authorization and revision check. Unlisted and public
+candidates. A private or unknown Collection has the same not-found response for another account and an anonymous viewer. Suspended valid bearers receive 403 `account_suspended` everywhere, including public/unlisted reads. Missing/invalid/revoked credentials use 401 where required; there is no anonymous-floor exception. Changing visibility uses the existing Collection authorization and revision check. Unlisted and public
 visibility continue to use the existing direct-read and listing rules.
 
 The curator's private descriptor may identify the built-in profile and state. It never appears for another viewer. A public or
-unlisted members page returns only its ordinary Collection metadata and subject summaries that pass the current viewer's native `subject:read` check. It returns no state, label, progress, holding, query body, predicate, profile pin, private candidate count, or
+unlisted members page returns only its ordinary Collection metadata and subject summaries that pass the current viewer's native original AND terminal eligibility, Access, consent, foreign target and source-tuple fence checks. It returns no state, label, progress, holding, query body, predicate, profile pin, private candidate count, or
 private member count. Collection membership never grants subject access. Filtering by an owner's personal facts remains owner-only.
 These exclusions concern private fact values; the agreed `builtinKind` and accepted `builtinLabels` presentation remain public.
 An inaccessible subject is omitted and consumes candidate budget just like any other rejected candidate.
@@ -114,6 +126,22 @@ the shared projection is safe.
 Curated listing-freshness defects remain with their current owner. Shared monotonic ordering, revoke-before-disclosure, rebuild, and
 bounded reconciliation still need closure before dynamic adoption. This spec adds no second public-membership table, event clock,
 freshness classifier, or projection engine.
+
+Current candidate checks alone cannot protect exclusions and order. Query-level privacy-reduction invalidation and
+acknowledgement is also required under [Filtered lists](filtered-lists.md#current-disclosure-and-query-privacy).
+Local reductions invalidate public use in their authoritative transaction; foreign source-fence, target, consent
+and Collection reductions invalidate affected public use immediately. Acknowledgement covers actual refresh-visible
+repair, including dependent foreign repair. Observe safety before execution and revalidate before disclosure;
+unsafe, changed, missing or pending acknowledgement means preparing/readiness. Withheld harem facts cannot affect
+NOT harem exclusion/order/counts merely because returned subjects pass Access. Paused-indexer cases remain preparing
+until the local reduction and all affected foreign repair are acknowledged. Checkpoints, local securityRevision,
+ordinary complete generations, returned-ID checks or omitted counts do not certify safety. This abstract seam is
+not a certificate store, safety-token ABI, global sweep or new permission authority; native ports remain incomplete.
+Omit unsafe totals/facet counts over unchecked populations, with no approximate/as_of or zero/row-length fallback.
+
+Ordinary catalogue edits become filterable within 60 seconds in healthy operation; actual source-to-searchable
+lag over five minutes yields readiness. Engine refresh alone is insufficient. Privacy reductions apply immediately;
+owner writes appear on the owner's next read, including prepared owner views.
 
 ### Account deletion and adopted public output
 
@@ -135,59 +163,79 @@ governs individual-record tombstones and 30-day undo: restore rechecks `deleted_
 fact and pin. Individual early purge needs platform permission. Takedown never schedules purge; legal-order purge needs platform authority. Business transitions define neither undo
 nor purge timing, and this contract adds no lifecycle engine or synchronous wait.
 
-## Saved-query language for the later runtime phase
+## Saved queries and execution admission
 
-First-scope runtime supports only the built-ins above. It does not expose a route that saves or runs user-authored queries. The
-later query runtime uses a closed JSON AST compiled by the shared kernel query planner:
+First scope exposes built-ins, not a route to save/run user-authored queries. Later saved queries use the same
+closed catalogue grammar and semantic admission; this document does not create a second catalogue predicate AST.
+Owner predicates remain owner-only and require reviewed shared admission/native owner plans. Definitions and
+accepted pins own meaning, not localized labels or fixed vertical vocabulary. The shared pure matcher is the
+conformance reference, not mandatory request-time raw-fact replay. Incomplete coverage remains unknown under NOT.
 
-```ts
-type SavedQuery =
-  | { and: SavedQuery[] }
-  | { or: SavedQuery[] }
-  | { not: SavedQuery }
-  | { predicate: { property: string; operator: string; value: unknown } };
-```
+Saving validates the full filter + source + order against immutable meaning, complete indexed coverage, visibility
+and owner authority. Admitted negatives need complete coverage; unsupported execution rejects 422 before enumeration.
+A supported prepared plan may become ready through retained finite work. Private AST/facts and private candidate
+counts never become public output. Publication exposes only the last complete adopted subject set. Custom query
+execution remains disabled until reviewed native admission and index-plan acceptance exist.
 
-The operator, property, literal, and index-plan registries are those admitted by current definitions and shared semantic/filter
-contracts. This document does not add fields to those registries. The envelope is strict and rejects unknown keys, operators,
-property/revision pairs, incompatible profile meanings, and values of the wrong declared type. It permits at most 4,096 canonical UTF-8 bytes, nesting depth 8, 32 leaves, and 32 values in one set-membership literal. There is no arbitrary SQL, JSONPath, regular
-expression, user code, or network-backed predicate. Negation is allowed only where the shared index proves complete absence at the
-bound generation; otherwise saving is rejected.
+## Query, identity and cursor bounds
 
-Saving compiles and validates the full AST against the exact profile and semantic release, supported index generation, visibility
-policy, and owner's current allowed facts. The server stores a canonical owner-only AST and immutable query revision. An unsupported or not-ready predicate fails at save time; it is never treated as an empty result. Public publication exposes only the resulting
-accessible subjects, never the AST, predicate names, private inputs, or query counts. Changing the AST, compatible profile pin, or
-index basis advances the query basis and invalidates cursors. Custom query execution is not enabled until the shared planner and
-native index-plan acceptance tests exist.
+Success fills the requested page or proves a genuinely exhausted final page. If direct work cannot establish
+that outcome, return explicit preparation/readiness and retain settled work. The old `4P` candidate formula is not
+a completion guarantee or a replacement numeric budget. Performance supplies per-plan bounds in actual units;
+no chain of short/empty successful pages over raw nonmatches. Fixed finite ready inputs must reach useful output
+after finite preparation, including crash/replay. No whole-account synchronous fanout or new scheduler/service.
 
-## Query and cursor bounds
+Canonical browsing uses maintained canonical-ID indexes and unique prepared result rows. The shared catalogue
+identity epoch remains pending throughout serialized durable merge/unmerge/repoint maintenance; lists prepare
+while pending and cursors restart after changes. At most 4,096 originals per group are admitted before effects;
+published redirects are direct to active terminals. No request-time exhaustive alias walking or all-home sweeps.
+Stored originals and occurrence notes/multiplicity remain; editing preserves occurrences. Canonical owner views
+select latest state with conflict visible, union labels, keep copies/sessions separate and address new writes to
+current terminals. Current original and terminal disclosure remains required.
 
-`P` is the returned page size. Dynamic reads examine at most `C = 4P` unique subject candidates, with `C <= 400`. Catalogue residual
-checks are bounded indexed lookups anchored to an already selected candidate. The owner partition is the only source for private
-facts; catalogue properties use their current semantic owner. There is no cross-partition SQL join, full-account scan, OFFSET page,
-exact global count, or synchronous update of every view for an account. Source-fact and profile changes update a bounded set of fact
-indexes and shared projection intents. Repairs use ordered pages of at most `P`, O(P) memory, idempotent source stamps, and no
-fanout transaction proportional to account size.
+Keep the existing owner cursor envelope, codec, key ring and binding to viewer, route, Collection/incarnation,
+filter/query, order, page size, accepted meaning/pins, source/result generation, identity epoch and keyset. Mutable
+bases stay inside encrypted position, stable request fields in authenticated binding. GET anonymous tokens remain
+deterministic/timeless; account tokens keep fifteen-minute lifetime. Tampering/rebinding/expiry fail closed through
+existing errors; changed basis returns stale_cursor and a fresh traversal, never silent meaning changes. Reauthorize
+every read. Zone POST retains its separate Search profile and fresh-start-on-unusable-progress policy; no schema,
+status/body, cursor codec or common DTO change is selected here.
 
-One shared opaque encrypted cursor binds viewer, route, Collection ID and incarnation, query revision, sort and filter, page size,
-profile/release pin, source/projection generation, keyset tuple, and expiry. Anonymous binding uses `viewer: null` and its
-timestamp-free token is deterministic and timeless; account-bound tokens expire after the shared 15-minute lifetime.
-Retirement of a cursor key invalidates tokens for both viewer kinds.
-Collections use the shared codec and key ring without local cryptography or a local TTL.
-Tampering, viewer or Collection mismatch, changed query/profile/generation, and expiry fail closed with the shared cursor
-errors. The token reveals no raw predicate, profile/state key, incarnation, or private candidate value. Dynamic keysets use the
-stable unique subject ID; curated keysets use the existing ordinal plus occurrence ID. Pages use current-keyset semantics: there is
-no cross-page snapshot. A basis change returns `409 stale_cursor`; the client starts again. It never silently switches meaning
-partway through a traversal.
+## Cost
 
-Growth acceptance runs native first and deep page plans at three account scales with `P` fixed: legal shared `checkGrowth`
-values `64`, `512`, and `4096`.
-Inputs include sparse catalogue filters, hidden subjects, filtered-empty intermediate pages, and many unrelated owner facts.
-It records actual rows examined, PostgreSQL buffers, statements, and the shared cost classifier.
-It proves candidate/anchor bounds and no account-size scan or join; a page size
-assertion alone is insufficient.
+### Direct and ready-result dynamic pages
+
+- Touches: named owner/catalogue index seeks or ready unique result rows, actual candidates including duplicates/
+  rejects/lookahead, current source and original/terminal Access, complete disclosure dependencies, summaries and
+  control/epoch reads.
+- Bound: derive per plan in candidates/keys, points, examined/removed rows, buffers, statements/connections, bytes,
+  engine work and output slots. Composed common pages stay within 16 distinct reads and 128 TOTAL output slots.
+  Each page/step supplies the INTERNAL cost object and separate shared harness counters in
+  [Filtered lists](filtered-lists.md#cost); reviewed native specifications bind actual counters, not this prose.
+- Growth check: real API/native first/deep/sparse pages at three geometric scales, all owner pools, unrelated
+  history/population and alias/duplicate axes. Performance sets numeric limits and executable captures. Returned
+  array length, LIMIT, timeout or old 256-proof tests do not prove engine work or replacement acceptance.
+
+### Preparation and index maintenance
+
+- Touches: bounded native input/frontier/result writes, source and foreign dependencies, shared durable work/outbox,
+  canonical mapping/index changes during pending identity epoch and terminal fences.
+- Bound: each step admits rows/keys/points/bytes/statements/engine operations and retains settled progress. Finite
+  total work follows relevant finite input and changed dependencies. No per-built-in witness mirror, repeated
+  restart from zero, unbounded synchronous fanout or stored permission.
+- Growth check: native three-scale interruption/replay, concurrent privacy change, complete activation/catch-up,
+  terminal fencing and useful-page completion. Permanent preparing is failure.
 
 ## Acceptance outcomes
+
+The [shared matrix](filtered-lists.md#shared-acceptance-matrix) runs the same scenarios across curated Collections,
+Everything, state Collections, public/unlisted/private visibility and mounted Zones. Require harem light novels,
+Book wordCount > 1,000,000 (exact threshold and absent excluded), and combined, in public Zone/Collection, own
+library without state and own library with own state. Owner-only NOT state X includes no entry. Released Concepts,
+genuine words versus characters and reviewed mappings remain separate producer prerequisites. Preserve same-statement
+qualifiers/units, compact/expanded conformance, two-release pins, healthy/max lag, owner read-after-write, paused-indexer
+NOT/order/count privacy, foreign fences/targets, finite sparse/crash-replay preparation, direct-target disclosure,
+canonical cross-page uniqueness, pending-epoch readiness and native current cursor reauthorization/session/cache.
 
 The API suites cover curated ordering, Everything/state views, profiles and old pins, overlapping labels, source changes, viewer
 authorization, disclosure, Search/count isolation, query and cursor bounds, and stale projection delivery. The label outcomes also
@@ -202,7 +250,7 @@ parallel query, bulk, projection, or shelf machinery to avoid a missing owner im
 | Order | Owner and work                                                                                                                                                                                                                                                                                                                                                                                                                   | Expected file surface                                                                                                                                                                                                                                                                        |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | Library and Definitions contract owners adopt profile/default-migration, independent-label presence, dynamic DTO, and test fixture contracts.                                                                                                                                                                                                                                                                                    | `docs/dynamic-collections.md`, `specs/dynamic-collections-driver.ts`, `specs/dynamic-collections-outcomes.test.ts`, `specs/dynamic-collections-contract.test.ts`                                                                                                                             |
-| 2     | Shared Query/List owner supplies the admitted property/filter registry, opaque cursor binding, keyset semantics, `C` budget instrumentation, and cross-partition access boundary.                                                                                                                                                                                                                                                | `packages/filter/src/`, `services/kernel/src/tokens/cursor.ts`; shared query planner closure still required                                                                                                                                                                                  |
+| 2     | Shared Query/List owner supplies the admitted property/filter registry, opaque cursor binding, keyset semantics, per-plan work instrumentation, and cross-partition access boundary.                                                                                                                                                                                                                                             | `packages/filter/src/`, `services/kernel/src/tokens/cursor.ts`; shared query planner closure still required                                                                                                                                                                                  |
 | 3     | Definitions and Library implement the canonical profile registry and explicit default migration, then independent labels; retain old immutable pins and keep migration work paged.                                                                                                                                                                                                                                               | Existing profile compiler/release, Library fact model and migration code plus their acceptance owners                                                                                                                                                                                        |
 | 4     | Library Collection owner adds built-in identity/read adapters to the existing Collection model, routes, reader, and indexed fact sources. Curated commands and DTOs retain their present contracts.                                                                                                                                                                                                                              | `services/kernel/src/library/collection-model.ts`, `collection-routes.ts`, `collection-reads.ts`, one migration, one indexed dynamic-member query                                                                                                                                            |
 | 5     | Shared listing-freshness owner closes the existing monotonic protocol gap; Library adds only a dynamic per-kind adapter and terminal freeze/revoke input. Account deletion owns the bounded durable handoff.                                                                                                                                                                                                                     | `services/kernel/src/library/listing.ts`, `listing-freshness-contract.ts`; Access events/port and protocol closure required                                                                                                                                                                  |
@@ -218,7 +266,7 @@ The eight ordered owner groups keep each landing slice within eight files. Confi
   sessions, or holdings, so clearing a state alone does not erase remaining library presence.
 - Built-in state identities use the canonical profile/state registry and stored accepting release pins, never a global vocabulary or
   localized labels. Old pins survive activation and retirement without reinterpretation.
-- Dynamic results are unique subjects. Curated duplicate occurrences and their notes/order remain unchanged.
+- Browsing returns unique canonical subjects. Curated editing preserves duplicate occurrences, their notes and order.
 - A query-basis mutation invalidates the old cursor with `stale_cursor`; pagination does not promise a snapshot.
 - Public dynamic output is only accessible subject membership. On terminal account deletion,
   only active-PUBLIC output retains its last complete published generation; private payload hides at `T` and is erased by bounded work, with durable handoff waiting for no consumer.

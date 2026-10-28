@@ -89,9 +89,9 @@ Each account has one graph agent. `accountAgentId(account)` derives a stable v8 
 
 One `semantic.account_agent_subject` row is the back link: it follows the visible subject into that subject's partition and maps the subject to its account. Unique account and derived-agent keys enforce one link per account and one account per catalogue subject. Subject reads expose `account: { id } | null`. A label edit through the ordinary identity writer is refused for an unverified account node. Statement creation and proposal resolve target types and account-agent ownership in the same batched read; only the owning account or platform work can state facts about or pointing to an unverified node. The primary target of a `sourceOrConsent` property is the exception: a reference permits a public assertion pointing at the node, and an unsourced assertion requires that target account. Account-authored statements use the account agent as their source.
 
-`verifyAccountAgent(pool, { account, catalogue, receipt })` is platform work. It requires a visible unlinked catalogue subject of the same kind: a person node must merge into `schema:Person`, an organization node into `schema:Organization`. Software nodes and kind mismatches receive `AccountAgentVerificationError` without changes. Verification keeps the catalogue id as the survivor, records the receipt on the merge revision, moves the back link, and emits the existing merge events. Access derives the subject from its verification record or otherwise from `accountAgentId(account)`; search follows merge events. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging.
+`verifyAccountAgent(pool, { account, catalogue, receipt })` is platform work. It requires a visible unlinked catalogue subject of the same kind: a person node must merge into `schema:Person`, an organization node into `schema:Organization`. Software nodes and kind mismatches receive `AccountAgentVerificationError` without changes. Verification keeps the catalogue id as the survivor, records the receipt on the merge revision, moves the back link, and emits the existing merge events through the durable epoch job specified under [Identity](#identity). Successful return waits for publication; these effects alone are not completion. Access derives the subject from its verification record or otherwise from `accountAgentId(account)`; search follows merge events. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging.
 
-`unverifyAccountAgent(pool, { account, receipt })` is platform work for account revocation. It records the revocation receipt on a new merge revision, removes the catalogue back link and account-node redirect, unregisters the node as a member of the catalogue survivor, and restores the account node's own statements and only the inbound links recorded by that verification, in pages. Statements the account made on the catalogue subject while verified stay there with the account as their source. It emits the existing `SUBJECT_REVISED` event at the returned revision with kind `merge`, plus the ordinary change event when needed. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging. A later verification is allowed. Ordinary merges refuse account nodes and linked catalogue subjects.
+`unverifyAccountAgent(pool, { account, receipt })` is platform work for account revocation. It records the revocation receipt on a new merge revision, removes the catalogue back link and account-node redirect, unregisters the node as a member of the catalogue survivor, and restores the account node's own statements and only the inbound links recorded by that verification, in pages. Statements the account made on the catalogue subject while verified stay there with the account as their source. It emits the existing `SUBJECT_REVISED` event at the returned revision with kind `merge`, plus the ordinary change event when needed. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging. A later verification is allowed. Ordinary merges refuse account nodes and linked catalogue subjects. Reversal uses the same durable epoch job and waits for its publication before successful return.
 
 ### Pen names and collective names
 
@@ -194,641 +194,119 @@ A Context's custom relation types are one term extension: an immutable body addr
 
 ## Search
 
-### Current leaf evidence
+[Filtered lists](../../../../docs/filtered-lists.md) is the shared authority for complete indexed observations,
+current disclosure, direct/prepared admission, freshness, canonical list identity and cost. Semantic owns the
+selected-fact projection and complete disclosure dependencies consumed by Search, including compact/expanded
+conformance, datatype/unit normalization, same-statement qualifiers, ranks, adoption, suppression, retraction,
+public consent and foreign target/source-tuple fences. Private Library facts remain owner-local PostgreSQL data.
 
-This additive internal contract is a native implementation handoff, deliberately red until the independent export
-below exists. Search accepts the data/coverage/accounting direction; the exact signature and fields remain an
-implementation proposal, not approved production ABI. The reserved wire phase below still requires direct Search
-confirmation before consumer production.
-It preserves public `SubjectSource`, Search admission, deadlines, `checkHits` and its unknown/drop
-policy. `SubjectSource.read` loads unrelated facts/history; `matchRelationFacets` samples a recorded witness and
-32 alternatives without caller accounting or continuation. Neither is this reader. The Search scope admission
-scaffold's callbacks are not implemented identity or evidence ports.
+Search compiles the one released grammar and owns preparation and source-to-searchable freshness. The pure shared
+matcher (`current-filter-plan.ts` and `current-leaf.ts`) is the conformance reference. It is not a requirement to
+replay all selected facts for every request. Typed parameterized range/qualifier index predicates may implement the
+same semantics. Samples, witness hints and overflow markers do not establish complete negative coverage. Missing
+essential coverage stays unknown under NOT and produces preparation/readiness until a complete admitted plan exists.
 
-Semantic returns current selected facts, never a Boolean filter verdict. Search owns values, inclusive ranges,
-units and qualifier matching and ONE shared AND/OR/NOT interpreter extracted from `disclosure/check.ts` for both
-`checkHits` and explicit point evaluation. No arbitrary AST, script, predicate, supplied positive evidence, fake
-Hit, public subject DTO, labels, renderer, private overlay or per-actor native allow cache enters this port.
-The actual shared Search ports are `current-filter-plan.ts:compileCurrentFilter`, `currentClauseKey` and
-`anyCurrentMatch`, and `current-leaf.ts:holdsCurrentType(type: string, clause: Extract<FactClause,
-{ facet: 'type' }>): boolean` / `holdsCurrentStatements(statements: readonly IndexedStatement[],
-clause: Extract<FactClause, { facet: 'statement' }>): boolean`. The native fixture dynamically resolves the shared
-matchers and `compileCurrentFilter(...).evaluate` after its native baseline. Its tiny test-only bridge aligns
-native evidence with plan leaves and maps a nonmatching window without a current coverage certificate to unknown;
-it contains no Boolean, range or qualifier interpreter. Final actual Scope consumer mapping/evaluation acceptance
-is separately Search-owned after the native export. Pure shared plan/matcher extraction can land first without
-importing this producer or waiting for a consumer adapter.
-Only currently admitted shapes are supported; this contract does not admit qualified relations that Search
-currently refuses. Qualifiers on supported material leaves remain normalized item qualifiers on the same statement.
+### Projection safety and freshness obligations
 
-The exact proposed independent export is `scope-leaf-evidence.ts:readScopeLeafEvidence`. Types below are closed;
-`Pool`, `Access`, `Actor`, `AuthoritativeTime`, `FactClause` and `IndexedStatement` retain their existing meanings.
-`FactClause` is imported type-only; no Search interpreter is imported by Semantic. A request contains ONE admitted
-leaf, not a filter tree. The native reader verifies its shape and current release capability; admission is never
-an authority claim. Statement constraints may select a proven complete possible-witness pair range for item
-values; otherwise read the property's bounded selected slot. Range/qualifier predicates are not SQL filters.
+Semantic must supply complete facet projections and disclosure dependencies. Query-level privacy-reduction
+invalidation/acknowledgement is required in addition to candidate original/terminal and Access checks. Local
+reductions invalidate public use in the authoritative transaction. Foreign source-fence, target, consent and
+Collection reductions invalidate affected public use immediately. The consumer acknowledgement must cover actual
+refresh-visible repair, including dependent foreign repair. Observe the required current safety state before
+execution and revalidate before disclosure; missing, pending, unsafe or changed state means preparation/readiness.
+A local security revision or ordinary relay checkpoint cannot certify query privacy.
 
-```ts
-export type LeafWork = Readonly<{
-  keys: number;
-  points: number;
-  witnesses: number;
-  rows: number;
-  bytes: number;
-  emptySeeks: number;
-}>;
-export type LeafProgress = Readonly<{
-  basis: string;
-  phase: 'compact' | 'selection' | 'witness';
-  valueOrdinal: number;
-  after: string | null;
-}>;
-export type SelectedLeafFact = Readonly<{
-  witness: string;
-  statement: IndexedStatement;
-  release: string;
-  revision: number;
-  rank: 'normal' | 'preferred';
-}>;
-export type LeafCoverage = { kind: 'selection'; basis: string } | { kind: 'empty_pair'; basis: string };
-export type LeafEvidence =
-  | { state: 'basis_changed' | 'not_ready'; usage: LeafWork }
-  | {
-      state: 'current';
-      basis: string;
-      type: string | null;
-      facts: readonly SelectedLeafFact[];
-      coverage: LeafCoverage | null;
-      progress: LeafProgress | null;
-      usage: LeafWork;
-    };
-export function readScopeLeafEvidence(
-  pool: Pool,
-  request: Readonly<{
-    subject: string;
-    leaf: FactClause;
-    after: LeafProgress | null;
-    revalidate: string | null;
-    budget: LeafWork;
-  }>,
-  options: Readonly<{
-    access: Access;
-    actor: Actor;
-    routeKey: Uint8Array;
-    deadline: number;
-    nativeT?: AuthoritativeTime;
-  }>,
-): Promise<LeafEvidence>;
-```
+A withheld harem tag must not influence membership, NOT harem exclusion, order, fields, source metadata, counts or
+cursor-visible information. Checking returned subjects alone misses excluded subjects. Omitting counts is also
+insufficient. Complete ordinary generations and published identity epochs are never grants or acknowledgement of
+pending privacy repair. This is an abstract producer/consumer seam, not a new safety-token ABI, certificate store,
+global home sweep or permission authority; current ports do not yet establish it.
 
-`revalidate` is one opaque native witness identity previously returned by this reader, at most 128 ASCII bytes,
-never an allow token. It restricts work to that exact candidate/recording identity, while rechecking all current
-selection, source-anchor Access/eligibility, fence and referenced-target authority. It cannot supply or override
-a body.
-It is mutually exclusive with `after`. `request.subject` is the ALREADY KNOWN live native source anchor.
-This reader does not discover or follow original-to-terminal mappings, scan aliases or return hidden terminal IDs.
-A redirected or unready source returns `not_ready`. It cannot certify an unprovided original anchor: actual
-original/terminal resolution and original/source/final Access belong to owner composition through the independent
-identity ports. The source anchor still receives real current Access/eligibility and selected-fact/fence/target
-checks. Facts contain only public normalized facet data needed by the leaf; no
-references, source tuple, raw body, private candidate content or labels. Type leaves return actual authoritative
-`subject.type`, no facts, a current selection coverage certificate and no progress. Denied/nonvisible sources
-return `not_ready` without revealing type, terminal identity or facts, not definitive leaf false.
+Ordinary catalogue edits become filterable within 60 seconds in healthy operation; actual source-to-searchable
+lag over five minutes yields readiness. Engine refresh alone is not pipeline freshness. Privacy reductions have no
+lag allowance. Owner writes appear on the owner's next read. Semantic supplies the source-side events/dependencies;
+Search owns complete searchable visibility and preparation. Unsafe totals/facet counts over unchecked populations
+must be omitted without approximate/as_of, zero or row-length substitutes.
 
-`basis` is a lowercase SHA-256 digest of length-delimited, versioned source identity/eligibility observations,
-current write release and admitted leaf meaning, and the selected native slot/driver coverage version. It is
-source/property local, never ordinary `core.partition.position`. For complete bounded selection it includes the
-current relevant foreign fence/target observations. For witness progress it fences source selection/meaning only:
-foreign eligibility is re-read for each witness, and DOES NOT certify previously rejected witnesses still fail.
-A relevant selection, adoption, suppression, retraction, disclosure/consent, source identity or release change
-invalidates unsafe progress with `basis_changed` and no facts. Unrelated positions do not. No digest summarizes
-all foreign targets by an unbounded scan. Missing target/fence/home observations propagate unavailable or unknown.
+### Implementation status and retained evidence
 
-Selection uses the SAME current compact/expanded machinery as `slots.ts` and `search-source.ts`: latest slot
-operation, compact assertion/retraction, current Global adoption mode and selected candidate rank, exact candidate
-revision/release, moderation, terminal retraction and public consent. Preferred and normal remain eligible;
-deprecated and community-only selection do not. Expanded selected candidates are point reads (at most 32), not a
-history fold. Compact slots use their native at-most-33 operation bound. Relation witnesses use the actual
-`relation_facet_statement` possible-identity pair index and `facet-witness-evidence.sql` checks. Extract private
-`visibleWitnesses` with accounting rather than building a competing resolver; extend its hardcoded normal rank
-and normalization through the same selected-statement helper. Extract `indexedStatement` rather than duplicating
-its year, amount/unit and same-statement item-qualifier conversion. Apply `statement-disclosure.ts` public consent,
-`candidateSources`/`fencedIds` and Content `readFences`; trusted keys and publication hints alone confer no right.
+`scope-leaf-evidence.ts` and its old whole-slot/one-pending-leaf/final-replay contracts are superseded list
+scaffolding, not an implemented general list evaluator. The universal 256 raw-key proof requirement, ban on derived
+query/index state and ban on range/qualifier SQL no longer govern lists. Existing exported types and frozen tests
+remain in place until reviewed native replacement acceptance permits removal. This prose adoption removes no code
+and proves no native capability. Independent leaf, multi-leaf and integration reports remain evidence, not gates
+for the replacement architecture. Unrelated complete-slot, graph, history and command bounds remain intact.
 
-Coverage is stronger than running out of a budget or cursor range. `selection` means the ENTIRE bounded current
-native selected slot has been read in this observation, including all relevant current target/fence checks.
-`empty_pair` means an exact EMPTY full `(route, subject_id, property, value)` prefix of the synchronously maintained
-possible-witness superset, with native/compact writes, expansion, proposal and old-data bootstrap coverage proved
-complete, for EVERY requested pair in the leaf. This is the precise pair-absence extension to the existing witness
-contract. A hint miss, sampled128 values, recorded+32 misses, stale generation, removed hint, unknown target or end
-of a previously rejected stream is NOT coverage. Nonempty historical pairs cannot use `empty_pair`, even after
-repair removed their visible hint. Foreign hide/restore/fence changes cannot invalidate an empty superset proof;
-for selection coverage they require fresh current foreign observations. No local generation alone proves foreign
-absence. If neither proof applies, coverage stays null and the existing coalesced source-home finite durable
-`requestFacetRebuild` is requested. Do not introduce a second absence table or authority.
-
-`current` means evidence was observed now, not that the leaf matches. With null coverage Search may use a matching
-current witness as a positive; otherwise the leaf is unknown, including under NOT. Nonmatching partial facts cannot
-prove false. A nonnull progress is raw unfinished work, never exhausted. An empty raw range may end progress while
-coverage remains null: this requests repair/readiness, not false or EOF. Unknown without a current absence
-certificate can remain readiness even after raw end and quiescence; nonempty historical pairs need not become
-false. Search re-reads every earlier positive
-before final disclosure, including original and terminal Access and current source authority. Any nonmatching
-final reread removes the old positive; it cannot fall back to its earlier truth value.
-
-Reserve independent keys/points/witnesses/raw rows/bytes/empty seeks BEFORE dispatch. All fields must be finite
-nonnegative safe integers; each field must be positive for a nonempty read, keys <= 101 and witnesses <= 100.
-A zero or malformed reservation fails before SQL, including Access preparation. Account raw duplicates, discarded
-rows, driver keys, candidate/revalidation work and explicitly reserved key-only lookahead (at most one) before
-filtering. No hidden refill loops. `usage` is actual consumption, never the reservation or just returned rows;
-bytes are UTF-8 field payload bytes (binary bytea length, null zero), including discarded native evidence. Refuse
-unbounded payloads using native bounded metadata/length reads before fetching bodies; length/sentinel points and
-rows count too. Empty indexed probes consume points and emptySeeks. If an otherwise valid budget cannot reserve
-the next bounded unit, return unfinished work/not_ready with actual usage; no silent overspend or fabricated false.
-The Search evaluation wrapper explicitly reserves `{ rawKeys, native }` and returns actual `{ keys, native }`
-plus at most ONE pending progress. `native` contains all five independent axes: points, witnesses, rows, bytes and
-emptySeeks. Keys cannot be inferred from returned IDs/rows or the witness allowance. The Source leaf receives only
-its reserved remainder of the SAME shared aggregate256 ledger. Every alias/prefix, leaf/internal driver, lookahead
-and reread key debits that ledger. Each owner step consumes <=100 keys plus its explicitly reserved lookahead. Deadline and unavailable errors propagate through existing typed handlers.
-
-The owner calls ACTUAL `readTerminalSubjectIdentity`, `readIdentityBasis`, and `readSubjectAliasGroup`, independently
-of this per-leaf port. It prepares Access before checking out each anchor, evaluates on that anchor's SAME RR client,
-and releases it before other-home preparation. NativeT is passed unchanged. A poolmax1 must suffice. Identity basis
-preparation, each continuation and final use each pay TWO4096-home sweeps: 8192 metadata rows PLUS core observations,
-separately from per-leaf work, once per owner phase rather than free or per candidate. Missing identity exports are
-separate native dependencies, dynamically resolved only after a valid native command/Access baseline.
-
-Progress advances lexicographically through the deterministic admitted value order and actual raw witness UUIDs.
-For compact/selection phases `after` is the canonical decimal native sequence/selected ordinal; for witness phase
-it is the last CONSUMED UUID, never unused lookahead. `valueOrdinal` is 0..63, phase and after have bounded size.
-Unfinished reads with enough allowance strictly advance or explicitly report not_ready/basis_changed. Do not repeat
-the same32/256 sample. After finite quiescence and bounded existing maintenance, surviving witnesses257 and4096 are
-reachable in finite calls. A restored witness behind a keyset needs a FRESH traversal; no snapshot/latency guarantee
-under perpetual writes. Repair can publish a fresh useful hint so the owner can re-read all deterministic leaves
-for final evaluation without retaining historical truth in a token. That final replay, including previously
-expensive leaves, must fit aggregate256 and all native reservations; otherwise actual durable repair must supply
-bounded final witnesses. Finite last-survivor progress does not prove exhaustive traversal: that additionally
-requires the definitive complete selection/pair evidence assumptions above. A general bounded final-replay proof
-is still missing; no cached truth, hidden reread overspend or new absence/generation authority fills that gap.
-
-The existing encrypted position stays exactly
-`[basisDigest, settledCanonicalId, groupId, sourceOrdinal, aliasAfter, sourceAfter, ownerBasisDigest, formatVersion]`.
-Proposed `sourceAfter` is ONE fixed 18-byte native raw record, base64url encoded (24 ASCII bytes). The first byte
-contains format version1 in its high3 bits and Search deterministic leaf ordinal (0..31) in its low5 bits. These
-record bounds derive from actual `FILTER_LIMITS.leaves = 32` and `FILTER_LIMITS.in = 64`, not new admission limits. The
-second byte contains wirePhase in its high2 bits and value ordinal in its low6 bits. The remaining16 payload bytes
-have these exact meanings:
-
-- Wire0 compact / wire1 selection: bytes2..9 are unsigned big-endian u64. Zero means `after: null`; a real canonical
-  decimal `n >= 0` encodes `n + 1`, with `n <= 2^64 - 2`. Use lossless BigInt, never a Number roundtrip. Real ordinal
-  zero encodes1, NEVER null. Bytes10..17 must be zero.
-- Wire2 witness: all16 payload bytes are the REAL UUID key, including a zero UUID. Normal native routed-key domain
-  checks still apply; a rejected key must never silently become start-of-range. Current writers derive UUIDv8,
-  but the candidate schema only checks routed bytes; no unstated nonnil storage guarantee is assumed.
-- Reserved wire3: maps ONLY to native `phase: 'witness', after: null`, with all16 payload bytes zero. Any nonzero
-  payload is invalid. This adds no native phase or UUID-domain assumption.
-
-Whole null `LeafProgress` uses empty `sourceAfter`, distinct from nonnull progress with null `after`. Require
-canonical24-character base64url without padding or extra bytes. Validate version1, canonical decimal/overflow,
-phase-specific padding/payload and ordinals against the CURRENT actual admitted plan and sorted values, not merely
-32/64 storage capacity. Search owns the actual parser and invalid-wire acceptance (wrong version, noncanonical
-number, overflow, padding, current leaf/value bounds, nil witness never null and nonzero reserved payload).
-Native layout assertions and the actual shared encrypted handoff are not a second parser or crypto implementation.
-The reserved phase3 proposal requires direct Search confirmation before consumer production; the native producer
-continues returning the SAME structured `LeafProgress`.
-It is not a nested token, JSON, leaf vector, prior result, witness receipt or allow/deny claim. Native progress.basis
-maps to ownerBasisDigest; that digest also binds current Search source/query/release/profile/generation. Search
-reconstructs the deterministic leaf from the admitted plan. A fresh bounded leaf probe supplies the native basis
-needed to recompute/check the composite owner digest before resuming; that probe and its rereads are charged,
-not an extra unrecorded basis callback. A mismatch restarts preparation before consuming old progress.
-The original being evaluated is the independent native aliasAfter raw key, groupId is its canonical group,
-sourceOrdinal selects the owner and basisDigest is actual structural identity. When a leaf can become pending,
-request a one-original native alias window and retain its ACTUAL returned after in aliasAfter (the original under
-evaluation). With nonempty sourceAfter, resume that ORIGINAL FIRST with current native identity/source checks.
-Do not seek `readSubjectAliasGroup(after: aliasAfter)` until the pending original settles: doing so can skip the
-last eligible alias257. Only then seek the next original using that same native alias cursor. Never overwrite it
-with a Semantic cursor. An identity window's unused lookahead is reread and charged. Final revalidation identities
-are request-local, not serialized. This scalar mapping needs manager/Search review before production; if an owner
-also needs independent unresolved prefix state at this boundary, that is a shared-protocol decision, NOT permission
-to append a ninth key or concatenate tokens. The existing scaffold's unresumable `leaves` callback must be replaced
-by this real evidence port in its own implementation, not claimed as covering capability.
-
-Small independent production slices are (1) shared accounted selection/normalization extraction over real source,
-slots, witness evidence, fences and consent; (2) the independent leaf reader and bounded raw continuation over those
-helpers and proven pair coverage; (3) Search's pure shared plan/matcher extraction, independently landable before
-the native producer; (4) final owner composition with actual identity ports. Existing witness storage/bootstrap/
-completeness and finite relay repair must land first where used; structural identity implementation remains separate. None is production code in this specification.
-
-#### Native current leaf evidence read
-
-- Touches: one admitted source/type/selected property, bounded slot operations/Global selection or one possible-witness pair range, exact candidate/revision/release/public consent/moderation/retraction points and current foreign fences/targets; Access and identity metadata sweeps are independently charged as above.
-- Bound: actual usage <= each independent caller reservation; <=100 raw driver/witness keys plus one explicitly reserved lookahead per call, independent of unrelated properties/history and total relation degree; SQL rows/statements constant and blocks logarithmic at fixed step. Total resumable work may grow with the relevant witness range. No whole-subject snapshot or whole-degree fetch.
-- Growth check: `test/semantic/growth-scope-leaf-evidence.test.ts`, `leaf evidence cost is bounded under unrelated property history and relation growth`, separate legal `[64,512,4096]` axes at fixed caller step, one warmup and three repetitions capturing actual SQL rows/blocks/statements and native usage. Native behavior regressions are in `test/semantic/scope-leaf-evidence.test.ts`; these two files gate the leaf producer. `test/semantic/scope-leaf-identity-composition.test.ts` separately gates final Scope/Zone composition after actual terminal/group exports, preserving the eight-key and last-alias tests. Full native specification runs all three files; missing exports fail only after real commands, actual selected facts and real Access succeed.
+The [Zone integration audit](../../../../docs/research/semantic-integration-audit-zone-composition.md) identifies
+an integrated resource substrate but incomplete actual membership, page/default execution and Zone-specific
+withholding, purge, account cleanup and scheduler work. Typed transport, immutable release loading, pure cursor
+capacity and helper setup do not close these gaps. Required acceptance retains two-release pins, same shared Search
+runtime, current grant/source/fact revocation, canonical cross-page ordering, native cursor restart/session/cache,
+full personas/API/default composition and growth. The shared common-page limit is 16 reads and 128 total output
+slots; the old SAME256, final replay, alias-window and home-certificate prescriptions are superseded.
 
 ## Identity
 
-This section specifies additive current terminal identity, structural basis, resumable alias-group reads and
-trusted sealed-subject repair metadata.
-It is an implementation contract: the native tests deliberately fail on absent exports until those exports and
-same-home maintenance hooks land. It does not authorize a graph engine, holder directory, permission engine,
-source SQL implementation in this specification change, or changes to the existing reference resolver.
+Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
+(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact fact storage
+is an optimization, not a separate compact-revision creation target. Merging requires `subject:merge` and asserts
+duplicate identity only. Distinct editions, translations and formats remain separate subjects linked by relations.
+Full native creation and merge-command implementation/acceptance remain required; this section selects no new ABI.
 
-The approved reference signature remains exactly:
+### Durable publication and caller contract
 
-```ts
-readSubjectReference(pool: Pool, id: string,
-  authorize: (client: PoolClient) => Promise<boolean>
-): Promise<{ id: string; component: SubjectComponent } | null>
-```
+Ordinary merge, unmerge and repoint, plus `verifyAccountAgent` and `unverifyAccountAgent`, run through the same
+serialized durable identity-epoch job on existing infrastructure. Admit at most 4,096 originals per group before
+any effects. Mark the shared catalogue identity epoch pending, complete bounded mapping/index maintenance and
+required participant acknowledgements, then publish the next epoch. Every published redirect points directly to
+an active terminal. A crashed job remains pending and resumes its retained frontier; it cannot publish a chain,
+a ready epoch, fabricated zero/missing metadata or a partial group.
 
-It remains a separate one-anchor read in `references.ts`, including its authorized redirect exception.
-Commerce retains its sole `library/subject-anchor.ts` resolver and owns its separate adoption of that reference
-helper. Neither helper is replaced by terminal identity. `readItemIdentityVersion` remains metadata containing
-revision, transaction and redirect ONLY; it gains no authorization, terminal resolution, type or preparation.
-`readItemTypes` is unchanged. There is no new type cap, cache, preparation, actor allocation or inherited right.
+Verification and reversal retain their current successful subject/component DTO, wait for the published epoch,
+and are idempotent for the existing receipt. Accounts calls them from durable DBOS steps, approving/clearing
+pending only after return. A crash resumes that same step. There is no pending DTO or caller polling loop.
+Fresh current authority is required, including on receipt replay; success is recorded only after the actual job
+and required mapping/index maintenance publish. Existing kind, catalogue-survivor, back-link and exact moved-link
+reversal rules in [Account agents](#account-agents) remain. An earlier revision event alone is not job completion.
 
-### Independent exports and implementation slices
+### Lists, point reads and personal references
 
-All modules below are independently importable functions; no factory requires unfinished methods or fake ports.
-Types use existing `Pool`, `PoolClient`, `Access`, `Actor`, opaque `AuthoritativeTime` and `SubjectComponent`.
-The last type is imported type-only from `subject.ts`; implementation must not import its display reader.
+Canonical lists read maintained canonical-ID indexes, with one public terminal document and unique prepared rows.
+They prepare while the shared epoch is pending; cursors restart after epoch changes. No request-time exhaustive
+alias walking, 4,096-home sweep or standalone identity-basis observation is a list prerequisite. Original AND
+terminal current eligibility remains mandatory. An index or epoch cannot authorize a withheld original through
+its readable terminal. Bounded preparation/access paths must support the last eligible original in large groups.
 
-```ts
-// terminal-identity.ts
-export type IdentityReadOptions = Readonly<{
-  access: Access;
-  actor: Actor;
-  deadline: number;
-  nativeT?: AuthoritativeTime;
-}>;
-export type TerminalIdentity =
-  | { state: 'ready'; id: string; components: readonly SubjectComponent[] }
-  | { state: 'not_ready' }
-  | null;
-export function readTerminalSubjectIdentity(
-  pool: Pool,
-  id: string,
-  options: IdentityReadOptions,
-): Promise<TerminalIdentity>;
+Unaffected point reads do not sweep or depend on global list readiness. An affected unready identity gives truthful
+readiness. Existing one-anchor `readSubjectReference`, item identity metadata and type reads retain their separate
+contracts and do not become display resolvers or permission caches. Point authorization stays on the actual native
+anchor and same read client, with native time passed unchanged; release one partition before visiting another.
+Missing/denied identities stay concealed and unavailable dependencies are not fabricated self-mappings.
 
-// identity-basis.ts: internal metadata, never an Access or browser API
-export type IdentityBasis = Readonly<{ digest: string }>;
-export type HomeIdentity = Readonly<{
-  partition: number;
-  epoch: number;
-  home: string;
-  generation: bigint;
-  pending: bigint;
-}>;
-export type BasisRead = { state: 'ready'; basis: IdentityBasis } | { state: 'not_ready' };
-export function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
-export function readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead>;
+Stored personal original IDs, notes and multiplicity remain. Canonical personal views use the owner's latest state
+with conflict visible, union labels, and keep copies/sessions separate. Collection browsing shows one canonical
+card; editing preserves every stored occurrence. New writes address current terminals. Corrections create new
+revisions and never roll back unrelated later edits. Stored references are not rewritten.
 
-// alias-group.ts: trusted service candidate enumeration, not public disclosure
-export type AliasWindow =
-  | { state: 'not_ready' | 'basis_changed' }
-  | {
-      state: 'ready';
-      originals: readonly string[];
-      after: string | null;
-      exhausted: boolean;
-      examined: number;
-      points: number;
-    };
-export function readSubjectAliasGroup(
-  pool: Pool,
-  options: {
-    terminal: string;
-    basis: IdentityBasis;
-    after: string | null;
-    limit: number;
-    deadline: number;
-  },
-): Promise<AliasWindow>;
-```
+### Library follow-count publication participant
 
-`readIdentityHome` reads one home on the supplied client, including a command transaction. `home` is the current
-core home/node incarnation identifier; epoch and home placement are read with the generation. `generation` and
-`pending` are lossless integers. Missing, fenced, moved or inconsistent home metadata is unavailable/not ready,
-never an invented zero generation. The digest is lowercase SHA-256 hex over versioned, length-delimited tuples
-`(partition, epoch, home, generation)` in partition order, not JavaScript bigint JSON or partition position.
+The durable epoch job includes the co-owned Library follow-count participant for affected originals and the new
+terminal. Durable re-key steps of at most 100 rows ACK before epoch publication; stored follows remain unchanged.
+Support is per (canonical target, follower); totals change only on support transitions 0-to-1 or 1-to-0. Derived
+pairs, support and totals live in the canonical-target partition and counts remain private. Stale-destination
+applies must fail epoch admission, then reread actual source and mapping on retry. The store authority is
+[Private follow counts](../../../../docs/private-follow-counts.md); this section copies neither SQL nor a step ABI.
+Native crash/replay and crossing-epoch/terminal-cleanup no-resurrection proof are required before completion.
 
-Small implementation slices are terminal points and anchored Access in `terminal-identity.ts`, home metadata and
-fixed-home observation in `identity-basis.ts`, writer/maintenance hooks in existing merge modules, and member
-keyset enumeration in `alias-group.ts`. Each uses focused typed SQL files beside its module; no broad subject
-renderer refactor is needed. Each native test file owns its database setup, fixture reset and cleanup, so the
-managed check can run each production slice by actual file path. The shared `identity-fixture.ts` remains the
-single fixture authority. Focused native tests are:
+### Superseded implementation and remaining acceptance
 
-`terminal-identity-contract.test.ts`:
-
-- `terminal identity is a lightweight current authorized read with explicit maintenance readiness`;
-- `terminal anchors use released same-client RR Access and native preparation time`;
-
-`identity-generation.test.ts`:
-
-- `structural identity generation changes atomically on redirect unmerge and repoint but not unrelated positions`;
-- `concurrent native redirects cannot lose structural increments and epoch or home changes invalidate a basis`;
-
-`identity-contract.test.ts`:
-
-- `resumable alias groups find the last readable member beyond two hundred fifty six without unbounded scans`;
-- `concealed groups exhaust with advancing empty windows and current eligibility behind progress requires a fresh traversal`;
-- `alias continuation rejects invalid viewer route query group and structural bases and keeps shared token lifetimes`;
-- `native repoint and verification reversal invalidate in-flight alias groups before any resumed disclosure`;
-- `alias raw keys confer no subject or source authority and malformed allocations do not start a scan`;
-- `an explicitly larger native survivor repoints inherited alias groups without a lexical-order assumption`.
-
-### Terminal read and disclosure
-
-A terminal read uses the native subject visibility and latest redirect point keys and current subject eligibility.
-It authorizes `subject:read` at the requested original and, if different, the terminal anchor using actual Access.
-For each anchor, prepare before checkout, then read identity, eligibility verification, partition observation and
-Access on the SAME RR read-only client. Release it before preparing or checking out another anchor. At most two
-anchors are inspected: the original plus its maintained one-hop terminal. A second redirect, incomplete registration,
-unsealed terminal mapping or a concurrently invalidated mapping returns `{state:'not_ready'}` after original
-visibility and authorization have been established. A live original needs no alias maintenance scan. Recheck the
-original mapping/home generation after terminal authorization; an intervening structural change cannot yield a
-positive for the old terminal. That extra point is charged; do not retry by walking the chain.
-
-`nativeT`, when present, is passed unchanged to Access on both anchors. Callers obtain it from actual core prepare;
-no JSON time, date cast, invented brand or minting an unrelated acceptance instant is allowed. Ordinary reads omit
-it and use existing clock/Access semantics. Components are observations from those anchor reads, in original then
-terminal order (one for a live original). They are neither Access claims nor historical SQL-as-of proof.
-
-Invalid/missing/nonvisible/denied originals or terminals return indistinguishable null; never disclose a hidden
-terminal ID in a result or exception. Explicit grants do not override native visibility. Readiness errors contain
-no terminal identity. Deadline and unavailable errors propagate through existing shared error handling, never null
-or false-empty. No full `readSubject`, labels, facts, relations, release bodies, summary rendering, projection waits,
-unbounded visited set, request redirect walk or link-consumer checkpoint wait is permitted.
-
-### Structural generation and truthful readiness
-
-Generation measures STRUCTURAL identity only. One `semantic.identity_home` row per existing partition stores its
-monotonic generation and outstanding identity-maintenance count. An actual redirect insertion, removal or repoint
-increments the affected original's home generation in the SAME transaction as the native mapping mutation.
-Use an atomic database increment under the existing home command serialization; reading then overwriting an old
-value cannot lose concurrent increments. Rollback changes neither mapping nor generation. Receipt replay and a
-same-target register/repoint do not increment. Labels, revisions, Library facts, editorial writes and unrelated
-`core.partition.position` movement cannot change the digest or restart identity progress. Epoch/home changes do.
-
-The writer audit includes `merges.ts:mergeSubjectsInCommand` and its `merges-insert-redirect.sql`, ordinary merges,
-`account-agents.ts:verifyAccountAgent` through that same writer, `unverifyAccountAgent` and
-`account-agent-delete-redirect.sql`, and `merge-moves.ts:register` with `merge-moves-insert-redirect.sql` for inherited
-members. Verification reversal also deletes the survivor's member row; its same-home member mutation participates
-in readiness. Audit future writers against this list. An account receipt is only the documented trusted platform
-adapter boundary; the tests do not claim forged end-user verification. Stored personal facts and Collection
-occurrences, their original subject IDs, order, notes and multiplicity are never rewritten by this contract.
-
-Existing `merge_member`, projection-pending flags and consumer checkpoints alone cannot prove complete alias
-coverage: redirect insertion can precede registration, and a root can redirect before inherited members repoint.
-A fresh checkpoint, lease timeout or an empty current member range is insufficient. The smallest additional hook
-is a durable same-home identity obligation per changed original/generation, inserted with the redirect change and
-counted in `identity_home.pending`. It records the expected target and registration/member-repoint frontier. Existing
-merge-move continuations advance it in bounded pages. Registration acknowledgement, descendant registration/repoint
-coverage and completion must be durable before the originating obligation is acknowledged. A stale acknowledgement
-must compare generation/target and cannot clear a newer obligation or decrement twice. Unmerge records/removes its
-own obligation atomically with deletion and proves the restored root and removed membership before acknowledgement.
-No synchronous cross-home transaction or new scheduler is introduced; existing durable events drive the work.
-Requested survivors need not decrease in UUID order. Existing register/repoint retry branches must consult actual
-current native redirects rather than treating lexical target order as a concurrency or convergence proof.
-
-#### Atomic structural identity event and Search coverage handoff
-
-`semantic/events.ts` exports `SUBJECT_IDENTITY_CHANGED` with the fully qualified value
-`com.rezics.subject.identity.changed.v1`. The producer registers its closed schema in the same implementation
-change before emitting it. Data contains ONLY `{generation: string}`, matching `/^(0|[1-9][0-9]*)$/`.
-The value is the ACTUAL `recordIdentityMutation` returned obligation's `version.toString()`, never a Number,
-subject revision, live ordinary partition head, new global clock or guessed latest home generation.
-The envelope `subject` is the actual changed ORIGINAL in its OWN home. Core envelope epoch/position supplies the
-committed structural catch-up fence; no new native read API, signature or position field is added.
-
-Every actual redirect insertion, removal and repoint, including inherited aliases, appends this event in the SAME
-native command transaction as the mapping, generation and pending obligation mutation. The audited SQL writers
-are exactly `merges-insert-redirect.sql`, `merge-moves-insert-redirect.sql` and
-`account-agent-delete-redirect.sql`. Ordinary merge, trusted verification, verification reversal and inherited
-member repoint all participate. In particular, repoint's existing `links.projected` event without a subject anchor
-cannot substitute for original-anchored structural invalidation. Rollback, unchanged mapping/no-op maintenance and
-authorized receipt replay emit NO NEW identity event. Existing semantic events retain their meanings; an inherited
-member receives no fake identity/create revision. The metadata/hooks producer alone owns production SQL, hook,
-event export and schema changes; this specification adds no implementation or catalogue registration.
-
-`identity-events.test.ts` is an independent native acceptance file. After legal native setup it dynamically checks
-the export and registered closed schema, then covers merge, verification/removal, inherited explicitly larger
-survivor repoint, actual obligation version, original/home anchoring, command/outbox fence and transaction
-provenance, unchanged inherited revisions, rollback, no-op and receipt replay. It does not seed raw outbox rows.
-
-A native ready structural basis is NOT Search public-index canonical coverage. Search alone owns its bounded
-per-home coverage/attempt/lineage rows (at most 4096 * 3), keyed to the actual physical index incarnation and
-source-home structural tuple. Its proof uses the actual consumer checkpoint, CAPTURED structural catch-up fence
-and current canonical work. Catch-up position is proof only, never the identity digest's meaning. Ordinary
-visibility/index lag does not change structural basis: prepare must not demand current `behind=0` every time.
-A raw prefix containing a subsequently hidden original under an UNCHANGED structural basis must remain possible,
-with current native disclosure checks deciding its use.
-
-Unknown late sink writes cannot be certified by a lease timeout/expiry or an invented ready callback. A native
-read helper returning ready is not a Source index proof. Search's owning README and native tests specify its
-consumer enrollment/drain and lineage implementation; this shared handoff does not duplicate its storage.
-The event adds no permission/holder engine and changes none of the terminal, basis, group or sealed-metadata
-signatures. Coverage is independently revalidated before publication/final handoff and on continuation.
-
-#### Same-home metadata ownership and internal ports
-
-The structural-store/hooks implementation owns `identity-maintenance.ts` and ALL new metadata-table SQL and
-migrations. Terminal and group implementations call its internal read port; they never create a competing table,
-write metadata or infer readiness from jobs/history. The public independent exports above remain unchanged.
-`identity-basis.ts:readIdentityHome` delegates the home point to this same metadata owner; its fixed-home sweeps
-remain independently implementable. This is an internal service handoff, never a public Access or holder claim.
-
-The authoritative `semantic.identity_home` primary key is `(partition_no)`. It holds generation and pending;
-current epoch/home incarnation comes from the exact `core.partition(partition_no)` point, not a second placement
-authority. The authoritative `semantic.identity_obligation` current-row primary key is
-`(partition_no, route, subject_id)`, where subject_id is the original and partition_no is its native home. Its
-`version` is that home's generation assigned by the actual mutation; `target` (nullable for removal),
-`sealed_version` (nullable), and bounded phase/keyset frontier describe ONLY that current mapping obligation.
-Replace the current row on a newer actual change; old acknowledgements compare version/target and their core
-epoch/home fence and cannot seal or decrement the replacement. Retain the sealed current row until superseded; no historical-row lookup is
-needed. `pending` counts unsealed current obligations, so replacement of an unsealed obligation does not double-count.
-A sealed removal remains evidence of restored-root/member-removal coverage. Initial rollout must establish current
-rows for existing redirects before making the home ready.
-
-The narrow internal handoff is:
-
-```ts
-// identity-maintenance.ts; metadata writer owns implementations and SQL
-export type IdentityMutation = Readonly<{
-  original: string;
-  previous: string | null;
-  target: string | null;
-}>;
-export type IdentityObligation = Readonly<{
-  original: string;
-  version: bigint;
-  epoch: number;
-  home: string;
-  target: string | null;
-}>;
-export type SealedSubjectIdentity =
-  | { state: 'ready'; terminal: string; home: HomeIdentity }
-  | { state: 'not_ready' }
-  | null;
-export function readSealedSubjectIdentity(client: PoolClient, original: string): Promise<SealedSubjectIdentity>;
-export function readHomeIdentity(client: PoolClient, partition: number): Promise<HomeIdentity>;
-export function readIdentityReadiness(
-  client: PoolClient,
-  mapping: {
-    original: string;
-    target: string | null;
-  },
-): Promise<{ state: 'ready' } | { state: 'not_ready' }>;
-export function recordIdentityMutation(
-  client: PoolClient,
-  mutation: IdentityMutation,
-): Promise<IdentityObligation | null>;
-export function advanceIdentityObligation(
-  client: PoolClient,
-  options: {
-    obligation: IdentityObligation;
-    expected: { phase: string; after: readonly string[] };
-    next: { phase: string; after: readonly string[] } | { sealed: true };
-  },
-): Promise<boolean>;
-```
-
-All calls use the caller's current same-home transaction, never a pool checkout or cross-home transaction.
-`recordIdentityMutation` accompanies the verified actual native redirect change in its command transaction;
-unchanged/replayed mappings return null. It atomically increments the home generation and replaces the obligation.
-`advanceIdentityObligation` compares current version/target, core epoch/home and expected bounded frontier; false
-means stale work, with no mutation. Existing maintenance supplies durable registration/repoint acknowledgements before a seal;
-`sealed:true` is permitted only after complete inherited coverage, and decrements pending exactly once. These ports
-are for trusted native writers, not caller-supplied positive membership or authorization assertions.
-
-`readSealedSubjectIdentity` is the smallest actor-neutral canonical-repair discovery point in this SAME
-structural metadata producer. Its caller supplies the source-home RR client/transaction. It checks bounded original
-existence, current native redirect, current obligation/version/seal and exact core/home metadata points, with no
-pool checkout, Access preparation/authorization, actor, eligibility or disclosure. Visibility and read denial are
-deliberately ignored at this trusted internal boundary. It reads no type, payload, history, jobs, graph or target;
-it never walks a redirect or repeats the fixed-home digest sweeps per original.
-
-Invalid or missing ORIGINAL returns null before and after the exact point. Null never means hidden or denied and
-never permits substituting self or dropping a stored fact. A live original maps to itself only from its actual
-native live mapping and never-redirected evidence, or a sealed CURRENT removal obligation. A redirect returns its
-maintained target only when the current native mapping matches the current obligation target/version and
-`sealed_version === version`. Missing, mismatched or unsealed evidence returns `{state:'not_ready'}` without a key;
-there is no guessed identity or fallback. The structural producer must preserve current seal coverage through
-inherited repoint and unmerge, including explicitly larger survivors; consumers do not repair by walking targets.
-
-The returned `home` is the SOURCE home's generation/epoch/home/pending observation. It is neither global terminal
-readiness nor an allow: a sealed source-local terminal may since have redirected, disappeared or become denied in
-another home. Canonical repair first obtains the actual ready FULL identity basis, then independently revalidates
-it before publishing index coverage/final handoff and on continuation. Changed or pending global basis invalidates
-canonical coverage; unresolved source/terminal obligations require repair readiness, never a manufactured key.
-Every final positive still needs actual current original, terminal and source Access plus current identity.
-Per-viewer denial cannot change this deterministic metadata or turn it into a cached allow.
-
-`identity-metadata.test.ts` independently accepts this producer before terminal/group exports exist. It covers
-live/hidden/genuinely denied originals, stored originals before filtering, pending registration/repoint, inherited
-larger-survivor coverage, current removal after native unmerge, missing originals and bounded points with no Access
-or payload/type. `growth-terminal-identity.test.ts` also charges a real ready metadata point in its existing
-irrelevant-history sample, with the same scales, warmup and repetitions.
-
-`readIdentityReadiness` checks the exact original's current native mapping and current obligation point, with the
-current core epoch/home observation on the same RR client. A redirect needs matching target and
-`sealed_version === version`; missing/mismatched/unsealed evidence is not_ready. A restored live original with an
-obligation needs the same current-version removal seal. A never-redirected live original needs no obligation scan.
-A placement/epoch change invalidates the basis and old in-flight maintenance tokens; a sealed version remains valid
-when the native mapping and its same-home metadata move together unchanged. The current home must be available and
-unfenced. No metadata copy claims placement authority.
-Do NOT compare the obligation version to the home's latest generation: another original's mutation can legitimately
-advance that generation. The terminal recheck compares the observed original mapping and home generation; basis
-readiness additionally requires home pending zero. None of these checks reads maintenance jobs, revisions or history.
-
-An authorized terminal read is ready only after the original's current obligation is sealed and its direct
-terminal is currently live. The source-local sealed metadata port does not establish that terminal condition.
-Basis readiness requires every home available with zero unsealed obligations. Registration/repoint and
-acknowledgement transactions must keep that condition truthful through nested merges; a parent cannot acknowledge
-before every inherited member has durable current-terminal coverage. A newly created member derived from an existing
-redirect is covered by that originating obligation, not an independent unchecked inverse authority. Initial rollout
-must rebuild/seal coverage in bounded existing maintenance pages before reporting ready. A finite fixed redirect
-set and finite quiescent native maintenance eventually seal all obligations; perpetual writes promise no deadline.
-
-`readIdentityBasis` reads exactly the fixed 4096-home metadata set, without scanning application jobs or joining
-homes. It performs two independently released sweeps and accepts only equal complete tuples with zero pending in
-both. This is a bounded observation, not a global transaction/snapshot: callers independently recheck it before
-final use and on each continuation. A write after observation is handled by current identity/owner revalidation;
-there is no future or retroactive consistency promise. Charge both sweeps (8192 metadata rows plus core-home
-observations), including empty/unavailable seeks. No global generation write, cross-home SQL join, global job scan
-or synchronous all-Collection fanout is allowed.
-
-### Resumable alias groups and owner handoff
-
-`readSubjectAliasGroup` is a trusted candidate port over the existing survivor-local `merge_member` key, plus the
-terminal itself in the same UUID order. It creates no second inverse authority. `originals` are RAW internal keys,
-including hidden/denied aliases, not a disclosed list or an allow decision. Only trusted services receive them.
-Every member candidate is checked against current native original/terminal identity; stale derived rows never
-prove membership. Essential unresolved native identity returns not_ready, not false. This metadata-only enumeration
-performs no actor allocation or permission cache. Positive disclosure requires `readTerminalSubjectIdentity` for
-the actual original plus current owner membership and Access; root-only authorization cannot launder an original.
-
-Validate `1 <= limit <= 100` before SQL. Read at most `limit` raw keys plus one explicitly CHARGED key-only
-lookahead. `examined` counts every fetched original/member/root key, including internal duplicate and lookahead
-keys, before filtering; never hide rejected raw keys behind this counter. `points` counts member/identity points,
-with at most four per examined key plus two terminal checks. Metadata sweeps are separately charged. No hidden
-membership/refill scan is allowed. `after` advances the actual raw group keyset even when every original fails
-Access. Return it as the last consumed key, not the lookahead, and set `exhausted` only on definitive range end.
-An exhausted empty group may retain its input after; an unexhausted result must strictly advance. Stale structural
-basis returns `basis_changed` before consuming keys, even if the current mapping is also not ready. A mismatched
-or nonterminal group cannot produce a ready window. Recheck structural basis independently before handing off a
-window. Unknown is never converted to false to fit an allowance.
-
-Search and Commerce reserve the raw allowance before calling this port, then intersect with their SAME current
-source authority. Collection canonical indexes are owner-derived access paths over existing curated/built-in/frozen
-truth. Owner repair is bounded and preserves stored facts; incomplete canonical coverage is not_ready. Search uses
-its real generation/coverage and current full shared filter evaluator; Collection members are never invented Hits.
-An index, candidate key, cursor or earlier positive is not authority. Every positive used for emission rechecks
-actual original and terminal Access, current source/resource owner authority and current native membership. Source
-revocation, subject denial or unmerge between discovery and final use removes the positive.
-
-Zone reserves one aggregate 256-key budget, including every source, duplicate source occurrence, internal fact-driver
-key, discarded lookahead, membership reread and resumed alias key. Owner calls cannot spend 100 each without that
-reservation. Reserve separate point/witness/byte and empty-seek budgets before dispatch too. One true source can
-settle a canonical group; with essential unknown and no true source retain the boundary BEFORE the group. A rejected
-but decided group advances. A continuing alias group advances within that group without advancing the common settled
-canonical prefix. Covered common-prefix ordering deduplicates across overlapping sources; there is no seen-ID set.
-
-Internal handoff uses fixed compact progress, not 32 nested opaque owner tokens. In the shared encrypted list codec,
-`position.after` has exactly eight keys:
-`[basisDigest, settledCanonicalId, groupId, sourceOrdinal, aliasAfter, sourceAfter, ownerBasisDigest, formatVersion]`.
-Empty strings mean absent keys; UUIDs use canonical lowercase text, digests use 64 hex characters, ordinals and
-version are safe integers. Each string is at most 256 UTF-8 bytes. One pending group and one deterministic current
-source suffice: later sources are reread from the settled prefix and those rereads are charged. `sourceAfter` is
-one reviewed bounded owner key; an owner requiring a larger vector must obtain a shared protocol revision, never
-concatenate JSON to evade the eight-key bound. Owner source descriptors/order and meaning belong in an authenticated
-fixed digest, not an unbounded position vector. Compare the source descriptor and group encoded in the position
-against current native truth before use. Direct target bindings also include their known group/target.
-
-Use `encodeListCursor`/`decodeListCursor` unchanged, binding actor/viewer, route and all stable query fields. Dynamic
-structural/source/meaning bases and group progress remain encrypted and authenticated in the position; valid stale
-bases are restartable, not tampering. Anonymous tokens retain existing deterministic timeless behavior, and account
-tokens retain their existing fifteen-minute lifetime. Tokens never carry allow/deny results. Invalid token, other
-viewer/route/query/group and stale basis cannot resume another group's progress. A completed candidate range is
-not an exact global live total; current-keyset late eligibility or insertion behind progress requires a fresh
-traversal. Reconstructing compact progress must find a last readable original beyond 256 in finite bounded steps.
-
-Direct Zone subject-target reads use the SAME resumable group path and budget. They cannot permanently return 404
-for a valid last-alias member or spin through every alias in one request. The confirmed additive transport is an
-optional opaque `cursor` QUERY parameter on `POST :readPage`. Actual advancing bounded progress returns
-`202 { next: string }` with `Cache-Control: private, no-store`; `next` uses the existing encrypted shared codec and
-request/actor/target/basis bindings above. `200` retains the unchanged commonPage-plus-zone ABI. No partial document
-is returned. Zero progress or maintenance/readiness failure uses the existing `503` standardProblem with
-`Retry-After`, no cursor. There is no new problem extension, continuation code or Link header. The shared schema
-owner exports separate query/progress schemas; this specification does not edit that owner's files.
-
-The loader takes at most four steps per render. If unfinished, its preparing page is a no-store 503, retains the
-last 202 cursor and continues with it; a readiness 503 supplies no replacement cursor. Lists retain their existing
-next cursor. Search/Commerce pass the compact internal group/source/keyset progress through this same handoff and
-revalidate current owner membership and subject Access before final use. The source-native composition tests here
-establish the identity seam, not production Search/Commerce/Zone completion.
+Old `identity-basis.ts`, home metadata/sweep, sealed repair and alias-window exported implementations/contracts
+are superseded scaffolding for list execution. They remain until replacement native acceptance permits removal;
+their existence or old proof results do not establish this durable epoch job. No cancelled home-certificate ABI is
+revived. Native job code and acceptance must prove admission before effects, serialized crash/replay, complete
+mapping/index publication, current authority, verification/reversal DTO and DBOS semantics, cross-page uniqueness,
+pending-epoch readiness, truthful affected point readiness and follow-count participation. Unrelated semantic core,
+graph/history/command/lifecycle acceptance remains required.
 
 ## Cost
 
@@ -857,11 +335,17 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 - Bound: two data statements and three transaction-control statements; at most three examined relation rows, O(log N) blocks, and constant result bytes independent of type/label size, unrelated subjects, redirect/editorial history and relation degree. Invalid ids perform no SQL; missing and nonvisible identities skip Access, and denied sources disclose neither identity nor redirect.
 - Growth check: `test/semantic/growth-subject-reference.test.ts`: `reference resolution stays bounded as unrelated history and relation degree grow`.
 
-### Identity terminal, basis and alias windows
+### Identity epoch publication and canonical access
 
-- Touches: sealed-subject metadata uses only the supplied source-home RR original-existence/native-mapping/current-obligation/core-home points, with no target or Access read. Terminal reads use at most two native subject anchors, their eligibility/Access and partition points, plus current home/core and obligation seal points and the original mapping/generation recheck. Basis uses two released fixed-home metadata sweeps including home/epoch observations. Alias enumeration uses the existing survivor/member ordered index and native current identity points; every key-only lookahead, root, duplicate and reread is charged. Collection/source and final Access checks retain their owner's costs. No rendering or link wait is included.
-- Bound: a sealed-subject metadata point has constant rows/statements independent of alias count, history and population (native point acceptance admits at most 16 examined rows and 12 statements including transaction controls), logarithmic index blocks, and never an 8192-row basis sweep. Terminal identity rows/statements and result bytes are constant in alias count, unrelated history and population, with index blocks logarithmic. Basis adds fixed 8192 metadata rows per observation plus fixed home observations, independent of application population. A window reads at most requested raw keys (hard limit 100) plus one charged lookahead and at most four native points per examined key plus two terminal checks; it may require multiple requests. Zone's aggregate 256 allowance includes all source/internal work, not just these returned candidates. Readiness metadata point reads, including absent obligation seeks, are charged in native capture. Maintenance writes one home counter/obligation and one closed original-anchored outbox event per actual structural mutation and advances existing member pages; total convergence work grows with changed aliases, each step stays bounded. Growth capture includes metadata, Access preparation, actual statements, examined rows, blocks and native indexes without planner controls or custom slack.
-- Growth check: `test/semantic/growth-terminal-identity.test.ts` owns `terminal identity and fixed-home digest stay bounded as irrelevant editorial history grows`. `test/semantic/growth-identity-contract.test.ts` owns `identity alias steps keep fixed candidate and point budgets as the native group grows` and `terminal identity and alias windows stay bounded as unrelated native population and redirect history grow`. These require a current last-original positive, not a successful null or not_ready result. Functional continuation, terminal authorization and atomicity coverage is split across `identity-contract.test.ts`, `terminal-identity-contract.test.ts` and `identity-generation.test.ts` as named above.
+- Touches: actual original/terminal native points and Access, epoch/control reads, bounded durable mapping/index
+  changes and participant acknowledgements, including Library private follow-count re-key work.
+- Bound: per-plan page bounds and separately bounded retained maintenance steps follow
+  [Filtered lists](../../../../docs/filtered-lists.md#cost). The 4,096-original admission limit bounds a group;
+  it does not authorize a request-time group or home sweep. Follow-count steps are at most 100 rows. Total
+  maintenance may grow with affected finite input; publication waits for actual completion.
+- Growth check: native first/deep canonical pages and affected/unaffected point reads at three geometric scales,
+  alias/duplicate/history axes, crash/replay, crossing epochs, verification/reversal and terminal cleanup. Old
+  fixed-home digest and alias-window proof tests do not establish the replacement job or list acceptance.
 
 ### Command and receipt
 

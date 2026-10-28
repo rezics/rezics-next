@@ -7,6 +7,13 @@ first public Zone resource, lifecycle and page-read contract under [scope](scope
 The eight `packages/definitions/presentation/*/zone.json` starters are inert input data. They instantiate
 nothing until a person submits a create command; subsequent definition releases never rewrite a Zone.
 
+[Filtered lists](filtered-lists.md) owns complete indexed observations, current disclosure, direct/prepared plans,
+freshness, canonical identity and cost. [Zone membership](zone-membership.md) owns source composition obligations.
+The resource substrate is integrated; actual membership/page/default execution and Zone-specific withholding,
+purge, account cleanup and scheduler work remain incomplete. Typed schemas, immutable loaders, cursor capacity
+and helper setup do not establish those capabilities; the
+[integration audit](research/semantic-integration-audit-zone-composition.md) remains evidence, not a completion gate.
+
 ## Routes and native declarations
 
 Browser paths are `/zones/{id}` (home), `/zones/{id}/{relativeRoute}` (configured page), and
@@ -113,8 +120,10 @@ authorize Platform; other actions authorize the Zone. This does not change Acces
 
 `subjects` and `collections` reuse the current owning APIs' safe summary item schemas, with no total or
 source-count field. All Zone lists, including the owned listing, use integer limits 1–100, default 20.
-The membership contract retains its ceiling of 256 examined keys per page, counted before filters; a
-short/empty page can still have a continuation. The larger response limit does not expand that budget.
+Success fills the requested page or proves genuine final exhaustion; otherwise return explicit preparation/
+readiness. Admission covers filter + source + order with per-plan work bounds, and aggregate bounds for a common
+page. The universal 256 raw-key rule and successful short/empty raw-window chains are superseded; unrelated native
+batch/string/byte and cursor limits retain their own units.
 Composition component preview limits and the existing appearance format are unchanged. These envelopes, canonical member ordering,
 deduplication, freshness witness and continuation semantics belong to the independent Zone query contract;
 this document does not choose a query algorithm. Its implementation must provide an anchored eligibility
@@ -147,8 +156,7 @@ this scope does not change registration defaults or auto-enable create for every
 
 `private` is read only with a current resource grant. `unlisted` and `public` permit anonymous direct read
 under the existing public resource eligibility formula. Only `public` is eligible for discovery/sitemaps;
-unlisted direct links remain readable. A suspended account is refused with 403 even if the same URL is
-anonymously readable. Invalid credentials return 401; they never silently downgrade to anonymous.
+unlisted direct links remain readable. A suspended valid bearer is refused with 403 `account_suspended` even if the same URL is anonymously readable. Missing, invalid or revoked credentials return 401 where required; they never silently downgrade to anonymous.
 Unknown, private-unreadable, deleted, wholly withheld and ineligible subject targets all return the same
 404 `not_found` problem apart from `request_id`. A known resource's unauthorized mutation/configuration
 request returns 403. No authorization failure reads a receipt to disclose a previous result.
@@ -224,6 +232,50 @@ defaults or new colours/fonts. Subject template appearance overlays home tokens 
 changes mixed-list frames; subject headers retain semantic type frames and existing portrait/5:7 behavior.
 Use the common safe href validator for existing LinkGrid links; there are no arbitrary URL configuration
 fields, custom CSS, HTML, script, stylesheet, font, iframe or executable page hooks.
+
+### Retained preparation and current query safety
+
+A common page combines admitted direct catalogue/owner or prepared public/owner plans and has aggregate admission
+within 16 distinct reads and 128 TOTAL output slots. These prose names select no executable discriminants. Direct
+execution needs a page-derived bound including engine work; otherwise use bounded retained preparation with finite
+progress/quota/expiry on existing infrastructure, or reject 422 before enumeration. A LIMIT or timeout is no proof.
+Sparse matches must yield useful pages after finite preparation, not repeated final-leaf replay.
+
+POST keeps optional opaque cursor query and existing Search profile for every viewer, stable request binding,
+mutable encrypted basis, exact native tuple types and fresh current authorization on unusable valid-shaped progress.
+`200` is the complete common page plus shell; `202 {next}` is explicit preparation with private/no-store; `503`
+Problem + Retry-After without cursor is unavailable/no progress. No partial document. Web follows at most four 202
+steps then renders a private/no-store preparing page retaining continuation. A 202 is not empty successful output,
+cached authority, per-leaf verdicts or a client result vector. GET keeps its default profile. No schema, status/body
+or codec change is selected here.
+
+Current original AND terminal Access/eligibility, source consent, foreign targets and tuple fences remain required
+for everything disclosed, including exclusion/order/source metadata/cursors. Query-level privacy invalidation and
+acknowledgement is additionally required: local reductions invalidate public use in their authoritative transaction;
+foreign source-fence/target/consent/Collection reductions invalidate affected use immediately. Acknowledgement covers
+actual refresh-visible repair INCLUDING dependent foreign repair. Observe safety before execution and revalidate
+before disclosure. Missing/pending/unsafe/changed acknowledgement means preparing/readiness. A withheld harem tag
+must not affect NOT harem exclusion or order; returned-ID checks and omitted counts alone are insufficient. Normal
+checkpoints, local securityRevision or complete ordinary generations cannot certify query privacy. This abstract
+seam selects no safety-token store, global sweep or new permission authority, and current ports remain incomplete.
+Unsafe engine totals/facet counts over unchecked populations are omitted, without approximate/as_of or zero/row-length
+fallback.
+
+Ordinary catalogue edits become filterable within 60 seconds in healthy operation; over five minutes of actual
+source-to-searchable lag gives readiness. Engine refresh alone is insufficient. Privacy reductions apply immediately
+and owner writes appear on the owner's next read. Canonical lists use maintained canonical-ID indexes and unique
+prepared rows. Lists prepare while the shared identity epoch is pending and cursors restart after epoch changes;
+no request-time exhaustive alias/home sweep. Group admission is at most 4,096 originals before effects, with only
+direct published redirects to active terminals. Original/terminal disclosure and stored personal occurrences remain.
+
+The [shared acceptance matrix](filtered-lists.md#shared-acceptance-matrix) requires harem light novels, Book wordCount
+
+> 1,000,000 and combined across public Zone/Collection and own library without/with own state, all Collection kinds,
+> visibilities and mounts. Preserve exact-threshold/absent exclusions, qualifier/unit and compact/expanded conformance,
+> two-release pins, real shared Search runtime, canonical cross-page ordering, current grant/source/fact revocation,
+> paused-indexer NOT/order/count readiness through local AND foreign repair, native cursor restart/session/cache and
+> full persona/API/default/growth requirements. Old SAME256, final-replay, alias-window and home-certificate remedies
+> are superseded evidence; this prose proves no native acceptance.
 
 ## Deletion, restoration, withholding and durable cleanup
 
@@ -336,7 +388,7 @@ Zones use the owner's route for the bounded `(route, owner_id, state, zone_id)` 
 never replaces current owner-role evidence and native Access. Owned cursors also bind the partition epoch
 and position plus the actor's current security snapshot; concurrent writes may require restarting a list.
 
-Read cost touches Zone-home metadata and current page points, at most 16 shared reads/cost 128, and separately
+Read cost follows [Filtered lists](filtered-lists.md#cost), including one internal cost object per page/step and separate shared harness captures. It touches Zone-home metadata and current page points, at most 16 shared reads and 128 TOTAL output slots, and separately
 anchored source Access probes for at most 16 scopes and 16 mounts. No full owner/library/Zone/history scan,
 cross-home SQL join, global count or scan-for-authority. Lifecycle cost is changed keys times index depth
 plus receipt/outbox/ordinary grants in one command partition; cleanup is bounded examined source-key pages.

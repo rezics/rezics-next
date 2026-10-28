@@ -1,200 +1,158 @@
 # Zone membership and current disclosure
 
-This is the first-public-scope query/access outcome contract under [scope](scope.md).
-Resource lifecycle and presentation are separate from membership. A Zone is a routed site over existing catalogue
-scopes and CommonCollection identities. It is neither a catalogue authority nor a second personal library.
-[Deletion](deletion.md), [Collections](library-and-collections.md), and
-[dynamic Collections](dynamic-collections.md) retain their owner policies.
+[Filtered lists](filtered-lists.md) is the shared authority for complete indexed observations, current disclosure,
+admitted direct/prepared plans, freshness, useful pages, canonical identity and cost. This document owns Zone
+composition obligations. [Zones](zones.md) owns resources, transport and lifecycle; Collections remain owned by
+[Library and Collections](library-and-collections.md), [Dynamic Collections](dynamic-collections.md) and their
+[source contract](collection-source.md). A Zone grants no rights in its sources and is no second personal library.
 
 ## Observable membership
 
-For Zone Z, viewer V and the current request, eligible subjects are:
+For readable Zone Z and viewer V, membership is the distinct canonical union of admitted saved scopes and currently
+readable mounted Collection subjects, with current original AND terminal subject disclosure. Membership uses a
+complete, identified index observation; every disclosed membership, exclusion, order, field, source metadata and
+cursor-visible detail must satisfy current native authority. Public output never borrows an editor's private facts
+or mount rights. Overlapping scopes, mounts and occurrences contribute a canonical subject once.
 
-`distinct(union(admitted saved scopes, readable mounted Collection subjects)) intersect current subject Access(V)`.
+The Zone stores bounded source descriptors, not personal state, pins, progress, notes, copies or a second membership
+authority. Disposable prepared public/owner results are permitted derived data on existing infrastructure; they do
+not grant permission. Curated occurrences and built-in facts remain with Commerce, whose editor preserves all
+original occurrence IDs, order, notes and multiplicity while browsing canonicalizes once.
 
-The Zone itself must first be readable by V. Zone grants and visibility do not confer any source or subject rights.
-A mounted Collection contributes only while its owner authorizes its disclosure to that viewer. Public Zone output
-cannot reveal private mounts, even if its editor can read them. CommonCollection alone owns curated occurrences
-and built-in dynamic membership. Repeated occurrences, overlapping mounts and overlapping saved scopes contribute
-a subject once. The Zone stores only bounded source descriptors, never a membership mirror, seen-subject history,
-personal state, profile pins, progress, notes, copies or a second list model.
+First scope uses released saved catalogue filters and curated/built-in Collections; user-saved queries remain
+deferred. Unknown saved IDs are invalid configuration. Admit expanded filter + source + order through the one
+shared registry, not a Zone property whitelist. Direct catalogue index, direct owner index, prepared public result
+and prepared owner result are responsibility names, not new executable discriminants. Each direct plan needs a
+page-derived work bound; otherwise prepare with bounded retained progress, quota/expiry on existing durable work,
+or reject 422 before enumeration. A composed page also requires aggregate admission.
 
-The first scope accepts released saved catalogue filters and curated/built-in dynamic Collections. User-authored
-dynamic queries remain deferred. Validate saved references and expanded filters at admission against the current
-shared Search/semantic filter registry. Reject unsupported plans with `422 unsupported_query` before executing
-source enumeration; do not evaluate arbitrary predicates over all catalogue or library rows. An unknown saved ID
-is invalid configuration, not an empty membership source. No local property whitelist replaces shared admission.
+## Native routes and disclosure
 
-## Native routes and projections
+- `POST /v1/zones` preserves the validated eight-locale ZoneStarter, at most sixteen saved scopes and sixteen
+  distinct existing Collection mounts, Global parent create authority and ordinary initialized owner grants.
+- `GET /v1/zones/{id}/subjects?limit=P&cursor=...` preserves `{subjects,next}`, canonical IDs, existing summaries,
+  freshness and opaque continuation. P is 1..100, default 20. Success fills P or proves genuine final exhaustion;
+  otherwise return preparation/readiness. There is no union total or chain of successful short/empty raw windows.
+- `GET /v1/zones/{id}/collections` preserves its envelope and omits currently unreadable mounts entirely, including
+  IDs, labels, descriptions, counts and source positions. A native curated count is governed by its owner; it is
+  not a safe accessible-subject or Zone-union total.
+- `POST /v1/zones/{id}:readPage` preserves configured-route or subject/view targets, languages, complete common
+  page and safe shell. Subject targets first satisfy membership and current disclosure. Reserved `subjects`
+  routing and canonical global URLs remain. Related references do not automatically become Zone targets.
 
-- `POST /v1/zones` takes `{configuration,mounts,visibility}`. Configuration is the validated ZoneStarter with
-  eight-locale labels, sorted relative pages including home and at most sixteen saved-filter IDs in `scope`;
-  mounts contains at most sixteen distinct existing Collection IDs. Resource creation uses Global parent authority
-  and ordinary initialized Zone owner grants. Query code must not invent a bypass for that authority.
-- `GET /v1/zones/{id}/subjects?limit=P&cursor=...` returns `{subjects,next}` with explicit freshness using the
-  shared listing protocol. Each subject has its canonical `id`; other fields obey their owners' DTO contracts.
-  No union total is implied. `P` is in 1..100, default 20. Underfill, including an empty page with non-null continuation, is legal.
-- `GET /v1/zones/{id}/collections` returns `{collections,next}` and shared freshness. Omit unreadable mounts
-  entirely, including their IDs, labels, descriptions, counts and source positions. A curated count may be shown
-  only under its Collection owner's disclosure; it is not an accessible-subject or Zone-union total.
-- `POST /v1/zones/{id}:readPage` accepts `{target:{route}}` or `{target:{subject,view?},languages?}`. It returns
-  the shared presentation result plus safe Zone shell metadata. A subject target must satisfy membership and
-  current subject Access. Configured routes cannot shadow reserved `subjects` routing. Global subject URLs remain
-  canonical. A related reference does not become a Zone target automatically: its owner independently decides
-  whether to disclose its link, label and fields.
+Unknown, unreadable, deleted and wholly withheld Zones/targets give the same 404 `not_found`, without echoing hidden
+IDs or source metadata. Suspended valid bearers give 403 `account_suspended` everywhere, including public/unlisted
+reads; 401 is missing/invalid/revoked credentials where required, with no anonymous downgrade. Every continuation
+reauthorizes the principal, Zone, sources, original and terminal subjects, source consent, foreign targets and tuple
+fences. Zone visibility, index revision, epoch or prepared generation is never cached permission.
 
-Unknown, unreadable, deleted and fully withheld Zones or subject targets have the same `404 not_found` problem,
-apart from request-specific diagnostics. Do not echo the tested hidden ID, source, label or count. Navigation,
-metadata, cursors and any future facets obey the same rule as the primary rows. No public configuration projection
-may serialize a hidden mount. Zone facets are not a new first-scope endpoint; should they be added, raw source
-facets/totals are insufficient evidence for accessible union counts.
+## Privacy safety and freshness
 
-## Mutation, freshness and continuation
+Returned-subject checks alone do not protect exclusion or order. A withheld harem tag must not influence positive
+harem membership or **NOT harem** exclusion, order, counts, fields, metadata or cursors. Query-level privacy-reduction
+invalidation/acknowledgement is required in addition to candidate checks. Local reductions invalidate public use in
+their authoritative transaction; foreign source-fence, target, consent and Collection reductions invalidate affected
+public use immediately. Acknowledgement covers actual refresh-visible projection repair INCLUDING dependent foreign
+repair. Observe safety before execution and revalidate before disclosure. Unsafe, changed, missing or pending
+acknowledgement means preparation/readiness, never stale results/exclusion/order.
 
-Every page rechecks current Zone, source and subject rights. A cursor issued before a source becomes private,
-loses a viewer grant, is deleted or withheld cannot preserve access. A subject suppressed after issuance must not
-appear in continuation or a direct Zone target read. Restore within the owner's thirty-day policy permits fresh
-reads again; it does not promise that a pre-restoration traversal will revisit a key already passed. Takedown is
-reversible withholding, never a purge. Public visibility revocation is tested independently of deletion.
+A normal relay checkpoint, local securityRevision, complete ordinary index generation, returned-ID check or omitted
+count cannot certify query privacy. This abstract producer/consumer seam selects no certificate database,
+safety-token ABI, global identity/home sweep or permission authority. Current native ports do not yet establish it.
+Paused-indexer NOT/order/count cases remain preparing until local and all affected foreign repair are acknowledged.
+Omit unsafe engine totals/facet counts over unchecked populations, without approximate/as_of or zero/row-length
+fallback. No new Zone facet endpoint is implied.
 
-For a dynamic Collection, public membership may disclose the curator's adopted subject selection, never the private
-facts or predicate that produced it. Changing a private copy note, progress value, label, profile pin or state detail
-without changing adopted membership must not change any public Collection-derived fields or counts. A private
-fact value cannot be smuggled through a public label, facet bucket, source descriptor or opaque token payload.
+Ordinary catalogue edits become filterable within 60 seconds in healthy operation; over five minutes of actual
+source-to-searchable lag gives readiness. Engine refresh alone is insufficient. Privacy reductions, takedowns,
+withdrawn consent and source revocation apply immediately. Owner writes appear on that owner's next read.
+Public dynamic Collections expose last completely published output, not owner predicates/facts. Private changes
+that leave output unchanged cannot change public fields/cursor bases. At terminal deletion, only eligible public
+contributions and completed public generations survive with de-identified attribution; private/unlisted data and
+published reading logs do not survive. [Deletion](deletion.md) and native owners retain erasure authority.
 
-Continuation uses the existing encrypted `tokens/list-cursor.ts` `encodeListCursor`/`decodeListCursor`.
-Keep its existing eight position keys, at most 256 bytes per string key and 4096-character token limit; do not nest
-32 owner tokens. Anonymous tokens remain deterministic and timeless; account tokens retain the shared fifteen-minute
-lifetime. No new codec, key policy or TTL is introduced. Stable operation/route, Zone ID, viewer and request shape
-belong in authenticated binding. Changing configuration, admitted query/release/profile, owner order/index and
-canonical identity basis belong in a bounded digest **inside the encrypted position**. Decode under the stable
-binding, then compare the current structural basis so a valid stale cursor receives `stale_cursor`, rather than
-being mistaken for tampering. Transferring a cursor between viewers, Zones or request shapes is invalid. Appearance
-need not change membership semantics; language/view bind when they affect the page. A basis never carries an allow
-claim: every continuation rechecks current Access even when that basis is unchanged.
+## Ordering, preparation and identity
 
-### Ordered settled prefixes
+Merge matching indexed streams or read an admitted prepared result in the requested native common order. UUID
+membership uses canonical ID order. Ordered TypeLists preserve actual native name or public Collection-count order,
+unique canonical ties and exact native null/missing behavior. Sorting a truncated UUID page cannot manufacture name
+or rank order. An essential unknown TypeList conjunct cannot be settled by an independent true union source.
+Unknown remains unknown under NOT; partial shards/timeouts/dependency failures never prove EOF.
 
-All sources cover a common ascending **canonical subject-ID** order. Each owner reports its covered raw prefix,
-including consumed rejected keys and truthful exhaustion. Zone settles canonical groups and commits the greatest
-terminally decided common watermark, retaining the boundary before any undecided group. Unused lookahead may be
-reread, with every reread paid again. Common order and covered ranges establish cross-page deduplication without a
-traversal-sized seen set. Occurrence order, concatenated source cursors and canonical normalization after raw paging
-do not establish this property. A short page may stop at the work budget; no positive-per-page guarantee applies.
+Successful pages fill the requested size or are genuinely exhausted final pages. If sparse matches or unresolved
+work exceed admitted direct work, retain settled preparation and return explicit readiness. Fixed finite ready
+input with successful fair maintenance must reach useful pages after finite steps, including crash/replay. Never
+repeat final-leaf replay forever or skip an unresolved interval to return later truth. Preparation progress is not
+cached per-leaf truth, authority or a client result vector.
 
-The shared admitted Boolean evaluator preserves `true`, `false` and `not_proven` through AND, OR and NOT.
-`NOT not_proven` remains `not_proven`. One independently current true source can establish union membership for a
-group, subject to current source/original/terminal subject authorization. If no true source settles it and essential
-proof remains unknown, stop **before** that group. Return an earlier actually settled prefix when one exists;
-otherwise return existing retryable owner readiness (`semantic_not_ready` with retry advice where applicable).
-Never skip an essential unknown forever, assert exhaustion, or return the same successful empty cursor indefinitely.
-Public Search's existing drop/refill policy is unchanged; its public page is insufficient for Zone continuation.
+Maintained canonical-ID indexes provide cross-page uniqueness, one public terminal document and unique prepared
+result rows. The shared catalogue identity epoch is pending throughout serialized durable merge/unmerge/repoint
+maintenance. Lists prepare while pending; cursors restart after epoch changes. Admit at most 4,096 originals per
+group before effects and publish only direct redirects to active terminals. No request-time exhaustive alias walk,
+4,096-home sweep or identity-basis protocol. Current original AND terminal disclosure still applies. Bounded
+preparation must support last-eligible-original listing/direct targets, complete negatives and canonical order;
+raw stored-ID normalization and arbitrary representatives cannot establish those outcomes.
 
-Definitively rejected or denied groups consume covered keys and may produce advancing empty pages. Only fully
-settled processed groups and exhausted covered ranges of every source permit `next:null`. A bounded pending alias
-group may advance its own compact phase under the same shared budget, but the identity/group API and token layout
-are shared dependencies, not a locally invented protocol. An unchanged group with no actual phase progress is
-readiness, not a successful empty page. Owner failure also cannot manufacture exhaustion.
+## Preserved transport and cursor ownership
 
-Finite exhaustive traversal requires a **fixed finite candidate and identity basis**, ready complete owner indexes,
-and finite definitive owner repair. Under those conditions repeated continuation emits each eligible canonical
-subject once and terminates, including across ordinary empty filtered windows. Quiescence alone does not make a
-permanently missing witness negative. Late index candidates or identity changes behind the watermark need a fresh
-traversal. No snapshot, complete live recall or exact union count is promised under concurrent mutation.
+Zone POST retains optional opaque cursor query and the existing Search profile for all viewers: 15-minute lifetime,
+60-second future allowance, confidentiality, stable route/operation/Zone/viewer/request binding and mutable bases
+inside encrypted position. Keep native tuple types and existing profile limits. GET retains the default cursor
+profile, including deterministic timeless anonymous behavior and timed account tokens. No new codec or nested owner
+token vector is selected. Native current authorization is required even when an encrypted basis is unchanged.
 
-## Bounded owner adapters
+Unusable valid-shaped POST progress starts fresh current authorization into preparation or a complete page; invalid
+body/query and actual denial retain existing errors. Identity/generation/meaning changes cannot preserve authority.
+POST returns 200 only for the complete common page plus safe shell, 202 `{next}` for retained preparation with
+`private, no-store`, or 503 Problem + Retry-After without cursor for unavailable/no progress. No partial document.
+A 202 is not an empty successful list. Web follows at most four steps then renders a private/no-store preparing page
+retaining usable continuation; a 503 supplies no replacement cursor. No schema/status/body change is authorized.
 
-The current Search seam is `createSearchService().search`, with shared filter admission, `sort:'id'`, bounded
-candidate windows, current `checkHits` proof and opaque generation-bound continuation. It currently returns a
-filtered public page; that alone does not expose all examined candidate work or provide a Zone membership probe.
-The term currentSearch means this existing current-evidence path, not a new local search engine.
+## Owner status and required native evidence
 
-Search owns the additive `createSearchScopeSource.prepare/prefix/evaluate` contract over its **same** compiler
-and current evaluator; those proposed methods are not live exports. Preparation admits the expanded released scope
-and pins its index/query basis. Prefix enumeration uses real engine hits and `matched_queries`, a caller-reserved
-candidate quota, covered consumed boundary and truthful exhaustion; reject partial shards/timeouts. Evaluation of
-bounded IDs must use actual Semantic source/facet evidence and preserve the shared Boolean unknown result.
-Collection candidates must not become fabricated Search Hit objects or run through a second evaluator. Search must
-report internal fact-driver keys, rejected/unknown candidates, duplicates, rereads and quota+1 probes. Public hit
-counts do not establish Zone counts. Source field disclosure, security revision and witness final revalidation keep
-the current native semantics.
+Search must provide actual same-service admitted indexed/prepared execution and freshness over Semantic's complete
+facet projections/dependencies. Commerce must provide actual curated, built-in, published and frozen source plans.
+The current service/Scope and Collection factories are unavailable scaffolding. Their raw-prefix, current-leaf,
+one-pending-leaf, universal 256, final-replay and home-certificate prescriptions are superseded list rules until
+replacement acceptance permits code removal. Existing native batch/string/byte and cursor limits remain independent.
 
-Commerce owns one `collection-source.ts` adapter contract over the same curated/built-in/frozen CommonCollection
-authority, with current metadata authorization, canonical covered-prefix enumeration and bounded membership probes.
-It is not yet a live export. Existing `collection-reads-members.sql` traverses stored occurrences in
-`(ordinal_key,member_id)` order and returns notes. Raw stored-ID helpers/indexes are useful owner primitives;
-neither they nor canonical normalization after paging prove canonical ordering or uniqueness. Charge raw duplicate
-drivers before filtering whenever examined; do not refill through public members routes outside the caller quota.
-Built-in identity resolution must use the actual common list/metadata/members surfaces, never a curated substitute.
-Public reverse listings/counts and copied private fact values are not current membership evidence.
+The [integration audit](research/semantic-integration-audit-zone-composition.md) establishes the resource substrate,
+not membership/page/default execution or Zone withholding/purge/account/scheduler completion. Typed schemas,
+immutable release loading, pure cursor capacity and helper setup prove only their own boundaries. Preserve
+original resource/membership/lifecycle assertions and real native persona/API/default/growth requirements.
 
-Canonical access paths, original and terminal authorization, lightweight terminal identity/readiness and a structural
-merge/unmerge/repoint basis remain explicit shared prerequisites. Existing `semantic.merge_member` and
-`semantic/merge-moves.ts` already register members before bounded redirect repointing; extend that native foundation
-rather than proposing a second inverse authority. Ordinary public merges choose the minimum ID. An optional
-requested survivor is internal/native, and account verification preserves catalogue identity. Keep stored Library
-and Collection subject IDs and ordinary occurrence identity, order and notes intact.
+The [shared acceptance matrix](filtered-lists.md#shared-acceptance-matrix) requires harem light novels, Book
+wordCount > 1,000,000 (exact threshold/absent excluded) and combined, across public Zones/Collections and own library without
+and with own state, curated/Everything/state Collections, all visibilities and mounts. Owner-only NOT state X
+includes no entry. Released Concepts, genuine words versus characters and reviewed mappings remain producer work.
+Required native outcomes include two-release pins, real shared Search runtime, same-statement qualifiers/units,
+compact/expanded conformance, healthy/max lag, owner read-after-write, paused-indexer NOT/order/count privacy,
+foreign fences/targets, sparse matches, finite crash/replay preparation, canonical cross-page order, epoch readiness,
+current direct-target disclosure and cursor restart/reauthorization/session/cache. Existing unrelated semantic
+core/graph/history/command/lifecycle acceptance remains required. Old proof reports are evidence, not current gates.
 
-The native positive-proof counterexample is 257 stored aliases of one survivor with only the last alias readable.
-Scanning 256 then declaring absent, choosing an arbitrary representative, or staying permanently unknown loses a
-valid mount. Listing and direct-target probes both need bounded definitive repair or a resumable authorization-group
-proof that eventually finds that last readable alias. A canonical-ID index alone does not bound original-source
-Access work. Exact shared group contracts, canonical access paths and structural identity metadata are pending
-shared agreement. This document does not authorize new generation storage, synchronous all-Collection merge fanout,
-a private holder directory or permission claims cached in indexes/cursors.
+## Cost
 
-Access stays on each owner's partition: bounded source checks and subject points via the real current resource
-eligibility predicates. No cross-partition SQL join is admitted. Capture every pool opened by owner commands and
-adapters; SQL on a second connection is still work. Search provider work also needs examined-key instrumentation;
-PostgreSQL captures alone cannot prove its bound.
+### Direct and ready-result Zone pages
 
-### Local budget derivation and separate native bounds
+- Touches: named matching catalogue/owner index seeks or prepared rows, candidates including duplicates/rejects/
+  lookahead, current Zone/source/original/terminal Access, complete disclosure dependencies, summaries and control/
+  epoch reads across all owners.
+- Bound: derive per plan in candidates/keys, native points, examined/removed rows, buffers, statements/connections,
+  bytes, engine work and output slots, then admit the whole common page within 16 distinct reads and 128 TOTAL
+  output slots. Each page/step supplies the INTERNAL cost object plus separate shared harness captures in
+  [Filtered lists](filtered-lists.md#cost). No executable counter ABI is invented here. A LIMIT or small response
+  does not bound engine work; sixteen independently maximal budgets do not prove aggregate admission.
+- Growth check: real native/API first/deep/sparse pages at three geometric scales, all owner pools, unrelated
+  history/population and alias/duplicate axes; equivalent and independently overlapping descriptors, mixed subject/
+  list reads and late preparation. Performance supplies numeric limits/captures; old 256-proof tests do not suffice.
 
-At most sixteen scopes and sixteen mounts imply at most 32 sources. Every public page shares **one aggregate
-256 source-key examination ledger**, independent of output size, catalogue size, Collection degree and other Zones.
-Reserve quota before dispatch. Every examined raw duplicate, filtered key, lookahead, reread, owner-internal
-fact-driver key, revalidation key and exhaustion probe counts; quota+1 requires a reserved slot too. Neither 256
-per source nor 256 SQL statements is this budget. A source with no allocated quota cannot perform an uncharged
-refill. Output is at most 100, default 20; output capacity does not require filling the page.
+### Preparation and index maintenance
 
-This ledger does not bound engine physical postings, total witness work, bytes, point reads, filter leaves or empty
-seeks. Each needs separately admitted and measured native bounds, with bounded statements and per-partition point
-and leaf/witness reads. PostgreSQL examined rows include rows removed by filters and all owner pools; Search engine
-counters need native evidence too. The existing SQL envelopes in the tests are coarse separate ceilings, never a
-measurement of the 256 source-key invariant. No cross-partition join or full-source scan follows from either limit.
-These numbers, canonical merge scheduling and finite test ceilings are local design derivations, not standards.
-The ordering/watermark rule is decided; exact owner wire types and pending identity-group progress remain dependencies.
-
-## Acceptance and implementation slices
-
-`test/zones/membership-contract.test.ts` uses native HTTP, real Access, real subject/Collection commands and a
-narrow shared fixture. Its named outcomes cover union, overlap and duplicate occurrences; current private,
-revoked, deleted and withheld disclosure; empty filtered windows and finite traversal. Additional cases cover
-subject target exclusion, cursor transfer, source restoration, unsupported admission and the native built-in
-Collection dependency. No absent Zone module is statically imported. Missing Zone routes must first fail at
-HTTP creation with expected 201 versus actual 404, not at fixture grant setup.
-
-`test/zones/growth-membership.test.ts` uses the shared capture/checkGrowth classifier with legal 64/512/4096
-populations, warmup and repeated samples. Axes are unrelated subjects, degree of one mounted Collection and
-unrelated Zones. First pages, continued filtered windows and direct membership checks must succeed before costs
-are accepted. Captures include filtered candidates and all owner pools; bounds do not use elapsed-time benchmarks.
-The native dynamic test is intentionally red until Commerce supplies real built-in membership and its public
-privacy projection. The following owner-native acceptance is still required before claiming union readiness:
-
-- Search: a real Semantic witness overflow with `not_proven` under NOT; an earlier settled prefix stops before that
-  group; no-prefix requests return retryable readiness; definitive repair resumes without omission; an independent
-  current true source settles the same group. Use real source setup and engine hits, never a model/fake unknown.
-- Search and Commerce: the shared 256 ledger across sources, all internal drivers/lookahead/revalidation, and separate
-  native point/leaf/witness/byte bounds. SQL captures alone do not certify engine candidates.
-- Semantic and Commerce: native merge/unmerge/repoint invalidation, unchanged stored personal/occurrence IDs, and
-  the 257-alias/only-last-readable positive listing and direct-target proof with bounded progress. The shared
-  identity/group API is pending; no nonexistent fixture/import or synthetic readiness response proves it.
-
-The native tests here add canonical order across deliberately different occurrence/source orders, paid duplicate
-windows, and successful empty-page cursor progress. Existing acceptance tests remain intact. Owner dependencies
-above are named explicitly rather than reported as passing native scenarios.
-
-Implementation can land in small owner slices: (1) Search admission/candidate/probe evidence; (2) Commerce common
-unique-member adapter including built-ins; (3) Zone bounded union and live Access/opaque continuation; (4) shared
-presentation target gate and public shell projection; (5) native provider growth and mutation outcomes. Resource
-CRUD/readPage shape is fixed by the shared routing skeleton; no query algorithm or adapter is implemented here.
+- Touches: bounded input/frontier/result writes on existing stores, source/foreign changes, shared outbox/durable
+  work and canonical mapping/index changes during the pending identity epoch.
+- Bound: separately admit each step's rows/keys/points/bytes/statements/engine operations and retain settled work.
+  Finite total work may follow relevant finite input and changed dependencies. No repeated restart from zero,
+  per-built-in witness mirror, unbounded synchronous fanout or stored reusable permission. No new scheduler/service.
+- Growth check: native three-scale interruption/replay, concurrent privacy reduction and terminal fencing; prove
+  complete activation/catch-up and useful pages. Permanent preparing is a failed outcome.
