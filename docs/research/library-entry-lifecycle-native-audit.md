@@ -184,12 +184,22 @@ constraints; no source was copied and no new external research or standard is re
 
 ## Validation evidence
 
-The focused command check completed typechecking, formatting and linting before running all eight native tests.
+The final exact acceptance command,
+`bun run --cwd services/kernel check test/library/entry-lifecycle-command.test.ts`, completed on check host `a`
+after its queued slot became available: **1 passed, 7 failed, 105 assertions**, with typechecking, formatting and
+linting completed before all eight native tests ran. These are the requested native REDs, not a passing runtime.
 The legal planned-entry create/read control passed. Six cases reached the intended lifecycle gaps: one actual-factory
 assertion found no `restoreEntry`; five observed the actual physical delete's Entry result instead of the real
 transaction-addressed deletion descriptor. The separate custom-profile baseline failed at the current writer's
 `Unknown library entry state` for `listening`, before any archival assertion. Thus lifecycle RED and the already absent
 profile writer are reported separately; none is replaced by a fixture outcome or claimed as automatic-purge coverage.
+
+Root `bun scripts/typecheck.ts` completed on check host `b`: all 13 workspaces passed with zero type errors.
+The unchanged `profile-entry-command.test.ts`, run through the same kernel check on host `a` with the fixture's
+default options, had **3 passed and 6 failed**. Its three native authorization/concealment cases passed; its six
+profile-writer/HTTP cases still expose the absent profile-aware writer and validation. No existing assertion,
+case or scale was changed to make these baseline gaps pass. The only tracked changes are the new command suite,
+this audit and optional fixture clock plumbing.
 
 Two local test runs used the check harness's default shared timing sink. It wrote three files outside the requested
 worktree, under `/home/edge/projects/rezics/rezics-next/.temp/kernel-check/timings/`:
