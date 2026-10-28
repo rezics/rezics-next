@@ -7,6 +7,10 @@ Prepare user and API outcome acceptance before implementation. A brief states th
 dependencies, affected consumers, acceptance and estimated size. Use the schema in
 [Goal tooling](../../tools/goal/README.md); do not maintain another schema here.
 
+Link each capability to its `docs/goals/<goal>.capabilities.md` evidence entry under
+[verification](verification.md#capability-evidence). Every interface brief names the page stories it adds, including
+states, viewers, viewports and their recorded API evidence. Missing user scenarios are frozen red before implementation.
+
 Before dispatch or reshape, check:
 
 - required exports, fixtures and dependencies exist on the recorded base;

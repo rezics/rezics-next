@@ -36,3 +36,5 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 - Keep task and ticket IDs out of code and documents; put them in commit messages.
 
 Read the [development workflow](docs/development/README.md) and its linked Goal definitions.
+
+Load [rezics-workflow](.agents/skills/rezics-workflow/SKILL.md) for all repository development work.

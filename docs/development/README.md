@@ -3,6 +3,9 @@
 Read [AGENTS](../../AGENTS.md), [architecture](../architecture.md), [scope](../scope.md) and the documents owning the
 work. Repository documents own durable rules; research reports provide evidence; tracked Goal definitions own scoped outcomes; attempt briefs link them.
 
+The [rezics-workflow skill](../../.agents/skills/rezics-workflow/SKILL.md) supplies the operating procedures for these
+rules. Keep durable rules here and command mechanics in their owning runbooks; the skill links both.
+
 Use this workflow:
 
 1. [Design the feature](feature-design.md).
@@ -25,3 +28,25 @@ Put an adopted decision in its owning document before briefing dependent work. L
 Continuations record operating state and owner links, not another copy of the decision.
 
 A topic has one authority. Correct or remove superseded text when changing it.
+
+## Skill discovery
+
+Keep one workflow skill in `.agents/skills/rezics-workflow/`. Codex discovers repository skills in `.agents/skills`
+from its working directory to the repository root; the installed CLI 0.164.0 includes that discovery path.
+Claude Code reaches the same files through the relative symlink `.claude/skills -> ../.agents/skills`.
+Do not create a second workflow copy or an additional Codex skill alias. Explicit invocation is `$rezics-workflow`
+in Codex or `/rezics-workflow` in Claude Code; the description also enables selection for development work.
+
+The entry point routes to short stage references. When maintaining it, follow
+[OpenAI's skill guidance](https://learn.chatgpt.com/docs/build-skills),
+[Anthropic's authoring guidance](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) and
+[Claude Code discovery](https://code.claude.com/docs/en/skills): precise triggers, concise instructions and detail
+loaded only for the current stage. Keep policy in these development documents and link it from procedures.
+
+Check the single-copy discovery layout from the repository root:
+
+```sh
+test -s .agents/skills/rezics-workflow/SKILL.md
+test "$(readlink .claude/skills)" = ../.agents/skills
+cmp .agents/skills/rezics-workflow/SKILL.md .claude/skills/rezics-workflow/SKILL.md
+```

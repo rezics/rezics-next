@@ -8,6 +8,33 @@ authorization or disclosure.
 
 Keep specified, implemented, exposed, tested and promoted distinct. Report unavailable evidence as unavailable.
 
+## Capability evidence
+
+Verification follows the [architecture](../architecture.md): prove backend capabilities through the API before
+building their interfaces. Write per-persona acceptance from user jobs on real-shaped, released fixture data before
+implementation, with no frontend and no mocked owner modules. Freeze missing user cases red first; use the
+[API acceptance gap inventory](../research/api-acceptance-gaps.md) to find them.
+
+Each Goal maintains `docs/goals/<goal>.capabilities.md`. For every capability record the user job, personas, released
+fixture data, every applicable surface cell with frozen scenarios or an explicit reason it does not apply, and the
+native acceptance command. Completion and promotion refuse incomplete manifests. A manifest entry or parallel
+specification without its passing native binding is not proof.
+
+Build and prove frontend surfaces in Storybook 11 with `addon-vitest` and `addon-a11y`. Page stories use recorded API
+responses for populated, empty, long or overflowing content, preparing or unavailable, and error states, for each
+applicable viewer (anonymous, member, owner or curator, suspended), on desktop and phone. Cover every control state
+on library, Collection, subject, search and Zone surfaces: filters, selection, each status chip, curated and dynamic,
+private/unlisted/public, Liked and Continue progress kinds. Clearly identified contract-shaped fakes may support
+interaction or failure injection; they do not establish a new backend state or replace native API evidence.
+
+Every interface brief lists the page stories it adds and their API evidence. Track exact story exports in the
+[page story coverage map](page-stories.md); a story proves only what it actually renders. Existing primitive stories
+remain, but receive no further workflow effort. Play functions prove behaviour; accessibility checks and visual
+snapshots support review by eye. The development publication is `https://storybook.rezics.com`.
+[Web recording and screenshot procedures](../../apps/web/README.md#storybook-and-page-recordings) own the commands.
+
+## Check selection and failures
+
 Run the acceptance command once after the last relevant edit, plus the root typecheck (`bun scripts/typecheck.ts`).
 Write missing acceptance tests named by the contract. Preserve existing frozen acceptance. Add focused checks for
 concrete risks, naming at most twelve nearby test files per discretionary check. Run a whole-workspace or full web
@@ -43,7 +70,32 @@ failure; cleanup failures are not eligible. Do not scale security TTLs, explicit
 failures. A proposed test deadline multiplier is not evidence of deployment. Distinguish a reproducible
 product failure from an infrastructure failure; never count an unverified baseline as a pass.
 
+Infrastructure failures, including check transport, rsync exit 24, SSH drops and killed Git processes, are retried
+by the tools without consuming a worker attempt. Preserve their exact errors; do not classify them as flaky product
+assertions or weaken a check. Follow the bounded escalation in [maintenance](maintenance.md). A fresh worktree's
+check must pass without manual preparation of generated output, Vite pre-bundles or test-only Worker variables;
+check runners own that preparation.
+
+When a required whole `tools/goal` suite fails under host load, rerun each failing file alone. A file that passes
+alone is load evidence, as in the landing check; a reproducible assertion remains a defect. Report completion once
+acceptance, root typecheck and the applicable individual reruns pass. This exception does not excuse transport,
+setup or cleanup failures and does not authorize a discretionary whole-suite run.
+
 Verify tooling fixes against the actual operating condition before reporting them fixed.
+
+## Review
+
+Inspect the changed diff against the owner contract, capability manifest and evidence. Ordinary delivery uses its
+required gates; it does not gain repeated model review rounds. For implementation in declared risk areas, use one
+independent review with the configured reviewer profile. Consolidate duplicate findings and investigate the defect
+class across the change. A blocking finding needs a failing outcome test on the reviewed head or a concrete,
+reproducible contract violation; record other observations for follow-up. Distinguish setup failures from reached
+outcome assertions before charging a repair round. The controller's [retry and consultation
+procedure](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing) owns escalation.
+
+Review interface evidence in addition to automated checks. Record the reviewed revision, scenarios, screenshots,
+findings and remaining limits. Integration is not promotion: confirm recorded checks cover the promoted commit
+before declaring the Goal complete.
 
 # Verification toolchain
 

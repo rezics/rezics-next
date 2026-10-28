@@ -13,6 +13,14 @@ failures. Monitor hourly. At least every three hours inspect the preceding twelv
 unready briefs, repeated exploration, context rereads, polling, retries, merge conflicts, checks and idle capacity.
 Fix the largest cause the same day and compare before and after.
 
+Investigate a task needing a third attempt before any further retry. Classify each lost attempt as infrastructure,
+contract, rebase or model failure, fix the class and record the evidence before continuing. An increased retry limit
+is not a repair. Controller retry limits still apply.
+
+“Selected model is at capacity” and an ambiguous “usage limit” with fresh allowance remaining are provider faults.
+Use the controller's bounded retry policy; never switch service tier or mark an allowance exhausted on that evidence
+alone. Keep private readings outside Git.
+
 Report progress and material slowdowns every two hours, with measured rates and causes. Separate measured timestamps
 and durations from estimates.
 
