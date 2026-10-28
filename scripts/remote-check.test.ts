@@ -1268,6 +1268,31 @@ test('a multi-slot waiter takes all slots or none and holds no slot or reservati
   }
 });
 
+test('while a gate waits for a host, an ordinary run takes no slot there and waits for another host', async () => {
+  const { env, events } = scenario({
+    a: { available: 20e9, slots: 2, cpuQuotaPercent: 800 },
+    b: { available: 20e9, slots: 4, cpuQuotaPercent: 800 },
+  });
+  // A gate waits on b, which has free slots, and a's one ordinary slot is busy.
+  mkdirSync(join(env.FAKE_DIR!, 'ops_b_test.gate-marker'));
+  mkdirSync(join(env.FAKE_DIR!, 'ops_a_test.slot.0'));
+  const single = startRemote(env, workspace(), ['true']);
+  try {
+    await waitFor(() => events().filter((event) => event.kind === 'probe').length >= 4);
+    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@b.test')).toBe(false);
+    rmSync(join(env.FAKE_DIR!, 'ops_a_test.slot.0'), { recursive: true, force: true });
+    expect(await single.child.exited).toBe(0);
+    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@a.test')).toBe(true);
+    expect(events().some((event) => event.kind === 'run' && event.address === 'ops@b.test')).toBe(false);
+  } finally {
+    try {
+      single.child.kill('SIGTERM');
+    } catch {}
+    await single.child.exited;
+    await Promise.all([single.stdout, single.stderr]);
+  }
+});
+
 test('while a gate waits for a host, single-slot runs prefer other hosts', async () => {
   const { env, events } = scenario({
     a: { available: 20e9, slots: 2, cpuQuotaPercent: 400 },

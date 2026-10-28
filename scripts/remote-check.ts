@@ -724,6 +724,15 @@ async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionL
   return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal);
 }
 
+/**
+ * A gate waiting on a host reserves it: an ordinary run takes no slot there while another host answers, so the host's
+ * slots drain to the gate. Preferring other hosts alone let single-slot runs refill it when those were full, and a
+ * promotion gate needing six slots at once waited an hour.
+ */
+function reservedForGate(entry: RankedHost, ranked: readonly RankedHost[], gate: boolean): boolean {
+  return !gate && entry.gateWaiting && ranked.some((other) => !other.gateWaiting);
+}
+
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
 async function rankedHosts(
   hosts: Host[],
@@ -780,8 +789,9 @@ async function acquireOnce(
       if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
     }
   }
-  for (const { host, freeSlots, slotLimit, ordinaryCapacity } of ranked) {
-    if (freeSlots < slots) continue;
+  for (const entry of ranked) {
+    const { host, freeSlots, slotLimit, ordinaryCapacity } = entry;
+    if (freeSlots < slots || reservedForGate(entry, ranked, gate)) continue;
     const lease = await takeSlots(
       host,
       slots,
@@ -855,7 +865,7 @@ async function acquire(
       } else if (giveUpIfUnanswered && !answered) return null;
       for (const entry of ranked) {
         const { host, freeSlots, slotLimit, ordinaryCapacity } = entry;
-        if (freeSlots < slots) continue;
+        if (freeSlots < slots || reservedForGate(entry, ranked, gate)) continue;
         const lease = await takeSlots(
           host,
           slots,
