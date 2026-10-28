@@ -153,6 +153,7 @@ function DeleteAccountPage() {
             <li>{m.auth_account_delete_erased_profile()}</li>
             <li>{m.auth_account_delete_erased_library()}</li>
             <li>{m.auth_account_delete_erased_collections()}</li>
+            <li>{m.auth_account_delete_erased_logs()}</li>
           </ul>
         </section>
         <section aria-labelledby="account-delete-retained" className="grid gap-2">
@@ -161,7 +162,6 @@ function DeleteAccountPage() {
           </h2>
           <ul className="auth-account-operation-requirements">
             <li>{m.auth_account_delete_retained_collections()}</li>
-            <li>{m.auth_account_delete_retained_logs()}</li>
             <li>{m.auth_account_delete_retained_posts()}</li>
           </ul>
           <p>{m.auth_account_delete_retained_attribution()}</p>

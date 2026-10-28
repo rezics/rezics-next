@@ -179,9 +179,16 @@ read remains public.
 Approval first records its decision receipt and queues the durable `accounts.agent-verification` workflow. The workflow
 rechecks and marks the account in its own partition, calls Semantic's `verifyAccountAgent` as platform work, then
 marks the request approved. A semantic refusal clears the pending account marker and records the typed problem on a
-failed request. The semantic catalogue node survives the merge. Receipt-bound commands and the semantic merge make
-workflow replay and restart converge. Rejection changes only its request. Request, withdrawal, approval, rejection,
-failure and verification each emit a registered Access event.
+failed request. The semantic catalogue node survives the merge. A subject id permanently names a catalogue record
+and is never reused; merging asserts duplicate identity only. Every published redirect points directly at an active
+terminal, so a read takes at most one step. An identity group holds at most 4,096 originals, checked when a merge
+is admitted. Stored references are never rewritten: personal entries, labels, sessions, copies and Collection
+occurrences keep their stored subject ids. New writes address the current terminal, and canonical views group them.
+Merge and unmerge run serialized through Semantic's one durable identity job: it marks a catalogue identity epoch
+pending, completes bounded mapping and index maintenance, then publishes the next epoch. A crashed job stays
+pending and resumes. Receipt-bound commands and the semantic merge make workflow replay and restart converge.
+Rejection changes only its request. Request, withdrawal, approval, rejection, failure and verification each emit a
+registered Access event.
 
 `POST /v1/accounts/{accountId}:revokeVerification` accepts `{ reason? }` (at most 500
 characters) and requires `account:verify_agent` on the Global Context. Send `{}` when omitting the reason.
@@ -214,9 +221,9 @@ An old activation or rename delivery also converges from the deleted row. No cat
 cleanup; independently held catalogue facts and links remain Semantic's responsibility.
 
 Cost: reversal touches one account point read/update per Access step and one exact pointer deletion. Access rows
-and statements stay constant; Semantic's reversal touches O(links moved from the account node), independent of
-the catalogue agent's in-degree. No additional growth check is required. Reversal coverage is in
-`test/access/agent-verification-reversal.test.ts`, alongside Semantic's reversal tests.
+and statements stay constant. The merge and unmerge run through Semantic's serialized identity job; no stored
+reference is moved or rewritten. Reversal coverage is in `test/access/agent-verification-reversal.test.ts`, alongside
+Semantic's reversal tests.
 
 The handle identity read returns `subject: { id, label, type }` for an active account, using its derived account agent
 until verification and the catalogue subject afterward. It returns `verified: false` or `true` accordingly; a deleted
@@ -1154,8 +1161,11 @@ The kernel's configurable request deadline defaults to 2000 ms, shared with the
 standalone command default. Test kernels use 30000 ms.
 
 Prepared permission, operator, and durable identity evidence expires at the earlier of
-the caller's deadline and one second of real time after preparation. Binding checks
-verify identity and provenance. Elapsed time is checked separately and raises
+the caller's deadline and one second of real time after preparation: min(caller deadline, real time + 1 s).
+Callers prepare evidence immediately before the transaction that applies it and never wait between preparing and
+applying it: no freshness or projection wait, lock wait, sleep or retry back-off. A caller that must wait does so
+first and prepares afterwards; a retry prepares afresh. Evidence that elapses before it is applied answers 503
+without effects. Binding checks verify identity and provenance. Elapsed time is checked separately and raises
 unavailability. The final SQL continues to check evidence validity at the authoritative
 command time. The database deadline uses the remaining budget when its clock was
 observed, so later preparation does not subtract elapsed time twice.
@@ -1362,10 +1372,9 @@ so nothing in Access is soft-deleted in that policy's sense; its records describ
 - **Restore.** There is no restore after the barrier: [lifecycle.ts](lifecycle.ts) requires an active account for
   tombstone, and [lifecycle-fence.sql](lifecycle-fence.sql) makes it deleted and fenced. As
   [Account deletion policy](#account-deletion-policy) states, fresh confirmation before the barrier replaces the
-  policy's restore window for accounts. The policy bounds private-data purge by the end of the 30-day window;
-  Access starts purging identity fields at the barrier, meeting that bound for those fields, while the unresolved
-  stores and deadlines remain in [Known retention gaps](#known-retention-gaps).
-  A restorable 30-day scheduled deletion before the barrier is not built, a known gap.
+  policy's restore window for accounts. Account erasure starts at T and does not wait for any window. Access starts
+  purging identity fields at that barrier; unresolved stores and deadlines remain in
+  [Known retention gaps](#known-retention-gaps).
 - **Minimal purge.** [lifecycle-fence.sql](lifecycle-fence.sql) clears the identity/profile group and retains the
   account skeleton plus the residual fields listed in the [retention inventory](#retention-inventory), rather
   than deleting the account row. The public skeleton is `{ id, state, kind }` under
@@ -1388,6 +1397,7 @@ separate state, never restoration of a deleted account. The sources discussed in
 [deletion report, §1](../../../../docs/research/account-deletion.md#1-cooling-off-and-cancellation-matches-an-established-pattern)
 share no cooling-off rule. A committed continuation's expiry limits cleanup authority, not the person's choice.
 Expired cleanup leaves the account deleted; governance renewal continues the unfinished steps.
+The erasure protocol, participants and completion are defined in [Deletion](../../../../docs/deletion.md#account-erasure).
 
 There is no self-serve export at launch. Before or after deletion, a person may request a copy of their data through
 the platform's privacy contact. The deletion confirmation names that channel. Self-serve export is a later feature
@@ -1405,9 +1415,9 @@ remain subject to [Content's erasure rules](../content/README.md#subject-threads
 rule, the owner decides; account deletion does not invent a content or catalogue erasure cascade.
 
 Deleting an account purges all of its private Library data and its private, unlisted and deleted Collections.
-Active public Collections stay, with their current notes and explicitly published log snapshots, as frozen,
-de-identified contributions. No replacement curator is appointed. Retained logs are detached from erased
-sessions. Authority ends at the deletion barrier; the Library's tombstone consumer cleans up asynchronously.
+Active public Collections stay, with their current notes, as frozen, de-identified contributions. Published reading
+logs are erased. No replacement curator is appointed. Authority ends at the deletion barrier; the Library's tombstone
+consumer cleans up asynchronously.
 The [Library README](../library/README.md) documents the mechanism and the Library's own consumer. The deletion
 confirmation states exactly what is erased and what stays as de-identified public contributions, next to the
 privacy contact.
