@@ -42,18 +42,19 @@ export async function createPublicFilterConsumerFixture(
   type Gate = {
     phase: Phase;
     fault: Fault;
-    entered: () => void;
+    entered: (point: Readonly<{ kind: string; stage: 'before_send' | 'after_response' }>) => void;
     wait: Promise<void>;
     release: () => void;
   };
   let next: Gate | undefined;
   const held = new Set<Gate>();
   let responses = 0;
+  const receipts: { kind: 'write' | 'explicit_refresh' | 'bulk_wait_for' | 'other'; response: unknown }[] = [];
   function arm(phase: Phase, fault: Fault = 'hold') {
     if (next) throw new Error('A native transport control is already armed');
-    let entered!: () => void;
+    let entered!: Gate['entered'];
     let release!: () => void;
-    const reached = new Promise<void>((resolve) => {
+    const reached = new Promise<Parameters<Gate['entered']>[0]>((resolve) => {
       entered = resolve;
     });
     const wait = new Promise<void>((resolve) => {
@@ -62,21 +63,44 @@ export async function createPublicFilterConsumerFixture(
     next = { phase, fault, entered, wait, release };
     return { reached, release };
   }
-  async function transport<T>(phase: Phase | undefined, send: () => Promise<T>): Promise<T> {
-    const gate = next?.phase === phase ? next : undefined;
+  async function barrier(gate: Gate, kind: string, stage: 'before_send' | 'after_response') {
+    held.add(gate);
+    gate.entered({ kind, stage });
+    await gate.wait;
+    held.delete(gate);
+  }
+  function take(phase: Phase | undefined) {
+    if (phase === undefined || next?.phase !== phase) return;
+    const gate = next;
+    next = undefined;
+    return gate;
+  }
+  async function transport<T>(
+    phase: Phase | undefined,
+    kind: (typeof receipts)[number]['kind'],
+    send: () => Promise<T>,
+  ): Promise<T> {
+    const gate = take(phase);
     if (gate) {
-      next = undefined;
-      held.add(gate);
-      gate.entered();
-      await gate.wait;
-      held.delete(gate);
+      await barrier(gate, kind, 'before_send');
       if (gate.fault === 'disconnect_before')
         throw new SearchUnavailableError('Native fixture disconnected before send');
     }
     const result = await send();
     responses++;
+    receipts.push({ kind, response: result });
     if (gate?.fault === 'disconnect_after')
       throw new SearchUnavailableError('Native fixture lost response after actual engine effect');
+    // wait_for is a real native visibility response, not write dispatch or an arbitrary bulk 200.
+    // Hold that original response before the producer receives it; never issue another refresh.
+    if (kind === 'bulk_wait_for') {
+      const completion = take('refresh');
+      if (completion) {
+        await barrier(completion, kind, 'after_response');
+        if (completion.fault !== 'hold')
+          throw new SearchUnavailableError('Native fixture lost wait_for response after actual engine effect');
+      }
+    }
     return result;
   }
   const controlled: OpenSearch = {
@@ -86,15 +110,22 @@ export async function createPublicFilterConsumerFixture(
       body?: unknown,
       options?: Parameters<OpenSearch['request']>[3],
     ) {
-      const phase = path.includes('_refresh')
-        ? 'refresh'
-        : (method === 'PUT' || method === 'DELETE' || method === 'POST') && /_doc|_bulk|_update/.test(path)
-          ? 'write'
-          : undefined;
-      return transport(phase, () => config.search.request<T>(method, path, body, options));
+      const url = new URL(path, 'http://native.fixture');
+      const explicit = /\/_refresh$/.test(url.pathname);
+      const write =
+        (method === 'PUT' || method === 'DELETE' || method === 'POST') && /_doc|_bulk|_update/.test(url.pathname);
+      const waitFor =
+        /\/_bulk$/.test(url.pathname) && (options?.query?.refresh ?? url.searchParams.get('refresh')) === 'wait_for';
+      return transport(
+        explicit ? 'refresh' : write ? 'write' : undefined,
+        explicit ? 'explicit_refresh' : waitFor ? 'bulk_wait_for' : write ? 'write' : 'other',
+        () => config.search.request<T>(method, path, body, options),
+      );
     },
     bulk<T = unknown>(lines: readonly unknown[], options?: Parameters<OpenSearch['bulk']>[1]) {
-      return transport('write', () => config.search.bulk<T>(lines, options));
+      return transport('write', options?.query?.refresh === 'wait_for' ? 'bulk_wait_for' : 'write', () =>
+        config.search.bulk<T>(lines, options),
+      );
     },
   };
   await createSubjectIndex(config.search, prefix, 1);
@@ -130,6 +161,9 @@ export async function createPublicFilterConsumerFixture(
     incarnation,
     arm,
     engineResponses: () => responses,
+    /** Exercise the SAME native transport with owned test documents; never an ACK setter. */
+    transport: controlled,
+    nativeReceipts: () => receipts.slice(),
     /** Real delete/create with the SAME name, no registration/ACK edits. */
     async recreate() {
       const before = await incarnation();

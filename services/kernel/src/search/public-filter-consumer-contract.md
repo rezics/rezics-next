@@ -3,7 +3,7 @@
 Search owns the canonical `PublicFilterQueriedObservation` in the adjacent type-only file. Semantic must import
 and re-export that exact type when closing its population observation boundary. There is no second observation
 type and no live/latest-ACK snapshot branch. This specification consumes only committed Source public types and
-existing SearchPlan/SearchResult, OpenSearch, Pool and KernelClock. It does not import the preserved Semantic
+existing shared FilterDocument, parsed TextNode, SearchPlan/SearchResult, OpenSearch, Pool and KernelClock. It does not import the preserved Semantic
 closure proposal. That proposal is context for owner review, not an available runtime dependency.
 
 The authority for disclosure, narrowing and budgets remains [Filtered lists](../../../../docs/filtered-lists.md).
@@ -15,7 +15,7 @@ A native protocol pass later will still be distinct from public API/default-work
 ## Exact exports and missing production entry point
 
 The adjacent module exports `PublicFilterQueriedObservation`, `PublicFilterConsumerContext`,
-`PublicFilterConsumerJob`, `PublicFilterConsumerUnavailable`, `PublicFilterConsumerCapture`,
+`PublicFilterConsumerCaptureInput`, `PublicFilterConsumerJob`, `PublicFilterConsumerUnavailable`, `PublicFilterConsumerCapture`,
 `PublicFilterConsumerQuery`, `PublicFilterConsumerStatus`, `PublicFilterConsumerRepair`,
 `PublicFilterConsumerOperations` and `PublicFilterConsumerOperationsFactory`.
 
@@ -56,14 +56,45 @@ can borrow a newer live-target ACK. Expiry or engine loss prepares/restarts; no 
 Observation and execution identities, PIT IDs, native jobs, cuts and consumer metadata stay off public transport,
 including cursor-visible fields. Internal SearchResult totals do not authorize public totals or facet counts.
 
-`capture` receives the trusted admitted native SearchPlan, rather than a second Boolean language. It validates
-that plan against supported native admission and meaning, creates/resolves the persisted immutable read definition,
-copies/retains it before returning, and
-establishes the actual immutable snapshot and persisted registration. A caller mutation cannot alter execution.
+`capture({plan, snapshot}, context)` requires `PublicFilterConsumerCaptureInput`: the existing SearchPlan
+order/size/keyset inputs plus REQUIRED `filterDocument: FilterDocument | undefined` and
+`text: TextNode | undefined`. Explicit undefined means no filter/text. This is one small closed capture input,
+not a second query-requirements ABI. A compiled-only object is invalid, including when passed from JavaScript.
+There are no caller positive-leaf, dependency-key, read-definition or claimed-admission fields.
+
+Expand saved filters with existing `admitFilter` against the configured accepted release before capture, retaining
+the actual expanded shared tree. The native boundary revalidates that tree against the SAME factory meaning;
+remaining saved references reject. Use `walkFilter` over ALL expanded nodes, including NOT and OR, to reject
+OwnerLeaf before ANY native I/O. Admission of owner facts elsewhere, including a saved expansion, cannot authorize
+this public consumer. Actual private-source observations remain Commerce's responsibility. No second Boolean
+parser/interpreter or per-property whitelist is introduced.
+
+The producer derives its physical plan with existing `compileFilter` (`prefix: 'f', relationOverflow: true`) and
+`compileText` (`field: 'search_text', prefix: 't'`), retaining full compiler leaves rather than matched/positive
+leaves. Preserve existing boost, overflow-property, functional order, size and keyset semantics. Optional inherited
+SearchPlan query/filter/boost/overflowProperties/rating/generation metadata is compatibility evidence ONLY: if
+supplied it must match the derived native plan and actual registered physical observation; mismatch rejects before
+native I/O. Absence of compiled DSL does not omit semantic inputs. Do not recover a FilterDocument from arbitrary DSL.
+Copy and retain the input trees, keyset, derived plan and factory meaning immutably before returning; later caller
+mutation cannot alter them. Derive complete filter/text/name/type/id and functional-order dependency keys from
+those retained shared inputs, including negative branches, same-statement qualifiers/units and tie breakers.
+
+The Source here is precisely the public catalogue's adopted Global subject population for the configured release
+and type, with native original/terminal eligibility and disclosure. It is not a Collection, mounted Zone, private
+Source or evidence of those surfaces' readiness. Bind this population to the ACTUAL factory `source` object and its
+pool/routing/Access configuration, native registered source/read-definition and physical observation. Caller-created
+source/meaning identity strings are never evidence. Retain source identity/configuration with the expanded AST,
+text, order, size and keyset in the immutable definition; validate digest against release and registration.
+**Concrete runtime prerequisite:** the current `PublicFilterSource` has only projection/head/log readers; it has
+no native registered public-catalogue source identity/read-definition resolution port. Source's producer must supply
+that binding before this factory can run; it cannot be inferred from three reader functions or omitted from the
+retained definition. This closure invents no substitute Source export. Semantic may re-export the ONE canonical
+`PublicFilterQueriedObservation` unchanged, not a duplicate PublicFilterQueryRequirements type.
+
 A read-definition identity is derived/resolved by native registration, never accepted as a caller-created string.
-Any new plan requires another capture. Incomplete initial projection/registration returns `preparing` with its
-real native repair job, allowing finite initialization without pretending there is already an immutable snapshot.
-No partial prepared generation can return `captured`. Unknown coverage stays unknown under NOT.
+Any new semantic input requires another capture. Incomplete initial projection/registration returns `preparing`
+with its real native repair job. No partial prepared generation can return `captured`.
+Unknown coverage stays unknown under NOT.
 
 `query` executes that retained plan through the existing native Search semantics, complete-shard checks,
 source/population authorization and current disclosure machinery for that exact PIT/prepared generation. It
@@ -146,7 +177,13 @@ and meaning. It provisions only its owned physical engine index and uses the rea
 factory. It creates no DB, Auth, release or fixture registry, copies no facts directly into the index and starts
 no second engine. Random resource names are not identity evidence; settings/PIT responses are native evidence.
 Its returned `operations` are the actual typed producer operations, without an adapter. Its controls hold native
-writes/refresh or disconnect transport before send/after actual engine effect; none supplies successful receipts
+writes or explicit `_refresh` before send, or hold the genuine bulk `refresh=wait_for` response AFTER native
+completion and BEFORE delivery to the producer. Both `bulk(lines, options)` and request-path bulk query options
+are recognized. No bulk option/request/response is changed and no redundant explicit refresh is required.
+`arm('refresh').reached` reports `{kind, stage}` to distinguish dispatch from completed native visibility;
+`nativeReceipts()` retains actual responses (including errors), never a fabricated shard/refresh success or ACK.
+A bare bulk response is a write receipt only and cannot consume the refresh gate; native errors/shard failures
+remain producer publication barriers. The helper also disconnects transport before send/after actual engine effect; none supplies successful receipts
 or ACK booleans. Recreate deletes/creates only its own index with the same name. Close releases gates, drains
 the actual producer and deletes only that index, leaving the supplied Semantic resources to their owner.
 
@@ -169,3 +206,11 @@ All existing native user cases remain required unchanged. Caught-up 4096-home na
 direct/prepared/composed growth matrix remain separate required evidence after runtime exists. Primitive fixture
 data is no released-word/recipe claim. No feasibility, runtime availability or public capability pass follows from
 committing these four specification/helper files or from a later isolated protocol pass.
+
+The two executable input/transport controls use the same actual producer lookup as all native races. Missing
+`semantic/public-filter-source.ts` fails before engine execution; it is not a pass for immutability, dependency
+keys, PIT/prepared identity, visibility or ACK. Once producers exist, the controls exercise expanded saved AST,
+OwnerLeaf under NOT/OR/saved expansion, compiled mismatch/compiled-only rejection, caller mutation, full OR
+narrowing, explicit refresh and real wait_for visibility while its native response remains withheld. Transport
+control documents are owned fixture inputs, never a synthetic privacy event or repair receipt. The existing tuple
+case still requires automatic FOREIGN repair with no unrelated subject edit, injected event or checkpoint advance.

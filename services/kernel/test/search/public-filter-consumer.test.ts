@@ -9,14 +9,16 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { admitFilter, type FilterDocument } from '@rezics/filter';
+import { parseText } from '../../src/search/text.ts';
 import { compileFilter } from '../../src/search/filter.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import type {
+  PublicFilterConsumerCaptureInput,
   PublicFilterConsumerJob,
   PublicFilterConsumerOperations,
   PublicFilterQueriedObservation,
 } from '../../src/search/public-filter-consumer-contract.ts';
-import type { SearchPlan } from '../../src/search/query.ts';
 import { capture, costOf } from '../support/growth.ts';
 import {
   complete,
@@ -30,18 +32,19 @@ import {
 import { createPublicFilterConsumerFixture } from './support/public-filter-consumer.ts';
 
 const context = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
-const positive = (author: string): SearchPlan => ({
+const positive = (author: string): PublicFilterConsumerCaptureInput => ({
   sort: 'id',
   size: 20,
-  filter: compileFilter({ statement: { property: 'schema:author', in: [author] } }, { prefix: 'native-' }).query,
+  text: undefined,
+  filterDocument: { statement: { property: 'schema:author', in: [author] } },
 });
-const negative = (author: string): SearchPlan => ({
+const negative = (author: string): PublicFilterConsumerCaptureInput => ({
   sort: 'name',
   size: 20,
-  filter: compileFilter(
-    { and: [{ type: { in: ['schema:Book'] } }, { not: { statement: { property: 'schema:author', in: [author] } } }] },
-    { prefix: 'native-' },
-  ).query,
+  text: undefined,
+  filterDocument: {
+    and: [{ type: { in: ['schema:Book'] } }, { not: { statement: { property: 'schema:author', in: [author] } } }],
+  },
 });
 
 async function setup(type = 'schema:Book') {
@@ -90,7 +93,7 @@ async function settle(n: Native, job: PublicFilterConsumerJob) {
   }
   throw new Error('Finite native consumer repair did not finish');
 }
-async function captured(n: Native, plan: SearchPlan, snapshot: 'pit' | 'prepared' = 'pit') {
+async function captured(n: Native, plan: PublicFilterConsumerCaptureInput, snapshot: 'pit' | 'prepared' = 'pit') {
   for (let step = 0; step < 256; step++) {
     const result = await n.operations.capture({ plan, snapshot }, context());
     expect(['captured', 'preparing']).toContain(result.status);
@@ -148,7 +151,7 @@ test('native queried observation retains the physical incarnation and immutable 
     expect(first.result.hits.map((hit) => hit.id)).toEqual([book]);
     const covered = (await status(n.operations, old)).covered;
     // Mutating a caller object cannot change the retained plan, meaning or snapshot.
-    plan.filter = { match_none: {} };
+    Object.assign(plan, { filter: { match_none: {} }, filterDocument: { type: { in: ['schema:Person'] } } });
     const repeated = await execute(n, first.queried);
     expect(repeated.result.hits.map((hit) => hit.id)).toEqual([book]);
     await n.f.post(`/v1/subjects/${book}/candidates/${candidate}:hide`, { reason: 'Local selected fact reduction' });
@@ -170,7 +173,7 @@ test('native queried observation retains the physical incarnation and immutable 
         id: repeated.queried.snapshot.kind === 'pit' ? repeated.queried.snapshot.pit : old.snapshot.pit,
         keep_alive: '1m',
       },
-      query: positive(author).filter,
+      query: compileFilter(positive(author).filterDocument!, { prefix: 'f', relationOverflow: true }).query,
     });
     expect(raw.body.timed_out).toBe(false);
     expect(raw.body._shards.failed).toBe(0);
@@ -313,7 +316,9 @@ test('native tuple and consent reductions repair their dependent source keys bef
       })
     ).candidate as string;
     await consent.f.post(`/v1/statements/${candidate}/disclose`, {});
-    const plan: SearchPlan = {
+    const plan: PublicFilterConsumerCaptureInput = {
+      text: undefined,
+      filterDocument: { statement: { property: 'rezics:penNameOf', in: [agent.subject.id] } },
       sort: 'id',
       size: 20,
       filter: compileFilter(
@@ -323,7 +328,7 @@ test('native tuple and consent reductions repair their dependent source keys bef
             in: [agent.subject.id],
           },
         },
-        { prefix: 'consent-' },
+        { prefix: 'f', relationOverflow: true },
       ).query,
     };
     const initial = await captured(consent, plan);
@@ -485,6 +490,153 @@ test('native irrelevant key narrowing never suppresses own-row or excluded negat
       ),
     ).toBe(true);
     expect((await status(n.operations, ownStart.queried, ownStart.execution)).blocking.length).toBeGreaterThan(0);
+  } finally {
+    await n.close();
+  }
+}, 600_000);
+
+test('native capture retains the expanded shared query meaning before deriving its physical plan and complete dependency keys', async () => {
+  const n = await setup();
+  try {
+    const author = await n.f.create();
+    const book = await n.f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] });
+    const release = structuredClone(n.f.meaning.release);
+    release.filters = {
+      'native/public': {
+        filter: {
+          and: [
+            { type: { in: ['schema:Book'] } },
+            {
+              or: [
+                { statement: { property: 'schema:author', in: [author] } },
+                { not: { statement: { property: 'schema:inLanguage', in: ['ja'] } } },
+              ],
+            },
+          ],
+        },
+      },
+      'native/private': { filter: { owner: { presence: true } } },
+    };
+    const expanded = admitFilter({ saved: 'native/public' }, release);
+    const input: PublicFilterConsumerCaptureInput = {
+      filterDocument: expanded,
+      text: parseText('Native AND NOT "unpublished phrase"'),
+      sort: 'name',
+      size: 20,
+    };
+    const observation = await captured(n, input);
+    const first = await execute(n, observation.queried);
+    expect(first.result.hits.map((hit) => hit.id)).toEqual([book]);
+    const definition = observation.queried.consumer.readDefinition;
+    // The native retained definition owns both trees and keyset/order, not this mutable caller graph.
+    Object.assign(input, { text: parseText('absent'), sort: 'id', size: 1, after: ['zzzz'] });
+    Object.assign(expanded, { and: [{ type: { in: ['schema:Person'] } }] });
+    expect((await execute(n, observation.queried)).result.hits.map((hit) => hit.id)).toEqual([book]);
+    expect(observation.queried.consumer.readDefinition).toBe(definition);
+    const other = await captured(n, { ...positive(author), text: parseText('Native'), sort: 'id' });
+    expect(other.queried.consumer.readDefinition).not.toBe(definition);
+
+    const owner = admitFilter({ saved: 'native/private' }, release, { owner: true });
+    for (const filterDocument of [owner, { not: owner }, { or: [{ type: { in: ['schema:Book'] } }, owner] }]) {
+      const before = n.consumer.engineResponses();
+      const rejected = await capture(
+        n.f.db,
+        async () => {
+          await expect(
+            n.operations.capture(
+              { plan: { filterDocument, text: undefined, sort: 'id', size: 20 }, snapshot: 'pit' },
+              context(),
+            ),
+          ).rejects.toThrow();
+        },
+        { includeBackends: true },
+      );
+      expect(costOf(rejected.capture).statements).toBe(0);
+      expect(n.consumer.engineResponses()).toBe(before);
+    }
+    const before = n.consumer.engineResponses();
+    // Optional native DSL is comparison evidence only. It cannot override an admitted AST.
+    await expect(
+      n.operations.capture({ plan: { ...positive(author), filter: { match_none: {} } }, snapshot: 'pit' }, context()),
+    ).rejects.toThrow();
+    // Runtime validation rejects a compiled-only caller even if it bypasses TypeScript.
+    await expect(
+      n.operations.capture(
+        {
+          plan: { filter: { match_all: {} }, sort: 'id', size: 20 } as PublicFilterConsumerCaptureInput,
+          snapshot: 'pit',
+        },
+        context(),
+      ),
+    ).rejects.toThrow();
+    expect(n.consumer.engineResponses()).toBe(before);
+    const projected = await complete(n.f, n.source, book);
+    const candidate = projected.records.find((row) => row.statement.property.id === 'schema:author')!.candidate;
+    // This OR branch is sufficient but is not the only matching alternative. It remains a dependency.
+    await n.f.post(`/v1/subjects/${book}/candidates/${candidate}:hide`, { reason: 'Expanded shared OR dependency' });
+    const reduced = await head(n.source, home(book));
+    expect((await status(n.operations, observation.queried, first.execution)).changed).toContainEqual(reduced);
+    expect(
+      (await status(n.operations, observation.queried, first.execution)).blocking.some(
+        (entry) => entry.scope === 'filter_or_order',
+      ),
+    ).toBe(true);
+  } finally {
+    await n.close();
+  }
+}, 600_000);
+
+test('native refresh controls cover explicit refresh and genuine bulk wait_for completion without acknowledging bare writes', async () => {
+  const n = await setup();
+  try {
+    const target = `/${n.consumer.physicalTarget}`;
+    const bareId = randomUUID();
+    const gate = n.consumer.arm('refresh');
+    let refreshEntered = false;
+    void gate.reached.then(() => {
+      refreshEntered = true;
+    });
+    const bare = await n.consumer.transport.bulk<{ errors: boolean }>([
+      { index: { _index: n.consumer.physicalTarget, _id: bareId } },
+      { id: bareId },
+    ]);
+    expect(bare.errors).toBe(false);
+    expect(refreshEntered).toBe(false);
+    const explicit = n.consumer.transport.request<{ _shards: { failed: number } }>('POST', `${target}/_refresh`);
+    try {
+      expect(await gate.reached).toEqual({ kind: 'explicit_refresh', stage: 'before_send' });
+      expect(n.consumer.nativeReceipts().at(-1)!.kind).toBe('write');
+    } finally {
+      gate.release();
+    }
+    expect((await explicit).body._shards.failed).toBe(0);
+    const id = randomUUID();
+    const completion = n.consumer.arm('refresh');
+    let delivered = false;
+    const waitFor = n.consumer.transport
+      .bulk<{ errors: boolean; items: { index: { _shards: { failed: number } } }[] }>(
+        [{ index: { _index: n.consumer.physicalTarget, _id: id } }, { id }],
+        { query: { refresh: 'wait_for' } },
+      )
+      .then((response) => {
+        delivered = true;
+        return response;
+      });
+    try {
+      expect(await completion.reached).toEqual({ kind: 'bulk_wait_for', stage: 'after_response' });
+      expect(delivered).toBe(false);
+      expect(n.consumer.nativeReceipts().at(-1)!.kind).toBe('bulk_wait_for');
+      const visible = await n.search.request<{ hits: { hits: { _id: string }[] } }>('POST', `${target}/_search`, {
+        query: { ids: { values: [id] } },
+      });
+      expect(visible.body.hits.hits.map((hit) => hit._id)).toEqual([id]);
+    } finally {
+      completion.release();
+    }
+    const response = await waitFor;
+    expect(response.errors).toBe(false);
+    expect(response.items[0]!.index._shards.failed).toBe(0);
+    expect(delivered).toBe(true);
   } finally {
     await n.close();
   }

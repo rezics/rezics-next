@@ -1,4 +1,6 @@
 import type { Pool } from 'pg';
+import type { FilterDocument } from '@rezics/filter';
+import type { TextNode } from './text.ts';
 import type { KernelClock } from '../clock.ts';
 import type {
   PublicFilterConsumer,
@@ -20,6 +22,17 @@ export type PublicFilterQueriedObservation = Readonly<{
     | Readonly<{ kind: 'pit'; observation: string; pit: string }>
     | Readonly<{ kind: 'prepared'; observation: string; build: string; generation: bigint }>;
 }>;
+
+/** Shared semantic input, never a compiled-only admission. All inherited native DSL/metadata
+ * fields are optional compatibility evidence and must match the plan derived from this AST.
+ * Undefined explicitly means no filter/text; order, size and keyset retain Search semantics.
+ */
+export type PublicFilterConsumerCaptureInput = Readonly<
+  SearchPlan & {
+    filterDocument: FilterDocument | undefined;
+    text: TextNode | undefined;
+  }
+>;
 
 /** Actual caller request/worker deadline. Domain clock is installed once at the trusted factory. */
 export type PublicFilterConsumerContext = Readonly<{ deadline: number }>;
@@ -93,7 +106,7 @@ export type PublicFilterConsumerRepair =
 /** Closed native boundary; there is no ACK setter, caller repair input or Boolean evaluator. */
 export interface PublicFilterConsumerOperations {
   capture(
-    request: Readonly<{ plan: SearchPlan; snapshot: 'pit' | 'prepared' }>,
+    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerCapture>;
   query(
