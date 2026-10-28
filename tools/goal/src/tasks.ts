@@ -282,7 +282,9 @@ export class WorkerTasks {
     const branch = `${this.settings.branchPrefix}${id}`;
     const worktree = join(this.settings.worktreeRoot, id);
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'));
+    // The lease covers worktree creation, dependency install and frozen-file formatting, about a minute under load.
+    // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
       const base = this.taskBaseHead(brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths);
