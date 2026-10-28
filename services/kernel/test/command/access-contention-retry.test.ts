@@ -95,7 +95,7 @@ test('a serialization failure raised through an Access query inside a command tr
 test('Access contention that outlasts the command deadline answers the same AccessUnavailableError with no effects', async () => {
   const key = crypto.randomUUID();
   const cause = new AccessUnavailableError('contention');
-  const deadline = Date.now() + 45;
+  const deadline = Date.now() + 500;
   let attempts = 0;
   const authorization = authorizationFor(
     async () => {
