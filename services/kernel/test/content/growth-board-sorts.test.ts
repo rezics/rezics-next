@@ -171,9 +171,9 @@ test(
           const measurement = JSON.stringify({
             sort,
             scale,
-            rows: cost.rows,
-            blocks: cost.blocks,
-            statements: cost.statements,
+            pageRows: cost.rows,
+            pageBlocks: cost.blocks,
+            pageStatements: cost.statements,
             relation: name,
             ...relation,
           });
