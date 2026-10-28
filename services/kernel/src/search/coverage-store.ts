@@ -153,7 +153,7 @@ export function createCoverageStore(pool: Pool): CoverageStore {
   ) {
     return transaction(async (client) => {
       const live = await locked(client, g);
-      if (!live || !['populating', 'live'].includes(live.state)) return null;
+      if (!live || live.state === 'retiring') return null;
       const old = await home(client, g.incarnation, g.partition);
       if ((old?.revision ?? 0n) !== g.revision || g.revision === codec.MAX) return null;
       const next = change(old, live);
@@ -305,7 +305,8 @@ export function createCoverageStore(pool: Pool): CoverageStore {
       const g = guard(value, true),
         slot = codec.attempt(proposed);
       codec.requireValue(slot.outcome === 'enrolled' && slot.checkpoint === 'pending' && slot.source === null);
-      return mutateHome(g, (old) => {
+      return mutateHome(g, (old, lineage) => {
+        if (!['populating', 'live'].includes(lineage.state)) return null;
         if (old?.attempt && (old.attempt.outcome !== 'completed' || old.attempt.id === slot.id)) return null;
         return {
           partition: g.partition,
