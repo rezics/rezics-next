@@ -54,7 +54,7 @@ import {
   RealmMembershipConflictError,
   type MembershipDependencies,
 } from './join.ts';
-import { banAccount, unbanAccount, listBans, RealmBanInputError, RealmBanRoleError } from './ban.ts';
+import { banAccount, unbanAccount, listBans, RealmBanInputError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
 import { listOwnRealms } from './own-realms.ts';
 import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
@@ -286,7 +286,6 @@ export type CommunityRouteDependencies = {
 };
 
 function communityProblem(error: unknown): never {
-  if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
   if (error instanceof RealmBanInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceAddressConflictError) throw new ProblemError('conflict');
@@ -1294,11 +1293,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: banParams,
         headers: commandHeaders,
         body: strict(t.Object({ reason: t.String({ maxLength: 1024 }) }, closed)),
-        response: {
-          200: withHeaders(strict(banResponse), sessionHeader),
-          ...writeFailures,
-          409: problemSchema('conflict'),
-        },
+        response: { 200: withHeaders(strict(banResponse), sessionHeader), ...writeFailures },
         detail: {
           operationId: 'realm.ban',
           'x-exposure': 'public',

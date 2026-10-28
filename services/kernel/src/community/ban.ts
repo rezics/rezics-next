@@ -19,7 +19,6 @@ import closeBan from './ban-close.sql';
 import readRealm from './ban-realm.sql';
 import pageBans from './ban-page.sql';
 import readMembership from './membership-current.sql';
-import readRole from './ban-role.sql';
 
 export type BanDependencies = SpaceDependencies & { tokens: KeyRing; workClient: () => Promise<WorkClient> };
 export type Ban = {
@@ -37,13 +36,6 @@ export class RealmBanInputError extends Error {
   constructor() {
     super('Invalid Realm ban');
     this.name = 'RealmBanInputError';
-  }
-}
-
-export class RealmBanRoleError extends Error {
-  constructor() {
-    super('Remove the Realm owner or moderator role first');
-    this.name = 'RealmBanRoleError';
   }
 }
 
@@ -97,7 +89,6 @@ export async function banAccount(
       const parameters = { route: resource.route, realm_id: input.realmId, account_id: input.accountId, at };
       const realm = await readRealm.run(tx, parameters);
       if (!realm) throw new GrantDeniedError();
-      if ((await readRole.run(tx, parameters))?.protected) throw new RealmBanRoleError();
       const record = (
         await openBan.run(tx, {
           ...parameters,

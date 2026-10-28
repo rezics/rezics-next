@@ -24,7 +24,6 @@ import {
 import { platformRootAnchor } from '../commerce/catalogue.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
@@ -32,7 +31,6 @@ import { ensureRealmMemberGrant } from './participation.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import read from './realm-read.sql';
-import currentBan from './ban-current.sql';
 import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
 import moveHead from './realm-head.sql';
@@ -170,7 +168,7 @@ function record(row: RealmRow): RealmView {
 }
 
 /** One head seek at Access's authoritative T, with the native grant branch
- * and no current ban required for protected Realms. Missing and denied resources both return null.
+ * required for protected Realms. Missing and denied resources both return null.
  */
 export async function readRealm(
   deps: Pick<RealmDependencies, 'pool' | 'access'>,
@@ -192,21 +190,10 @@ export async function readRealm(
     { ...resource, eligibility },
     { pool: deps.pool, deadline: context.deadline },
   );
-  try {
-    return await withConnection(deps.pool, async (client) => {
-      if (!(await check(deadlineClient(client, context.deadline)))) return null;
-      return current ? record(current) : null;
-    });
-  } catch (error) {
-    if (error instanceof RealmReadDeniedError) return null;
-    throw error;
-  }
-}
-
-class RealmReadDeniedError extends ProblemError {
-  constructor() {
-    super('not_found');
-  }
+  return withConnection(deps.pool, async (client) => {
+    if (!(await check(deadlineClient(client, context.deadline)))) return null;
+    return current ? record(current) : null;
+  });
 }
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
@@ -217,20 +204,8 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
     async prepare() {
       return resource;
     },
-    async verify({ client, actor, at }) {
+    async verify({ client, at }) {
       const row = await read.run(client, { route: resource.route, id: resource.id, at });
-      if (
-        row?.visibility === 'protected' &&
-        actor.kind === 'account' &&
-        (await currentBan.run(client, {
-          route: resource.route,
-          realm_id: resource.id,
-          account_id: actor.accountId,
-          at,
-        }))
-      )
-        // A false floor alone would leave independent grants available.
-        throw new RealmReadDeniedError();
       observe?.(row);
       return row?.visibility === 'public';
     },

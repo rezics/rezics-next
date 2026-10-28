@@ -172,6 +172,21 @@ type SharedCommunity = {
 
 let shared: SharedCommunity | undefined;
 
+/** Pause this file's worker without changing its HTTP application or database. */
+export const worker = {
+  async stop(): Promise<void> {
+    if (!shared) throw new Error('Community driver is not open');
+    await shared.worker.stop();
+  },
+};
+
+/** Resume native workflows, preserving the worker handle held by existing drivers. */
+export async function restartWorker(): Promise<void> {
+  if (!shared) throw new Error('Community driver is not open');
+  if (shared.worker.child.exitCode === null) throw new Error('Community worker is still running');
+  Object.assign(shared.worker, await startWorker(shared.system));
+}
+
 async function buildShared(): Promise<SharedCommunity> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

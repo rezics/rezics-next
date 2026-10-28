@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { Pool } from 'pg';
 import type {
   Account,
   CommunityDriver,
@@ -11,7 +10,13 @@ import type {
   Thread,
 } from '../../../../specs/community-driver.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { closeCommunityDrivers, createCommunityDriver, queryCommunityDatabase } from './community-driver.ts';
+import {
+  closeCommunityDrivers,
+  createCommunityDriver,
+  queryCommunityDatabase,
+  restartWorker,
+  worker,
+} from './community-driver.ts';
 
 let driver: CommunityDriver;
 let fixture: Fixture;
@@ -180,19 +185,8 @@ test.serial(
       201,
     );
     for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
-    const database = (await queryCommunityDatabase<{ database: string }>('SELECT current_database() AS database'))[0]!
-      .database;
-    const url = new URL(process.env.DATABASE_URL!);
-    url.pathname = `/${database}`;
-    const pool = new Pool({ connectionString: url.href });
-    const lock = await pool.connect();
+    await worker.stop();
     try {
-      await lock.query('BEGIN');
-      // Hold the native publish update; ordinary MVCC readers still see the open membership.
-      await lock.query(
-        'SELECT 1 FROM community.realm_member WHERE realm_id=$1 AND account_id=$2 AND upper_inf(valid) FOR UPDATE',
-        [c.realm.realmId, fixture.member.id],
-      );
       await json(await ban(c.realm, fixture.member));
       expect(
         await queryCommunityDatabase(
@@ -202,9 +196,7 @@ test.serial(
       ).toEqual([{ role: 'member' }]);
       await hidden(c);
     } finally {
-      await lock.query('ROLLBACK');
-      lock.release();
-      await pool.end();
+      await restartWorker();
       await driver.settle();
     }
     expect(
