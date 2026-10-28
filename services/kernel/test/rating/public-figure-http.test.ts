@@ -32,6 +32,7 @@ let app: ReturnType<typeof createKernel>;
 let worker: Awaited<ReturnType<typeof startWorker>>;
 let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 const tokens = new Map<string, string>();
+let voterOrdinal = 0;
 type Figure = {
   questionId: string;
   populationId: string;
@@ -43,7 +44,8 @@ type Figure = {
 };
 
 async function voter() {
-  const accountId = newId(0x2201);
+  // Match native worker fixtures: independent voters have independently routed account partitions.
+  const accountId = newId((0x1000 + voterOrdinal++ * 16) & 0xffff);
   await database.admin.query(
     `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
      VALUES ($1, $2, 'actor', 'active', $2)`,
@@ -123,7 +125,12 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean): Pr
     await Bun.sleep(20);
     value = await read();
   }
-  expect(done(value), JSON.stringify(value)).toBe(true);
+  if (!done(value)) {
+    const workflows = await database.admin.query(`SELECT status, count(*) FROM dbos.workflow_status GROUP BY status`);
+    const activity = await database.admin.query(`SELECT state, wait_event_type, wait_event
+      FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()`);
+    throw new Error(JSON.stringify({ value, workflows: workflows.rows, activity: activity.rows }));
+  }
   return value;
 }
 async function published(subjectId: string, count: number, populationId = GLOBAL_CONTEXT.id) {
