@@ -8,7 +8,7 @@ WHERE revision = 0 OR EXISTS (
     AND c.revision = input.revision
 )
 ON CONFLICT (partition_no, prefix) DO UPDATE
-SET revision = index_prefix_control.revision + 1, issued_generation = EXCLUDED.issued_generation
+SET revision = index_prefix_control.revision + 1, issued_generation = EXCLUDED.issued_generation, allocation_bound = false
 WHERE index_prefix_control.revision = (SELECT revision FROM input)
   AND index_prefix_control.revision < 9223372036854775807
   AND index_prefix_control.issued_generation < EXCLUDED.issued_generation

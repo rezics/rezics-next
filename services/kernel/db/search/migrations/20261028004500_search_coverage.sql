@@ -7,6 +7,7 @@ CREATE TABLE search.index_prefix_control (
   prefix text COLLATE "C" NOT NULL CHECK (prefix ~ '^[a-z0-9][a-z0-9-]{0,47}$'),
   revision bigint NOT NULL CHECK (revision > 0),
   issued_generation bigint NOT NULL CHECK (issued_generation BETWEEN 1 AND 9007199254740991),
+  allocation_bound boolean NOT NULL DEFAULT false,
   PRIMARY KEY (partition_no, prefix)
 );
 

@@ -97,6 +97,7 @@ CREATE TABLE search.index_prefix_control (
     prefix text NOT NULL COLLATE pg_catalog."C",
     revision bigint NOT NULL,
     issued_generation bigint NOT NULL,
+    allocation_bound boolean DEFAULT false NOT NULL,
     CONSTRAINT index_prefix_control_issued_generation_check CHECK (((issued_generation >= 1) AND (issued_generation <= '9007199254740991'::bigint))),
     CONSTRAINT index_prefix_control_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT index_prefix_control_prefix_check CHECK ((prefix ~ '^[a-z0-9][a-z0-9-]{0,47}$'::text)),

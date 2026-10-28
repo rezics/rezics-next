@@ -846,7 +846,9 @@ range ordering and these bounds on input and decode; malformed stored state fail
 
 The storage implementation uses the owning migration/schema snapshot, `coverage-store.ts`, a closed codec
 module and five typed point SQL modules for allocation, registration, home reads, attempts and promotion. Prefix
-row locks serialize allocation/admission; lifecycle row locks fence home CAS and reclamation. Home reads also
+row locks serialize allocation/admission; a current allocation-bound bit prevents rebinding the last issued
+name after its lineage is reclaimed, without retaining historical targets. Lifecycle row locks fence home CAS
+and reclamation. Home reads also
 bracket their point read with the lifecycle lock. Transactions contain database work only and release the
 connection before any caller can perform engine I/O. The coordinator, reader and engine lifecycle remain
 unavailable specification stubs; durable observations alone cannot certify native coverage.
