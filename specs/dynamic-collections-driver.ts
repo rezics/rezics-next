@@ -7,7 +7,8 @@
  * Every request passes through createKernel(...).handle. owner and other are distinct active accounts; anonymous has no
  * token; suspended uses its actual bearer obtained while active, then genuine suspension advances the native authn
  * floor and fences that bearer. Auth mints only for active accounts, so no valid suspended bearer can be provisioned.
- * Its native 401 invalid_token maps to the denied outcome; preserve the raw response and WWW-Authenticate challenge.
+ * Its native 401 invalid_credentials maps to the denied outcome; preserve the raw response and the exact
+ * WWW-Authenticate: Bearer error="invalid_token" challenge. invalid_token is a challenge error, never a JSON problem code.
  * No SQL-made suspended state, forged JWT, authentication bypass, artificial floor or response normalization.
  * Missing/malformed/expired/revoked credentials retain 401; scope denial retains 403 insufficient_scope.
  * close stops owned workers/server and removes the database and tokens.
