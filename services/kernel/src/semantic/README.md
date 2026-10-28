@@ -1145,12 +1145,18 @@ account grace. The 30-day restore window applies to individually deleted records
 purge can remove retained takedown fields, subject to legal holds. Content owns source fences. No semantic purge job or
 purge bound is implemented. The required job caps examined source keys before filters, commits durable fragment
 checkpoints in one owner partition, and retains nonpersonal identity/decision skeleton. Takedown alone never
-creates its deadline. Workflow-history retention does not establish semantic erasure. Native link readers currently
-filter unavailable summaries while keeping stored counts; this does not prove publicly live counts under paused
-consumers. The contract supplies a real counterexample and leaves exact foreign-count authority for resolution.
+creates its deadline. Workflow-history retention does not establish semantic erasure. Public aggregate disclosure follows
+[aggregate-disclosure.md](aggregate-disclosure.md) and its separately owned backend in `links.ts`, `subject.ts` and
+`graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
+links and absent count after source revocation with consumers paused.
 
 The required first independent slice is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
 state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
 grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
-Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes. Exact immediate foreign
-live counts remain a pending shared ABI decision; the failing native assertion is preserved.
+Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
+
+| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| State and owner evidence      | Native reader and read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                  |
+| Owned lifecycle and retention | DELETE/restore/purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.                                                                            |
+| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |

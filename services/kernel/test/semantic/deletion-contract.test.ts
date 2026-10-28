@@ -1,327 +1,46 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createAccess } from '../../src/access/index.ts';
-import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { createAccess } from '../../src/access/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { createPool } from '../../src/database/pool.ts';
-import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import * as semantic from '../../src/semantic/index.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
-import { linkProjection } from '../../src/semantic/links.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
-import { createRealAccess } from './real-access.ts';
+import { createDeletionFixture } from './support/deletion-fixture.ts';
 
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
-const admin = new pg.Pool({ connectionString: url, max: 2 });
-const accounts = { owner: newId(21000), editor: newId(21001), stranger: newId(21002), platform: newId(21003) };
-let now = new Date();
-const clock = () => new Date(now);
-// Refresh JWTs at the domain clock when moving beyond the restoration window.
-// Shared real-Access fixtures create accounts/grants; the native Access below validates these tokens.
-const signing = await generateKeyPair('ES256', { extractable: true });
-const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-deletion', alg: 'ES256' };
-const auth = {
-  issuer: 'https://auth.example.test',
-  audience: 'https://api.rezics.test',
-  jwksUrl: 'https://auth.example.test/jwks',
-  fetch: async () => Response.json({ keys: [jwk] }),
-};
-async function bearer(account: string, scopes: string[]) {
-  const at = Math.floor(clock().getTime() / 1000);
-  return new SignJWT({ client_id: 'web', scope: scopes.join(' '), authn_epoch: 1, auth_time: at, amr: ['pwd'] })
-    .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
-    .setIssuer(auth.issuer)
-    .setAudience(auth.audience)
-    .setSubject(account)
-    .setIssuedAt(at)
-    .setExpirationTime(at + 300)
-    .sign(signing.privateKey);
-}
-
-const day = 86_400_000;
-const actions = [
-  'definitions:publish',
-  'definitions:activate',
-  'subject:create',
-  'subject:read',
-  'statement:propose',
-  'context:create',
-  'context:read',
-  'context:accept',
-  'context:adopt',
-  'statement:delete',
-  'statement:restore',
-  'account:delete',
-  'access:grant',
-  'context:delete',
-  'context:restore',
-  'semantic:purge',
-  'semantic:hold',
-  'moderation:takedown',
-];
-const real = await createRealAccess(admin, accounts, actions);
-const routeKey = new Uint8Array(32).fill(71);
-const kernel = createKernel({
+const fixture = await createDeletionFixture();
+beforeAll(fixture.setup);
+afterAll(fixture.close);
+const {
   pool,
-  access: (config) => createAccess({ ...config, auth }),
+  admin,
+  accounts,
   clock,
+  auth,
+  bearer,
+  actions,
+  real,
   routeKey,
-  tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) },
-  writeRate: createWriteRateLimiter({
-    secret: 'semantic-deletion-native-test-rate-secret',
-    overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',
-  }),
-});
-type Persona = keyof typeof accounts;
-async function call(method: string, path: string, persona?: Persona, body?: unknown, key = `"${randomUUID()}"`) {
-  const response = await kernel.handle(
-    new Request(`http://kernel.test${path}`, {
-      method,
-      headers: {
-        ...(persona ? { authorization: `Bearer ${await bearer(accounts[persona], actions)}` } : {}),
-        'idempotency-key': key,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  );
-  const text = await response.text();
-  return { status: response.status, body: text ? JSON.parse(text) : null };
-}
-function status(answer: { status: number; body: unknown }, expected: number) {
-  expect(answer.status, JSON.stringify(answer.body)).toBe(expected);
-}
-const snak = (property: string, content: unknown) => ({
-  property: { id: property },
-  value: { type: 'value', content },
-});
-const cited = (property: string, content: unknown) => ({
-  ...snak(property, content),
-  references: [{ parts: [snak('schema:url', 'https://example.test/evidence')] }],
-});
-async function person(label = 'Communal catalogue person') {
-  const result = await call('POST', '/v1/subjects', 'owner', { type: 'schema:Person', labels: { en: label } });
-  status(result, 201);
-  return result.body.subject.id as string;
-}
-async function proposal(subject: string, payload = `https://example.test/personal/${randomUUID()}`) {
-  const result = await call('POST', `/v1/subjects/${subject}/candidates`, 'owner', {
-    statement: cited('schema:url', payload),
-  });
-  status(result, 201);
-  return { subject, candidate: result.body.candidate as string, payload };
-}
-const path = (record: { subject: string; candidate: string }) =>
-  `/v1/subjects/${record.subject}/candidates/${record.candidate}`;
-async function accept(record: { subject: string; candidate: string }) {
-  status(await call('POST', `${path(record)}:accept`, 'editor', { context: GLOBAL_CONTEXT, expected_head: null }), 200);
-}
-async function adopt(record: { subject: string; candidate: string }, expected: number | null) {
-  const result = await call('POST', `/v1/subjects/${record.subject}:adopt`, 'editor', {
-    context: GLOBAL_CONTEXT,
-    property: 'schema:url',
-    mode: 'replace',
-    selection: [{ candidate: record.candidate, rank: 'normal' }],
-    expected_head: expected,
-  });
-  status(result, 200);
-  return result.body.adoption.head as number;
-}
-async function current(subject: string) {
-  const result = await call('GET', `/v1/subjects/${subject}`, 'owner');
-  status(result, 200);
-  return result.body.subject;
-}
-async function revisions(subject: string) {
-  return (
-    await admin.query(
-      'SELECT revision, kind FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision',
-      [routeOf(subject), subject],
-    )
-  ).rows;
-}
-async function caughtUp(subject: string) {
-  const projection = linkProjection(pool);
-  for (let i = 0; i < 200; i++) {
-    const result = await projection.run(partitionOf(routeOf(subject)!));
-    if (result.status !== 'busy' && result.envelopes === 0) return;
-    await Bun.sleep(5);
-  }
-  throw new Error('Link projection did not drain');
-}
-// Required native retention adapter, not an HTTP purge permission or a simulated worker.
-// The import above exists on the base. Route outcomes fail before this unimplemented adapter is reached.
-type RetentionPage = { examined: number; purged: number; checkpoint: string | null; done: boolean };
-function retention() {
-  const factory = Reflect.get(semantic, 'semanticRetention');
-  expect(typeof factory, 'Semantic must expose its native durable retention adapter').toBe('function');
-  return (
-    factory as (
-      pool: ReturnType<typeof createPool>,
-      options: { clock: () => Date },
-    ) => {
-      step(input: { partition: number; limit: number; key: string }): Promise<RetentionPage>;
-    }
-  )(pool, { clock });
-}
-async function drain(subject: string) {
-  const job = retention();
-  for (let page = 0; page < 100; page++) {
-    const result = await job.step({ partition: partitionOf(routeOf(subject)!), limit: 2, key: randomUUID() });
-    expect(result.examined).toBeLessThanOrEqual(2);
-    if (result.done) return;
-  }
-  throw new Error('Retention did not exhaust this small fixture');
-}
-async function absentPayload(payload: string) {
-  // Evidence reads only; no SQL fixture writes or invented purge progress.
-  const tables = (await admin.query("SELECT tablename FROM pg_tables WHERE schemaname='semantic'")).rows;
-  for (const { tablename } of tables) {
-    const result = await admin.query(
-      `SELECT count(*)::int AS n FROM semantic."${tablename}" AS r WHERE strpos(to_jsonb(r)::text,$1)>0`,
-      [payload],
-    );
-    expect(result.rows, tablename).toEqual([{ n: 0 }]);
-  }
-  for (const table of ['core.outbox', 'core.receipt']) {
-    const result = await admin.query(
-      `SELECT count(*)::int AS n FROM ${table} AS r WHERE strpos(to_jsonb(r)::text,$1)>0`,
-      [payload],
-    );
-    expect(result.rows, table).toEqual([{ n: 0 }]);
-  }
-}
-beforeAll(async () => {
-  await bootstrapRelease(pool, bundledRelease);
-  for (const action of ['subject:create', 'statement:propose', 'context:create'])
-    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', action);
-  for (const action of ['context:accept', 'context:adopt'])
-    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
-  for (const action of ['moderation:takedown', 'semantic:purge', 'semantic:hold'])
-    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'platform', action);
-});
-afterAll(async () => {
-  await Promise.all([pool.end(), admin.end()]);
-});
-
-// Read-only first slice: caller owns RR and native T; this is evidence, never an Access grant.
-type LifecycleTarget = { kind: 'candidate'; subject: string; candidate: string } | { kind: 'context'; context: string };
-type LifecycleEvidence = {
-  target: LifecycleTarget;
-  owner: { kind: 'write_basis' | 'owner_grant'; accountId: string } | null;
-  state: 'active' | 'deleted' | 'purged';
-  deletedAt: string | null;
-  purgeAfter: string | null;
-  held: boolean;
-};
-type LifecycleReader = (
-  client: Pick<pg.PoolClient, 'query'>,
-  input: { target: LifecycleTarget; accountId: string; nativeT: AuthoritativeTime },
-) => Promise<LifecycleEvidence | null>;
-async function lifecycle(target: LifecycleTarget, persona: Persona) {
-  return withReadTransaction(pool, async (client) => {
-    const nativeT = await mintReadTime(client, clock);
-    const reader = Reflect.get(semantic, 'readSemanticLifecycle');
-    expect(typeof reader, 'Semantic must expose its native state/owner evidence reader').toBe('function');
-    return (reader as LifecycleReader)(client, { target, accountId: accounts[persona], nativeT });
-  });
-}
-const activeEvidence = (target: LifecycleTarget, owner: LifecycleEvidence['owner']): LifecycleEvidence => ({
-  target,
-  owner,
-  state: 'active',
-  deletedAt: null,
-  purgeAfter: null,
-  held: false,
-});
-
-test('native lifecycle locator identifies proposal authors without provenance or editorial-role ownership', async () => {
-  // The subject creator/adopter is a different account from this contribution's author.
-  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
-  const created = await call('POST', '/v1/subjects', 'editor', {
-    type: 'schema:Person',
-    labels: { en: 'Another account created this communal subject' },
-  });
-  status(created, 201);
-  const record = await proposal(created.body.subject.id);
-  await accept(record);
-  await adopt(record, null);
-  // Actual native attribution evidence, not installed lifecycle truth. This URL proposal
-  // never mentions the derived account agent, so its source is null.
-  const evidence = await admin.query(
-    `SELECT r.source, b.principal_kind, b.principal_id::text
-     FROM semantic.candidate c JOIN semantic.revision r
-       ON r.route=c.route AND r.subject_id=c.subject_id AND r.revision=c.revision
-     JOIN editorial.write_basis b ON b.partition_no=$3 AND b.transaction_id=r.recorded_transaction_id
-     WHERE c.route=$1 AND c.subject_id=$2 AND c.candidate_id=$4`,
-    [routeOf(record.subject), record.subject, partitionOf(routeOf(record.subject)!), record.candidate],
-  );
-  expect(evidence.rows).toEqual([{ source: null, principal_kind: 'account', principal_id: accounts.owner }]);
-  const target: LifecycleTarget = { kind: 'candidate', subject: record.subject, candidate: record.candidate };
-  expect(await lifecycle(target, 'owner')).toEqual(
-    activeEvidence(target, { kind: 'write_basis', accountId: accounts.owner }),
-  );
-  // Acceptance/adoption authority grants no ownership of someone else's contribution.
-  expect(await lifecycle(target, 'editor')).toEqual(activeEvidence(target, null));
-  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
-  expect(await lifecycle({ ...target, subject: await person() }, 'owner')).toBeNull();
-});
-
-test('native lifecycle locator identifies compact contributions independently of communal subject ownership', async () => {
-  const payload = `https://example.test/compact/${randomUUID()}`;
-  const created = await call('POST', '/v1/subjects', 'owner', {
-    type: 'schema:Person',
-    labels: { en: 'Communal subject' },
-    statements: { 'schema:url': [cited('schema:url', payload)] },
-  });
-  status(created, 201);
-  const subject = created.body.subject.id;
-  const listed = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl`, 'owner');
-  status(listed, 200);
-  expect(listed.body.candidates).toHaveLength(1);
-  const target: LifecycleTarget = { kind: 'candidate', subject, candidate: listed.body.candidates[0].id };
-  expect(await lifecycle(target, 'owner')).toEqual(
-    activeEvidence(target, { kind: 'write_basis', accountId: accounts.owner }),
-  );
-  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
-});
-
-test('native lifecycle state uses current Context owner grants after native revocation', async () => {
-  const created = await call('POST', '/v1/contexts', 'owner', { labels: { en: 'Current owner evidence' } });
-  status(created, 201);
-  const context = created.body.context.id;
-  const target: LifecycleTarget = { kind: 'context', context };
-  expect(await lifecycle(target, 'owner')).toEqual(
-    activeEvidence(target, { kind: 'owner_grant', accountId: accounts.owner }),
-  );
-  expect(await lifecycle(target, 'stranger')).toEqual(activeEvidence(target, null));
-  const ownerGrant = await admin.query(
-    `SELECT valid::text FROM access.resource_role_grant
-     WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='semantic.context.owner'`,
-    [routeOf(context), context, accounts.owner],
-  );
-  expect(ownerGrant.rows).toHaveLength(1);
-  const grant = {
-    resource: { route: routeOf(context)!, id: context },
-    subject: { kind: 'account', id: accounts.owner },
-    role: 'semantic.context.owner',
-    valid: ownerGrant.rows[0].valid,
-  };
-  status(await call('POST', '/v1/roleGrants:revoke', 'owner', grant), 200);
-  expect(await lifecycle(target, 'owner')).toEqual(activeEvidence(target, null));
-  // Global has lifecycle identity but no private owner, even for an editorial grantee.
-  const global: LifecycleTarget = { kind: 'context', context: GLOBAL_CONTEXT };
-  expect(await lifecycle(global, 'editor')).toEqual(activeEvidence(global, null));
-});
+  call,
+  status,
+  snak,
+  cited,
+  person,
+  proposal,
+  path,
+  accept,
+  adopt,
+  current,
+  revisions,
+  caughtUp,
+  retention,
+  drain,
+  absentPayload,
+  setNow,
+} = fixture;
+const day = 86_400_000;
 
 test('user-owned semantic records soft-delete and restore without resurrecting superseded decisions', async () => {
   const subject = await person();
@@ -343,7 +62,7 @@ test('user-owned semantic records soft-delete and restore without resurrecting s
   const replacement = await proposal(subject);
   await accept(replacement);
   await adopt(replacement, head);
-  now = new Date(deletedAt + 29 * day);
+  setNow(new Date(deletedAt + 29 * day));
   status(await call('POST', `${path(old)}:restoreDeleted`, 'stranger', {}), 403);
   status(await call('POST', `${path(old)}:restoreDeleted`, 'owner', {}), 200);
   const shown = JSON.stringify(await current(subject));
@@ -364,12 +83,12 @@ test('owner restore expires at thirty days and cannot reverse current moderation
     }),
     200,
   );
-  now = new Date(deletedAt + 29 * day);
+  setNow(new Date(deletedAt + 29 * day));
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
   expect((await readCandidateDisclosure(admin, record))?.disclosed).toBe(false);
   const expired = await proposal(await person());
   status(await call('DELETE', path(expired), 'owner'), 200);
-  now = new Date(clock().getTime() + 30 * day);
+  setNow(new Date(clock().getTime() + 30 * day));
   status(await call('POST', `${path(expired)}:restoreDeleted`, 'owner', {}), 409);
 });
 
@@ -403,7 +122,7 @@ test('semantic takedown withholds only covered fields and retains reversible dat
   status(listed, 200);
   expect(listed.body.candidates).toContainEqual(expect.objectContaining({ id: record.candidate }));
   expect(JSON.stringify(listed.body)).toContain('https://example.test/evidence');
-  now = new Date(clock().getTime() + 60 * day);
+  setNow(new Date(clock().getTime() + 60 * day));
   await drain(record.subject);
   expect(
     (await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate])).rows[0]
@@ -428,7 +147,7 @@ test('ordinary owners and early platform purge cannot destroy retained takedown 
     await call('POST', `${path(record)}:purge`, 'platform', { reason: 'legal_order', order: 'order-reference' }),
     200,
   );
-  now = new Date(clock().getTime() + 60 * day);
+  setNow(new Date(clock().getTime() + 60 * day));
   await drain(record.subject);
   const held = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate]);
   expect(JSON.stringify(held.rows)).toContain(record.payload);
@@ -443,7 +162,7 @@ test('semantic purge removes minimum personal payload in bounded durable pages w
   await adopt(record, null);
   const before = await revisions(record.subject);
   status(await call('DELETE', path(record), 'owner'), 200);
-  now = new Date(clock().getTime() + 30 * day);
+  setNow(new Date(clock().getTime() + 30 * day));
   const job = retention();
   const key = randomUUID();
   const input = { partition: partitionOf(routeOf(record.subject)!), limit: 2, key };
@@ -465,7 +184,7 @@ test('early purge is separate platform authority and a legal hold suspends autom
   status(await call('DELETE', path(record), 'owner'), 200);
   status(await call('POST', `${path(record)}:purge`, 'owner', { reason: 'early' }), 403);
   status(await call('POST', `${path(record)}:hold`, 'platform', { held: true, reason: 'Preserve evidence' }), 200);
-  now = new Date(clock().getTime() + 31 * day);
+  setNow(new Date(clock().getTime() + 31 * day));
   await drain(record.subject);
   expect(
     (await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate])).rows[0]
@@ -499,7 +218,10 @@ test('paused consumers do not disclose a revoked source in inverse links or publ
   const subject = created.body.subject.id;
   await caughtUp(subject);
   const inverse = () => call('GET', `/v1/subjects/${target}/links?property=schema%3Aauthor`);
-  expect((await inverse()).body.count).toEqual({ value: 1, exact: true });
+  const initial = await inverse();
+  status(initial, 200);
+  expect(initial.body.links).toHaveLength(1);
+  if (Object.hasOwn(initial.body, 'count')) expect(initial.body.count).toEqual({ value: 1, exact: true });
   status(
     await call('POST', `/v1/subjects/${subject}:takedown`, 'platform', {
       notice: { complaint: 'Whole source', received_at: clock().toISOString() },
@@ -509,8 +231,16 @@ test('paused consumers do not disclose a revoked source in inverse links or publ
   // No projection.run or relay runs after the authoritative revocation.
   const withheld = await inverse();
   status(withheld, 200);
+  // Skeleton storage is retained even when its public number lacks current proof.
+  const stored = await admin.query(
+    `SELECT value::int FROM semantic.inbound_link_count
+     WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND property='schema:author'
+       AND filter_value='00000000-0000-0000-0000-000000000000'`,
+    [routeOf(target), target, GLOBAL_CONTEXT],
+  );
+  expect(stored.rows).toEqual([{ value: 1 }]);
   expect(withheld.body.links).toEqual([]);
-  expect(withheld.body.count, JSON.stringify(withheld.body)).toEqual({ value: 0, exact: true });
+  expect(Object.hasOwn(withheld.body, 'count'), JSON.stringify(withheld.body)).toBe(false);
 });
 
 test('deleted community Context cannot disclose its adopted overlay while consumers pause', async () => {
@@ -611,7 +341,7 @@ test('retention failure before receipt commit leaves payload intact and the same
   status(proposed, 201);
   const record = { subject, candidate: proposed.body.candidate };
   status(await call('DELETE', path(record), 'editor'), 200);
-  now = new Date(clock().getTime() + 31 * day);
+  setNow(new Date(clock().getTime() + 31 * day));
   const input = { partition: partitionOf(routeOf(subject)!), limit: 2, key: randomUUID() };
   // A native command failure after its writes must roll back payload and checkpoint together.
   await admin.query(`CREATE FUNCTION public.reject_semantic_retention_receipt() RETURNS trigger LANGUAGE plpgsql

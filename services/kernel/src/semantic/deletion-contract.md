@@ -90,7 +90,7 @@ ones enter bounded durable purge at the injected account confirmation time, with
 
 ## Executable surfaces and native adapter
 
-The two test files use the migrated database, native HTTP creation/proposal/editorial commands, `createRealAccess`,
+The four test files use the migrated database, native HTTP creation/proposal/editorial commands, `createRealAccess`,
 the injected domain clock, existing projection and shared `checkGrowth` capture. They do not prefill lifecycle truth
 with SQL, skip scenarios, import nonexistent files, or substitute a fake job. SQL reads inspect evidence; the
 existing receipt-fault trigger tests rollback and is removed in `finally`. It installs no lifecycle state.
@@ -132,7 +132,7 @@ readSemanticLifecycle(
 ): Promise<LifecycleEvidence | null>
 ```
 
-The closed shapes are declared in `deletion-contract.test.ts`: target is either
+The closed shapes are declared in `lifecycle-state.test.ts`: target is either
 `{kind:'candidate',subject,candidate}` or `{kind:'context',context}`; a known result contains exactly
 `{target,owner,state,deletedAt,purgeAfter,held}`. State is `active | deleted | purged`; timestamps are canonical
 ISO strings or null. New records are active with null timestamps and `held:false`. Owner is null unless the
@@ -151,6 +151,15 @@ Missing or ambiguous account author evidence yields null owner, never a guessed 
 native locator before extending the contract. No indistinguishable author counterexample was found in the
 native personal proposal/create paths audited here.
 
+Access must export `resourceRoleHeld(client,{resource:{route,id},role,accountId,at})` from `access/index.ts`.
+This read-only port is a production dependency of the state reader, not a prerequisite for loading the native
+specification. It executes one temporal `SELECT EXISTS` on the exact same caller client: direct identity grants
+only, `subject_role=''`, exact resource and role, and `valid @> at`. It adds no group or active-account
+inheritance, account-state check or Access allow decision. The semantic reader supplies
+`authoritativeTimeValue(nativeT)` as `at`; neither port opens a connection or transaction. The native tests
+continue resolving the exact reader signature above after legal setup, without a stub or direct Access SQL
+substitute for the production port.
+
 Community owner evidence comes from the current `semantic.context.owner` resource-role grant for the queried
 account at native T, through existing Access evidence semantics, not historical `resource_initialization.creator_id`
 or an accept/adopt action grant. Global has active state and null owner. Author evidence itself grants no role:
@@ -158,10 +167,10 @@ later lifecycle commands must still perform current Access authorization, with d
 needed; preserve frozen editorial role catalogues. This reader and creation metadata share the existing native
 writer; do not create a parallel permission or provenance engine.
 
-Three separately named native tests exercise proposal authors versus adopter/stranger and wrong subject,
+`lifecycle-state.test.ts` owns three separately named native tests exercising proposal authors versus adopter/stranger and wrong subject,
 compact contribution identity, and Context owner evidence after real role revocation. They require no missing
-HTTP DELETE/restore/retention route and can pass independently when this first slice lands. The separate locator
-growth test captures only this reader after native setup across 64/512/4096 unrelated proposal history.
+HTTP DELETE/restore/retention route and can pass independently when this first slice lands. `growth-lifecycle-state.test.ts` owns the separate locator
+growth test, which captures only this reader after native setup across 64/512/4096 unrelated proposal history.
 Later route tests prove actual transitions; fresh-state tests alone do not certify those transitions.
 
 ## Small production briefs and dependencies
@@ -179,27 +188,24 @@ changes to another owner. Acceptance files here are frozen outcomes for implemen
 | Retention page                        | Native adapter above, eligible-key/fragment indexes, hold/replay receipts and maintenance registration. Depends on lifecycle state and payload/identity split. Native minimum purge, hold/restart tests and 64/512/4096 history growth; native injected precommit receipt failure must roll back payload and progress.                                                                                                                                                                                                                                                            |
 | Payload and custody minimization      | Narrow authorized fragment erasure under immutable guards; revision/source/notice payloads and exact shared receipt/outbox custody locators. Depends on retention page; shared owners expose cleanup hooks. Native payload absence across semantic/core stores. Content adapter must prove body cleanup separately.                                                                                                                                                                                                                                                               |
 | Account erasure adapter               | Existing account-tombstone consumer and bounded owner-key lookup; retain/de-identify public, purge private and clear derived labels, including unknown/current types. Depends on locator and retention page. Native account test plus existing account-agent-erasure tests; native software-agent name clear after its type leaves the active release; add account-event replay coverage.                                                                                                                                                                                         |
-| Disclosure and foreign projections    | Current availability checks at source/read/search/link boundaries, per bounded returned page, no degree scans. Depends on lifecycle visibility; reuse existing source fence mechanisms. Paused-consumer inverse fixture below and lifecycle growth. Exact foreign live totals need the decision below before implementation claims them.                                                                                                                                                                                                                                          |
+| Disclosure and foreign projections    | Current availability checks at source/read/search/link boundaries, per bounded returned page, no degree scans. Depends on lifecycle visibility; reuse existing source fence mechanisms. Paused-consumer inverse fixture below and lifecycle growth. Public numbers follow the owning aggregate-disclosure contract and its separately owned backend; no separate count authority is required here.                                                                                                                                                                                |
 
-## Foreign-count counterexample and manager decision
+## Foreign-count counterexample and aggregate authority
 
-The last native regression creates a person target and a book with one adopted `schema:author` link, drains the
+The native regression creates a person target and a book with one adopted `schema:author` link, drains the
 link projection, takes down the book, then reads the person's inverse page without running a consumer again.
-The source summary is withheld, but `read-inbound-link-count.sql` obtains only the target-local stored count:
-`COALESCE(inbound_link_count.value,0) + COALESCE(inbound_link_context_count.value,0)` for the fixed target,
-Global Context, property and nil filter key. It has no current source availability predicate. The README explicitly
-states summary filtering leaves counts unchanged. The test demands zero publicly live items; the focused check returned
-`{"links":[],"count":{"value":1,"exact":true},"freshness":{"consistency":"eventual","target_seconds":10,"caught_up":true},"next":null}`.
-The actual [count query](read-inbound-link-count.sql) probes only target-local aggregates, as described above. This is an existing native route counterexample independent of missing DELETE.
+The retained internal Global counter remains 1. The current public response must contain `links:[]` and no
+own `count` property. Returning exact zero, null, an approximation or the stored 1 would violate the owning
+[aggregate disclosure contract](aggregate-disclosure.md). The separately owned backend must apply that
+contract in the actual `links.ts`, `subject.ts` and `graph.ts` producers; this deletion audit adds no aggregate
+authority or count engine. The current base still publishes the stored inverse count, so this native omission
+assertion remains an honest backend regression until that implementation lands.
 
-An exact immediate total for arbitrarily many foreign sources cannot be established by checking only the
-returned page, nor by waiting for paused relays. The current fixed-budget read has no shared revocation aggregate.
-A shared ABI decision requested from the manager is pending. The manager must resolve an exact count
-authority/dependency contract before this can be claimed solved. This specification does not choose nullable
-counts, approximations or a new cross-home aggregate. Do not
-silently label the stale integer a live count, scan the full degree, introduce a cross-home transaction, or relax
-the policy. Retained stored counters remain permissible skeleton. Bounded disclosure of returned items is a
-separate deliverable and does not prove an exact total.
+The initial visible complete-set count may be absent until an actual bounded complete-set proof exists.
+When returned it must remain exact 1, and the visible row is still required. Omission never permits a stale
+returned row. Internal counter storage, replay and projection effects remain unchanged. An exact immediate
+total for arbitrarily many foreign sources cannot be established from the returned page or a caught-up relay;
+never scan the full degree or add a cross-home transaction to manufacture completeness.
 
 ## Validation limits
 
@@ -211,6 +217,9 @@ checkpoint. Additional Context settings/extension, account-event replay, passage
 paused-worker tests remain required native acceptance for the respective implementation briefs;
 existing unavailable sitemap behavior is evidence only. No external product research was needed for this audit. The reference index was read; the contract and cited READMEs name no external reference implementation for this lifecycle surface.
 
+The following prior-run evidence predates the file split and aggregate reconciliation below. Its count
+expectations are historical observations, not current requirements.
+
 The corrected specification and independent state/locator tests were committed before native check-host waits.
 Root TC0 (`bun scripts/typecheck.ts`), focused lint, formatting and diff checks passed in the prior reconciliation
 and continuation. Prior native validation evidence is distinct from the corrected tests' required outcomes:
@@ -221,8 +230,8 @@ and continuation. Prior native validation evidence is distinct from the correcte
 | Reconciliation        | Host `a` acquired after 3983 seconds; workspace-upload SSH closure, rsync exit 255. Retry acquired host `b` after 166 seconds; upload SSH closure, rsync exit 12; remote directory cleanup also failed. | Neither run returned native test results.                                               |
 | Supplied continuation | Host `b` acquired after 276.133 seconds; upload SSH closure, rsync exit 12, `RemoteTransportError` for `workspace upload`.                                                                              | Runner exited 1 before returning native test results.                                   |
 
-Missing lifecycle routes, scoped withholding, state/retention adapters and the unchanged exact-live count
-assertion remain expected native reds, **not observed outcomes of those corrected-test attempts**. Neither
+Missing lifecycle routes, scoped withholding, state/retention adapters and the then-required public count
+assertion remained expected native reds, **not observed outcomes of those corrected-test attempts**. Neither
 512/4096 growth measurements nor account-at-confirmation cleanup, legal holds or replay results are claimed.
 A slot wait is queued work; the prior blockers were workspace-upload transport failures. No unrelated process,
 database or container was stopped or removed. No production file or existing acceptance assertion was changed.
@@ -254,6 +263,23 @@ load-sensitive outcomes were observed. No further runtime result is inferred fro
 This continuation preserved all corrected policy decisions and existing acceptance assertions: immediate
 account-confirmation handoff, individual 30-day restoration, lowerCamelCase `restoreDeleted`, Content source
 fence custody, legal-order-only destruction of takedown evidence with holds, read-only caller-RR/native-T
-owner evidence, and pending foreign-count ABI. It changed only this validation documentation within the
+owner evidence, and the then-pending foreign-count ABI (now superseded by
+[aggregate disclosure](aggregate-disclosure.md)). It changed only this validation documentation within the
 declared paths; there are no outside-path changes or new product decisions. Reference reading was limited
 to the read-only reference `INDEX.md`; no external implementation is named for this lifecycle surface.
+
+The native acceptance is split by production dependency:
+
+| File                                           | Required evidence                                                                                                                                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test/semantic/lifecycle-state.test.ts`        | Three unchanged proposal-author, compact-author and current Context-owner tests; native setup and cleanup, caller RR/native T, role revocation, mismatched locator and exact result assertions. No DELETE or retention prerequisite. |
+| `test/semantic/growth-lifecycle-state.test.ts` | Unchanged locator-only growth test and shared capture at 64/512/4096, one warmup and one repetition. No missing lifecycle routes.                                                                                                    |
+| `test/semantic/deletion-contract.test.ts`      | Remaining delete/restore, purge/hold, account and field outcomes, plus the reconciled paused-consumer aggregate omission counterexample and retained internal counter.                                                               |
+| `test/semantic/growth-deletion.test.ts`        | Remaining delete/restore and retention/replay growth outcomes at their original scales and capture settings.                                                                                                                         |
+
+Each file owns its native fixture instance and cleanup through `test/semantic/support/deletion-fixture.ts`.
+The factory is extracted from the original actual fixtures; no test imports another registering test module,
+installs lifecycle truth or replaces Access with a callback. All lifecycle outcomes and assertions remain.
+The sole obsolete aggregate expectation is reconciled to the owning omission rule above. The first slice
+changes no roles, grants or action catalogues. Lifecycle authority integration must be explicit before any
+later change to frozen editorial catalogues.
