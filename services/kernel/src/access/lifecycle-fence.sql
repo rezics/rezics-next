@@ -27,6 +27,10 @@ WITH input AS NOT MATERIALIZED (
   FROM input i CROSS JOIN counter_time
   WHERE access.account.route = i.route AND access.account.account_id = i.account_id AND state <> 'deleted'
   RETURNING minimum_authn_epoch
+), erased_preferences AS (
+  DELETE FROM access.account_preferences p
+  USING input i, changed
+  WHERE i.tombstone AND p.route = i.route AND p.account_id = i.account_id
 )
 INSERT INTO access.lifecycle_fence_receipt
   (route, account_id, receipt_id, minimum_authn_epoch, kind, prior_operator_account_id, transaction_id)
