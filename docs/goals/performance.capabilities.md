@@ -1,0 +1,181 @@
+# Performance capability acceptance
+
+This manifest maps the [Performance Goal](performance.md) to user cases across [public scope](../scope.md).
+The [acceptance-gap report](../research/api-acceptance-gaps.md#definitions-and-fixtures-the-missing-cases-require)
+owns the fixture contract names; [filtered-list Cost](../filtered-lists.md#cost) owns list budgets and scales.
+This is an acceptance specification, not evidence that the capabilities have passed.
+
+Stages advance separately: **specified red** (validated failing specification), **driver registered** (native binding),
+**implementation exposed** (production boundary), **user-case acceptance passed** (all named cases at a recorded
+revision), **promoted** (that revision on main with recorded checks). “Not yet specified” precedes these stages.
+A reserved scenario name below becomes frozen with its executable acceptance; reserving it proves no stage.
+Existing frozen tests remain unchanged. Promotion requires every applicable cell and exact scenario execution,
+zero skips/todos, real native Access, production HTTP/default workers where relevant, and recorded revision evidence.
+
+## composed-discovery-cost
+
+**User job:** Anonymous and Alice find light novels tagged harem with more than 1,000,000 words, and vegetarian
+recipes cooking in 30 minutes or less; Alice excludes recipes she has cooked. Alice also submits the report's bulk
+query selecting long harem light novels, follows bounded outcome pages, retries and cancels. Useful discovery pages
+and bulk progress stay within the native budgets as unrelated data grows.
+
+**Personas:** Anonymous; Alice using her own state/history; Bob with unrelated owner history; hidden-subject,
+hidden-source, denied, valid suspended-bearer and empty controls from the report. Revoked credentials remain distinct
+from a valid suspended bearer (`403 account_suspended`). Public output never borrows private owner authority.
+
+**Released fixtures:** `words`, `classification`, `books`, `diet`, `recipes`, `personal`, `sources`, `privacy`,
+from the shared versioned released fixture builder, using deterministic logical names mapped to actual created IDs.
+No test-only definitions, private labels standing in for diet, or title matches standing in for Concepts.
+Words exclude equality, unknown values, characters and edition pages. The combined book set is `{B-long}`;
+form/tag alone is `{B-long, B-edge, B-characters}`. Quick vegetarian recipes are
+`{R-quick, R-edge, R-cooked, R-other-cooked}`; Alice's supported not-cooked set is
+`{R-quick, R-edge, R-other-cooked}`. Completion semantics and the owner-query wire schema must be adopted by
+Commerce before freezing the new private predicate; clearing state cannot silently erase completed history.
+
+| Surface cell | Scope and reason |
+| --- | --- |
+| Catalogue: direct catalogue | In scope: public book/recipe predicates through native search; owner-history predicates require Alice's admitted private population. |
+| Catalogue: prepared public plans | In scope: expensive public predicates must finish preparation and yield the same useful public sets. |
+| Curated Collection | In scope: canonical browsing of `C-public` intersects its population; occurrence editing retains duplicate notes. Private personalization only where admitted. |
+| Everything without state | In scope: Alice's support union includes label/holding-only subjects without fabricating an entry or state. |
+| Own state | In scope: intersect Alice's accepted state/predicate; Bob's facts do not affect her result. |
+| Mounted Zone | In scope: `Z-public` unions overlapping mounts/scopes; one composed page reaches 16 reads and 128 total slots. Public reads never inspect Alice's history. |
+| TypeList | In scope: Book and Recipe are configured in `packages/definitions/presentation/book/zone.json` and `packages/definitions/presentation/recipe/zone.json`; exercise both public list consumers with the same released predicates. |
+
+The checked-in catalogue release `packages/definitions/release/rezics.json` has Book and Recipe types but no
+`schema:wordCount` or `schema:suitableForDiet`; it does not embed the configured Zone documents. Existing TypeList
+configuration makes that cell required, while missing released predicates remain dependencies, not scope exclusions.
+Subject detail factual projection belongs to its owner; this capability measures the configured list consumer.
+
+**Reserved frozen scenario names:** each applicable public job/cell and Alice owner job/cell is a separately named
+native case, using `<job>/<surface>/<scenario>`. Jobs are `long-harem-light-novels`, `quick-vegetarian-recipes`,
+`quick-vegetarian-not-cooked`, and `bulk-long-harem-light-novels`; surfaces are the explicit cells above.
+An anonymous private-history request is a denied control, not a public personalized result.
+
+| Scenario suffix | Required observable result |
+| --- | --- |
+| `first-page`, `deep-page`, `sparse-page` | Each direct catalogue, prepared public, direct owner and prepared owner plan returns an ordered useful page or genuine exhaustion; sparse work cannot hide behind short output. |
+| `composed-page-at-limits` | Native mounted page admits 16 reads and 128 slots and holds every summed counted-unit ceiling. |
+| `aliases-and-duplicates` | Canonical browsing emits each eligible subject once and charges original/terminal and duplicate work. |
+| `unrelated-owner-history` | Bob's growing history does not expand Alice's selected neighbourhood or disclose private facts. |
+| `privacy-reduction-served-share` | Grow reductions with population, acknowledge after actual repair; public served share never falls between scales. |
+| `preparation-frontier-resume` | Interrupt and resume retained progress; reread at most one step, finish useful pages, and keep total work linear in relevant input. |
+| `foreign-dependency-revoked-midway` | Reauthorize current dependencies before disclosure; no stale permission survives preparation or cursor continuation. |
+| `hidden-control`, `denied-control`, `suspended-control`, `empty-control` | Safe native disclosure/error envelopes and genuine empty exhaustion obey the same work bounds. |
+| `bulk-captured-population`, `bulk-retry-cancel-revoke` | HTTP admission is `202` with operation ID/Location, status/outcomes are `200`; exactly captured eligible subjects change once with bounded continuation and safe cancellation/revocation. |
+
+**Measurement:** use 64, 512 and 4,096 for each independent axis in
+[Three-scale checks](../filtered-lists.md#three-scale-checks): catalogue population, matching population, sparse
+nonmatches, unrelated history, owner pools, aliases/duplicates, cursor depth and privacy reductions. Keep the selected
+neighbourhood fixed. These scales override the report/library's older 1,000/10,000/100,000 examples for this capability.
+Capture actual candidates (including rejects/lookahead/rereads), Access/dependency points, index/engine work,
+examined/removed rows, shared blocks, statements, connections per backend, bytes and output slots with no budget slack.
+Rows/statements/bytes remain constant in population, blocks logarithmic and engine work constant or logarithmic.
+Use the linked Budgets for each page and preparation step, including shared privacy observation and linear total
+preparation; wall time and a small returned array are insufficient evidence.
+
+**Native acceptance command:**
+
+```sh
+bun run --cwd services/kernel check test/performance/composed-discovery-user-cases.test.ts
+```
+
+This file runs user jobs end to end through production HTTP and holds counted units with the shared harness.
+Search retains direct catalogue/prepared public checks; Commerce retains direct owner/prepared owner checks;
+the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
+evidence rather than duplicate their checks or implement benchmark-only matching.
+
+**Stage:** not yet specified. The named suite does not yet exist; released fixtures, native plans and the adopted
+owner completion/query contract are prerequisites. No red, driver, exposed, passed or promoted claim is made.
+
+## growth-harness
+
+**User job and persona:** an owner Goal contributor measures engine work at three seeded scales independently of
+machine speed, growing unrelated data/history separately from the selected neighbourhood.
+**Released fixtures:** none of the report's vertical fixtures is needed by test support; use the harness's
+production-shaped seeded populations and isolated native resources. Composed consumers supply the released fixtures
+listed above rather than replacing them with synthetic definitions.
+**Surface cells:** catalogue, curated Collection, Everything without state, own state, mounted Zone and TypeList
+are all not applicable: this is test support with no list surface.
+
+**Frozen scenarios already present in `test/support/growth.test.ts`:**
+
+- `a primary-key point read passes constant rows and logarithmic blocks as the table grows`
+- `an unindexed payload filter fails logarithmic rows and reports the table evidence`
+- `restricting an unindexed filter to the hot partition routes still exposes partition scans`
+- `measure counts request statements through the production pool`
+- `a linear-in-change operation passes linear and fails constant bounds`
+
+Reserve `counted-unit-ceilings-at-three-scales` for `growth-counters.test.ts`: examined/removed rows, shared blocks,
+statements, request/response bytes, connections per backend and native counted units must be captured, attributed
+and asserted at every scale. Independent background work is reported separately, with its own bounded statements.
+
+**Native acceptance command:**
+
+```sh
+bun run --cwd services/kernel check test/support/growth.test.ts test/support/growth-counters.test.ts
+```
+
+**Stage:** implementation exposed for the existing harness API only; the complete capability has no recorded
+user-case acceptance or promotion. `growth-counters.test.ts` is absent, so its reserved scenario is not yet
+specified red or driver registered. Existing supporting suites are inventoried below, not treated as its substitute.
+
+## hot-path-bounds
+
+**User job and personas:** contributors and owner Goals can audit every merged read, write, Access, validation,
+projection, cleanup and job operation against a derived bound and an existing growth check. API callers, including
+hidden/denied/empty cases, receive bounded native work even on deep pages and resumable jobs.
+**Released fixtures:** no additional report fixture contract is introduced for the audit; each operation uses its
+owner's native fixtures, with the eight released contracts above required wherever the discovery jobs participate.
+**Surface cells:** catalogue, curated Collection, Everything without state, own state, mounted Zone and TypeList
+are all not applicable per operation: this audit covers hot paths rather than another list surface.
+
+**Scenario obligations:** `read-bound`, `write-bound`, `access-bound`, `validation-bound`, `projection-bound`,
+`cleanup-bound`, `job-progress-bound`. Each requires an operation Cost row (or the current equivalent operation
+subsection) identifying touches/anchors, a derived constant/logarithmic/change-proportional bound and a check that
+exists. Include denied/empty/deep paths, replay and bounded resumable progress. Existing native scenario titles in
+the following files remain frozen; these obligation names do not rename or replace them.
+The Cost-table verifier's frozen cases include `a Cost table whose every row cites an existing check passes` and
+`a citation of a missing file or of a name the file does not contain is refused and named`.
+
+**Native acceptance commands:** run `bun run --cwd services/kernel check test/support/growth-cost-table.test.ts`
+for Cost citation validation. For each inventory row below, join its directory and each filename to form
+workspace-relative paths; substitute those paths into the workspace command in groups of at most twelve files. Kernel uses `bun run --cwd services/kernel check <files>`;
+Auth uses `bun run --cwd services/auth check <files>`; importer uses
+`bun run --cwd services/importer check <files>`; conversion uses
+`bun run --cwd packages/conversion check <files>`. Root import growth uses
+`IMPORT_GROWTH_DRIVER=/absolute/path/to/native-driver.ts bun test specs/imports-growth.test.ts` from the repository
+root, with a real producer binding exporting `createImportGrowthDriver`; a missing-driver verifier is red evidence
+only. These are capability commands for future verification, not a claim that they ran in this specification change.
+
+**Stage:** implementation exposed for existing Cost verification and module growth suites; complete hot-path
+coverage has no recorded user-case acceptance or promotion. Inventory presence alone cannot prove every operation
+has a sound derivation or that its native driver passes.
+
+### Existing tracked Cost-table and growth inventory
+
+Discovered with `git ls-files '*cost-table.test.ts' '*growth*.test.ts'`; filenames below are relative to the named
+workspace (root for `specs`). This includes growth suffixes as well as `growth-` prefixes and retains every existing
+suite, including harness diagnostics. The sole tracked `*cost-table.test.ts` is the kernel support verifier below.
+
+| Workspace / directory | Existing test filenames |
+| --- | --- |
+| `packages/conversion` / `tests` | `bangumi-growth.test.ts`, `logical-growth.test.ts`, `open-library-growth.test.ts`, `vndb-growth.test.ts`, `wikidata-growth.test.ts` |
+| `services/auth` / `test` | `growth-auth-rate.test.ts`, `growth-auth-schedules.test.ts`, `growth-barrier-proofs.test.ts`, `growth-bounded-sessions.test.ts`, `growth-client-reduction-natural.test.ts`, `growth-client-reduction.test.ts`, `growth-consent-erasure.test.ts`, `growth-consent-issuance.test.ts`, `growth-credential-effects.test.ts`, `growth-current-consent.test.ts`, `growth-erasure-indexes.test.ts`, `growth-pages-reads.test.ts`, `growth-passkeys.test.ts`, `growth-protocol.test.ts`, `growth-provisioning-evidence.test.ts`, `growth-recovery-delivery.test.ts`, `growth-recovery-establishment.test.ts`, `growth-registration-operator-workflows.test.ts`, `growth-retention.test.ts`, `growth-revoke-maintenance.test.ts`, `growth-session-proof-capability.test.ts`, `growth-sessions.test.ts`, `growth-signing-retention.test.ts`, `growth-verification.test.ts`, `growth-website-refresh.test.ts` |
+| `services/importer` / `tests` | `bindings-growth.test.ts`, `dumps-growth.test.ts`, `import-fetch-growth.test.ts`, `importer-growth.test.ts`, `importer-reconciliation-growth.test.ts`, `record-caps-growth.test.ts`, `record-cpu-growth.test.ts`, `record-store-growth.test.ts`, `request-backing-growth.test.ts`, `run-store-empty-growth.test.ts`, `run-store-growth.test.ts`, `run-store-native-keys-growth.test.ts`, `sqlite-growth.test.ts`, `vndb-archive-limits-growth.test.ts`, `vndb-chunk-growth.test.ts`, `vndb-tables-growth.test.ts` |
+| `services/kernel` / `test/access/gates` | `growth-admission.test.ts`, `growth-discovery.test.ts` |
+| `services/kernel` / `test/access` | `growth-account-agent-effect.test.ts`, `growth-account-handle-read.test.ts`, `growth-account-public-views.test.ts`, `growth-account-realms.test.ts`, `growth-active-account-page.test.ts`, `growth-agent-page-lookup.test.ts`, `growth-agent-pages.test.ts`, `growth-agent-verification.test.ts`, `growth-anonymous-resource-authorization.test.ts`, `growth-auth-barriers.test.ts`, `growth-auth-credential-capability.test.ts`, `growth-auth-session-capability.test.ts`, `growth-authenticate.test.ts`, `growth-bootstrap-governance.test.ts`, `growth-command-admission.test.ts`, `growth-commands.test.ts`, `growth-committed-continuation.test.ts`, `growth-creation-manifest.test.ts`, `growth-durable-initiator-capture.test.ts`, `growth-durable-initiator.test.ts`, `growth-evaluator.test.ts`, `growth-governance-reach.test.ts`, `growth-grant-routes.test.ts`, `growth-handle-retirement.test.ts`, `growth-membership-inverse-bootstrap.test.ts`, `growth-membership-inverse.test.ts`, `growth-native-account-bindings.test.ts`, `growth-native-membership-work.test.ts`, `growth-open-interval-history.test.ts`, `growth-operator-cursor.test.ts`, `growth-operator-fencing.test.ts`, `growth-operator-reinstatement.test.ts`, `growth-operator-transfer.test.ts`, `growth-organization-close.test.ts`, `growth-organization-creation.test.ts`, `growth-organization-speakers.test.ts`, `growth-permission.test.ts`, `growth-preferences.test.ts`, `growth-public-identity-read.test.ts`, `growth-rate-tier.test.ts`, `growth-rating-counter.test.ts`, `growth-recovery-completion.test.ts`, `growth-registration-proof.test.ts`, `growth-reinstatement.test.ts`, `growth-resource-authorization-page.test.ts`, `growth-resource-authorization.test.ts`, `growth-resource-role-held.test.ts`, `growth-revocation-lifecycle.test.ts`, `growth-share-reach-consent.test.ts`, `growth-suspension.test.ts`, `growth-workflow-approvals.test.ts`, `growth-write-rate-chunk.test.ts`, `growth-write-rate-route.test.ts`, `growth-write-rate.test.ts`, `membership-work-growth.test.ts` |
+| `services/kernel` / `test` | `anonymous-receipts-growth.test.ts`, `check-growth-rerun.test.ts`, `growth-command-wait.test.ts`, `growth-command.test.ts`, `growth-effects.test.ts`, `growth-events.test.ts`, `growth-projection.test.ts`, `growth-request.test.ts` |
+| `services/kernel` / `test/commerce` | `growth-orders.test.ts`, `growth-payouts.test.ts`, `growth-transactions.test.ts` |
+| `services/kernel` / `test/community` | `growth-ban.test.ts`, `growth-join.test.ts`, `growth-membership-history.test.ts`, `growth-membership.test.ts`, `growth-publication.test.ts`, `growth-realm.test.ts`, `growth-sitemap.test.ts`, `growth-space-address.test.ts`, `growth-space.test.ts` |
+| `services/kernel` / `test/content` | `growth-board-sorts.test.ts`, `growth-boards.test.ts`, `growth-lifecycle.test.ts`, `growth-media-erase.test.ts`, `growth-media.test.ts`, `growth-notices.test.ts`, `growth-reactions.test.ts`, `growth-reports.test.ts`, `growth-sitemap.test.ts`, `growth-subject-threads.test.ts`, `growth-threads.test.ts` |
+| `services/kernel` / `test/imports` | `growth-outcomes.test.ts`, `growth-warmups.test.ts`, `identity-growth.test.ts`, `media-boundary-growth.test.ts` |
+| `services/kernel` / `test/library` | `collection-source-native-growth.test.ts`, `entry-due-store-growth.test.ts`, `growth-bulk-outcome-page.test.ts`, `growth-canonical-source.test.ts`, `growth-collections.test.ts`, `growth-curator-list.test.ts`, `growth-listing.test.ts`, `growth-loops.test.ts`, `growth-maintenance-history-page.test.ts`, `growth-maintenance-session-page.test.ts`, `growth-members.test.ts`, `growth-personal-reads.test.ts`, `growth-personal-writes.test.ts`, `growth-preparation-native-reader.test.ts`, `growth-published-logs.test.ts`, `growth-scales.test.ts`, `growth-sessions.test.ts`, `growth-sitemap-discovery.test.ts`, `growth-sitemap.test.ts`, `label-assignment-growth.test.ts`, `label-assignment-lifecycle-growth.test.ts`, `shelf-active-growth.test.ts`, `shelf-page-activity-asc-growth.test.ts`, `shelf-page-activity-desc-growth.test.ts`, `shelf-page-created-asc-growth.test.ts`, `shelf-page-finished-asc-growth.test.ts`, `shelf-page-finished-desc-growth.test.ts` |
+| `services/kernel` / `test/presentation` | `growth-pages.test.ts`, `growth-profile-routes.test.ts`, `growth-profiles.test.ts` |
+| `services/kernel` / `test/rating` | `growth-aggregate-read.test.ts`, `growth-aggregate.test.ts`, `growth-figures-statistics.test.ts`, `growth-own-votes.test.ts`, `growth-prior-epoch.test.ts`, `growth-public-figure.test.ts`, `growth-segment-job.test.ts`, `growth-votes.test.ts` |
+| `services/kernel` / `test/search` | `growth-facets.test.ts`, `growth-indexing.test.ts`, `growth-query.test.ts`, `growth-rating-query.test.ts` |
+| `services/kernel` / `test/semantic` | `growth-aggregate-disclosure.test.ts`, `growth-definitions.test.ts`, `growth-deletion.test.ts`, `growth-identity-contract.test.ts`, `growth-inverse-pages.test.ts`, `growth-item-identity-version.test.ts`, `growth-key-reemit.test.ts`, `growth-lifecycle-state.test.ts`, `growth-private-statements.test.ts`, `growth-reads.test.ts`, `growth-relation-facet-rebuilds.test.ts`, `growth-relation-facet-source.test.ts`, `growth-relations.test.ts`, `growth-scope-leaf-evidence.test.ts`, `growth-search-source.test.ts`, `growth-sourced-writes.test.ts`, `growth-subject-page-candidates.test.ts`, `growth-subject-page-repair.test.ts`, `growth-subject-pages.test.ts`, `growth-subject-reference.test.ts`, `growth-subjects.test.ts`, `growth-terminal-identity.test.ts` |
+| `services/kernel` / `test/support` | `growth-background.test.ts`, `growth-bound.test.ts`, `growth-bytes.test.ts`, `growth-calibration.test.ts`, `growth-capture.test.ts`, `growth-catalog.test.ts`, `growth-cost-table.test.ts`, `growth-cost.test.ts`, `growth-dbos-vacuum.test.ts`, `growth-determinism.test.ts`, `growth-load.test.ts`, `growth-model.test.ts`, `growth-nested-capture.test.ts`, `growth-plans.test.ts`, `growth-profile-read.test.ts`, `growth-profile.test.ts`, `growth-report.test.ts`, `growth-rule.test.ts`, `growth-scale-cap.test.ts`, `growth-schedule.test.ts`, `growth-seed.test.ts`, `growth-shadow.test.ts`, `growth-vacuum.test.ts`, `growth-warmup.test.ts`, `growth.test.ts` |
+| `services/kernel` / `test/work` | `growth-retention.test.ts`, `growth-work-client.test.ts` |
+| `services/kernel` / `test/zones` | `growth-membership.test.ts`, `resource-growth.test.ts` |
+| `.` / `specs` | `imports-growth.test.ts` |
