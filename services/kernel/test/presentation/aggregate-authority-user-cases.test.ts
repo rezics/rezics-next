@@ -112,6 +112,7 @@ test('native pages driver preserves unknown, hidden and taken-down standalone au
 }, 180_000);
 
 type Observation = {
+  root: boolean;
   path: string;
   method: string;
   headers: Headers;
@@ -158,6 +159,7 @@ test('production page aggregates preserve each standalone read authority and dis
     app.wrap((handle) => async (request: Request) => {
       const seen = capture.getStore();
       if (!seen) return handle(request);
+      const root = seen.active === 0;
       seen.active += 1;
       seen.peak = Math.max(seen.peak, seen.active);
       // customMethod rewrites the genuine Request URL in place while routing.
@@ -167,6 +169,7 @@ test('production page aggregates preserve each standalone read authority and dis
       try {
         const response = await handle(request);
         seen.requests.push({
+          root,
           path,
           method: request.method,
           headers,
@@ -323,7 +326,7 @@ test('production page aggregates preserve each standalone read authority and dis
       status(aggregate, 200);
       expect(aggregate.body.profile).toBe(digest);
       const reads = record(aggregate.body.reads);
-      const subrequests = observed.requests.filter(({ path }) => path !== '/v1/pages:read');
+      const subrequests = observed.requests.filter(({ root }) => !root);
       expect(subrequests.map(({ path }) => path).sort()).toEqual(routes.map(([, path]) => path).sort());
       expect(observed.peak - 1).toBeLessThanOrEqual(4); // outer page remains active
       for (const request of subrequests) {
@@ -404,7 +407,7 @@ test('production page aggregates preserve each standalone read authority and dis
       send(null, 'POST', '/v1/pages:read', { target: { subject: subject.id } }),
     );
     status(budgetPage, 200);
-    const executed = budgetCapture.requests.filter(({ path }) => path !== '/v1/pages:read');
+    const executed = budgetCapture.requests.filter(({ root }) => !root);
     expect(executed).toHaveLength(16);
     expect(new Set(executed.map(({ method, path }) => `${method} ${path}`)).size).toBe(16);
     expect(budgetCapture.peak - 1).toBeLessThanOrEqual(4);
