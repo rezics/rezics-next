@@ -64,7 +64,7 @@ export async function setLabelAssignment(
     label_id: input.labelId,
   };
   const guarded = await guard.run(db, tuple);
-  const labelId = guarded[0]?.labelId;
+  const labelId = guarded.labelId;
   if (!labelId) throw new Error('Label assignment guard returned no canonical label identity');
   const rows = await reservations.run(db, tuple);
   const desired = rows.find((row) => row.labelId === labelId);
