@@ -12,7 +12,7 @@ import {
   subjectIndexDefinition,
   subjectIndexName,
 } from '../../src/search/indices.ts';
-import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { createOpenSearch, OpenSearchError, type OpenSearch } from '../../src/search/opensearch.ts';
 import { FACET_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
 import { startSearchIndexing } from '../../src/search/runner.ts';
 import { createSearchService, type SearchRequest } from '../../src/search/service.ts';
@@ -134,6 +134,10 @@ async function scenario(boundary: Boundary, zero: boolean, continuation = false)
       expect(created.status).toBe(201);
       ids.push((await created.json()).subject.id);
     }
+    // Provision the supported native mapping before starting the real relay. The base runner's bootstrap
+    // replaces _meta with activated_at; that separate defect must not prevent this race reaching admission.
+    await createSubjectIndex(engine, prefix, 1);
+    await engine.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
     runner = await startSearchIndexing({
       pool: identity.database.pool,
       search: engine,
@@ -250,8 +254,14 @@ async function scenario(boundary: Boundary, zero: boolean, continuation = false)
         const state = await subjectGenerations(engine, prefix);
         for (const generation of state.generations)
           await engine.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
-        for (const template of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
-          await engine.request('DELETE', `/_scripts/${prefix}${template}`);
+        for (const template of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE]) {
+          try {
+            await engine.request('DELETE', `/_scripts/${prefix}${template}`);
+          } catch (error) {
+            // A fixture failure before its first query has not installed scripts. Preserve that original failure.
+            if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+          }
+        }
       } finally {
         await identities.close();
       }
