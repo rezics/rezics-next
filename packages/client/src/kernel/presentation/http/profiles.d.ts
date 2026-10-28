@@ -58,6 +58,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     error: [];
 }, "post", "/v1/pages/$read", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     body: import("typebox").TAny;
+    query: import("typebox").TObject<{
+        target: import("typebox").TOptional<import("typebox").TString>;
+    }>;
     response: {
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
@@ -76,6 +79,16 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
             };
         };
         400: import("typebox").TObject<{
@@ -170,6 +183,12 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 body: any;
             }>;
         };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
         400: {
             type: unknown;
             title: unknown;
@@ -243,6 +262,12 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 body: any;
             }>;
         };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
         400: {
             type: unknown;
             title: unknown;
@@ -302,6 +327,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         body: import("typebox").TAny;
+        query: import("typebox").TObject<{
+            target: import("typebox").TOptional<import("typebox").TString>;
+        }>;
         response: {
             200: import("typebox").TObject<{
                 subject: import("typebox").TOptional<import("typebox").TString>;
@@ -320,6 +348,16 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             }> & {
                 headers: {
                     readonly 'cache-control': import("typebox").TString;
+                };
+            };
+            308: import("typebox").TObject<{
+                redirect: import("typebox").TObject<{
+                    from: import("typebox").TString;
+                    to: import("typebox").TString;
+                }>;
+            }> & {
+                headers: {
+                    readonly location: import("typebox").TString;
                 };
             };
             400: import("typebox").TObject<{
@@ -411,7 +449,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     request: Request;
     store: {};
     body: unknown;
-    query: Record<string, string | undefined>;
+    query: {
+        target?: string;
+    };
     params: {};
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
@@ -429,6 +469,9 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<Response>, {
     body: import("typebox").TAny;
+    query: import("typebox").TObject<{
+        target: import("typebox").TOptional<import("typebox").TString>;
+    }>;
     response: {
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
@@ -447,6 +490,16 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         }> & {
             headers: {
                 readonly 'cache-control': import("typebox").TString;
+            };
+        };
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
             };
         };
         400: import("typebox").TObject<{

@@ -177,7 +177,8 @@ one template serves every account: an agent page at `/@handle` is a subject page
 immutable. A reader follows a list's `next` through its standalone route. Every account component reads nothing
 when the page has no account. An account whose agent is a graph subject takes that subject's type template, verified or
 not; an account without one takes the `schema:Organization` template for an organization and the `schema:Person`
-template for an actor. Automated actor accounts use the Person template until an agent type of their own exists.
+template for a person. An automated account without a named subject uses `schema:SoftwareApplication`; its public
+identity supplies `automated` and `operatorId`.
 Threads and replies return at most 20 entries per page; collections return at most 24 entries and always use the
 standalone BASIC view. The configured limit is the component's page-read cost; identity costs one.
 

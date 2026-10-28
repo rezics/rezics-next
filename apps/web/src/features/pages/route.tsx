@@ -43,7 +43,12 @@ function problemError(value: unknown): Error {
 export async function loadRoutePage(client: KernelClient, route: string): Promise<RoutePageLoad> {
   const result = await client.pages.$read.post({ target: { route } });
   if (result.status === 404) return { kind: 'missing' };
-  if (result.status === 503 && isRecord(result.error?.value) && result.error.value.code === 'presentation_not_ready')
+  if (
+    result.status === 503 &&
+    isRecord(result.error?.value) &&
+    'code' in result.error.value &&
+    result.error.value.code === 'presentation_not_ready'
+  )
     return { kind: 'missing' };
   if (result.status === 200 && result.data) {
     const page = result.data as Omit<RoutePageData, 'route'>;

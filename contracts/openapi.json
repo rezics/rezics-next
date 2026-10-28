@@ -61360,6 +61360,16 @@
     "/v1/pages:read": {
       "post": {
         "operationId": "pages.read",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -61449,6 +61459,45 @@
             "description": "Response for status 200",
             "headers": {
               "cache-control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "308": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "redirect": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "redirect"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 308",
+            "headers": {
+              "location": {
                 "schema": {
                   "type": "string"
                 }

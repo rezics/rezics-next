@@ -17,9 +17,10 @@ import {
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { TProperties } from 'typebox';
+import { readPublicAccountByAgent } from '../../access/account-data.ts';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
-import { customMethod } from '../../http/custom-method.ts';
+import { customMethod, customMethodPath } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
@@ -63,8 +64,10 @@ export function extendPageResponseSchema<Extension extends TProperties>(extensio
 }
 
 const pageResponse = PageResponseSchema;
+const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.String() }, closed) }, closed);
 
 type ReadResult = { status: number; body: unknown };
+type PageAccount = { id: string; handle: string; automated: boolean; operatorId: string | null };
 type PageTarget = ({ subject: string } | { route: string } | { account: string }) & { view?: View };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -159,7 +162,14 @@ function survivor(body: unknown): { id: string; type: string } {
 }
 
 /** The public account the account probe returned, or null when it is unknown, deleted or not visible. */
-function accountOf(body: unknown): { id: string; kind: string; state: string; subject: string | null } | null {
+function accountOf(body: unknown): {
+  id: string;
+  kind: string;
+  state: string;
+  subject: string | null;
+  automated: boolean;
+  operatorId: string | null;
+} | null {
   if (!isRecord(body) || !Array.isArray(body.accounts)) throw new Error('Account read did not return accounts');
   if (body.accounts.length === 0) return null;
   const account = body.accounts[0];
@@ -171,7 +181,14 @@ function accountOf(body: unknown): { id: string; kind: string; state: string; su
   )
     throw new Error('Account read did not return an account');
   const subject = isRecord(account.subject) && typeof account.subject.id === 'string' ? account.subject.id : null;
-  return { id: account.id, kind: account.kind, state: account.state, subject };
+  return {
+    id: account.id,
+    kind: account.kind,
+    state: account.state,
+    subject,
+    automated: account.automated === true,
+    operatorId: typeof account.operatorId === 'string' ? account.operatorId : null,
+  };
 }
 
 function mergedSession(ring: KeyRing, scope: string, first: string | null, second: string | null): string | null {
@@ -214,8 +231,10 @@ export function pageRoutes<App>(
     customMethod('/v1/pages', 'read'),
     {
       body: t.Any(),
+      query: t.Object({ target: t.Optional(t.String()) }),
       response: {
         200: withHeaders(pageResponse, { 'cache-control': t.String() }),
+        308: withHeaders(pageRedirect, { location: t.String() }),
         400: problemSchema('invalid_request'),
         401: unauthorized,
         404: problemSchema('not_found'),
@@ -229,7 +248,19 @@ export function pageRoutes<App>(
       },
     },
     async ({ body, request, authorize, admission, job, actor }) => {
-      const target = targetOf(body);
+      // A 308 preserves the POST body; its Location supplies the replacement page target.
+      const encodedTarget = new URL(request.url).searchParams.get('target');
+      let redirectedTarget: unknown;
+      if (encodedTarget !== null) {
+        try {
+          redirectedTarget = JSON.parse(encodedTarget);
+        } catch {
+          reject([{ pointer: '/target', code: 'invalid_format' }]);
+        }
+      }
+      const target = targetOf(
+        encodedTarget === null ? body : { ...(isRecord(body) ? body : {}), target: redirectedTarget },
+      );
       const languages = languagesOf(body);
       const check = await authorize({
         ...resource,
@@ -263,7 +294,7 @@ export function pageRoutes<App>(
         return { subject: found } as const;
       };
       let subject: { id: string; type: string } | null = null;
-      let account: { id: string; handle: string } | null = null;
+      let account: PageAccount | null = null;
       let resolved: ResolvedTemplate;
       let views: View[] | null = null;
       if ('route' in target) {
@@ -271,6 +302,7 @@ export function pageRoutes<App>(
       } else {
         let subjectTarget: string | null = null;
         let kind = 'actor';
+        let automated = false;
         if ('subject' in target) {
           subjectTarget = target.subject;
         } else {
@@ -278,18 +310,46 @@ export function pageRoutes<App>(
           if (result.status !== 200) return respond(result.status, result.body, probeSession, false);
           const found = accountOf(result.body);
           if (found === null || found.state !== 'active') throw new ProblemError('not_found');
-          account = { id: found.id, handle: target.account };
+          account = { id: found.id, handle: target.account, automated: found.automated, operatorId: found.operatorId };
           subjectTarget = found.subject;
           kind = found.kind;
+          automated = found.automated;
         }
         if (subjectTarget !== null) {
           const probed = await subjectProbe(subjectTarget);
           if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, false);
           subject = probed.subject;
+          if ('subject' in target) {
+            const [agent] = await admission.run('normal', job, () =>
+              readPublicAccountByAgent(pool, probed.subject.id, { includeSuspended: true }),
+            );
+            if (agent && agent.state !== 'deleted' && agent.handle !== null) {
+              const location = new URL(request.url);
+              location.pathname = customMethodPath(location.pathname);
+              location.searchParams.set(
+                'target',
+                JSON.stringify({ account: agent.handle, ...(target.view ? { view: target.view } : {}) }),
+              );
+              const response = respond(
+                308,
+                { redirect: { from: target.subject, to: agent.handle } },
+                probeSession,
+                true,
+              );
+              response.headers.set('location', `${location.pathname}${location.search}`);
+              return response;
+            }
+          }
         }
         const release = await activeRelease(pool);
         // An account without a named subject takes the template of its kind's agent type.
-        const type = subject?.type ?? (kind === 'organization' ? 'schema:Organization' : 'schema:Person');
+        const type =
+          subject?.type ??
+          (kind === 'organization'
+            ? 'schema:Organization'
+            : automated
+              ? 'schema:SoftwareApplication'
+              : 'schema:Person');
         const definition = release?.release.types[type];
         const template: TemplateTarget = {
           type,
@@ -328,7 +388,7 @@ async function pageAnswer(input: {
   resolved: ResolvedTemplate;
   views: View[] | null;
   subject: string | null;
-  account: { id: string; handle: string } | null;
+  account: PageAccount | null;
   probes: Map<string, ReadResult>;
   probeSession: string | null;
   languages?: readonly string[];

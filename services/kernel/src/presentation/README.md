@@ -86,6 +86,17 @@ original language and then `en`.
 
 ### Page read
 
+A subject target follows its merge survivor, then resolves current verification through Access's public agent lookup.
+For a verified active or suspended account it answers `308` directly to the account's handle page, preserving the view,
+languages and query. The JSON body is `{ redirect: { from: subjectId, to: handle } }`; `Location` names
+`/v1/pages:read` with an encoded JSON `target` query parameter replacing the POST body's target when followed.
+Never verified, pending, released, revoked and deleted accounts do not redirect or disclose an account handle.
+Subject reads and account reads retain their existing behavior.
+
+An account without a named subject uses `schema:Organization` for an organization, `schema:SoftwareApplication` for
+an automated account, and `schema:Person` for a person. Automation and its `operatorId` come from the public account
+identity, as in `GET /v1/accounts?ids=`, and remain available in the account identity read on the page.
+
 A subject or account target may name a `view`; the page is then that view's document, planned and read the same way, and
 `views` lists the views the page's templates define. A view no template defines, and a `view` on a route target, are
 refused (`404` and `400`).
@@ -93,6 +104,12 @@ refused (`404` and `400`).
 - Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject or account target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` runs once and is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject and account probes are reused. This request releases its admission slot before those sub-reads; each sub-read takes its own.
 - Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
 - Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
+
+### Page read for a subject address
+
+- Touches: the existing subject probe plus one indexed public agent lookup by subject id in the subject's partition. Access confirms the current verification against the account authority.
+- Bound: one extra indexed point lookup per subject page read; statements and rows constant, blocks O(log N).
+- Growth check: `test/presentation/agent-page-address.test.ts` grows verified agents and unrelated subjects at three scales and measures subject and handle page reads.
 
 ### Account page read
 

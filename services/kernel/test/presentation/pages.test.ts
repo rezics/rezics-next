@@ -193,5 +193,5 @@ test('the kernel contract documents the page read', () => {
     'x-action': 'presentation:read',
     security: [{ bearerAuth: [] }, {}],
   });
-  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '400', '401', '404', '503']);
+  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '308', '400', '401', '404', '503']);
 });
