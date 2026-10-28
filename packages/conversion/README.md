@@ -178,6 +178,40 @@ projection and digest, and cited as a Gregorian day-precision
 `schema:dateModified` using its native calendar day. Missing modification dates
 remain absent; no fetched, ingested, current or publication time is substituted.
 
+### VNDB optional Latin-cell source contract
+
+The required source contract accepts `vn_titles.latin` as `null`, the exact
+zero-length string `''`, or meaningful nonempty Romanization. The sanitized
+source projection must preserve each accepted value exactly: `null` retains
+native absence, and `''` remains `''` rather than being rewritten to `null`.
+For `''`, emit no Romanized name, label or alias in either bootstrap or resolved
+conversion. Null continues to emit none; nonempty Romanization retains the
+current canonical language behavior. The primary title remains required and
+meaningful, with its existing language behavior.
+
+Whitespace-only Latin, missing or wrong-type Latin, and empty, blank or null
+primary titles remain invalid. Do not trim invalid data into absence or relax
+the shared meaningful-title validation. Accepted sanitized `null` and `''`
+must have distinct source digests even when their semantic names agree.
+Repeated conversion, bootstrap/resolution bindings and converter revision
+changes must preserve each data-only digest. Native `entry_meta` revision and
+modification-date policy above remains unchanged.
+
+This is adopted REZICS treatment of schema-permitted zero-length input, not a
+claim that VNDB equates `''` with SQL NULL. The complete pinned observation in
+the [empty Latin-cell evidence report](../../docs/research/imports-audit/vndb-empty-latin.md)
+found 34,600 NULL and 43,433 nonempty Latin values among 78,033 rows, with zero
+empty or whitespace-only Latin values. Exact-empty acceptance is therefore a
+synthetic schema-edge requirement, not an observed source-record replay.
+The report supplies evidence; this README owns the adopted source contract.
+
+The current converter at `vndb@6` still rejects `''` during title validation.
+The [COPY reader](../../services/importer/src/vndb-tables.ts) preserves the
+empty cell, so its output does not yet compose with that converter for this
+case. A separate revisioned converter repair and composition acceptance are
+required. This document adopts the contract only; it does not establish
+product or native acceptance for exact-empty Latin.
+
 ### Provider facts required for catalogue use
 
 The table above describes executable mappings on this base. The following are
