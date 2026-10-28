@@ -30,6 +30,8 @@ The following are **MISSING**, to be implemented by the producer: `SourceRecord`
 `semantic.source_record` storage; and `Item.sourceRecords`/Subject read HTTP and generated consumer types.
 These names designate future production ports, not an invitation to add successful placeholder exports.
 The tests use structural types at HTTP boundaries, so their deliberate red is never a missing-module TS error.
+The current native bulk validator also reports unsupported facts rights as a per-command 400; the required
+portable 422 assertion deliberately records that remaining integration gap rather than accepting either status.
 
 ## Identity and closed command
 

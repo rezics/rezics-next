@@ -171,35 +171,54 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     property = 'schema:inLanguage',
     mode = 'replace',
     target?: string,
+    as: Persona = 'importer',
   ) {
     const listing = status(
       await call(
         'GET',
         `/v1/subjects/${id}/candidates?property=${encodeURIComponent(property)}${target ? `&target=${target}` : ''}`,
+        undefined,
+        as,
       ),
       200,
     );
     return status(
-      await call('POST', `/v1/subjects/${id}:adopt`, {
-        context: GLOBAL_CONTEXT,
-        property,
-        mode,
-        selection: candidates.map((candidate, i) => ({ candidate, rank: i === 0 ? 'preferred' : 'normal' })),
-        expected_head: listing.adoption?.head ?? null,
-        ...(target ? { target } : {}),
-      }),
+      await call(
+        'POST',
+        `/v1/subjects/${id}:adopt`,
+        {
+          context: GLOBAL_CONTEXT,
+          property,
+          mode,
+          selection: candidates.map((candidate, i) => ({ candidate, rank: i === 0 ? 'preferred' : 'normal' })),
+          expected_head: listing.adoption?.head ?? null,
+          ...(target ? { target } : {}),
+        },
+        as,
+      ),
       200,
     );
   }
-  async function select(id: string, candidate: string, property = 'schema:inLanguage', target?: string) {
+  async function select(
+    id: string,
+    candidate: string,
+    property = 'schema:inLanguage',
+    target?: string,
+    as: Persona = 'importer',
+  ) {
     status(
-      await call('POST', `/v1/subjects/${id}/candidates/${candidate}:accept`, {
-        context: GLOBAL_CONTEXT,
-        expected_head: null,
-      }),
+      await call(
+        'POST',
+        `/v1/subjects/${id}/candidates/${candidate}:accept`,
+        {
+          context: GLOBAL_CONTEXT,
+          expected_head: null,
+        },
+        as,
+      ),
       200,
     );
-    await adopt(id, [candidate], property, 'replace', target);
+    await adopt(id, [candidate], property, 'replace', target, as);
   }
   async function metadata(
     origin: Source,
@@ -350,7 +369,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
       },
       { from: 0, to: 1 },
     );
-    if (consent) await select(id, candidate, property, consent.target);
+    if (consent) await select(id, candidate, property, consent.target, 'person');
     return { id, candidate };
   }
   async function stored(origin: Source) {
