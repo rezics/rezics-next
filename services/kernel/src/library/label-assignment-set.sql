@@ -3,8 +3,8 @@ WITH input AS NOT MATERIALIZED (
          :subject_id::uuid AS subject_id, :label_id::uuid AS label_id,
          :slot_no::smallint AS slot_no, :time::timestamptz AS time,
          :transaction_id::uuid AS transaction_id, :retained::boolean AS retained,
-         :assignment_id::uuid AS assignment_id, :revision::integer AS revision,
-         :deleted_at::timestamptz AS deleted_at, :purge_after::timestamptz AS purge_after
+         :assignment_id::nullable(uuid) AS assignment_id, :revision::nullable(integer) AS revision,
+         :deleted_at::nullable(timestamptz) AS deleted_at, :purge_after::nullable(timestamptz) AS purge_after
 ), reassigned AS (
   UPDATE library.label_assignment AS a
   SET revision = a.revision + 1, slot_no = input.slot_no,

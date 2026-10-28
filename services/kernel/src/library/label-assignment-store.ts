@@ -107,7 +107,7 @@ export async function setLabelAssignment(
       time: context.time,
       transaction_id: context.transactionId,
     });
-    if (reclaimed.length !== 1) lostObservation();
+    if (!reclaimed || reclaimed.assignment_id !== victim.id) lostObservation();
     slot = victim.slotNo;
   }
   const written = await set.run(db, {
