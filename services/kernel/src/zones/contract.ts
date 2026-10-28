@@ -8,6 +8,7 @@ import {
   VIEWS,
   plainText,
   type CompositionDocument,
+  type ZoneStarter,
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Static, TLiteral, TOptional, TSchema, TUnion } from 'typebox';
@@ -24,7 +25,7 @@ function literalUnion<const Values extends readonly [string, ...string[]]>(
   values: Values,
 ): TUnion<LiteralTuple<Values>> {
   const literals = values.map((value) => t.Literal(value)) as unknown as LiteralTuple<Values>;
-  return t.Union(literals);
+  return t.Union(literals) as unknown as TUnion<LiteralTuple<Values>>;
 }
 
 type RequiredLocaleProperties<Locales extends readonly string[], Value extends TSchema> = {
@@ -128,16 +129,18 @@ const compositionDocumentSchema = t.Unsafe<CompositionDocument>(
     closed,
   ),
 );
-const zoneStarterSchema = t.Object(
-  {
-    labels: configurationLabelsSchema,
-    pages: t.Array(t.Object({ route: zoneRouteSchema, document: compositionDocumentSchema }, closed), {
-      minItems: 1,
-      maxItems: MAX_ZONE_PAGES,
-    }),
-    scope: t.Array(t.String(), { maxItems: MAX_ZONE_SCOPE }),
-  },
-  closed,
+const zoneStarterSchema = t.Unsafe<ZoneStarter>(
+  t.Object(
+    {
+      labels: configurationLabelsSchema,
+      pages: t.Array(t.Object({ route: zoneRouteSchema, document: compositionDocumentSchema }, closed), {
+        minItems: 1,
+        maxItems: MAX_ZONE_PAGES,
+      }),
+      scope: t.Array(t.String(), { maxItems: MAX_ZONE_SCOPE }),
+    },
+    closed,
+  ),
 );
 const mountsSchema = t.Array(routedUuidSchema, { maxItems: MAX_ZONE_MOUNTS, uniqueItems: true });
 
