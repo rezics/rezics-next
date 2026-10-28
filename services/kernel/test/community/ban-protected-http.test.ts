@@ -180,7 +180,8 @@ test.serial(
       201,
     );
     for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
-    const [{ database }] = await queryCommunityDatabase<{ database: string }>('SELECT current_database() AS database');
+    const database = (await queryCommunityDatabase<{ database: string }>('SELECT current_database() AS database'))[0]!
+      .database;
     const url = new URL(process.env.DATABASE_URL!);
     url.pathname = `/${database}`;
     const pool = new Pool({ connectionString: url.href });
@@ -269,6 +270,15 @@ test.serial(
     const c = await community('public');
     await json(await call('POST', `${realmPath(c.realm)}/membership`, fixture.member), 202);
     await driver.settle();
+    await json(
+      await call('POST', '/v1/grants', fixture.owner, {
+        resource: { route: routeOf(c.realm.realmId), id: c.realm.realmId },
+        subject: { kind: 'account', id: fixture.member.id },
+        actions: ['realm:read'],
+        valid: '(,)',
+      }),
+      201,
+    );
     await json(await ban(c.realm, fixture.member));
     await driver.settle();
     for (const path of [...reads(c).map(([path]) => path), `/v1/spaces/${c.space.spaceId}`]) {
@@ -276,6 +286,31 @@ test.serial(
       const anonymous = await call('GET', path, null);
       expect(banned.status).toBe(200);
       expect(banned.status).toBe(anonymous.status);
+      expect(await banned.json()).toEqual(await anonymous.json());
+    }
+    const protectedResult = await json<{ realm: Realm }>(
+      await call(
+        'PATCH',
+        realmPath(c.realm),
+        fixture.owner,
+        { visibility: 'protected' },
+        JSON.stringify(c.realm.headRevisionId),
+      ),
+    );
+    await hidden(c);
+    await json(
+      await call(
+        'PATCH',
+        realmPath(c.realm),
+        fixture.owner,
+        { visibility: 'public' },
+        JSON.stringify(protectedResult.realm.headRevisionId),
+      ),
+    );
+    for (const [path] of reads(c)) {
+      const banned = await call('GET', path, fixture.member);
+      const anonymous = await call('GET', path, null);
+      expect(banned.status).toBe(200);
       expect(await banned.json()).toEqual(await anonymous.json());
     }
   },
