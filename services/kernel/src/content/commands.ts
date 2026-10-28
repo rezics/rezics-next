@@ -28,7 +28,7 @@ import { readPartition } from '../partition/partition.ts';
 import { withConnection } from '../database/pool.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
-import { claimMedia, InvalidMediaClaimError } from './media.ts';
+import { claimMedia, InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import {
   mediaParentBoard,
   mediaParentSnapshot,
@@ -228,7 +228,8 @@ function mediaReferences(value: unknown, r: number): string[] {
   if (!Array.isArray(value) || value.length > 32) throw new InvalidMediaClaimError();
   const ids: string[] = [];
   for (const id of value as unknown[]) {
-    if (typeof id !== 'string' || routeOf(id) !== r) throw new InvalidMediaClaimError();
+    if (typeof id !== 'string') throw new InvalidMediaClaimError();
+    if (routeOf(id) !== r) throw new MediaUnavailableError();
     ids.push(id);
   }
   if (new Set(ids).size !== ids.length) throw new InvalidMediaClaimError();

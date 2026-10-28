@@ -478,8 +478,8 @@ test('invalid ownership, reservation key, availability, and anonymous requests d
     const mediaId = await entry.mediaId(target.id);
     const before = await rowCounts(target.route);
     const result = await call('POST', '/v1/threads', threadInput([mediaId]), key);
-    expect(result.response.status, entry.label).toBe(422);
-    expect(result.body.code, entry.label).toBe('idempotency_conflict');
+    expect(result.response.status, entry.label).toBe(409);
+    expect(result.body.code, entry.label).toBe('media_unavailable');
     expect(await rowCounts(target.route), entry.label).toEqual(before);
     const row = await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [
       routeOf(mediaId),
@@ -508,6 +508,19 @@ test('invalid ownership, reservation key, availability, and anonymous requests d
   const anonymousCreate = await call('POST', '/v1/threads', threadInput(), anonymousKey, null);
   expect(anonymousCreate.response.status).toBe(401);
   expect(await rowCounts(anonymousTarget.route)).toEqual(before);
+});
+
+test('malformed media reference lists return invalid requests without creating content', async () => {
+  const route = routeOf(boardId)!;
+  const repeatedId = newId(route);
+  const malformed: unknown[] = [null, Array.from({ length: 33 }, () => newId(route)), [1], [repeatedId, repeatedId]];
+  const before = await rowCounts(route);
+  for (const mediaIds of malformed) {
+    const result = await call('POST', '/v1/threads', { ...threadInput(), mediaIds });
+    expect(result.response.status).toBe(400);
+    expect(result.body.code).toBe('invalid_request');
+  }
+  expect(await rowCounts(route)).toEqual(before);
 });
 
 test('new-thread reservation stays bounded as other uploaders add same-route media rows', async () => {

@@ -45,20 +45,21 @@ const documentedOutcomeRoutes = Object.entries(openApiDocument.paths).flatMap(([
         )
         .join('')}$`,
     );
-    const refusalStatuses = new Set(
-      Object.entries(responses)
-        .filter(([status, response]) => {
-          if (['401', '403', '404'].includes(status)) return true;
-          if (status !== '409') return false;
-          const code = response.content?.['application/problem+json']?.schema?.properties?.code;
-          const codes = [code?.const, ...(code?.enum ?? [])];
-          return codes.some((value) =>
-            ['authentication_required', 'invalid_credentials', 'forbidden', 'not_found'].includes(String(value)),
-          );
-        })
-        .map(([status]) => status),
-    );
-    return [{ method: method.toUpperCase(), routePattern, statuses: new Set(Object.keys(responses)), refusalStatuses }];
+    const refusalCodes = new Map<string, Set<string>>();
+    for (const [status, response] of Object.entries(responses)) {
+      if (!['401', '403', '404', '409'].includes(status)) continue;
+      const code = response.content?.['application/problem+json']?.schema?.properties?.code;
+      const documentedCodes = [code?.const, ...(code?.enum ?? [])].map(String);
+      const refusals = new Set(
+        documentedCodes.filter((value) =>
+          ['authentication_required', 'invalid_credentials', 'forbidden', 'not_found', 'media_unavailable'].includes(
+            value,
+          ),
+        ),
+      );
+      if (refusals.size > 0) refusalCodes.set(status, refusals);
+    }
+    return [{ method: method.toUpperCase(), routePattern, statuses: new Set(Object.keys(responses)), refusalCodes }];
   }),
 );
 
@@ -208,10 +209,18 @@ export async function classifyMediaOutcome(
   const documented = route?.statuses.has(String(response.status)) ?? false;
   const succeeds = documented && response.status >= 200 && response.status < 300;
   const validation = documented && (response.status === 400 || response.status === 422);
-  const refusal = route?.refusalStatuses.has(String(response.status)) ?? false;
   if (succeeds) return 'permitted';
   if (invalid && validation) return 'invalid';
-  if (refusal) return 'denied';
+  if (['401', '403', '404'].includes(String(response.status)) && documented) return 'denied';
+  if (response.status === 409 && route?.refusalCodes.get('409')?.size) {
+    let code: unknown;
+    try {
+      code = ((await response.clone().json()) as { code?: unknown }).code;
+    } catch {
+      code = undefined;
+    }
+    if (typeof code === 'string' && route.refusalCodes.get('409')?.has(code)) return 'denied';
+  }
   throw new Error(`Kernel ${method} ${path} (${response.status}): ${await problemBody(response)}`);
 }
 function instant(value: unknown): string {
@@ -414,6 +423,7 @@ export async function createContentMediaDriver(): Promise<ContentMediaDriver> {
         ),
         'POST',
         captured.path,
+        true,
       );
     }
     async function collect(as: Persona, partition: number): Promise<CollectionRun> {

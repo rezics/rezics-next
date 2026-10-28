@@ -14,6 +14,10 @@ Published erased posts remain in thread pages as `removed: true` with `body: nul
 
 `clearErasedPostRevisions(pool, { postId }, deadline)` clears retained revision bodies, their SHA-256 digests and search text using the committed tombstone as authority. Each digest is cleared in the same statement as its body, since retaining a hash would let a reader confirm guesses about erased text. It runs `null-erased-revisions.sql` in atomic pages of 100, releases each connection between pages and can safely run again. It changes no revision of an available post. This module exports the cleanup for direct invocation; worker registration and consumption of the post-erased event belong to the content work integration.
 
+## Media claims
+
+A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or already claimed. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.
+
 ## Cost
 
 These are derivations from the implemented adapters and SQL here, checked against `db/content/migrations/` and `db/content/schema.sql`, not measurements or promises about a particular query plan.
