@@ -30,7 +30,7 @@ export const metadataPath = '/v1/source-records:setMetadata';
 export const metadataKind = 'source_record.set_metadata';
 export const routeKey = new Uint8Array(32).fill(113);
 export const global = { route: 0, id: GLOBAL_CONTEXT };
-export const source = (external_id = randomUUID(), alias = 'registered_catalogue'): Source => ({
+export const source = (external_id: string = randomUUID(), alias = 'registered_catalogue'): Source => ({
   source: alias,
   external_id,
   record_revision: 'upstream-original',

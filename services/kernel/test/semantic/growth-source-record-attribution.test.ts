@@ -5,6 +5,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 import { slotId } from '../../src/semantic/slots.ts';
 import {
   assertGrowth,
@@ -87,10 +88,25 @@ function population(name: string, subject: string, base: number, axis: 'unrelate
       const id = axis === 'candidates' ? subject : newId(home);
       const ownerRoute = axis === 'candidates' ? subjectRoute : home;
       const candidate = newId(ownerRoute);
-      const revision = axis === 'candidates' ? base + ordinal * 2 + 1 : 1;
+      const revision = axis === 'candidates' ? base + ordinal * 2 + 1 : 2;
       const transaction = randomUUID();
+      const labels = itemFacts(id, { labels: { en: `Unrelated record ${ordinal}` } }, 'schema:Book', undefined);
       // Native-shaped unrelated rows, original provenance, immutable history and retractions.
       return {
+        'core.receipt': [
+          {
+            partition_no: partitionOf(home),
+            principal_kind: 'account',
+            principal_id: f.accounts.importer,
+            command_kind: 'source_record.set_metadata',
+            idempotency_key: `${name}-${ordinal}`,
+            request_digest: Buffer.alloc(32, ordinal % 256),
+            epoch: 1,
+            position: 1,
+            transaction_id: transaction,
+            response: { record: registeredBangumi(origin.external_id), metadata_revision: 1, effect: 'filled' },
+          },
+        ],
         'semantic.source_record': [
           {
             route: home,
@@ -109,10 +125,18 @@ function population(name: string, subject: string, base: number, axis: 'unrelate
                   subject_id: id,
                   type: 'schema:Book',
                   recorded_transaction_id: transaction,
-                  current_facts: 0,
+                  current_facts: labels.length,
                   current_release: bundledDigest,
                 },
               ],
+              'semantic.fact': labels.map((fact) => ({
+                ...fact,
+                route: ownerRoute,
+                subject_id: id,
+                recorded_transaction_id: transaction,
+                release: null,
+                relation: false,
+              })),
               'semantic.external_claim': [
                 {
                   route: home,
@@ -125,6 +149,19 @@ function population(name: string, subject: string, base: number, axis: 'unrelate
             }
           : {}),
         'semantic.revision': [
+          ...(axis === 'unrelated'
+            ? [
+                {
+                  route: ownerRoute,
+                  subject_id: id,
+                  revision: 1,
+                  kind: 'create',
+                  release: bundledDigest,
+                  recorded_transaction_id: transaction,
+                  source: origin,
+                },
+              ]
+            : []),
           {
             route: ownerRoute,
             subject_id: id,

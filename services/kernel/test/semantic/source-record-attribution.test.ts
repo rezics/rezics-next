@@ -129,10 +129,10 @@ test('concurrent native fills and CAS corrections serialize without lost metadat
   ]);
   expect(additions.map((r) => r.status)).toEqual([200, 200]);
   const final = status(
-    await f.metadata(compatible, { ...bare, licence: a.licence, attribution: 'Registered contributors' }),
+    await f.metadata(compatible, { ...bare, licence: a.licence!, attribution: 'Registered contributors' }),
     200,
   );
-  expect(final.record).toEqual({ ...bare, licence: a.licence, attribution: 'Registered contributors' });
+  expect(final.record).toEqual({ ...bare, licence: a.licence!, attribution: 'Registered contributors' });
 });
 
 test('real Global bulk grants are required before replay and suspended accounts get account_suspended', async () => {
