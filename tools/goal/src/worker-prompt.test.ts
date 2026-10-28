@@ -43,6 +43,8 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('Never stop or remove containers, databases or processes you did not start in this attempt');
+  // A diagnosis patched a hardlinked reylo file in place and every worktree and check host printed its trace.
+  expect(prompt).toContain('Never write under node_modules');
 });
 
 test('every worker can ask for research, and a research worker is told how to do it', () => {
