@@ -91,7 +91,6 @@ with the real configuration and account. For example, use `wrangler deploy --dry
 configuration; a mock or weaker substitute cannot prove it. Include a first real deployment in task acceptance where
 safe. Verify tooling fixes against the actual operating condition before reporting them fixed.
 
-
 ## Review
 
 Inspect the changed diff against the owner contract, capability manifest and evidence. Ordinary delivery uses its
