@@ -113,7 +113,7 @@ export type PoolReading = {
   allowanceKey: string;
   at: string;
   observedAt: string | null;
-  windows: { usedPercent: number; resetsAt: number | null; minutes: number | null }[];
+  windows: { window?: string; usedPercent: number; resetsAt: number | null; minutes: number | null }[];
   exhausted: boolean;
   error: string | null;
 };

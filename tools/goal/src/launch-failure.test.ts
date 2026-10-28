@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { git } from './merge.ts';
 import type { GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
-import { harness } from './test-support.ts';
+import { harness, reading } from './test-support.ts';
+import { WorkerTasks } from './tasks.ts';
 
 // The CLI fails while loading its configuration: no session starts, nothing is written to stdout, nothing is committed.
 const brokenCli = `#!/usr/bin/env bun
@@ -92,8 +93,10 @@ test('a launch refused for an exhausted allowance marks the pool exhausted inste
   const h = harness(exhaustedCli),
     inbox: ManagerEvent[] = [];
   try {
-    const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
+    let reads = 0;
+    const tasks = new WorkerTasks(h.settings, h.store, (pool) => reading(pool, ++reads > 1 ? 100 : 0));
+    const task = tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     // The harness has one pool, so the rerun that excludes it finds none and rejects.
     await job.start(task.id).catch(() => {});
     await job.drain().catch(() => {});
