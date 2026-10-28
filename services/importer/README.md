@@ -52,6 +52,76 @@ This adopts the [bulk backpressure research](../../docs/research/importer-bulk-b
 
 `tests/write-width.test.ts` verifies this behaviour in `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes`.
 
+## Known own references
+
+Imports owns the default handoff of successful local claims to conversion, including ordinary
+[`createSourceRegistration`](src/source-registry.ts), [`Importer`](src/importer.ts) and
+[CLI](src/cli.ts) construction without an injected identifier provider. A later Open Library
+edition must receive the real work subject ID already learned from successful public
+create-or-resolve for the exact same configured source alias and native work key. The
+completed response and its durable own binding are identity evidence. Never allocate or
+guess a UUID, infer across aliases, look up a source label, or search global claims.
+The configured alias is authoritative even when it differs from the native registration's
+alias; an identical native key under another alias supplies no evidence.
+
+This is bounded own-claim resolution within the current session's durable bindings. The
+existing [`resolvedReferences` context](../../packages/conversion/README.md#package-api)
+passes actual native-key bindings to the pure converter. Conversion remains caller-resolution
+capable; this default producer obligation belongs to the importer and requires no conversion
+API change. Injected identifier providers retain their existing limitations for other
+providers and nonlocal identities. No new author source adapter or global resolver is implied.
+An unknown author retains its native external identifier and citation, using `somevalue`
+only where the adopted property permits it, including the Open Library author relation.
+
+An acknowledged edition whose bounded work dependency becomes known must be reconsidered
+when the unchanged source input is reimported. Learning may refresh it in that complete dump
+or on the next identical import; by the latter, its relation must use the actual work ID.
+Equality of the source row alone cannot justify skipping that dependency check. The resolved
+semantic body produces a distinct proposal command key and candidate while native revision,
+data-only source digest and converter revision remain intact. Immutable bootstrap command
+bytes, their key and receipt never change. Recovery replays previously prepared requests
+exactly; changed dependency planning must not rewrite uncertain or acknowledged envelopes.
+
+Old unresolved candidates and their revisions/history remain readable. Source reconciliation
+may retract its own candidate through the ordinary API but must not commandeer another
+Context's adoption. The community's prior selection remains until its editor independently
+accepts and adopts the resolved candidate. Once actual resolution is unchanged, further
+identical runs create neither duplicates nor replay conflicts. Cached IDs and receipts are
+not permission grants: native target admission and disclosure still check current
+authorization, including on replay and after grant revocation.
+
+These are required outcomes, not delivered runtime behavior. The current CLI supplies no
+identifier lookup, planning calls only an optional injected lookup, and the unchanged-row
+shortcut precedes conversion and resolution. [`RecordBindings`](src/record-bindings.ts)
+already retains the successful create response's subject and supports exact own-binding
+reads. Default producer wiring and dependency-aware journal/planning scheduling are still
+missing; the observation seam does not prescribe a new resolver ABI or storage format.
+
+The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
+default handoff and unchanged dependency refresh. The committed
+[known-reference report](../../docs/research/imports-audit/known-reference-refresh.md)
+records **0 pass, 2 fail, 65 assertions** at those intended assertions on unchanged product
+code. The deeper duplicate/replay, revocation, resolved adoption and retained-history
+expectations were not reached and are not passing evidence. Its exact native command is:
+
+```sh
+bun scripts/worker-check.ts -- env KERNEL_CHECK_SKIP_STALE_CLEANUP=1 bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
+```
+
+### Changed-dependency cost obligation
+
+For one supplied record, let F be its admitted native reference-key count, bounded by the
+supplied record-byte and field caps, B the stored binding rows, and M its bounded source
+and semantic-body bytes. Examine only those F keys with exact `(configured source alias,
+native key)` local point reads and bounded per-record dependency metadata. Required work
+is O(M + F log B) for resolution comparison, plus bounded changed-command planning and the
+existing journal/write costs; retained dependency state is O(F) per record. Unchanged input
+still incurs this bounded comparison before skipping effects. Whole-dump work follows the
+finite supplied records; learning a claim must not trigger binding, history or catalogue
+enumeration or an unbounded replay sweep. This derives a required bound, not measured
+implementation evidence or a mandated dependency storage/API. Existing injected-provider
+call bounds below remain unchanged.
+
 ## Deletion
 
 The [common deletion policy](../../docs/deletion.md) governs lifecycle; the
