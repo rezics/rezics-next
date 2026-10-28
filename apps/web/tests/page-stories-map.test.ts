@@ -26,7 +26,10 @@ for (const row of cells) {
 }
 
 test('page story map has a section for every route file and tabulates states by viewer and device', () => {
-  for (const route of routeFiles) expect(document, `missing route section: ${route}`).toContain(`## ${route}`);
+  for (const route of routeFiles) {
+    expect(document, `missing route section: ${route}`).toContain(`## ${route}`);
+    expect(cells.some(([, tableRoute]) => tableRoute.trim() === route), `no state rows for ${route}`).toBe(true);
+  }
   expect(document).toMatch(/\|\s*Route\s*\|\s*State\s*\|\s*Viewer\s*\|\s*Desktop\s*\|\s*Phone\s*\|/);
   expect(document).toContain('Every route has page stories on recorded or fake API responses');
   expect(document).toContain('Primitive component stories (shadcn wrappers) are not required.');
@@ -68,5 +71,17 @@ test('missing cells are listed by surface in the required order and exactly once
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
   expect(new Set(document.match(/^\| missing: .*$/gm) ?? []).size).toBe((document.match(/^\| missing: .*$/gm) ?? []).length);
   expect(missingRows.size).toBeGreaterThan(0);
+  const listedMissing = (document.match(/^- apps\/web\/src\/routes\/.*$/gm) ?? []).filter((line) =>
+    / — (desktop|phone)$/.test(line),
+  );
+  const tableMissing = new Set(
+    [...document.matchAll(/^\|\s*(apps\/web\/src\/routes\/[^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*$/gm)]
+      .flatMap(([, route, state, viewer, desktop, phone]) => [
+        ...(desktop.trim() === 'missing' ? [`- ${route.trim()} — ${state.trim()} — ${viewer.trim()} — desktop`] : []),
+        ...(phone.trim() === 'missing' ? [`- ${route.trim()} — ${state.trim()} — ${viewer.trim()} — phone`] : []),
+      ]),
+  );
+  expect(new Set(listedMissing).size).toBe(listedMissing.length);
+  expect(new Set(listedMissing)).toEqual(tableMissing);
   expect(relative(root, stories)).toBe('apps/web/src/stories');
 });
