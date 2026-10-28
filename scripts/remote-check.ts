@@ -35,6 +35,7 @@ export type Host = {
   memoryMaxGiB: number;
   cpuQuotaPercent: number;
   slots: number;
+  fallback?: boolean;
 };
 
 export type RemoteCheck = {
@@ -164,7 +165,7 @@ export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
   if (!Array.isArray(parsed.hosts) || parsed.hosts.length === 0) throw new Error(`${file} lists no hosts`);
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
-    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots } = entry;
+    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback } = entry;
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
@@ -174,7 +175,8 @@ export function readHosts(file: string): Host[] {
     if (typeof cpuQuotaPercent !== 'number' || !(cpuQuotaPercent > 0))
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
-    return { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots: slots as number };
+    if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
+    return { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots: slots as number, ...(fallback ? { fallback: true } : {}) };
   });
 }
 
@@ -1179,7 +1181,7 @@ async function acquireOnce(
       if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
     }
   }
-  for (const entry of ranked) {
+  for (const entry of startableHosts(ranked, slots, gate)) {
     const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
     if (freeSlots < slots) continue;
     const lease = await takeSlots(
@@ -1201,6 +1203,14 @@ async function acquireOnce(
     if (lease) return lease;
   }
   return null;
+}
+
+/** Uses fallback hosts only when no ordinary host can start this non-gate run in the current probe round. */
+function startableHosts(ranked: RankedHost[], slots: number, gate: boolean): RankedHost[] {
+  if (gate) return ranked;
+  const startable = ranked.filter(({ freeSlots }) => freeSlots >= slots);
+  const ordinary = startable.filter(({ host }) => !host.fallback);
+  return ordinary.length > 0 ? ordinary : startable;
 }
 
 async function acquire(
@@ -1262,9 +1272,22 @@ async function acquire(
           if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
         }
       } else if (giveUpIfUnanswered && !answered) return null;
+      const globallyStartable = startableHosts(ranked, slots, gate);
+      const markedHost = ranked.find(({ host }) => host.name === markerHost)?.host;
+      if (
+        multiWaiterId &&
+        markerHost &&
+        markedHost?.fallback &&
+        globallyStartable.some(({ host }) => !host.fallback)
+      ) {
+        if (marker) await marker.release();
+        marker = undefined;
+        markerHost = undefined;
+      }
       const acquisitionHosts =
         multiWaiterId && markerHost ? ranked.filter(({ host }) => host.name === markerHost) : ranked;
-      for (const entry of acquisitionHosts) {
+      const canStart = startableHosts(acquisitionHosts, slots, gate);
+      for (const entry of canStart) {
         const { host, freeSlots, slotLimit, ordinaryCapacity, ordinaryAdmissionLimit } = entry;
         if (freeSlots < slots) continue;
         const lease = await takeSlots(
@@ -1827,6 +1850,7 @@ if (import.meta.main) {
   } catch (error) {
     if (error instanceof RemoteTransportError) {
       console.error(error.message);
+      console.error('remote-check: transport failure marker');
       process.exitCode = REMOTE_TRANSPORT_FAILURE;
     } else if (error instanceof SlotRequestTooLarge) {
       console.error(error.message);

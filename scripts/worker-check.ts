@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 import { spawn } from 'node:child_process';
 import {
+  accessSync,
   closeSync,
+  constants,
   existsSync,
   fstatSync,
   mkdirSync,
@@ -23,6 +25,7 @@ import {
   checkMemoryWeight,
   memoryLeaseDirectory,
   readPeaks,
+  recordPeak,
   recordScopedPeak,
 } from './check-memory.ts';
 
@@ -99,10 +102,14 @@ function failureSummary(file: string): string {
 export async function runWorkerCheck(
   argv: readonly string[],
   cwd = process.cwd(),
-  report = true,
+  reportOutput = true,
   recordedLog?: string,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
+  const localOnly = argv[0] === '--local';
+  if (localOnly) argv = argv.slice(1);
+  if (argv[0] === '--') argv = argv.slice(1);
+  if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] -- <command...>');
   const root = resolve(cwd);
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, 'wx', 0o600);
@@ -114,6 +121,80 @@ export async function runWorkerCheck(
   const directory = memoryLeaseDirectory(env);
   const capacity = checkMemoryCapacity(env);
   const weight = checkMemoryWeight(readPeaks(directory)[commandClass] ?? [], capacity);
+  const remoteHostsFile = env.KERNEL_CHECK_REMOTE;
+  let remoteEligible = false;
+  if (!localOnly && remoteHostsFile && weight >= 2) {
+    try {
+      accessSync(remoteHostsFile, constants.R_OK);
+      remoteEligible = true;
+    } catch {
+      // An unreadable explicit hosts file keeps worker checks local, matching the other placement wrappers.
+    }
+  }
+  const relativeLogPath = relative(root, file);
+  const report = (code: number): number => {
+    process.stdout.write(`check: exit status ${code}\n`);
+    if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
+    process.stdout.write(`check: log ${relativeLogPath}\n`);
+    return code;
+  };
+  if (remoteEligible) {
+    let remoteOutput = '';
+    const remote = spawn(process.execPath, [join(root, 'scripts/remote-check.ts'), root, '--', ...argv], {
+      cwd: root,
+      env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
+      stdio: ['inherit', 'pipe', 'pipe'],
+    });
+    const saveRemote = (chunk: Buffer): void => {
+      writeSync(descriptor, chunk);
+      remoteOutput = (remoteOutput + chunk.toString('utf8')).slice(-16_000);
+    };
+    remote.stdout?.on('data', saveRemote);
+    remote.stderr?.on('data', saveRemote);
+    wait.begin();
+    let remoteSignal: number | undefined;
+    const remoteForwarders = Object.entries(SIGNALS).map(([signal, number]) => {
+      const name = signal as keyof typeof SIGNALS;
+      const forward = () => {
+        remoteSignal ??= number;
+        remote.kill(name);
+      };
+      process.on(name, forward);
+      return [name, forward] as const;
+    });
+    let remoteCode: number;
+    try {
+      remoteCode = await new Promise<number>((resolveExit, reject) => {
+        remote.once('error', reject);
+        remote.once('close', (status, signal) => {
+          const fromSignal = signal === null ? undefined : SIGNALS[signal as keyof typeof SIGNALS];
+          resolveExit(status ?? 128 + (fromSignal ?? 1));
+        });
+      });
+    } finally {
+      for (const [name, forward] of remoteForwarders) process.off(name, forward);
+    }
+    const transportReason = remoteOutput.includes('remote-check: transport failure marker')
+      ? remoteOutput.match(/remote-check: connection to .+ failed during .+ before a result/)?.[0]
+      : undefined;
+    if (remoteCode !== 75 || !transportReason || remoteSignal !== undefined) {
+      const peakMiB = remoteOutput.match(/peak memory (\d+) MiB on [^\r\n]+/)?.[1];
+      if (peakMiB) {
+        const peakBytes = Number(peakMiB) * 2 ** 20;
+        recordPeak(directory, commandClass, peakBytes);
+        process.stderr.write(
+          `worker-check: ${commandClass} peak ${(peakBytes / 2 ** 30).toFixed(1)} GiB (weight ${weight})\n`,
+        );
+      }
+      wait.stop();
+      closeSync(descriptor);
+      return report(remoteSignal === undefined ? remoteCode : 128 + remoteSignal);
+    }
+    const retry = `worker-check: remote transport failed: ${transportReason}; retrying locally under memory lease\n`;
+    process.stderr.write(retry);
+    writeSync(descriptor, retry);
+    wait.stop();
+  }
   const leaseEnv = { ...env };
   // The memory lease is independent of any stack lease held by the caller.
   delete leaseEnv.REZICS_STACK_SLOT;
@@ -238,7 +319,7 @@ export async function runWorkerCheck(
   }
   rmSync(peakFile, { force: true });
   const relativeLogPath = relative(root, file);
-  if (report) {
+  if (reportOutput) {
     process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
     if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
     process.stdout.write(`check: log ${relativeLogPath}\n`);
@@ -314,7 +395,7 @@ function parse(argv: string[]): string[] {
   // Bun consumes the conventional `--` separator before exposing Bun.argv; accept it too for direct Node execution.
   const command = argv[0] === '--' ? argv.slice(1) : argv;
   if (command.length === 0) {
-    throw new Error('Usage: worker-check.ts -- <command...>');
+    throw new Error('Usage: worker-check.ts [--local] -- <command...>');
   }
   return command;
 }

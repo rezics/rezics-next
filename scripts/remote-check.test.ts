@@ -401,6 +401,7 @@ type HostConfig = {
   baseAgeSeconds?: number;
   zstd?: boolean;
   baseRefreshExit?: number;
+  fallback?: boolean;
 };
 
 let root: string;
@@ -441,6 +442,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         memoryMaxGiB: hosts[name].memoryMaxGiB ?? 16,
         cpuQuotaPercent: hosts[name].cpuQuotaPercent ?? 800,
         slots: hosts[name].slots ?? 2,
+        ...(hosts[name].fallback ? { fallback: true } : {}),
       })),
     }),
   );
@@ -955,6 +957,74 @@ test('acquisition prefers the host with the most free capacity', async () => {
   const granted = events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted);
   expect(granted).toHaveLength(2);
   expect(new Set(granted.map((event) => event.call)).size).toBe(1);
+});
+
+test('non-gate runs prefer any startable non-fallback host over a fallback host', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 }, c: { available: 8e9, fallback: true } });
+  const directory = workspace();
+  try {
+    const result = await remote(env, directory, ['echo', 'preferred']);
+    expect(result.code).toBe(0);
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a fallback host starts a non-gate run only when every non-fallback host is unable to start it', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, ordinaryBusy: 1 }, c: { available: 8e9, fallback: true } });
+  const directory = workspace();
+  try {
+    const result = await remote(env, directory, ['echo', 'fallback']);
+    expect(result.code).toBe(0);
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@c.test');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('when no host can start a non-gate run, fallback entries do not change the existing soonest-start choice', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, slots: 4, ordinaryBusySlots: [0, 1] },
+    c: { available: 16e9, slots: 4, ordinaryBusySlots: [0, 1], fallback: true },
+  });
+  const directory = workspace();
+  const waitFile = join(env.FAKE_DIR!, 'soonest-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  const run = startRemote(env, directory, ['echo', 'soonest'], ['--slots', '2']);
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
+    await waitFor(() => existsSync(waitFile));
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+    expect(events().find((event) => event.kind === 'multi-marker')?.address).toBe('ops@c.test');
+
+    rmSync(join(env.FAKE_DIR!, 'ops_c_test.slot.1'), { recursive: true });
+    await waitFor(() => events().some((event) => event.kind === 'run'));
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@c.test');
+    expect(await run.child.exited).toBe(0);
+  } finally {
+    try {
+      run.child.kill('SIGTERM');
+    } catch {}
+    await run.child.exited;
+    await Promise.all([run.stdout, run.stderr]);
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('gate runs ignore the fallback preference', async () => {
+  const { env, events } = scenario({
+    a: { available: 12e9, slots: 4 },
+    c: { available: 12e9, slots: 4, ordinaryBusy: 1, fallback: true },
+  });
+  const directory = workspace();
+  try {
+    const result = await remote(env, directory, ['echo', 'gate'], ['--gate']);
+    expect(result.code).toBe(0);
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('an unreadable check slice memory limit falls back to MemAvailable', async () => {
