@@ -130,6 +130,8 @@ export class RemoteTransportError extends Error {
   constructor(
     readonly host: string,
     readonly step: string,
+    readonly code: number,
+    readonly retryable = true,
   ) {
     super(`remote-check: connection to ${host} failed during ${step} before a result`);
     this.name = 'RemoteTransportError';
@@ -546,6 +548,7 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
       shift
       if [ "$code" -eq 0 ]; then
         command_started=$(date +%s%N)
+        touch ${quote(`${directory}/command-started`)}
         "$@"
         code=$?
         command_finished=$(date +%s%N)
@@ -639,7 +642,10 @@ function localRsyncSupportsZstd(): boolean {
 
 /** Reads the command's recorded exit status when ssh itself reports 255. */
 function statusScript(directory: string): string {
-  return `# REMOTE_CHECK_STATUS\ncat -- ${quote(`${directory}/exit-status`)}`;
+  return `# REMOTE_CHECK_STATUS
+if [ -e ${quote(`${directory}/exit-status`)} ]; then cat -- ${quote(`${directory}/exit-status`)}
+elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
+else printf 'NOT_STARTED\\n'; fi`;
 }
 
 /** Tracked and untracked files that exist, without Git's own data, installed packages and local scratch space. */
@@ -653,7 +659,12 @@ export function workspaceFiles(workspace: string): string[] {
   const files = listed.stdout.toString().split('\0').filter(Boolean);
   return [...new Set(files)].filter((file) => {
     const parts = file.split('/');
-    if (parts[0] === '.git' || parts[0] === '.temp' || parts.includes('node_modules')) return false;
+    if (
+      parts[0] === '.git' ||
+      parts[0] === '.temp' ||
+      parts.includes('node_modules') ||
+      parts.some((part) => ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part))
+    ) return false;
     try {
       return lstatSync(resolve(workspace, file)).isFile() || lstatSync(resolve(workspace, file)).isSymbolicLink();
     } catch {
@@ -1460,8 +1471,11 @@ async function runLeased(
     const { code: synced, stderr } = await finishedRsync(sync, signal);
     reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
     if (signal.aborted) throw new Aborted();
-    if ([12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload');
+    if ([10, 12, 30, 35, 255].includes(synced))
+      throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
+    // rsync documents 24 as a vanished source file; generated outputs are excluded above, and remaining races
+    // should not fail a check because the source snapshot is already best-effort.
     else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
 
     console.error(`remote-check: running on ${host.name}`);
@@ -1487,9 +1501,11 @@ async function runLeased(
       if (signal.aborted) throw new Aborted();
       const recorded = output.trim();
       const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
-      if (statusCode !== 0 || !Number.isInteger(parsed) || parsed > 255) {
-        throw new RemoteTransportError(host.name, 'remote command');
+      if (statusCode !== 0 || (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') || parsed > 255) {
+        throw new RemoteTransportError(host.name, 'remote command', 255, false);
       }
+      if (recorded === 'NOT_STARTED') throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
+      if (recorded === 'STARTED') throw new RemoteTransportError(host.name, 'remote command', 255, false);
       code = parsed;
     }
     await copyReturns(host, directory, options, signal);
@@ -1517,18 +1533,51 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquire(
-    hosts,
-    slots,
-    options.estimateMs,
-    options.pollMs ?? 5000,
-    signal,
-    false,
-    undefined,
-    options.gate ?? false,
-  );
-  if (!lease) throw new Error('remote-check: no check host answered');
-  return await runLeased(lease, options, files, slotWaitStarted, signal);
+  const result = await runWithTransportRetries(options, hosts, files, slotWaitStarted, signal, false);
+  if (result === null) throw new Error('remote-check: no check host answered');
+  return result;
+}
+
+/** Retries only failures known to have happened before a remote command produced a result. */
+async function runWithTransportRetries(
+  options: RemoteCheck,
+  hosts: Host[],
+  files: string[],
+  slotWaitStarted: number,
+  signal: AbortSignal,
+  giveUpIfUnanswered: boolean,
+  onAnswered?: () => void,
+): Promise<number | null> {
+  const slots = options.slots ?? 1;
+  const failedHosts = new Set<string>();
+  let lastFailure: RemoteTransportError | undefined;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      const delay = 100 * 2 ** (attempt - 1);
+      console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
+      await sleep(delay, signal);
+    }
+    const preferred = hosts.filter((host) => !failedHosts.has(host.name));
+    const retryHosts = attempt > 0 && preferred.length > 0 ? preferred : hosts;
+    let lease: Lease | null;
+    if (attempt === 0) {
+      lease = await acquire(retryHosts, slots, options.estimateMs, options.pollMs ?? 5000, signal, giveUpIfUnanswered, onAnswered, options.gate ?? false);
+    } else {
+      lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false);
+      if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
+        lease = await acquire(hosts, slots, options.estimateMs, options.pollMs ?? 5000, signal, false, onAnswered, options.gate ?? false);
+      }
+    }
+    if (!lease) return null;
+    try {
+      return await runLeased(lease, options, files, slotWaitStarted, signal);
+    } catch (error) {
+      if (!(error instanceof RemoteTransportError) || !error.retryable || attempt === 2 || signal.aborted) throw error;
+      lastFailure = error;
+      failedHosts.add(error.host);
+    }
+  }
+  throw lastFailure;
 }
 
 /**
@@ -1541,18 +1590,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquire(
-    hosts,
-    slots,
-    options.estimateMs,
-    options.pollMs ?? 5000,
-    signal,
-    true,
-    options.answered,
-    options.gate ?? false,
-  );
-  if (!lease) return null;
-  return await runLeased(lease, options, files, slotWaitStarted, signal);
+  return await runWithTransportRetries(options, hosts, files, slotWaitStarted, signal, true, options.answered);
 }
 
 /**
@@ -1565,13 +1603,25 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
   const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
   const slotWaitStarted = performance.now();
-  const lease = await acquireOnce(hosts, slots, options.estimateMs, signal, options.gate ?? false);
-  if (!lease) return { status: 'no-slot' };
-  return {
-    status: 'ran',
-    host: lease.host.name,
-    code: await runLeased(lease, options, files, slotWaitStarted, signal),
-  };
+  const failedHosts = new Set<string>();
+  let lastFailure: RemoteTransportError | undefined;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
+      await sleep(100 * 2 ** (attempt - 1), signal);
+    }
+    const preferred = hosts.filter((host) => !failedHosts.has(host.name));
+    const lease = await acquireOnce(attempt > 0 && preferred.length > 0 ? preferred : hosts, slots, options.estimateMs, signal, options.gate ?? false);
+    if (!lease) return { status: 'no-slot' };
+    try {
+      return { status: 'ran', host: lease.host.name, code: await runLeased(lease, options, files, slotWaitStarted, signal) };
+    } catch (error) {
+      if (!(error instanceof RemoteTransportError) || !error.retryable || attempt === 2 || signal.aborted) throw error;
+      lastFailure = error;
+      failedHosts.add(error.host);
+    }
+  }
+  throw lastFailure;
 }
 
 function parse(argv: string[]): RemoteCheck {

@@ -83,6 +83,9 @@ setup or cleanup failures and does not authorize a discretionary whole-suite run
 
 Verify tooling fixes against the actual operating condition before reporting them fixed.
 
+Infrastructure failures in remote check transport are retried by the tools and never consume a worker attempt. A remote
+command's recorded exit status remains the result once the command has started.
+
 ## Review
 
 Inspect the changed diff against the owner contract, capability manifest and evidence. Ordinary delivery uses its

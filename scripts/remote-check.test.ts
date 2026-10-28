@@ -262,8 +262,11 @@ if (script.includes('/proc/loadavg')) {
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
   log({ kind: 'status' });
   const statusFile = dir + '/' + hostKey + '.status';
-  if (!existsSync(statusFile)) process.exit(1);
-  console.log(readFileSync(statusFile, 'utf8'));
+  if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
+  else {
+    const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
+    console.log(runCount > 0 && runCount <= (config.preCommandFailures ?? 0) ? 'NOT_STARTED' : 'STARTED');
+  }
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
   log({ kind: 'returns', paths });
@@ -275,6 +278,10 @@ if (script.includes('/proc/loadavg')) {
   console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
+  if (runNumber < (config.preCommandFailures ?? 0)) {
+    log({ kind: 'pre-command-transport-failure' });
+    process.exit(255);
+  }
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
   if (hang && config.memoryHeadroomOnHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomOnHang });
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
@@ -324,7 +331,16 @@ const address = remote?.slice(0, remote.indexOf(':'));
 const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config.json', 'utf8'))[address] ?? {} : {};
 const rshIndex = args.indexOf('-e');
 const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
-const code = isBack ? (config.rsyncBackExit ?? 0) : (config.rsyncExit ?? 0);
+const hostKey = (address ?? '').replace(/[^a-z0-9]/gi, '_');
+const attemptFile = process.env.FAKE_DIR + '/' + hostKey + '.rsync-attempt';
+const attempt = Number((await import('node:fs')).existsSync(attemptFile) ? readFileSync(attemptFile, 'utf8') : '0');
+const { writeFileSync } = await import('node:fs');
+writeFileSync(attemptFile, String(attempt + 1));
+const code = isBack
+  ? (config.rsyncBackExit ?? 0)
+  : attempt < (config.rsyncFailures ?? 0)
+    ? (config.rsyncFailureCode ?? 12)
+    : (config.rsyncExit ?? 0);
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   args,
@@ -371,6 +387,9 @@ type HostConfig = {
   rsyncExit?: number;
   rsyncBackExit?: number;
   vanishedFiles?: string[];
+  rsyncFailures?: number;
+  rsyncFailureCode?: number;
+  preCommandFailures?: number;
   stdout?: string;
   stderr?: string;
   hang?: boolean;
@@ -998,14 +1017,17 @@ test('a remote command that itself exits 255 keeps its exit code', async () => {
   expect(events().filter((event) => event.kind === 'status')).toHaveLength(1);
 });
 
-test('rsync connection errors are reported as transport failures before the command runs', async () => {
-  for (const exit of [12, 30, 35, 255]) {
-    const { env, events } = scenario({ a: { available: 8e9, rsyncExit: exit } });
-    const result = await remote(env, workspace());
+test('rsync connection errors retry on another host before the command runs', async () => {
+  for (const exit of [10, 12, 30, 35, 255]) {
+    const { env, events } = scenario({
+      a: { available: 8e9, rsyncFailures: 1, rsyncFailureCode: exit },
+      b: { available: 8e9 },
+    });
+    const result = await remote(env, workspace(), ['true']);
 
-    expect(result.code).toBe(75);
-    expect(result.stderr).toContain('connection to a failed during workspace upload before a result');
-    expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(`retrying transport failure on a with code ${exit}`);
+    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
   }
 });
 
@@ -1096,6 +1118,59 @@ test('bases older than the retention period are removed by host cleanup while th
   expect(cleanup).toContain('current=$(readlink -f /srv/rezics-check/bases/current');
   expect(cleanup).toContain('[ "$base" = "$current" ] && continue');
   expect(cleanup).toContain('flock -x 9');
+});
+
+test('an rsync exit 24 completes the upload and changing build outputs stay out of the upload', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, rsyncExit: 24 } });
+  const directory = workspace();
+  mkdirSync(join(directory, 'dist'), { recursive: true });
+  mkdirSync(join(directory, '.next/cache'), { recursive: true });
+  mkdirSync(join(directory, 'build'), { recursive: true });
+  writeFileSync(join(directory, 'dist/output.js'), 'generated');
+  writeFileSync(join(directory, '.next/cache/data'), 'generated');
+  writeFileSync(join(directory, 'build/intermediate'), 'generated');
+
+  const result = await remote(env, directory, ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  const files = events().find((event) => event.kind === 'rsync')!.files as string[];
+  expect(files).not.toContain('dist/output.js');
+  expect(files).not.toContain('.next/cache/data');
+  expect(files).not.toContain('build/intermediate');
+});
+
+test('pre-command SSH and rsync transport failures retry with backoff on another host', async () => {
+  for (const code of [10, 12, 30, 35]) {
+    const { env, events } = scenario({
+      a: { available: 8e9, rsyncFailures: 1, rsyncFailureCode: code },
+      b: { available: 8e9 },
+    });
+    const result = await remote(env, workspace(), ['true']);
+    expect(result.code).toBe(0);
+    expect(events().filter((event) => event.kind === 'rsync').map((event) => event.destination)).toEqual([
+      expect.stringContaining('ops@a.test:'),
+      expect.stringContaining('ops@b.test:'),
+    ]);
+    expect(result.stderr).toContain(`retrying transport failure on a with code ${code}`);
+    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
+  }
+
+  const ssh = scenario({
+    a: { available: 8e9, preCommandFailures: 1 },
+    b: { available: 8e9 },
+  });
+  const result = await remote(ssh.env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('retrying transport failure on a with code 255');
+  expect(ssh.events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
+
+  const exhausted = scenario({ a: { available: 8e9, rsyncFailures: 5, rsyncFailureCode: 30 } });
+  const failed = await remote(exhausted.env, workspace(), ['true']);
+  expect(failed.code).toBe(75);
+  expect(exhausted.events().filter((event) => event.kind === 'rsync')).toHaveLength(3);
+  expect(failed.stderr.match(/retrying transport failure on a with code 30/g)).toHaveLength(2);
+  expect(exhausted.events().filter((event) => event.kind === 'run')).toHaveLength(0);
 });
 
 test('a host with no free slot is skipped and with none free the check waits', async () => {
