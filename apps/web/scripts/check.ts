@@ -340,7 +340,7 @@ async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
   ensureLocalWorkerVars();
   await runCommand('generate', 'bun', ['run', 'generate'], env);
   await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
-  await runCommand('dependency optimization', 'bunx', ['vite', 'optimize', '--config', 'vite.config.ts'], env);
+  await runCommand('dependency optimization', 'bun', ['x', 'vite', 'optimize', '--config', 'vite.config.ts'], env);
 }
 
 function testScriptArgument(args: string[]): string {
