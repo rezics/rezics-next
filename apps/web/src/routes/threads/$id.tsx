@@ -11,7 +11,6 @@ function threadSearch(search: Record<string, unknown>): { cursor?: string } {
 
 /** The id without a slug redirects to the canonical thread URL and keeps the cursor. */
 export const Route = createFileRoute('/threads/$id')({
-  staticData: { sessionReread: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
   loader: async ({ params, deps, context }) => {

@@ -1,7 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
-import { publicRead, readQueryKey } from '../kernel/query';
+import { personalRead, publicRead, readQueryKey } from '../kernel/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { readBoardPage, readThreadPage, readThreadSlug } from './reads';
+import { readThreadPersonal } from './reads';
 
 export type CredentialMode = ReadCredentialMode;
 
@@ -31,6 +32,17 @@ export function threadPageQuery(
           credentialMode,
         },
       }),
+  });
+}
+
+export function threadPersonalQuery(id: string, cursor: string | undefined, postIds: string[]) {
+  return queryOptions({
+    ...personalRead,
+    queryKey: ['thread-personal', id, cursor ?? null, ...postIds],
+    queryFn: async () => ({
+      ...(await readThreadPersonal({ data: { id, postIds } })),
+      idempotencyKey: crypto.randomUUID(),
+    }),
   });
 }
 

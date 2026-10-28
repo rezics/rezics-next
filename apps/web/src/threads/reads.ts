@@ -6,11 +6,11 @@ import { env } from 'cloudflare:workers';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
-import { cookie } from '../session/cookies';
 import { prepareSession, viewerCredential } from '../session/request';
 import { kernelClient } from '../kernel/client';
 import { threadTitle } from './thread-href';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
+import { sessionSubject } from '../session/request';
 import type { PageAuthors } from '../identity/read';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
@@ -30,17 +30,6 @@ type PageInput = {
   expectedSlug?: string;
   credentialMode?: ReadCredentialMode;
 };
-const draftCookie = 'rezics_draft_key';
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function carriedDraftKey(request: Request, threadId: string): string | undefined {
-  const raw = cookie(request, draftCookie);
-  const split = raw?.lastIndexOf('.') ?? -1;
-  if (!raw || split < 1 || raw.slice(0, split) !== threadId) return undefined;
-  const key = raw.slice(split + 1);
-  return uuid.test(key) ? key : undefined;
-}
-
 function validatePageInput(input: unknown): PageInput {
   if (
     !input ||
@@ -116,6 +105,50 @@ export const readThreadSlug = createServerFn({ method: 'GET' })
     return { id: thread.thread.id, title: threadTitle(thread.thread) };
   });
 
+export const readThreadPersonal = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('id' in input) ||
+      typeof input.id !== 'string' ||
+      !('postIds' in input) ||
+      !Array.isArray(input.postIds) ||
+      input.postIds.length > 101 ||
+      input.postIds.some((id) => typeof id !== 'string' || id.length > 128)
+    )
+      throw notFound();
+    return { id: input.id, postIds: input.postIds as string[] };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    const viewerId = sessionSubject(request);
+    if (!authorization || !viewerId) return { viewerId: null, reactions: {} as Record<string, string | null> };
+    const client = kernelClient();
+    const targets = [data.id, ...data.postIds];
+    const values = await Promise.all(
+      targets.map(async (target) => {
+        const resource = target === data.id ? client.threads({ id: target }) : client.posts({ id: target });
+        try {
+          const result = await (
+            resource as unknown as {
+              reaction: {
+                get(options: { headers: { authorization: string } }): Promise<{ data?: { kind?: string | null } }>;
+              };
+            }
+          ).reaction.get({ headers: { authorization } });
+          return [target, result.data?.kind ?? null] as const;
+        } catch {
+          return [target, null] as const;
+        }
+      }),
+    );
+    return { viewerId, reactions: Object.fromEntries(values) };
+  });
+
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(
@@ -127,7 +160,6 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           board?: Board['board'];
           realm?: BoardRealm;
           posts: PostPage;
-          idempotencyKey: string;
           viewerId?: string;
           verification: VerificationConfig;
           authors: PageAuthors;
@@ -153,6 +185,6 @@ export const readThreadPage = createServerFn({ method: 'GET' })
         data.credentialMode ?? 'anonymous',
       );
       if ('redirect' in page) return page;
-      return { ...page, idempotencyKey: carriedDraftKey(request, data.id) ?? crypto.randomUUID() };
+      return page;
     },
   );

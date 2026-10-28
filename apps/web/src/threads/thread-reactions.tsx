@@ -61,12 +61,16 @@ export function ThreadReactions({
   value,
   signedIn,
   returnTo,
+  onMutation,
+  personalReady = true,
 }: {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
   signedIn: boolean;
   returnTo: string;
+  onMutation?: () => Promise<void>;
+  personalReady?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -92,12 +96,13 @@ export function ThreadReactions({
       flushSync(() => setFailed(message));
       throw new Error(message);
     }
+    await onMutation?.();
   }
 
   return (
     <Reactions
       counts={counts}
-      disabled={!hydrated}
+      disabled={!hydrated || !personalReady}
       {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
       labels={reactionLabels(failed)}
       locale={getLocale()}

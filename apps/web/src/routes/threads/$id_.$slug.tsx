@@ -5,13 +5,14 @@ import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { createFileRoute, redirect, useLocation } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ThreadPost } from '../../threads/reads';
-import { threadPageQuery } from '../../threads/thread-queries';
+import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
 import {
   rememberThreadSlug,
@@ -43,7 +44,6 @@ function threadSearch(search: Record<string, unknown>): { cursor?: string } {
 }
 
 export const Route = createFileRoute('/threads/$id_/$slug')({
-  staticData: { sessionReread: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
   loader: async ({ params, deps, context }) => {
@@ -69,23 +69,19 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
 });
 
 function ThreadPage() {
-  const {
-    thread,
-    board,
-    realm,
-    posts: loadedPosts,
-    idempotencyKey,
-    viewerId,
-    verification,
-    authors,
-    subjects,
-    now,
-  } = Route.useLoaderData();
+  const { thread, board, realm, posts: loadedPosts, verification, authors, subjects, now } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
   const { state: session } = useSession();
+  const queryClient = useQueryClient();
   const location = useLocation();
   const id = Route.useParams().id;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
+  const postIds = posts.posts.map((post) => post.id);
+  const personalQuery = useQuery({
+    ...threadPersonalQuery(id, Route.useSearch().cursor, postIds),
+    enabled: session === 'signed-in',
+  });
+  const personal = session === 'signed-in' ? personalQuery.data : undefined;
 
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
 
@@ -100,6 +96,13 @@ function ThreadPage() {
       ...current,
       posts: current.posts.map((item) => (item.id === post.id ? post : item)),
     }));
+  }
+
+  async function refreshThreadQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['thread-page', id] }),
+      queryClient.invalidateQueries({ queryKey: ['thread-personal', id] }),
+    ]);
   }
 
   return (
@@ -128,10 +131,12 @@ function ThreadPage() {
                   counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
                   returnTo={returnTo}
                   signedIn={session === 'signed-in'}
+                  personalReady={session !== 'signed-in' || personal !== undefined}
                   target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
-                  value={(firstPost ? thread.viewerReaction : post.viewerReaction) ?? null}
+                  value={(personal?.reactions[firstPost ? thread.id : post.id] as ReactionKind | null) ?? null}
                   verification={verification}
-                  viewerId={viewerId}
+                  viewerId={personal?.viewerId ?? undefined}
+                  onMutation={refreshThreadQueries}
                 />
               );
             })}
@@ -150,28 +155,33 @@ function ThreadPage() {
           </nav>
         )}
       </section>
-      {session === 'signed-in' ? (
-        <PostComposer<CreatedPost>
-          initialKey={idempotencyKey}
-          containerId={id}
-          onSubmit={async ({ body, idempotencyKey: key, mediaIds }) => {
-            const result = await replyToThread({
-              data: {
-                threadId: id,
-                body,
-                idempotencyKey: key,
-                ...(mediaIds.length > 0 ? { mediaIds } : {}),
-              },
-              headers: csrfHeaders(),
-              fetch: draftFetch(body),
-            });
-            return result.ok ? { ok: true as const, value: result.post } : result;
-          }}
-          onSuccess={(post) => setPosts((current) => ({ ...current, posts: [...current.posts, post] }))}
-        />
-      ) : session === 'signed-out' ? (
-        <SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />
-      ) : null}
+      <div className="min-h-[22rem]">
+        {session === 'signed-in' && personal ? (
+          <PostComposer<CreatedPost>
+            initialKey={personal.idempotencyKey}
+            containerId={id}
+            onSubmit={async ({ body, idempotencyKey: key, mediaIds }) => {
+              const result = await replyToThread({
+                data: {
+                  threadId: id,
+                  body,
+                  idempotencyKey: key,
+                  ...(mediaIds.length > 0 ? { mediaIds } : {}),
+                },
+                headers: csrfHeaders(),
+                fetch: draftFetch(body),
+              });
+              return result.ok ? { ok: true as const, value: result.post } : result;
+            }}
+            onSuccess={(post) => {
+              setPosts((current) => ({ ...current, posts: [...current.posts, post] }));
+              void refreshThreadQueries();
+            }}
+          />
+        ) : session === 'signed-out' ? (
+          <SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -190,6 +200,7 @@ function PostSlot({
   authors,
   now,
   viewerId,
+  personalReady,
   onChange,
   anchorId,
   target,
@@ -198,11 +209,13 @@ function PostSlot({
   signedIn,
   returnTo,
   verification,
+  onMutation,
 }: {
   post: ThreadPost;
   authors: PageAuthors;
   now: string;
   viewerId: string | undefined;
+  personalReady: boolean;
   onChange: (post: ThreadPost) => void;
   anchorId: string;
   target: { kind: 'thread' | 'post'; id: string };
@@ -211,6 +224,7 @@ function PostSlot({
   signedIn: boolean;
   returnTo: string;
   verification: VerificationConfig;
+  onMutation: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
@@ -259,6 +273,7 @@ function PostSlot({
     });
     if (!result.ok) throw new Error(postDeleteFailureText(result));
     onChange({ ...post, body: null, availability: 'erased', removed: true } as ThreadPost);
+    await onMutation();
   }
 
   if (('removed' in post && post.removed) || post.availability === 'erased') {
@@ -291,7 +306,15 @@ function PostSlot({
           ) : null}
         </Byline>
         <div className="flex shrink-0 items-center gap-1">
-          <ThreadReactions counts={counts} returnTo={returnTo} signedIn={signedIn} target={target} value={value} />
+          <ThreadReactions
+            counts={counts}
+            returnTo={returnTo}
+            signedIn={signedIn}
+            target={target}
+            value={value}
+            onMutation={onMutation}
+            personalReady={personalReady}
+          />
           {editing ? null : ownsPost ? (
             <ContentActions
               labels={labels}
@@ -331,6 +354,7 @@ function PostSlot({
           onSuccess={(updated: RevisedPost) => {
             onChange(updated as ThreadPost);
             setEditing(false);
+            void onMutation();
           }}
         />
       ) : (

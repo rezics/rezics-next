@@ -414,6 +414,15 @@ async function selectRecording(
       return recordings.thread;
     if (thread?.[1] && decodeURIComponent(thread[1]) === resourceId(recordings['thread-owned'], 'thread'))
       return recordings['thread-owned'];
+    const ownReaction = /^\/v1\/(threads|posts)\/([^/]+)\/reaction$/.exec(pathname);
+    if (ownReaction?.[1] && ownReaction[2]) {
+      const id = decodeURIComponent(ownReaction[2]);
+      const threadRecord = recordings['thread-owned']?.thread as { id?: unknown } | undefined;
+      const postRecord = (recordings['thread-owned-posts']?.posts as Record<string, unknown>[] | undefined)?.find(
+        (post) => post.id === id,
+      );
+      if ((ownReaction[1] === 'threads' && threadRecord?.id === id) || postRecord) return { status: 200, kind: null };
+    }
     if (pathname === `/v1/threads/${deletedOrganizationThreadId}/posts`)
       return recordings['thread-deleted-organization-posts'];
     if (pathname === `/v1/threads/${deletedOrganizationThreadId}`) return recordings['thread-deleted-organization'];

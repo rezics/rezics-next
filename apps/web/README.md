@@ -535,6 +535,18 @@ Each server render and browser session has its own query cache. Public reads sta
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
   `tests/reactions-cost.test.ts`: `thread page reads stay within their bound as s grows`
 
+### Board and thread personal state
+
+- **Touches:** Board and thread HTML reads use anonymous kernel requests and do not resolve the reader's session. Once
+  hydrated, a signed-in thread reader makes one `personalRead` for the reader id and one reaction read for the thread
+  plus each post on the visible page. It supplies own-post edit/delete controls, reaction selections and the reply
+  composer. Signed-out readers make no personal thread read and receive the sign-in reply link.
+- **Bound:** At most `s + 1` personal kernel reads for a thread page with `s` posts, independent of reaction counts;
+  0 personal reads for a signed-out reader. The board and thread public HTML is identical across session states apart
+  from the CSP nonce.
+- **Growth check:** `tests/thread-personal.test.ts` verifies anonymous server rendering, browser-only personal data,
+  reserved personal-control space and query updates after reply, edit, delete and reaction.
+
 ### Realm crumb
 
 The line above a thread title reads `Realm › Board`, and the line above a board title names the Realm. Both are links:

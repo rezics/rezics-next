@@ -27,7 +27,6 @@ function boardSearch(search: Record<string, unknown>): { cursor?: string; sort?:
 }
 
 export const Route = createFileRoute('/boards/$id')({
-  staticData: { sessionReread: true },
   validateSearch: boardSearch,
   // The router passes unvalidated keys through, so read the sort through the same check again.
   loaderDeps: ({ search }) => {

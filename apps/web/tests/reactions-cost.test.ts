@@ -133,15 +133,16 @@ test('thread page reads stay within their bound as s grows', async () => {
         sitekey: '',
         scriptUrl: 'https://site.test/turnstile.js',
       },
+      'anonymous',
     );
     expect(page.posts.posts).toHaveLength(size);
     expect(page.thread.reactions).toEqual({ upvote: size });
-    expect(metrics).toEqual({ K: 2, D: 1, R: 0, A: 0 });
+    expect(metrics).toEqual({ K: 2, D: 0, R: 0, A: 0 });
     expect(recorded.peak()).toBe(2);
     expect(calls.map((call) => `${call.method} ${call.path}`).sort()).toEqual(
       [`GET /v1/threads/${threadId}`, `GET /v1/threads/${threadId}/posts`].sort(),
     );
-    expect(calls.every((call) => call.authorization === 'Bearer access')).toBe(true);
+    expect(calls.every((call) => call.authorization === null)).toBe(true);
     expect(calls.some((call) => call.path.endsWith('/reaction'))).toBe(false);
   }
 });
