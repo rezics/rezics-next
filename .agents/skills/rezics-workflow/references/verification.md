@@ -9,10 +9,15 @@ without its native driver is not acceptance.
 - [ ] Exercise every applicable surface cell, or record the contract's reason it does not apply in the manifest.
 - [ ] For changed operations, compare examined work with the derived Cost bound at three seeded scales, including
       unrelated data and history. Use native cost counters, not response size or wall time.
-- [ ] Build frontend states as page stories on API recordings. Use play functions, accessibility checks and snapshots;
+- [ ] Check every route against the [capability evidence matrix](../../../../docs/development/verification.md#capability-evidence),
+      including all required content, viewer, viewport and complex control states. Build page stories on API recordings. Use play functions, accessibility checks and snapshots;
       inspect the rendered phone/desktop pages in both themes and applicable locales. Follow the
       [page story map](../../../../docs/development/page-stories.md) and
       [web recording runbook](../../../../apps/web/README.md#storybook-and-page-recordings).
+- [ ] Validate external configuration through the [real integration boundary](../../../../docs/development/verification.md#external-integrations)
+      and include first-deployment evidence when required by acceptance.
+- [ ] Select the narrowest acceptance under [check selection](../../../../docs/development/verification.md#check-selection-and-failures).
+      Confirm fresh-worktree preparation is owned by the runner, and classify transport failures separately.
 - [ ] Run acceptance once after the last relevant edit and the root typecheck. Preserve exit status and logs.
       Let queued checks acquire their slot. Follow the rules' bounded diagnostics for actual failures.
 

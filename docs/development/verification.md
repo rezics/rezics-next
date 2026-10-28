@@ -20,7 +20,7 @@ fixture data, every applicable surface cell with frozen scenarios or an explicit
 native acceptance command. Completion and promotion refuse incomplete manifests. A manifest entry or parallel
 specification without its passing native binding is not proof.
 
-Build and prove frontend surfaces in Storybook 11 with `addon-vitest` and `addon-a11y`. Page stories use recorded API
+Build and prove frontend surfaces in Storybook 11 with `addon-vitest` and `addon-a11y`. Every route has page stories using recorded API
 responses for populated, empty, long or overflowing content, preparing or unavailable, and error states, for each
 applicable viewer (anonymous, member, owner or curator, suspended), on desktop and phone. Cover every control state
 on library, Collection, subject, search and Zone surfaces: filters, selection, each status chip, curated and dynamic,
@@ -34,6 +34,9 @@ snapshots support review by eye. The development publication is `https://storybo
 [Web recording and screenshot procedures](../../apps/web/README.md#storybook-and-page-recordings) own the commands.
 
 ## Check selection and failures
+
+Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
+workspace-wide change; the train and promotion own whole-workspace checks.
 
 Run the acceptance command once after the last relevant edit, plus the root typecheck (`bun scripts/typecheck.ts`).
 Write missing acceptance tests named by the contract. Preserve existing frozen acceptance. Add focused checks for
@@ -74,17 +77,20 @@ Infrastructure failures, including check transport, rsync exit 24, SSH drops and
 by the tools without consuming a worker attempt. Preserve their exact errors; do not classify them as flaky product
 assertions or weaken a check. Follow the bounded escalation in [maintenance](maintenance.md). A fresh worktree's
 check must pass without manual preparation of generated output, Vite pre-bundles or test-only Worker variables;
-check runners own that preparation.
+check runners own that preparation. Once a remote command starts, its recorded exit status remains the result.
 
 When a required whole `tools/goal` suite fails under host load, rerun each failing file alone. A file that passes
 alone is load evidence, as in the landing check; a reproducible assertion remains a defect. Report completion once
 acceptance, root typecheck and the applicable individual reruns pass. This exception does not excuse transport,
 setup or cleanup failures and does not authorize a discretionary whole-suite run.
 
-Verify tooling fixes against the actual operating condition before reporting them fixed.
+## External integrations
 
-Infrastructure failures in remote check transport are retried by the tools and never consume a worker attempt. A remote
-command's recorded exit status remains the result once the command has started.
+Prove deploys, provider configuration and integrations such as Cloudflare or Stripe through the real tool's validation
+with the real configuration and account. For example, use `wrangler deploy --dry-run` against the actual deployment
+configuration; a mock or weaker substitute cannot prove it. Include a first real deployment in task acceptance where
+safe. Verify tooling fixes against the actual operating condition before reporting them fixed.
+
 
 ## Review
 

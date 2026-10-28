@@ -11,9 +11,12 @@ Managers:
 - [ ] Freeze missing per-persona API cases red before implementation under the
       [capability evidence rules](../../../../docs/development/verification.md#capability-evidence).
 - [ ] For interfaces, list exact stories to add: route/control, state, viewer, viewport and recorded API evidence.
-- [ ] Verify exports, fixtures and dependencies exist on the recorded base; check current task state before reshape.
-- [ ] Sequence shared-file writers. Include existing tests whose old behaviour the new contract replaces; their
-      owner reconciles frozen acceptance before dispatch, never the implementation worker.
+- [ ] Apply [brief preflight](../../../../docs/development/delivery.md#brief-preflight) to paths, counts, package
+      ownership, exports, fixtures and dependencies; check current task state before reshape.
+- [ ] Apply its overlap rule when setting dependencies. Include existing tests whose old behaviour the new contract
+      replaces; their owner reconciles frozen acceptance before dispatch, never the implementation worker.
+- [ ] Apply [checkout and landing discipline](../../../../docs/development/delivery.md#checkout-and-landing-discipline)
+      when splitting control-plane and companion work or assigning a shared module workspace.
 - [ ] Use the configured route, not a model selection copied from old memory. Keep private settings outside Git.
 
 These commands run only in the controller's authorized checkout and state, not as a worker workaround:

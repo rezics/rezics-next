@@ -40,3 +40,7 @@ cross-surface acceptance examples; the filter, freshness and disclosure contract
 
 Include cost, disclosure, lifecycle, accessibility and cross-surface consistency. Adopt the result in the owning
 product document. A research recommendation or attractive mockup is not an accepted contract.
+
+Before briefing an adopted design, apply the [brief preflight](delivery.md#brief-preflight) to every concrete
+repository premise, including paths, counts and package ownership. Design evidence does not substitute for checking
+the current base.

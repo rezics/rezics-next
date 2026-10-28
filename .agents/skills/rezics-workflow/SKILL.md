@@ -22,7 +22,7 @@ rules](../../../docs/development/README.md), owner documents and [AGENTS](../../
 5. **Review and deliver.** Use [review](references/review.md) to assess the diff and evidence, repair defect classes,
    commit and hand off. The controller owns integration and promotion; verify the promoted revision for Goal closure.
 6. **Measure and improve.** Managers use [efficiency](references/efficiency.md) at checkpoints to compare accepted
-   outcomes, diagnose lost attempts and remove the largest measured cause of waste.
+   outcomes, diagnose lost attempts, apply the linked incident method and verify class repairs in the next hourly report.
 
 For example, when adding Collection filters, design their behaviour across every Collection surface, link the
 adopted filter contract and frozen native scenarios in the brief, make API acceptance pass, then add recorded-response

@@ -27,8 +27,8 @@ and durations from estimates.
 Keep instructions short and contexts focused. Prefer reusable evidence and owner links to repeated repository
 exploration. Use event-driven waits and fresh continuations rather than polling through model turns.
 
-Preflight before spending an attempt. Keep independent work moving, sequence shared-file changes and remove artificial
-dependencies. Avoid restarting unchanged work or repeating checks without new evidence.
+Apply the [brief preflight](delivery.md#brief-preflight) before spending an attempt. Keep independent and overlapping
+work moving under the delivery dependency rules; remove artificial dependencies. Avoid restarting unchanged work or repeating checks without new evidence.
 
 Set concurrency from measured worker memory, check capacity, queueing and allowance per landing. Worker and heavy-check
 admission are separate controls. More workers are useful only when accepted throughput justifies their cost.
@@ -40,3 +40,16 @@ A model pin changes routing, not authorization to exceed an operating budget. Pa
 by the controller.
 
 Do not spend allowance merely to exhaust it before a reset. Preserve explicit pauses and spending limits.
+
+## Incident method
+
+When work slows or an attempt is lost, enumerate every evidenced cause from task states, attempt records, run logs
+and `failure.json`. Name the class of each cause: for example, shared-file holds, wrong brief premises, oversized
+checks, unnoticed long attempts, unvalidated integration configuration, or branch and propagation gaps. Distinguish
+observations from hypotheses; do not invent missing timing or claim a fix without evidence.
+
+Repair each class in tools or workflow: a control-plane change, a gate or a brief rule must prevent recurrence beyond
+the individual task. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
+report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
+Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
+when preparing the cause-to-fix record.
