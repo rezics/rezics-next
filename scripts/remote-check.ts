@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
 // stay off the machine the agents run on.
+// Runs share the host package cache through hardlinks. An in-place write into an installed package fails the run and
+// removes its cache entry; patch dependencies through patchedDependencies in package.json, never at run time.
 //
 // A short run (one slot, estimated at no more than 120,000 ms, and not a gate) waits at most one short run per host.
 // Each host keeps one slot as express capacity, so its ordinary capacity is one slot lower.
@@ -68,6 +70,42 @@ const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
 export const CHECK_SLOT_PROCESSORS = 2;
 const MAX_WAIT_RECORD_MS = 60_000;
+
+/** Shell guard for installed package files changed in place after installation. */
+export function installedPackageCacheCheck(directory: string, hostName: string, cacheRoot = `${ROOT}/bun-cache`): string {
+  const marker = `${directory}/.bun-install-complete`;
+  const packageTree = `${directory}/node_modules/.bun`;
+  return `
+    modified_files=$(find ${quote(packageTree)} -type f -links +1 -newer ${quote(marker)} -print 2>/dev/null)
+    if [ -n "$modified_files" ]; then
+      modified_count=$(printf '%s\n' "$modified_files" | wc -l | tr -d ' ')
+      printf 'remote-check: the run modified %s installed package files shared with the host package cache on %s:\n' "$modified_count" ${quote(hostName)} >&2
+      run_root=${quote(directory)}
+      cache_root=${quote(cacheRoot)}
+      shown=0
+      printf '%s\n' "$modified_files" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        if [ "$shown" -lt 10 ]; then
+          printf '  %s\n' "\${file#"$run_root"/}" >&2
+          shown=$((shown + 1))
+        fi
+        inode=$(stat -c '%i' -- "$file")
+        cache_file=$(find "$cache_root" -type f -inum "$inode" -print -quit 2>/dev/null)
+        if [ -n "$cache_file" ]; then
+          relative=\${cache_file#"$cache_root"/}
+          first=\${relative%%/*}
+          if [ "\${first#@}" != "$first" ]; then
+            rest=\${relative#*/}
+            entry="$cache_root/$first/\${rest%%/*}"
+          else
+            entry="$cache_root/$first"
+          fi
+          rm -rf -- "$entry"
+        fi
+      done
+      if [ "$code" -eq 0 ]; then code=1; fi
+    fi`;
+}
 
 export class Aborted extends Error {}
 
@@ -481,6 +519,7 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
     install_started=$(date +%s%N)
     bun install --frozen-lockfile
     code=$?
+    if [ "$code" -eq 0 ]; then touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
@@ -493,6 +532,7 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
         code=$?
         command_finished=$(date +%s%N)
         awk -v elapsed="$((command_finished - command_started))" -v host="$host" 'BEGIN { printf "remote-check: command %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
+        ${installedPackageCacheCheck(directory, hostName)}
       fi
     fi
     run_finished=$(date +%s%N)

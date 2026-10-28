@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -18,6 +19,7 @@ import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
   controlSocketDirectoryPath,
+  installedPackageCacheCheck,
   returnsProbe,
   selectSlotClass,
 } from './remote-check.ts';
@@ -636,6 +638,87 @@ test("each remote run keeps Bun's transpiler cache inside its own run directory"
     const cachePath = script.match(/(?:^|\s)BUN_RUNTIME_TRANSPILER_CACHE_PATH=([^\s]+)/)?.[1];
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
   }
+});
+
+test('an in-place write to a shared installed package fails and removes its host cache entry', () => {
+  for (const scoped of [false, true]) {
+    const directory = mkdtempSync(join(root, 'package-cache-'));
+    const cache = join(directory, 'cache');
+    const run = join(directory, 'run');
+    const packageEntry = scoped ? '@scope/pkg@3.0.0@@@1' : 'pkg@1.0.0@@@1';
+    const cacheFile = join(cache, packageEntry, scoped ? 'b.js' : 'src/a.js');
+    const runFile = join(run, 'node_modules/.bun', packageEntry, scoped ? 'b.js' : 'src/a.js');
+    const otherEntry = join(cache, scoped ? 'other@2.0.0@@@1' : '@scope/pkg@3.0.0@@@1');
+    mkdirSync(join(cache, packageEntry, scoped ? '' : 'src'), { recursive: true });
+    mkdirSync(join(cache, 'other@2.0.0@@@1'), { recursive: true });
+    mkdirSync(join(cache, '@scope/pkg@3.0.0@@@1'), { recursive: true });
+    mkdirSync(join(runFile, '..'), { recursive: true });
+    writeFileSync(cacheFile, 'original');
+    writeFileSync(join(cache, 'other@2.0.0@@@1/index.js'), 'other');
+    if (!scoped) writeFileSync(join(cache, '@scope/pkg@3.0.0@@@1/b.js'), 'scoped');
+    linkSync(cacheFile, runFile);
+    if (!scoped) {
+      const scopedRunFile = join(run, 'node_modules/.bun/@scope/pkg@3.0.0@@@1/b.js');
+      mkdirSync(join(scopedRunFile, '..'), { recursive: true });
+      linkSync(join(cache, '@scope/pkg@3.0.0@@@1/b.js'), scopedRunFile);
+    }
+    const marker = join(run, '.bun-install-complete');
+    writeFileSync(marker, '');
+
+    const script = `code=0\nprintf changed > ${JSON.stringify(runFile)}\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
+    const result = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe('1');
+    expect(result.stderr).toContain('modified 1 installed package files shared with the host package cache on check-a');
+    expect(result.stderr).toContain(`node_modules/.bun/${packageEntry}/${scoped ? 'b.js' : 'src/a.js'}`);
+    expect(existsSync(join(cache, packageEntry))).toBe(false);
+    expect(existsSync(join(cache, 'other@2.0.0@@@1'))).toBe(true);
+    if (!scoped) expect(existsSync(otherEntry)).toBe(true);
+  }
+});
+
+test('new package files and files replaced by a new inode do not fail or evict cache entries', () => {
+  const directory = mkdtempSync(join(root, 'package-cache-'));
+  const cache = join(directory, 'cache');
+  const run = join(directory, 'run');
+  const cacheFile = join(cache, '@scope/pkg@3.0.0@@@1/b.js');
+  const runFile = join(run, 'node_modules/.bun/@scope/pkg@3.0.0@@@1/b.js');
+  mkdirSync(join(cache, '@scope/pkg@3.0.0@@@1'), { recursive: true });
+  mkdirSync(join(runFile, '..'), { recursive: true });
+  writeFileSync(cacheFile, 'original');
+  linkSync(cacheFile, runFile);
+  writeFileSync(join(run, '.bun-install-complete'), '');
+
+  const replacement = `${runFile}.replacement`;
+  const script = `code=0\nprintf added > ${JSON.stringify(join(run, 'node_modules/.bun/new-file.js'))}\nprintf replaced > ${JSON.stringify(replacement)}\nmv ${JSON.stringify(replacement)} ${JSON.stringify(runFile)}\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
+  const result = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout.trim()).toBe('0');
+  expect(result.stderr).toBe('');
+  expect(existsSync(join(cache, '@scope/pkg@3.0.0@@@1'))).toBe(true);
+});
+
+test('the package cache failure lists at most ten changed run-relative paths', () => {
+  const directory = mkdtempSync(join(root, 'package-cache-'));
+  const cache = join(directory, 'cache');
+  const run = join(directory, 'run');
+  const runPackages = join(run, 'node_modules/.bun');
+  mkdirSync(runPackages, { recursive: true });
+  for (let index = 0; index < 11; index += 1) {
+    const name = `pkg${index}@1.0.0@@@1`;
+    mkdirSync(join(cache, name), { recursive: true });
+    mkdirSync(join(runPackages, name), { recursive: true });
+    writeFileSync(join(cache, name, 'file.js'), 'original');
+    linkSync(join(cache, name, 'file.js'), join(runPackages, name, 'file.js'));
+  }
+  writeFileSync(join(run, '.bun-install-complete'), '');
+  const script = `code=0\nfor file in ${JSON.stringify(runPackages)}/*/file.js; do printf changed > "$file"; done\n${installedPackageCacheCheck(run, 'check-a', cache)}\nprintf '%s\\n' "$code"`;
+  const result = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout.trim()).toBe('1');
+  expect(result.stderr).toContain('modified 11 installed package files shared with the host package cache');
+  expect(result.stderr.trim().split('\n').slice(1)).toHaveLength(10);
+  expect(result.stderr).toContain('node_modules/.bun/');
 });
 
 test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally and runs them on the host with the most free capacity', async () => {
@@ -2026,6 +2109,20 @@ async function generatedRun() {
   const script = (kind: string) => String(events().find((event) => event.kind === kind)!.script);
   return { run: script('run'), cleanup: script('cleanup'), slot: script('slot') };
 }
+
+test('the run checks installed packages after the command and before recording its exit status', async () => {
+  const { run } = await generatedRun();
+  const install = run.indexOf('bun install --frozen-lockfile');
+  const marker = run.indexOf('.bun-install-complete');
+  const command = run.indexOf('\n        "$@"');
+  const packageCheck = run.indexOf('modified_files=$(find');
+  const exitStatus = run.indexOf('exit-status');
+  expect(install).toBeGreaterThanOrEqual(0);
+  expect(marker).toBeGreaterThan(install);
+  expect(command).toBeGreaterThan(marker);
+  expect(packageCheck).toBeGreaterThan(command);
+  expect(exitStatus).toBeGreaterThan(packageCheck);
+});
 
 test('each run and every container it starts share one run slice', async () => {
   const scripts = await generatedRun();

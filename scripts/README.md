@@ -5,6 +5,8 @@
 A check host is a Linux machine reached over SSH. It runs a disposable copy of a checkout.
 It needs systemd, cgroup v2 accounting, Docker and an SSH account with permission to manage them.
 Checks share the capped `rezics-check.slice`. A loopback host uses this same protocol on the caller's machine.
+Runs share the host's package cache through hardlinks. A run that writes into an installed package in place fails and
+its cache entry is removed. Patch a dependency through `patchedDependencies` in `package.json`, never at run time.
 
 This section owns the operational rules. The implementation is in [remote-check.ts](remote-check.ts),
 [stack-run.ts](stack-run.ts), [stack-lease.ts](stack-lease.ts),
