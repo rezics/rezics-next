@@ -70,9 +70,11 @@ export class SqliteLandingQueue implements LandingQueue {
     const tasks = this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get();
     const laneFilter = lane
       ? !tasks
-        ? lane === 'main' ? ' AND 0' : ''
+        ? lane === 'main'
+          ? ' AND 0'
+          : ''
         : lane === 'main'
-        ? ` AND (
+          ? ` AND (
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
@@ -84,7 +86,7 @@ export class SqliteLandingQueue implements LandingQueue {
               )
             )
           )`
-        : ` AND NOT (
+          : ` AND NOT (
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
