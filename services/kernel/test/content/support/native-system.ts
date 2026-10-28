@@ -22,6 +22,7 @@ import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { assertSetupResponse } from './setup-response.ts';
 import type { ContentActors, ContentCredential, ContentSystem, ContentSystemOptions } from './system.ts';
+import type { Access } from '../../../src/request/access.ts';
 
 export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly actors: Omit<ContentActors, 'worker' | 'otherWorker'>;
@@ -142,6 +143,18 @@ async function createNativeContentSystemWithOptions(
       instant = parsed;
     };
     let nativeAuth: AuthService;
+    let access: Access | undefined;
+    const deferredAccess = new Proxy({} as Access, {
+      get(_target, property) {
+        return (...args: unknown[]) => {
+          const resolved = access;
+          if (!resolved) throw new Error('Native fixture Access is not initialized');
+          const member = resolved[property as keyof Access];
+          if (typeof member !== 'function') return member;
+          return member.apply(resolved, args);
+        };
+      },
+    });
     // Kernel resolves Access on a live request, after all routes are mounted.
     // This same instance authenticates fixture credentials on this exact pool.
     const kernel = createKernel({
@@ -150,7 +163,7 @@ async function createNativeContentSystemWithOptions(
       tokens: tokenKeys,
       clock,
       content: { cursorNow: () => clock().getTime() },
-      access: () => access,
+      access: () => deferredAccess,
       writeRate: createWriteRateLimiter({
         secret: crypto.randomUUID() + crypto.randomUUID(),
         overrides: writeRateOverrides,
@@ -159,7 +172,7 @@ async function createNativeContentSystemWithOptions(
     });
     const actions = actionCatalogue(kernel);
     let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
-    const access = createAccess({
+    access = createAccess({
       actions,
       clock,
       realmRoleReader: (client, input) => {
