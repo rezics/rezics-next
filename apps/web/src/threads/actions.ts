@@ -7,14 +7,20 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
-import { erasePostRequest, revisePostRequest, startThreadRequest } from './post-writes';
+import {
+  erasePostRequest,
+  revisePostRequest,
+  startThreadRequest,
+  type StartThreadInput,
+  type VoteCitation,
+} from './post-writes';
 import { forgetThreadSlug, rememberThreadSlug } from './thread-href';
 
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type FailureReason = 'closed' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'unavailable';
-export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number };
+export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number; existingReviewId?: string };
 export type ThreadResource = ReturnType<KernelClient['threads']>;
 export type PostResource = ReturnType<KernelClient['posts']>;
 export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>;
@@ -57,13 +63,30 @@ function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey
   };
 }
 
-function validateThreadDraft(input: unknown): {
-  boardId: string;
-  title: string;
-  body: DocumentSnapshot;
-  idempotencyKey: string;
-  mediaIds?: string[];
-} {
+function validateVoteCitation(value: unknown): VoteCitation | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('questionId' in value) ||
+    typeof value.questionId !== 'string' ||
+    !uuid.test(value.questionId) ||
+    !('units' in value) ||
+    typeof value.units !== 'number' ||
+    !Number.isInteger(value.units) ||
+    value.units < 0 ||
+    value.units > 20 ||
+    !('revision' in value) ||
+    typeof value.revision !== 'number' ||
+    !Number.isInteger(value.revision) ||
+    value.revision < 1 ||
+    value.revision > 2_147_483_647
+  )
+    throw new Error('Invalid review vote citation');
+  return { questionId: value.questionId, units: value.units as number, revision: value.revision as number };
+}
+
+function validateThreadDraft(input: unknown): StartThreadInput {
   const draft = validateDraft(input);
   if (
     !input ||
@@ -78,7 +101,29 @@ function validateThreadDraft(input: unknown): {
     input.title.length > 512
   )
     throw new Error('Invalid thread draft');
-  return { ...draft, boardId: input.boardId, title: input.title };
+  const base = { ...draft, boardId: input.boardId, title: input.title };
+  if ('kind' in input && input.kind !== undefined) {
+    if (
+      input.kind !== 'review' ||
+      !('subjectId' in input) ||
+      typeof input.subjectId !== 'string' ||
+      !uuid.test(input.subjectId)
+    )
+      throw new Error('Invalid review draft');
+    const voteCitation = 'voteCitation' in input ? validateVoteCitation(input.voteCitation) : undefined;
+    return {
+      ...base,
+      kind: 'review',
+      subjectId: input.subjectId,
+      ...(voteCitation ? { voteCitation } : {}),
+    };
+  }
+  if (
+    ('subjectId' in input && input.subjectId !== undefined) ||
+    ('voteCitation' in input && input.voteCitation !== undefined)
+  )
+    throw new Error('Invalid discussion draft');
+  return base;
 }
 
 function parseRetryAfter(value: unknown): number | undefined {

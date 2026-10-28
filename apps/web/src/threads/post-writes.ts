@@ -2,19 +2,61 @@ import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
-import { prepareSession, viewerCredential } from '../session/request.ts';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request.ts';
 import type { EditFailure, RevisedPost, WriteFailure } from './actions';
 
 type Refusal = (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure;
 type StartedThread = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>['thread'];
 
-export type StartThreadInput = {
+type StartThreadBase = {
   boardId: string;
   title: string;
   body: DocumentSnapshot;
   idempotencyKey: string;
   mediaIds?: string[];
 };
+
+export type VoteCitation = { questionId: string; units: number; revision: number };
+export type StartThreadInput = StartThreadBase &
+  (
+    | { kind: 'review'; subjectId: string; voteCitation?: VoteCitation }
+    | { kind?: undefined; subjectId?: undefined; voteCitation?: undefined }
+  );
+
+const globalContextId = '00000000-0000-8000-8000-000000000000';
+
+/** Finds the author's live review through the subject index after a review-create conflict. */
+export async function findExistingReview(
+  client: KernelClient,
+  input: { subjectId: string; boardId: string; authorId: string; authorization: string },
+): Promise<string | undefined> {
+  const auth = { headers: { authorization: input.authorization } };
+  const board = await client.boards({ id: input.boardId }).get(auth);
+  if (board.error || !board.data) return undefined;
+  const place = board.data.board.realmId ?? globalContextId;
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+
+  for (;;) {
+    const result = await client.subjects({ id: input.subjectId }).threads.get({
+      query: { place, kind: 'review', limit: 20, ...(cursor ? { cursor } : {}) },
+      ...auth,
+    });
+    if (result.error || !result.data) return undefined;
+    const existing = result.data.threads.find(
+      (thread) =>
+        thread.authorId === input.authorId &&
+        thread.boardId === input.boardId &&
+        thread.kind === 'review' &&
+        thread.subjectIds.includes(input.subjectId),
+    );
+    if (existing) return existing.id;
+    const next = result.data.next;
+    if (!next || seen.has(next)) return undefined;
+    seen.add(next);
+    cursor = next;
+  }
+}
 
 export async function startThreadRequest(
   input: StartThreadInput,
@@ -33,7 +75,13 @@ export async function startThreadRequest(
         title: input.title,
         body: input.body,
         licence: 'LicenseRef-rezics-terms',
-        subjectIds: [],
+        ...(input.kind === 'review'
+          ? {
+              kind: 'review' as const,
+              subjectIds: [input.subjectId],
+              ...(input.voteCitation ? { voteCitation: input.voteCitation } : {}),
+            }
+          : { subjectIds: [] }),
         visibility: 'published',
         ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
       },
@@ -41,7 +89,22 @@ export async function startThreadRequest(
         headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string },
       },
     );
-    if (result.error) return refusal(result.status, result.headers, result.error.value);
+    if (result.error) {
+      const failure = refusal(result.status, result.headers, result.error.value);
+      if (result.status === 409 && input.kind === 'review') {
+        const authorId = sessionSubject(request);
+        if (authorId) {
+          const existingReviewId = await findExistingReview(client, {
+            subjectId: input.subjectId,
+            boardId: input.boardId,
+            authorId,
+            authorization,
+          });
+          if (existingReviewId) return { ...failure, existingReviewId };
+        }
+      }
+      return failure;
+    }
     return { ok: true, thread: result.data.thread };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };

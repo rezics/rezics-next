@@ -148,6 +148,7 @@ export function SignInPrompt({
 export function PostComposer<T>({
   initialKey,
   titleRequired = false,
+  canSubmit = true,
   containerId,
   boardId,
   onSubmit,
@@ -155,6 +156,7 @@ export function PostComposer<T>({
 }: {
   initialKey: string;
   titleRequired?: boolean;
+  canSubmit?: boolean;
   containerId?: string;
   boardId?: string;
   onSubmit: (input: {
@@ -183,7 +185,7 @@ export function PostComposer<T>({
   const pendingRef = useRef(0);
   const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const ready = bodyCanSend && (!titleRequired || Boolean(title.trim()));
+  const ready = canSubmit && bodyCanSend && (!titleRequired || Boolean(title.trim()));
   const upload =
     containerId || boardId
       ? async (file: File, signal: AbortSignal) => {
@@ -330,10 +332,24 @@ export function PostComposer<T>({
       </div>
       {failure ? (
         <div className="mt-5 space-y-3" role="alert">
-          <p>{refusalText(failure)}</p>
-          <Button type="button" variant="outline" disabled={submitting} onClick={() => void submit()}>
-            {m.thread_write_retry()}
-          </Button>
+          {failure.existingReviewId ? (
+            <p>
+              {m.thread_review_duplicate()}{' '}
+              <a
+                className="font-medium text-primary underline underline-offset-4"
+                href={`/${locale}/threads/${failure.existingReviewId}`}
+              >
+                {m.thread_review_existing()}
+              </a>
+            </p>
+          ) : (
+            <>
+              <p>{refusalText(failure)}</p>
+              <Button type="button" variant="outline" disabled={submitting} onClick={() => void submit()}>
+                {m.thread_write_retry()}
+              </Button>
+            </>
+          )}
         </div>
       ) : null}
       {uploadNotice ? (

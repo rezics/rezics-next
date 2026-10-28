@@ -1,0 +1,55 @@
+{
+  "status": 200,
+  "threads": [
+    {
+      "id": "01a1a000-0000-7000-8000-000000000014",
+      "route": 4661,
+      "boardId": "01a1a000-0000-7000-8000-000000000013",
+      "authorId": "story-viewer",
+      "kind": "review",
+      "subjectIds": ["01a17a3b-0884-721b-91ef-d7ffd7bb58e4"],
+      "title": "A story of love and responsibility",
+      "licence": "MIT",
+      "visibility": "published",
+      "securityRevision": "1",
+      "availability": "available",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "firstPost": {
+        "id": "01a1a000-0000-7000-8000-000000000015",
+        "threadId": "01a1a000-0000-7000-8000-000000000014",
+        "route": 4661,
+        "authorId": "story-viewer",
+        "parentId": null,
+        "licence": "MIT",
+        "subjectIds": [],
+        "boardId": "01a1a000-0000-7000-8000-000000000013",
+        "visibility": "published",
+        "securityRevision": "1",
+        "createdAt": "2026-10-24T00:00:00.000Z",
+        "revisedAt": null,
+        "mediaIds": [],
+        "voteCitation": null,
+        "revisionId": "01a1a000-0000-7000-8000-000000000016",
+        "body": {
+          "doc": {
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": { "dir": null, "id": "review-opening", "lang": "en", "textAlign": null },
+                "content": [{ "type": "text", "text": "A review of the little prince." }]
+              }
+            ],
+            "type": "doc"
+          },
+          "profile": "blocks",
+          "version": "rezics-document-v1"
+        },
+        "sha256": "a0daf7f4fb39a27271cc0e51b31991d84b27c9f1ca013aa15f3d08feb1b6dadb",
+        "availability": "available",
+        "reactions": {}
+      },
+      "reactions": {}
+    }
+  ],
+  "next": null
+}

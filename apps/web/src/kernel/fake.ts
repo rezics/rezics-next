@@ -21,6 +21,8 @@ import subjectReactionRecording from './recorded/subject-reaction.json';
 import subjectReactionsRecording from './recorded/subject-reactions.json';
 import subjectRecording from './recorded/subject.json';
 import subjectUncoveredRecording from './recorded/subject-uncovered.json';
+import ratingVoteRecording from './recorded/rating-vote.json';
+import subjectReviewThreadsRecording from './recorded/subject-review-threads.json';
 import boardRecording from './recorded/board.json';
 import boardThreadsRecording from './recorded/board-threads.json';
 import threadRecording from './recorded/thread.json';
@@ -112,6 +114,15 @@ export type FixtureAccount = {
 export type KernelRecording = { status: number; [key: string]: unknown };
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
+const reviewFakeRecordings: Record<string, KernelRecording> = {
+  'subject-page': subjectPageRecording,
+  subject: subjectRecording,
+  'my-realms': myRealmsRecording,
+  realm: realmRecording,
+  'realm-boards': realmBoardsRecording,
+  'rating-vote': ratingVoteRecording,
+  'subject-review-threads': subjectReviewThreadsRecording,
+};
 
 function resourceId(recording: KernelRecording | undefined, key: string, idKey = 'id'): string | undefined {
   const value = recording?.[key];
@@ -382,9 +393,29 @@ async function selectRecording(
     return suggestionRead(subjects, request);
   }
   if (request.method === 'GET') {
+    const realmReviewBoards = recordings['realm-boards']?.items;
+    const reviewBoard = Array.isArray(realmReviewBoards)
+      ? realmReviewBoards.find((board) => isRecord(board) && board.purpose === 'reviews')
+      : undefined;
+    const reviewBoardPath = /^\/v1\/boards\/([^/]+)$/.exec(pathname);
+    if (reviewBoardPath?.[1] && isRecord(reviewBoard) && decodeURIComponent(reviewBoardPath[1]) === reviewBoard.id)
+      return { status: 200, board: reviewBoard };
+    const subjectThreads = /^\/v1\/subjects\/([^/]+)\/threads$/.exec(pathname);
+    if (subjectThreads?.[1] && decodeURIComponent(subjectThreads[1]) === knownSubjectId(recordings)) {
+      const query = new URL(request.url).searchParams;
+      if (query.get('kind') === 'review' && query.get('place') === '01a1a000-0000-7000-8000-000000000002')
+        return recordings['subject-review-threads'];
+    }
     const withDeleted = pathname === '/v1/accounts' ? withDeletedOrganization(request, recordings.accounts) : undefined;
     if (withDeleted) return withDeleted;
     if (pathname === '/v1/accounts') return recordings.accounts;
+    const vote = /^\/v1\/subjects\/([^/]+)\/ratings\/([^/]+)\/vote$/.exec(pathname);
+    if (
+      vote?.[1] &&
+      vote[2] === '00000000-0000-7000-8000-000000000001' &&
+      decodeURIComponent(vote[1]) === knownSubjectId(recordings)
+    )
+      return recordings['rating-vote'];
     const reactions = /^\/v1\/subjects\/([^/]+)\/(reactions?)$/.exec(pathname);
     if (reactions?.[1] && decodeURIComponent(reactions[1]) === knownSubjectId(recordings))
       return recordings[reactions[2] === 'reactions' ? 'subject-reactions' : 'subject-reaction'];
@@ -588,6 +619,8 @@ export function createStoryRecordedKernelFetch(): typeof fetch {
     'order-paid': orderPaidRecording,
     'order-pending': orderPendingRecording,
     ...libraryStoryRecordings(),
+    'rating-vote': ratingVoteRecording,
+    'subject-review-threads': subjectReviewThreadsRecording,
     'my-realms': myRealmsRecording,
     realm: realmRecording,
     'realm-boards': realmBoardsRecording,
@@ -907,6 +940,33 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
     const url = new URL(request.url);
     const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
     if (moduleRecording) return recordedResponse(moduleRecording);
+    if (request.method === 'GET') {
+      const community = communityRecording(request.method, url.pathname, reviewFakeRecordings);
+      if (community) return recordedResponse(community);
+      const reviewBoard = reviewFakeRecordings['realm-boards'];
+      const items = reviewBoard?.items;
+      const firstReviewBoard = Array.isArray(items)
+        ? items.find((board) => isRecord(board) && board.purpose === 'reviews')
+        : undefined;
+      const boardPath = /^\/v1\/boards\/([^/]+)$/.exec(url.pathname);
+      if (boardPath?.[1] && isRecord(firstReviewBoard) && decodeURIComponent(boardPath[1]) === firstReviewBoard.id)
+        return recordedResponse({ status: 200, board: firstReviewBoard });
+      const votePath = /^\/v1\/subjects\/([^/]+)\/ratings\/([^/]+)\/vote$/.exec(url.pathname);
+      if (
+        votePath?.[1] &&
+        votePath[2] === '00000000-0000-7000-8000-000000000001' &&
+        decodeURIComponent(votePath[1]) === knownSubjectId(reviewFakeRecordings)
+      )
+        return recordedResponse(reviewFakeRecordings['rating-vote']!);
+      const subjectThreadsPath = /^\/v1\/subjects\/([^/]+)\/threads$/.exec(url.pathname);
+      if (
+        subjectThreadsPath?.[1] &&
+        decodeURIComponent(subjectThreadsPath[1]) === knownSubjectId(reviewFakeRecordings) &&
+        url.searchParams.get('kind') === 'review' &&
+        url.searchParams.get('place') === '01a1a000-0000-7000-8000-000000000002'
+      )
+        return recordedResponse(reviewFakeRecordings['subject-review-threads']!);
+    }
     const sitemap = sitemapRecording(request.method, url.pathname, {
       board: boardRecording,
       thread: threadRecording,
