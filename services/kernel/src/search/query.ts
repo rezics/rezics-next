@@ -109,8 +109,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
   validateSize(plan.size, 200);
   if (plan.sort === 'rating')
     return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
-  const target =
-    plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
+  const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
     plan.sort === 'relevance'
