@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import pg from 'pg';
 import { createCoverageStore } from '../../src/search/coverage-store.ts';
 import {
   activateSubjectIncarnation,
@@ -11,14 +10,12 @@ import {
 } from '../../src/search/coverage.ts';
 import { documentActions, bulkLines } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
-import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import type { OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
-import { searchSubjects } from '../../src/search/query.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { createCoverageFixture } from './coverage-fixture.ts';
-import { createDriverClient } from './support/driver-client.ts';
 
-// Final production lifecycle proof remains independent of the three focused implementation acceptances.
+// Focused lifecycle proof; production mounting is independently required in coverage-default-worker.test.ts.
 let f: Awaited<ReturnType<typeof createCoverageFixture>>;
 beforeAll(async () => {
   f = await createCoverageFixture();
@@ -293,60 +290,3 @@ test('an unresolved old HTTP bulk cannot implicitly recreate an eligible target 
     code: 'index_not_ready',
   });
 }, 180_000);
-
-test('real default lifecycle certifies its own worker population before pause and ordinary lag', async () => {
-  const client = createDriverClient();
-  let pool: pg.Pool | undefined;
-  try {
-    const driver = await client.init();
-    const observation = await client.inspect();
-    expect(observation.workerStats!.registeredModules).toEqual(observation.workerStats!.defaultModules);
-    expect(observation.workerStats!.registrationCounts.search).toBe(1);
-    const database = client.ledger().resources.find((resource) => resource.kind === 'kernel_database');
-    const target = client.ledger().resources.find((resource) => resource.kind === 'index_prefix');
-    if (!database || database.kind !== 'kernel_database' || !target || target.kind !== 'index_prefix')
-      throw new Error('Missing actual default lifecycle ownership');
-    const url = new URL(process.env.DATABASE_URL!);
-    url.pathname = `/${database.name}`;
-    pool = new pg.Pool({ connectionString: url.href });
-    const search = createOpenSearch(process.env.OPENSEARCH_URL!);
-    const config = { pool, search, prefix: target.name };
-    const ids: string[] = [];
-    for (let n = 0; n < 3; n++) {
-      const response = await driver.request(
-        'editor',
-        'POST',
-        '/v1/subjects',
-        { type: 'schema:Book', labels: { en: `Lifecycle worker ${n}` } },
-        { 'Idempotency-Key': `"${crypto.randomUUID()}"` },
-      );
-      expect(response.status).toBe(201);
-      ids.push((response.body.subject as { id: string }).id);
-    }
-    ids.sort();
-    const raw = async () =>
-      (await searchSubjects(search, target.name, { filter: f.compiled.query, sort: 'id', size: 100 })).hits.filter(
-        (hit) => ids.includes(hit.id),
-      );
-    const deadline = Date.now() + 120_000;
-    let ready;
-    for (;;) {
-      ready = await readSubjectCoverage(config, { deadline });
-      if (ready.state === 'ready' && (await raw()).length === 3) break;
-      if (Date.now() >= deadline) throw new Error('Default worker did not establish physical coverage');
-      await Bun.sleep(50); // Poll actual completion; elapsed time never proves it.
-    }
-    expect(ready.state).toBe('ready');
-    const before = await raw();
-    expect(before.map((hit) => hit.id)).toEqual(ids);
-    expect(before.map((hit) => hit.matched)).toEqual([['f0'], ['f0'], ['f0']]);
-    expect(before.map((hit) => hit.sort)).toEqual(ids.map((id) => [id]));
-    await driver.indexing('paused');
-    await driver.remove(ids[1]!, 'hidden');
-    expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
-    expect(await raw()).toEqual(before);
-  } finally {
-    await pool?.end();
-    await client.close();
-  }
-}, 600_000);

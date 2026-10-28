@@ -1055,6 +1055,50 @@ short-retention schedule is a guard regression; final acceptance must force real
 than treat a short sleep as proof. Default-worker A/B/C certification is independently required even after helper
 composition passes. Original frozen assertions and the existing thirteen plus six cases remain untouched.
 
+### Independent default coverage composition acceptance
+
+Both `test/search/coverage-lifecycle.test.ts` and `test/search/coverage-default-worker.test.ts` remain mandatory.
+The focused lifecycle file retains bootstrap, UUID/lineage, activation and retirement races. Its implementation
+acceptance does not depend on default registration or production rebuild. The independent default-worker file owns
+the complete real-worker A/B/C certification and ordinary-hide case formerly in the lifecycle file, plus Search-only
+pause/drain/restart, current API withholding, production rebuild and resource-ledger cleanup. Neither file imports
+or registers the other. The existing canonical, writer and growth acceptances remain independently required.
+
+Status: staged native specification, honestly red until production coverage composition exists. Its own
+`createCoverageFixture` setup first proves real commands, source and engine baseline; it then uses the shared
+`support/driver-client.ts` supervisor and actual default worker. Formatting and root typecheck stage this split;
+they establish no native runtime, growth or default-worker pass. No manually driven coordinator or separate consumer
+can satisfy the independent default-worker proof. Canonical coverage, current disclosure and estimated engine total
+metadata are separate observations: a paused ordinary hide leaves raw B and its structural certificate unchanged,
+withholds B through the real API, and requires the resumed worker to remove B and drain actual checkpoints.
+
+Green native evidence requires `coverage.ts` lifecycle/population/certification/read delivery,
+`coverage-projection.ts` guarded production apply and `indexer.ts` visibility/checkpoint integration on the existing
+`coverage-store.ts` and core event runtime. Production `runner.ts` and `work.ts` must mount that coordinator, create
+and certify the fresh controlled target before registration acknowledges readiness, and drain all owned work.
+`generations.ts` must use the same guarded replay, reconcile native source partitions, certify a genuinely new
+UUID/lineage and only then atomically publish. These depend on Semantic's actual `identity-basis.ts`
+`readIdentityBasis(pool, { deadline })` / `readIdentityHome(client, partition)`, `semantic/identity-maintenance.ts`
+metadata/hooks and `semantic/events.ts` identity invalidation, plus the unchanged `semantic/search-source.ts`,
+`rating-source.ts` / `rating-subject-source.ts`, `library/listing-counts.ts` and structural-fence sources. `worker.ts`,
+`work/modules.ts` and `work/registry.ts` provide real default mounting and the shared clock. The existing
+`support/outcome-worker.ts`, `support/runner-slot.ts` and `support/outcome-supervisor.ts` must retain that composition
+through actual pause/resume/rebuild/close; `SearchDriver.rebuild()` returns only `{ generation }`. The test adds no
+fixture/control port or native/shared ABI. See [Default coverage composition proof](#cost-default-coverage-composition-proof)
+for the independently charged composition work.
+
+### Cost: default coverage composition proof
+
+- Touches: actual default worker, guarded coordinator and production rebuild, isolated real runtime pools and
+  actual engine target. Reuse the existing producer; no duplicate event consumer/indexer.
+- Bound: production batches remain 64 envelopes, source chunks 256 IDs, at most three generations and 4096 fixed
+  homes, with bounded discovery concurrency. Observe all current metadata and external-write work honestly;
+  readiness is not a free callback. Replay, native partition reconciliation, certification and physical deletion
+  retain their source/index population costs.
+- Growth check: existing native coverage, writer and growth suites remain independently required. The default-worker
+  file establishes production mounting/lifecycle, not postings or latency; stage formatting is not a growth/runtime
+  pass. The [coverage writes and lifecycle](#cost-coverage-writes-and-lifecycle) bounds also apply.
+
 ### Cost: canonical coverage observation
 
 - Touches: at each required prepare, continuation, engine-result bracket and final observation, one actual native
