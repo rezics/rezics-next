@@ -142,7 +142,7 @@ test assertions agree by inspection, not that a passing execution was observed h
   cover-group asset referencing the stated image; actual by inspection: `coverAssets: []`
   and `unsupported_infobox_mapping`. Smallest owner boundary: conversion's Bangumi parser.
   A regression sketch compares that asset URL/provenance to conversion of the equivalent
-  `images.large` record. Existing API fixture supplies *both* representations
+  `images.large` record. Existing API fixture supplies _both_ representations
   (`specs/fixtures/imports/api/bangumi.jsonl:1`), so its cover scenario misses this gap.
   The README still explicitly permits opaque infobox omission; this report does not resolve
   that contract mismatch or authorize extending all inventory mappings.
