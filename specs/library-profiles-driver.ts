@@ -103,6 +103,9 @@ export interface ProfileMigrationPage {
   transactionId: string;
   /** Aggregate across entry/session/copy rows in this page transaction. */
   ownerRowsRead: number;
+  /** Actual native source scan keys including filtered pinned rows and loops, not changed/result row counts. */
+  sourceRowsExamined: number;
+  sourcePlans: { relation: string; indexName: string; rowsExamined: number; rowsRemovedByFilter: number }[];
   ownerRowsChanged: number;
   bytesRead: number;
   bytesWritten: number;

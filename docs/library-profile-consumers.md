@@ -35,8 +35,9 @@ The consumer contract starts from the actual schema and commands in this checkou
 | Shelf projections          | `activity_at`, `finished_at`, `progress_head`, `shelf_count`, shelf keyset indexes, and shelf type observation fields are separate from fact values and user revisions. The per-account shelf type value/root/node/reservation tables contain copied type text, digest roots, trie chunks, and staging state.                                                                                                                                        | Profile pins must not replace user activity, completion dates, counters, or their stable fact keys. The copied type dictionary/trie/staging is not the profile registry and must not be revived or expanded for profiles.                         |
 
 The relevant definitions in this checkout are immutable releases validated and published by the existing definitions
-routes. The current Library row models and SQL do not yet persist a profile pin. This consumer contract does not claim
-that the row migration, profile-aware writers, or migration worker already exist.
+routes. The applied `20261027184414_library_profile_pins.sql` adds nullable pins, shape checks, copy kind and pending
+indexes. Current row adapters do not yet consume those columns; profile-aware writers and the migration worker remain
+implementation work. Structural storage alone proves neither profile admission nor migration completion.
 
 ## Pinned fact semantics
 
@@ -84,7 +85,7 @@ submit an old pin to bypass a missing capability. API request bodies do not acce
 
 ### Profile-aware write validation
 
-For a new mutation, resolve the subject's authoritative current accepting type and the active immutable release at
+For a NEW profiled value (not clearing/deleting an own fact), resolve the subject's authoritative current accepting type and the active immutable release at
 the command's authorization/acceptance observation `T`. Validate the operation against the entire selected profile:
 
 - Entry states must be an exact declared state ID. `role` is descriptive semantic mapping; it never renames an ID or
@@ -93,8 +94,8 @@ the command's authorization/acceptance observation `T`. Validate the operation a
   pair. Pair metadata is read as data. The algorithms remain those three kernel algorithms.
 - Numeric minimum/maximum comparison is exact decimal-text comparison. Optional precision is 0–6. If precision is
   absent, preserve the existing parser's 12 integer digit and 6 fractional digit behavior. Dimension is inert and
-  causes no conversion. Scalar percent amount/total is bounded by 100; a cursor position in percent is not. Totals
-  obey the selected pair's `totalPolicy`.
+  causes no conversion. LEGACY scalar-percent amount/total preserves 0..100; legacy cursor percent is not capped.
+  The 0..100 rule belongs to LEGACY profile metadata/old behavior. New unit IDs, including `percent`, use declared per-mode bounds and `totalPolicy` only.
 - Completed-unit identity is `none` for scalar/cursor and `session_local` for sparse completed sets. Preserve the
   exact opaque IDs and existing bounds. `structure` is `none` only. No ordinal expansion, provider identity,
   achievement, structure revision, or invented date is introduced.
@@ -104,12 +105,41 @@ the command's authorization/acceptance observation `T`. Validate the operation a
   endpoints, executable mappings, and adapter-enable flags do not enter profile data.
 
 Absence of `TypeDefinition.library`, or a new state, mode/unit pair, copy kind, or status absent from the selected
-profile, denies the write with HTTP `422`, code `unsupported_library_profile`, and `effect_status: not_applied`.
+profile, denies NEW profiled state/progress/holding values with HTTP `422`, code `unsupported_library_profile`, and `effect_status: not_applied`.
 Malformed request shapes, including caller-supplied pin metadata or a missing fresh-copy kind, return HTTP `400` with
 `invalid_request`. Unsupported IDs are profile data membership failures, not rejections by a copied closed kernel enum.
 Absence does not select `legacy-fixed-v1`, default a profile, infer a profile from ancestry at runtime, or grant
 capabilities to People/Concepts. The bundled book and anime type declarations remain ordinary catalogue data and are
 exercised alongside data-only fixture verticals; generated files do not activate themselves.
+
+**DECIDED:** readable unprofiled subjects accept generic label assignment/unassignment and curated occurrence add/remove.
+Missing or retired profiles never prevent reading historic own facts or clearing/deleting them; no default/legacy
+profile enables new values. Access, scopes, CAS, deletion fences and authorization-before-receipt still apply.
+Everything contains distinct subjects with any live state, label assignment, progress session or holding; follows and
+curated occurrences alone do not count. Clearing state removes only state-view membership, and another live fact keeps
+the subject in Everything. Removing the last live personal fact removes it. Label-only subjects have no default state.
+Soft-deleted facts are hidden immediately and are not live inputs to Everything while their payload remains restorable.
+
+[Deletion](deletion.md) governs ordinary fact hiding and undo: delete hides immediately everywhere, preserves only
+permitted tombstone references, and permits owner restore within 30 days. Restore rechecks current
+`deleted_at`/`purge_after`/CAS and restores the same historic fact and pin, never current-profile reinterpretation or a
+new fact. Automatic minimal purge follows the window; early purge needs separate platform
+permission. Business transitions (completion, abandonment, refund or revocation) do not establish undo authority or an
+earlier purge deadline. Takedown withholds only the least affected field/record and never auto-purges solely for the notice;
+a legal-order purge requires separate platform authority.
+
+Account deletion is terminal at fresh authentication plus typed confirmation time `T`. Only
+`account-tombstoned.v1` exists; there is no account restore, scheduled/cancelled event, account-generation counter, or
+`accountDeletionState` port. Bounded durable private-payload purge starts at `T`; private, unlisted and already-deleted
+payloads are hidden immediately and erased as that work settles. Legal-hold integration is deferred from first scope;
+no new hold/custody engine is required here. Whole private facts, including personal skeletons, are erased; only safe
+nonpersonal public skeletons survive. The durable handoff does not
+wait for projection consumers, and the delete response may precede physical purge completion.
+**DECIDED retention:** retained Collection identities and their classification are fixed at `T`. Only Collections active
+and PUBLIC at `T` survive. A public dynamic Collection retains its last completely published generation, read-only and
+de-identified with current viewer-native subject access. Private, UNLISTED and already-deleted Collections, including
+formerly-public ones, are erased by bounded work. No fresh query at `T` or pending generation is adopted; if no dynamic
+generation completed, no subject set is manufactured.
 
 ## Authorization, receipts, and replay
 
@@ -175,7 +205,7 @@ type has no reference. All vertical fixtures share the same generic commands and
 Migration is an explicit, checkpointed consumer operation. A release activation never starts it. At job creation,
 capture one published destination digest that contains the unattached `legacy-fixed-v1` registry entry; every page
 uses that same digest even if the Global head later changes. The initial migration only pins pre-profile rows. It does
-not convert a fact from one profile revision to another.
+not convert a fact from its accepting release to another release.
 
 For each unpinned legacy row, set `provenance: 'legacy'`, the captured release digest, `profileId: 'legacy-fixed-v1'`,
 and `acceptingType: null` unless that row itself retained authoritative accepting-type evidence. Current entry,
@@ -202,15 +232,16 @@ state.
 
 ### Bounded work and row fence
 
-Let `P = 100` owner rows. One worker transaction reads and changes at most `P` pending entry/session/copy rows total,
+Let `P = 100` source rows. One worker transaction examines and changes at most `P` entry/session/copy rows total,
 plus its bounded generic checkpoint/receipt. It keyset-pages each owner relation by its stable fact key and never
 counts an account's rows up front. It does not scan `progress_unit`, `progress_change`, command receipt history,
-collections, unrelated accounts, or the full profile catalogue. Total work is `O(N)` in pending fact rows and page
+collections, unrelated accounts, or the full profile catalogue. Total work is `O(N)` in source fact rows and page
 memory/work is `O(P)` plus capped pin bytes. At every boundary the migration stores only identifiers, release digest,
 last stable key, and phase—not a fact body or a user receipt body.
 
-Add one nullable pin column to each existing fact table for the online transition. Use the existing entry key for its
-pending-row seek and add only partial owner/key indexes where no current key supports a bounded seek:
+Use the existing nullable pin columns for the online transition. Use the entry primary key for its source-key seek,
+materializing at most the remaining page allowance BEFORE filtering pending pins, even though a partial pending-entry
+index also exists. The applied session/copy partial indexes supply their bounded pending seeks:
 
 ```sql
 CREATE INDEX progress_session_profile_pending
@@ -222,7 +253,10 @@ CREATE INDEX copy_profile_pending
   WHERE library_profile_pin IS NULL;
 ```
 
-`library.entry` already has `(route, account_id, subject_id)` as its primary key, which is the pending-row key. No
+`library.entry` uses its primary key `(route, account_id, subject_id)` to select <=100 SOURCE keys in a materialized
+page before `library_profile_pin IS NULL` filtering. Advance after the LAST EXAMINED source key even if no row is
+eligible; a LIMIT only after an unindexed pending filter is forbidden. Native SQL/plan instrumentation counts examined
+keys including pinned rows and rows removed by filters, across the current phase/page, not only changed/returned rows. No
 index on `releaseDigest`, `acceptingType`, `profileId`, or a profile ID map is needed for fact reads or writes. Once
 the online backfill and per-owner writer fence prove no null pins remain, enforce non-null pins for profile-aware
 rows. The migration and writer use a compare-and-set on both the observed fact revision and `library_profile_pin IS
@@ -264,8 +298,8 @@ policy map, model backend, fake authorization, raw source writes, invented migra
 an in-memory product model. Test-only SQL may inspect stored rows and inject a persistence fault at a named native
 boundary; it may not manufacture facts or migration progress.
 
-For profile writes, keep the target account/fact fixed and measure actual SQL at three unrelated-fact scales `1`,
-`1,000`, and `10,000`; also vary unrelated compiled definition manifests `10` and `100`. Each generated manifest uses
+For profile writes, keep the target account/fact fixed and measure actual SQL at three unrelated-fact scales `64`,
+`512`, and `4096` (legal geometric scales for shared `checkGrowth`, with its actual grow/operation/warmup API); also vary unrelated compiled definition manifests `10` and `100`. Each generated manifest uses
 the existing definitions expansion fixture pattern, adding three types and twelve properties, with a profile attached
 only through data. Include real canonical bytes and verify the existing 4 MiB, 1,024-type, and 4,096-property caps.
 Record rows and bytes as well as statement counts. The profile operation's fact-row/CAS/receipt count stays fixed;
@@ -277,8 +311,8 @@ The driver compiles data fixtures with the production definitions compiler. `pro
 facts through their stored releases, rejects fresh writes using those old IDs after each release change, and checks
 that the pin's accepting type and profile ID match the actual semantic subject type and compiled nearest declaration.
 The inheritance fixture gives the child distinct complete profiles at two ancestors. The conflict fixture repeats an
-incompatible profile ID and must fail compilation; the absence fixture carries no consumer capability for People or
-Concepts. The fixtures are source data sent through the real compiler, never prebuilt release objects.
+incompatible profile ID and must fail compilation; the absence fixture removes library references from fixture verticals,
+including People and Concepts. The fixtures are source data sent through the real compiler, never prebuilt release objects.
 
 For migration, inspect every actual page's read/write rows and bytes. Assert at most 100 owner facts per transaction,
 constant bounded checkpoint work, exact-row CAS, unchanged user revisions/timestamps/values/history/receipts, restart
@@ -290,8 +324,8 @@ count or transaction, or derive fake progress from an expected count.
 This is specification-only. The following production work remains separate, reviewable slices of at most 400 changed
 lines and eight files each:
 
-1. Add the three nullable row pin columns, bounded-shape validation/store projection, partial session/copy pending
-   indexes, and native row-shape tests. Keep existing primary keys and unaffected user fields.
+1. Consume the applied nullable pin columns, shape checks and partial indexes through bounded store projections
+   and native row-shape tests. Keep existing primary keys and unaffected user fields.
 2. Adapt entry/session/copy commands to current Access-before-receipt ordering, one active-release/current-type lookup
    for fresh writes, stored-pin reads, and no caller pin input. Update only their existing routes and store paths.
 3. Add the generic checkpointed legacy pin worker over at most 100 owner rows, exact CAS, owner-ready fence,

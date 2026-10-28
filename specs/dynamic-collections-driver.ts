@@ -22,7 +22,6 @@ export type BuiltinKey =
       profileId: string;
       stateSetId: string;
       stateId: string;
-      meaningRevision: string;
     };
 
 export interface ProfileFixture {
@@ -30,13 +29,13 @@ export interface ProfileFixture {
   profileId: string;
   stateSetId: string;
   releaseDigest: string;
-  states: readonly { id: string; meaningRevision: string; label: string }[];
+  states: readonly { id: string; label: string }[];
 }
 
 export interface SubjectFixture {
   id: string;
   typeId: string;
-  profileId: string;
+  profileId: string | null;
 }
 
 export interface DynamicCollectionView {
@@ -131,13 +130,16 @@ export interface DynamicCollectionsDriver {
   ): Promise<Response>;
 
   /** Create a real subject through semantic's accepted production command. */
-  provisionSubject(profile: ProfileName, options?: { ownerOnlyReadable?: boolean }): Promise<SubjectFixture>;
-  /** Activate or retire an immutable compiled profile release through its trusted Definitions owner. */
+  /** unprofiled uses data-only compiler input and real release publish/activate; never fabricated release/grant rows. */
+  provisionSubject(
+    profile: ProfileName | 'unprofiled',
+    options?: { ownerOnlyReadable?: boolean },
+  ): Promise<SubjectFixture>;
+  /** Compile data-only state/label inputs, publish and activate through Definitions; return its actual immutable digest. */
   activateProfileRelease(
     profile: ProfileName,
     input: {
-      releaseDigest: string;
-      states: readonly { id: string; meaningRevision: string; label: string }[];
+      states: readonly { id: string; label: string }[];
     },
   ): Promise<ProfileFixture>;
   retireProfile(profile: ProfileName): Promise<void>;
@@ -152,6 +154,7 @@ export interface DynamicCollectionsDriver {
   startProgressSession(subjectId: string): Promise<Response>;
   createHolding(subjectId: string): Promise<Response>;
   removeAllPrivateFacts(subjectId: string): Promise<Response>;
+  /** Raw terminal account deletion at T; no automatic clock advance or consumer wait. */
   deleteAccount(): Promise<Response>;
   mountCollection(collectionId: string): Promise<Response>;
   exportCollection(collectionId: string, as: Persona): Promise<Response>;

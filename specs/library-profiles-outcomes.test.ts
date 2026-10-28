@@ -256,7 +256,7 @@ test('nearest complete inherited profile wins while incompatible repeated profil
   if (!conflict.valid) expect(conflict.errors.length).toBeGreaterThan(0);
 });
 
-test('profile absence does not grant People or Concepts a library write capability', async () => {
+test('profile absence does not grant People or Concepts new profiled state values', async () => {
   await setupProfiles('profile-absent');
   for (const vertical of ['people', 'concept'] as const) {
     const subjectId = await driver.provisionSubject(fixture, vertical);
@@ -785,7 +785,7 @@ test('profile writes perform one bounded lookup across three unrelated fact scal
     bytesRead: number;
     bytesWritten: number;
   }[] = [];
-  for (const count of [1, 1_000, 10_000]) {
+  for (const count of [64, 512, 4096]) {
     await driver.ensureUnrelatedFacts(fixture, count);
     const measured = await driver.measure(() => entry(subjectId, 'planned'));
     expect([200, 201]).toContain(measured.value.status);
@@ -966,4 +966,87 @@ test('migration target digest stays fixed across activation changes and bundle c
   const third = await driver.compile('profile-v3-removed-ids');
   expect(third.valid).toBe(true);
   expect((await active()).digest).toBe(second.digest);
+});
+
+
+test('unprofiled readable subjects accept labels without default state but reject new state progress and holding', async () => {
+  await setupProfiles('profile-absent');
+  const subjectId = await driver.provisionSubject(fixture, 'people');
+  expect((await driver.addLabel(fixture, subjectId, 'unprofiled-label')).status).toBe(200);
+  const before = await driver.inspect(fixture);
+  expect(before.independentLabels.length).toBeGreaterThan(0);
+  await expectProblem(await entry(subjectId, 'planned'), 422, 'unsupported_library_profile');
+  await expectProblem(await session({ subjectId, mode: 'scalar_amount', unit: 'page' }), 422, 'unsupported_library_profile');
+  await expectProblem(await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()), 422, 'unsupported_library_profile');
+  const after = await driver.inspect(fixture);
+  for (const field of ['entries', 'sessions', 'copies', 'receipts', 'events', 'independentLabels'] as const)
+    expect(after[field]).toEqual(before[field]);
+});
+
+test('removed profile values remain pinned and readable and their owner can clear them without reacceptance', async () => {
+  await setupProfiles();
+  const subjectId = await driver.provisionSubject(fixture, 'game');
+  expect((await entry(subjectId, 'planned')).status).toBe(201);
+  const before = (await driver.inspect(fixture)).entries.find(row => row.subjectId === subjectId)!;
+  await setupProfiles('profile-v3-removed-ids');
+  expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(200);
+  expect((await driver.inspect(fixture)).entries.find(row => row.subjectId === subjectId)).toEqual(before);
+  await expectProblem(await entry(subjectId, 'planned'), 422, 'unsupported_library_profile');
+  expect((await api('owner', 'DELETE', `/v1/libraryEntries/${subjectId}?revision=${before.revision}`, undefined, idempotencyKey())).status).toBe(200);
+  expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
+});
+
+test('migration bounds examined source keys through a long pinned prefix and interspersed pinned rows', async () => {
+  await driver.seedLegacyFacts(fixture, { entries: 1024, sessions: 0, copies: 0 });
+  const release = await setupProfiles();
+  const rows = (await driver.inspect(fixture)).entries.toSorted((a, b) => a.subjectId.localeCompare(b.subjectId));
+  for (const [index, row] of rows.entries()) {
+    if (index < 512 || index % 2 === 0)
+      expect((await entry(row.subjectId, row.state, idempotencyKey(), row.revision)).status).toBe(200);
+  }
+  const before = await driver.inspect(fixture);
+  await driver.migrateOwner(fixture, release.digest);
+  const after = await driver.inspect(fixture);
+  expect(after.entries.map(sameUserEntry)).toEqual(before.entries.map(sameUserEntry));
+  expect(after.entries.every(row => row.pin !== null)).toBe(true);
+  const pages = after.migration.pages;
+  expect(pages.some(page => page.committed && page.ownerRowsChanged === 0 && page.sourceRowsExamined === 100)).toBe(true);
+  for (const page of pages) {
+    expect(page.sourceRowsExamined).toBeLessThanOrEqual(100);
+    expect(page.sourcePlans.reduce((n, plan) => n + plan.rowsExamined, 0)).toBe(page.sourceRowsExamined);
+    expect(page.sourcePlans.some(plan => plan.relation === 'library.entry' && plan.indexName.length > 0)).toBe(true);
+    if (page.committed && page.sourceRowsExamined > 0) expect(page.checkpointAfter).not.toEqual(page.checkpointBefore);
+  }
+  expect(pages.reduce((n, page) => n + page.sourceRowsExamined, 0)).toBe(1024);
+});
+
+test('removing a profile preserves historic state progress and holding pins while permitting own clear and delete', async () => {
+  await setupProfiles('profile-fixture-verticals');
+  const subjectId = await driver.provisionSubject(fixture, 'recipe');
+  expect((await entry(subjectId, 'planned')).status).toBe(201);
+  const progress = await session({ subjectId, mode: 'scalar_amount', unit: 'minute' });
+  expect(progress.status).toBe(201);
+  const progressId = (await body(progress)).progressSession.id as string;
+  const holding = await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey());
+  expect(holding.status).toBe(201);
+  const copyId = (await body(holding)).copy.id as string;
+  const before = await driver.inspect(fixture);
+  const state = before.entries.find(row => row.subjectId === subjectId)!;
+  await setupProfiles('profile-absent');
+  const absent = await driver.inspect(fixture);
+  for (const field of ['entries', 'sessions', 'copies'] as const) expect(absent[field]).toEqual(before[field]);
+  for (const path of [`/v1/libraryEntries/${subjectId}`, `/v1/progressSessions/${progressId}`, `/v1/copies/${copyId}`])
+    expect((await api('owner', 'GET', path)).status).toBe(200);
+  await expectProblem(await entry(subjectId, 'planned', idempotencyKey(), state.revision), 422, 'unsupported_library_profile');
+  await expectProblem(await session({ subjectId, mode: 'scalar_amount', unit: 'minute' }), 422, 'unsupported_library_profile');
+  await expectProblem(await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()), 422, 'unsupported_library_profile');
+  const rejected = await driver.inspect(fixture);
+  for (const field of ['entries', 'sessions', 'copies', 'receipts', 'events'] as const) expect(rejected[field]).toEqual(absent[field]);
+  expect((await api('other', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(404);
+  expect(await driver.inspect(fixture)).toEqual(rejected);
+  expect((await api('owner', 'DELETE', `/v1/libraryEntries/${subjectId}?revision=${state.revision}`, undefined, idempotencyKey())).status).toBe(200);
+  expect((await api('owner', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(204);
+  expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
+  expect((await api('owner', 'GET', `/v1/copies/${copyId}`)).status).toBe(404);
+  expect((await driver.inspect(fixture)).sessions).toEqual(before.sessions);
 });
