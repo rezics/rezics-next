@@ -127,18 +127,33 @@ if (script.includes('/proc/loadavg')) {
     process.exit(75);
   }
   mkdirSync(taking);
-  const ordinaryAdmissionAllowed = occupied.length + requested <= ordinaryAdmissionLimit;
-  const freeOrdinary = ordinaryAdmissionAllowed
-    ? Array.from({ length: ordinaryCapacity }, (_, index) => index).filter((index) => !occupied.includes(index))
-    : [];
-  const free = slotClass === 'short' ? [...freeOrdinary, ...(expressOccupied ? [] : ['express' as const])] : freeOrdinary;
-  const limitedOccupied = occupied.length + (slotClass === 'short' && expressOccupied ? 1 : 0);
-  if (limitedOccupied + requested > slotLimit || free.length < requested) {
+  const hasBusyCountPass = script.includes('# REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS');
+  const selected: Array<number | 'express'> = [];
+  let occupiedCount = hasBusyCountPass ? occupied.length : 0;
+  let ordinaryUsed = hasBusyCountPass ? occupied.length : 0;
+  for (let index = 0; index < ordinaryCapacity; index += 1) {
+    if (occupied.includes(index)) {
+      if (!hasBusyCountPass) {
+        occupiedCount += 1;
+        ordinaryUsed += 1;
+      }
+    } else if (
+      selected.length < requested &&
+      (hasBusyCountPass ? ordinaryUsed + selected.length : ordinaryUsed) < ordinaryAdmissionLimit
+    ) {
+      selected.push(index);
+      if (!hasBusyCountPass) ordinaryUsed += 1;
+    }
+  }
+  if (slotClass === 'short' && selected.length < requested) {
+    if (expressOccupied) occupiedCount += 1;
+    else selected.push('express');
+  }
+  if (occupiedCount + selected.length > slotLimit || selected.length < requested) {
     rmSync(taking, { recursive: true, force: true });
-    log({ kind: 'slot', granted: false, reason: 'capacity', requested, slotClass, script, occupied: limitedOccupied, slotLimit, call });
+    log({ kind: 'slot', granted: false, reason: 'capacity', requested, slotClass, script, occupied: occupiedCount, slotLimit, call });
     process.exit(75);
   }
-  const selected = free.slice(0, requested);
   for (const slot of selected) mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
   writeFileSync(dir + '/' + hostKey + '.granted', String(grants + selected.length));
   rmSync(taking, { recursive: true, force: true });
@@ -259,6 +274,7 @@ type HostConfig = {
   hangRuns?: number;
   runDurationMs?: number;
   present?: string[];
+  ordinaryBusySlots?: number[];
 };
 
 let root: string;
@@ -304,8 +320,8 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
   );
   for (const [name, config] of Object.entries(hosts)) {
     const hostKey = `ops@${name}.test`.replace(/[^a-z0-9]/gi, '_');
-    for (let index = 0; index < (config.ordinaryBusy ?? 0); index += 1)
-      mkdirSync(join(dir, `${hostKey}.slot.${index}`));
+    const occupiedSlots = config.ordinaryBusySlots ?? Array.from({ length: config.ordinaryBusy ?? 0 }, (_, index) => index);
+    for (const index of occupiedSlots) mkdirSync(join(dir, `${hostKey}.slot.${index}`));
     if (config.expressBusy) mkdirSync(join(dir, `${hostKey}.slot.express`));
   }
   const env: Record<string, string> = {
@@ -1320,6 +1336,25 @@ test('while a gate waits for a host, a short run may take its express slot', asy
   const admitted = events().find((event) => event.kind === 'slot' && event.granted)!;
   expect(admitted.slotClass).toBe('short');
   expect(admitted.slot).toBe('express');
+});
+
+test('a short run never takes an ordinary slot beyond the remainder on a gated host, whichever slot index is free', async () => {
+  for (const freeSlot of [0, 1, 2, 3, 4]) {
+    const { env, events } = scenario({
+      b: {
+        available: 20e9,
+        cpuQuotaPercent: 1600,
+        slots: 6,
+        ordinaryBusySlots: [0, 1, 2, 3, 4].filter((index) => index !== freeSlot),
+      },
+    });
+    mkdirSync(join(env.FAKE_DIR!, 'ops_b_test.gate-marker'));
+    const result = await remote(env, workspace(), ['true'], ['--estimate-ms', '120000']);
+    expect(result.code).toBe(0);
+    const admitted = events().find((event) => event.kind === 'slot' && event.granted)!;
+    expect(admitted).toMatchObject({ slotClass: 'short', slot: 'express' });
+    expect(admitted.script).toContain('# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT 1');
+  }
 });
 
 test('gates waiting on every host still drain their hosts', async () => {

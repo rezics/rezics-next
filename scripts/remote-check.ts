@@ -243,7 +243,7 @@ function slotScript(
   shortRun: boolean,
   estimateMs: number | undefined,
 ): string {
-  const ordinaryLocks = (start: number, end: number, take: boolean): string =>
+  const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
     Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
       const slot = start + offset;
       const fd = slot + 9;
@@ -251,10 +251,9 @@ function slotScript(
       return `exec ${fd}>"${lockPath}"
 if flock -n ${fd}; then
   ${
-    take
-      ? `if [ "$acquired" -lt ${count} ] && [ "$ordinary_used" -lt ${ordinaryAdmissionLimit} ]; then
+    action === 'take'
+      ? `if [ "$acquired" -lt ${count} ] && [ "$((ordinary_used + acquired))" -lt ${ordinaryAdmissionLimit} ]; then
     acquired=$((acquired + 1))
-    ordinary_used=$((ordinary_used + 1))
   else
     flock -u ${fd}
     exec ${fd}>&-
@@ -263,13 +262,13 @@ if flock -n ${fd}; then
   exec ${fd}>&-`
   }
 else
-  occupied=$((occupied + 1))
-  ordinary_used=$((ordinary_used + 1))
+  ${action === 'count' ? 'occupied=$((occupied + 1))\n  ordinary_used=$((ordinary_used + 1))' : action === 'skip' ? 'occupied=$((occupied + 1))' : ':'}
   exec ${fd}>&-
 fi`;
     }).join('\n');
-  const takeOrdinary = ordinaryLocks(0, ordinaryCapacity, true);
-  const countOtherOrdinary = ordinaryLocks(ordinaryCapacity, host.slots - 1, false);
+  const countBusyOrdinary = ordinaryLocks(0, ordinaryCapacity, 'count');
+  const takeOrdinary = ordinaryLocks(0, ordinaryCapacity, 'take');
+  const countOtherOrdinary = ordinaryLocks(ordinaryCapacity, host.slots - 1, 'skip');
   const expressFd = host.slots + 8;
   const expressTake = shortRun
     ? `if [ "$acquired" -lt ${count} ]; then
@@ -300,6 +299,8 @@ flock -x -n 8 || exit ${SLOT_BUSY}
 occupied=0
 acquired=0
 ordinary_used=0
+# REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
+${countBusyOrdinary}
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
