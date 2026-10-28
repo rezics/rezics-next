@@ -132,23 +132,58 @@ const currentProfile: LibraryProfile = {
   importSources: [{ id: 'catalog-one', mappingVersion: 'v1', recordKinds: ['volume'] }],
 };
 
+const editionProfile: LibraryProfile = {
+  id: 'edition-v1',
+  entryStateSet: {
+    id: 'edition-states',
+    states: [{ id: 'catalogued', labels: { en: 'Catalogued' }, role: 'completed' }],
+  },
+  progress: {
+    allowed: [
+      {
+        mode: 'cursor_position',
+        units: [
+          {
+            id: 'reel',
+            labels: { en: 'Reel' },
+            minimum: '0',
+            maximum: '24',
+            identity: { kind: 'none' },
+            structure: { kind: 'none' },
+          },
+        ],
+      },
+    ],
+  },
+  copies: {
+    kinds: [
+      {
+        id: 'paper-volume',
+        labels: { en: 'Paper volume' },
+        statuses: [{ id: 'on-shelf', labels: { en: 'On shelf' } }],
+      },
+    ],
+  },
+};
+
 const release = {
   types: {
     'schema:Novel': { bases: ['schema:Thing'], library: { profileId: 'reading-v2' } },
-    'schema:Edition': { bases: [], library: { profileId: 'legacy-fixed-v1' } },
+    'schema:Edition': { bases: [], library: { profileId: 'edition-v1' } },
     'schema:Unconfigured': { bases: ['schema:Novel'] },
     'schema:MissingProfile': { library: { profileId: 'not-in-registry' } },
   },
   properties: {},
   libraryProfiles: {
     'reading-v2': currentProfile,
+    'edition-v1': editionProfile,
     'legacy-fixed-v1': legacyProfile,
   },
 } as unknown as Release;
 
 test("a subject's library profile is the active release's libraryProfiles entry named by its type's library reference, and a type without a reference, or a reference to a missing profile, has none", () => {
   expect(libraryProfile(release, 'schema:Novel')).toBe(currentProfile);
-  expect(libraryProfile(release, 'schema:Edition')).toBe(legacyProfile);
+  expect(libraryProfile(release, 'schema:Edition')).toBe(editionProfile);
   expect(libraryProfile(release, 'schema:Unconfigured')).toBeUndefined();
   expect(libraryProfile(release, 'schema:MissingProfile')).toBeUndefined();
   expect(libraryProfile(release, 'schema:Unknown')).toBeUndefined();
@@ -208,6 +243,22 @@ test('stored IDs resolve in the current profile, then legacy-fixed-v1, and label
     text: 'scalar_amount page 日本語',
     lang: 'ja',
   });
+  expect(libraryStateLabel(release, 'schema:Edition', 'catalogued', 'en')).toEqual({
+    text: 'Catalogued',
+    lang: 'en',
+  });
+  expect(libraryUnitLabel(release, 'schema:Edition', 'cursor_position', 'reel', 'en')).toEqual({
+    text: 'Reel',
+    lang: 'en',
+  });
+  expect(libraryCopyKindLabel(release, 'schema:Edition', 'paper-volume', 'en')).toEqual({
+    text: 'Paper volume',
+    lang: 'en',
+  });
+  expect(libraryCopyStatusLabel(release, 'schema:Edition', 'paper-volume', 'on-shelf', 'en')).toEqual({
+    text: 'On shelf',
+    lang: 'en',
+  });
 });
 
 test("a profile's choices preserve its declaration order and exact progress metadata", () => {
@@ -243,7 +294,12 @@ test('resolving profiles for one hundred subjects of five types reads the active
     types: Object.fromEntries(
       ['schema:Novel', 'schema:Edition', 'schema:Unconfigured', 'schema:MissingProfile', 'schema:Other'].map((type) => [
         type,
-        { library: { profileId: type === 'schema:Novel' ? 'reading-v2' : 'legacy-fixed-v1' } },
+        {
+          library: {
+            profileId:
+              type === 'schema:Novel' ? 'reading-v2' : type === 'schema:Edition' ? 'edition-v1' : 'legacy-fixed-v1',
+          },
+        },
       ]),
     ),
     properties: {},
@@ -274,7 +330,9 @@ test('resolving profiles for one hundred subjects of five types reads the active
     const types = ['schema:Novel', 'schema:Edition', 'schema:Unconfigured', 'schema:MissingProfile', 'schema:Other'];
     const subjects = Array.from({ length: 100 }, (_, index) => ({ type: types[index % types.length]! }));
     expect(subjects.map(({ type }) => libraryProfile(activeRelease, type)?.id)).toEqual(
-      Array.from({ length: 100 }, (_, index) => (index % types.length === 0 ? 'reading-v2' : 'legacy-fixed-v1')),
+      Array.from({ length: 100 }, (_, index) =>
+        index % types.length === 0 ? 'reading-v2' : index % types.length === 1 ? 'edition-v1' : 'legacy-fixed-v1',
+      ),
     );
     expect(reads).toEqual({ active: 1, release: 1 });
   } finally {
