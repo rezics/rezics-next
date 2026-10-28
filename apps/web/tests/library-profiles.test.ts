@@ -195,6 +195,10 @@ test('stored IDs resolve in the current profile, then legacy-fixed-v1, and label
     text: 'Feuilles lues',
     lang: 'fr',
   });
+  expect(libraryUnitLabel(release, 'schema:Novel', 'completed_units', 'leaf', 'fr')).toEqual({
+    text: 'Feuille',
+    lang: 'fr',
+  });
   expect(libraryUnitLabel(release, 'schema:Novel', 'cursor_position', 'page', 'ja-JP')).toEqual({
     text: 'cursor_position page 日本語',
     lang: 'ja',
