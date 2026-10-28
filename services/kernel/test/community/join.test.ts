@@ -348,6 +348,12 @@ async function captureFailure(
   const actor = await access.authenticate(owner.bearer, { pool, deadline });
   const idempotencyKey = crypto.randomUUID();
   const before = await footprint();
+  const receiptCountBefore = (
+    await admin.query(
+      "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+      [actor.accountId],
+    )
+  ).rows[0]!.count as number;
   const capture = spyOn(initiatorCapture, 'captureDurableInitiator');
   if (options.persistent) capture.mockRejectedValue(failure);
   else capture.mockRejectedValueOnce(failure);
@@ -369,28 +375,26 @@ async function captureFailure(
     expect(
       (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
     ).toHaveLength(1);
-    expect(
-      (
-        await admin.query(
-          "SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1 AND idempotency_key=$2",
-          [actor.accountId, idempotencyKey],
-        )
-      ).rows,
-    ).toHaveLength(1);
+    const receiptCountAfter = (
+      await admin.query(
+        "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+        [actor.accountId],
+      )
+    ).rows[0]!.count as number;
+    expect(receiptCountAfter).toBe(receiptCountBefore + 1);
     return error;
   }
   expect(await footprint()).toEqual(before);
   expect(
     (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
   ).toEqual([]);
-  expect(
-    (
-      await admin.query(
-        "SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1 AND idempotency_key=$2",
-        [actor.accountId, idempotencyKey],
-      )
-    ).rows,
-  ).toEqual([]);
+  const receiptCountAfter = (
+    await admin.query(
+      "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+      [actor.accountId],
+    )
+  ).rows[0]!.count as number;
+  expect(receiptCountAfter).toBe(receiptCountBefore);
   return error;
 }
 
