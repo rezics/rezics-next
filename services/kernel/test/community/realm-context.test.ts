@@ -361,7 +361,7 @@ test('Realm Context decisions preserve global identity, values and candidate dec
   }
 });
 
-test('a non-moderator member and an unrelated account cannot accept or reject in the Realm Context', async () => {
+test('an account with a direct Realm read grant and an unrelated account cannot accept or reject in the Realm Context', async () => {
   const { book, target, candidate } = await fixture();
   expect((await call('GET', `/v1/realms/${realmId}`, member)).status).toBe(200);
   expect((await call('GET', `/v1/realms/${realmId}`, unrelated)).status).toBe(404);

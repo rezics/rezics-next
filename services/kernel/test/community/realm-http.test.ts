@@ -252,7 +252,7 @@ afterAll(async () => {
 });
 
 test.serial(
-  "a Space owner granted realm:create creates the Space's one Realm with a classification Context and becomes its owner",
+  'a Space owner granted realm:create creates a protected Realm with a classification Context and reads its head',
   async () => {
     await grant(owner.accountId, ['realm:create', 'space:create']);
     await grant(contextAuthor.accountId, ['context:create']);
@@ -320,7 +320,7 @@ test.serial(
 );
 
 test.serial(
-  'a second Realm, a non-owner, a suspended account, an unreadable Context and a stale head are denied with no effect',
+  'second Realm creation, non-owner updates, an unknown Context and stale-head updates are denied without writes',
   async () => {
     // account:suspend is not mounted on this kernel, so this file leaves that case out.
     let before = await snapshot();

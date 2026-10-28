@@ -182,7 +182,7 @@ async function snapshot() {
 }
 const read = (id: string, actor = f.actor) => realm.readRealm(deps(), actor, id, { deadline: Date.now() + 5000 });
 
-test('Space owner with Global realm:create mints a distinct Realm on the Space route with a head and only its owner role', async () => {
+test('Space owner with Global realm:create mints a distinct Realm on the Space route with a head and owner and standing roles', async () => {
   const spaceId = await createSpace();
   await f.grant(f.actor.accountId, root, 'realm:create');
   const request = context();

@@ -345,7 +345,7 @@ test.serial(
 );
 
 test.serial(
-  'an account without the grant, a suspended account and a stale head are denied with no effect and no disclosure',
+  'Space creation without a grant, non-owner updates and stale-head updates fail without writes or metadata in errors',
   async () => {
     // account:suspend is not mounted on this kernel, so this file does not suspend an account.
     await grantCreate();

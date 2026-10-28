@@ -171,30 +171,47 @@ position counter.
 
 A Realm publishes subjects into one slot per subject. The record history is append-only and the head
 names the current record. `publish`, `withdraw` and `reject` require `realm:publish` on that Realm.
-The action is not mounted on the Realm role template; the caller grants it to a moderator. Publishing
-confers no ownership and writes no access grant, resource initialization or semantic row on the subject
-or the Global Context.
+The owner and moderator role templates both include that action. Publishing confers no ownership
+and writes no access grant, resource initialization or semantic row on the subject or the Global Context.
 
-The anchor admits the actor once, then at T reads the active Realm and requires the subject to exist
-and pass `subjectReadEligibility`. Publishing into an empty slot needs no `If-Match`. An authorized
+Each command attempt shares one admission observation between the Realm authorization and the
+`subject:read` check. The anchor reads the active Realm at T and verifies the prepared subject check,
+which uses `subjectReadEligibility`. Publishing into an empty slot needs no `If-Match`. An authorized
 publisher can move an occupied slot by supplying its current head in the optional `If-Match` header;
 without it, publish returns 409 and writes nothing, and a wrong head returns 412. Withdraw and reject
 require `If-Match`, append a record and move the same head, so the slot leaves the adopted keyset in
 the transaction that writes it.
 
-`subject_revision_id` is null. The subject point reads at T (`subject-public-evidence.sql` and
-`subject-exists.sql`) expose no revision. `readSubject` exposes a monotonic integer `revision`, not a
-revision id.
+`subject_revision_id` is null. The subject eligibility point read (`subject-public-evidence.sql`)
+exposes visibility and a security revision, not a subject revision id. `readSubject` exposes an integer
+`revision`, not a revision id.
 
-`listPublications` seeks the Realm's adopted heads. Every returned item passes final disclosure:
-`realm:read` for the Realm, including the public floor or a grant when the Realm is protected, and
-`subjectReadEligibility` for the subject at one snapshot T. `readPublication` returns one adopted head
-under those same checks. A protected Realm that the actor cannot read is indistinguishable from absence.
+`listPublications` fetches at most `L + 1` adopted heads for a limit of L, then prepares subject
+checks for the first L candidates. In a repeatable-read snapshot it checks `realm:read`, rereads each
+candidate's adopted head and checks `subject:read` with `subjectReadEligibility` before returning it.
+Changed heads and subjects that fail disclosure are omitted without fetching replacements. The next
+cursor follows the last candidate in that window when the initial seek found a lookahead row, so a
+page can be short or empty and still have a continuation. `readPublication` checks `realm:read`, reads
+one adopted head and checks `subject:read` in a repeatable-read snapshot. Both use the Realm's ordinary
+read eligibility, including the public floor or the protected grant and current-ban checks.
 
-| Operation                   | Touches                                                                                                                                            | Bound                                          | Growth check                                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Publish, withdraw or reject | One admission observation, one Realm point read and one subject point read at T, then one record insert and one head upsert in the Realm partition | O(1) rows, O(log R) blocks, plus A             | `growth-publication.test.ts`: a fixed probe as publications on other Realms and subjects grow |
-| List or read publications   | One keyset seek of L adopted heads plus final disclosure of the Realm and each subject; no count or offset                                         | O(L * (conditions + chain)); O(1) for one head | `growth-publication.test.ts`: the probe Realm and page stay fixed at the same scales          |
+### Publish, withdraw or reject
+
+- Touches: One shared admission observation and prepared subject evidence per command attempt; one active Realm point read and subject authorization at T; one record insert and one head insert or compare-and-set, plus the command receipt and outbox event in the Realm partition.
+- Bound: O(1) rows and statements; O(log R) blocks, plus A for Realm publication and subject read authorization.
+- Growth check: `growth-publication.test.ts`, `checkGrowth` name `community publication write`, republishes a fixed subject as publications on other Realms and subjects grow. Withdraw and reject use the same write path but are not separately measured there.
+
+### List publications
+
+- Touches: One keyset seek of at most `L + 1` adopted heads, prepared subject checks for at most L candidates, one partition epoch read and Realm read authorization, then at most L head point rereads and subject read checks in the final snapshot. Skipped candidates count toward L; there is no count, offset or refill.
+- Bound: O(L) domain rows and statements and O(L log R) blocks, plus A for the Realm and each candidate, with `L ≤ 100`.
+- Growth check: `growth-publication.test.ts`, `checkGrowth` name `community publication page`, keeps the probe Realm and page fixed as publications on other Realms and subjects grow.
+
+### Read a publication
+
+- Touches: Prepared Realm and subject checks, one Realm read authorization, one adopted-head point read and, when the head exists, one subject read check in the final snapshot.
+- Bound: O(1) domain rows and statements; O(log R) blocks, plus A for the Realm and subject.
+- Growth check: No separate single-publication growth measurement; `community publication page` in `growth-publication.test.ts` measures the same head reread and disclosure path within a fixed page.
 
 A Realm's `boardSchemeId` is initially null. `setBoardScheme` requires `realm:manage`,
 reads the proposed subject through Semantic's own subject/statement reader and
