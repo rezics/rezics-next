@@ -39,6 +39,7 @@ export function allowance(rawKeys = 100): CanonicalAllowance {
   return {
     reservationId: randomUUID(),
     rawKeys,
+    nativeRows: 1_000_000,
     nativePoints: 8192 * 4 + 400,
     emptySeeks: 100,
     statements: 8192 * 8 + 800,
@@ -51,6 +52,7 @@ export function ownerAllowance(rawKeys = 100) {
     reservationId: randomUUID(),
     remaining: {
       candidateKeys: rawKeys,
+      nativeRows: 1_000_000,
       identityMetadataRows: 8192 * 4,
       emptySeeks: 100,
       nativePoints: 8192 * 4 + 400,
@@ -80,7 +82,14 @@ export function receipt(work: CanonicalWork, reserved: CanonicalAllowance) {
     expect(value).toBeGreaterThanOrEqual(0);
   }
   expect(charged(work)).toBeLessThanOrEqual(reserved.rawKeys);
-  for (const dimension of ['nativePoints', 'emptySeeks', 'statements', 'bytes', 'identityMetadataRows'] as const)
+  for (const dimension of [
+    'nativeRows',
+    'nativePoints',
+    'emptySeeks',
+    'statements',
+    'bytes',
+    'identityMetadataRows',
+  ] as const)
     expect(work[dimension]).toBeLessThanOrEqual(reserved[dimension]);
 }
 

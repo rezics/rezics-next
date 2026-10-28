@@ -7,10 +7,15 @@ import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 
-/** Reserved by the caller BEFORE dispatch; raw keys hard <=100, shared Zone aggregate <=256 including final use. */
+/**
+ * Reserved by the caller BEFORE dispatch; raw keys hard <=100, shared Zone aggregate <=256 including final use.
+ * `nativeRows` maps directly to the shared Source `rows` allowance and is charged from plan-proved operation bounds.
+ */
 export interface CanonicalAllowance {
   readonly reservationId: string;
   readonly rawKeys: number;
+  /** Charged plan-proved native row-work bound across all pools; reserve before dispatch, independently of raw keys. */
+  readonly nativeRows: number;
   readonly nativePoints: number;
   readonly emptySeeks: number;
   readonly statements: number;
@@ -27,6 +32,8 @@ export interface CanonicalWork {
   readonly duplicateKeys: number;
   readonly lookaheadKeys: number;
   readonly internalDriverKeys: number;
+  /** Charged plan-proved native row-work bound, not result size, raw-key count or observed physical tuples. */
+  readonly nativeRows: number;
   readonly nativePoints: number;
   readonly emptySeeks: number;
   readonly statements: number;

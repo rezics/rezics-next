@@ -10,6 +10,8 @@ import type { ListingStamp } from './listing-freshness-contract.ts';
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
   readonly candidateKeys: number;
+  /** Shared Source.rows unit: charged plan-proved row-work upper bound; observed physical rows are measured separately. */
+  readonly nativeRows: number;
   /** TWO independently released 4096-home sweeps per full Semantic basis read; not candidate work. */
   readonly identityMetadataRows: number;
   readonly emptySeeks: number;
@@ -25,7 +27,11 @@ export interface WorkAllowance {
   readonly remaining: WorkDimensions;
 }
 
-/** Every used dimension <= its reservation. Errors must also settle actual work with the caller's instrumentation. */
+/**
+ * Every used dimension <= its reservation. `used.nativeRows` sums charged per-operation plan bounds, not observed
+ * physical tuples. Failures settle consumed dispatched work through caller instrumentation; unused reservation is
+ * never reported as spent.
+ */
 export interface WorkReceipt {
   readonly reservationId: string;
   readonly used: WorkDimensions;

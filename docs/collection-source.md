@@ -181,17 +181,25 @@ window; a true witness can settle the group without finishing that other window.
 ## Work and continuation
 
 `WorkAllowance {reservationId, remaining}` is a caller reservation, not another budget authority. `WorkReceipt` echoes
-the reservation and reports `used`. Both use separated dimensions: `candidateKeys`, `emptySeeks`, `nativePoints`,
-`witnessKeys`, `statements`, `bytes`, `identityMetadataRows`. Shared Search/Zone ledger integration is a prerequisite;
-this module implements no ledger. The caller reserves each dimension before dispatch, subtracts used work, then may
-release unused reservation.
+the reservation and reports `used`. Both use separated dimensions: `candidateKeys`, `nativeRows`, `identityMetadataRows`,
+`emptySeeks`, `nativePoints`, `witnessKeys`, `statements`, and `bytes`. `nativeRows` is a finite, plan-proved upper
+bound on native row work, mapped one-for-one to the shared Search/Zone `Source.rows` budget. It is not output length,
+candidate count, statement count, or a guess derived from points and witnesses. Native plans and traces separately
+observe actual rows, loops, filter removals, buffers, statements and bytes. `used.nativeRows` sums the charged
+per-operation bounds for work dispatched; it is not a claim about exact physical tuples. Shared Search/Zone ledger
+integration is a prerequisite; this module implements no ledger. The caller reserves each dimension before dispatch,
+subtracts used work, then may release unused reservation.
 Concurrent reservations cannot overlap. Errors also settle actual work through the same caller instrumentation.
 
 All raw duplicates, rejects, lookahead, rereads, alias-member candidates, and **every** internal fact-driver key consume
 the aggregate request allowance of **256 candidate keys** across calls/sources. Dedup does not refund work. Quota+1
-exhaustion consumes the extra key only if reserved in advance. Indivisible native work must fit every remaining dimension
-before starting. Empty seeks, native points, witnesses, statements and bytes have additional finite admitted bounds;
-they are not free. Zero/insufficient allocation yields retryable readiness before work; no owner private refill budget.
+exhaustion consumes the extra key only if reserved in advance. Independently, each dispatched native operation
+reserves a finite `nativeRows` upper bound justified by its actual SQL plan/API footprint. Charge row work across all
+pools, including metadata, Access/core/control/catalogue/definition/constraint queries, filtered and rejected rows,
+and rereads. There are no exemptions and no conversion from another dimension. Failed or partial dispatched work
+settles its consumed reservation. Indivisible native work must fit every remaining dimension before starting. Empty
+seeks, native points, witnesses, statements and bytes have additional finite admitted bounds; they are not free.
+Zero or insufficient allocation on any dimension yields retryable readiness before work; no owner private refill budget.
 At most 100 raw keys, INCLUDING internal work and lookahead, are consumed in one owner source window.
 Semantic alias windows independently accept limit 1..100 plus a reserved/charged lookahead, so limit 100 may examine
 101 keys. Reserve that extra key before dispatch, or request a smaller limit that fits the remaining owner window.
@@ -287,7 +295,8 @@ instrumentation; Semantic counters do not create another allowance.
 
 Semantic's fixed 4096-home digest requires two independently released complete matching sweeps with zero pending
 obligations. Before EACH prepare/final/continuation basis observation reserve at least 8192 `identityMetadataRows`
-plus actual core-home observations in `nativePoints`, statements, empty seeks and bytes. Settle actual usage even
+and enough `nativeRows` to cover those metadata rows plus every actual core-home observation. Core-home observations
+also consume `nativePoints`; statements, empty seeks and bytes remain independently admitted. Settle actual usage even
 when the read is partial, not ready or throws; never reserve only one 4096-row sweep, infer a zero generation, or
 read a free/per-candidate digest. Charge all these in their separate admitted dimensions; do not hide them in one
 candidate key or infer readiness from a fresh link checkpoint. Ordinary partition

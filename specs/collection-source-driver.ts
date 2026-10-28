@@ -56,6 +56,8 @@ export interface NativeTrace {
   candidateKeys: readonly { key: string; family: 'curated' | FactKind | 'alias' | 'published' }[];
   /** Actual Semantic metadata rows from BOTH sweeps, including partial/not-ready/error observations. */
   identityMetadataRows: number;
+  /** Total charged plan-proved native row-work ceiling; separate from the actual rows/buffers captured below. */
+  nativeRows: number;
   identityBasisReads: readonly {
     state: 'ready' | 'not_ready' | 'error';
     reservationId: string;
@@ -63,6 +65,8 @@ export interface NativeTrace {
     metadataRows: number;
     /** Actual core-home observations count in nativePoints, in addition to identity metadata rows. */
     coreHomeObservations: number;
+    /** Charged plan-proved row-work reservation settled for this basis operation. */
+    nativeRows: number;
   }[];
   /** Actual caller admission events, recorded before dispatch, not reconstructed from completed reads. */
   metadataReservations: readonly { allowance: WorkAllowance; beforeMetadataOffset: number }[];
@@ -81,10 +85,11 @@ export interface NativeTrace {
   witnessKeys: number;
   statements: number;
   bytes: number;
-  /** Actual application/Access rows. Fixed identity metadata is reported separately above; growth uses BOTH. */
+  /** Actual native SQL rows across every query/pool; identity metadata has its own count; growth checks both. */
   rowsExamined: number;
   buffers: number;
   sql: readonly string[];
+  /** Actual EXPLAIN rows/loops/filter removals from every participating query and pool, never estimates. */
   plans: readonly NativePlan[];
   /** Recorded ordinary native Access invocations, including source sink and original/terminal anchors. */
   anchors: readonly { action: string; route: number; id: string; actor: Actor; at: AuthoritativeTime }[];

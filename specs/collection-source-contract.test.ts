@@ -223,11 +223,15 @@ function acceptedIdentityFixtures(
   const metadataRows: number = identityMetadataRows;
   // @ts-expect-error Both 4096-home sweeps require their own explicit admitted work dimension.
   const invalid: import('../services/kernel/src/library/collection-source.ts').WorkDimensions = withoutMetadata;
+  const { nativeRows, ...withoutNativeRows } = dimensions;
+  const chargedRows: number = nativeRows;
+  // @ts-expect-error Native row-work needs a separate plan-proved reservation axis.
+  const invalidRows: import('../services/kernel/src/library/collection-source.ts').WorkDimensions = withoutNativeRows;
   // @ts-expect-error A nested token/vector is not the fixed native source tuple format.
   const nested: CollectionSourceAfter = '["cursor1","cursor2"]';
   // @ts-expect-error There are exactly six native source driver discriminators.
   const extraDriver: CollectionSourceAfter = '1:6:subject:fact';
-  void [metadataRows, invalid, nested, extraDriver];
+  void [metadataRows, invalid, chargedRows, invalidRows, nested, extraDriver];
 }
 void acceptedIdentityFixtures;
 

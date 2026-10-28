@@ -145,6 +145,8 @@ test('fixed-home identity metadata is measured independently of admitted source 
   expect(charged(metadata.value.work)).toBe(0);
   expect(metadata.value.work.identityMetadataRows).toBe(8192);
   expect(metadata.value.work.nativePoints).toBeGreaterThanOrEqual(8192);
+  expect(metadata.value.work.nativeRows).toBeGreaterThanOrEqual(metadata.value.work.identityMetadataRows + 8192);
+  expect(metadata.value.work.nativeRows).toBeLessThan(reserved.nativeRows);
   expect(metadata.capture.statements.length).toBeGreaterThan(0);
   // Metadata samples are not a successful empty candidate/growth proof, and are reported separately.
   console.log(

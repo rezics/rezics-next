@@ -54,6 +54,7 @@ function account(work: WorkReceipt, allowance: WorkAllowance, trace: NativeTrace
   }
   expect(work.used).toEqual({
     candidateKeys: trace.candidateKeys.length,
+    nativeRows: trace.nativeRows,
     identityMetadataRows: trace.identityMetadataRows,
     emptySeeks: trace.emptySeeks,
     nativePoints: trace.nativePoints,
@@ -409,6 +410,19 @@ test('aggregate reservations across multiple calls never exceed 256 and zero or 
   const zero = await driver.measure(() => retryable(() => canonical(source, 0, after)));
   expect(zero.trace.candidateKeys).toEqual([]);
   const noNativeWork = allocate(1);
+  const noRowWork = {
+    ...noNativeWork,
+    remaining: { ...noNativeWork.remaining, nativeRows: 0 },
+  };
+  const rowsStopped = await driver.measure(() =>
+    driver.read('owner', (context) =>
+      retryable(() => driver.source.prefix({ ...context, source, allowance: noRowWork, afterSubjectId: after })),
+    ),
+  );
+  expect(rowsStopped.trace.candidateKeys).toEqual([]);
+  expect(rowsStopped.trace.nativeRows).toBe(0);
+  expect(rowsStopped.trace.statements).toBe(0);
+
   const allowance = {
     ...noNativeWork,
     remaining: { ...noNativeWork.remaining, statements: 0, nativePoints: 0, bytes: 0 },
@@ -1064,6 +1078,8 @@ function identityAccounting(trace: NativeTrace) {
     expect(reserved.beforeMetadataOffset).toBeLessThanOrEqual(metadataOffset);
     expect(read.beforeMetadataOffset).toBe(metadataOffset);
     expect(reserved.allowance.remaining.identityMetadataRows).toBeGreaterThanOrEqual(8192);
+    expect(reserved.allowance.remaining.nativeRows).toBeGreaterThanOrEqual(read.nativeRows);
+    expect(read.nativeRows).toBeGreaterThanOrEqual(read.metadataRows + read.coreHomeObservations);
     expect(Number.isSafeInteger(read.metadataRows) && read.metadataRows >= 0).toBe(true);
     expect(read.metadataRows).toBeLessThanOrEqual(8192);
     if (read.state === 'ready') {
