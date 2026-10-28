@@ -14,10 +14,14 @@ export type LifetimeRuntime = {
 const runtime: LifetimeRuntime = {
   pressure: () => {
     try {
-      const line = readFileSync('/proc/pressure/io', 'utf8').split('\n').find((row) => row.startsWith('some '));
+      const line = readFileSync('/proc/pressure/io', 'utf8')
+        .split('\n')
+        .find((row) => row.startsWith('some '));
       const value = /(?:^| )avg10=([\d.]+)/.exec(line ?? '')?.[1];
       return value === undefined ? null : Number(value);
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   command: (command, args, cwd) => {
@@ -28,21 +32,42 @@ const runtime: LifetimeRuntime = {
 
 const finished = new Set(['integrated', 'merged', 'cancelled']);
 const protectedStates = new Set(['running', 'landing', 'ready', 'held', 'stopped']);
-export async function removeFinishedWorktree(settings: Settings, store: WorkerStore, io: LifetimeRuntime = runtime): Promise<string | null> {
-  const lease = (() => { try { return acquireDirectoryLease(join(settings.stateDirectory, 'leases', 'worktree-lifetime')); } catch (e) { if (e instanceof LeaseHeldError) return null; throw e; } })();
+export async function removeFinishedWorktree(
+  settings: Settings,
+  store: WorkerStore,
+  io: LifetimeRuntime = runtime,
+): Promise<string | null> {
+  const lease = (() => {
+    try {
+      return acquireDirectoryLease(join(settings.stateDirectory, 'leases', 'worktree-lifetime'));
+    } catch (e) {
+      if (e instanceof LeaseHeldError) return null;
+      throw e;
+    }
+  })();
   if (!lease) return null;
   try {
-    const candidates = store.tasks().filter((task) => finished.has(task.state) && !protectedStates.has(task.state))
+    const candidates = store
+      .tasks()
+      .filter((task) => finished.has(task.state) && !protectedStates.has(task.state))
       .sort((a, b) => a.sequence - b.sequence);
     const roots = [...new Set([settings.worktreeRoot, join(settings.mainCheckout, '.temp/worktrees')])];
     let candidate: Task | undefined;
     let taskLease: DirectoryLease | undefined;
     for (const task of candidates) {
       if (!roots.some((root) => task.worktree === join(root, task.id) && existsSync(task.worktree))) continue;
-      try { taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id)); }
-      catch (error) { if (error instanceof LeaseHeldError) continue; throw error; }
+      try {
+        taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id));
+      } catch (error) {
+        if (error instanceof LeaseHeldError) continue;
+        throw error;
+      }
       const current = store.task(task.id);
-      if (!finished.has(current.state) || protectedStates.has(current.state)) { taskLease.release(); taskLease = undefined; continue; }
+      if (!finished.has(current.state) || protectedStates.has(current.state)) {
+        taskLease.release();
+        taskLease = undefined;
+        continue;
+      }
       candidate = current;
       break;
     }
@@ -54,12 +79,22 @@ export async function removeFinishedWorktree(settings: Settings, store: WorkerSt
     try {
       while ((io.pressure() ?? 0) > IO_PRESSURE_LIMIT) await io.sleep(1000);
       if (existsSync(candidate.worktree)) {
-        try { io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', candidate.worktree], settings.mainCheckout); }
-        catch (error) { if (existsSync(candidate.worktree)) throw error; }
+        try {
+          io.command(
+            'ionice',
+            ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', candidate.worktree],
+            settings.mainCheckout,
+          );
+        } catch (error) {
+          if (existsSync(candidate.worktree)) throw error;
+        }
       }
       io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
       return candidate.id;
-    } finally { taskLease?.release(); }
-  } finally { lease.release(); }
+    } finally {
+      taskLease?.release();
+    }
+  } finally {
+    lease.release();
+  }
 }
-

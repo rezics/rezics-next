@@ -470,13 +470,16 @@ export class WorkerTasks {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
       mkdirSync(dirname(task.worktree), { recursive: true });
-      try { git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]); }
-      catch {
+      try {
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
+      } catch {
         git(this.settings.mainCheckout, ['worktree', 'prune']);
         git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       }
       installWorktreeDependencies(task.worktree);
-    } finally { lease.release(); }
+    } finally {
+      lease.release();
+    }
   }
   /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
   /** Whether a retry can skip the capacity wait (it only holds, or replaces a running worker) and whether it goes first. */
