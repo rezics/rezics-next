@@ -112,7 +112,6 @@ function PublishedLogs({
   sessionId: string;
   search: { changes?: string; units?: string };
 }) {
-  if (!page.signedIn) return null;
   const headingId = 'published-logs-heading';
 
   return (
@@ -188,13 +187,13 @@ export function ProgressLogs({
   logs: PublishedLogPage;
   search: { changes?: string; units?: string; logs?: string };
 }) {
-  if (!progress.signedIn) return null;
+  const page = progress as Extract<ProgressSessionPage, { signedIn: true }>;
   return (
     <>
-      <PublishLog page={progress} />
+      <PublishLog page={page} />
       <PublishedLogs
         page={logs}
-        sessionId={progress.session.id}
+        sessionId={page.session.id}
         search={{
           ...(search.changes ? { changes: search.changes } : {}),
           ...(search.units ? { units: search.units } : {}),

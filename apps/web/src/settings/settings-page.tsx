@@ -1,6 +1,5 @@
 import { useSession } from '../session/query';
 import { useId, useLayoutEffect, useState } from 'react';
-import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -10,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { csrfHeaders, SignInPrompt } from '../threads/composer';
+import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, savePreferences } from './actions';
 import type { ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
 
@@ -60,7 +59,7 @@ function ReadingCard({ initial }: { initial: ReadingPreferences }) {
     setSignal('reloading');
     try {
       const page = await readSettingsPage();
-      if (!page.signedIn) throw new Error('signed out');
+      if (!('preferences' in page)) throw new Error('Preferences unavailable');
       setKnown(page.preferences);
       setChoice(page.preferences);
       setSignal('idle');
@@ -179,24 +178,23 @@ function AccountCard({ securityHref, csrfToken }: { securityHref: string | null;
   );
 }
 
-export function SettingsPageView({ page, csrfToken }: { page: SettingsPage; csrfToken: string | null }) {
-  const location = useLocation();
+export function SettingsPageView({
+  page,
+  csrfToken,
+}: {
+  page: Extract<SettingsPage, { signedIn: true }>;
+  csrfToken: string | null;
+}) {
   return (
     <article className="max-w-2xl space-y-8 text-foreground">
       <header>
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
-      {page.signedIn ? (
-        <>
-          <ReadingCard key={page.preferences.version} initial={page.preferences} />
-          <AccountCard securityHref={page.securityHref} csrfToken={csrfToken} />
-        </>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-muted-foreground">{m.settings_signed_out()}</p>
-          <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
-        </div>
-      )}
+
+      <>
+        <ReadingCard key={page.preferences.version} initial={page.preferences} />
+        <AccountCard securityHref={page.securityHref} csrfToken={csrfToken} />
+      </>
     </article>
   );
 }

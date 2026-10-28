@@ -25,7 +25,7 @@ export const sessionQuery = queryOptions({
   queryKey: ['session'],
   queryFn: async () => {
     const session = await readSession();
-    browserCsrfToken = session.csrfToken;
+    if (typeof window !== 'undefined') browserCsrfToken = session.csrfToken;
     return session;
   },
   // Document sign-in/out starts a fresh client that reads the new session state.
@@ -71,6 +71,8 @@ function useBrowserSession(): ClientSession {
     () => false,
   );
   const { data } = useQuery({ ...sessionQuery, enabled: personalRead.enabled && hydrated });
+  // A guard can seed the server cache, so hydration also initializes imperative transports.
+  if (hydrated && data) browserCsrfToken = data.csrfToken;
   return hydrated && data ? data : { state: 'unknown', csrfToken: null };
 }
 

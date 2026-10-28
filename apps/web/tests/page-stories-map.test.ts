@@ -9,6 +9,8 @@ const documentPath = join(root, 'docs/development/page-stories.md');
 const document = existsSync(documentPath) ? readFileSync(documentPath, 'utf8') : '';
 const routeFiles = readdirSync(routes, { recursive: true })
   .filter((entry): entry is string => typeof entry === 'string' && /\.(tsx|ts)$/.test(entry))
+  // Endpoint routes do not render a page and have no browser stories.
+  .filter((entry) => entry !== 'robots[.]txt.ts')
   .map((entry) => `apps/web/src/routes/${entry}`)
   .sort();
 const cells = [

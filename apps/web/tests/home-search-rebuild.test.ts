@@ -858,7 +858,11 @@ test(
         await page.context().close();
       }
       // Typeahead suggestions: the same frame, title, type and year in a smaller cover, in the shell on any other page.
-      const other = await openLive(`/${locale}/library`);
+      const origin = await site();
+      const library = await fetch(`${origin}/${locale}/library`, { redirect: 'manual' });
+      expect(library.status).toBe(302);
+      expect(new URL(library.headers.get('location')!, origin).pathname).toBe('/auth/sign-in');
+      const other = await openLive(`/${locale}`);
       try {
         const chain = localeChain(locale);
         const input = other.getByRole('combobox').and(other.locator('input'));

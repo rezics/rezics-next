@@ -16,6 +16,8 @@ export function robotsResponse(request: Request, { origin, locales }: RobotsOpti
   const body =
     [
       'User-agent: *',
+      'Allow: /',
+      ...notCrawledRoutes.map((route) => `Disallow: /*${route}`),
       ...locales.flatMap((locale) => notCrawledRoutes.map((route) => `Disallow: /${locale}${route}`)),
       ...notCrawledPaths.map((path) => `Disallow: ${path}`),
       `Sitemap: ${base}/sitemap.xml`,

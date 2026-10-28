@@ -339,6 +339,18 @@ that route exists.
 
 ## Cost
 
+### Signed-in routes
+
+Signed-in routes use `beforeLoad: requireSignedIn`; an unavailable session store shows the existing error page.
+The guard shares `sessionQuery` with the browser. Hydration reuses its session and CSRF token, so the first personal
+action needs no additional session read.
+
+- **Touches:** One session read in `beforeLoad` per server render of a signed-in route; none on client navigation
+  within the session's cached state. A signed-out reader's request ends at the redirect, with no page read.
+- **Bound:** Constant per request; no loader runs for a signed-out reader.
+- **Growth check:** `tests/signed-in-routes.test.ts` counts kernel and session reads for a signed-out GET of each
+  signed-in route: one session read and no kernel read.
+
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,
 `src/session/` and `src/media/`; they count outbound work, not the kernel's internal query cost.
 The criterion is a bounded neighbourhood per request, about changes × log N; constant engine overhead is acceptable,

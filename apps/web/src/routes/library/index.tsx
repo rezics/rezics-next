@@ -1,3 +1,6 @@
+import { requireSignedIn } from '../../session/guard';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { PersonalLibraryPage } from '../../library/entries-page';
 import { readPersonalLibrary } from '../../library/entries-actions';
@@ -6,6 +9,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
 export const Route = createFileRoute('/library/')({
+  beforeLoad: requireSignedIn,
   validateSearch: validateShelfSearch,
   // The router merges what the address says over what validation returns, so a value the validator dropped is still
   // there; reading through the validator again keeps only the documented values.
@@ -20,7 +24,8 @@ export const Route = createFileRoute('/library/')({
         ...(deps.cursor ? { cursor: deps.cursor } : {}),
       },
     }),
-  head: () => ({ meta: [{ title: m.library_heading() }] }),
+  head: ({ match }) =>
+    pageHead({ title: m.library_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: LibraryRoute,
 });
 

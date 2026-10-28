@@ -14,7 +14,6 @@ import {
 } from './session/csrf.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
-import { robotsResponse } from './sitemap/robots.ts';
 import { sitemapResponse, type SitemapEnv } from './sitemap/serve.ts';
 import { sitemapFeeds } from './sitemap/feeds.ts';
 import {
@@ -222,14 +221,13 @@ defineCustomServerStrategy('custom-accept-language', {
 });
 
 const fetchHandler = createStartHandler(defaultStreamHandler);
-export default {
+const worker = {
   async fetch(request: Request) {
     const url = new URL(request.url);
-    // Sitemaps and robots.txt read no session and make no kernel request.
+    // Crawler files read no session and make no kernel request.
+    if (url.pathname === '/robots.txt') return fetchHandler(request);
     const publicEnv = env as Partial<SitemapEnv> & { PUBLIC_ORIGIN?: string };
-    const crawlerFile =
-      robotsResponse(request, { origin: publicEnv.PUBLIC_ORIGIN ?? '', locales }) ??
-      (await sitemapResponse(request, publicEnv));
+    const crawlerFile = await sitemapResponse(request, publicEnv);
     if (crawlerFile) return crawlerFile;
     const sessionEnv = env as Partial<SessionEnv>;
     if (
@@ -359,7 +357,17 @@ export default {
       return problemResponse(error);
     }
   },
+};
+export default {
   scheduled,
+  async fetch(request: Request) {
+    const response = await worker.fetch(request);
+    const path = new URL(request.url).pathname;
+    if (!path.startsWith('/auth/') && !path.startsWith('/_serverFn/')) return response;
+    const headers = new Headers(response.headers);
+    headers.set('X-Robots-Tag', 'noindex');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  },
 };
 
 async function pageRedirect(request: Request, url: URL): Promise<Response | undefined> {

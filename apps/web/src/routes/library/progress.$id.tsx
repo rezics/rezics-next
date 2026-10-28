@@ -1,3 +1,6 @@
+import { requireSignedIn } from '../../session/guard';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { progressSubjects } from '../../library/progress-subjects';
 import { ProgressSessionPage } from '../../library/progress-session';
@@ -7,6 +10,7 @@ import { readProgressSession } from '../../library/progress-server';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/$id')({
+  beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) => ({
     ...(typeof search.changes === 'string' && search.changes ? { changes: search.changes } : {}),
     ...(typeof search.units === 'string' && search.units ? { units: search.units } : {}),
@@ -35,7 +39,8 @@ export const Route = createFileRoute('/library/progress/$id')({
     };
   },
   staleTime: 60_000,
-  head: () => ({ meta: [{ title: m.library_progress_heading() }] }),
+  head: ({ match }) =>
+    pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressSessionRoute() {
     const loaded = Route.useLoaderData();
     const page = { ...loaded, ...progressSubjects(loaded.progress, loaded.logs) };

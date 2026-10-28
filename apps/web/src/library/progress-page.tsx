@@ -15,13 +15,13 @@ import { EllipsisIcon } from 'lucide-react';
 import { progressIndexSubjects } from './progress-subjects';
 import { ProgressPicker, pickerSubject } from './progress-picker';
 import { ProgressRow } from '@rezics/ui/progress-row';
-import { Link, useLocation, useRouter } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt, csrfHeaders } from '../threads/composer';
+import { csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
 import { progressView } from './progress-label';
 import { finishProgressSession, startProgressSession } from './progress-server';
@@ -60,7 +60,6 @@ const subscribe = () => () => {};
 
 export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
-  const location = useLocation();
   const sessions = progressIndexSubjects(page.sessions);
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -115,130 +114,127 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
     }
   }
 
-  const ratio = rowRatio(page.signedIn ? sessions.map((session) => session.subject) : []);
+  const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
     <article className="max-w-4xl space-y-10 text-foreground">
       <PageHeading>{m.library_progress_heading()}</PageHeading>
-      {page.signedIn ? (
-        <>
-          {sessions.length ? (
-            <ol className="divide-y divide-border/60 border-y border-border/60">
-              {sessions.map((session) => (
-                <SessionRow key={session.id} session={session} ratio={ratio} />
-              ))}
-            </ol>
-          ) : (
-            <p className="text-muted-foreground">{m.library_progress_empty()}</p>
-          )}
-          {page.next ? (
-            <Exposure operation="progress_session.list">
-              <nav>
-                <Link
-                  to="/library/progress"
-                  search={{ subjectId: page.subjectId, cursor: page.next }}
-                  className={buttonClass}
-                >
-                  {m.library_progress_more()}
-                </Link>
-              </nav>
-            </Exposure>
-          ) : null}
-          <Exposure operation="progress_session.create">
-            <section aria-labelledby="start-progress-heading" className="space-y-5">
-              <h2 id="start-progress-heading" className="text-xl font-semibold">
-                {m.library_progress_start_heading()}
-              </h2>
-              <form className="max-w-xl space-y-5" onSubmit={onStart}>
-                <input type="hidden" name="idempotencyKey" value={key} />
-                {hydrated ? (
-                  <>
-                    <input type="hidden" name="subjectId" value={subject} />
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                      <ProgressPicker value={chosen} onValueChange={setChosen} />
-                    </div>
-                  </>
-                ) : (
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                    <Input name="subjectId" defaultValue={page.subjectId} />
-                  </label>
-                )}
-                <fieldset className="space-y-3">
-                  <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
-                  <RadioGroup
-                    name="progress-mode"
-                    value={mode}
-                    onValueChange={(value) => setMode(value as ProgressMode)}
-                    className="flex flex-wrap gap-x-6 gap-y-3"
-                  >
-                    {modeChoices.map((choice) => (
-                      <label key={choice.value} className="flex items-center gap-2 text-sm">
-                        <RadioGroupItem value={choice.value} />
-                        {choice.label()}
-                      </label>
-                    ))}
-                  </RadioGroup>
-                </fieldset>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
-                    {hydrated ? (
-                      <Select
-                        value={unit}
-                        onValueChange={(value) => {
-                          if (value) setUnit(value as ProgressUnit);
-                        }}
-                      >
-                        <SelectTrigger id="progress-unit" className="w-full">
-                          <SelectValue>{unitLabel(unit)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {unitChoices.map((choice) => (
-                            <SelectItem key={choice.value} value={choice.value}>
-                              {choice.label()}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
-                        {unitChoices.map((choice) => (
-                          <option key={choice.value} value={choice.value}>
-                            {choice.label()}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">{m.library_progress_total()}</span>
-                    <Input
-                      name="total"
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={total}
-                      disabled={mode !== 'scalar_amount'}
-                      onChange={(event) => setTotal(event.target.value)}
-                    />
-                  </label>
-                </div>
-                {alert ? (
-                  <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                    {alert}
-                  </p>
-                ) : null}
-                <Button type="submit" disabled={pending}>
-                  {m.library_progress_start()}
-                </Button>
-              </form>
-            </section>
+
+      <>
+        {sessions.length ? (
+          <ol className="divide-y divide-border/60 border-y border-border/60">
+            {sessions.map((session) => (
+              <SessionRow key={session.id} session={session} ratio={ratio} />
+            ))}
+          </ol>
+        ) : (
+          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+        )}
+        {page.next ? (
+          <Exposure operation="progress_session.list">
+            <nav>
+              <Link
+                to="/library/progress"
+                search={{ subjectId: page.subjectId, cursor: page.next }}
+                className={buttonClass}
+              >
+                {m.library_progress_more()}
+              </Link>
+            </nav>
           </Exposure>
-        </>
-      ) : (
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
-      )}
+        ) : null}
+        <Exposure operation="progress_session.create">
+          <section aria-labelledby="start-progress-heading" className="space-y-5">
+            <h2 id="start-progress-heading" className="text-xl font-semibold">
+            {m.library_progress_start_heading()}
+          </h2>
+          <form className="max-w-xl space-y-5" onSubmit={onStart}>
+            <input type="hidden" name="idempotencyKey" value={key} />
+            {hydrated ? (
+              <>
+                <input type="hidden" name="subjectId" value={subject} />
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">{m.library_progress_subject()}</span>
+                  <ProgressPicker value={chosen} onValueChange={setChosen} />
+                </div>
+              </>
+            ) : (
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">{m.library_progress_subject()}</span>
+                <Input name="subjectId" defaultValue={page.subjectId} />
+              </label>
+            )}
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
+              <RadioGroup
+                name="progress-mode"
+                value={mode}
+                onValueChange={(value) => setMode(value as ProgressMode)}
+                className="flex flex-wrap gap-x-6 gap-y-3"
+              >
+                {modeChoices.map((choice) => (
+                  <label key={choice.value} className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value={choice.value} />
+                    {choice.label()}
+                  </label>
+                ))}
+              </RadioGroup>
+            </fieldset>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
+                {hydrated ? (
+                  <Select
+                    value={unit}
+                    onValueChange={(value) => {
+                      if (value) setUnit(value as ProgressUnit);
+                    }}
+                  >
+                    <SelectTrigger id="progress-unit" className="w-full">
+                      <SelectValue>{unitLabel(unit)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unitChoices.map((choice) => (
+                        <SelectItem key={choice.value} value={choice.value}>
+                          {choice.label()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
+                    {unitChoices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label()}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">{m.library_progress_total()}</span>
+                <Input
+                  name="total"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={total}
+                  disabled={mode !== 'scalar_amount'}
+                  onChange={(event) => setTotal(event.target.value)}
+                />
+              </label>
+            </div>
+            {alert ? (
+              <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                {alert}
+              </p>
+            ) : null}
+            <Button type="submit" disabled={pending}>
+              {m.library_progress_start()}
+            </Button>
+          </form>
+          </section>
+        </Exposure>
+      </>
     </article>
   );
 }

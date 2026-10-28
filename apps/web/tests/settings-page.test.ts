@@ -288,13 +288,17 @@ let browser: Browser | undefined;
 async function readPage(path: string, signedIn = true) {
   const cookie = signedIn ? await signIn(path) : undefined;
   const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
   });
-  return { status: response.status, html: await response.text(), cookie };
+  return { status: response.status, html: await response.text(), cookie, location: response.headers.get('location') };
 }
 async function readWithCookie(path: string, cookie: string) {
-  const response = await fetch(`${await site()}${path}`, { headers: { cookie: `${session}=${cookie}` } });
-  return { status: response.status, html: await response.text() };
+  const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
+    headers: { cookie: `${session}=${cookie}` },
+  });
+  return { status: response.status, html: await response.text(), location: response.headers.get('location') };
 }
 async function open(path: string, cookie: string): Promise<Page> {
   browser ??= await chromium.launch();
@@ -494,18 +498,19 @@ test(
     expect(revocations).toHaveLength(1);
     const ended = await readWithCookie('/en/settings', first.cookie!);
     expect(main(ended.html)).not.toContain('Hide all spoilers');
-    expect(hrefFor(ended.html, 'Sign in')).toContain('/auth/sign-in');
+    expect(ended.status).toBe(302);
+    expect(ended.location).toBe('/auth/sign-in?return_to=%2Fen%2Fsettings');
   },
   timeout,
 );
 
 test(
-  'signed out, settings offers sign-in; without JavaScript the controls are disabled',
+  'signed out, settings redirects to sign-in; without JavaScript the controls are disabled',
   async () => {
     reset();
     const out = await readPage('/en/settings', false);
-    expect(out.status).toBe(200);
-    expect(hrefFor(out.html, 'Sign in')).toBe('/auth/sign-in?return_to=%2Fen%2Fsettings');
+    expect(out.status).toBe(302);
+    expect(out.location).toBe('/auth/sign-in?return_to=%2Fen%2Fsettings');
     expect(main(out.html)).not.toContain('role="radio"');
     expect(calls).toHaveLength(0);
 

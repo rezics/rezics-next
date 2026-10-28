@@ -2,12 +2,11 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { coverSrc } from '../media/cover-src';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt } from '../threads/composer';
 import type { CollectionVisibility } from './reads';
 import type { MineCollectionsPage } from './mine-collections';
 
@@ -18,10 +17,7 @@ function visibilityLabel(visibility: CollectionVisibility): string {
 }
 
 export function MineCollectionsPageView({ page }: { page: MineCollectionsPage }) {
-  const location = useLocation();
   const readable = useOperation('collection.get');
-  if (!page.signedIn) return <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />;
-
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">

@@ -1,10 +1,10 @@
 import { Exposure } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { csrfHeaders, SignInPrompt } from '../threads/composer';
+import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy } from './copies-actions';
 import type { CopiesPageData, CopyItem, CopyStatus, SavedCopy } from './copies-read';
 import { rowRatio, SubjectIdentity } from './subject-row';
@@ -415,14 +415,12 @@ function AddCopyForm({
 }
 
 export function CopiesPage({ page }: { page: CopiesPageData }) {
-  const location = useLocation();
   const [copies, setCopies] = useState(page.copies);
   const [addKey, setAddKey] = useState(page.addKey);
   useEffect(() => {
     setCopies(page.copies);
     setAddKey(page.addKey);
   }, [page]);
-  const returnTo = location.publicHref.split('#')[0] ?? location.publicHref;
   const ratio = rowRatio(copies.map((copy) => copy.subject));
   const subjectTitle = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
 
@@ -433,63 +431,57 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
         <StatusHints />
         <DateHints />
       </header>
-      {page.signedIn ? (
-        <>
-          {page.subjectId ? (
-            <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-              <span>{m.library_copy_filtered_heading({ title: subjectTitle ?? m.library_copy_this_edition() })}</span>
-              <Exposure operation="copy.list">
-                <Link to="/library/copies" search={{}} className="text-primary underline underline-offset-4">
-                  {m.library_copy_all()}
-                </Link>
-              </Exposure>
-            </p>
-          ) : null}
-          {copies.length ? (
-            <div className="divide-y divide-border/60 border-y border-border/60">
-              {copies.map((copy) => (
-                <CopyArticle
-                  key={`${copy.id}:${copy.revision}`}
-                  copy={copy}
-                  ratio={ratio}
-                  onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
-                  onRemoved={(id) => setCopies((current) => current.filter((item) => item.id !== id))}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground">
-              {page.subjectId ? m.library_copy_filtered_empty() : m.library_copy_empty()}
-            </p>
-          )}
-          {page.next ? (
-            <Exposure operation="copy.list">
-              <nav aria-label={m.library_copy_heading()}>
-                <Link
-                  to="/library/copies"
-                  search={{
-                    ...(page.subjectId ? { subjectId: page.subjectId } : {}),
-                    cursor: page.next,
-                  }}
-                  className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-                >
-                  {m.library_copy_more()}
-                </Link>
-              </nav>
-            </Exposure>
-          ) : null}
-          <AddCopyForm
-            subjectId={page.subjectId}
-            addKey={addKey}
-            onCreated={(copy) => {
-              setCopies((current) => [...current, { ...copy, subject: null, idempotencyKey: crypto.randomUUID() }]);
-            }}
-            onKey={setAddKey}
-          />
-        </>
+      {page.subjectId ? (
+        <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
+          <span>{m.library_copy_filtered_heading({ title: subjectTitle ?? m.library_copy_this_edition() })}</span>
+          <Exposure operation="copy.list">
+            <Link to="/library/copies" search={{}} className="text-primary underline underline-offset-4">
+              {m.library_copy_all()}
+            </Link>
+          </Exposure>
+        </p>
+      ) : null}
+      {copies.length ? (
+        <div className="divide-y divide-border/60 border-y border-border/60">
+          {copies.map((copy) => (
+            <CopyArticle
+              key={`${copy.id}:${copy.revision}`}
+              copy={copy}
+              ratio={ratio}
+              onSaved={(next) => setCopies((current) => current.map((item) => (item.id === next.id ? next : item)))}
+              onRemoved={(id) => setCopies((current) => current.filter((item) => item.id !== id))}
+            />
+          ))}
+        </div>
       ) : (
-        <SignInPrompt returnTo={returnTo} />
+        <p className="text-muted-foreground">
+          {page.subjectId ? m.library_copy_filtered_empty() : m.library_copy_empty()}
+        </p>
       )}
+      {page.next ? (
+        <Exposure operation="copy.list">
+          <nav aria-label={m.library_copy_heading()}>
+            <Link
+              to="/library/copies"
+              search={{
+                ...(page.subjectId ? { subjectId: page.subjectId } : {}),
+                cursor: page.next,
+              }}
+              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+            >
+              {m.library_copy_more()}
+            </Link>
+          </nav>
+        </Exposure>
+      ) : null}
+      <AddCopyForm
+        subjectId={page.subjectId}
+        addKey={addKey}
+        onCreated={(copy) => {
+          setCopies((current) => [...current, { ...copy, subject: null, idempotencyKey: crypto.randomUUID() }]);
+        }}
+        onKey={setAddKey}
+      />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { platformRegistry, validateProfile, type CompositionDocument } from '@rezics/composition';
-import { ClientOnly, useLocation } from '@tanstack/react-router';
+import { ClientOnly } from '@tanstack/react-router';
 import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { ErrorPage } from '../../shell/shell';
-import { csrfHeaders, SignInPrompt } from '../../threads/composer';
+import { csrfHeaders } from '../../threads/composer';
 import { overviewOf, profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
 
@@ -29,7 +29,7 @@ const editorTheme = {
   '--puck-font-family': 'var(--font-interface)',
 } as CSSProperties;
 
-function Failure({ failure }: { failure: CurationFailure }) {
+function Failure({ failure }: { failure: CurationFailure | Exclude<CurationRead, { ok: true }> }) {
   return (
     <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">
       <p>
@@ -62,11 +62,8 @@ export function CurationView({ initial }: { initial: CurationRead }) {
   const [selected, setSelected] = useState<Template | null>(null);
   const [scope, setScope] = useState<'type' | 'route'>('type');
   const [key, setKey] = useState('');
-  const location = useLocation();
 
   if ((!current.ok && current.reason === 'forbidden') || failure?.reason === 'forbidden') return <ErrorPage />;
-  if (!current.ok && current.reason === 'signed-out')
-    return <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />;
 
   async function reload() {
     setBusy(true);

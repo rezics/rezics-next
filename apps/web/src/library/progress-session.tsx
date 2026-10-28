@@ -12,13 +12,13 @@ import {
   DropdownMenuTrigger,
 } from '@rezics/ui/shadcn/dropdown-menu';
 import { EllipsisIcon } from 'lucide-react';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt, csrfHeaders } from '../threads/composer';
+import { csrfHeaders } from '../threads/composer';
 import { parseUnitBatch, type ProgressChange, type ProgressSessionPage, type ProgressState } from './progress-reads';
 import { finishProgressSession, recordProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
@@ -34,16 +34,7 @@ function stateLabel(state: ProgressState): string {
 }
 
 export function ProgressSessionPage({ page, children }: { page: ProgressSessionPage; children?: ReactNode }) {
-  const location = useLocation();
-  if (!page.signedIn) {
-    return (
-      <article className="max-w-4xl space-y-10 text-foreground">
-        <PageHeading>{m.library_progress_heading()}</PageHeading>
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
-      </article>
-    );
-  }
-  return <SessionEditor page={page}>{children}</SessionEditor>;
+  return <SessionEditor page={page as Extract<ProgressSessionPage, { signedIn: true }>}>{children}</SessionEditor>;
 }
 
 function SessionEditor({

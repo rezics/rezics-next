@@ -4,27 +4,23 @@ import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { coverSrc } from '../media/cover-src';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt } from '../threads/composer';
 import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
 import { coverSubject } from './subject-row';
 
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   const { csrfToken } = useSession();
-  const location = useLocation();
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
   const [follows, setFollows] = useState(page.follows);
   const [pending, setPending] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
   useEffect(() => setFollows(page.follows), [page.follows]);
-
-  if (!page.signedIn) return <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />;
 
   const active = follows.filter((follow) => follow.state === 'following');
   const groups = [

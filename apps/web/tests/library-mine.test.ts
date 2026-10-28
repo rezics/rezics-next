@@ -371,13 +371,17 @@ let browser: Browser | undefined;
 async function readPage(path: string, signedIn = true) {
   const cookie = signedIn ? await signIn(path) : undefined;
   const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
   });
-  return { status: response.status, html: await response.text(), cookie };
+  return { status: response.status, html: await response.text(), cookie, location: response.headers.get('location') };
 }
 async function readWithCookie(path: string, cookie: string) {
-  const response = await fetch(`${await site()}${path}`, { headers: { cookie: `${session}=${cookie}` } });
-  return { status: response.status, html: await response.text() };
+  const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
+    headers: { cookie: `${session}=${cookie}` },
+  });
+  return { status: response.status, html: await response.text(), location: response.headers.get('location') };
 }
 async function open(path: string, cookie: string): Promise<Page> {
   browser ??= await chromium.launch();
@@ -488,16 +492,13 @@ test(
 );
 
 test(
-  'signed out, both pages offer sign-in',
+  'signed out, both pages redirect to sign-in',
   async () => {
     reset();
     for (const path of ['/en/library/collections', '/en/library/following']) {
       const page = await readPage(path, false);
-      expect(page.status).toBe(200);
-      const content = main(page.html);
-      expect(content).toMatch(
-        /<a\b[^>]*href="\/auth\/sign-in\?return_to=%2Fen%2Flibrary%2F(?:collections|following)"[^>]*>Sign in<\/a>/,
-      );
+      expect(page.status).toBe(302);
+      expect(page.location).toBe(`/auth/sign-in?return_to=${encodeURIComponent(path)}`);
     }
     expect(calls).toHaveLength(0);
   },

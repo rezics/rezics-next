@@ -209,10 +209,16 @@ async function headingStyle(path: string) {
 }
 
 test(
-  'the board, thread, search, library and not-found pages draw their main heading with the same font, size and weight',
+  'public pages share their main heading style, and a signed-out library request redirects to sign-in',
   async () => {
     const styles = [];
-    for (const path of [`/en/boards/${boardId}`, `/en/threads/${threadId}`, '/en/search', '/en/library', '/en/missing'])
+    const origin = await site();
+    const library = await fetch(`${origin}/en/library`, { redirect: 'manual' });
+    expect(library.status).toBe(302);
+    const location = new URL(library.headers.get('location')!, origin);
+    expect(location.pathname).toBe('/auth/sign-in');
+    expect(location.searchParams.get('return_to')).toBe('/en/library');
+    for (const path of [`/en/boards/${boardId}`, `/en/threads/${threadId}`, '/en/search', '/en/missing'])
       styles.push(await headingStyle(path));
     expect(styles.every((style) => style.family === styles[0]!.family)).toBe(true);
     expect(styles.every((style) => style.size === styles[0]!.size)).toBe(true);

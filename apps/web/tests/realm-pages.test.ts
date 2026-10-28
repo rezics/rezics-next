@@ -758,7 +758,8 @@ test(
     expect(empty.status).toBe(200);
     expect(main(empty.html)).toContain('You have not joined any Realms yet.');
     const signedOut = await readPage('/en/realms');
-    expect(links(signedOut.html).some((anchor) => anchor.href === '/auth/sign-in?return_to=%2Fen%2Frealms')).toBe(true);
+    expect(signedOut.status).toBe(302);
+    expect(signedOut.location).toBe('/auth/sign-in?return_to=%2Fen%2Frealms');
   },
   timeout,
 );

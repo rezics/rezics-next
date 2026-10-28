@@ -43,6 +43,8 @@ only a title and no other public fact, and every page of a Realm or Zone that is
 
 Not crawled (`robots.txt` disallow and `noindex`): account, settings, library, checkout and order pages, editors,
 authentication pages, and API paths.
+A signed-in or offer page whose path shares a prefix with indexed pages, or that is readable signed out, gets
+`noindex` without a robots.txt disallow.
 
 A Realm-routed or Zone-routed view of a subject that shows the same facts as the general page has its canonical
 link on the general page.

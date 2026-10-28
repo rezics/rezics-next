@@ -232,20 +232,7 @@ export function PersonalLibraryPage({
   return (
     <div className="max-w-6xl space-y-6 text-foreground">
       <PageHeading>{m.library_heading()}</PageHeading>
-      {page.signedIn ? (
-        <SignedInLibrary page={page} cursor={cursor} locale={locale} display={display} />
-      ) : (
-        <p>
-          <Exposure operation="library_entry.list">
-            <a
-              href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/library`)}`}
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              {m.library_sign_in()}
-            </a>
-          </Exposure>
-        </p>
-      )}
+      <SignedInLibrary page={page as SignedIn} cursor={cursor} locale={locale} display={display} />
     </div>
   );
 }

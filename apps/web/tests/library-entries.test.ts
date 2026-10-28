@@ -431,12 +431,14 @@ const alice = async () => {
 
 async function readPage(path: string, cookie?: string) {
   const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
   });
   return {
     status: response.status,
     html: await response.text(),
     cache: response.headers.get('cache-control') ?? '',
+    location: response.headers.get('location'),
   };
 }
 function main(html: string) {
@@ -756,27 +758,16 @@ test(
 );
 
 test(
-  'signed out, the library offers sign-in',
+  'signed out, the library redirects to sign-in',
   async () => {
     reset();
-    const page = await readPage('/en/library');
-    expect(page.status).toBe(200);
-    expect(page.cache).toMatch(/\bno-store\b/);
-    const body = main(page.html);
-    expect(body).toContain('Library');
-    expect(body).not.toContain('Zebra story');
-    expect(body).not.toContain('Your library is empty.');
-    const signInLink = links(page.html).find((link) => link.text === 'Sign in to see your library.');
-    expect(signInLink?.href).toBe('/auth/sign-in?return_to=%2Fen%2Flibrary');
+    for (const path of ['/en/library', '/ja/library']) {
+      const page = await readPage(path);
+      expect(page.status).toBe(302);
+      expect(page.cache).toMatch(/\bno-store\b/);
+      expect(page.location).toBe(`/auth/sign-in?return_to=${encodeURIComponent(path)}`);
+    }
     expect(calls.some((call) => call.path.startsWith('/v1/libraryEntries'))).toBe(false);
-
-    const japanese = await readPage('/ja/library');
-    expect(japanese.status).toBe(200);
-    const japaneseLink = links(japanese.html).find(
-      (link) => link.text === 'ライブラリを見るにはサインインしてください。',
-    );
-    expect(japaneseLink?.href).toBe('/auth/sign-in?return_to=%2Fja%2Flibrary');
-    expect(main(japanese.html)).not.toContain('Zebra story');
   },
   timeout,
 );

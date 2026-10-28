@@ -673,18 +673,12 @@ test(
       await page.context().close();
     }
 
-    const signedOut = await open('/en/collections/new', { sub: '' });
-    try {
-      const link = signedOut.page.locator('main').getByRole('link', { name: 'Sign in' });
-      expect(await link.count()).toBe(1);
-      const target = new URL((await link.getAttribute('href'))!, signedOut.origin);
-      expect(target.pathname).toBe('/auth/sign-in');
-      expect(target.searchParams.get('return_to')).toBe('/en/collections/new');
-      expect(await signedOut.page.getByRole('button', { name: 'Create collection' }).count()).toBe(0);
-      expect(await signedOut.page.getByRole('textbox', { name: 'Title' }).count()).toBe(0);
-    } finally {
-      await signedOut.page.context().close();
-    }
+    const before = calls.length;
+    const signedOut = await fetch(`${await site()}/en/collections/new`, { redirect: 'manual' });
+    expect(signedOut.status).toBe(302);
+    expect(signedOut.headers.get('location')).toBe('/auth/sign-in?return_to=%2Fen%2Fcollections%2Fnew');
+    await signedOut.text();
+    expect(calls).toHaveLength(before);
   },
   timeout,
 );
