@@ -22,8 +22,11 @@ Derived files declare an `integration` or `promotion` stage in `defaults.json`. 
 during rebase; the promotion stage regenerates files on the `dev` head before promotion gates run.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
-` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller writes
-and commits these files before launch, records their SHA-256 hashes, and refuses integration if a worker changes one.
+` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
+configured `formatCommand` on exactly these files before committing them and records their formatted SHA-256 hashes. If
+the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
+formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
+integration if a worker changes a frozen file.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
