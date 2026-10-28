@@ -193,7 +193,11 @@ async function rejected(d: MediaBoundaryDriver, fault: SourceFault, code: string
   await drain(d, id);
   const native = await d.boundary.observe(id);
   expect(native.row.state).toBe('rejected');
-  expect(native.transitions).toEqual(['reserved', 'rejected']);
+  expect(native.transitions).toEqual(
+    fault === 'corrupt-image' || fault === 'over-40-megapixels'
+      ? ['reserved', 'uploaded', 'rejected']
+      : ['reserved', 'rejected'],
+  );
   expect(native.variants).toEqual([]);
   const status = await d.status(id);
   expect(checkMediaImportStatus(status.body)).toEqual([]);
