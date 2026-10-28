@@ -240,6 +240,7 @@ if (process.argv.includes('--content-worker')) {
     bytes: Uint8Array,
     targetRoute = route,
     reservation?: { mediaId: string; containerId: string; uploaderId: string },
+    options: { events?: boolean } = {},
   ) {
     const mediaId = reservation?.mediaId ?? newId(targetRoute);
     const containerId = reservation?.containerId ?? newId(targetRoute);
@@ -268,13 +269,16 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         );
         return {
           value: mediaId,
-          events: [
-            {
-              type: 'com.rezics.content.media.uploaded.v1',
-              subject: mediaId,
-              data: { mediaId, containerId, actorId: uploaderId },
-            },
-          ],
+          events:
+            options.events === false
+              ? []
+              : [
+                  {
+                    type: 'com.rezics.content.media.uploaded.v1',
+                    subject: mediaId,
+                    data: { mediaId, containerId, actorId: uploaderId },
+                  },
+                ],
         };
       },
     );
@@ -616,10 +620,10 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       const now = new Date().toISOString();
       running = await worker(store, databaseUrl, { CONTENT_TEST_NOW: now });
       const bytes = new Uint8Array([1]);
-      const old = await uploaded(pool, store, bytes);
-      const young = await uploaded(pool, store, bytes);
-      const claimed = await uploaded(pool, store, bytes);
-      const other = await uploaded(pool, store, bytes, route + 16);
+      const old = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const young = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const claimed = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const other = await uploaded(pool, store, bytes, route + 16, undefined, { events: false });
       await pool.query(
         `UPDATE content.media SET created_at=$2::timestamptz-interval '24 hours' WHERE media_id=ANY($1)`,
         [[old.mediaId, claimed.mediaId, other.mediaId], now],
@@ -638,7 +642,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       const deletesAfterFirstSweep = store.deletes.length;
       expect(store.objects.has(old.key)).toBe(false);
       for (const fixture of [young, claimed, other]) expect(store.objects.has(fixture.key)).toBe(true);
-      const pending = await uploaded(pool, store, bytes);
+      const pending = await uploaded(pool, store, bytes, route, undefined, { events: false });
       await pool.query(
         "UPDATE content.media SET created_at=clock_timestamp()-interval '25 hours' WHERE route=$1 AND media_id=$2",
         [route, pending.mediaId],
@@ -660,7 +664,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       running = await worker(store);
       await result(schedule);
       expect(
-        store.deletes.filter((key) => !key.startsWith(`m/${pending.mediaId}/`)).slice(deletesAfterFirstSweep),
+        store.deletes.slice(deletesAfterFirstSweep).filter((key) => !key.startsWith(`m/${pending.mediaId}/`)),
       ).toEqual([]);
       expect(store.objects.has(pending.key)).toBe(false);
       expect(await client.listSchedules({ scheduleNamePrefix: CONTENT_COLLECTION_SCHEDULE })).toHaveLength(1);
