@@ -26,6 +26,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'commerce',
     'library',
     'community',
+    'semantic',
     'search',
     'content',
     'retention',

@@ -2,6 +2,21 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Worker lifecycle
+
+`semanticWorkModule` in `work-module.ts` is registered once as `semantic` in `KERNEL_WORK_MODULES`, after
+community and before search. Registration adds one service starter through `WorkContext.addService`. After the
+single DBOS launch, that starter runs the existing `linkProjection` through `startRelays` on the same native worker
+pool, retaining the `semantic_links` consumer, event handling, checkpoints, freshness and relation disclosure.
+The outer worker relay continues to own effects delivery separately.
+
+The service returns the actual relay stop handle. Work shutdown stops scheduling and drains in-flight projection
+before SDK, client and pool teardown; a later starter failure also drains this service. Repeated stop and worker
+signals use the existing worker lifecycle. Relay cadence, concurrency and pool-size validation retain their existing
+bounds. Projection cost remains the existing [Links projection write](#links-projection-write) Cost entry.
+This module composes only the native relation projector; it does not supply Source, index or publication factories.
+Native registration, convergence and drain evidence lives in `test/semantic/work-module.test.ts`.
+
 ## Subject page feed
 
 The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).
