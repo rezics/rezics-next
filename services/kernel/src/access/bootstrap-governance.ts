@@ -18,8 +18,8 @@ export const PLATFORM_GOVERNANCE_ROLE = 'platform.governance';
 export const BOOTSTRAP_GOVERNANCE_DEADLINE_MS = 10_000;
 
 export class BootstrapGovernanceUnavailableError extends Error {
-  constructor() {
-    super('Operator governance bootstrap is unavailable');
+  constructor(options?: ErrorOptions) {
+    super('Operator governance bootstrap is unavailable', options);
     this.name = 'BootstrapGovernanceUnavailableError';
   }
 }
@@ -102,7 +102,9 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
       }
       if (conflict < 2 && typeof error === 'object' && error !== null && 'code' in error && error.code === '23505')
         continue;
-      throw new BootstrapGovernanceUnavailableError();
+      throw error instanceof BootstrapGovernanceUnavailableError
+        ? error
+        : new BootstrapGovernanceUnavailableError({ cause: error });
     }
   }
   // Separate durable installation lets an interrupted deployment resume without
@@ -148,7 +150,9 @@ export async function bootstrapGovernance(pool: Pool, accountId: string): Promis
       if (error instanceof AlreadyBootstrapped) return { ...value, replayed };
       if (conflict < 2 && typeof error === 'object' && error !== null && 'code' in error && error.code === '23505')
         continue;
-      throw new BootstrapGovernanceUnavailableError();
+      throw error instanceof BootstrapGovernanceUnavailableError
+        ? error
+        : new BootstrapGovernanceUnavailableError({ cause: error });
     }
   }
   throw new BootstrapGovernanceUnavailableError();

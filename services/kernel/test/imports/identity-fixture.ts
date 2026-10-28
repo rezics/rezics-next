@@ -961,25 +961,93 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
   }
 }
 
+const BOOTSTRAP_DIAGNOSTIC_BYTES = 16_384; // Per pipe; draining continues after the cap.
+type BootstrapChild = {
+  exited: Promise<number>;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+};
+type BootstrapSpawn = (
+  command: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; stdout: 'pipe'; stderr: 'pipe' },
+) => BootstrapChild;
+
+async function drainBootstrapPipe(stream: ReadableStream<Uint8Array>) {
+  const retained = new Uint8Array(BOOTSTRAP_DIAGNOSTIC_BYTES);
+  let length = 0;
+  let truncated = false;
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const count = Math.min(value.byteLength, retained.length - length);
+      retained.set(value.subarray(0, count), length);
+      length += count;
+      truncated ||= count < value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { text: new TextDecoder().decode(retained.subarray(0, length)), truncated };
+}
+
+function bootstrapDiagnostic(output: { text: string; truncated: boolean }, url: string) {
+  const locator = URL.canParse(url) ? new URL(url) : null;
+  const secrets = new Set([url]);
+  for (const value of [locator?.username, locator?.password]) {
+    if (!value) continue;
+    secrets.add(value);
+    try {
+      secrets.add(decodeURIComponent(value));
+    } catch {
+      // Malformed URL escapes must not hide the original child failure.
+    }
+  }
+  let text = output.text;
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+    if (!secret) continue;
+    text = text.replaceAll(secret, '[redacted]');
+    // A cap can split a locator or credential. Remove that trailing prefix too.
+    if (output.truncated) {
+      for (let length = Math.min(secret.length - 1, text.length); length > 0; length--) {
+        if (text.endsWith(secret.slice(0, length))) {
+          text = `${text.slice(0, -length)}[redacted]`;
+          break;
+        }
+      }
+    }
+  }
+  // Redaction and replacement characters can expand the already bounded text.
+  return new TextDecoder().decode(Buffer.from(text).subarray(0, BOOTSTRAP_DIAGNOSTIC_BYTES), { stream: true });
+}
+
 export async function runIdentityBootstrap(
   url: string,
   accountId: string,
   required = false,
+  spawn: BootstrapSpawn = (command, options) => Bun.spawn(command, options),
 ): Promise<{ exitCode: number }> {
-  const child = Bun.spawn(
-    [process.execPath, 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId],
-    {
-      cwd: new URL('../../../../', import.meta.url).pathname,
-      env: { ...process.env, DATABASE_URL: url },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
-  const [exitCode] = await Promise.all([
+  const child = spawn([process.execPath, 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId], {
+    cwd: new URL('../../../../', import.meta.url).pathname,
+    env: { ...process.env, DATABASE_URL: url },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+    drainBootstrapPipe(child.stdout),
+    drainBootstrapPipe(child.stderr),
   ]);
-  if (required && exitCode !== 0) throw new Error(`Deployment governance bootstrap exited ${exitCode}`);
+  if (required && exitCode !== 0)
+    throw new Error(`Deployment governance bootstrap exited ${exitCode}`, {
+      cause: {
+        exitCode,
+        stdout: bootstrapDiagnostic(stdout, url),
+        stderr: bootstrapDiagnostic(stderr, url),
+        stdoutTruncated: stdout.truncated,
+        stderrTruncated: stderr.truncated,
+      },
+    });
   return { exitCode };
 }
