@@ -32,7 +32,7 @@ export type ApplyAttempt = Readonly<{
   from: CoverageCheckpoint;
   through: CoverageCheckpoint;
   source: CoverageHome | null;
-  outcome: 'enrolled' | 'visible' | 'ambiguous' | 'completed';
+  outcome: 'enrolled' | 'visible' | 'ambiguous' | 'completed' | 'aborted' | 'skipped';
   checkpoint: 'pending' | 'advanced' | 'lost' | 'stopped';
 }>;
 

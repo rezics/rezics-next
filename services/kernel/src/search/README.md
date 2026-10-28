@@ -781,7 +781,8 @@ actual migrated database. These tests supply storage observations, not native re
 Scope run/populate/certify remain unavailable until the actual producer lands.
 
 The store methods are `readPrefix`, `allocate`, `readLineage`, `register`, `population`, `transition`, `reclaim`,
-`readHome`, `enroll`, `outcome`, `complete` and `promote`; their exact signatures are in `CoverageStore`.
+`readHome`, `enroll`, `outcome`, `complete` and `promote`, plus the unavailable `settleNoWrite` correction
+specified below; their exact signatures are in `CoverageStore`.
 All writes atomically compare full incarnation identity (prefix, generation, index, UUID, protocol, consumer) and
 lifecycle revision; home writes additionally compare partition and home revision. Revisions start at 1, missing
 rows compare as revision 0, and every successful mutation increments its row revision. CAS loss/absent or
@@ -804,6 +805,8 @@ may become retiring. Retiring blocks enrollment, outcome, completion and promoti
 its revision, deletes at most 4096 homes and its lineage atomically, retains the prefix fence, and never performs
 engine deletion or deletes core checkpoints. The lifecycle owner separately owns those external operations.
 
+The following enrollment/outcome rules describe the existing runtime; the staged additive correction below
+changes replacement and nullable-fence validation only when implemented.
 Enrollment accepts only an enrolled/pending attempt with null source, a fresh UUID and ordered same-epoch
 checkpoint range; its initial home has null current/fence/verified/coveredThrough. Only populating/live can enroll.
 A completed slot may be replaced; any other slot blocks replacement indefinitely. Enrollment on an existing home
@@ -954,16 +957,29 @@ Marking these cases ambiguous would permanently strand ordinary native-pending r
 `settleNoWrite(guard: HomeGuard, attemptId: string, result:
 { outcome: 'aborted'; checkpoint: 'pending' } |
 { outcome: 'skipped'; checkpoint: 'advanced' | 'lost' | 'stopped' }): Promise<HomeCoverage | null>`.
-It accepts enrolled/pending only, retains null attempt source, preserves existing current/fence/verified/
+It accepts enrolled/pending/null-source only, retains null attempt source, preserves existing current/fence/verified/
 coveredThrough, and makes the slot replaceable without authorizing promotion. `aborted` means positive local
 knowledge that NO mutating engine request started; `skipped` means the shared body selected no actions and the
-actual core outcome is known. This is a proposed additive follow-up contract; this specification does not change
-`coverage.ts` types, `CoverageStore`, existing tests or frozen storage files. Storage implementation/tests must
-adopt it before the producer uses it. Also allow the already nullable `outcome(visible).fence` to remain null
+actual core outcome is known. The additive types and method are now staged: only `settleNoWrite` throws the existing retryable
+`index_not_ready` with `Retry-After: 1`. Every preexisting store method, SQL path and codec remains unchanged.
+`test/search/coverage-no-write.test.ts` stages real migrated-pool CAS, replacement, reopen and evidence tests;
+these are implementation acceptance, currently red, not native readiness evidence. Formatting and root type
+checking alone validate this specification stage. The actual store correction remains a build dependency
+before the producer uses it. Also allow the already nullable `outcome(visible).fence` to remain null
 when the real source tuple is known but no committed structural event fence has been observed. Visible sink
 completion and core CAS settlement must be recordable without inventing that fence. Such a row cannot promote;
 retain an existing matching committed fence when available, and never replace it with a source snapshot head.
+A different source tuple clears old verified/coveredThrough evidence even when the new fence is absent.
+The result is a closed discriminated shape: abort with a terminal checkpoint, skip with pending, unknown
+fields and other malformed combinations reject without writes. Settlement compares the exact physical identity,
+home, attempt ID, lifecycle revision and home revision in the same short atomic CAS as existing mutations.
+Only an enrolled slot can settle; ambiguous, visible, completed or non-null-source attempts cannot be relabeled.
+Terminal no-write slots admit a different attempt ID, never the same ID.
 This relaxes only storage observation validation, not the requirement for genuine certification provenance.
+Cost: one exact lineage guard and one exact home/attempt row, O(1) rows/statements using the existing
+partition-leading indexed keys and one current slot; no queue, history or TTL scan. Existing native storage/growth
+probes plus the fixed CAS/slot/reopen tests cover storage. Native producer and all-pool growth proofs remain
+independently mandatory and are never implied by staged formatting.
 A process crash before recording safe abort remains conservatively enrolled;
 no lease or timeout proves that a request was never sent.
 
@@ -981,9 +997,9 @@ If they differ, discard those actions before HTTP and safely abort if no earlier
 actual source snapshot position only as the external version. A current native tuple observed at snapshot head
 cannot supply the committed structural fence: only genuine parsed `SUBJECT_IDENTITY_CHANGED` envelopes with
 own-home original and closed lossless decimal generation supply event fences. Match a known fence to its exact
-generation; if that fence is not known yet, keep source/fence evidence unavailable and require later contiguous
-catch-up. Do not stamp a newer native generation onto earlier selected anchors, guess a fence from source head,
-or create a Source wrapper that purports to supply native identity. No native/core public signature changes and
+generation; if that fence is not known yet, record the actual source with a null fence and require later contiguous
+catch-up before promotion. Do not stamp a newer native generation onto earlier selected anchors, guess a fence
+from source head, or create a Source wrapper that purports to supply native identity. No native/core public signature changes and
 no database client/transaction held across source or HTTP I/O are needed.
 
 `test/search/coverage-projection.test.ts` specifies the real hook boundary and coordinator: durable slot observable

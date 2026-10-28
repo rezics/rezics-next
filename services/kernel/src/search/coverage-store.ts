@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { ProblemError } from '../http/problem.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { subjectIndexName } from './indices.ts';
 import { subjectConsumer } from './runner.ts';
@@ -63,6 +64,19 @@ export interface CoverageStore {
     guard: HomeGuard,
     attemptId: string,
     observation: { outcome: 'visible' | 'ambiguous'; source: CoverageHome | null; fence: StructuralFence | null },
+  ): Promise<HomeCoverage | null>;
+  /**
+   * Staged correction: exact enrolled/pending/null-source CAS; preserves all prior home evidence.
+   * Terminal aborted/skipped slots are replaceable but never grant verification or promotion.
+   * Abort requires positive knowledge no mutating request started; skip requires zero selected actions
+   * and the actual checkpoint result. Neither time nor uncertain dispatch is no-write evidence.
+   */
+  settleNoWrite(
+    guard: HomeGuard,
+    attemptId: string,
+    result:
+      | { outcome: 'aborted'; checkpoint: 'pending' }
+      | { outcome: 'skipped'; checkpoint: 'advanced' | 'lost' | 'stopped' },
   ): Promise<HomeCoverage | null>;
   /** Visible only; records actual core CAS result, including loss, and completes this attempt. */
   complete(
@@ -350,6 +364,10 @@ export function createCoverageStore(pool: Pool): CoverageStore {
           attempt: { ...slot, source, outcome },
         };
       });
+    },
+    async settleNoWrite(_guard, _attemptId, _result) {
+      // Honest unavailable stub: existing mutations and durable codecs remain unchanged.
+      throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
     },
     async complete(value, id, result) {
       const g = guard(value, true),
