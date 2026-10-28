@@ -422,6 +422,7 @@ test('native sparse cardinality stays capped at twenty thousand across bounded r
     const result = await commands.recordProgress(owner.actor, s.id, { revision: batch + 1, add }, entryKey());
     expect(result.value.completedUnitCount).toBe((batch + 1) * 100);
   }
+  expect((await contents(s.id)).units).toHaveLength(20_000);
   await rejectRecord(s.id, 201, { add: ['overflow'] });
   expect((await record(s.id, 201, { add: ['key-0'] })).completedUnitCount).toBe(20000);
 }, 120_000);
