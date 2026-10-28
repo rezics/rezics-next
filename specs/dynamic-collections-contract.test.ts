@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const specification = await readFile(new URL('../docs/dynamic-collections.md', import.meta.url), 'utf8');
 const outcomes = await readFile(new URL('./dynamic-collections-outcomes.test.ts', import.meta.url), 'utf8');
 const driver = await readFile(new URL('./dynamic-collections-driver.ts', import.meta.url), 'utf8');
+const filteredLists = await readFile(new URL('../docs/filtered-lists.md', import.meta.url), 'utf8');
 
 test('dynamic Collection work remains specification-only and starts with built-ins', () => {
   expect(specification).toContain('specification-only');
@@ -50,7 +51,7 @@ test('one page distinguishes curated occurrences from unique dynamic subjects wi
     specification.indexOf('## Access and disclosure'),
   );
   expect(page).toContain('`GET /v1/collections/{collectionId}/members`');
-  expect(page).toContain('one row per occurrence');
+  expect(page).toContain('editor retains all occurrences');
   expect(page).toContain('one row per unique `subjectId`');
   expect(page).toContain('`409 dynamic_membership_immutable`');
   expect(page).toContain('`422 unsupported_query`');
@@ -60,56 +61,71 @@ test('one page distinguishes curated occurrences from unique dynamic subjects wi
 test('public dynamic disclosure returns viewer-readable subjects and uses the shared monotonic projection', () => {
   const disclosure = specification.slice(
     specification.indexOf('## Access and disclosure'),
-    specification.indexOf('## Saved-query language'),
+    specification.indexOf('## Saved queries and execution admission'),
   );
   for (const forbidden of [
     'state, label, progress, holding, query body, predicate',
     'private candidate count',
     'private member count',
-    "current viewer's native `subject:read` check",
+    "current viewer's native original AND terminal eligibility",
     'Older projection events cannot restore',
   ])
     expect(disclosure).toContain(forbidden);
   expect(disclosure).toContain('Curated listing-freshness defects remain with their current owner');
 });
 
-test('saved-query grammar and budgets are later runtime scope with save-time rejection', () => {
+test('saved queries reuse shared grammar and remain later runtime scope with save-time rejection', () => {
   const later = specification.slice(
-    specification.indexOf('## Saved-query language'),
-    specification.indexOf('## Query and cursor bounds'),
+    specification.indexOf('## Saved queries and execution admission'),
+    specification.indexOf('## Query, identity and cursor bounds'),
   );
-  expect(later).toContain('First-scope runtime supports only the built-ins above');
-  expect(later).toContain('type SavedQuery');
-  expect(later).toContain('4,096 canonical UTF-8 bytes');
-  expect(later).toContain('nesting depth 8, 32 leaves, and 32 values');
-  expect(later).toContain('unsupported or not-ready predicate fails at save time');
-  expect(later).toContain('Custom query execution is not enabled');
+  expect(later).toContain('First scope exposes built-ins');
+  expect(later).toContain('closed catalogue grammar and semantic admission');
+  expect(later).toContain('does not create a second catalogue predicate AST');
+  expect(later).toContain('Saving validates the full filter + source + order');
+  expect(later).toContain('unsupported execution rejects 422 before enumeration');
+  expect(later).toContain('execution remains disabled until reviewed native admission');
   expect(outcomes).not.toMatch(/test\s*\(\s*['"].*saved.query.*runtime/i);
   expect(driver).not.toMatch(/saveQuery|executeUserQuery/);
 });
 
 test('cursor, candidate, deletion, and native growth bounds are explicit', () => {
   const bound = specification.slice(
-    specification.indexOf('## Query and cursor bounds'),
+    specification.indexOf('## Query, identity and cursor bounds'),
     specification.indexOf('## Acceptance outcomes'),
   );
-  expect(bound).toContain('`C = 4P` unique subject candidates');
-  expect(bound).toContain('`C <= 400`');
-  expect(bound).toContain('One shared opaque encrypted cursor binds viewer');
-  expect(bound).toContain('A basis change returns `409 stale_cursor`');
-  expect(bound).toContain('actual rows examined, PostgreSQL buffers, statements, and the shared cost classifier');
+  expect(bound).toContain('Success fills the requested page or proves a genuinely exhausted final page');
+  expect(bound).toContain('return explicit preparation/readiness and retain settled work');
+  expect(bound).toContain('existing owner cursor envelope, codec, key ring and binding to viewer');
+  expect(bound).toContain('changed basis returns stale_cursor');
+  expect(bound).toContain('examined/removed rows, buffers, statements/connections, bytes');
+  for (const unit of [
+    'min(600, 6s + 3)',
+    '16 + 8c',
+    '64 + 16c',
+    '2s + 2',
+    'at most 2 index reads',
+    'at most three refill rounds',
+    'at most 12 statements',
+    '64, 512 and 4,096',
+  ])
+    expect(filteredLists).toContain(unit);
+  expect(outcomes).toContain('countedViolations');
+  expect(driver).toContain('allCost: Cost');
+  expect(driver).toContain('specification-red behavior ONLY');
   expect(specification).toContain('freezes its last complete published subject set');
   expect(specification).toContain('returns without waiting for projection consumers');
 });
 
-test('ordered implementation plan names shared owners and stays within its line and phase limits', () => {
+test('ordered implementation plan names shared owners and stays within its file and phase limits', () => {
   const plan = specification.slice(
     specification.indexOf('## Ordered implementation plan'),
     specification.indexOf('## Decisions fixed'),
   );
-  const phases = [...plan.matchAll(/^\| [1-9] \|/gm)];
+  const phases = [...plan.matchAll(/^\| [1-9]\s+\|/gm)];
+  expect(phases).toHaveLength(8);
   expect(phases.length).toBeLessThanOrEqual(8);
-  expect(specification.split('\n')).toHaveLength(225);
+  expect(specification).toContain('Each implementation landing slice is capped at eight files');
   for (const owner of [
     'Shared Query/List',
     'Shared listing-freshness',
@@ -146,14 +162,15 @@ test('the default profile migration preserves legacy state meanings in bounded p
 
 test('shared cursor key, anonymous, and account lifetimes are adopted without local policy', async () => {
   const cursor = specification.slice(
-    specification.indexOf('One shared opaque encrypted cursor'),
-    specification.indexOf('Growth acceptance'),
+    specification.indexOf('Keep the existing owner cursor envelope'),
+    specification.indexOf('## Cost'),
   );
-  expect(cursor).toContain('viewer: null');
-  expect(cursor).toContain('deterministic and timeless');
-  expect(cursor).toContain('shared 15-minute lifetime');
-  expect(cursor).toContain('Retirement of a cursor key invalidates tokens for both viewer kinds');
-  expect(cursor).toContain('without local cryptography or a local TTL');
+  expect(cursor).toContain('GET anonymous tokens remain');
+  expect(cursor).toContain('deterministic/timeless');
+  expect(cursor).toContain('account tokens keep fifteen-minute lifetime');
+  expect(cursor).toContain('codec, key ring');
+  expect(cursor).toContain('no schema,');
+  expect(cursor).toContain('cursor codec or common DTO change is selected here');
   expect(outcomes).toContain(
     'shared cursor lifetime and key retirement follow the common anonymous and account policy',
   );
@@ -161,17 +178,17 @@ test('shared cursor key, anonymous, and account lifetimes are adopted without lo
 });
 
 test('Web shelf uses the actual shared Collection page and never keeps a template fork', () => {
-  expect(specification).toContain("The Web shelf page is this page for the account's built-in dynamic Collection");
-  expect(specification).toContain('with no shelf template fork');
+  expect(specification).toContain('Web owner adapts the existing CollectionView surface');
+  expect(specification).toContain('Keep both addresses and avoid a template fork');
   expect(specification).toContain('Retire `/library/shelf` client/API/tests after the shared engine is live');
 });
 
 test('native growth acceptance measures first and deep pages with hidden candidates at each scale', () => {
-  expect(specification).toContain('native first and deep page plans at three account scales');
-  expect(specification).toContain('sparse catalogue filters, hidden subjects, filtered-empty intermediate pages');
+  expect(specification).toContain('real API/native first/deep/sparse pages at three geometric scales');
+  expect(specification).toContain('no chain of short/empty successful pages over raw nonmatches');
   expect(outcomes).toContain(
     'first and deep native pages stay bounded with sparse catalog filters and hidden candidates at three scales',
   );
   expect(driver).toContain('candidateIds: readonly string[]');
-  expect(driver).toContain('buffers: number');
+  expect(driver).toContain('allCost: Cost');
 });

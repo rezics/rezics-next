@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { costOf, isControlStatement } from '../services/kernel/test/support/growth-cost';
+import { countedSample, countedViolations, validateCountedRun } from '../services/kernel/test/support/growth-counters';
 import type {
   CollectionMembersPage,
   CollectionView,
   DynamicCollectionView,
   DynamicCollectionsDriver,
+  Measurement,
+  NativeWork,
+  PreparationMeasurement,
   Persona,
   ProfileName,
   SubjectFixture,
@@ -72,6 +77,156 @@ function queryPath(
 }
 async function members(collectionId: string, as: Persona = 'owner', input: Parameters<typeof queryPath>[1] = {}) {
   return json<CollectionMembersPage>(await get(as, queryPath(collectionId, input)));
+}
+
+// Filtered lists owns these numeric ceilings. They apply to this one-read page, never unrelated writes.
+function nativeCost(work: NativeWork, rowBudget: number, statementBudget: number) {
+  expect(work.sql.length).toBeGreaterThan(0);
+  expect(new Set(work.sql.map((pool) => pool.database)).size).toBe(work.sql.length);
+  let rows = 0,
+    blocks = 0,
+    statements = 0;
+  let requestBytes = work.engineRequestBytes,
+    responseBytes = work.engineResponseBytes;
+  for (const { capture, allCost } of work.sql) {
+    // Preserve all plans, including catalogue work the ordinary cost classifier separates. No invented free rows.
+    const plans = costOf({ statements: [], plans: capture.plans });
+    expect(allCost.rows).toBe(plans.rows);
+    expect(allCost.blocks).toBe(plans.blocks);
+    expect(allCost.statements).toBe(capture.statements.filter((sql) => !isControlStatement(sql)).length);
+    expect(capture.statementBackends).toHaveLength(capture.statements.length);
+    expect(capture.statementBackends!.every((backend) => backend !== undefined)).toBe(true);
+    expect(capture.planBackends).toHaveLength(capture.plans.length);
+    expect(new Set(capture.statementBackends).size).toBeLessThanOrEqual(1);
+    expect(capture.requestBytes).toHaveLength(capture.statements.length);
+    expect(capture.responseBytes).toHaveLength(capture.statements.length);
+    expect(allCost.requestBytes).toBe(capture.requestBytes!.reduce((sum, n) => sum + n, 0));
+    expect(allCost.responseBytes).toBe(capture.responseBytes!.reduce((sum, n) => sum + n, 0));
+    expect(allCost.statements).toBeLessThanOrEqual(statementBudget);
+    rows += allCost.rows;
+    blocks += allCost.blocks;
+    statements += allCost.statements;
+    requestBytes += allCost.requestBytes!;
+    responseBytes += allCost.responseBytes!;
+  }
+  expect(work.crossPartitionJoins).toBe(0);
+  expect(rows).toBeLessThanOrEqual(rowBudget);
+  return {
+    rows,
+    blocks,
+    statements,
+    requestBytes,
+    responseBytes,
+    connections: work.sql.length,
+    engineIteratorSteps: work.engineIteratorSteps,
+  };
+}
+
+function pageCost(sample: Measurement, slots: number) {
+  const c = sample.candidateIds.length;
+  const direct = sample.plan === 'direct owner index' || sample.plan === 'direct catalogue index';
+  expect(['direct owner index', 'direct catalogue index', 'prepared owner result', 'prepared public result']).toContain(
+    sample.plan,
+  );
+  expect(c).toBeLessThanOrEqual(direct ? Math.min(600, 6 * slots + 3) : 2 * slots + 2);
+  expect(sample.points).toBeLessThanOrEqual(16 + 8 * c);
+  expect(sample.rounds.length).toBeLessThanOrEqual(direct ? 3 : 0);
+  for (const round of sample.rounds) {
+    expect(round.remainingSlots).toBeGreaterThan(0);
+    expect(round.remainingSlots).toBeLessThanOrEqual(slots);
+    expect(round.requested).toBeLessThanOrEqual(2 * round.remainingSlots + 1);
+    expect(round.engineSearches).toBeLessThanOrEqual(2);
+    expect(round.ownerSeeks).toBeLessThanOrEqual(1);
+  }
+  expect(sample.engineSearches).toBeLessThanOrEqual(direct ? 6 : 0);
+  expect(sample.ownerSeeks).toBeLessThanOrEqual(direct ? 3 : 0);
+  expect(sample.engineSearches).toBe(sample.rounds.reduce((sum, round) => sum + round.engineSearches, 0));
+  expect(sample.ownerSeeks).toBe(sample.rounds.reduce((sum, round) => sum + round.ownerSeeks, 0));
+  expect(sample.resultIndexReads).toBeLessThanOrEqual(direct ? 0 : 2);
+  const cost = nativeCost(sample, 64 + 16 * c, 12);
+  expect(cost.blocks).toBeLessThanOrEqual(6 * (64 + 16 * c));
+  expect(cost.responseBytes).toBeLessThanOrEqual(16 * 1024 + 4 * 1024 * c);
+  expect(cost.requestBytes).toBeLessThanOrEqual(64 * 1024 + 1024 * c);
+  expect(sample.outputSlots).toBeLessThanOrEqual(slots);
+  return {
+    ...cost,
+    candidates: c,
+    points: sample.points,
+    indexReads: sample.ownerSeeks + sample.resultIndexReads,
+    engineSearches: sample.engineSearches,
+    outputSlots: sample.outputSlots,
+  };
+}
+
+async function settle() {
+  const builds = new Map<string, string[]>();
+  const steps = await driver.resumeAndSettle();
+  for (const step of steps) {
+    const input = step.candidateIds.length;
+    expect(input).toBeLessThanOrEqual(1000);
+    expect(step.resultRowsWritten).toBeLessThanOrEqual(1000);
+    expect(step.frontierWrites).toBeLessThanOrEqual(1);
+    expect(step.points).toBeLessThanOrEqual(8 * input);
+    expect(step.engineSearches).toBeLessThanOrEqual(4);
+    expect(nativeCost(step, 64 + 16 * input, 16).responseBytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    if (input > 0 && step.frontierWrites > 0) expect(step.frontierAfter).not.toBe(step.frontierBefore);
+    const keys = builds.get(step.buildId) ?? [];
+    keys.push(...step.candidateIds);
+    builds.set(step.buildId, keys);
+  }
+  // One pass per build plus at most one step's replay, with actual input identities retained as evidence.
+  for (const keys of builds.values()) expect(keys.length - new Set(keys).size).toBeLessThanOrEqual(1000);
+  return steps;
+}
+
+async function usefulPage(collectionId: string, as: Persona, input: Parameters<typeof queryPath>[1]) {
+  let preparation: readonly PreparationMeasurement[] = [];
+  let measured = await driver.measure(() => get(as, queryPath(collectionId, input)));
+  pageCost(measured, input?.limit ?? 100);
+  if (measured.value.status === 503) {
+    expect(measured.value.headers.get('retry-after')).toMatch(/^\d+$/);
+    expect(measured.value.headers.get('content-type')).toMatch(/^application\/problem\+json\b/);
+    const readiness = await json<{ code: string; status: number; retryable: boolean }>(measured.value.clone(), 503);
+    expect(['dependency_unavailable', 'index_not_ready', 'semantic_not_ready']).toContain(readiness.code);
+    expect(readiness).toMatchObject({ status: 503, retryable: true });
+    preparation = await settle(); // Actual default work, not a client enumeration loop; permanent 503 fails the next assertion.
+    measured = await driver.measure(() => get(as, queryPath(collectionId, input)));
+    pageCost(measured, input?.limit ?? 100);
+  }
+  const page = await json<CollectionMembersPage>(measured.value.clone());
+  expect(measured.outputSlots).toBe(page.members.length);
+  if (page.next !== null) expect(page.members).toHaveLength(input?.limit ?? 100);
+  expect(new Set(subjectIds(page)).size).toBe(page.members.length);
+  return { measured, page, preparation };
+}
+
+function pageGrowth(samples: readonly Measurement[], slots: number) {
+  const check = {
+    read: (value: unknown) => pageCost(value as Measurement, slots),
+    bounds: {
+      rows: 'constant',
+      blocks: 'logarithmic',
+      statements: 'constant',
+      requestBytes: 'constant',
+      responseBytes: 'constant',
+      engineIteratorSteps: 'logarithmic',
+      candidates: 'constant',
+      points: 'constant',
+      indexReads: 'constant',
+      engineSearches: 'constant',
+      connections: 'constant',
+      outputSlots: 'constant',
+    },
+  } as const;
+  expect(
+    countedViolations(
+      check,
+      samples.map((sample, index) => ({
+        scale: [64, 512, 4096][index]!,
+        counted: countedSample([validateCountedRun(check, check.read(sample), [64, 512, 4096][index]!)]),
+      })),
+    ),
+  ).toEqual([]);
 }
 async function allMembers(collectionId: string, as: Persona = 'owner', limit = 2, filter?: unknown) {
   const result: CollectionMembersPage['members'][number][] = [];
@@ -264,6 +419,23 @@ test('an empty owner has one private Everything identity and no state-set fanout
   expect(await allMembers(everything.id)).toEqual([]);
   const subject = await driver.provisionSubject('game');
   await okay(await driver.addLabel(subject.id, 'empty-account-profile-use'));
+  const labelOnly = await driver.inspect();
+  expect(labelOnly.facts.filter((fact) => fact.subjectId === subject.id).map((fact) => fact.kind)).toEqual(['label']);
+  expect(labelOnly.facts.find((fact) => fact.subjectId === subject.id)?.pin).toBeNull();
+  expect(subjectIds(await members(everything.id))).toEqual([subject.id]);
+  expect(
+    (await ownerCollections()).filter((item) => (item as Partial<DynamicCollectionView>).builtin?.kind === 'state'),
+  ).toEqual([]);
+  expect(await driver.inspect()).toEqual(labelOnly);
+  await okay(await driver.startProgressSession(subject.id));
+  expect(
+    (await driver.inspect()).facts.find((fact) => fact.subjectId === subject.id && fact.kind === 'session')?.pin,
+  ).toEqual({
+    provenance: 'profile',
+    releaseDigest: driver.profiles.game.releaseDigest,
+    acceptingType: driver.profiles.game.typeId,
+    profileId: driver.profiles.game.profileId,
+  });
   const after = await ownerCollections();
   expect(after.filter((item) => (item as Partial<DynamicCollectionView>).builtin?.kind === 'state')).toHaveLength(
     driver.profiles.game.states.length,
@@ -308,12 +480,29 @@ test('labels overlap optional state and retained sessions or holdings preserve E
   const subject = await subjectIn('recipe');
   const everything = await builtin({ kind: 'everything' });
   const stateView = await stateCollection('recipe');
+  expect((await driver.inspect()).collections.some((row) => row.id === stateView.id)).toBe(false);
   await okay(await driver.addLabel(subject.id, 'private-marker-7d41'));
   expect(subjectIds(await members(stateView.id))).toEqual([subject.id]);
   await okay(await driver.clearEntryState(subject.id));
-  expect(await members(stateView.id)).toMatchObject({ members: [] });
+  expect((await ownerCollections()).some((row) => row.id === stateView.id)).toBe(false);
+  expect(
+    (await driver.inspect()).facts.filter((fact) => fact.subjectId === subject.id).map((fact) => fact.kind),
+  ).toEqual(['label']);
+  await problem(await get('owner', `/v1/collections/${stateView.id}`), 404, 'not_found');
+  await problem(await get('owner', queryPath(stateView.id)), 404, 'not_found');
   expect(subjectIds(await members(everything.id))).toContain(subject.id);
   await okay(await driver.startProgressSession(subject.id));
+  expect(
+    (await driver.inspect()).facts.find((fact) => fact.subjectId === subject.id && fact.kind === 'session')?.pin,
+  ).toEqual({
+    provenance: 'profile',
+    releaseDigest: driver.profiles.recipe.releaseDigest,
+    acceptingType: driver.profiles.recipe.typeId,
+    profileId: driver.profiles.recipe.profileId,
+  });
+  expect((await stateCollection('recipe')).id).toBe(stateView.id);
+  expect(await members(stateView.id)).toEqual({ members: [], next: null });
+  expect((await driver.inspect()).collections.some((row) => row.id === stateView.id)).toBe(false);
   await okay(await driver.createHolding(subject.id));
   await okay(await driver.removeLabel(subject.id, 'private-marker-7d41'));
   expect(subjectIds(await members(everything.id))).toContain(subject.id);
@@ -355,7 +544,9 @@ test('curator authorization and viewer-native subject reads apply to dynamic mem
   expect(subjectIds(await members(view.id, 'owner'))).toContain(hidden.id);
   const unknown = await problem(await get('other', `/v1/collections/${driver.unknown.collectionId}`), 404, 'not_found');
   expect(await problem(await get('other', `/v1/collections/${view.id}`), 404, 'not_found')).toEqual(unknown);
-  expect(await problem(await get('suspended', `/v1/collections/${view.id}`), 401, 'invalid_credentials')).toBeDefined();
+  const suspended = await get('suspended', `/v1/collections/${view.id}`);
+  expect(await problem(suspended, 403, 'account_suspended')).toBeDefined();
+  expect(suspended.headers.get('www-authenticate')).toBeNull();
 
   const publicView = ((await (await setVisibility(view, 'public')).json()) as { collection: DynamicCollectionView })
     .collection;
@@ -432,16 +623,22 @@ test('public dynamic revocation withholds stale membership and older projection 
   expect((await driver.inspect()).publicMembership.filter((item) => item.collectionId === publicView.id)).toEqual([]);
 });
 
-test('bounded Collection filters advance opaque prefixes through hidden and filtered candidates without joins', async () => {
+test('bounded Collection filters return useful full or final pages after finite native preparation without cross-partition joins', async () => {
   const subjects: SubjectFixture[] = [];
   for (let index = 0; index < 9; index++) subjects.push(await subjectIn(index % 2 ? 'recipe' : 'game'));
   const everything = await builtin({ kind: 'everything' });
   const sparse = { type: { in: [driver.profiles.record.typeId] } };
-  const empty = await members(everything.id, 'owner', { limit: 1, filter: sparse });
-  expect(empty.members).toEqual([]);
-  expect(empty.next).toEqual(expect.any(String));
-  const next = await members(everything.id, 'owner', { limit: 1, filter: sparse, cursor: empty.next! });
-  expect(next.next).not.toBe(empty.next);
+  const empty = await usefulPage(everything.id, 'owner', { limit: 2, filter: sparse });
+  expect(empty.page).toEqual({ members: [], next: null });
+  const matches: SubjectFixture[] = [];
+  for (let index = 0; index < 3; index++) matches.push(await subjectIn('record'));
+  const first = await usefulPage(everything.id, 'owner', { limit: 2, filter: sparse });
+  expect(first.page.members).toHaveLength(2);
+  expect(first.page.next).toEqual(expect.any(String));
+  const final = await usefulPage(everything.id, 'owner', { limit: 2, filter: sparse, cursor: first.page.next! });
+  expect(final.page.members).toHaveLength(1);
+  expect(final.page.next).toBeNull();
+  expect([...subjectIds(first.page), ...subjectIds(final.page)]).toEqual(matches.map((subject) => subject.id).sort());
 
   const unsupported = await problem(
     await get(
@@ -454,11 +651,9 @@ test('bounded Collection filters advance opaque prefixes through hidden and filt
     'unsupported_query',
   );
   expect(unsupported).toBeDefined();
-  const measured = await driver.measure(() => get('owner', queryPath(everything.id, { limit: 10, filter: sparse })));
-  expect(measured.candidateIds.length).toBeLessThanOrEqual(40);
-  expect(measured.crossPartitionJoins).toBe(0);
-  expect(measured.rowsExamined).toBeLessThanOrEqual(8 * 10 + 32);
-  expect(measured.classifier).toBe('bounded-keyset');
+  const measured = await usefulPage(everything.id, 'owner', { limit: 10, filter: sparse });
+  expect(subjectIds(measured.page)).toEqual(matches.map((subject) => subject.id).sort());
+  expect(measured.page.next).toBeNull();
 });
 
 test('shared cursors bind viewer Collection sort size profile generation and keyset and reject tamper or expiry', async () => {
@@ -553,23 +748,19 @@ test('account deletion freezes adopted public subjects without waiting for consu
   expect(JSON.stringify(publicDto).toLowerCase()).not.toContain('predicate');
 });
 
-test('three-scale native page work stays within the candidate cap and shared growth classifier', async () => {
+test('three-scale native page work stays within admitted plan budgets and shared counted-unit growth bounds', async () => {
   const everything = await builtin({ kind: 'everything' });
   const sparse = { type: { in: [driver.profiles.record.typeId] } };
-  const samples = [];
-  for (const scale of [64, 512, 4096]) {
-    await driver.seedUnrelatedFacts(scale);
-    samples.push(await driver.measure(() => get('owner', queryPath(everything.id, { limit: 10, filter: sparse }))));
+  for (const axis of ['population', 'matches', 'sparse', 'history', 'owner-pools', 'aliases'] as const) {
+    const samples = [];
+    for (const scale of [64, 512, 4096]) {
+      await driver.seedUnrelatedFacts(scale, axis);
+      const { measured, page } = await usefulPage(everything.id, 'owner', { limit: 10, filter: sparse });
+      expect(page).toEqual({ members: [], next: null });
+      samples.push(measured);
+    }
+    pageGrowth(samples, 10);
   }
-  for (const sample of samples) {
-    expect(sample.candidateIds.length).toBeLessThanOrEqual(40);
-    expect(sample.rowsExamined).toBeLessThanOrEqual(112);
-    expect(sample.crossPartitionJoins).toBe(0);
-    expect(sample.classifier).toBe('bounded-keyset');
-  }
-  expect(new Set(samples.map((sample) => sample.statements)).size).toBe(1);
-  expect(new Set(samples.map((sample) => sample.rowsExamined)).size).toBe(1);
-  expect(samples[2]!.buffers - samples[0]!.buffers).toBeLessThanOrEqual(64);
 });
 
 test('retired profile facts can lazily resolve their old pinned state Collections', async () => {
@@ -701,6 +892,8 @@ test('first and deep native pages stay bounded with sparse catalog filters and h
     hiddenIds.push(hidden.id);
     await okay(await driver.setEntryState(hidden.id, driver.profiles.record.states[0]!.id));
   }
+  const visible: SubjectFixture[] = [];
+  for (let index = 0; index < 21; index++) visible.push(await subjectIn('record'));
   const everything = await builtin({ kind: 'everything' });
   const publicView = (
     await json<{ collection: DynamicCollectionView }>(
@@ -712,51 +905,48 @@ test('first and deep native pages stay bounded with sparse catalog filters and h
       }),
     )
   ).collection;
-  await driver.resumeAndSettle();
+  const prepared = await settle();
+  const examined = new Set(prepared.flatMap((step) => step.candidateIds));
   const sparse = { type: { in: [driver.profiles.record.typeId] } };
-  const pages = [];
-
-  for (const scale of [64, 512, 4096]) {
-    await driver.seedUnrelatedFacts(scale);
-    await driver.resumeAndSettle();
-    const first = await driver.measure(() =>
-      get(
-        'anonymous',
-        queryPath(publicView.id, {
-          limit: 10,
-          filter: sparse,
-        }),
-      ),
-    );
-    const firstPage = await json<CollectionMembersPage>(first.value.clone());
-    expect(firstPage.members).toEqual([]);
-    expect(firstPage.next).toEqual(expect.any(String));
-    const deep = await driver.measure(() =>
-      get(
-        'anonymous',
-        queryPath(publicView.id, {
-          limit: 10,
-          filter: sparse,
-          cursor: firstPage.next!,
-        }),
-      ),
-    );
-    expect((await json<CollectionMembersPage>(deep.value.clone())).members).toEqual([]);
-    pages.push(first, deep);
+  for (const axis of ['population', 'matches', 'sparse', 'history', 'owner-pools', 'aliases'] as const) {
+    const firstSamples = [],
+      deepSamples = [];
+    for (const scale of [64, 512, 4096]) {
+      await driver.seedUnrelatedFacts(scale, axis);
+      for (const step of await settle()) for (const id of step.candidateIds) examined.add(id);
+      const first = await usefulPage(publicView.id, 'anonymous', { limit: 10, filter: sparse });
+      expect(first.page.members).toHaveLength(10);
+      expect(first.page.next).toEqual(expect.any(String));
+      const deep = await usefulPage(publicView.id, 'anonymous', {
+        limit: 10,
+        filter: sparse,
+        cursor: first.page.next!,
+      });
+      expect(deep.page.members).toHaveLength(10);
+      expect(deep.page.next).toEqual(expect.any(String));
+      const final = await usefulPage(publicView.id, 'anonymous', {
+        limit: 10,
+        filter: sparse,
+        cursor: deep.page.next!,
+      });
+      for (const result of [first, deep, final]) {
+        for (const work of [result.measured, ...result.preparation])
+          for (const id of work.candidateIds) examined.add(id);
+      }
+      expect(final.page.members).toHaveLength(1);
+      expect(final.page.next).toBeNull();
+      const ids = [...subjectIds(first.page), ...subjectIds(deep.page), ...subjectIds(final.page)];
+      expect(ids).toEqual(visible.map((subject) => subject.id).sort());
+      expect(new Set(ids).size).toBe(21);
+      expect(ids.some((id) => hiddenIds.includes(id))).toBe(false);
+      firstSamples.push(first.measured);
+      deepSamples.push(deep.measured);
+    }
+    pageGrowth(firstSamples, 10);
+    pageGrowth(deepSamples, 10);
   }
-
-  for (const page of pages) {
-    expect(page.candidateIds.length).toBeLessThanOrEqual(40);
-    expect(page.candidateIds.some((id) => hiddenIds.includes(id))).toBe(true);
-    expect(page.rowsExamined).toBeLessThanOrEqual(112);
-    expect(page.crossPartitionJoins).toBe(0);
-    expect(page.classifier).toBe('bounded-keyset');
-  }
-  for (const offset of [0, 2, 4]) {
-    expect(pages[offset + 1]!.statements).toBe(pages[offset]!.statements);
-    expect(pages[offset + 1]!.rowsExamined).toBe(pages[offset]!.rowsExamined);
-  }
-  expect(pages[5]!.buffers - pages[0]!.buffers).toBeLessThanOrEqual(64);
+  // Ready rows may already exclude hidden inputs; their actual preparation work must remain charged and observable.
+  expect(hiddenIds.some((id) => examined.has(id))).toBe(true);
 });
 
 test('shared cursors bind Collection identity, the effective filter, and the admitted sort', async () => {
