@@ -109,7 +109,10 @@ function actor(viewer: Actor): viewer is AccountActor {
 }
 
 /** Live account authority for a private Collection. A token cached before suspension is not enough. */
-function grantCapable(account: Account, viewer: AccountActor): boolean {
+export function grantCapable(
+  account: Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>,
+  viewer: AccountActor,
+): boolean {
   const route = routeOf(viewer.accountId);
   return (
     route !== null &&

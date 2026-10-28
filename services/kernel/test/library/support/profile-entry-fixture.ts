@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import pg from 'pg';
+import pg, { type Pool } from 'pg';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
@@ -76,10 +76,10 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
-export async function createProfileEntryFixture(options: { clock?: KernelClock } = {}) {
+export async function createProfileEntryFixture(options: { clock?: KernelClock; pool?: Pool } = {}) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
+  const pool = options.pool ?? createPool(url);
   // Assertions cannot observe an uncommitted writer connection or mutate the fixture.
   const reader = new pg.Pool({ connectionString: url, max: 1, options: '-c default_transaction_read_only=on' });
   try {
@@ -372,11 +372,11 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock }
         await lifecycle.raiseFence({ accountId, key: entryKey() });
       },
       async close() {
-        await Promise.all([pool.end(), reader.end()]);
+        await Promise.all([...(options.pool ? [] : [pool.end()]), reader.end()]);
       },
     };
   } catch (error) {
-    await Promise.all([pool.end(), reader.end()]);
+    await Promise.all([...(options.pool ? [] : [pool.end()]), reader.end()]);
     throw error;
   }
 }
