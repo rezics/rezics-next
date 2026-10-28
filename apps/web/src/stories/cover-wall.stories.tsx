@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { sharedRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
-import { ProgressRow } from '@rezics/ui/progress-row';
 import { subjectHref } from '../subject/subject-href';
 
 type Tile = {
@@ -134,7 +133,8 @@ function Wall({ density }: { density?: CoverDensity }) {
             title={subject.title}
             cover={{ subject, cover: image ? imageFor(subject) : null, src: imageSrc }}
             secondary={creator}
-            state={progress ? <ProgressRow value={progress.value} label={progress.label} /> : state}
+            {...(progress ? { progress } : {})}
+            {...(!progress && state != null ? { state } : {})}
             menuLabel={`More actions for ${subject.title}`}
             menu={<DropdownMenuItem>Remove</DropdownMenuItem>}
           />

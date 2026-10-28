@@ -112,9 +112,9 @@ An image whose own ratio is within 15% of the frame fills it (`object-fit: cover
 
 ### Typographic placeholder
 
-The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id within the type's palette. It never shows a generic icon alone. Below 64 px a set title is unreadable, so the placeholder there shows the title's initials on the same background, and every surface that uses those sizes prints the subject's name beside the cover. Text stays legible against its background in both themes. The same subject always gets the same placeholder, on every surface.
+The placeholder is designed, not empty: the subject's title set in the Work title face, its principal creator or type label in the interface face, on a background chosen deterministically from the subject id alone. Its colour does not depend on the title, byline or type, so the same id always looks the same on every surface. It never shows a generic icon alone. Below 64 px a set title is unreadable, so a standalone cover represents it with its initials in the Work title face. A cover in a tile beside its visible title shows only the colour field; it does not repeat the title, byline or initials. Text stays legible against its background in both themes.
 
-A suitability-withheld cover shows its decoded ThumbHash blurred behind the label and the reveal button, and requests no image byte until the viewer reveals it. `placeholder.color` is painted first, and the ThumbHash (decoded with the `thumbhash` package) over it while the image loads; a contained image keeps the colour alone as its backdrop. The placeholder colour pair is fixed by the subject's id within a per-type palette (light text on a deep background, at least 5.5:1), so it holds in both themes and at every size. Without a byline the placeholder shows the title alone. The labels (`withheld`, `reveal`, `credit`, `via`) are English by default and the site passes translations in `labels`.
+A suitability-withheld cover shows its decoded ThumbHash blurred behind the label and the reveal button, and requests no image byte until the viewer reveals it. `placeholder.color` is painted first, and the ThumbHash (decoded with the `thumbhash` package) over it while the image loads; a contained image keeps the colour alone as its backdrop. The placeholder colour is derived only from the subject id, and its light text keeps at least 5.5:1 contrast in both themes and at every size. On a standalone cover, the placeholder shows the title and, when available, the byline. The labels (`withheld`, `reveal`, `credit`, `via`) are English by default and the site passes translations in `labels`.
 
 ### Sizes and loading
 
@@ -135,20 +135,25 @@ Import `CoverCard`, `CoverGrid` and `CoverRow` from `@rezics/ui/cover-card`.
 Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
 mode, relation, edition and character tiles) follows one pattern:
 
-- The cover fills the card's top edge to edge: no padding, inset, border or background frame around the cover. The
-  card is a light surface (hairline border or the faintest shadow, small radius) whose padding belongs only to the
-  text area below the cover. The reference is a mature reading app's shelf: at 1280 px about eight cards per row
-  with an 8 px gap, the cover across the full card width, then the title centered on at most two lines with an
-  ellipsis, then one progress row of the ⋯ menu on the left, a thin bar, and the percent right-aligned.
+- The cover fills the tile's top edge to edge, followed by the caption on the page background. The tile has no
+  background, outline, border or shadow, including on hover. Keyboard focus shows a visible ring around the whole
+  tile. `Cover` owns the one cover radius. The cover frame in a tile, each `CoverRow` or `CoverGrid` item and a
+  standalone `Cover` use that radius; the `CoverRow` rail uses it too, while `CoverCard` sets no radius of its own.
+  At 1280 px about eight tiles fit per row with an 8 px gap; the title is centered on at most two lines with an
+  ellipsis.
 - Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
   relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
-  the subject page.
+  the subject page. The placeholder in a tile shows only its colour field because the title is already visible.
 - Every cover in a grid or row has the frame ratio rules of [Cover](#cover), so covers align across the row and
   text starts at the same height.
 - The whole card is one link to the subject; a site passes its client-side router link as `link`. Actions on the item (change status, remove, add to collection) live
   in the card's ⋯ menu, never as a button or select on the card.
 - Grid columns follow the container width (two on a phone, more on wider screens), with the same gap between
   cards in both directions.
+
+A tile with progress takes `progress={{ value, label }}` and renders `ProgressRow` in its state line. A known fraction
+shows the bar and percentage on one line; unknown progress shows its position label without a bar. Pages do not build
+their own progress row inside a cover tile.
 
 ## Progress
 
@@ -158,6 +163,8 @@ Reading, watching or playing progress shows as one row: the item's ⋯ menu at t
 thin progress bar filling the remaining width, and the percentage after it in tabular figures. The bar and the
 number never sit on separate lines. Where a unit is meaningful the number may be the unit instead ("Ep 3/12",
 "p. 120/310"), with the same row layout. An item without known progress shows no bar rather than an empty one.
+`CoverCard` builds this row when given `progress={{ value, label }}`; `value` is a fraction from 0 to 1, or `null`
+when only the position label is known.
 
 ## Shelves
 

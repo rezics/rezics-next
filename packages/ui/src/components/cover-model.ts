@@ -148,14 +148,6 @@ export function objectPosition(types: readonly string[], focalPoint: CoverSummar
 
 /** Light text on every background, at least 5.5:1, so the placeholder reads the same in both themes. */
 const foreground = '#fbf8f3';
-const palettes: Record<Family, readonly string[]> = {
-  work: ['#6b4a33', '#2f5368', '#51406b', '#3c6046', '#7a3f3f', '#3a4a73'],
-  game: ['#27506b', '#5c3a73', '#2f6159', '#6b3a55', '#4a4f78', '#355e3b'],
-  music: ['#7a3b2e', '#2d4f73', '#5d4580', '#2d6153', '#6e5424', '#4a4a4a'],
-  recipe: ['#8a3f24', '#5e6420', '#2f6153', '#7a3b4d', '#6e5424', '#4a5a2e'],
-  person: ['#4f4a7a', '#6b4153', '#2f5f6b', '#5a5a2e', '#4f3b66', '#3d5c7a'],
-  other: ['#3f4f5f', '#4a5a3f', '#5a4a3f', '#3f5a58', '#5a3f4f', '#46467a'],
-};
 
 function hash(text: string): number {
   let value = 0x811c9dc5;
@@ -165,13 +157,40 @@ function hash(text: string): number {
   return value;
 }
 
-/** The placeholder colours of a subject: fixed by its id within its type's palette, the same on every surface. */
+function hex(value: number): string {
+  return Math.round(value * 255)
+    .toString(16)
+    .padStart(2, '0');
+}
+
+function placeholderColor(id: string): string {
+  const hue = (hash(id) % 360) / 60;
+  const saturation = 0.48;
+  const lightness = 0.24;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const secondary = chroma * (1 - Math.abs((hue % 2) - 1));
+  const offset = lightness - chroma / 2;
+  const [red, green, blue] =
+    hue < 1
+      ? [chroma, secondary, 0]
+      : hue < 2
+        ? [secondary, chroma, 0]
+        : hue < 3
+          ? [0, chroma, secondary]
+          : hue < 4
+            ? [0, secondary, chroma]
+            : hue < 5
+              ? [secondary, 0, chroma]
+              : [chroma, 0, secondary];
+  return `#${hex(red! + offset)}${hex(green! + offset)}${hex(blue! + offset)}`;
+}
+
+/** The placeholder colours of a subject: both are fixed by its id alone and stay the same on every surface. */
 export function placeholderColors(subject: Pick<CoverSubject, 'id' | 'types'>): {
   background: string;
   foreground: string;
 } {
-  const palette = palettes[coverFamily(subject.types)];
-  return { background: palette[hash(subject.id) % palette.length]!, foreground };
+  return { background: placeholderColor(subject.id), foreground };
 }
 
 /** The `sizes` attribute of a named size, so the browser picks the smallest sufficient variant. */

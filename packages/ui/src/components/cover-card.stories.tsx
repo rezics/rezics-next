@@ -5,7 +5,6 @@ import { DropdownMenuItem } from '../shadcn/dropdown-menu.tsx';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { sharedRatio } from './cover.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
-import { ProgressRow } from './progress-row.tsx';
 
 const subjects = [
   { id: 'book', title: 'A very long book title that continues over more than two lines', types: ['schema:Book'] },
@@ -23,7 +22,8 @@ const cards = () =>
       titleLang={index % 2 ? 'zh' : 'en'}
       cover={{ subject, cover: null, src: () => '' }}
       secondary={index < 2 ? 'A creator' : undefined}
-      state={index === 0 ? <ProgressRow value={0.42} label="42%" /> : index === 1 ? 'Reading' : undefined}
+      progress={index === 0 ? { value: 0.42, label: '42%' } : undefined}
+      state={index === 1 ? 'Reading' : undefined}
       menu={index === 0 ? <DropdownMenuItem>Remove</DropdownMenuItem> : undefined}
     />
   ));
@@ -49,10 +49,14 @@ export const Grid: Story = {
     container.style.width = '';
     const frames = articles.map((article) => article.querySelector('[data-slot=cover]')!.getBoundingClientRect());
     await expect(frames.every((frame) => Math.abs(frame.height - frames[0]!.height) < 1)).toBe(true);
-    await expect(getComputedStyle(articles[0]!).borderTopLeftRadius).toBe('3px');
+    const articleRadius = getComputedStyle(articles[0]!).borderTopLeftRadius;
     const frame = articles[0]!.querySelector('[data-slot=aspect-ratio]')!;
-    await expect(getComputedStyle(frame).borderTopLeftRadius).toBe('3px');
-    await expect(getComputedStyle(frame).borderBottomLeftRadius).toBe('0px');
+    const frameRadius = getComputedStyle(frame).borderTopLeftRadius;
+    await expect(articleRadius).toBe('0px');
+    await expect(frameRadius).not.toBe('0px');
+    await expect(getComputedStyle(frame).borderTopRightRadius).toBe(frameRadius);
+    await expect(getComputedStyle(frame).borderBottomLeftRadius).toBe(frameRadius);
+    await expect(getComputedStyle(frame).borderBottomRightRadius).toBe(frameRadius);
     const titleLink = within(articles[0]!).getByRole('link');
     for (const slot of ['cover', 'cover-card-secondary']) {
       const box = articles[0]!.querySelector(`[data-slot=${slot}]`)!.getBoundingClientRect();
@@ -84,6 +88,9 @@ export const Row: Story = {
     await expect(region).toHaveAttribute('tabindex', '0');
     region.style.width = '390px';
     const cards = region.querySelectorAll('article');
+    const rowRadius = getComputedStyle(region).borderTopLeftRadius;
+    const frameRadius = getComputedStyle(cards[0]!.querySelector('[data-slot=aspect-ratio]')!).borderTopLeftRadius;
+    await expect(rowRadius).toBe(frameRadius);
     const third = cards[2]!.getBoundingClientRect();
     await expect(region.getBoundingClientRect().right - third.left).toBeGreaterThan(third.width / 2);
     region.style.width = '';
@@ -104,7 +111,7 @@ export const Shelf: Story = {
               status={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">Reading</span>}
               badge={<span className="rounded bg-primary px-1 text-xs text-primary-foreground">2</span>}
               meta="Finished yesterday"
-              state={<ProgressRow value={0.42} label="42%" />}
+              progress={{ value: 0.42, label: '42%' }}
               selectable={index === 1}
               selected={index === 1}
               onSelectedChange={() => {}}

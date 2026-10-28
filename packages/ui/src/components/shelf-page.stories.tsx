@@ -3,7 +3,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
-import { ProgressRow } from './progress-row.tsx';
 import { ShelfTabs, ShelfToolbar, ShelfTypeChips } from './shelf-toolbar.tsx';
 
 const labels = {
@@ -56,7 +55,7 @@ function Page({ initial = 'all' }: { initial?: string }) {
         title={subject.title}
         cover={{ subject, cover: null, src: () => '' }}
         secondary="A. Reader"
-        state={<ProgressRow value={(index + 1) / 4} label={`${(index + 1) * 25}%`} />}
+        progress={{ value: (index + 1) / 4, label: `${(index + 1) * 25}%` }}
       />
     ));
   return (

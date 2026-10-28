@@ -37,6 +37,9 @@ export const coverLabels = {
 
 export type CoverLabels = { readonly [K in keyof typeof coverLabels]: string };
 
+/** The single corner radius used by every cover surface. */
+export const coverRadius = 'rounded-lg' as const;
+
 export interface CoverProps {
   subject: CoverSubject;
   /** The cover summary the kernel returned with the subject, or null when the reader may not see a cover. */
@@ -44,10 +47,14 @@ export interface CoverProps {
   size: CoverSize;
   /** The address of one variant, from the site's media route. `Cover` never builds addresses itself. */
   src: (media: string, format: CoverFormat, width: number) => string;
+  /** Additional classes for the ratio frame around the image. */
+  frameClassName?: string;
   /** A row's shared ratio; otherwise the ratio of the subject's type. */
   ratio?: CoverRatio;
   /** An empty text alternative, for a repeat next to the visible title. */
   decorative?: boolean;
+  /** Keep only the colour field when the visible title is already beside this cover. */
+  showPlaceholderText?: boolean;
   /** The page's own cover: eager, with high fetch priority. */
   priority?: boolean;
   /** The viewer's setting for covers withheld for suitability. */
@@ -72,8 +79,10 @@ export function Cover({
   cover,
   size,
   src,
+  frameClassName,
   ratio,
   decorative = false,
+  showPlaceholderText = true,
   priority = false,
   suitability = 'blur',
   caption = false,
@@ -123,10 +132,10 @@ export function Cover({
     >
       <AspectRatio
         ratio={ratioValue(frameRatio)}
-        className="@container overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/10"
+        className={cn('@container overflow-hidden bg-muted ring-1 ring-foreground/10', coverRadius, frameClassName)}
       >
         {state === 'placeholder' ? (
-          <Placeholder subject={subject} size={size} colors={colors} />
+          <Placeholder subject={subject} size={size} colors={colors} showText={showPlaceholderText} />
         ) : (
           <>
             <div className="absolute inset-0" style={{ backgroundColor: image!.placeholder.color }} />
@@ -227,18 +236,25 @@ function Thumbhash({ hash, blurred }: { hash: string; blurred: boolean }) {
 
 /**
  * The typographic placeholder: the title in the Work title face and the byline in the interface face, on the
- * subject's own colour. Below 64 px a set title is unreadable, so it shows the initials; a `fill` frame switches
- * on its own width.
+ * subject's own colour. A decorative repeat beside visible title text keeps only the colour field.
  */
 function Placeholder({
   subject,
   size,
   colors,
+  showText,
 }: {
   subject: CoverSubject;
   size: CoverSize;
   colors: { background: string; foreground: string };
+  showText: boolean;
 }) {
+  if (!showText) {
+    return (
+      <div className="absolute inset-0" style={{ backgroundColor: colors.background, color: colors.foreground }} />
+    );
+  }
+
   const letters = (
     <span
       className={cn(

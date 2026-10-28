@@ -1,7 +1,6 @@
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
-import { ProgressRow } from '@rezics/ui/progress-row';
 import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
@@ -41,12 +40,10 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         title={title}
         {...(lang ? { titleLang: lang } : {})}
         linkLabel={m.home_continue_label({ title }, options)}
-        state={
-          <ProgressRow
-            value={progress?.percent == null ? null : progress.percent / 100}
-            label={progress?.text ?? m.home_continue_in_progress({}, options)}
-          />
-        }
+        progress={{
+          value: progress?.percent == null ? null : progress.percent / 100,
+          label: progress?.text ?? m.home_continue_in_progress({}, options),
+        }}
         menuLabel={m.home_continue_actions({ title }, options)}
         menu={
           <DropdownMenuItem render={<a href={subjectHref({ id: entry.subjectId, label: title }, locale).href} />}>

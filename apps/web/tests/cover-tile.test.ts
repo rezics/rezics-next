@@ -7,7 +7,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CoverCard } from '@rezics/ui/cover-card';
 import { Cover, coverRatio, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
-import { ProgressRow } from '@rezics/ui/progress-row';
 
 const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: 'https://definitions-cover-test.invalid' };
 const app = join(import.meta.dir, '..');
@@ -121,14 +120,14 @@ function classOf(tag: string): string {
   return (tag.match(/\bclass="([^"]*)"/)?.[1] ?? '').replaceAll('&amp;', '&');
 }
 
-test('cover cards are one light surface with an edge-to-edge cover and padded text below', () => {
+test('cover cards have no surface and keep the edge-to-edge cover and padded text below', () => {
   const html = renderToStaticMarkup(
     createElement(CoverCard, {
       href: '/book-1',
       title: cover.subject.title,
       cover,
       secondary: 'A creator',
-      state: createElement(ProgressRow, { value: 0.35, label: '35%' }),
+      progress: { value: 0.35, label: '35%' },
       menuLabel: 'More actions',
       menu: createElement('span', null, 'Remove'),
     }),
@@ -140,19 +139,24 @@ test('cover cards are one light surface with an edge-to-edge cover and padded te
   const title = tagWith(html, 'data-slot="cover-card-title"');
   const secondary = tagWith(html, 'data-slot="cover-card-secondary"');
   const state = tagWith(html, 'data-slot="cover-card-state"');
+  const progress = tagWith(html, 'data-slot="progress-row"');
   const actions = tagWith(html, 'data-slot="cover-card-actions"');
-  expect(classOf(tile)).toContain('bg-white');
-  expect(classOf(tile)).toContain('dark:bg-white');
-  expect(classOf(tile)).toContain('outline-black/10');
-  expect(classOf(tile)).toContain('outline-1');
-  expect(classOf(tile)).toContain('rounded-sm');
+  expect(classOf(tile)).not.toMatch(
+    /(?:^|\s)(?:bg-[^\s]*|outline(?:-[^\s]*)?|border(?:-[^\s]*)?|shadow(?:-[^\s]*)?)(?:\s|$)/,
+  );
+  expect(classOf(tile)).toContain('focus-within:ring-2');
+  expect(classOf(tile)).not.toMatch(/(?:^|\s)rounded(?:-[^\s]+)?(?:\s|$)/);
   expect(classOf(tile)).not.toMatch(/(?:^|\s)p-[^\s]+/);
+  expect(classOf(text)).not.toMatch(
+    /(?:^|\s)(?:bg-[^\s]*|outline(?:-[^\s]*)?|border(?:-[^\s]*)?|shadow(?:-[^\s]*)?)(?:\s|$)/,
+  );
   expect(classOf(text)).toMatch(/(?:^|\s)p-2(?:\s|$)/);
-  expect(classOf(frame)).not.toMatch(/(?:^|\s)(?:bg-|border(?:-|\s)|p-[^\s]+)/);
-  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:rounded-t-sm');
-  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:border-0');
-  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:bg-transparent');
-  expect(classOf(frame)).toContain('[&_[data-slot=aspect-ratio]]:ring-0');
+  expect(classOf(frame)).not.toMatch(/(?:^|\s)(?:bg-[^\s]*|border(?:-[^\s]*)?|p-[^\s]+|rounded(?:-[^\s]+)?)(?:\s|$)/);
+  expect(classOf(aspect)).toContain('rounded-lg');
+  expect(classOf(aspect)).toContain('bg-transparent');
+  expect(classOf(aspect)).toContain('ring-0');
+  expect(classOf(aspect)).not.toContain('bg-muted');
+  expect(classOf(aspect)).not.toContain('ring-1');
   expect(frame).toContain('data-ratio="5:7"');
   expect(html.indexOf('data-slot="cover"')).toBeLessThan(html.indexOf('data-slot="cover-card-text"'));
   expect(classOf(title)).toContain('text-center');
@@ -160,7 +164,8 @@ test('cover cards are one light surface with an edge-to-edge cover and padded te
   expect(classOf(title)).toContain('text-xs');
   expect(classOf(secondary)).toContain('text-center');
   expect(classOf(secondary)).toContain('line-clamp-1');
-  expect(classOf(state)).toContain('items-center');
+  expect(classOf(state)).toContain('pt-0.5');
+  expect(classOf(progress)).toContain('flex');
   expect(html.indexOf('data-slot="cover-card-actions"')).toBeGreaterThan(html.indexOf('data-slot="cover-card-text"'));
   expect(html.indexOf('data-slot="cover-card-actions"')).toBeLessThan(html.indexOf('role="progressbar"'));
   expect(html.indexOf('role="progressbar"')).toBeLessThan(html.indexOf('>35%</span>'));

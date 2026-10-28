@@ -9,7 +9,8 @@ import {
 } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
-import { Cover, type CoverProps, type CoverRatio } from './cover.tsx';
+import { Cover, coverRadius, type CoverProps, type CoverRatio } from './cover.tsx';
+import { ProgressRow } from './progress-row.tsx';
 
 export type CoverDensity = 'small' | 'medium' | 'large';
 const DensityContext = createContext<CoverDensity | undefined>(undefined);
@@ -44,6 +45,8 @@ export interface CoverCardProps {
   linkLabel?: string;
   secondary?: ReactNode;
   state?: ReactNode;
+  /** Replaces `state` with the card's progress row; a null value keeps the position label without a bar. */
+  progress?: { value: number | null; label: string };
   menu?: ReactNode;
   /** A caller-managed trigger placed at the start of the state row. */
   menuTrigger?: ReactNode;
@@ -70,6 +73,7 @@ export function CoverCard({
   linkLabel,
   secondary,
   state,
+  progress,
   menu,
   menuTrigger,
   menuLabel,
@@ -89,19 +93,44 @@ export function CoverCard({
   const density = densityProp ?? contextDensity;
   const small = density === 'small';
   const Link = link ?? 'a';
+  const actions =
+    menu != null || menuTrigger != null ? (
+      <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
+        {menuTrigger ?? (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0"
+                  aria-label={menuLabel ?? `More actions for ${title}`}
+                />
+              }
+            >
+              <EllipsisIcon aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>{menu}</DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </span>
+    ) : null;
   return (
     <article
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className="group relative min-w-0 rounded-sm bg-white text-slate-900 outline outline-1 outline-black/10 shadow-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring [--radius:7px] dark:bg-white dark:text-slate-900"
+      className="group relative min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring"
     >
       <Cover
         {...cover}
         size="fill"
         {...(ratio ? { ratio } : {})}
         decorative
+        showPlaceholderText={false}
+        frameClassName="bg-transparent ring-0"
         caption={false}
-        className="w-full [&_[data-slot=aspect-ratio]]:rounded-none [&_[data-slot=aspect-ratio]]:rounded-t-sm [&_[data-slot=aspect-ratio]]:border-0 [&_[data-slot=aspect-ratio]]:bg-transparent [&_[data-slot=aspect-ratio]]:ring-0 [&_button:not(.absolute)]:relative [&_button]:z-10"
+        className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
       />
       {selectable ? (
         <button
@@ -176,40 +205,25 @@ export function CoverCard({
         {(meta ?? secondary) != null && (
           <div
             data-slot="cover-card-secondary"
-            className="line-clamp-1 text-center text-[11px] leading-4 text-slate-600 dark:text-slate-600"
+            className="line-clamp-1 text-center text-[11px] leading-4 text-muted-foreground"
           >
             {meta ?? secondary}
           </div>
         )}
-        {(state != null || menu != null || menuTrigger != null) && (
-          <div
-            data-slot="cover-card-state"
-            className="flex min-w-0 items-center gap-1 pt-0.5 text-xs text-slate-600 dark:text-slate-600"
-          >
-            {(menu != null || menuTrigger != null) && (
-              <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
-                {menuTrigger ?? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          className="shrink-0"
-                          aria-label={menuLabel ?? `More actions for ${title}`}
-                        />
-                      }
-                    >
-                      <EllipsisIcon aria-hidden />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>{menu}</DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </span>
-            )}
-            {state != null && <div className="min-w-0 flex-1">{state}</div>}
+        {progress != null ? (
+          <div data-slot="cover-card-state" className="min-w-0 pt-0.5 text-xs text-muted-foreground">
+            <ProgressRow value={progress.value} label={progress.label} menu={actions} />
           </div>
+        ) : (
+          (state != null || actions != null) && (
+            <div
+              data-slot="cover-card-state"
+              className="flex min-w-0 items-center gap-1 pt-0.5 text-xs text-muted-foreground"
+            >
+              {actions}
+              {state != null && <div className="min-w-0 flex-1">{state}</div>}
+            </div>
+          )
         )}
       </div>
     </article>
@@ -254,7 +268,7 @@ export function CoverRow({ ratio, label, children }: { ratio: CoverRatio; label:
         aria-label={label}
         tabIndex={0}
         data-slot="cover-row"
-        className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-ring [&>*]:w-[7.5rem] [&>*]:shrink-0 [&>*]:snap-start"
+        className={`flex snap-x snap-mandatory gap-2 overflow-x-auto ${coverRadius} focus-visible:outline-2 focus-visible:outline-ring [&>*]:w-[7.5rem] [&>*]:shrink-0 [&>*]:snap-start`}
       >
         {children}
       </div>

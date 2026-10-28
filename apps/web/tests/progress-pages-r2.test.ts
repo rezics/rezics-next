@@ -153,8 +153,11 @@ test('the signed-in home story renders one Continue card for every recorded acti
 
   const continueCard = await source('../src/library/continue.tsx');
   const fake = await source('../src/kernel/fake.ts');
-  expect(continueCard).toContain('ProgressRow');
-  expect(continueCard).toContain('label={progress?.text');
+  expect(continueCard).toContain('<CoverCard');
+  expect(continueCard).toContain('progress={{');
+  expect(continueCard).not.toContain('ProgressRow');
+  expect(continueCard).toContain('value: progress?.percent == null ? null : progress.percent / 100');
+  expect(continueCard).toContain('label: progress?.text');
   expect(fake).toContain("'library-continue-entries'");
   expect(fake).toContain("'library-continue-progress-sessions'");
 });
