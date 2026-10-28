@@ -30,7 +30,7 @@ Otherwise both groups use the original hosts file. Admission still checks actual
 Once a host answers, a busy run queues. Later probe silence does not send it back locally.
 With no answering host, it runs locally under the stack lease and explains placement on stderr.
 A run already under `/srv/rezics-check/runs/` executes there without another placement.
-The caller's environment is not copied to the host; callers must pass required values in the command.
+The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. Each run has a 3-hour default deadline, configurable with `--max-ms <n>`; expiration stops the run slice, prints the deadline and exits with code 124.
 
 Runs that keep files stay local unless they declare workspace-relative return paths.
 A person can also choose `REZICS_STACK_REMOTE=off` or inherit `REZICS_STACK_SLOT` to stay local.
@@ -91,7 +91,7 @@ One slot is express capacity. Only a non-gate, one-slot run with an explicit est
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.
 Long and unestimated runs cannot take express. Estimates classify runs; they do not stop overruns.
 With memory headroom, express lets short work proceed while ordinary work is full.
-There is no FIFO queue or enforced 120-second deadline for remote runs.
+There is no FIFO queue or enforced 120-second deadline for remote runs; `--estimate-ms` classifies slot eligibility only.
 
 A waiting gate holds a host's `gate-wait.lock` over SSH. While that marker is held, non-gates may occupy
 at most `O - G` ordinary slots (one when `O` is positive). Short runs may still take express.

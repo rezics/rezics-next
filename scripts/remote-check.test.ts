@@ -978,6 +978,28 @@ test('an unreadable check slice memory limit falls back to MemAvailable', async 
   expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
 });
 
+test('remote admission stops stale liveness slices but preserves fresh runs and removes empty slices', async () => {
+  const { env, events } = scenario({ a: { available: 8e9 } });
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+  const admission = events().find((event) => event.kind === 'slot')!.script as string;
+  expect(admission).toContain('age="$((now - touched))"');
+  expect(admission).toContain('[ "$age" -gt 600 ]');
+  expect(admission).toContain('systemctl stop "$run_slice"');
+  expect(admission).toContain('remote-check: stopped stale run');
+  expect(admission).toContain('TasksCurrent');
+  expect(admission).toContain('[ "$tasks" = 0 ]');
+  const run = events().find((event) => event.kind === 'run')!.script as string;
+  expect(run).toContain('.alive');
+});
+
+test('a run that reaches its deadline stops its slice and returns a distinct deadline code', async () => {
+  const { env } = scenario({ a: { available: 8e9, hang: true } });
+  const result = await remote(env, workspace(), ['true'], ['--max-ms', '25']);
+  expect(result.code).toBe(124);
+  expect(result.stderr).toContain('remote-check: deadline reached after 25 ms');
+});
+
 test("the remote run's output streams back and its exit code becomes the local exit code", async () => {
   const { env, events } = scenario({
     a: { available: 8e9, exit: 7, stdout: 'remote says hello', stderr: 'remote complains' },

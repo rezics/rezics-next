@@ -16,7 +16,7 @@
 // order. A waiting multi-slot run starts once the runs that held its slots when it began waiting have ended and the
 // waiters ahead of it have started, when no gate is waiting there.
 //
-//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--gate] <workspace> -- <command...>
+//   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
 // The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
@@ -44,6 +44,9 @@ export type RemoteCheck = {
   command: string[];
   slots?: number;
   estimateMs?: number;
+  maxMs?: number;
+  /** Test seam for the client heartbeat cadence. */
+  livenessIntervalMs?: number;
   /** Allows the promotion gate to use all but one slot of its host. */
   gate?: boolean;
   pollMs?: number;
@@ -65,6 +68,9 @@ export const ROOT = '/srv/rezics-check';
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
+export const REMOTE_DEADLINE_EXIT = 124;
+const DEFAULT_MAX_MS = 3 * 60 * 60 * 1000;
+const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
@@ -141,6 +147,12 @@ export class RemoteTransportError extends Error {
 export function validateEstimateMs(estimateMs: number | undefined): void {
   if (estimateMs !== undefined && (!Number.isSafeInteger(estimateMs) || estimateMs < 0)) {
     throw new Error(`--estimate-ms must be a non-negative safe integer, received ${estimateMs}`);
+  }
+}
+
+function validateMaxMs(maxMs: number | undefined): void {
+  if (maxMs !== undefined && (!Number.isSafeInteger(maxMs) || maxMs < 1)) {
+    throw new Error(`--max-ms must be a positive safe integer, received ${maxMs}`);
   }
 }
 
@@ -462,6 +474,32 @@ elif [ ${gate ? 1 : 0} -eq 0 ] && [ "$multi_waiting_slots" -gt 0 ]; then
   fi
 fi`;
   return `mkdir -p ${ROOT}/slots ${ROOT}/runs
+# Stop runs abandoned by a dead client before taking any slot.
+now=$(date +%s)
+for run in ${ROOT}/runs/*; do
+  [ -d "$run" ] || continue
+  alive="$run/.alive"
+  if [ -f "$alive" ]; then
+    touched=$(stat -c %Y "$alive" 2>/dev/null || echo "$now")
+    age=$((now - touched))
+    if [ "$age" -gt 600 ]; then
+      run_id=\${run##*/}
+      run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+      systemctl stop "$run_slice" >/dev/null 2>&1 || true
+      echo "remote-check: stopped stale run $run_id (alive file age $age s)" >&2
+      rm -rf -- "$run"
+    fi
+  elif [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
+    run_id=\${run##*/}
+    run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+    run_directory=$run
+    ${cleanupCommands()}
+  fi
+done
+for unit in $(systemctl list-units --all --type=slice --plain --no-legend 'rezics-check-*.slice' 2>/dev/null | awk '{print $1}'); do
+  tasks=$(systemctl show --property=TasksCurrent --value "$unit" 2>/dev/null || echo 1)
+  if [ "$tasks" = 0 ]; then systemctl stop "$unit" >/dev/null 2>&1 || true; fi
+done
 REMOTE_CHECK_SLOT_TAKE=1
 # REMOTE_CHECK_SLOT_COUNT ${count}
 # REMOTE_CHECK_ORDINARY_COUNT ${ordinaryCapacity}
@@ -488,15 +526,6 @@ flock -u 8
 exec 8>&-
 flock -u 6
 exec 6>&-
-for run in ${ROOT}/runs/*; do
-  [ -d "$run" ] || continue
-  if [ -n "$(find "$run" -maxdepth 0 -mmin +60)" ] && ! systemctl is-active --quiet "rezics-check-\${run##*/}.scope"; then
-    run_id=\${run##*/}
-    run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
-    run_directory=$run
-    ${cleanupCommands()}
-  fi
-done
 mkdir -p ${ROOT}/bases
 exec 9>"${ROOT}/bases/.lock"
 flock -x 9
@@ -573,6 +602,7 @@ mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && 
 ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 cd ${directory} || exit 1
+touch ${quote(`${directory}/.alive`)}
 exec systemd-run --scope --quiet --collect --slice=${runSlice(id)} --unit=rezics-check-${id} \\
   sh -c ${quote(systemdScript)} sh ${[cwd, ...command].map(quote).join(' ')}`;
 }
@@ -582,6 +612,14 @@ function cleanupScript(id: string, directory: string): string {
 run_slice=${runSlice(id)}
 run_directory=${quote(directory)}
 ${cleanupCommands()}`;
+}
+
+function heartbeatScript(directory: string): string {
+  return `touch ${quote(`${directory}/.alive`)}`;
+}
+
+function stopRunScript(id: string): string {
+  return `systemctl stop ${quote(runSlice(id))} >/dev/null 2>&1 || true`;
 }
 
 /** Serializes stale-base cleanup and reports the immutable current base used by this upload. */
@@ -1491,8 +1529,43 @@ async function runLeased(
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
-    let code = await finished(run, signal);
+    const maxMs = options.maxMs ?? DEFAULT_MAX_MS;
+    const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
+    let heartbeatStopped = false;
+    const heartbeat = setInterval(() => {
+      if (!heartbeatStopped) {
+        const renew = Bun.spawn(['ssh', ...sshOptions(host), host.address, heartbeatScript(directory)], {
+          stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+        });
+      }
+    }, heartbeatMs);
+    let deadline = false;
+    const commandResult = finished(run, signal);
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadlineResult = new Promise<null>((resolve) => {
+      deadlineTimer = setTimeout(() => resolve(null), maxMs);
+    });
+    let code: number;
+    try {
+      const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
+      if (completed === null) {
+        deadline = true;
+        console.error(`remote-check: deadline reached after ${maxMs} ms`);
+        const stop = Bun.spawn(['ssh', ...sshOptions(host), host.address, stopRunScript(id)], {
+          stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+        });
+        await within(15_000, stop.exited);
+        run.kill('SIGTERM');
+        await run.exited;
+        code = REMOTE_DEADLINE_EXIT;
+      } else code = completed;
+    } finally {
+      heartbeatStopped = true;
+      clearInterval(heartbeat);
+      if (deadlineTimer) clearTimeout(deadlineTimer);
+    }
     if (signal.aborted) throw new Aborted();
+    if (deadline) return REMOTE_DEADLINE_EXIT;
     if (code === 255) {
       const status = Bun.spawn(['ssh', ...sshOptions(host), host.address, statusScript(directory)], {
         stdin: 'ignore',
@@ -1664,6 +1737,7 @@ function parse(argv: string[]): RemoteCheck {
   let cwd: string | undefined;
   let slots: number | undefined;
   let estimateMs: number | undefined;
+  let maxMs: number | undefined;
   let gate = false;
   let returns: string[] | undefined;
   const rest = [...argv];
@@ -1678,6 +1752,13 @@ function parse(argv: string[]): RemoteCheck {
     }
     if (flag === '--gate') {
       gate = true;
+      continue;
+    }
+    if (flag === '--max-ms') {
+      const value = rest.shift();
+      if (value === undefined) throw new Error('--max-ms must be a positive safe integer, received no value');
+      maxMs = Number(value);
+      validateMaxMs(maxMs);
       continue;
     }
     if (flag === '--estimate-ms') {
@@ -1712,6 +1793,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(cwd === undefined ? {} : { cwd }),
     ...(slots === undefined ? {} : { slots }),
     ...(estimateMs === undefined ? {} : { estimateMs }),
+    ...(maxMs === undefined ? {} : { maxMs }),
     ...(gate ? { gate } : {}),
     ...(returns === undefined ? {} : { returns }),
     ...(pollMs === undefined ? {} : { pollMs }),
