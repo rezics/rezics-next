@@ -24,7 +24,7 @@ export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox']);
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(
   argv: string[],
-  factory: () => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
+  factory: (options?: { trainMode: 'detached' | 'inline' }) => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
 ): Promise<number> {
   const [command, ...args] = argv;
   if (!command || !commands.includes(command)) {
@@ -34,9 +34,9 @@ export async function run(
   let runtime: Runtime | IntegrationRuntime | undefined;
   // Only the train itself and land drain the train in this process; everything else, the host included, hands it
   // off, so a promotion never holds a command or the manager socket.
-  if (!['land', 'train'].includes(command)) process.env.GOAL_TRAIN_MODE = 'detached';
+  const trainMode = ['land', 'train'].includes(command) ? 'inline' : 'detached';
   try {
-    runtime = await factory();
+    runtime = await factory({ trainMode });
     // A command settles only orphans whose worker has exited; the host adopts the ones still running. The train and
     // the inbox leave that to the host's sweep: every settle spawns a train, and each spawned train swept the whole
     // store before finding the train lease held, so dozens swept at once (load 146 on 2026-10-28).

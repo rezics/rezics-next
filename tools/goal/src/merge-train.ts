@@ -1471,18 +1471,51 @@ export class MergeTrain {
           stage = 'gate';
           appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
           let checked = await runIntegrationChecks(CONTROL_PLANE_CHECKS, trainTree, logPath, runGate);
-          // The suite runs on the train's host beside every worker, and a timing test can fail under that load: two
-          // landings of one task failed on two different tests that pass alone. As the kernel check does, failing
-          // test files rerun alone once, and the check passes only if they pass alone.
+          // Suite failures are compared per test file against the landing's base. A suite-only failure that passes
+          // alone is load-sensitive; a failure also present on base does not block an unrelated landing.
           const suite = CONTROL_PLANE_CHECKS.at(-1)!;
           if (!checked.passed && !checked.timedOut && JSON.stringify(checked.failedCommand) === JSON.stringify(suite)) {
             const files = failingTestFiles(checked.output);
             if (files.length) {
+              const command = ['bun', 'test', ...files];
               appendFileSync(logPath, `Rerunning failed control-plane test files alone: ${files.join(' ')}\n`);
-              const alone = await runIntegrationChecks([['bun', 'test', ...files]], trainTree, logPath, runGate);
-              if (alone.passed) {
+              const branchAlone = await runIntegrationChecks([command], trainTree, logPath, runGate);
+              if (branchAlone.passed) {
                 appendFileSync(logPath, 'Load-sensitive control-plane tests passed alone\n');
-                checked = alone;
+                checked = branchAlone;
+              } else {
+                const baselineTree = resolve(o.worktreeRoot, `control-plane-base-${randomUUID()}`);
+                git(o.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+                try {
+                  appendFileSync(logPath, `Rerunning failed control-plane test files alone on base ${base}\n`);
+                  const installed = await runIntegrationChecks(
+                    [
+                      ['bun', 'install', '--frozen-lockfile'],
+                      ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
+                    ],
+                    baselineTree,
+                    logPath,
+                    runGate,
+                  );
+                  const baseline = installed.passed
+                    ? await runIntegrationChecks([command], baselineTree, logPath, runGate)
+                    : installed;
+                  if (baseline.passed) {
+                    appendFileSync(logPath, 'Control-plane test failures are new on this branch\n');
+                    checked = branchAlone;
+                  } else {
+                    const baseFailures = new Set(failingTestFiles(baseline.output));
+                    const newFailures = failingTestFiles(branchAlone.output).filter((file) => !baseFailures.has(file));
+                    if (newFailures.length) {
+                      checked = { ...branchAlone, output: `Failures introduced on this branch:\n${newFailures.join('\n')}\n${branchAlone.output}` };
+                    } else {
+                      appendFileSync(logPath, 'Control-plane test failures also occur on base; allowing landing\n');
+                      checked = { ...branchAlone, passed: true };
+                    }
+                  }
+                } finally {
+                  git(o.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+                }
               }
             }
           }
