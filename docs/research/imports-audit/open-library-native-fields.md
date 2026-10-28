@@ -25,7 +25,8 @@ revision, modification timestamp and complete JSON. It runs the actual reader, c
 against isolated migrated databases with real Auth-issued credentials and Access. It reuses
 `openApiRuntime` and `openApiObserver`; SQL is observation only. The fixed input has two works,
 two editions and one cover. Existing record/page/media-job bounds remain active. The runtime's temporary
-SQLite uses the existing temporary-directory mechanism; no timeout or resource configuration is changed.
+SQLite uses the existing temporary-directory mechanism with `TMPDIR=/dev/shm` during runtime creation,
+restoring the caller's environment afterwards. The existing timeout and native job bounds are unchanged.
 
 ## Frozen outcomes
 
@@ -33,7 +34,8 @@ SQLite uses the existing temporary-directory mechanism; no timeout or resource c
   establish four distinct identities: two `schema:Book` works and two `bf:Instance` editions. No author
   Person is created. The fixture keys identify records; titles and labels never resolve identity.
 - Valid ISBN-10 becomes ISBN-13, hyphenated and duplicate ISBN inputs produce one edition fact, and
-  ISBN inputs on a work produce no ISBN fact. Invalid ISBN-10 and ISBN-13 checksums reject the native
+  ISBN inputs on a work produce no ISBN fact. One edition supplies only ISBN-10, independently
+  establishing the converted ISBN-13 effect. Invalid ISBN-10 and ISBN-13 checksums reject the native
   dump without public writes or additional effects. Publication retains May 1980 with month precision.
 - Every returned candidate cites its source URL, P648 identifier, native revision and day-precision
   modification date. Unknown supplied authors remain explicit `somevalue` with their P648 qualifier.
@@ -50,7 +52,8 @@ SQLite uses the existing temporary-directory mechanism; no timeout or resource c
   rights-holder/via-Open-Library credit with `LicenseRef-unknown` image licence. Public image values
   use the returned media UUID. Public download authorization returns actual stored variant bytes.
 - The editor accepts and adopts the returned candidate IDs in Global before anonymous subject and
-  page assertions. The page embeds the same selected statements. Restart and identical reimport
+  page assertions. Bounded deliveries of the production links relay project those actual editor events.
+  The page embeds the same selected statements. Restart and identical reimport
   preserve subject/candidate IDs, receipts/revisions/effect totals and media job/request totals.
 
 ## Decisions and limits
@@ -58,41 +61,50 @@ SQLite uses the existing temporary-directory mechanism; no timeout or resource c
 The shared native runtime has no `identifierLookup` adapter. A reference to a work already imported
 therefore remains the documented `somevalue` plus P648 qualifier. The test preserves that actual
 contract instead of inventing a resolution endpoint, new property or author adapter. Later binding
-of unresolved references belongs to separate acceptance.
+of unresolved references belongs to separate acceptance. The frozen driver type describes only
+`value`; exact `somevalue` wire assertions use `unknown` without changing that driver.
 
 The existing observer's convenience adoption helper can create a manual candidate and selects by
 value; this case instead calls the real editor APIs with the retrieved IDs. It selects Global because
 the public page reads Global. Grants use the ordinary governance API and actual account credential.
+The editor is provisioned as `trusted` through `accounts/:id:setRateTier` with the existing
+governance management credential (including `account:set_rate_tier`): this fixed accept/adopt session exceeds the new-account thirty-write budget.
+The normal trusted budget remains active; no limiter override, clock advance or synthetic actor is used.
 
 Source metadata is observed in actual conversion output only. General source-record metadata
 persistence/read remains pending; no new write ABI or successful persistence claim is introduced.
 This is a fixed native-field outcome case, not a discovery filter matrix, growth proof, live provider
 test or visual browser acceptance. The existing import-to-discovery specification owns those filters.
 Object storage and source HTTP are the existing external boundary fixtures, not live R2/upstream access.
+The cover's source bytes are registered before importing its URL; observing a source after import cannot
+provide bytes to an earlier job. The runtime launches a media worker, so this case also delivers the
+production semantic links relay for each selected subject partition (at most sixteen batches). These
+are actual outbox deliveries, not seeded projection rows or fabricated media success.
 
 ## Verification
 
-Commands ran from the assigned worktree root through `bun scripts/worker-check.ts --`:
+Final commands ran from the assigned worktree root through `bun scripts/worker-check.ts --`:
 
 - `bun run --cwd services/kernel check test/imports/open-library-native-fields.test.ts`:
-  **exit 1**. After compilation succeeded, the native case timed out at 300,000 ms. The check runner
-  automatically retried the same file alone; that run also timed out at 300,000 ms. Its log contains
-  no reached outcome assertion failure, so none of the frozen outcomes above is claimed proved by
-  this execution. No timeout was increased, test skipped or product/helper behavior changed.
-  Log: `.temp/goal/checks/worker-check-2026-10-28T19-03-16.910Z-130d981b.log`.
+  **exit 0**, **1 pass, 0 fail, 541 assertions**, with no automatic isolated rerun. The native case
+  completed in 15.2 seconds; the complete test process took 45.2 seconds. The frozen outcomes above
+  are established through actual API responses, receipts, native storage and public projections.
+  Log: `.temp/goal/checks/worker-check-2026-10-28T20-12-31.022Z-6e5a73cb.log`.
 - `bun run typecheck`: **exit 0**, including the kernel workspace.
-  Log: `.temp/goal/checks/worker-check-2026-10-28T19-03-53.672Z-30517a4a.log`.
+  Log: `.temp/goal/checks/worker-check-2026-10-28T20-12-31.022Z-e41dae3a.log`.
 
-The first compilation attempt exposed an existing driver type limitation: its `Statement.value`
-type describes only `value`, although the documented real wire contract includes `somevalue`.
-The new test compares these two actual wire values as `unknown`, retaining exact equality to
-`{ type: 'somevalue' }`; the frozen driver is unchanged. Both final commands above include that
-correction. The earlier compilation-only failures are recorded in
-`.temp/goal/checks/worker-check-2026-10-28T18-56-58.872Z-ad129e96.log` and
-`.temp/goal/checks/worker-check-2026-10-28T18-58-58.390Z-68b28996.log`.
+The report-presence acceptance is `test -s docs/research/imports-audit/open-library-native-fields.md`,
+run through the same wrapper after finalizing this report.
 
-The native execution remains unverified because of the repeated timeout. The evidence does not
-establish whether the timeout also occurs on the base revision, nor which runtime phase stalled;
-it is not evidence of an ISBN, relation, licence or media outcome defect. The report-presence
-acceptance is checked separately. No full root or kernel gate ran. No files outside the two
-declared paths are changed.
+Retry diagnostics exposed fixture setup gaps: source HTTP bytes were registered after the import,
+selected relations had no links relay delivery, and the editor exceeded the new-account write budget.
+The corrections register source bytes before importing, deliver the production relay, and provision
+`trusted` through the actual management credential. `member` is a derived rate class, not a settable
+tier; the API rejected it, and the narrower importer-scoped governance credential was also refused.
+Compilation-only failures were corrected with the runtime-compatible UUID generator and an explicit
+relay `read` status guard. Frozen driver/result types, outcome assertions and the 300,000 ms timeout
+were preserved. The ISBN-10-only edition strengthens the conversion evidence.
+
+No full root or kernel gate ran. No files outside the two declared paths are changed. Read source
+references are listed above. General source-record metadata persistence/read, late reference binding,
+discovery filtering, live upstream availability and browser rendering remain outside this case.

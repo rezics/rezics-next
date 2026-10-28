@@ -1,13 +1,16 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { converter_revision } from '../../../../packages/conversion/src/open-library.ts';
 import type { Dump, Proposal } from '../../../../specs/imports-api-driver.ts';
 import type { Subject } from '../../../../specs/semantic-driver.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { processImage } from '../../src/content/image-job.ts';
 import { processImportedMedia } from '../../src/content/media-import-job.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
+import { identitySupport } from './identity-fixture.ts';
 
 type NativeRecord = {
   type: { key: string };
@@ -44,14 +47,36 @@ const calendar = 'http://www.wikidata.org/entity/Q1985727';
 const date = (time: string, precision: number) => ({ time, precision, calendarmodel: calendar });
 
 test('Open Library native book edition ISBN rights and cover fields survive real API selection and storage', async () => {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+  // Keep the importer's fixed SQLite journal on the check host's tmpfs.
+  const previousTemporaryDirectory = process.env.TMPDIR;
+  const runtime = await (async () => {
+    process.env.TMPDIR = '/dev/shm';
+    try {
+      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+    } finally {
+      if (previousTemporaryDirectory === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previousTemporaryDirectory;
+    }
+  })();
   try {
+    // This fixed editorial session exceeds the new-account 30-write budget.
+    // Provision a trusted editor through governance, retaining native limits.
+    const tierKey = randomUUID();
+    const editorTier = await runtime.request(
+      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+      { key: tierKey, tier: 'trusted' },
+      identitySupport(runtime.identity).managementBearer,
+      tierKey,
+    );
+    expect(editorTier.status, await editorTier.text()).toBe(200);
     const observer = await openApiObserver(runtime);
     const work = await fixture('work'),
       edition = await fixture('edition');
     // Crossed source presence proves neither direction copies authors automatically.
     const noAuthorWork = { ...work, key: '/works/OL900000003W', authors: [], covers: [] };
     const noAuthorEdition = { ...edition, key: '/books/OL900000004M', authors: [] };
+    // This edition has no ISBN-13 input: its public fact must come from ISBN-10.
+    noAuthorEdition.isbn_13 = [];
     edition.works = [{ key: noAuthorWork.key }];
     work.isbn_10 = ['0306406152'];
     work.isbn_13 = ['9780306406157'];
@@ -59,6 +84,9 @@ test('Open Library native book edition ISBN rights and cover fields survive real
     edition.isbn_13 = ['978-0-306-40615-7', '9780306406157'];
     const records = [work, noAuthorWork, edition, noAuthorEdition];
     const input = dump(records);
+    // Register source HTTP bytes before the real import job can request them.
+    const sourceUrl = 'https://covers.openlibrary.org/b/id/900000001-L.jpg';
+    const source = await runtime.mediaBoundary.source(sourceUrl);
     const run = await runtime.run(input);
     expect(run.outcome).toBe('complete');
     expect(run.exchanges.length).toBeGreaterThan(0);
@@ -162,7 +190,6 @@ test('Open Library native book edition ISBN rights and cover fields survive real
     const mediaId = String(content(cover[0]!));
     expect(mediaId).toMatch(/^[a-f0-9-]{36}$/);
     const native = await runtime.mediaBoundary.observe(mediaId);
-    const sourceUrl = 'https://covers.openlibrary.org/b/id/900000001-L.jpg';
     expect(native.row).toMatchObject({
       id: mediaId,
       containerId: ids[0],
@@ -187,7 +214,6 @@ test('Open Library native book edition ISBN rights and cover fields survive real
     );
     expect(native.transitions).toContain('available');
     expect(native.variants.length).toBeGreaterThan(0);
-    const source = await runtime.mediaBoundary.source(sourceUrl);
     for (const variant of native.variants) {
       expect(variant.bytes.length).toBeGreaterThan(0);
       expect(Buffer.from(variant.bytes).equals(Buffer.from(source.bytes))).toBe(false);
@@ -220,6 +246,7 @@ test('Open Library native book edition ISBN rights and cover fields survive real
       valid: '(,)',
     });
     expect(grant.status).toBe(201);
+    const links = linkProjection(runtime.database.pool);
     for (const view of views) {
       const groups = new Map<string, Proposal[]>();
       for (const proposal of view.proposals) {
@@ -241,6 +268,19 @@ test('Open Library native book edition ISBN rights and cover fields survive real
         });
         expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
       }
+      // The fixture's worker delivers media jobs; deliver the actual semantic
+      // relay too so the public relation preview observes the editor's writes.
+      let caughtUp = false;
+      for (let batch = 0; batch < 16; batch++) {
+        const delivered = await links.run(partitionOf(routeOf(view.subject!.id)!));
+        expect(delivered.status).not.toBe('stopped');
+        expect(delivered.status).not.toBe('busy');
+        if (delivered.status === 'read' && delivered.envelopes === 0) {
+          caughtUp = true;
+          break;
+        }
+      }
+      expect(caughtUp).toBe(true);
       const publicSubject = await runtime.request(`/v1/subjects/${view.subject!.id}`);
       expect(publicSubject.status).toBe(200);
       const body = (await publicSubject.json()) as { subject: Subject };
