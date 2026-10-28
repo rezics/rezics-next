@@ -63,18 +63,49 @@ export class SqliteLandingQueue implements LandingQueue {
   next(): LandingEntry | undefined {
     return this.nextBatch(1)[0];
   }
-  nextBatch(limit: number, excludedIds: readonly number[] = []): LandingEntry[] {
+  nextBatch(limit: number, excludedIds: readonly number[] = [], lane?: 'main' | 'dev'): LandingEntry[] {
     if (!Number.isInteger(limit) || limit < 1) throw new Error('landing batch size must be a positive integer');
     // Control-plane changes land first, since they change how fast everything else lands; then critical-path and
     // stabilize fixes, which unblock other work (a fix for dev's red typecheck once waited behind 37 landings).
     const tasks = this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get();
+    const laneFilter = lane
+      ? !tasks
+        ? lane === 'main'
+          ? ' AND 0'
+          : ''
+        : lane === 'main'
+          ? ` AND (
+            COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
+            OR (
+              json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
+              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') != 'stabilize'
+              AND json_array_length(request, '$.declaredPaths') > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(request, '$.declaredPaths')
+                WHERE value NOT GLOB 'tools/goal/*'
+              )
+            )
+          )`
+          : ` AND NOT (
+            COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
+            OR (
+              json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
+              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') != 'stabilize'
+              AND json_array_length(request, '$.declaredPaths') > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(request, '$.declaredPaths')
+                WHERE value NOT GLOB 'tools/goal/*'
+              )
+            )
+          )`
+      : '';
     const priority = tasks
       ? "COALESCE((SELECT json_extract(body, '$.brief.goal') = 'control-plane' FROM worker_tasks WHERE id = task), 0) DESC, " +
         "COALESCE((SELECT json_extract(body, '$.brief.criticalPath') = 1 OR json_extract(body, '$.brief.target') = 'stabilize' FROM worker_tasks WHERE id = task), 0) DESC, "
       : '';
     const excluded = excludedIds.length ? ` AND id NOT IN (${excludedIds.map(() => '?').join(',')})` : '';
     const rows = this.db
-      .query(`SELECT * FROM landing_queue WHERE delivered = 0${excluded} ORDER BY ${priority}id LIMIT ?`)
+      .query(`SELECT * FROM landing_queue WHERE delivered = 0${laneFilter}${excluded} ORDER BY ${priority}id LIMIT ?`)
       .all(...excludedIds, limit) as {
       id: number;
       request: string;

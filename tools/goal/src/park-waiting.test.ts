@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { loadSettings } from './config.ts';
 import { launchCommand, workerPrompt } from './launch.ts';
@@ -7,8 +7,10 @@ import type { Pool, Profile, Task } from './types.ts';
 import { harness } from './test-support.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
+// scripts/worker-check.ts is dev tooling; on main (where the control plane runs) it arrives with promotion.
+const hasWorkerCheck = existsSync(join(repository, 'scripts/worker-check.ts'));
 
-test('a worker waiting for a check is not woken by the model loop until the check ends or prints a failure', async () => {
+test.skipIf(!hasWorkerCheck)('a worker waiting for a check is not woken by the model loop until the check ends or prints a failure', async () => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   const root = mkdtempSync(join(repository, '.temp', 'park-waiting-'));
   mkdirSync(join(root, '.temp'), { recursive: true });

@@ -16,22 +16,41 @@ function setup() {
   const db = openDb(join(repo.path, 'state.sqlite'));
   let current = 1;
   const fence: AttemptFence = {
-    assertCurrent(ref) { if (current !== ref.attempt) throw new StaleAttemptError(ref, current); },
-    commitMerge(ref, merge) { return db.transaction(() => { fence.assertCurrent(ref); return merge(); }).immediate(); },
+    assertCurrent(ref) {
+      if (current !== ref.attempt) throw new StaleAttemptError(ref, current);
+    },
+    commitMerge(ref, merge) {
+      return db
+        .transaction(() => {
+          fence.assertCurrent(ref);
+          return merge();
+        })
+        .immediate();
+    },
   };
   const queue = new SqliteLandingQueue(db, fence);
   const outcomes: GateOutcome[] = [];
   return {
-    ...repo, db, queue, outcomes,
+    ...repo,
+    db,
+    queue,
+    outcomes,
     options: {
       mainCheckout: repo.main,
       stateDirectory: join(repo.path, 'state'),
       worktreeRoot: join(repo.path, 'trees'),
       queue,
       fence,
-      sink: { onGateOutcome(outcome: GateOutcome) { outcomes.push(outcome); } },
+      sink: {
+        onGateOutcome(outcome: GateOutcome) {
+          outcomes.push(outcome);
+        },
+      },
     },
-    close() { db.close(); repo.close(); },
+    close() {
+      db.close();
+      repo.close();
+    },
   };
 }
 
@@ -42,7 +61,7 @@ test('a pump that finds the train held returns at once without an error', async 
   const originalNow = Date.now;
   let clockReads = 0;
   try {
-    Date.now = () => ++clockReads === 1 ? 0 : 30_001;
+    Date.now = () => (++clockReads === 1 ? 0 : 30_001);
     await expect(runtime.pump()).resolves.toBeUndefined();
     expect(clockReads).toBe(0);
   } finally {
@@ -60,12 +79,12 @@ test('a request queued while the holder drains is landed by the holder after it 
     s.queue.enqueue(first);
 
     const leasePath = join(s.options.stateDirectory, 'train.lease');
-    const next = s.queue.next.bind(s.queue);
+    const nextBatch = s.queue.nextBatch.bind(s.queue);
     let observeRelease = true;
     let holderCheckedAfterRelease = false;
-    s.queue.next = () => {
+    s.queue.nextBatch = (...args) => {
       if (observeRelease && !existsSync(leasePath)) holderCheckedAfterRelease = true;
-      return next();
+      return nextBatch(...args);
     };
 
     let queuedDuringRelease = false;
@@ -82,11 +101,13 @@ test('a request queued while the holder drains is landed by the holder after it 
     observeRelease = false;
     expect(holderCheckedAfterRelease).toBe(true);
     expect(s.queue.next()).toBeUndefined();
-    expect(s.outcomes.map(outcome => [outcome.taskId, outcome.passed])).toEqual([
+    expect(s.outcomes.map((outcome) => [outcome.taskId, outcome.passed])).toEqual([
       ['first', true],
       ['second', true],
     ]);
     expect(existsSync(join(s.main, 'first-result'))).toBe(true);
     expect(existsSync(join(s.main, 'second-result'))).toBe(true);
-  } finally { s.close(); }
+  } finally {
+    s.close();
+  }
 });

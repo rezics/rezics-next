@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -10,6 +10,8 @@ import { removeAttemptContainers } from './worker-containers.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const wrapper = join(root, 'scripts/check-host/docker');
+// The worker docker wrapper is dev tooling; on main (where the control plane runs) it arrives with promotion.
+const hasWrapper = existsSync(wrapper);
 
 function sandbox(): { directory: string; close: () => void } {
   const directory = mkdtempSync(join(tmpdir(), 'worker-containers-'));
@@ -21,7 +23,7 @@ function executable(path: string, body: string): void {
   chmodSync(path, 0o755);
 }
 
-test.serial(
+test.serial.skipIf(!hasWrapper)(
   "a worker's environment uses the worktree wrapper, which forwards all container starts with slice and attempt labels",
   () => {
     const box = sandbox();

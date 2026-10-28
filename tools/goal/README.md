@@ -35,11 +35,14 @@ formatter output so the manager can repair the brief. The train checks hashes be
 integration if a worker changes a frozen file.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
-enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
-the lease to drain a request that arrived during shutdown. Detached train processes wait for the lease and recheck the
-control-plane version while they wait. Every process records the Git object id for `main:tools/goal` when it starts;
-a stale train finishes its active landing, releases the lease and hands the remaining queue to current code before it
-can take another request. Pumps used by short commands still return quietly when another process holds the lease.
+enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
+requests use `train.lease`. The two lanes select and order their own requests, so a long control-plane landing on
+`main` can run alongside a dev landing. Each lane remains serial. A train releases its lease and checks its lane's
+queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
+the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
+`main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
+queue to current code before it can take another request. Pumps used by short commands still return quietly when
+another process holds the lane lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
 A stale manager host restarts after finishing its active request and recovers persisted sessions.
 
@@ -140,6 +143,20 @@ once and fast-forwards dev through its members in queue order, recording each me
 combined check fails, the train retries the members individually so a passing member can still land. A member that
 cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
+
+### Host-capacity admission
+
+Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
+attempts through the `worker_attempts_state` expression index. Each poll issues one `COUNT(*)` query and does not
+decode attempt bodies. The existing 15-second polling interval and ticket ordering are unchanged.
+
+#### Cost: running-attempt count
+
+- **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
+- **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
+  of non-running attempt history.
+- **Growth check:** `capacity-wait.test.ts` seeds 10, 100 and 1,000 attempts, verifies the indexed query plan and
+  checks the running count at each scale.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |

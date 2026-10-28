@@ -164,7 +164,7 @@ export function workerEnvironment(
           ? 'CLAUDE_CONFIG_DIR'
           : 'CURSOR_CONFIG_DIR';
   // With CLAUDE_CONFIG_DIR set, Claude Code looks for .claude.json inside it, not beside the default ~/.claude.
-  const result =
+  const result: NodeJS.ProcessEnv =
     pool.cli === 'claude' && resolve(pool.configDirectory) === join(homedir(), '.claude')
       ? { ...env, ...NO_COMPILE_CACHE, ...extra }
       : { ...env, ...NO_COMPILE_CACHE, ...extra, [key]: pool.configDirectory };
@@ -309,7 +309,7 @@ export function capacityAvailable(store: WorkerStore, stateDirectory: string): b
   } catch {
     /* Defaults. */
   }
-  const running = store.attempts().filter((candidate) => candidate.state === 'running').length;
+  const running = store.runningAttemptsCount();
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Starts on the stabilize branch and on the critical path skip the worker cap; only the memory floor holds them. */
@@ -348,7 +348,7 @@ export async function awaitHostCapacity(
       } catch {
         /* Defaults. */
       }
-      const running = first ? 0 : store.attempts().filter((candidate) => candidate.state === 'running').length;
+      const running = first ? 0 : store.runningAttemptsCount();
       const ahead = first ? 0 : waitersAhead(queue, ticket);
       if (hasCapacity(running + ahead, availableMiB(), capacity)) return;
       if (!reported)
