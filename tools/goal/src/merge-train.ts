@@ -519,9 +519,13 @@ export class MergeTrain {
     await this.drain(true);
   }
 
-  /** A detached train waits for the current owner, checking its code version while it waits. */
+  /**
+   * A detached train runs only if it can take the lease. Every settle spawns one, so waiting for the owner made them
+   * pile up: 304 trains polling every 50 ms took the host to load 111. The owner drains the queue and checks its code
+   * version before each request, and the host's sweep starts a train for any request left behind.
+   */
   async runWaiting(): Promise<void> {
-    await this.drain(true, true);
+    await this.drain(false);
   }
 
   /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
@@ -529,7 +533,7 @@ export class MergeTrain {
     await this.drain(false);
   }
 
-  private async drain(failWhenInitiallyHeld: boolean, waitForLease = false): Promise<void> {
+  private async drain(failWhenInitiallyHeld: boolean): Promise<void> {
     const o = this.options;
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
@@ -547,10 +551,6 @@ export class MergeTrain {
         lease = acquireDirectoryLease(leasePath);
       } catch (error) {
         if (error instanceof LeaseHeldError) {
-          if (waitForLease) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            continue;
-          }
           if (failWhenInitiallyHeld && !acquired) throw error;
           return;
         }
