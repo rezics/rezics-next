@@ -454,7 +454,7 @@ async function runLocalGate(args: string[]): Promise<number> {
   // Install supplies the exact canary; hosts and the caller may use an older Bun to bootstrap it.
   process.env.PATH = `${join(root, 'node_modules/.bin')}:${process.env.PATH ?? ''}`;
   if (code === 0 && existsSync(join(root, 'scripts/toolchain.test.ts'))) {
-    code = await run(['bun', 'test', 'scripts/toolchain.test.ts'], root);
+    code = await run(['bun', 'test', 'scripts/toolchain.test.ts', 'scripts/toolchain-workspaces.test.ts'], root);
   }
   const configuredConcurrency = process.env.GATE_CONCURRENCY;
   const concurrency = configuredConcurrency === undefined ? workspaces.length : Number(configuredConcurrency);

@@ -54,8 +54,8 @@ Use the exact `bun@1.4.4-canary.20261027.1` npm distribution pinned in the root
 cannot distinguish this canary from the stable release.
 
 `bun install --frozen-lockfile` installs this runtime into `node_modules/.bin`.
-The remote runner puts that directory first on `PATH` after installation. The root gate
-invokes the installed executable by path, because `Bun.spawn("bun")` selects its caller
+The remote runner puts that directory first on `PATH` after installation. The root gate and root typecheck
+invoke the installed executable by path, because `Bun.spawn("bun")` selects its caller
 even when `PATH` points to a newer Bun;
 an older host Bun can bootstrap the install without selecting the runtime used for checks.
 The check-host provisioner pins the same distribution and checks its full build revision.
@@ -64,16 +64,18 @@ Provision hosts with `scripts/provision-check-host.sh` as described in
 to be changed while evaluating a candidate checkout.
 
 Run `bun scripts/gate.ts` for the landing gate and `bun run typecheck` for the root
-typecheck. The gate also runs `scripts/toolchain.test.ts`, which checks formatter
+typecheck. The gate also runs `scripts/toolchain.test.ts` and `scripts/toolchain-workspaces.test.ts`, which check formatter
 compatibility, all six configured lint rules and their options, TypeScript diagnostics,
-and the SQL mapper fallback. Declaration generation continues to use tsc.
+and the SQL mapper fallback, every workspace's checker selection and the declaration compiler.
+Declaration generation continues to use tsc. The npm `latest` and `canary` tags were rechecked on
+28 October 2026: stable is 1.4.4 and the canary remains the exact distribution pinned above.
 
 ## Switch decisions
 
 ### Formatting
 
 Keep oxfmt 0.74.0 for `bun run format`, `bun run format:check` and workspace gates.
-On a temporary copy of the base tree, oxfmt formatted all 3,126 eligible files. Then
+On a temporary copy of the base tree, oxfmt formatted all 3,170 eligible files in the completed comparison. Then
 `bun fmt --check` used the same `.oxfmtrc.json` and reported exactly two differences:
 
 | File                                         | Difference from oxfmt output                                                              |
@@ -125,8 +127,8 @@ fallback also stays on tsc for workspaces that do not explicitly select a checke
 Use `bun lint --no-script --config .oxlintrc.json` in the root lint script and the
 kernel/auth check runners. Keep oxlint 1.89.0 installed as the differential reference.
 `bun lint --doctor` reports six native rules and zero JavaScript fallback rules. Against
-the whole base tree, Bun and oxlint reported the same 80 diagnostic lines, including
-rule, severity, source position and message, after sorting. These existing errors were
+the whole tree, Bun and oxlint reported exactly the same 80 JSON diagnostic objects,
+including rule, severity, source position and message, after sorting. These existing errors were
 not hidden or fixed as part of a toolchain switch. The regression fixtures require
 each configured rule to reject a witness, compare diagnostic spans and severity, and
 check the configured null comparison, unused argument, rest sibling and underscore
@@ -146,20 +148,37 @@ all other hosts excluded from this attempt's local hosts file. Queueing, synchro
 installation and browser setup are included in their end-to-end times. No busy slot is
 bypassed. The gate's per-workspace times are reported separately from admission wait.
 
-| Check                                                                     | Before seconds | After seconds | Result / interpretation                                              |
-| ------------------------------------------------------------------------- | -------------: | ------------: | -------------------------------------------------------------------- |
-| Tree format check                                                         |          0.882 |         2.552 | oxfmt retained; both detect existing base formatting issues.         |
-| Eleven non-SQL type checks, sequential sum                                |         53.571 |        34.129 | Identical diagnostics; 1.57 times faster in this paired observation. |
-| Root typecheck, including generation, compiler DB and kernel construction |        302.044 |       Pending | Both passed; includes database and generator costs.                  |
-| Tree lint                                                                 |          0.600 |         0.477 | Identical 80 diagnostics; 1.26 times faster in this observation.     |
-| Full kernel check                                                         |        Pending |       Pending | Full suite, with affected selection disabled.                        |
-| Full web check                                                            |        Pending |       Pending | Generation, type checks, tests, build and stories.                   |
+| Check                                                                     | Before seconds | After seconds | Result / interpretation                                                              |
+| ------------------------------------------------------------------------- | -------------: | ------------: | ------------------------------------------------------------------------------------ |
+| Tree format check                                                         |          0.882 |         2.552 | oxfmt retained; both detect existing base formatting issues.                         |
+| Eleven non-SQL type checks, sequential sum                                |         53.571 |        34.129 | Identical diagnostics; 1.57 times faster in this paired observation.                 |
+| Root typecheck, including generation, compiler DB and kernel construction |        302.044 |       150.699 | Both passed; includes database and generator costs.                                  |
+| Tree lint                                                                 |          1.290 |         0.195 | Identical 80 JSON diagnostics; 6.62 times faster in this observation.                |
+| Full kernel check                                                         |    Unavailable |   Unavailable | Local comparison cancelled after the gate proved incompatible acceptance assertions. |
+| Full web check                                                            |    Unavailable |   Unavailable | Local comparison cancelled on the same specification conflict.                       |
 
-The candidate formatter also took 1.597 seconds to check the oxfmt-normalized 3,126-file
+The candidate formatter also took 0.615 seconds to check the oxfmt-normalized 3,170-file
 temporary copy and rejected the two files above. An initial canary lint observation
 under heavier load took 3.086 seconds; the final installed-runtime observation is in
 the table. The retained formatter's slower observation likewise illustrates load
-variation rather than a formatter implementation change.
+variation rather than a formatter implementation change. On the unchanged checkout, the final
+paired formatter observation was 2.638 seconds for oxfmt and 0.324 seconds for Bun;
+the two output differences still prevent adoption. The component and per-workspace
+typecheck observations are complete; full-check comparisons are not. The focused
+toolchain and root-typecheck regression run passed all 27 tests across three files.
+
+The root gate's kernel check completed in 4,298.43 seconds on host a and failed;
+that remote observation is separate from the requested local comparison. In that run,
+`test/commerce/http.test.ts` passed and `test/commerce/exposure.test.ts` failed.
+The former requires `summary` among the exact keys returned by `POST /v1/offers`;
+the latter forbids that key for the same input shape (an unseeded target subject,
+title `Book`, USD 1,200 minor units and the same tax code). Their public offer reads
+also require different shapes: the former replaces `summary` with `subject`, while
+the latter requires the creation response unchanged. Both assertions already exist
+on the pre-migration commit. Changing runtime tools cannot satisfy both fixed
+response contracts, and existing acceptance tests were preserved. The remaining
+checks started by this attempt were cancelled after establishing this conflict;
+queue time and cancelled runs are not reported as completed benchmark times.
 
 ## Sources and reproduction
 

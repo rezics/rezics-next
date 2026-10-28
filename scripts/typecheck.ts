@@ -2,6 +2,7 @@
 // Typecheck every workspace from the repository root. One throwaway database receives the kernel and Auth
 // schemas, is shared, then removed.
 import { dirname, join, relative, resolve } from 'node:path';
+import { resolveBunCommand } from './gate.ts';
 
 export type StartedDatabase = {
   url: string;
@@ -71,7 +72,11 @@ async function loadWorkspaces(root: string): Promise<Workspace[]> {
         .map(([dependency]) => dependency),
       needsDatabase:
         (typeof script === 'string' && script.includes('--runExternalCode')) ||
-        (await Bun.file(join(directory, 'tsconfig.json')).text().catch(() => '')).includes('"contentMappers"'),
+        (
+          await Bun.file(join(directory, 'tsconfig.json'))
+            .text()
+            .catch(() => '')
+        ).includes('"contentMappers"'),
     });
   }
   return workspaces;
@@ -98,7 +103,7 @@ export function affectedWorkspaces<W extends { name: string; directory: string; 
     if (!owner) return [...workspaces];
     affected.add(owner.name);
   }
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false;
     for (const workspace of workspaces)
       if (!affected.has(workspace.name) && workspace.dependencies.some((dependency) => affected.has(dependency))) {
@@ -137,7 +142,7 @@ async function runWorkspace(root: string, workspace: Workspace, env: Record<stri
   if (!workspace.hasCheck)
     return blockFor(root, workspace, 1, '', 'error: package.json has no check script, which the root gate requires', 0);
   try {
-    const child = Bun.spawn(workspace.command, {
+    const child = Bun.spawn(resolveBunCommand(workspace.command, root), {
       cwd: workspace.directory,
       env,
       stdin: 'ignore',
