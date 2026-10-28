@@ -742,11 +742,10 @@ async function main(): Promise<void> {
   const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
 
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
-  const oxlint = resolve(directory, '../../node_modules/.bin/oxlint');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
   if (plan.files === null) {
     run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-    run(oxlint, ['--config', '../../.oxlintrc.json', '.'], env);
+    run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], env);
     run(oxfmt, ['--check', '.'], env);
   } else {
     const typecheck = await capture(
@@ -761,7 +760,8 @@ async function main(): Promise<void> {
     }
 
     const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
-    if (lintFiles.length) run(oxlint, ['--config', '../../.oxlintrc.json', ...lintFiles], env);
+    if (lintFiles.length)
+      run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles], env);
 
     const formatFiles = formattedFiles(plan.files);
     if (formatFiles.length) run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], env);

@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
-    "check": "oxfmt --check . && bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run build",
-    "typecheck": "bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json",
+    "check": "oxfmt --check . && bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json && bun run test && bun run build",
+    "typecheck": "bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json",
     "generate": "bun scripts/generate.ts",
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
     "screenshots": "bun scripts/isolated.ts bun scripts/screenshots.ts",

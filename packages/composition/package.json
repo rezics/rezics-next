@@ -9,7 +9,8 @@
     "./schema/*.json": "./schema/*.json"
   },
   "scripts": {
-    "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun test && bun scripts/schema.ts --check"
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun test && bun scripts/schema.ts --check",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

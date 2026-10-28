@@ -15,8 +15,9 @@
     "./slug": "./src/slug.ts"
   },
   "scripts": {
-    "check": "tsc --noEmit -p tsconfig.json && bun test",
-    "release": "bun scripts/release.ts"
+    "check": "bun check --no-script -p tsconfig.json && bun test",
+    "release": "bun scripts/release.ts",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
     "@neverblink/linkml": "0.17.1",

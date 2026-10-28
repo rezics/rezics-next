@@ -78,7 +78,8 @@ if [ "$#" -eq 5 ]; then
   done
 fi
 
-bun_version=1.4.3
+bun_version=1.4.4-canary.20261027.1
+bun_revision=a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b
 # The kernel check runs npm-packaged tools (dbmate) whose launcher scripts start with `env node`, and tooling that
 # needs node:sqlite; Debian's own Node is too old for it.
 node_version=26.8.2
@@ -90,10 +91,11 @@ case "${address#*@}" in
   127.0.0.1|::1|localhost) loopback=1 ;;
 esac
 
-printf -v remote_command '%q ' bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" "$penalty_exemptions" "$loopback"
+printf -v remote_command '%q ' bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" "$penalty_exemptions" "$loopback" "$bun_revision"
 ssh -i "$identity" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$address" "$remote_command" <<'REMOTE'
 set -euo pipefail
 bun_version=$1
+bun_revision=$8
 node_version=$2
 memory=$3
 cpu=$4
@@ -141,15 +143,16 @@ else
   fi
 fi
 
-if [ "$(/usr/local/bin/bun --version 2>/dev/null || true)" != "$bun_version" ]; then
+# Canary --version omits the prerelease; compare the immutable build revision.
+if ! /usr/local/bin/bun --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$bun_revision" 2>/dev/null; then
   case "$(uname -m)" in
     x86_64) build=x64; grep -q avx2 /proc/cpuinfo || build=x64-baseline ;;
     aarch64) build=aarch64 ;;
     *) echo "unsupported architecture $(uname -m)" >&2; exit 1 ;;
   esac
-  curl -fsSL -o "$work/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-${build}.zip"
-  unzip -q "$work/bun.zip" -d "$work"
-  install -m 0755 "$work"/bun-linux-*/bun /usr/local/bin/bun
+  curl -fsSL -o "$work/bun.tgz" "https://registry.npmjs.org/@oven/bun-linux-${build}/-/bun-linux-${build}-${bun_version}.tgz"
+  tar -xzf "$work/bun.tgz" -C "$work"
+  install -m 0755 "$work/package/bin/bun" /usr/local/bin/bun
 fi
 
 if [ "$(/usr/local/bin/node --version 2>/dev/null || true)" != "v$node_version" ]; then

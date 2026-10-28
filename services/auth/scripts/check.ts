@@ -101,8 +101,8 @@ if (import.meta.main) {
           await compilerDatabase.remove();
         }
         run(
-          resolve('../../node_modules/.bin/oxlint'),
-          ['--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])],
+          process.execPath,
+          ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])],
           env,
         );
         run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env);

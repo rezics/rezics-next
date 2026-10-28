@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The repository's landing gate runs every workspace check and the control plane's own gate. When a readable
 // KERNEL_CHECK_REMOTE hosts file is configured, the root gate splits the work between two check-host runs.
-import { accessSync, constants, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { readHosts } from './remote-check.ts';
 import { classifyLoadInducedOutput } from './test-lanes.ts';
@@ -316,9 +316,15 @@ async function runRemoteGroups(workspaces: Workspace[], hostsFile: string): Prom
   return 0;
 }
 
+/** Bun.spawn("bun") selects the caller's executable even when PATH names a newer Bun. */
+export function resolveBunCommand(command: string[], directory = root): string[] {
+  const pinned = join(directory, 'node_modules/.bin/bun');
+  return command[0] === 'bun' && existsSync(pinned) ? [pinned, ...command.slice(1)] : command;
+}
+
 async function run(command: string[], cwd: string): Promise<number> {
   writeOutput(`$ ${command.join(' ')}  (${cwd === root ? '.' : cwd.slice(root.length + 1)})\n`);
-  const child = Bun.spawn(command, { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+  const child = Bun.spawn(resolveBunCommand(command), { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   const forward = async (source: ReadableStream<Uint8Array>, stream: 'stdout' | 'stderr'): Promise<void> => {
     const reader = source.getReader();
     const decoder = new TextDecoder();
@@ -340,7 +346,7 @@ async function run(command: string[], cwd: string): Promise<number> {
 async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
   const command = ['bun', 'run', 'check'];
   const startedAt = performance.now();
-  const child = Bun.spawn(command, {
+  const child = Bun.spawn(resolveBunCommand(command), {
     cwd: join(root, workspace.directory),
     stdin: 'ignore',
     stdout: 'pipe',
@@ -445,6 +451,11 @@ async function runLocalGate(args: string[]): Promise<number> {
   }
 
   let code = await run(['bun', 'install', '--frozen-lockfile'], root);
+  // Install supplies the exact canary; hosts and the caller may use an older Bun to bootstrap it.
+  process.env.PATH = `${join(root, 'node_modules/.bin')}:${process.env.PATH ?? ''}`;
+  if (code === 0 && existsSync(join(root, 'scripts/toolchain.test.ts'))) {
+    code = await run(['bun', 'test', 'scripts/toolchain.test.ts'], root);
+  }
   const configuredConcurrency = process.env.GATE_CONCURRENCY;
   const concurrency = configuredConcurrency === undefined ? workspaces.length : Number(configuredConcurrency);
   if (workspaces.length > 0 && (!Number.isSafeInteger(concurrency) || concurrency < 1)) {

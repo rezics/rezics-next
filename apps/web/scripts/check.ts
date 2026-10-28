@@ -434,7 +434,7 @@ async function main(args: string[]): Promise<void> {
     return;
   }
   const results = await Promise.allSettled([
-    runCommand('typecheck', 'tsc', ['--noEmit', '-p', 'tsconfig.json'], env),
+    runCommand('typecheck', 'bun', ['check', '--no-script', '-p', 'tsconfig.json'], env),
     runTests(files, env, testScript),
   ]);
   const hostResult = await Promise.allSettled([runCommand('host tests', 'bun', ['run', 'test:host'], env)]);

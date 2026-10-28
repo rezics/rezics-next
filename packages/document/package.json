@@ -5,7 +5,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "check": "oxfmt --check . && bun run tsc --noEmit --project tsconfig.json && bun test && bun scripts/schema.ts --check"
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun test && bun scripts/schema.ts --check",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "files": [
     "src",

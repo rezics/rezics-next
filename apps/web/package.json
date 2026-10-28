@@ -9,7 +9,7 @@
     "record": "bun scripts/record.ts",
     "build": "vite build --config vite.config.ts",
     "check": "oxfmt --check . '!src/kernel/recorded/*.json' && bun scripts/check.ts --skip-format --test-command 'bun run test'",
-    "typecheck": "bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json",
     "generate": "bun scripts/generate.ts",
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
     "test": "bun scripts/isolated.ts bun test",

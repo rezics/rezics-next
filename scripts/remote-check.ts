@@ -527,6 +527,7 @@ function runScript(id: string, directory: string, cwd: string, command: string[]
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
+      export PATH="$PWD/node_modules/.bin:$PATH"
       cd "$1"
       code=$?
       shift

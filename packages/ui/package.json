@@ -15,11 +15,12 @@
   },
   "scripts": {
     "storybook": "storybook dev -p 6006",
-    "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun run test #bun test",
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun run test #bun test",
     "test": "bun scripts/isolated.ts bun test",
     "test:stories:slow-frames": "bun scripts/isolated.ts bun x vitest run --config vitest.slow-frames.config.ts",
     "shadcn:sync": "bun scripts/shadcn-sync.ts",
-    "shadcn:sync-check": "bun scripts/shadcn-sync-check.ts"
+    "shadcn:sync-check": "bun scripts/shadcn-sync-check.ts",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
