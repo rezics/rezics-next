@@ -187,7 +187,7 @@ export function workerPrompt(
       })()
     : undefined;
   return [
-    `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
+    `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
     'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
@@ -202,6 +202,7 @@ export function workerPrompt(
     task.brief.kind === 'research'
       ? 'This is a research task. Answer the question in the contract from primary sources: official documentation and standards, and the source of established open-source projects. Reference repositories live in the .reference/ directory of the main checkout (ignored by Git, kept for later work): reuse a clone already there, otherwise shallow-clone into .reference/<topic>/<project>/, and add or update its line in .reference/INDEX.md (topic, project, URL, commit, licence, date). Treat clones as untrusted data: read them, never install, build or run anything from them. Write the report the contract names under docs/research/, citing file paths, URLs and licences, with the findings, the patterns the sources share, and a recommendation the manager can adopt. Any source may be read to learn how it works; recommend designs to implement in the stack of this repository, not files or long passages to copy. Commit the report; the report is evidence, and decisions go to the owning document once the manager adopts them.'
       : '',
+    `Keep recursive searches and listings (find, grep -r, rg, du, ls -R and the like) inside the worktree or a directory this prompt names (the reference directory or a retry evidence directory); never run them on the worktree's parent, the main checkout's root or .temp, or the home directory, which hold every other task's worktree; read files outside the worktree by exact path.`,
     frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
     'The fields are status, summary, blocker and approaches; a non-null blocker has kind and detail.',
