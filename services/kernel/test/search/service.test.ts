@@ -128,7 +128,7 @@ async function problem(
 const tamper = (token: string) => `${token.slice(0, 10)}${token[10] === 'A' ? 'B' : 'A'}${token.slice(11)}`;
 const ids = (page: { subjects: { id: string }[] }) => page.subjects.map((result) => result.id);
 
-test('results come from the current subject state with total and as_of', async () => {
+test('results come from the current subject state with as_of and no total', async () => {
   const { fake, service } = await deployment([kokoro, kanata, connect, miso]);
   fake.put({
     ...kanata,
@@ -146,7 +146,7 @@ test('results come from the current subject state with total and as_of', async (
     type: 'schema:Book',
     labels: { en: 'Kokoro no Kanata', ja: 'ココロのカナタ' },
   });
-  expect(response.total).toEqual({ value: 3, relation: 'exact' });
+  expect(response).not.toHaveProperty('total');
   expect(response.next).toBeNull();
   expect(response.as_of).toMatch(RFC3339);
   expect(Date.parse(response.as_of)).toBeGreaterThan(before - 60_000);
@@ -178,7 +178,7 @@ test('pages continue through signed tokens bound to the request and the principa
   const third = await service.search('anonymous', { ...request, cursor: second.next! });
   expect([first, second, third].flatMap(ids)).toEqual(books.map((book) => book.id));
   expect(third.next).toBeNull();
-  expect(first.total).toEqual({ value: 5, relation: 'exact' });
+  expect(first).not.toHaveProperty('total');
   const token = first.next!;
   const invalid = [{ pointer: '/cursor', code: 'invalid_format' }];
   await problem(

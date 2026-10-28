@@ -111,12 +111,12 @@ async function refusal(promise: Promise<unknown>) {
   return [(error as ProblemError).code, (error as ProblemError).errors] as unknown[];
 }
 
-test('facet values count subjects, top k first, with their labels', async () => {
+test('facet values retain top k order and labels without public counts', async () => {
   const answer = await service.facets('anonymous', { filter: booksOnly, facets: authors(1) });
-  expect(answer.total).toEqual({ value: 4, relation: 'exact' });
-  expect(answer.facets).toEqual([
-    { property: 'schema:author', relation: 'exact', values: [{ value: a, count: 3, labels: { en: 'Author A' } }] },
-  ]);
+  expect(answer).not.toHaveProperty('total');
+  expect(answer.facets).toEqual([{ property: 'schema:author', values: [{ value: a, labels: { en: 'Author A' } }] }]);
+  expect(answer.facets[0]).not.toHaveProperty('relation');
+  for (const value of answer.facets[0]!.values) expect(value).not.toHaveProperty('count');
   expect(answer.as_of).toEqual(expect.any(String));
   const lead2 = await service.facets('anonymous', {
     filter: {
@@ -124,10 +124,7 @@ test('facet values count subjects, top k first, with their labels', async () => 
     },
     facets: authors(),
   });
-  expect(lead2.facets[0]!.values.map(({ value, count }) => [value, count])).toEqual([
-    [a, 1],
-    [b, 1],
-  ]);
+  expect(lead2.facets[0]!.values.map(({ value }) => value)).toEqual([a, b]);
 });
 
 test("facet value labels follow the reader's language chain", async () => {
@@ -191,10 +188,7 @@ test("facet value labels follow the reader's language chain", async () => {
 
 test('values whose own subject cannot be disclosed are dropped', async () => {
   const answer = await service.facets('anonymous', { filter: booksOnly, facets: authors(10) });
-  expect(answer.facets[0]!.values.map(({ value, count }) => [value, count])).toEqual([
-    [a, 3],
-    [b, 2],
-  ]);
+  expect(answer.facets[0]!.values.map(({ value }) => value)).toEqual([a, b]);
   fake.put({ ...people[1]!, redirect: a });
   try {
     const redirected = await service.facets('anonymous', { filter: booksOnly, facets: authors(10) });
@@ -239,17 +233,18 @@ test('facet requests are admitted like filters', async () => {
   expect((await refusal(unready.facets('anonymous', { facets: authors() })))[0]).toBe('semantic_not_ready');
 });
 
-test('counts beyond the sample are lower bounds', async () => {
+test('sampled facets return bounded values without public counts', async () => {
   const sampled = createSearchService({ ...options, facetSample: 2 });
   const answer = await sampled.facets('anonymous', { filter: booksOnly, facets: authors(10) });
-  expect(answer.total).toEqual({ value: 4, relation: 'exact' });
-  expect(answer.facets[0]!.relation).toBe('lower_bound');
-  const exact = new Map([
-    [a, 3],
-    [b, 2],
-  ]);
-  for (const { value, count } of answer.facets[0]!.values) expect(count).toBeLessThanOrEqual(exact.get(value)!);
-  expect(answer.facets[0]!.values.reduce((sum, { count }) => sum + count, 0)).toBeLessThanOrEqual(4);
+  expect(answer).not.toHaveProperty('total');
+  expect(answer.facets[0]).not.toHaveProperty('relation');
+  const values = answer.facets[0]!.values;
+  for (const entry of values) {
+    expect([a, b]).toContain(entry.value);
+    expect(entry).not.toHaveProperty('count');
+  }
+  expect(new Set(values.map(({ value }) => value)).size).toBe(values.length);
+  expect(values.length).toBeLessThanOrEqual(2);
 });
 
 test('the facets route serves anonymous readers and is documented', async () => {
@@ -275,9 +270,10 @@ test('the facets route serves anonymous readers and is documented', async () => 
   );
   expect(response.status).toBe(200);
   const body = (await response.json()) as { facets: unknown[] };
-  expect(body.facets).toEqual([
-    { property: 'schema:author', relation: 'exact', values: [{ value: a, count: 3, labels: { en: 'Author A' } }] },
-  ]);
+  expect(body).not.toHaveProperty('total');
+  expect(body.facets[0]).not.toHaveProperty('relation');
+  expect(body.facets[0]).not.toHaveProperty('values.0.count');
+  expect(body.facets).toEqual([{ property: 'schema:author', values: [{ value: a, labels: { en: 'Author A' } }] }]);
   const operation = openApiDocument(kernel).paths['/v1/subjects:facets']!.post!;
   expect(operation).toMatchObject({
     operationId: 'subject.facets',

@@ -119,20 +119,22 @@ test("code values are checked against the property's pattern", async () => {
   ]);
 });
 
-test('code facets count values without subjects', async () => {
+test('code facets return ordered values without subjects or public counts', async () => {
   const before = reads;
   const answer = await service.facets('anonymous', { facets: [{ property: 'schema:inLanguage' }] });
   expect(answer.facets).toEqual([
     {
       property: 'schema:inLanguage',
-      relation: 'exact',
       values: [
-        { value: 'ja', count: 2, labels: {} },
-        { value: 'en', count: 1, labels: {} },
-        { value: 'zh-Hant', count: 1, labels: {} },
+        { value: 'ja', labels: {} },
+        { value: 'en', labels: {} },
+        { value: 'zh-Hant', labels: {} },
       ],
     },
   ]);
+  expect(answer).not.toHaveProperty('total');
+  expect(answer.facets[0]).not.toHaveProperty('relation');
+  for (const value of answer.facets[0]!.values) expect(value).not.toHaveProperty('count');
   expect(reads).toBe(before);
   expect(await refusal(service.facets('anonymous', { facets: [{ property: 'schema:alternateName' }] }))).toEqual([
     'unsupported_query',

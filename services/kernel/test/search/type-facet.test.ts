@@ -128,9 +128,8 @@ const kernel = createKernel({
   },
 });
 const types = (size?: number) => [{ property: 'type', ...(size === undefined ? {} : { size }) }];
-const expected = (value: keyof typeof release.types, count: number) => ({
+const expected = (value: keyof typeof release.types) => ({
   value,
-  count,
   labels: release.types[value].labels,
 });
 const request = (body: unknown) =>
@@ -142,30 +141,38 @@ const request = (body: unknown) =>
     }),
   );
 
-test('a type facet counts matches per subject type with release labels', async () => {
+test('a type facet returns ordered types with release labels and no public counts', async () => {
   const before = reads;
   const response = await request({ facets: types() });
   expect(response.status).toBe(200);
   const answer = await response.json();
-  expect(answer.total).toEqual({ value: 8, relation: 'exact' });
+  expect(answer).not.toHaveProperty('total');
   expect(answer.facets).toEqual([
     {
       property: 'type',
-      relation: 'exact',
-      values: [expected('schema:Book', 4), expected('schema:Person', 2), expected('schema:Movie', 1)],
+      values: [expected('schema:Book'), expected('schema:Person'), expected('schema:Movie')],
     },
   ]);
+  expect(answer.facets[0]).not.toHaveProperty('relation');
+  for (const value of answer.facets[0].values) expect(value).not.toHaveProperty('count');
   expect(answer.as_of).toEqual(expect.any(String));
   expect(reads).toBe(before);
   const limited = await service.facets('anonymous', { facets: types(1) });
-  expect(limited.facets[0]!.values).toEqual([expected('schema:Book', 4)]);
+  expect(limited.facets[0]!.values).toEqual([expected('schema:Book')]);
   // Unknown types are dropped before cutting the result to size; ties use the type CURIE.
   const tied = await service.facets('anonymous', { text: 'one', facets: types(2) });
-  expect(tied.facets[0]!.values).toEqual([expected('schema:Book', 1), expected('schema:Movie', 1)]);
+  expect(tied.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Movie')]);
   const sampled = createSearchService({ ...options, facetSample: 2 });
   const lower = await sampled.facets('anonymous', { facets: types() });
-  expect(lower.facets[0]!.relation).toBe('lower_bound');
-  expect(lower.facets[0]!.values.reduce((sum, value) => sum + value.count, 0)).toBeLessThanOrEqual(2);
+  expect(lower).not.toHaveProperty('total');
+  expect(lower.facets[0]).not.toHaveProperty('relation');
+  const sampledValues = lower.facets[0]!.values;
+  expect(sampledValues.length).toBeLessThanOrEqual(2);
+  expect(new Set(sampledValues.map(({ value }) => value)).size).toBe(sampledValues.length);
+  for (const value of sampledValues) {
+    expect(['schema:Book', 'schema:Person', 'schema:Movie']).toContain(value.value);
+    expect(value).not.toHaveProperty('count');
+  }
   expect(reads).toBe(before);
   const operation = openApiDocument(kernel).paths['/v1/subjects:facets']!.post!;
   expect(JSON.stringify(operation.responses)).not.toContain('"format":"uuid"');
@@ -190,26 +197,22 @@ test("type facet labels follow the reader's language chain", async () => {
   ]);
 
   const all = await service.facets('anonymous', { facets: types() });
-  expect(all.facets[0]!.values).toEqual([
-    expected('schema:Book', 4),
-    expected('schema:Person', 2),
-    expected('schema:Movie', 1),
-  ]);
+  expect(all.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Person'), expected('schema:Movie')]);
 });
 
-test('a type facet counts within the text and filter, including a type filter', async () => {
+test('a type facet returns values within the text and filter, including a type filter', async () => {
   const text = await service.facets('anonymous', { text: 'one', facets: types() });
-  expect(text.facets[0]!.values).toEqual([expected('schema:Book', 1), expected('schema:Movie', 1)]);
+  expect(text.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Movie')]);
   const filter = { type: { in: ['schema:Book', 'schema:Person'] } };
   const filtered = await service.facets('anonymous', { filter, facets: types() });
-  expect(filtered.facets[0]!.values).toEqual([expected('schema:Book', 4), expected('schema:Person', 2)]);
+  expect(filtered.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Person')]);
   const both = await service.facets('anonymous', { text: 'one', filter, facets: types() });
-  expect(both.facets[0]!.values).toEqual([expected('schema:Book', 1)]);
+  expect(both.facets[0]!.values).toEqual([expected('schema:Book')]);
   const statement = await service.facets('anonymous', {
     filter: { statement: { property: 'schema:author', in: [a] } },
     facets: types(),
   });
-  expect(statement.facets[0]!.values).toEqual([expected('schema:Book', 3)]);
+  expect(statement.facets[0]!.values).toEqual([expected('schema:Book')]);
   const empty = await service.facets('anonymous', {
     filter: { and: [{ type: { in: ['schema:Book'] } }, { type: { in: ['schema:Person'] } }] },
     facets: types(),
@@ -233,13 +236,12 @@ test('a type facet is requested at most once and keeps the facet size bounds', a
   });
   expect(mixed.status).toBe(200);
   expect((await mixed.json()).facets).toEqual([
-    { property: 'type', relation: 'exact', values: [expected('schema:Book', 4)] },
+    { property: 'type', values: [expected('schema:Book')] },
     {
       property: 'schema:author',
-      relation: 'exact',
       values: [
-        { value: a, count: 3, labels: { en: 'Author A' } },
-        { value: b, count: 2, labels: { en: 'Author B' } },
+        { value: a, labels: { en: 'Author A' } },
+        { value: b, labels: { en: 'Author B' } },
       ],
     },
   ]);
