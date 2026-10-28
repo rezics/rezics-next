@@ -39,6 +39,13 @@ export function createPool(
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? readPoolAcquireTimeoutMillis(),
     idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,
     options: '-c idle_in_transaction_session_timeout=5000',
+    types: {
+      getTypeParser(oid, format) {
+        // pg omits name[] (1003); it uses the same wire representation as text[] (1009).
+        const nameArray = oid === (1003 as typeof oid) && format !== 'binary';
+        return pg.types.getTypeParser(nameArray ? (1009 as typeof oid) : oid, format);
+      },
+    },
   });
   pool.on('error', () => {});
   pool.on('connect', (client) => client.on('error', () => {}));
