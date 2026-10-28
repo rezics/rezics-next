@@ -7,20 +7,22 @@ It adds no product authority, runtime adapter or definition switch. Behaviour re
 [Semantic](../../services/kernel/src/semantic/README.md), [Content](../../services/kernel/src/content/README.md)
 and [filtered-list](../filtered-lists.md) contracts.
 
-Source inspection baseline: `5ee41687d596ddf03894a9d42cc9701388cf9e0a`.
+Source inspection baseline for this refresh: `2eb8bf31c4313bccc8ec27b92cf92a6e67d19c4e`.
+Recorded executions below retain their own revisions and bytes; they were not rerun for this inventory.
 No product suites were run for this inventory. The manifest's acceptance is
 `node_modules/.bin/oxfmt --check docs/goals/imports.capabilities.md`; it proves formatting/delivery only.
 Missing acceptance below stays owned work, not a claim that a required capability is unsupported forever.
 
 ## Evidence stages
 
-| Capability                       | Specification validated red                                                                                         | Native driver registered                                                                | Implementation exposed                                                                                                        | User-case pass at named revision                                  | Promoted                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
-| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity and media wrappers registered; VNDB statistics remains unbound            | Ordinary batch, fence, subject/candidate, media and statistic routes visible in source; complete composed job not established | Missing: imports must record executed native results and revision | Missing: imports promotion evidence |
-| Import-to-discovery              | REQUIRED NOT YET FROZEN for the composed released-data matrix                                                       | Missing: imports composed wrapper/driver; shared consumer bindings are not this journey | Partial producer mappings and native subject reads; reviewed tag/form mappings and released controls missing                  | Missing: imports with semantic/search/commerce/web                | Missing: imports promotion evidence |
-| Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                   | Native composition registered; see execution evidence below                             | Actual receipt/media/SQLite and subject/page/download assertions; consumer matrix remains open                                | 3 native cases pass at recorded revision; whole capability open   | Missing: imports promotion evidence |
+| Capability                       | Specification validated red                                                                                                   | Native driver registered                                                     | Implementation exposed                                                                                                            | User-case pass at named revision                                                                    | Promoted                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here           | API, identity and media wrappers registered; VNDB statistics remains unbound | Ordinary batch, fence, subject/candidate, media and statistic routes visible in source; complete composed job not established     | Four selected-read cases pass in the environment-qualified discovery run; complete refresh job open | Missing: imports promotion evidence |
+| Import-to-discovery              | 13 independent native cases delivered; seven recorded native reds, not missing-driver errors; remaining matrix not yet frozen | Actual discovery suite/helper registered; command and bytes below            | Four provider Context-selected reads exposed; bundled words and sourceRecords absent; production Search lifecycle/binding missing | Environment-qualified 6 pass / 7 fail; no full discovery pass                                       | Missing: imports promotion evidence |
+| Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                             | Native composition registered; see execution evidence below                  | Actual receipt/media/SQLite and subject/page/download assertions; consumer matrix remains open                                    | 3 native cases pass at recorded revision; whole capability open                                     | Missing: imports promotion evidence |
 
-“Specification validated red” requires recorded execution with missing binding; file presence alone does not earn it.
+“Specification validated red” requires recorded failing execution; distinguish missing binding from native product red.
+File presence alone does not earn it.
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
 production code, a pass requires actual named-revision execution with all exact scenarios and zero skips/todos,
 and promotion requires separate integration evidence. Helper, converter and SQLite tests support these jobs;
@@ -34,16 +36,23 @@ The actual bundled definitions are [release/rezics.json](../../packages/definiti
 Book work `schema:Book` and edition `bf:Instance` are distinct; `schema:exampleOfWork` links them.
 `schema:keywords` is Concept-valued; game/release `schema:gamePlatform` is released.
 Recipe `schema:cookTime` is an integer minute quantity (`wd:Q7727`).
-These released schemas are not delivered runtime subject populations or actual Concept creation receipts.
+These released schemas are not delivered runtime subject populations. The actual version **1** factory is
+[`createReleasedDiscoveryFixture({version:1})`](../../services/kernel/test/support/released-discovery.ts),
+introduced at `f3d11d3f95fc5bbb4062f29c7e7b4b48b91afe60`, with its
+[closed interface and prerequisites](../../packages/definitions/src/released-discovery-fixtures.md).
+It uses native Auth/Access, republishes the identical bundled release, creates real identities and returns actual
+candidate/acceptance/adoption/revision/release receipts when admission succeeds. It is not wholly absent.
+Its link projection drain proves neither Search indexing nor readiness; this inspected factory still lacks the
+production Search lifecycle/binding. Prerequisite descriptors do not create runtime data.
 
-| Required fixture/data                     | Actual delivery and missing closure                                                                                                                                                                                                                                                                                                                                     | Owner                                                                                    |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Genuine words                             | No `schema:wordCount` in bundled release. Required nonnegative integer quantity, unit `1`, Book facet; counted text/version, language, source and measurement meaning must accompany genuine producer data                                                                                                                                                              | Semantic release/builder; imports reviewed source mappings                               |
-| Book range controls                       | Required `B-long` 1,200,001; `B-edge` 1,000,000; `B-short` 999,999; unknown words absent/somevalue; characters-only 1,400,000 with no words; edition page-count control. Native runtime creation receipts missing                                                                                                                                                       | Semantic shared released-data fixture builder                                            |
-| Form/tag controls                         | Required actual created `HAREM` and `LN` Concept IDs, public labels/scheme/attribution and a released `FORM` key. None delivered for this journey. `B-long`/`B-edge`/`B-characters` both; `B-short` form only; `B-unknown` harem/unknown form; alternate-form `B-tag-only`; `B-form-only` no harem. These names are logical discriminators, never IDs or title searches | Semantic definitions/Concept receipts/builder                                            |
-| Recipe controls, separate editorial input | `schema:suitableForDiet` release/representation and vegetarian Concept receipt missing; cookTime already released. Required genuine authored `R-quick` vegetarian/25, `R-edge`/30, `R-slow`/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked`/20 Alice-completed, `R-other-cooked`/20 Bob-only completed. Native shared data missing               | Semantic editorial fixtures; commerce own completion facts                               |
-| Platform release qualifiers               | Released gamePlatform does not supply actual Switch/PC Concept receipts or discriminating release population. Required Switch/Japanese versus PC/English statements with dates; Switch+English must not Cartesian-match across statements, Switch+Japanese must match one statement                                                                                     | Semantic shared builder/qualifier admission; imports reviewed mappings; search consumers |
-| Personal/source/privacy controls          | Released profile bindings and two immutable accepting releases missing; Alice/Bob independent state, label-only, holding-only, active/history-only, empty shell/follow-only controls missing from shared journey. Required public curated duplicate occurrence/alias, private/unlisted controls, overlapping Zone scope/mount and current withholding/revocation        | Semantic profiles/Zone; commerce population; accounts authority; search disclosure       |
+| Required fixture/data                     | Actual delivery and missing closure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Owner                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Genuine words                             | Bundled `schema:wordCount` remains absent. Required nonnegative integer quantity, unit `1`, Book facet. Current builder amounts are controlled editorial assertions, not genuine measurements; holder/text/version/language/method/scope/provenance association remains missing                                                                                                                                                                                                                                                                                  | Semantic release/measurement producer; imports reviewed mappings                   |
+| Book range controls                       | Builder specifies `B-long` 1,200,001, `B-edge` 1,000,000, `B-short` 999,999, `B-unknown` absent and `B-characters` without words. Six discovery consumers fail actual word admission before enumeration. Separate character 1,400,000 producer and crossed/unknown measurement controls remain missing; edition pages never fill work words                                                                                                                                                                                                                      | Semantic shared builder/definitions                                                |
+| Form/tag controls                         | Actual builder creates public scheme/Concept receipts and selects `FORM = wdt:P7937`, `LN`/`HAREM` actual created IDs. `B-long`/`B-edge`/`B-characters` both; `B-short` form only; `B-unknown` harem/unknown form; alternate-form `B-tag-only`; `B-form-only` no harem. Complete Book group/discovery still fails word admission; logical names are never IDs                                                                                                                                                                                                    | Semantic definitions/Concept receipts; imports reviewed bindings                   |
+| Recipe controls, separate editorial input | Factory has diet/recipe producers; bundled `schema:suitableForDiet` remains absent. Require authored `R-quick` vegetarian/25, `R-edge`/30, `R-slow`/31, `R-meat` nonvegetarian/20, `R-unknown` unknown diet/20, `R-cooked`/20 Alice-completed and `R-other-cooked`/20 Bob-only completed. Registration is not successful native population                                                                                                                                                                                                                       | Semantic editorial/release data; commerce completion facts                         |
+| Platform release qualifiers               | gamePlatform is released; shared platform field is a prerequisite descriptor. [Statement-grain proposal and two frozen native producer cases](../../services/kernel/src/semantic/platform-tuple-contract.md#frozen-api-evidence-and-pending-consumers) now exist. Qualifier release admission, string-filter adoption and actual consumer results remain missing. Switch/Japanese and PC/English must not imply Switch/English                                                                                                                                   | Semantic definitions/producer; imports mappings; Search consumers                  |
+| Personal/source/privacy controls          | Bundled libraryProfiles and type bindings now exist; this does not supply historical accepting releases or native consumers. [Registered Library population extension](../../services/kernel/test/library/support/released-library-population.md) and [helper](../../services/kernel/test/library/support/released-library-population.ts) name state/label/session/holding and curated controls. No native pass is credited here. Empty shell, read-only bearer, historical profiles, published dynamic/Zone and privacy producers remain explicit prerequisites | Commerce population; Semantic profiles/Zone; Accounts authority; Search disclosure |
 
 Genuine word and character scopes remain separate: no pages, characters, translated estimate, reading duration or
 series sum fills words. If the four providers supply no genuine words, imported words remain unknown. Separate
@@ -84,7 +93,7 @@ permissions, not inherit importer privilege. Suspended-valid and revoked/invalid
 [Source registration](../../services/importer/src/source-registry.ts) supplies trusted aliases and converter revisions;
 [converter sources](../../packages/conversion/src/) supply pure commands, never IDs, adoption or transport.
 Open Library reader kind `openlibrary` differs from its default envelope alias `open-library`.
-The API populations above are synthetic controlled native-format inputs, not the missing shared released-data
+The API populations above are controlled native-format inputs, separate from the registered shared released-data
 builder. The [runtime](../../services/kernel/test/imports/api-runtime.ts) binds the real Importer/SQLite, authenticated public
 batch/fence/media requests and native content workers. The [observer](../../services/kernel/test/imports/api-observer.ts)
 reads subjects/candidates/revisions and performs ordinary Context adoption; those inspection reads use its observer
@@ -196,12 +205,103 @@ native transport; Semantic owns shared fixture construction, property releases, 
 and identity. Search owns indexing/facets/query admission, Commerce common Collection and owner-query consumers,
 Semantic mounted Zone routing, Content source/media disclosure and Web page/TypeList publication.
 
-**REQUIRED NOT YET FROZEN:** `import-to-discovery` is the report's capability label, not an existing exact native
-test title. Each applicable producer-to-consumer cell below needs separately named native scenarios. No composed
-suite, wrapper, driver or executable native command currently establishes it; imports owns that missing registration.
-A future `services/kernel/test/imports/import-to-discovery.test.ts` and
-`bun run --cwd services/kernel check test/imports/import-to-discovery.test.ts` are **pending**, not runnable acceptance.
-Reuse existing API/identity/media scenarios above rather than duplicate their covered outcomes.
+**Delivered registration and recorded result:** the actual suite is
+[discovery-user-cases.test.ts](../../services/kernel/test/imports/discovery-user-cases.test.ts), with
+[discovery-user-cases-fixture.ts](../../services/kernel/test/imports/discovery-user-cases-fixture.ts) and its
+[complete report](../research/imports-audit/discovery-user-cases.md#verification-and-cost).
+`import-to-discovery` remains the parent capability label, not an exact test title or a second filename.
+The delivered acceptance has **13 independent cases, 6 pass, 7 fail, zero skips/todos**, exit **1**, recorded
+against base `c0c82dea99af6067464fafc403614d6acb43ebac` plus these delivered bytes (unchanged in this checkout):
+
+- Test SHA-256: `98638edc178257c3e012a3ba7fd8d08def2ab4ec81041288801c95b0d8cb1362`.
+- Helper SHA-256: `c1e429a477868248b42d724ad639ef689950c91b6c91590ca5b9524ac839c382`.
+
+Actual recorded commands:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/discovery-user-cases.test.ts
+bun scripts/worker-check.ts -- bun scripts/typecheck.ts
+bun scripts/worker-check.ts -- test -s docs/research/imports-audit/discovery-user-cases.md
+```
+
+The report records native exit 1 in
+`.temp/goal/checks/worker-check-2026-10-28T18-29-18.213Z-affc4401.log` and root typecheck exit 0 in
+`.temp/goal/checks/worker-check-2026-10-28T18-35-49.703Z-bce10ddf.log`; its file-presence command establishes
+documentation only. Native results are **environment-qualified**: the inspected helper overrides
+`TMPDIR` to worktree `.temp/import-discovery` on Btrfs while opening the runtime, then restores it. A fixture
+correction is queued separately. Neither corrected helper bytes nor a corrected execution report are present here;
+no corrected passing result is inferred or rerun. Cover recovery instead uses `mkdtemp(join(tmpdir(), ...))`
+without that override.
+
+The exact native titles and recorded outcomes are:
+
+| Exact scenario                                                                                                        | Recorded outcome                          |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `catalogue words strictly over one million returns only B-long`                                                       | Fail: word admission                      |
+| `catalogue released light-novel form AND harem returns exactly three books`                                           | Fail: word admission                      |
+| `catalogue conjunction of words and released form AND harem returns only B-long`                                      | Fail: word admission                      |
+| `catalogue harem facet counts only the exact selected three-book conjunction`                                         | Fail: word admission                      |
+| `readable Book detail retains selected word amounts and unit without edition page inference`                          | Fail: word admission                      |
+| `readable Book detail projects actual adopted light-novel and source-scoped harem Concept IDs`                        | Fail: word admission                      |
+| `bangumi ordinary importer candidates survive editor accept/adopt and anonymous selected read with citations`         | Pass, environment-qualified               |
+| `vndb ordinary importer candidates survive editor accept/adopt and anonymous selected read with citations`            | Pass, environment-qualified               |
+| `openlibrary ordinary importer candidates survive editor accept/adopt and anonymous selected read with citations`     | Pass, environment-qualified               |
+| `wikidata ordinary importer candidates survive editor accept/adopt and anonymous selected read with citations`        | Pass, environment-qualified               |
+| `Open Library edition keeps unsupported pages unknown and language separate from work identity and absent work words` | Pass, environment-qualified               |
+| `Bangumi observed manga meta_tags and ordinary novel tags never imply light novel or imported words`                  | Pass, environment-qualified               |
+| `imported selected metadata public read exposes sourceRecords without inventing unknown registration metadata`        | Fail: expected `[]`, received `undefined` |
+
+All six Book cases encounter `Propose schema:wordCount ... expected HTTP 201, observed 400`, problem
+`invalid_request`, `effect_status:not_applied`, pointer `/statement/property/id`, code `unsupported`, before
+query enumeration. These are native admission reds, not six query passes or thirteen native passes.
+The four provider passes accept/adopt only actual importer candidates in a real community Context and read
+anonymously with that selected Context. Supported title/language/external-ID facts and citations survive;
+this is neither Global adoption nor Global Search indexing. The observer's fallback-authoring `adopt` helper
+is deliberately unused. Native Auth hosts are closed between the released and importer groups.
+
+The Open Library edition is a separate `bf:Instance`; unsupported native `number_of_pages` stays unknown.
+The runtime lacks `identifierLookup`, so its `schema:exampleOfWork` candidate remains `somevalue`, never a
+client-injected work ID. Bangumi observed manga metadata and separate ordinary novel-tag controls establish
+non-inference only. No imported genuine words, resolved four-provider release identities, reviewed classification
+mapping or complete import-to-discovery capability is established.
+
+[Source record attribution](../../services/kernel/src/semantic/source-record-attribution-contract.md) now owns
+the closed metadata specification and `GET /v1/subjects/{id}` → `subject.sourceRecords` projection. Its native
+storage, write/read exports, mounted operation and generated typed consumer schema remain producer obligations;
+contract closure is not an implemented producer. Registration aliases supply no general display metadata.
+The recorded unknown-array failure is not positive attribution. Imports still needs a distinct journalled
+current-run metadata step before bound/unchanged shortcuts after the actual producer exists. No speculative
+operation or writer is called by this suite. Facts rights, summary rights and cover credit stay separate.
+
+**Remaining matrix:** all following cells are required, **NOT YET FROZEN** for this discovery journey, and cannot
+be discharged by registering the Library extension or by the six narrow selected-read passes.
+
+| Job                   | Public curated       | Everything without state | Own state              | Mounted public Zone       | Configured Book TypeList |
+| --------------------- | -------------------- | ------------------------ | ---------------------- | ------------------------- | ------------------------ |
+| Words >1000000        | `curated-words`      | `everything-words`       | `own-state-words`      | `mounted-zone-words`      | `type-list-words`        |
+| Light novel AND harem | `curated-form-harem` | `everything-form-harem`  | `own-state-form-harem` | `mounted-zone-form-harem` | `type-list-form-harem`   |
+| Conjunction           | `curated-combined`   | `everything-combined`    | `own-state-combined`   | `mounted-zone-combined`   | `type-list-combined`     |
+
+Additional exact still-missing discovery scenarios from the report:
+
+- Semantic measurements: `words-measured-statement`, `words-character-control`, `words-crossed-evidence`.
+  Amount-only editorial controls do not prove genuine same-statement measurement or a character producer.
+- Imports/Semantic mappings: `bangumi-meta-tags-selected-discovery`, `reviewed-form-selected-discovery`,
+  `reviewed-platform-selected-discovery`, `four-provider-resolved-work-edition-release`.
+- Platform consumers: `platform-release-same-statement`, `platform-false-Cartesian-control` on Search, curated,
+  Everything, own state, mounted Zone and detail/TypeList. The newer frozen producer cases above do not execute
+  Search or complete these cells; string qualifier admission still needs its owner.
+- Metadata: `selected-native-source-attribution-positive`, requiring actual producer receipts/exports.
+- Disclosure: `query-withheld-harem-positive`, `query-withheld-harem-NOT`, `query-withheld-order-count-cursor`,
+  `mounted-withheld-original`, `query-foreign-source-fence`, `query-withdrawn-consent`,
+  `query-final-disclosure-revocation`, independently on every applicable surface, including paused-index final
+  barriers, hidden targets/originals, revoked/delegated authority and real foreign repair acknowledgements.
+
+The actual Zone boundaries are `POST /v1/zones/{id}:readPage` and `GET /v1/zones/{id}/subjects`, with their owned
+common-page and `{subjects,next}` DTOs. Configured TypeList evidence must use its configured page read, installed
+profile/template, route and actual preparation; there is no invented TypeList endpoint. Public curated occurrence
+notes/duplicates/alias, owner support intersections, published dynamic generations, overlapping Zone mount/scope,
+source lifecycle and configured consumer execution remain open until actual native receipts and results exist.
 
 Required exact query controls, using actual created IDs, not text search:
 
@@ -210,13 +310,25 @@ Required exact query controls, using actual created IDs, not text search:
   exactly `{B-long, B-edge, B-characters}`; conjoin the range for exactly `{B-long}`.
 - Recipe type AND released vegetarian diet Concept AND cookTime `lte: 30` in the released minute unit:
   exactly `{R-quick, R-edge, R-cooked, R-other-cooked}`. Editorial controls, not imported recipes.
-- Platform plus language/date qualifiers must match one release statement; Switch+English cannot combine the
-  Switch/Japanese and PC/English statements. Work-level platform union cannot invent a release tuple.
+- Platform plus language qualifiers must match one statement on an actual release; Switch+English cannot combine
+  the Switch/Japanese and PC/English statements. Under the newer statement-grain proposal, `schema:datePublished`
+  stays at release grain, not an invented date qualifier. Work-level platform union cannot invent a release tuple.
 
 Native search uses `POST /v1/subjects:search` and `/v1/subjects:facets`, including facet values beyond previews.
 Collection consumers must use the adopted common members schema, not invent a route or adapter.
-The report's owner completion wire form remains Commerce-owned missing adoption; “not cooked” is not a public NOT
-on private state or a recipe switch. This inventory does not freeze its proposed session interpretation.
+The [approved owner-query wire](../library-owner-queries.md#closed-additive-wire) supersedes the report's missing
+adoption note. Semantic owns the shared grammar producer; typed schema and downstream Commerce/Search consumers
+remain required. The inspected [FilterDocument/parser](../../packages/filter/src/filter.ts) has no owner leaf or
+`allowOwner` option. Do not guess an alternative wire. The approved Recipe template uses viewer-self presence plus
+NOT completed session with actual accepting `profileId`, over Alice's admitted support union; it requires exactly
+`{R-quick, R-edge, R-other-cooked}`. State clear preserves history and Bob's completion is irrelevant. This is not
+public private-state inference. Registered population setup does not prove that query executes.
+
+Recipe diet/time and owner-not-cooked jobs still require Search admission/anonymous owner denial, curated,
+Everything, own-state, mounted public/private isolation and configured Recipe TypeList/detail cells from the
+[original matrix](../research/api-acceptance-gaps.md#required-cross-surface-expansion). Each remains independently
+required; public results never read Alice's history. Detail must disclose actual authored instructions, diet and
+time; export conversion to `PT25M` is separate publication evidence.
 
 ### Cover-native-recovery
 
@@ -264,6 +376,9 @@ reservation/jobs and successful public proposal ACK before local deferred comple
 Replacement selects actual candidates through the editor API; public subject, available-variant download and
 `/v1/pages:read` are the covered consumers when reached. Distinct replacement-pixel delivery needs the minimal
 external-source fixture seam recorded in the report; normal source URLs currently share deterministic PNG bytes.
+The separate optional distinct-encoded-image fixture work is registered, but the inspected
+[MediaBoundary.source](../../services/kernel/test/imports/media-boundary.ts) still accepts only URL/fault and emits
+its normal deterministic PNG. Registration supplies neither distinct pixels nor a broader consumer case.
 
 Imports owns crash/run composition; Content owns fetch/jobs/media/rights and final download authority; Semantic
 owns selection and source-record metadata. General source-record attribution/licence production is a separate
@@ -312,11 +427,11 @@ no state, label, holding or library membership is created merely by importing. T
 remove the Everything/state/curated/Zone/TypeList consumer obligations below. Personal-library migration is outside
 [first public scope](../scope.md).
 
-| Capability                       | Catalogue                                                                                                                                            | Curated                                                                                                                                         | Everything without state                                                                                                                                    | Own state                                                                                                              | Mounted Zone                                                                                                              | TypeList                                                                                                                                              |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ordinary provider import/refresh | Applicable producer: four-source native batch/subject reads registered; anonymous semantic discovery closure missing, imports/semantic/search        | Applicable consumer: imported/adopted facts and refreshed fences; composed case missing, commerce/imports                                       | No independent import list write; consume adopted subjects supported by own labels/holdings without fabricated state; missing, commerce/import-to-discovery | No independent import state write; consume only own accepted state intersection; missing, commerce/import-to-discovery | Applicable common imported subject/media consumer after mount/scope selection; missing, semantic/import-to-discovery      | Applicable configured list and factual projection of imported selected data; missing, web/semantic/import-to-discovery                                |
-| Import-to-discovery              | Applicable exact range, form/tag, conjunction and same-statement release qualifiers plus facets/source attribution; missing, imports/search/semantic | Applicable same predicates over eligible source, canonical browsing while occurrence editor preserves duplicate notes; missing, commerce/search | Applicable predicate intersect own support union, label/holding-only subject included with no entry; missing, commerce                                      | Applicable same predicate intersect selected own accepted state, Bob irrelevant; missing, commerce                     | Applicable same predicate over eligible union of mount/scope, canonical deduplication/all pages; missing, semantic/search | Applicable configured list returns same exact IDs; detail projects actual facts/units/identity, not arbitrary detail filtering; missing, semantic/web |
-| Cover-native-recovery            | Native subject/media recovery scenarios registered; executed slice in report; catalogue/discovery matrix missing, imports/content/semantic           | Applicable common-media consumer shows recovered/replaced permitted cover and rights; missing composed case, commerce/content/web               | No importer list write; own supported subjects render recovered cover with current disclosure, missing, commerce/content/web                                | No importer state write; own state-selected subjects use same media/rights, missing, commerce/content/web              | Native subject page-read asserted separately; mounted Zone media/fence propagation still missing, semantic/content/web    | Native subject page-read registered; configured TypeList rows and web common-cover publication still missing, semantic/content/web                    |
+| Capability                       | Catalogue                                                                                                                                                                         | Curated                                                                                                                                         | Everything without state                                                                                                                                    | Own state                                                                                                              | Mounted Zone                                                                                                              | TypeList                                                                                                                                              |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordinary provider import/refresh | Applicable producer: four Context-selected importer/editor/anonymous reads passed, environment-qualified; Global/search and full refresh closure missing, imports/semantic/search | Applicable consumer: imported/adopted facts and refreshed fences; composed case missing, commerce/imports                                       | No independent import list write; consume adopted subjects supported by own labels/holdings without fabricated state; missing, commerce/import-to-discovery | No independent import state write; consume only own accepted state intersection; missing, commerce/import-to-discovery | Applicable common imported subject/media consumer after mount/scope selection; missing, semantic/import-to-discovery      | Applicable configured list and factual projection of imported selected data; missing, web/semantic/import-to-discovery                                |
+| Import-to-discovery              | Six Book consumers native red at word admission; unknown sourceRecords read red; same-statement qualifiers and positive attribution still missing, imports/search/semantic        | Applicable same predicates over eligible source, canonical browsing while occurrence editor preserves duplicate notes; missing, commerce/search | Applicable predicate intersect own support union, label/holding-only subject included with no entry; missing, commerce                                      | Applicable same predicate intersect selected own accepted state, Bob irrelevant; missing, commerce                     | Applicable same predicate over eligible union of mount/scope, canonical deduplication/all pages; missing, semantic/search | Applicable configured list returns same exact IDs; detail projects actual facts/units/identity, not arbitrary detail filtering; missing, semantic/web |
+| Cover-native-recovery            | Native subject/media recovery scenarios registered; executed slice in report; catalogue/discovery matrix missing, imports/content/semantic                                        | Applicable common-media consumer shows recovered/replaced permitted cover and rights; missing composed case, commerce/content/web               | No importer list write; own supported subjects render recovered cover with current disclosure, missing, commerce/content/web                                | No importer state write; own state-selected subjects use same media/rights, missing, commerce/content/web              | Native subject page-read asserted separately; mounted Zone media/fence propagation still missing, semantic/content/web    | Native subject page-read registered; configured TypeList rows and web common-cover publication still missing, semantic/content/web                    |
 
 All applicable list cells require public/unlisted/private source controls where supported, owner/other-owner
 isolation, unknown evidence, alias/original identity, hidden source/subject/Concept, source revocation, sparse/deep
@@ -327,27 +442,33 @@ Public output never reads Alice's private completion history; permitted private 
 
 ## Missing closure and owner reconciliation
 
-- **Semantic:** deliver shared released-data native builder, actual property/profile releases and Concept receipts;
-  select the released form key; ordinary selection/adoption and native work/edition/release identity. Definition
-  inventory alone is insufficient. Imports separately maintains pinned native Bangumi metadata input and mappings.
+- **Semantic:** extend the delivered version-1 builder with missing bundled word/diet admission, genuine
+  measurement/character producers, historical accepting profiles and complete native identity/metadata producers.
+  Actual form selection is `wdt:P7937`; definitions/Concept registration alone is insufficient. Imports owns pinned
+  native Bangumi metadata input, reviewed mappings and the later journalled metadata step.
 - **Search:** consume adopted provider facts and shared released controls through normal search/facets and common
   list predicates, preserving same-statement qualifiers, unknown evidence and current privacy/readiness.
 - **Commerce:** own support/state intersections, common Collection query, occurrence versus canonical semantics,
-  owner-query schema and library/ItemList export consumers. No imported catalogue fact fabricates personal state.
+  approved owner-query execution and library/ItemList export consumers. No imported catalogue fact fabricates personal state.
 - **Content:** native cover fetch/reencode/receipt/rights/fences and source withdrawal; join with importer crash
   recovery. Media availability is separate from authorization. Metadata CC licensing never licenses the cover.
 - **Web:** actual served subject/page/TypeList and common-media consumers; a serializer or fake client is not HTTP
   publication. Reuse backend evidence and add only the missing publication journey.
-- **Accounts with imports/content/search/commerce:** new valid suspended-bearer cases require `403 account_suspended`;
-  revoked/invalid credentials are separate. Frozen scenarios expecting `401 invalid_credentials` for suspension
-  need owner reconciliation, not edits here. Reduced/unscoped/delegated and late revoked authority cannot disclose
-  receipts or protected facts. A ban beats independent grants; the report's earlier unresolved precedence note is
-  not authority to bypass the current contract. Missing composed variants remain owner work.
+- **Accounts with imports/content/search/commerce:** retain distinct revoked/invalid and suspension controls.
+  The newer [owner-query admission contract](../library-owner-queries.md#viewer-self-binding-and-admission)
+  specifies native suspension revoking existing bearers (`401 invalid_credentials`), correct-password suspended
+  sign-in `403 ACCOUNT_SUSPENDED`, and supersedes hypothetical valid-suspended `403 account_suspended` wording
+  in older list documents. The fixture's revoked pre-suspension bearer proves no valid-suspended case. Preserve
+  frozen bytes and reconcile the report/fixture's older prerequisite through owning acceptance; do not fabricate
+  credentials or call it a pass. Reduced/unscoped/delegated and late revoked authority cannot disclose receipts
+  or protected facts. A ban beats independent grants. Missing composed authority variants remain owner work.
 - **Commerce/search/performance:** the existing frozen dynamic scenario
   `bounded Collection filters advance opaque prefixes through hidden and filtered candidates without joins` in
   [dynamic-collections-outcomes.test.ts](../../specs/dynamic-collections-outcomes.test.ts) expects empty successful
   continuation, conflicting with the useful-page contract. Owners reconcile through acceptance ownership; preserve
   frozen bytes and do not bless that behaviour in new scenarios.
 
-This manifest deliberately leaves native passes and promotion unclaimed. Existing frozen scenarios are reused;
-missing released fixtures, bindings, commands and composed cases stay explicit owner obligations.
+This refresh advances discovery registration/exposure and records its environment-qualified six passes/seven reds;
+cover recovery retains its three recorded native passes. Neither parent capability nor promotion is established.
+No acceptance bytes or product behaviour changed. Only this manifest's scoped formatter is run here; no new test,
+root typecheck, product suite, whole-kernel check or root gate is part of this documentation acceptance.
