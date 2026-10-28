@@ -449,7 +449,7 @@ function blockStabilize(
 }
 
 function infrastructureText(text: string): boolean {
-  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker (?:run|:).*?(?:failed|failure|error|exit(?:ed)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(text);
+  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker\s+(?:run\b|:).*?(?:failed|failure|error|exit(?:ed)?(?: with code)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(text);
 }
 
 function infrastructureFailure(
@@ -474,7 +474,7 @@ function stabilizeRetryCommands(
   const path = join(options.settings.stateDirectory, `promotion-${run.id}-head-${index}.log`);
   if (!existsSync(path)) return [[...failed.command]];
   const log = readFileSync(path, 'utf8');
-  const workspaces = [...log.matchAll(/^Workspace .*?\(([^)]+)\)$/gm)].map((match) => match[1]!);
+  const workspaces = (log.match(/^Failed workspaces:\s*(.+)$/m)?.[1] ?? '').trim().split(/\s+/).filter(Boolean);
   const unique = [...new Set(workspaces.filter((workspace) => /^(?:apps|services|packages)\/[^/]+$/.test(workspace)))];
   return unique.length ? unique.map((workspace) => ['bun', 'run', '--cwd', workspace, 'check']) : [[...failed.command]];
 }
