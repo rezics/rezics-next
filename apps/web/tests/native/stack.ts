@@ -258,9 +258,11 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
     })());
   try {
+    console.info('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
     if (!process.env.DATABASE_URL) {
+      console.info('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
       postgresContainer = startPostgresContainer();
@@ -285,8 +287,10 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
         }
       }
       process.env.DATABASE_URL = databaseUrl;
+      console.info('Native web stack startup: migrating PostgreSQL');
       migrate(databaseUrl);
     }
+    console.info('Native web stack startup: preparing SQL analysis');
     // Give Reylo an owned cache and the migrated template for SQL analysis.
     await mkdir(join(repositoryRoot, '.temp'), { recursive: true });
     runtimeDirectory = await mkdtemp(join(repositoryRoot, '.temp', 'native-kernel-runtime-'));
@@ -316,6 +320,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     let kernel: ReturnType<typeof createKernel> | undefined;
+    console.info('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
         kernel = createKernel(dependencies);
@@ -335,6 +340,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
       KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
     };
+    console.info('Native web stack startup: starting durable-work worker');
     durableWorker = await startDurableWorker(workerEnv);
 
     const sourceApp = kernel!;
@@ -356,6 +362,7 @@ async function startStack(): Promise<Omit<NativeWebStack, 'kernel' | 'request'>>
     const webOrigin = `http://127.0.0.1:${await freePort()}`;
     let publicOrigin = 'https://rezics.example.test';
     const launch = async () => startWeb(webOrigin, kernelOrigin, publicOrigin);
+    console.info('Native web stack startup: starting production web Worker');
     webProcess = await launch();
 
     return {
@@ -502,7 +509,11 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       },
       async request(url, persona, suppliedHeaders) {
         const requested = new URL(url, web);
-        const target = new URL(requested.pathname + requested.search, web);
+        const target = new URL(web);
+        // Assign the path rather than resolving it: a leading // is still a
+        // document path, never authority to contact a different listener.
+        target.pathname = requested.pathname;
+        target.search = requested.search;
         const headers = await authenticatedHeaders(suppliedHeaders, persona);
         // Keep the HTTP Response itself: observing never reads its body, replaces
         // its headers, changes its status, or follows a Worker redirect.

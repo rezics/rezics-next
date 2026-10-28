@@ -153,3 +153,38 @@ test('returns the original HTTP response and confines absolute URLs, credentials
     await canary.stop(true);
   }
 }, 300_000);
+
+test('keeps leading double slashes in a document path on the owned web listener', async () => {
+  const stack = await startNativeWebStack();
+  stacks.push(stack);
+  let escaped = 0;
+  const canary = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch() {
+      escaped++;
+      return new Response('escaped');
+    },
+  });
+  const nativeFetch = globalThis.fetch;
+  const calls: { url: string; response: Response }[] = [];
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const response = await nativeFetch(input, init);
+    calls.push({ url: String(input), response });
+    return response;
+  }) as typeof fetch;
+  try {
+    const path = `//${canary.url.host}/en/subjects/00000000-0000-4000-8000-000000000000?transport=kept`;
+    const response = await stack.request(`https://rezics.example.test${path}`, 'editor');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${stack.web}${path}`);
+    expect(response).toBe(calls[0]!.response);
+    expect(response.bodyUsed).toBe(false);
+    expect(response.redirected).toBe(false);
+    expect(escaped).toBe(0);
+    await response.arrayBuffer();
+  } finally {
+    globalThis.fetch = nativeFetch;
+    await canary.stop(true);
+  }
+}, 300_000);
