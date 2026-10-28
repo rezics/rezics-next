@@ -101,7 +101,14 @@ research is needed.
 
 ## Local execution and evidence limits
 
-Ran exactly once after the final test edits:
+The assigned base already contains both focused acceptance files and the exact
+authorized frozen amendment. Inspection of that amendment confirms that its
+entire diff removes only the two array entries shown above. This attempt leaves
+all acceptance files unchanged and revalidates the inherited specification.
+The failures below occur on the assigned base; they are the required red
+implementation acceptance, not a blocker for this specification-only delivery.
+
+Ran exactly once in this attempt, with exit status 1:
 
 ```sh
 bun test packages/conversion/tests/bangumi-scope.test.ts services/importer/tests/bangumi-scope.test.ts
@@ -157,3 +164,27 @@ specific specification-only instruction permits only the two new local tests
 and prohibits root checks. No product defect was fixed to make the intended red
 acceptance green. No file outside the four declared paths was changed; temporary
 execution output is kept under `.temp/` and is not committed.
+
+## Cost
+
+### Dispatch a source record
+
+- Touches: source identity and numeric type, then the existing bounded per-record
+  projection only for supported types. Exclusions produce no command or media work.
+- Bound: constant identity/type dispatch plus O(M) existing conversion for a
+  supported record of bounded size M; no catalogue or historical-record reads.
+- Growth check: the focused tests establish outcomes and named I/O interception,
+  not measured growth. Existing Bangumi growth assertions were inspected only;
+  no three-scale performance run was performed in this specification attempt.
+
+### Account for skipped acquisition inputs
+
+- Touches: each input already visited by full acquisition, one in-memory scalar,
+  and the exact run metadata at seal and resume.
+- Bound: O(S) scalar updates over S acquired inputs, O(1) additional retained
+  state, and constant additional metadata accesses by run identity. The existing
+  staging/pages retain their bounds; no historical scan or skipped-ID Set.
+- Growth check: unchanged and durable-resume scenarios require the same count
+  without another input pass. These are currently red functional requirements;
+  native statement and examined-row measurements remain implementation evidence
+  to collect, independently growing unrelated source history.
