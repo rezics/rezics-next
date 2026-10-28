@@ -70,6 +70,24 @@ async function buildErasureBoard(
   }
 }
 
+async function retryTransientAccess<T>(deadline: number, run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (
+        !(error instanceof AccessUnavailableError) ||
+        !['contention', 'overloaded'].includes(error.reason) ||
+        attempt >= 2
+      )
+        throw error;
+      const delay = 20 * (attempt + 1);
+      if (Date.now() + delay >= deadline) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 /** IPC preserves the executor's opaque time identities separately from values.
  * Different native time objects must remain different after transport.
  */
@@ -501,7 +519,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     const freshGovernanceActor = async (deadline: number) => {
       governanceCredential ??= native.governanceBearer;
       if (Number(decodeJwt(governanceCredential).exp) * 1000 > Date.now() + 5_000)
-        return native.system.access.authenticate(governanceCredential, { pool, deadline });
+        return retryTransientAccess(deadline, () =>
+          native.system.access.authenticate(governanceCredential!, { pool, deadline }),
+        );
       const row = (
         await pool.query<{ account_id: string }>(
           'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
@@ -515,7 +535,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
       });
       governanceCredential = credential.bearer;
-      return native.system.access.authenticate(credential.bearer, { pool, deadline });
+      return retryTransientAccess(deadline, () =>
+        native.system.access.authenticate(credential.bearer, { pool, deadline }),
+      );
     };
     const freshAuthorActor = async (deadline: number) => {
       const account = await readAccount(pool, routeOf(native.accountIds.author)!, native.accountIds.author);
@@ -547,7 +569,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         }
       }
       native.updateBearer('author', authorCredential.bearer);
-      return native.system.access.authenticate(authorCredential.bearer, { pool, deadline });
+      return retryTransientAccess(deadline, () =>
+        native.system.access.authenticate(authorCredential!.bearer, { pool, deadline }),
+      );
     };
     const buildSpareBoard = async (authorId: string): Promise<PreparedBoard> => {
       if (authorId === native.accountIds.suspended) {
@@ -746,10 +770,13 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         const governanceActor = await freshGovernanceActor(Date.now() + 120_000);
         if (governanceActor.kind !== 'account') throw new Error('Native governance credential is not an account');
         const governanceContext = () => ({ pool, actor: governanceActor, deadline: Date.now() + 120_000 });
-        let organizationOwner = await lifecycleAccess.authenticate(native.system.actors.other.bearer, {
-          pool,
-          deadline: Date.now() + 120_000,
-        });
+        const initialOwnerDeadline = Date.now() + 120_000;
+        let organizationOwner = await retryTransientAccess(initialOwnerDeadline, () =>
+          lifecycleAccess.authenticate(native.system.actors.other.bearer, {
+            pool,
+            deadline: initialOwnerDeadline,
+          }),
+        );
         const ownerContext = () => ({ actor: organizationOwner, deadline: Date.now() + 120_000 });
         const addGroupGrant = async (id: string, subject: PublicGrantSubject, actions: string[]) => {
           await grants.create(authorContext(), {
@@ -813,10 +840,10 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             clientId: membershipClientId,
             scopes: ['account:read', 'organization:membership'],
           });
-          organizationOwner = await lifecycleAccess.authenticate(ownerCredential.bearer, {
-            pool,
-            deadline: Date.now() + 120_000,
-          });
+          const ownerDeadline = Date.now() + 120_000;
+          organizationOwner = await retryTransientAccess(ownerDeadline, () =>
+            lifecycleAccess.authenticate(ownerCredential.bearer, { pool, deadline: ownerDeadline }),
+          );
           principalId = newId(routeOf(actorId)!);
           const ownerReservation = await internal.reserveCoordination({
             accountId: native.accountIds.unrelated,
@@ -942,10 +969,13 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
                 clientId: native.system.auth.ordinaryClient.id,
                 scopes: ['access:grant'],
               });
-            const principal = await native.system.access.authenticate(principalCredential.bearer, {
-              pool,
-              deadline: Date.now() + 120_000,
-            });
+            const principalDeadline = Date.now() + 120_000;
+            const principal = await retryTransientAccess(principalDeadline, () =>
+              native.system.access.authenticate(principalCredential!.bearer, {
+                pool,
+                deadline: principalDeadline,
+              }),
+            );
             requestedBy = (
               await createDelegationCommands({ pool, access: native.system.access, action: 'access:grant' }).create(
                 { pool, actor: principal, deadline: Date.now() + 120_000 },
@@ -1020,7 +1050,10 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             );
             if (response.ok) {
               const { access_token: bearer } = (await response.json()) as { access_token: string };
-              const actor = await native.system.access.authenticate(bearer, { pool, deadline: Date.now() + 120_000 });
+              const authDeadline = Date.now() + 120_000;
+              const actor = await retryTransientAccess(authDeadline, () =>
+                native.system.access.authenticate(bearer, { pool, deadline: authDeadline }),
+              );
               if (actor.kind !== 'account') throw new Error('Native Auth refresh did not authenticate an account');
               credential = { bearer, actor };
               refreshToken = externalSessionCookie;
@@ -1594,7 +1627,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             clientId: lifecycleClientId,
             scopes: ['account:read', 'account:delete'],
           });
-          const lifecycleActor = await lifecycleAccess.authenticate(credential.bearer, { pool, deadline });
+          const lifecycleActor = await retryTransientAccess(deadline, () =>
+            lifecycleAccess.authenticate(credential.bearer, { pool, deadline }),
+          );
           const outcome = await lifecycle.tombstone(
             { actor: lifecycleActor, deadline },
             {
@@ -1638,7 +1673,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             clientId: membershipClientId,
             scopes: ['account:read', 'organization:membership'],
           });
-          const organizationOwner = await lifecycleAccess.authenticate(ownerCredential.bearer, { pool, deadline });
+          const organizationOwner = await retryTransientAccess(deadline, () =>
+            lifecycleAccess.authenticate(ownerCredential.bearer, { pool, deadline }),
+          );
           const member = (
             await pool.query<{ reservation_id: string }>(
               `SELECT reservation_id FROM access.membership_inverse
@@ -1821,7 +1858,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               clientId: native.system.auth.ordinaryClient.id,
               scopes: ['access:grant'],
             });
-            const principalActor = await native.system.access.authenticate(principal.bearer, { pool, deadline });
+            const principalActor = await retryTransientAccess(deadline, () =>
+              native.system.access.authenticate(principal.bearer, { pool, deadline }),
+            );
             const outcome = await createDelegationCommands({
               pool,
               access: native.system.access,
