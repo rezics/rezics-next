@@ -1,3 +1,5 @@
+import type { AffectedTestResult } from './types.ts';
+
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
 // failure classes and evidence bundles; the integration side owns the merge train, manager sessions and inboxes.
 // Each side tests against fakes of the other side's interface.
@@ -20,6 +22,8 @@ export interface AttemptFence {
   assertCurrent(ref: AttemptRef): void;
   /** Hold the shared store write lock through Git advancement and publication of merged task state. */
   commitMerge(ref: AttemptRef, merge: () => string): string;
+  /** Atomically fence every member while one cumulative candidate advances the integration ref. */
+  commitBatchMerge?(members: readonly (AttemptRef & { commit: string })[], merge: () => string): string;
 }
 
 export type LandingRequest = AttemptRef & {
@@ -30,6 +34,7 @@ export type LandingRequest = AttemptRef & {
   /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
   protectedPaths?: readonly string[];
   gate: readonly string[];
+  affectedTests?: readonly AffectedTestResult[];
 };
 
 /** Implemented by the integration side. */
@@ -53,6 +58,8 @@ export type GateOutcome = AttemptRef & {
   firstFailure?: FirstFailure;
   /** The same first failure also occurs on main. */
   failsOnMain?: boolean;
+  /** Exact command that produced firstFailure when the gate runner identified one. */
+  failedCommand?: readonly string[];
   timedOut?: boolean;
   logPath: string;
   hostMs: number;

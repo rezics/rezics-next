@@ -168,6 +168,18 @@ export function workerPrompt(
   mainCheckout: string,
 ): string {
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
+  const evidenceText = evidence
+    ? (() => {
+        const failurePath = join(evidence, 'failure.json');
+        if (!existsSync(failurePath)) return `Retry evidence directory: ${evidence}`;
+        try {
+          const document = JSON.parse(readFileSync(failurePath, 'utf8')) as { manifest?: unknown };
+          return typeof document.manifest === 'string' ? document.manifest : `Retry evidence directory: ${evidence}`;
+        } catch {
+          return `Retry evidence directory: ${evidence}`;
+        }
+      })()
+    : undefined;
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
@@ -185,7 +197,7 @@ export function workerPrompt(
       : '',
     frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
-    readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
+    'The fields are status, summary, blocker and approaches; a non-null blocker has kind and detail.',
     task.brief.kind === 'bulk-text'
       ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
       : '',
@@ -193,7 +205,7 @@ export function workerPrompt(
     task.brief.markdown,
     'A failure that also occurs on your base commit is not your blocker: when your acceptance command passes, report success and name it in your summary. A test that passes on your base and fails after your change is yours: fix it, wherever the fix belongs.',
     "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
-    evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
+    evidenceText ? `Continue from this retry manifest:\n${evidenceText}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
