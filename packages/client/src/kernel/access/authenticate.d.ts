@@ -1,3 +1,4 @@
+import type { IdentityExpiry } from './identity-expiry.ts';
 import { type KernelClock } from '../clock.ts';
 import { type FetchImplementation } from 'jose';
 import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
@@ -12,11 +13,10 @@ export type AuthenticationConfig = {
     /** Public JWKS transport only. No credential, token or private key is passed. */
     fetch?: FetchImplementation;
 };
-type Identity = {
+type Identity = IdentityExpiry & {
     account: Account;
     pool: AccessContext['pool'];
     deadline: number;
-    expires: number;
     observedAt: number;
     durableTime?: AuthoritativeTime;
     durableAction?: string;

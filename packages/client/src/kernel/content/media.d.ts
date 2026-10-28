@@ -121,6 +121,9 @@ export declare class NewThreadTargetExistsError extends Error {
 export declare class InvalidMediaClaimError extends Error {
     constructor();
 }
+export declare class MediaUnavailableError extends Error {
+    constructor();
+}
 export declare function reserveMedia(dependencies: MediaDependencies, actor: Actor, input: MediaReservationInput, context: RequestContext, newThreadTarget?: NewThreadMediaTarget): Promise<CommandOutcome<Readonly<{
     mediaId: MediaId;
 }>>>;

@@ -12,6 +12,7 @@ import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
+import { noticeRoutes } from '../content/notice-routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
@@ -41,13 +42,21 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Test and deployment override for the kernel-registered current Realm role reader. */
     realmRoleReader?: AccessRealmRoleReader;
 };
-/** Builds the Access resolver shared by production kernels and test compositions. */
+export declare class KernelAccessCompositionError extends Error {
+    constructor();
+}
+/** One Access per kernel, built on first use after composition from the complete
+ * mounted catalogue; composition code receives Access lazily. Standalone test
+ * compositions may supply their already-complete catalogue in resolveAccess.
+ */
 export declare function createKernelAccessResolver(options: {
     pool: Pool;
     tokens: KeyRing;
     clock: () => Date;
     access?: Access | AccessFactory;
     realmRoleReader?: AccessRealmRoleReader;
+    /** Undefined until the kernel has mounted its last route. */
+    composedActions?: () => AccessConfig['actions'] | undefined;
 }): {
     resolveAccess: (config: AccessConfig) => Access;
     realmRoleReader: AccessRealmRoleReader;
@@ -59,7 +68,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
 export type Kernel = KernelComposition;
 /** createKernel guarantees one parameter name for each route position. */
 export type ClientKernel = Elysia<KernelComposition['~Prefix'], 'local', KernelComposition['~Singleton'], KernelComposition['~Definitions'], KernelComposition['~Metadata'], KernelComposition['~Routes'], KernelComposition['~Ephemeral'], KernelComposition['~Volatile']>;

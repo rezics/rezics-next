@@ -1,3 +1,4 @@
+import { type IdentityExpiry } from './identity-expiry.ts';
 import { type Access, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import approvalRead from './workflow-approvals-read.sql';
@@ -24,13 +25,16 @@ type Claims = {
 };
 type Bridge = {
     scope: object;
-    expiry(actor: AccountActor, context: AccessContext): number | undefined;
+    expiry(actor: AccountActor, context: AccessContext): IdentityExpiry | undefined;
     restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export declare function installApprovalIdentityBridge(access: Access, bridge: Bridge): void;
 export declare function approvedIdentityClaims(proof: ApprovedIdentity, scope: object, pool: AccessContext['pool']): Claims | undefined;
+/** The original verified instant, checked on the clock that issued the identity. */
 export declare function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number;
+/** Kernel rows retain kernel instants, including caps inherited from a bearer. */
+export declare function verifiedKernelExpiry(access: Access, actor: AccountActor, context: AccessContext): number;
 /** Bind every immutable column, including original scope ceiling and JWT expiry. */
 export declare function approvalRowDigest(row: ApprovalRow): string;
 /** This is the only approval identity minting path. It requires the configured

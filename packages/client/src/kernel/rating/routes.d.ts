@@ -11,7 +11,21 @@ type Dependencies = {
 };
 /** Private account-owned vote transport. Commands remain responsible for partition ownership and current account state. */
 export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
-    typebox: {};
+    typebox: {
+        PublicFigure: import("typebox").TObject<{
+            questionId: import("typebox").TString;
+            populationId: import("typebox").TString;
+            scale: import("typebox").TObject<{
+                min: import("typebox").TInteger;
+                max: import("typebox").TInteger;
+                displayStep: import("typebox").TInteger;
+            }>;
+            count: import("typebox").TInteger;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+            mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+            score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        }>;
+    };
     error: [{
         error: Error;
         response: {};
@@ -3820,6 +3834,111 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
     v1: {
         subjects: {
             ":id": {
+                figure: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                figure: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
                 ratings: {
                     get: {
                         body: unknown;
@@ -4592,7 +4711,21 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job }: {
+}, {
+    PublicFigure: import("typebox").TObject<{
+        questionId: import("typebox").TString;
+        populationId: import("typebox").TString;
+        scale: import("typebox").TObject<{
+            min: import("typebox").TInteger;
+            max: import("typebox").TInteger;
+            displayStep: import("typebox").TInteger;
+        }>;
+        count: import("typebox").TInteger;
+        state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+        mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+    }>;
+}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -4948,7 +5081,21 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 bearerAuth?: never;
             })[];
         };
-    }, {}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {
+        PublicFigure: import("typebox").TObject<{
+            questionId: import("typebox").TString;
+            populationId: import("typebox").TString;
+            scale: import("typebox").TObject<{
+                min: import("typebox").TInteger;
+                max: import("typebox").TInteger;
+                displayStep: import("typebox").TInteger;
+            }>;
+            count: import("typebox").TInteger;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+            mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+            score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        }>;
+    }, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {

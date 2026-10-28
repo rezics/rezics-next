@@ -76,8 +76,8 @@ export type CredentialCapability = Required<Pick<CredentialApprovalPorts<Credent
  * credential binding columns; a broad opening alone fails. Four separate purposes
  * never substitute for each other, sessions or devices in either direction.
  *
- * Operator opening expiry is min(native created T + 60s, verified bearer expiry),
- * checked against command T AND database time. The evidence read window bounds
+ * Operator opening expiry is min(native created T + 60s, bearer expiry carried
+ * into kernel time), checked against command T. The evidence read window bounds
  * creation reads, not the opening lifetime. Retention never renews rows. Every
  * consume/retry re-runs the SAME formula, current state, fences, floors and operator
  * checks, including before disclosure of an exact saved Auth result.
