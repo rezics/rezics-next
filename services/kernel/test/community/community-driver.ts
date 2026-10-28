@@ -187,8 +187,7 @@ export async function restartWorker(): Promise<void> {
   Object.assign(shared.worker, await startWorker(shared.system));
 }
 
-async function buildShared(): Promise<SharedCommunity> {
-  const databaseUrl = process.env.DATABASE_URL;
+async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<SharedCommunity> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
   const system = await createContentSystem({ databaseUrl });
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
@@ -269,15 +268,21 @@ function closeShared(base: SharedCommunity): Promise<void> {
 }
 
 /** A test file builds its system and worker once; each test gets its own driver state over them. */
-export async function createCommunityDriver(): Promise<CommunityDriver> {
+export async function createCommunityDriver(options: { databaseUrl?: string } = {}): Promise<CommunityDriver> {
   if (shared?.retired) await closeShared(shared);
-  const base = (shared ??= await buildShared());
+  const base = (shared ??= await buildShared(options.databaseUrl));
   return bindDriver(base);
 }
 
 /** Ends the system and worker the file's drivers share. Call it once when the file is done. */
 export async function closeCommunityDrivers(): Promise<void> {
   if (shared) await closeShared(shared);
+}
+
+/** Shared native composition for companion fixtures that need Auth-issued accounts and instrumented reads. */
+export function communityFixtureRuntime(): Pick<SharedCommunity, 'system' | 'kernel'> {
+  if (!shared) throw new Error('Community driver is not open');
+  return { system: shared.system, kernel: shared.kernel };
 }
 
 /** Read the isolated fixture database from a companion integration test. */

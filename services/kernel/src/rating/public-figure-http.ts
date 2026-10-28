@@ -1,10 +1,12 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
+import type { Static } from 'typebox';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { publicFigureState, readPublicFigurePending, readPublicFigures } from './public-figure.ts';
+import { publicFigureState, type Queryable } from './public-figure.ts';
+import readViews from './public-figure-views.sql';
 import questionRead from './question-read.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 
@@ -25,43 +27,65 @@ export const PublicFigureSchema = t.Object(
   closed,
 );
 
+export type PublicFigureView = Static<typeof PublicFigureSchema>;
+
+/** Two Global-only point reads within the caller's REPEATABLE READ READ ONLY snapshot; no transaction control. */
+export async function readPublicFigureViews(
+  client: Queryable,
+  subjectIds: readonly string[],
+): Promise<ReadonlyMap<string, Readonly<{ figure: PublicFigureView; revision: string }>> | null> {
+  if (!Array.isArray(subjectIds) || subjectIds.length > 256)
+    throw new TypeError('Public figure reads accept at most 256 subjects');
+  const subjects = [...new Set(subjectIds)].map((subject_id) => {
+    const route = routeOf(subject_id);
+    if (route === null) throw new TypeError('Invalid subject figure address');
+    return { partition_no: partitionOf(route), route, subject_id };
+  });
+  const result = new Map<string, Readonly<{ figure: PublicFigureView; revision: string }>>();
+  if (subjects.length === 0) return result;
+  const question = await questionRead.run(client, { question_id: STANDARD_QUESTION_ID });
+  const rows = await readViews.run(client, {
+    subjects,
+    question_id: STANDARD_QUESTION_ID,
+    population_id: GLOBAL_CONTEXT.id,
+  });
+  if (!question) return null;
+  const bySubject = new Map(rows.map((row) => [row.subjectId, row]));
+  for (const { subject_id } of subjects) {
+    const row = bySubject.get(subject_id);
+    const published = row && row.revision !== '0' ? row : undefined;
+    const count = Number(published?.count ?? 0);
+    if (!Number.isSafeInteger(count) || count < 0)
+      throw new Error('Public rating figure count is outside the safe range');
+    const state = publicFigureState({ count }, question.grain, row?.pending ?? false);
+    result.set(subject_id, {
+      revision: published?.revision ?? '0',
+      figure: {
+        questionId: question.id,
+        populationId: GLOBAL_CONTEXT.id,
+        scale: { min: question.minimumUnits, max: question.maximumUnits, displayStep: question.stepUnits },
+        count,
+        state,
+        mean: state === 'ready' && published?.mean != null ? Number(published.mean) : null,
+        score:
+          state === 'ready' && published?.priorEpoch != null && published.score !== null
+            ? Number(published.score)
+            : null,
+      },
+    });
+  }
+  return result;
+}
+
 /** Only published Global data and its pending mark enter the consumer snapshot. */
 export async function readSubjectPublicFigure(pool: Pool, subjectId: string, deadline: number) {
-  const route = routeOf(subjectId);
-  if (route === null) throw new TypeError('Invalid subject figure address');
+  if (routeOf(subjectId) === null) throw new TypeError('Invalid subject figure address');
   return withConnection(pool, async (client) => {
     const bounded = deadlineClient(client, deadline);
     await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
-      const question = await questionRead.run(bounded, { question_id: STANDARD_QUESTION_ID });
-      if (!question) {
-        await bounded.query('COMMIT');
-        return null;
-      }
-      const [published] = await readPublicFigures(bounded, {
-        partition: partitionOf(route),
-        questionId: STANDARD_QUESTION_ID,
-        populationId: GLOBAL_CONTEXT.id,
-        subjectIds: [subjectId],
-      });
-      const pending = await readPublicFigurePending(bounded, {
-        questionId: STANDARD_QUESTION_ID,
-        populationId: GLOBAL_CONTEXT.id,
-        subjectId,
-      });
-      const state = publicFigureState(published ?? null, question.grain, pending);
-      const result = {
-        revision: published?.revision ?? '0',
-        figure: {
-          questionId: question.id,
-          populationId: GLOBAL_CONTEXT.id,
-          scale: { min: question.minimumUnits, max: question.maximumUnits, displayStep: question.stepUnits },
-          count: published?.count ?? 0,
-          state,
-          mean: state === 'ready' ? (published?.mean ?? null) : null,
-          score: state === 'ready' && published?.priorEpoch != null ? published.score : null,
-        },
-      };
+      const views = await readPublicFigureViews(bounded, [subjectId]);
+      const result = views?.get(subjectId) ?? null;
       await bounded.query('COMMIT');
       return result;
     } catch (error) {

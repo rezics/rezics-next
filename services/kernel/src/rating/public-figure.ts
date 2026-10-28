@@ -56,7 +56,7 @@ const DEFAULT_DRAIN_LIMIT = 500;
 const MAX_DRAIN_LIMIT = 500;
 const MAX_READ_IDS = 256;
 
-type Queryable = Pick<Pool | PoolClient, 'query'>;
+export type Queryable = Pick<Pool | PoolClient, 'query'>;
 
 export type PublicFigure = Readonly<{
   questionId: string;

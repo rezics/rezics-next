@@ -16,6 +16,7 @@ import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { createFigureFixture } from './support/figure-fixture.ts';
 
 const routeKey = new Uint8Array(32).fill(94);
 const ownerId = newId(0x2201);
@@ -146,45 +147,6 @@ async function published(subjectId: string, count: number, populationId = GLOBAL
       )[0],
     (value) => value?.count === count,
   );
-}
-async function privateRealm() {
-  const realmId = newId(0x3310);
-  const spaceId = newId(0x3310);
-  const revisionId = newId(0x3310);
-  const client = await database.admin.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
-    VALUES ($1, $2, 'active', $3, now(), $4)`,
-      [routeOf(spaceId), spaceId, revisionId, ownerId],
-    );
-    await client.query(
-      `INSERT INTO community.space_revision
-    (route, space_id, revision_id, title, summary, created_at, author)
-    VALUES ($1, $2, $3, 'Private space', '', now(), $4)`,
-      [routeOf(spaceId), spaceId, revisionId, ownerId],
-    );
-    await client.query(
-      `INSERT INTO community.realm
-    (route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
-    VALUES ($1, $2, $3, 'active', 'protected', $4, $5, now(), $6)`,
-      [routeOf(realmId), realmId, spaceId, GLOBAL_CONTEXT.id, revisionId, ownerId],
-    );
-    await client.query(
-      `INSERT INTO community.realm_revision
-    (route, realm_id, revision_id, title, summary, visibility, context_id, created_at, author)
-    VALUES ($1, $2, $3, 'Private Realm', '', 'protected', $4, now(), $5)`,
-      [routeOf(realmId), realmId, revisionId, GLOBAL_CONTEXT.id, ownerId],
-    );
-    await client.query('COMMIT');
-    return realmId;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 // Hold only publication, after the native aggregate apply commits its pending mark.
 async function holdPublication(subjectId: string) {
@@ -385,39 +347,57 @@ test('the subject figure route answers the published Global standard figure with
 }, 300_000);
 
 test('the subject figure never reflects a private Realm population or exposes an individual vote', async () => {
-  const target = await subject();
-  await figure(target);
-  const realmId = await privateRealm();
-  expect((await request(`/v1/realms/${realmId}`)).status).toBe(404);
-  const members = await Promise.all(Array.from({ length: 5 }, () => voter()));
-  const outsiders = await Promise.all(Array.from({ length: 5 }, () => voter()));
-  for (const accountId of members) await vote(target, accountId, 20);
-  for (const accountId of outsiders) await vote(target, accountId, 0);
-  await published(target, 10);
-  const baseline = await figure(target);
-  const before = baseline.figure;
-  // A private membership fixture; all votes and both populations' figures still use the native producer.
-  for (const accountId of members)
-    await database.admin.query(
-      `INSERT INTO rating.voter_realm
-    (route, voter_id, realm_id, joined_at, state) VALUES ($1, $2, $3, now(), 'counted')`,
-      [routeOf(accountId), accountId, realmId],
+  // The native Auth fixture owns the in-process workflow runtime while its Kernel worker runs separately.
+  await worker.stop();
+  // The check runner's migrated template is untouched by the route scenarios above.
+  const template = new URL(process.env.DATABASE_URL!);
+  template.pathname = '/rezics';
+  const fixture = await createFigureFixture({
+    subjects: 1,
+    partitions: 1,
+    databaseUrl: template.href,
+    deferMembership: true,
+  });
+  try {
+    const target = fixture.subjectIds[0]!;
+    const accounts = new Map(
+      [...fixture.realmMembers, ...fixture.globalVoters].map((account) => [account.id, account]),
     );
-  // Swap equal groups' extremes: Global remains identical while the new Realm figure is exclusively zero.
-  for (const accountId of members) await vote(target, accountId, 0);
-  for (const accountId of outsiders) await vote(target, accountId, 20);
-  const privateFigure = (await published(target, 5, realmId))!;
-  expect(privateFigure.mean).toBe(0);
-  await until(
-    () => figure(target),
-    (value) => value.etag !== baseline.etag && value.figure.mean === before.mean,
-  );
-  for (const accountId of [undefined, members[0], outsiders[0]]) {
-    const response = await request(`/v1/subjects/${target}/figure`, accountId);
-    const text = await response.text();
-    expect(response.status).toBe(200);
-    expect(JSON.parse(text)).toEqual({ figure: before });
-    for (const secret of [realmId, ...members, ...outsiders, 'voterId', 'units', 'histogram', 'vote'])
-      expect(text).not.toContain(secret);
+    const request = (path: string, accountId?: string) =>
+      fixture.request(path, accountId ? accounts.get(accountId)! : null);
+    const vote = (subjectId: string, accountId: string, units: number) =>
+      fixture.vote(subjectId, accounts.get(accountId)!, units);
+    const figure = fixture.figure;
+    const published = fixture.published;
+    await figure(target);
+    const realmId = fixture.realmId;
+    expect((await request(`/v1/realms/${realmId}`)).status).toBe(404);
+    const members = fixture.realmMembers.map((account) => account.id);
+    const outsiders = fixture.globalVoters.map((account) => account.id);
+    for (const accountId of members) await vote(target, accountId, 20);
+    for (const accountId of outsiders) await vote(target, accountId, 0);
+    await published(target, 10);
+    const baseline = await figure(target);
+    const before = baseline.figure;
+    await fixture.joinMembers();
+    // Swap equal groups' extremes: Global remains identical while the new Realm figure is exclusively zero.
+    for (const accountId of members) await vote(target, accountId, 0);
+    for (const accountId of outsiders) await vote(target, accountId, 20);
+    const privateFigure = (await published(target, 5, realmId))!;
+    expect(privateFigure.mean).toBe(0);
+    await until(
+      () => figure(target),
+      (value) => value.etag !== baseline.etag && value.figure.mean === before.mean,
+    );
+    for (const accountId of [undefined, members[0], outsiders[0]]) {
+      const response = await request(`/v1/subjects/${target}/figure`, accountId);
+      const text = await response.text();
+      expect(response.status).toBe(200);
+      expect(JSON.parse(text)).toEqual({ figure: before });
+      for (const secret of [realmId, ...members, ...outsiders, 'voterId', 'units', 'histogram', 'vote'])
+        expect(text).not.toContain(secret);
+    }
+  } finally {
+    await fixture.close();
   }
-}, 120_000);
+}, 180_000);
