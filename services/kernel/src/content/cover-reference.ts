@@ -2,6 +2,7 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import type { PoolClient } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { ClaimMediaInput } from './media.ts';
 import claimCoverMediaStatement from './claim-cover-media.sql';
 import type { ImportedSource, Rights } from './imported-contract.ts';
@@ -218,8 +219,14 @@ export async function claimCoverMedia(
     input.mediaIds.some((id) => routeOf(id) !== route) ||
     (command.authorization !== null &&
       (command.authorization.mode !== 'execute' ||
-        command.authorization.resource.id !== reference.subjectId ||
-        command.authorization.resource.route !== subjectRoute))
+        !(
+          (command.authorization.resource.id === reference.subjectId &&
+            command.authorization.resource.route === subjectRoute) ||
+          ((command.authorization.action === 'statement:propose' ||
+            command.authorization.action === 'subject:create') &&
+            command.authorization.resource.id === GLOBAL_CONTEXT &&
+            command.authorization.resource.route === routeOf(GLOBAL_CONTEXT))
+        )))
   )
     throw new TypeError('Invalid cover reference command context');
   const rows = await claimCoverMediaStatement.run(tx, {

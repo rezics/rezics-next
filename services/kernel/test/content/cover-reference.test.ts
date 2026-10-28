@@ -3,7 +3,13 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import { claimCoverMedia, checkMediaObject } from '../../src/content/cover-reference.ts';
 import { runCommand } from '../../src/command/command.ts';
 import type { ClaimMediaInput } from '../../src/content/media.ts';
-import { newId, partitionOf } from '../../src/route/route.ts';
+import { currentCommand, type CommandAuthorization } from '../../src/command/command.ts';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { globalContextAnchor } from '../../src/semantic/context.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -453,3 +459,111 @@ test('intentional cover claim batch growth is linear in changed rows and input b
   }
   expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
 }, 60000);
+
+test('a cover claim is admitted under statement:propose or subject:create evaluated on the Global Context, and refused under any other action or resource', async () => {
+  const actions = ['statement:propose', 'subject:create', 'subject:update'];
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     VALUES ($1,$2,'actor','active',$2)`,
+    [routeOf(uploaderId), uploaderId],
+  );
+  const access = admittedAccess({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  const author = await authenticateAccount(
+    access,
+    { pool: db.pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: uploaderId,
+      clientId: 'cover-importer',
+      scopes: actions,
+      authnEpoch: 1,
+    },
+  );
+  const global = { route: routeOf(GLOBAL_CONTEXT)!, id: GLOBAL_CONTEXT };
+  for (const targetRoute of [route, 1]) {
+    const target = newId(targetRoute);
+    const other = { route: targetRoute, id: newId(targetRoute) };
+    for (const resource of [global, other]) {
+      for (const action of actions) {
+        await db.admin.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
+          [resource.route, resource.id, uploaderId, action],
+        );
+      }
+    }
+    async function attempt(action: string, resource = global, outside = false, receiptOnly = false) {
+      const mediaRoute = outside ? targetRoute + 16 : targetRoute;
+      const subject = outside ? newId(mediaRoute) : target;
+      const id = newId(mediaRoute);
+      await db.admin.query(
+        `INSERT INTO content.media
+         (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
+          actual_byte_count,sha256,state,key,transaction_id,source_url,credit,provenance,
+          width,height,thumbhash,average_color)
+         VALUES ($1,$2::uuid,$3,$4,$2::uuid::text,'cover','image/jpeg',256,256,$5,'available',
+          'm/'||$2::uuid::text||'/original',$2::uuid,$6,$7,$8,1200,1800,decode('AQID','base64'),'#5a4632')`,
+        [mediaRoute, id, subject, uploaderId, digest, request.sourceUrl, request.credit, request.provenance],
+      );
+      const partition = partitionOf(targetRoute);
+      const context = { pool: db.pool, deadline: Date.now() + 10_000, partition };
+      const authorization =
+        resource.id === GLOBAL_CONTEXT && partitionOf(global.route) !== partition
+          ? resourceAuthorization({ access, actor: author, action, anchor: globalContextAnchor, context })
+          : await accessCommandAuthorization(
+              access,
+              author,
+              action,
+              resource,
+              context,
+              () => new Error('Access denied'),
+            );
+      const binding: CommandAuthorization = receiptOnly
+        ? {
+            ...authorization,
+            async authorize(tx, attempt, evidence) {
+              await authorization.authorize(tx, attempt, evidence);
+              return 'receipt-only';
+            },
+          }
+        : authorization;
+      const command = runCommand(db.pool, { ...commandOptions, partition, authorization: binding }, async (tx) => {
+        expect(currentCommand(tx).authorization).toMatchObject({ action, resource, mode: 'execute' });
+        await claimCoverMedia(tx, {
+          mediaIds: [id],
+          containerId: subject,
+          author,
+          reference: { kind: 'semantic_candidate', subjectId: subject, candidateId: newId(mediaRoute), revision: 1 },
+        });
+        return { value: null, events: [claimEvent] };
+      });
+      if (action === actions[2] || resource.id !== GLOBAL_CONTEXT || outside || receiptOnly) {
+        await expect(command).rejects.toThrow(receiptOnly ? undefined : 'Invalid cover reference command context');
+        expect(
+          (
+            await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [
+              mediaRoute,
+              id,
+            ])
+          ).rows,
+        ).toEqual([{ claimed_at: null }]);
+      } else {
+        await command;
+        expect(
+          (
+            await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [
+              mediaRoute,
+              id,
+            ])
+          ).rows[0].claimed_at,
+        ).not.toBeNull();
+      }
+    }
+    for (const action of actions.slice(0, 2)) await attempt(action);
+    await attempt(actions[2]!);
+    for (const action of actions.slice(0, 2)) {
+      await attempt(action, other);
+      await attempt(action, global, true);
+      await attempt(action, global, false, true);
+    }
+  }
+});

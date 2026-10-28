@@ -5,6 +5,10 @@ import { appendImportedField, readImportedField, type ImportedFieldView } from '
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
+import { currentCommand, type CommandAuthorization } from '../../src/command/command.ts';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { globalContextAnchor } from '../../src/semantic/context.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
@@ -446,4 +450,86 @@ test('imported summary rejects user posts and third-party media without writing 
     for (const bad of invalid) await expect(appendImportedField(tx, bad)).rejects.toThrow();
   });
   expect((await db.admin.query('SELECT count(*) FROM content.post')).rows).toEqual(before.rows);
+});
+
+test('an imported field is admitted under statement:propose or subject:create evaluated on the Global Context, and refused under any other action or resource', async () => {
+  const actions = ['statement:propose', 'subject:create', 'subject:update'];
+  const access = admittedAccess({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  const importer = await authenticateAccount(
+    access,
+    { pool: db.pool, deadline: Date.now() + 10_000 },
+    {
+      ...actor,
+      scopes: actions,
+    },
+  );
+  const global = { route: routeOf(GLOBAL_CONTEXT)!, id: GLOBAL_CONTEXT };
+  for (const targetRoute of [route, 1]) {
+    const target = newId(targetRoute);
+    const other = { route: targetRoute, id: newId(targetRoute) };
+    for (const resource of [global, other]) {
+      for (const action of actions) {
+        await db.admin.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
+          [resource.route, resource.id, actorId, action],
+        );
+      }
+    }
+    async function attempt(action: string, resource = global, outside = false, receiptOnly = false) {
+      const partition = partitionOf(targetRoute);
+      const context = { pool: db.pool, deadline: Date.now() + 10_000, partition };
+      const authorization =
+        resource.id === GLOBAL_CONTEXT && partitionOf(global.route) !== partition
+          ? resourceAuthorization({ access, actor: importer, action, anchor: globalContextAnchor, context })
+          : await accessCommandAuthorization(access, importer, action, resource, context, () => new Denied());
+      const binding: CommandAuthorization = receiptOnly
+        ? {
+            ...authorization,
+            async authorize(tx, attempt, evidence) {
+              await authorization.authorize(tx, attempt, evidence);
+              return 'receipt-only';
+            },
+          }
+        : authorization;
+      const value = {
+        ...input(),
+        subject: outside ? newId(targetRoute + 16) : target,
+        candidate: newId(outside ? targetRoute + 16 : targetRoute),
+      };
+      return runCommand(
+        db.pool,
+        {
+          partition,
+          authorization: binding,
+          basis: { actorAccountId: actorId, clientId: importer.clientId, requestedBy: null },
+        },
+        async (tx) => {
+          expect(currentCommand(tx).authorization).toMatchObject({ action, resource, mode: 'execute' });
+          return {
+            value: await appendImportedField(tx, value),
+            events: [{ type: 'com.rezics.test.imported.v1', data: {} }],
+          };
+        },
+      );
+    }
+    for (const action of actions.slice(0, 2)) {
+      const result = await attempt(action);
+      expect(await readImportedField(db.pool, result.value.id)).toMatchObject({ subject: target });
+    }
+    const before = (await db.admin.query('SELECT count(*) FROM content.imported_field')).rows;
+    await expect(attempt(actions[2]!)).rejects.toThrow(
+      'Imported summary requires current subject command authorization',
+    );
+    for (const action of actions.slice(0, 2)) {
+      await expect(attempt(action, other)).rejects.toThrow(
+        'Imported summary requires current subject command authorization',
+      );
+      await expect(attempt(action, global, true)).rejects.toThrow(
+        'Imported subject must belong to the current command partition',
+      );
+      await expect(attempt(action, global, false, true)).rejects.toThrow();
+    }
+    expect((await db.admin.query('SELECT count(*) FROM content.imported_field')).rows).toEqual(before);
+  }
 });

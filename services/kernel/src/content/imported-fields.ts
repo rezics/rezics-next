@@ -3,6 +3,7 @@ import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
 import { Value } from 'typebox/value';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { validateContentDocument } from './document.ts';
 import {
   validateImportedFieldMetadata,
@@ -102,8 +103,12 @@ export async function appendImportedField(
     throw new RangeError('Imported subject must belong to the current command partition');
   if (
     command.authorization?.mode !== 'execute' ||
-    command.authorization.resource.id !== input.subject ||
-    command.authorization.resource.route !== route
+    !(
+      (command.authorization.resource.id === input.subject && command.authorization.resource.route === route) ||
+      ((command.authorization.action === 'statement:propose' || command.authorization.action === 'subject:create') &&
+        command.authorization.resource.id === GLOBAL_CONTEXT &&
+        command.authorization.resource.route === routeOf(GLOBAL_CONTEXT))
+    )
   )
     throw new TypeError('Imported summary requires current subject command authorization');
   if (routeOf(input.candidate) !== route) throw new RangeError('Imported candidate must carry the subject route');
