@@ -153,10 +153,9 @@ test('production page aggregates preserve each standalone read authority and dis
         cursors: ring,
       }),
     });
-    const handle = app.handle.bind(app);
     // All responses and headers below are genuine. Intercept the real kernel boundary,
     // including recursive standalone dispatch; do not replace dispatch or authorization.
-    app.handle = async (request: Request) => {
+    app.wrap((handle) => async (request: Request) => {
       const seen = capture.getStore();
       if (!seen) return handle(request);
       seen.active += 1;
@@ -175,7 +174,7 @@ test('production page aggregates preserve each standalone read authority and dis
       } finally {
         seen.active -= 1;
       }
-    };
+    });
     return app;
   });
   try {
