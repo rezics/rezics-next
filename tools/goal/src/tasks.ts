@@ -330,9 +330,13 @@ export class WorkerTasks {
       }
     } else git(task.worktree, ['reset', '--hard', integration]);
     if (task.currentAttempt) {
-      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
-        current.base = integration;
-      });
+      task = this.store.updateHeldRetryTask(
+        { taskId, attempt: task.currentAttempt },
+        (current) => {
+          current.base = integration;
+        },
+        { abandonPending: true },
+      );
     } else {
       task = this.store.updateTask({ taskId, attempt: 0 }, (current) => {
         current.base = integration;
@@ -388,12 +392,16 @@ export class WorkerTasks {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
-        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
-          current.brief = nextBrief;
-          current.briefPath = briefPath;
-          current.taskClass = nextTaskClass;
-          current.state = 'held';
-        });
+        this.store.updateHeldRetryTask(
+          { taskId, attempt: task.currentAttempt },
+          (current) => {
+            current.brief = nextBrief;
+            current.briefPath = briefPath;
+            current.taskClass = nextTaskClass;
+            current.state = 'held';
+          },
+          { abandonPending: true },
+        );
         return null;
       }
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
