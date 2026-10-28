@@ -4,8 +4,16 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function counter(value: unknown): boolean {
+function counter(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function completeShards(value: unknown): boolean {
+  if (!record(value)) return false;
+  const { total, successful, skipped, failed } = value;
+  if (!counter(total) || !counter(successful) || !counter(skipped) || failed !== 0 || skipped > total) return false;
+  // Successful may already include skipped shards, so only require the counters to cover total.
+  return successful >= total - skipped;
 }
 
 /** Checks native completion metadata only; callers must validate hits, sort tuples and aggregations. */
@@ -13,17 +21,9 @@ export function assertCompleteSearch(body: unknown): void {
   if (!record(body) || body.timed_out !== false) {
     throw new SearchUnavailableError('OpenSearch completion metadata is missing, malformed or timed out');
   }
-  const shards = body._shards;
-  if (
-    !record(shards) ||
-    !counter(shards.total) ||
-    !counter(shards.successful) ||
-    !counter(shards.skipped) ||
-    shards.failed !== 0
-  ) {
-    throw new SearchUnavailableError('OpenSearch shard completion metadata is missing, malformed or failed');
+  if (!completeShards(body._shards)) {
+    throw new SearchUnavailableError('OpenSearch shard completion metadata is missing, malformed, incomplete or failed');
   }
-  // Native successful can include skipped shards; summing them would reject complete responses.
   if ('terminated_early' in body && body.terminated_early !== false) {
     throw new SearchUnavailableError('OpenSearch terminated early or has malformed termination metadata');
   }

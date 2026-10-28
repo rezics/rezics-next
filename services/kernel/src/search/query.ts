@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
+import { assertCompleteSearch } from './complete-search.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
@@ -121,38 +122,46 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
           : [{ id: 'asc' }];
 
   return search
-    .request<SearchResponse>('POST', `/${target}/_search/template`, {
-      id: `${prefix}${SEARCH_TEMPLATE}`,
-      params: {
-        query: plan.query,
-        has_query: plan.query !== undefined,
-        filter: plan.filter,
-        has_filter: plan.filter !== undefined,
-        // OpenSearch's toJson serializes containers but emits scalar strings verbatim.
-        // Encode string scalars first so quotes and control characters remain JSON data.
-        boost: plan.boost === undefined ? undefined : JSON.stringify(plan.boost),
-        has_boost: plan.boost !== undefined,
-        sort,
-        size: plan.size,
-        after: plan.after,
-        has_after: plan.after !== undefined,
-        has_overflow: hasOverflow,
-        overflow_properties: plan.overflowProperties,
+    .request<SearchResponse>(
+      'POST',
+      `/${target}/_search/template`,
+      {
+        id: `${prefix}${SEARCH_TEMPLATE}`,
+        params: {
+          query: plan.query,
+          has_query: plan.query !== undefined,
+          filter: plan.filter,
+          has_filter: plan.filter !== undefined,
+          // OpenSearch's toJson serializes containers but emits scalar strings verbatim.
+          // Encode string scalars first so quotes and control characters remain JSON data.
+          boost: plan.boost === undefined ? undefined : JSON.stringify(plan.boost),
+          has_boost: plan.boost !== undefined,
+          sort,
+          size: plan.size,
+          after: plan.after,
+          has_after: plan.after !== undefined,
+          has_overflow: hasOverflow,
+          overflow_properties: plan.overflowProperties,
+        },
       },
-    })
-    .then(({ body }) => ({
-      ...(plan.generation === undefined ? {} : { generation: plan.generation }),
-      hits: body.hits.hits.map((hit) => ({
-        ...subjectHit(hit),
-        matched: hit.matched_queries ?? [],
-        sort: hit.sort,
-      })),
-      total: {
-        value: body.hits.total.value,
-        relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact',
-      },
-      ...(hasOverflow ? { overflow: body.aggregations!.overflow.doc_count > 0 } : {}),
-    }));
+      { query: { allow_partial_search_results: false } },
+    )
+    .then(({ body }) => {
+      assertCompleteSearch(body);
+      return {
+        ...(plan.generation === undefined ? {} : { generation: plan.generation }),
+        hits: body.hits.hits.map((hit) => ({
+          ...subjectHit(hit),
+          matched: hit.matched_queries ?? [],
+          sort: hit.sort,
+        })),
+        total: {
+          value: body.hits.total.value,
+          relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact',
+        },
+        ...(hasOverflow ? { overflow: body.aggregations!.overflow.doc_count > 0 } : {}),
+      };
+    });
 }
 
 export function suggestSubjects(
@@ -163,11 +172,19 @@ export function suggestSubjects(
   validateSize(plan.size, 50);
   const alias = subjectAlias(prefix);
   return search
-    .request<SearchResponse>('POST', `/${alias}/_search/template`, {
-      id: `${prefix}${SUGGEST_TEMPLATE}`,
-      params: { text: JSON.stringify(plan.text), size: plan.size },
-    })
-    .then(({ body }) => body.hits.hits.map(subjectHit));
+    .request<SearchResponse>(
+      'POST',
+      `/${alias}/_search/template`,
+      {
+        id: `${prefix}${SUGGEST_TEMPLATE}`,
+        params: { text: JSON.stringify(plan.text), size: plan.size },
+      },
+      { query: { allow_partial_search_results: false } },
+    )
+    .then(({ body }) => {
+      assertCompleteSearch(body);
+      return body.hits.hits.map(subjectHit);
+    });
 }
 
 type FacetAggregation =
@@ -251,13 +268,19 @@ export async function countFacets(
         }
       : facetAggregations),
   };
-  const { body } = await search.request<FacetResponse>('POST', `/${subjectAlias(prefix)}/_search/template`, {
-    id: `${prefix}${FACET_TEMPLATE}`,
-    params: {
-      query: { bool: { must: plan.query ?? { match_all: {} }, ...(plan.filter ? { filter: plan.filter } : {}) } },
-      aggregations,
+  const { body } = await search.request<FacetResponse>(
+    'POST',
+    `/${subjectAlias(prefix)}/_search/template`,
+    {
+      id: `${prefix}${FACET_TEMPLATE}`,
+      params: {
+        query: { bool: { must: plan.query ?? { match_all: {} }, ...(plan.filter ? { filter: plan.filter } : {}) } },
+        aggregations,
+      },
     },
-  });
+    { query: { allow_partial_search_results: false } },
+  );
+  assertCompleteSearch(body);
   const unresolved = (body.aggregations.filter_overflow?.doc_count ?? 0) > 0;
   const total: SearchResult['total'] = unresolved
     ? { value: Math.min(TOTAL_LIMIT, body.aggregations.definite!.doc_count), relation: 'lower_bound' }
