@@ -18,7 +18,7 @@ Missing acceptance below stays owned work, not a claim that a required capabilit
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
 | Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity and media wrappers registered; VNDB statistics remains unbound            | Ordinary batch, fence, subject/candidate, media and statistic routes visible in source; complete composed job not established | Missing: imports must record executed native results and revision | Missing: imports promotion evidence |
 | Import-to-discovery              | REQUIRED NOT YET FROZEN for the composed released-data matrix                                                       | Missing: imports composed wrapper/driver; shared consumer bindings are not this journey | Partial producer mappings and native subject reads; reviewed tag/form mappings and released controls missing                  | Missing: imports with semantic/search/commerce/web                | Missing: imports promotion evidence |
-| Cover-native-recovery            | Local recovery regression exists; REQUIRED NOT YET FROZEN for native crash/replacement journey                      | Media/API slices registered; missing composed crash wrapper, imports/content            | SQLite resume and native media separately visible; connection through interruption and subsequent replacement unproved        | Missing: imports/content/web native journey and revision          | Missing: imports promotion evidence |
+| Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                   | Native composition registered; see execution evidence below                             | Actual receipt/media/SQLite and subject/page/download assertions; consumer matrix remains open                                | See native execution report; no whole-capability pass             | Missing: imports promotion evidence |
 
 “Specification validated red” requires recorded execution with missing binding; file presence alone does not earn it.
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
@@ -245,14 +245,29 @@ reopen; its transport receipts and media availability are fake. Its local comman
 The real API uncertainty scenario covers lost bootstrap response, not this deferred-cover crash/replacement chain.
 Native media event replay/object-store recovery below likewise does not establish importer SQLite recovery.
 
-**REQUIRED NOT YET FROZEN:** `cover-native-recovery` is a report capability label, not a frozen native scenario.
-Missing: native ACK interruption hook, persisted importer-to-media receipt integration, restart followed by cover
-replacement, ordinary subject/media/page disclosure assertions, composed driver/wrapper and native command.
-Imports owns crash/run composition; Content owns actual source fetch, registered workers, media state/rights and
-current download authority; Semantic adoption and Web publication participate. A future
-`services/kernel/test/imports/cover-native-recovery.test.ts` and
-`bun run --cwd services/kernel check test/imports/cover-native-recovery.test.ts` are **pending**, not executable today.
-Fake upstream availability is acceptable; fake native receipts or media resolver output cannot close this job.
+**Frozen native composition:**
+[wrapper](../../services/kernel/test/imports/cover-native-recovery.test.ts) and
+[fixture](../../services/kernel/test/imports/cover-native-recovery-fixture.ts) use `openApiRuntime`,
+`openApiObserver`, real Importer/ImportSession and `createMediaResolver` over public transport, native receipts,
+reserved/available media and registered content jobs. Exact scenario names:
+
+- `native new-cover acknowledgement survives interruption before local deferred completion`
+- `native changed-cover acknowledgement survives interruption and subsequent replacement remains correctly credited`
+- `a fenced cover during native recovery is never restored while adjacent unfenced facts remain readable`
+
+Command: `bun run --cwd services/kernel check test/imports/cover-native-recovery.test.ts`.
+[Execution evidence and limitations](../research/imports-audit/cover-native-recovery.md) distinguish native results
+from this report's acceptance and promotion. The producer boundary is the real Bangumi converter, native media
+reservation/jobs and successful public proposal ACK before local deferred completion; no fixture release is invented.
+Replacement selects actual candidates through the editor API; public subject, available-variant download and
+`/v1/pages:read` are the covered consumers when reached. Distinct replacement-pixel delivery needs the minimal
+external-source fixture seam recorded in the report; normal source URLs currently share deterministic PNG bytes.
+
+Imports owns crash/run composition; Content owns fetch/jobs/media/rights and final download authority; Semantic
+owns selection and source-record metadata. General source-record attribution/licence production is a separate
+pending Semantic producer: a source URL is not that effect and this suite creates no substitute ABI or I2 pass.
+Catalogue/list consumers, mounted Zones, configured TypeLists and Web served publication remain missing cross-owner
+proof; passing this slice cannot close I1, the whole capability, main acceptance or promotion.
 
 ### Existing native media slices for import and recovery
 
@@ -299,7 +314,7 @@ remove the Everything/state/curated/Zone/TypeList consumer obligations below. Pe
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ordinary provider import/refresh | Applicable producer: four-source native batch/subject reads registered; anonymous semantic discovery closure missing, imports/semantic/search        | Applicable consumer: imported/adopted facts and refreshed fences; composed case missing, commerce/imports                                       | No independent import list write; consume adopted subjects supported by own labels/holdings without fabricated state; missing, commerce/import-to-discovery | No independent import state write; consume only own accepted state intersection; missing, commerce/import-to-discovery | Applicable common imported subject/media consumer after mount/scope selection; missing, semantic/import-to-discovery      | Applicable configured list and factual projection of imported selected data; missing, web/semantic/import-to-discovery                                |
 | Import-to-discovery              | Applicable exact range, form/tag, conjunction and same-statement release qualifiers plus facets/source attribution; missing, imports/search/semantic | Applicable same predicates over eligible source, canonical browsing while occurrence editor preserves duplicate notes; missing, commerce/search | Applicable predicate intersect own support union, label/holding-only subject included with no entry; missing, commerce                                      | Applicable same predicate intersect selected own accepted state, Bob irrelevant; missing, commerce                     | Applicable same predicate over eligible union of mount/scope, canonical deduplication/all pages; missing, semantic/search | Applicable configured list returns same exact IDs; detail projects actual facts/units/identity, not arbitrary detail filtering; missing, semantic/web |
-| Cover-native-recovery            | Applicable producer-to-native subject/media disclosure after crash/restart/replacement; existing slices only, missing, imports/content/semantic      | Applicable common-media consumer shows recovered/replaced permitted cover and rights; missing composed case, commerce/content/web               | No importer list write; own supported subjects render recovered cover with current disclosure, missing, commerce/content/web                                | No importer state write; own state-selected subjects use same media/rights, missing, commerce/content/web              | Applicable mounted subject/page media disclosure and fence propagation; missing, semantic/content/web                     | Applicable configured rows/page show same recovered/replaced cover without stale or unauthorized image, missing, semantic/content/web                 |
+| Cover-native-recovery            | Native subject/media recovery scenarios registered; executed slice in report; catalogue/discovery matrix missing, imports/content/semantic           | Applicable common-media consumer shows recovered/replaced permitted cover and rights; missing composed case, commerce/content/web               | No importer list write; own supported subjects render recovered cover with current disclosure, missing, commerce/content/web                                | No importer state write; own state-selected subjects use same media/rights, missing, commerce/content/web              | Native subject page-read asserted separately; mounted Zone media/fence propagation still missing, semantic/content/web    | Native subject page-read registered; configured TypeList rows and web common-cover publication still missing, semantic/content/web                    |
 
 All applicable list cells require public/unlisted/private source controls where supported, owner/other-owner
 isolation, unknown evidence, alias/original identity, hidden source/subject/Concept, source revocation, sparse/deep
