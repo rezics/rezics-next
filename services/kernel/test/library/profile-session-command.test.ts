@@ -153,10 +153,10 @@ function privateFree(value: unknown) {
     privateFree(child);
   }
 }
-async function problem(response: Response, status: number, code: string) {
+async function problem(response: Response, status: number, code: string, effect = 'not_applied') {
   const body = await json(response, status);
   expect(body.code).toBe(code);
-  expect(body.effect_status).toBe('not_applied');
+  expect(body.effect_status).toBe(effect);
   expect(JSON.stringify(body)).not.toContain('ex:');
   expect(JSON.stringify(body)).not.toContain('fixture.sessions');
   return body;
@@ -492,7 +492,8 @@ test('native guards conceal sessions and source failures and fence old receipts 
     });
   for (const suffix of ['', '/completedUnits', '/changes']) {
     await noEffects(async () => {
-      await problem(await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer), 404, 'not_found');
+      const read = await send('GET', path(s.id) + suffix, undefined, entryKey(), other.bearer);
+      await problem(read, 404, 'not_found', 'not_applicable');
     }, other.actor.accountId);
     const anonymous = await native.send('anonymous', 'GET', path(s.id) + suffix);
     expect([401, 404]).toContain(anonymous.status);
