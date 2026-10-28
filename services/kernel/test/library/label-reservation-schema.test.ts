@@ -75,18 +75,18 @@ test('one assignment reservation index bounds cap candidates independently of re
     ).rows;
     expect(indexes[0]?.indexdef).toContain('(route, account_id, subject_id, assignment_id)');
     expect(indexes[0]?.indexdef).toContain('WHERE (slot_no IS NOT NULL)');
-    await c.query('INSERT INTO library.fact_source_head(route,account_id,generation) VALUES($1,$2,1)', [route, id(1)]);
+    await c.query('INSERT INTO library.fact_source_head(route,account_id,generation) VALUES($1,$2,1)', [route, id(3)]);
     await code(c, '23514', () =>
-      c.query('UPDATE library.fact_source_head SET generation=0 WHERE route=$1 AND account_id=$2', [route, id(1)]),
+      c.query('UPDATE library.fact_source_head SET generation=0 WHERE route=$1 AND account_id=$2', [route, id(3)]),
     );
     await code(c, '23514', () =>
-      c.query('INSERT INTO library.fact_source_head(route,account_id,generation) VALUES($1,$2,1)', [route + 1, id(1)]),
+      c.query('INSERT INTO library.fact_source_head(route,account_id,generation) VALUES($1,$2,1)', [route + 1, id(3)]),
     );
     expect(
       (
         await c.query('SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2', [
           route,
-          id(1),
+          id(3),
         ])
       ).rows,
     ).toEqual([{ generation: '1' }]);
