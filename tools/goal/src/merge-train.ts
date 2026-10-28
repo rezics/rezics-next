@@ -71,6 +71,11 @@ function checkTransportFailed(output: string): boolean {
   );
 }
 
+function checkEnvironmentFailed(output: string): boolean {
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
+  return /^kernel check: environment failure: database storage full \(SQLSTATE 53100\)(?: on .*)?$/m.test(clean);
+}
+
 /** No wall timeout: a check waiting for a shared host slot is still queued. */
 export async function runAffectedTest(
   command: readonly string[],
@@ -82,6 +87,7 @@ export async function runAffectedTest(
   let output = '';
   let passed = false;
   let transportUnverified = false;
+  let environmentUnverified = false;
   for (let retry = 0; retry < 2; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
     const result = await new Promise<{ passed: boolean; output: string }>((done) => {
@@ -98,12 +104,13 @@ export async function runAffectedTest(
     });
     output = result.output;
     passed = result.passed;
+    environmentUnverified = checkEnvironmentFailed(output);
     transportUnverified = !passed && checkTransportFailed(output);
     if (!transportUnverified) break;
     if (retry === 0) appendFileSync(logPath, 'Check-host transport failed; retrying once\n');
   }
   const selectionUnverified = /^Affected mode: unverified, 0 of \d+ test files selected \(.+\)$/m.test(output);
-  const unverified = transportUnverified || (passed && selectionUnverified);
+  const unverified = transportUnverified || environmentUnverified || (passed && selectionUnverified);
   const status = unverified ? 'unverified' : passed ? 'passed' : 'failed';
   const durationMs = Date.now() - started;
   appendFileSync(logPath, `Affected test: ${status} in ${durationMs} ms\n`);
@@ -1327,6 +1334,7 @@ export class MergeTrain {
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         const affectedFailures: string[] = [];
+        let baseTreeFiles: Set<string> | undefined;
         for (const checked of request.affectedTests ?? []) {
           if (checked.status === 'unverified') {
             appendFileSync(logPath, `Affected test unverified (landing allowed): ${checked.command.join(' ')}\n`);
@@ -1335,8 +1343,8 @@ export class MergeTrain {
           if (checked.status === 'passed') continue;
           stage = 'gate';
           // A failure that names no test file (a setup or migration failure) has nothing bounded to compare on the
-          // base: comparing it ran the whole kernel suite inside the train. Transport, disk and load failures are
-          // already unverified, environment or rerun, so what remains is refused with its output and no base run.
+          // base: comparing it ran the whole kernel suite inside the train. Transport and storage failures are
+          // already unverified, so what remains is refused with its output and no base run.
           if (!checked.failingFiles.length) {
             const tail = checked.output
               .split('\n')
@@ -1348,10 +1356,29 @@ export class MergeTrain {
             result.failedCommand ??= [...checked.command];
             continue;
           }
+          if (!baseTreeFiles) {
+            baseTreeFiles = new Set(
+              git(o.mainCheckout, 'ls-tree', '-r', '--full-tree', '--name-only', '-z', base)
+                .split('\0')
+                .filter(Boolean),
+            );
+          }
+          const filesAtBase = baseTreeFiles;
+          const baselineFiles = checked.failingFiles.filter((file) => filesAtBase.has(file));
+          const introducedFiles = checked.failingFiles.filter((file) => !filesAtBase.has(file));
+          if (!baselineFiles.length) {
+            affectedFailures.push(...introducedFiles);
+            result.failedCommand ??= [...checked.command];
+            appendFileSync(
+              logPath,
+              'All affected-test failures name files absent from the base; no baseline run needed\n',
+            );
+            continue;
+          }
           // A base compared with itself selects no affected tests, so the base runs the files that failed on the
           // branch by name. The whole suite cost a full kernel run inside the serial train on every landing, because
           // dev moves with each landing and a full base result was almost never reused.
-          const baselineCommand = [...checked.command, ...checked.failingFiles];
+          const baselineCommand = [...checked.command, ...baselineFiles];
           const key = `affected-test:${JSON.stringify(baselineCommand)}`;
           let baseline = o.queue.baseline(base, key);
           if (!baseline) {
@@ -1389,7 +1416,10 @@ export class MergeTrain {
           o.fence.assertCurrent(request);
           if (target() !== base) break;
           const baseFiles = new Set(failingTestFiles(baseline.output));
-          const added = checked.failingFiles.filter((file) => baseline.passed || !baseFiles.has(file));
+          const added = [
+            ...introducedFiles,
+            ...baselineFiles.filter((file) => baseline.passed || !baseFiles.has(file)),
+          ];
           if (added.length) {
             affectedFailures.push(...added);
             result.failedCommand ??= [...checked.command];
