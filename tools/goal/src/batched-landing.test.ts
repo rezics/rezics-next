@@ -21,9 +21,10 @@ function markTask(
 }
 
 function markAffectedFailure(h: ReturnType<typeof integrationHarness>, taskId: string): void {
-  const row = h.store.db
-    .query('SELECT id, request FROM landing_queue WHERE task=?')
-    .get(taskId) as { id: number; request: string };
+  const row = h.store.db.query('SELECT id, request FROM landing_queue WHERE task=?').get(taskId) as {
+    id: number;
+    request: string;
+  };
   const request = JSON.parse(row.request);
   request.affectedTests = [
     { command: ['false'], status: 'failed', failingFiles: [], durationMs: 1, output: 'failed affected check' },
@@ -56,10 +57,9 @@ test('the dev lane batches eligible entries across control-plane, stabilize, and
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
     expect(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)?.passed).toBe(true);
     expect(h.outcomes.find(({ taskId }) => taskId === stabilize.id)?.passed).toBe(true);
-    expect(h.outcomes.filter(({ taskId }) => [first.id, second.id].includes(taskId)).map(({ passed }) => passed)).toEqual([
-      true,
-      true,
-    ]);
+    expect(
+      h.outcomes.filter(({ taskId }) => [first.id, second.id].includes(taskId)).map(({ passed }) => passed),
+    ).toEqual([true, true]);
     const controlPlaneLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)!.logPath, 'utf8');
     const stabilizeLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === stabilize.id)!.logPath, 'utf8');
     const affectedLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === affected.id)!.logPath, 'utf8');
@@ -105,9 +105,9 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
     await h.train();
 
     const dev = [first, second, third, fourth];
-    expect(
-      h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId),
-    ).toEqual(dev.map(({ id }) => id));
+    expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId)).toEqual(
+      dev.map(({ id }) => id),
+    );
     expect(dev.map(({ id }) => h.outcomes.find(({ taskId }) => taskId === id)?.passed)).toEqual([
       true,
       true,
@@ -115,9 +115,7 @@ test('the dev batch fills to its limit in eligible queue order when prioritized 
       true,
     ]);
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)).toMatchObject({ passed: false, stage: 'gate' });
-    const logs = dev.map(({ id }) =>
-      readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8'),
-    );
+    const logs = dev.map(({ id }) => readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8'));
     expect(logs.slice(0, 3).every((log) => log.includes('Batch integration check on'))).toBe(true);
     expect(logs[3]).toContain('Integration check on');
     expect(logs[3]).not.toContain('Batch integration check on');

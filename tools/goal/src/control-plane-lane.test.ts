@@ -176,7 +176,11 @@ test('main-lane routing preserves dev queue priority and FIFO order within each 
   };
   const queue = new SqliteLandingQueue(db, fence);
   let sequence = 0;
-  function enqueue(id: string, brief: { goal?: string; target?: string; criticalPath?: boolean }, paths = [`${id}.ts`]) {
+  function enqueue(
+    id: string,
+    brief: { goal?: string; target?: string; criticalPath?: boolean },
+    paths = [`${id}.ts`],
+  ) {
     sequence++;
     db.run('INSERT INTO worker_tasks VALUES (?, ?, 1, ?)', [id, sequence, JSON.stringify({ brief })]);
     queue.enqueue({
