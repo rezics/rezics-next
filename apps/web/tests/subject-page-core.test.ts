@@ -330,7 +330,7 @@ test("a value or entry above the reader's spoiler level is hidden behind a revea
   expect(hidden).toContain('plain');
   const controls = hidden.match(/<button[^>]*aria-expanded="false"[^>]*>/g) ?? [];
   expect(controls).toHaveLength(2);
-  expect(hidden.match(/Show spoiler/g)?.length).toBeGreaterThanOrEqual(2);
+  expect(hidden.match(/Show or hide spoilers/g)?.length).toBeGreaterThanOrEqual(2);
 
   const minor = render0({ spoilerLevel: 1, suitability: 'blur' });
   expect(minor).toContain('minor-twist');
