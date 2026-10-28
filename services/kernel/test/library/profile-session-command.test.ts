@@ -197,9 +197,11 @@ async function contents(id: string) {
 async function noEffects(body: () => Promise<unknown>, accountId = owner.actor.accountId, id?: string) {
   const before = await native.inspect(accountId);
   const history = id ? await contents(id) : null;
+  const own = accountId === owner.actor.accountId ? null : await native.inspect(owner.actor.accountId);
   await body();
   expect(await native.inspect(accountId)).toEqual(before);
-  if (id) expect(await contents(id)).toEqual(history);
+  if (id && history) expect(await contents(id)).toEqual(history);
+  if (own) expect(await native.inspect(owner.actor.accountId)).toEqual(own);
 }
 async function rejectCreate(input: unknown, status = 400, code = 'invalid_request') {
   await noEffects(async () => {
@@ -242,12 +244,6 @@ test(title, async () => {
   expect(first.replayed).toBe(false);
   expect(String(first.value.unit)).toBe('seed-tray.v2');
   expect((await fact(first.value.id)).library_profile_pin).toEqual(pin());
-  expect(Object.keys((await fact(first.value.id)).library_profile_pin).sort()).toEqual([
-    'acceptingType',
-    'profileId',
-    'provenance',
-    'releaseDigest',
-  ]);
   const reread = await start(subject, 'scalar_amount', 'seed-tray.v2', { total: '999999999999.999998' });
   expect(reread.id).not.toBe(first.value.id);
   expect(reread).toMatchObject({
@@ -269,6 +265,12 @@ test(title, async () => {
   independentFacts(before, await native.inspect(owner.actor.accountId));
 });
 
+test('native creation stores the accepting primary type and exact private profile pin', async () => {
+  const subject = await native.createSubject('game');
+  const s = await start(subject);
+  expect((await fact(s.id)).library_profile_pin).toEqual(pin());
+});
+
 test('fresh active profile admission rejects missing capabilities and pairs without legacy fallback', async () => {
   const game = await native.createSubject('game');
   const recipe = await native.createSubject('recipe');
@@ -283,6 +285,8 @@ test('fresh active profile admission rejects missing capabilities and pairs with
     create(unprofiled),
   ])
     await rejectCreate(input, 422, 'unsupported_library_profile');
+  await native.activate(replacement);
+  await rejectCreate(create(game, 'scalar_amount', 'seed-tray.v2', { total: '9' }), 422, 'unsupported_library_profile');
 });
 
 test('malformed shapes caller pins and totals on other modes are invalid requests without effects', async () => {
@@ -426,7 +430,7 @@ test('native sparse cardinality stays capped at twenty thousand across bounded r
 test('authorized receipts survive profile replacement removal hide and rollback without changing creation meaning', async () => {
   const subject = await native.createSubject('game');
   const startKey = entryKey();
-  const input = create(subject, 'scalar_amount', 'seed-tray.v2', { total: '9' });
+  const input = create(subject, 'scalar_amount', 'page', { total: '9' });
   const original = await json(await send('POST', '/v1/progressSessions', input, startKey), 201);
   const s = original.progressSession;
   const recordKey = entryKey();
@@ -456,10 +460,8 @@ test('authorized receipts survive profile replacement removal hide and rollback 
     );
     expect(await fact(s.id)).toEqual(stored);
     expect(await contents(s.id)).toEqual(history);
-    expect((await fact(s.id)).library_profile_pin).toEqual(pin());
     expect((await json(await send('GET', path(s.id)), 200)).progressSession).toEqual(recorded.progressSession);
   }
-  await rejectCreate(input, 422, 'unsupported_library_profile');
   await json(
     await native.send('steward', 'POST', `/v1/subjects/${subject}:hide`, { reason: 'Native receipt concealment' }),
     200,
