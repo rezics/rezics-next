@@ -219,12 +219,14 @@ test('native entry delete retains an independent exact snapshot and owner restor
   );
   expect(await observed(subjectId)).toEqual(occupied);
 
+  time += 60_000;
   const deleted2 = await remove(f.owner.actor, b);
   const { d: d2, archive: archive2 } = await snapshot(b, deleted2);
   expect(d2.deletionId).not.toBe(d1.deletionId);
   expect(await rows(subjectId, true)).toEqual(expect.arrayContaining([archive1, archive2]));
   const restoreKey = entryKey();
   const undo1 = await restore(f.owner.actor, subjectId, d1, restoreKey);
+  expect(undo1.transactionId).not.toBe(deleted1.transactionId);
   await restored(a, undo1);
   expect((await rows(subjectId, true)).map((r) => r.deletion_id)).toEqual([d2.deletionId]);
   const once = await observed(subjectId);
@@ -236,11 +238,13 @@ test('native entry delete retains an independent exact snapshot and owner restor
 
   // Delete the restored SAME incarnation: a third episode, never reuse/recreate D1.
   const aAgain = await live(subjectId);
+  time += 60_000;
   const deleted3 = await remove(f.owner.actor, aAgain);
   const { d: d3 } = await snapshot(aAgain, deleted3);
   expect(aAgain.incarnation_id).toBe(a.incarnation_id);
   expect(new Set([d1.deletionId, d2.deletionId, d3.deletionId]).size).toBe(3);
   const absent = await observed(subjectId);
+  expect(absent.archived.find((row) => row.deletion_id === d2.deletionId)).toEqual(archive2);
   expect(await restore(f.owner.actor, subjectId, d1, restoreKey)).toEqual({ ...undo1, replayed: true });
   expect(await remove(f.owner.actor, a, deleteKey)).toEqual({ ...deleted1, replayed: true });
   expect(await observed(subjectId)).toEqual(absent);
