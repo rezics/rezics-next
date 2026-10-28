@@ -43,6 +43,19 @@ const permissionScenarios = [
   'organization-role grants require an eligible human member with the specified role',
   'grant administration cannot delegate actions the grantor lacks',
 ];
+const maximumTimerDelayMs = 2_147_483_647;
+
+export function getOutcomeTimeoutMs(env: Readonly<Record<string, string | undefined>>): number {
+  const value = env.VERIFY_OUTCOME_TIMEOUT_MS;
+  if (value === undefined) return 120_000;
+  const timeoutMs = Number(value);
+  requireThat(
+    /^[1-9]\d*$/.test(value) && Number.isSafeInteger(timeoutMs),
+    `Invalid VERIFY_OUTCOME_TIMEOUT_MS value ${JSON.stringify(value)}: expected a positive integer`,
+  );
+  return timeoutMs;
+}
+
 function requireThat(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -50,6 +63,7 @@ const xml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&
   .replaceAll("'", '&apos;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
 async function verify() {
+  const timeoutMs = getOutcomeTimeoutMs(process.env);
   const args = process.argv.slice(2);
   requireThat(args.length === 1 || args.length === 3, 'Expected <suite> [DRIVER_ENV_VARIABLE "missing-driver message"]');
   const suite = resolve(args[0]!);
@@ -76,12 +90,23 @@ async function verify() {
       env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
     });
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, 20_000);
+    const deadline = performance.now() + timeoutMs;
+    let timer: ReturnType<typeof setTimeout>;
+    const expireOrContinue = () => {
+      const remainingTimeoutMs = deadline - performance.now();
+      if (remainingTimeoutMs <= 0) {
+        timedOut = true;
+        child.kill();
+      } else {
+        timer = setTimeout(expireOrContinue, Math.min(remainingTimeoutMs, maximumTimerDelayMs));
+      }
+    };
+    timer = setTimeout(expireOrContinue, Math.min(timeoutMs, maximumTimerDelayMs));
     const [code, stdout, stderr] = await Promise.all([
       child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
     ]).finally(() => clearTimeout(timer));
     const output = `${stdout}\n${stderr}`;
-    requireThat(!timedOut, 'Missing-driver run timed out');
+    requireThat(!timedOut, `Missing-driver run timed out after ${timeoutMs} ms (VERIFY_OUTCOME_TIMEOUT_MS)`);
     requireThat(code !== 0, 'Expected a red run without a driver, but Bun passed');
     requireThat(output.includes(`error: ${message}`), `Expected clear missing-driver failure was absent:\n${output}`);
     requireThat(!/^\s*[1-9]\d* errors?\b/m.test(output) &&
@@ -103,7 +128,9 @@ async function verify() {
     await rm(temporary, { recursive: true, force: true });
   }
 }
-await verify().catch(error => {
-  console.error(`Specification verifier FAIL: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  await verify().catch(error => {
+    console.error(`Specification verifier FAIL: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}
