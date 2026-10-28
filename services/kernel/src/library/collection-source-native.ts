@@ -149,7 +149,10 @@ for (const query of [candidates, permissions])
     return { nativeRows: 32 * points + 64, nativePoints: points, bytes: 256 * keys };
   });
 function footprint(sql: string, values: readonly unknown[], work: NativeCollectionWork): WorkDimensions | undefined {
-  const control = /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(sql);
+  // The existing shared native capture sends these two session SETs. They access no relation, but still cost
+  // statements/bytes here; the capture deliberately omits its own setup from its measured statement list.
+  const control =
+    /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(sql) || /^SET auto_explain\.log_min_duration = (?:0|-1)$/.test(sql);
   const partitionBytes = work.resultByteBound('partition:' + values[0]);
   const cost = control
     ? { nativeRows: 0, nativePoints: 0, bytes: 0 }

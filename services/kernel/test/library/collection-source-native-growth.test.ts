@@ -42,7 +42,11 @@ async function measured<T extends { work: WorkReceipt }>(operation: () => Promis
   const measured = await capture(db, operation, { includeBackends: true });
   // Actual node rows include loops and removals; this is separate from the charged plan bound.
   expect(costOf(measured.capture).rows).toBeLessThanOrEqual(measured.value.work.used.nativeRows);
-  expect(measured.capture.statements.length).toBe(measured.value.work.used.statements);
+  // Shared capture omits its session SETs; the owner also admits those real native control statements.
+  expect(measured.value.work.used.statements).toBeGreaterThanOrEqual(measured.capture.statements.length);
+  expect(measured.value.work.used.statements - measured.capture.statements.length).toBeLessThanOrEqual(
+    measured.value.work.used.nativePoints,
+  );
   expect(costOf(measured.capture).catalogStatements).toBe(0);
   expect(costOf(measured.capture).backgroundStatements ?? 0).toBe(0);
   for (const sql of measured.capture.statements) expect(sql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CREATE)\b/i);
@@ -136,7 +140,7 @@ test('native admission settles partial work and closes its read transaction befo
   });
   expect(result.value.used.nativePoints).toBe(1);
   expect(result.value.used.nativeRows).toBe(0);
-  expect(result.value.used.statements).toBe(2);
+  expect(result.value.used.statements).toBe(3); // BEGIN, the shared capture's session SET, ROLLBACK.
   expect(result.capture.statements).toHaveLength(2);
   expect(result.capture.statements[0]).toMatch(/^BEGIN/);
   expect(result.capture.statements[1]).toBe('ROLLBACK');
