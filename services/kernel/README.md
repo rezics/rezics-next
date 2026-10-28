@@ -222,9 +222,11 @@ When a task changes a kernel-wide contract, run the full kernel check and fix ev
 
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
-A failed test file is rerun alone once under a stack slot when any failed test or unhandled error carries a recognized load signal; growth checks remain eligible when every failure is a `GrowthBoundError` or `GrowthEvidenceError`.
-The alone run decides the outcome; failures without their own signal in a load-eligible file are marked `(cascade)`, and a passing file is reported under load-sensitive tests or growth checks.
-After reruns, the check prints `Load reruns: <files> files, <seconds> s alone (<passed> passed alone)`.
+A failed test file is rerun alone once under a stack slot when any failed test or unhandled error carries a recognized load
+signal; growth checks remain eligible when every failure is a `GrowthBoundError` or `GrowthEvidenceError`. The alone run
+decides the outcome; failures without their own signal in a load-eligible file are marked `(cascade)`, and a passing file is
+reported under load-sensitive tests or growth checks. After reruns, the check prints
+`Load reruns: <files> files, <seconds> s alone (<passed> passed alone)`.
 
 Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), considers test files
 that import a path changed since `<rev>` (committed, staged, unstaged or untracked). It selects at most

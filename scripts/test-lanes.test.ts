@@ -315,7 +315,7 @@ test('a timeout printed after its fail line belongs to that failure and JUnit ti
   ]);
 });
 
-test('an overload does not make unrelated SQLSTATEs or errors load-induced by themselves', () => {
+test('a load signal makes a mixed file eligible without classifying unrelated failures as load-induced', () => {
   for (const other of [
     'GrowthBoundError: query count exceeded its bound',
     'Error: unexpected result',
@@ -324,9 +324,18 @@ test('an overload does not make unrelated SQLSTATEs or errors load-induced by th
     'AccessUnavailableError: Access unavailable: contention',
     'CommandUnavailableError: Command unavailable for partition 1315: fenced',
   ]) {
-    const { outcome, reports } = loadFailureFixture([other]);
-    expect(classifyLoadInducedOutput(outcome.error!.message)).toBeNull();
-    for (const report of reports) expect(classifyLoadInducedFailures(outcome, report)).toBeNull();
+    const { outcome: plainOutcome, reports: plainReports } = loadFailureFixture([other]);
+    expect(classifyLoadInducedOutput(plainOutcome.error!.message)).toBeNull();
+    for (const report of plainReports) expect(classifyLoadInducedFailures(plainOutcome, report)).toBeNull();
+
+    const { outcome, reports } = loadFailureFixture(['Access unavailable: overloaded', other]);
+    expect(classifyLoadInducedOutput(outcome.error!.message)?.map((failure) => failure.kind)).toEqual([
+      'load',
+      'cascade',
+    ]);
+    for (const report of reports) {
+      expect(classifyLoadInducedFailures(outcome, report)?.map((failure) => failure.kind)).toEqual(['load', 'cascade']);
+    }
   }
 });
 
