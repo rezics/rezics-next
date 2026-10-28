@@ -5,9 +5,11 @@
  * createDynamicCollectionsDriver(): Promise<DynamicCollectionsDriver>. Each call owns an isolated migrated PostgreSQL
  * database, real Auth/Access personas and a real DBOS executor composed from the production kernel work modules.
  * Every request passes through createKernel(...).handle. owner and other are distinct active accounts; anonymous has no
- * token; suspended has an otherwise valid own bearer: not revoked, expired, session-fenced or below the authn floor.
- * It must reach 403 account_suspended without WWW-Authenticate. A revoked pre-suspend bearer is a distinct 401 control,
- * never this persona. Missing/malformed/expired/revoked credentials retain 401; scope denial retains 403 insufficient_scope.
+ * token; suspended uses its actual bearer obtained while active, then genuine suspension advances the native authn
+ * floor and fences that bearer. Auth mints only for active accounts, so no valid suspended bearer can be provisioned.
+ * Its native 401 invalid_token maps to the denied outcome; preserve the raw response and WWW-Authenticate challenge.
+ * No SQL-made suspended state, forged JWT, authentication bypass, artificial floor or response normalization.
+ * Missing/malformed/expired/revoked credentials retain 401; scope denial retains 403 insufficient_scope.
  * close stops owned workers/server and removes the database and tokens.
  *
  * The three profiles are real compiled Definitions releases for game, recipe, and record subjects. Subjects are

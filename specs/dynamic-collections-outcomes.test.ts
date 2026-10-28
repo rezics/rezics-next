@@ -545,8 +545,8 @@ test('curator authorization and viewer-native subject reads apply to dynamic mem
   const unknown = await problem(await get('other', `/v1/collections/${driver.unknown.collectionId}`), 404, 'not_found');
   expect(await problem(await get('other', `/v1/collections/${view.id}`), 404, 'not_found')).toEqual(unknown);
   const suspended = await get('suspended', `/v1/collections/${view.id}`);
-  expect(await problem(suspended, 403, 'account_suspended')).toBeDefined();
-  expect(suspended.headers.get('www-authenticate')).toBeNull();
+  expect(await problem(suspended, 401, 'invalid_token')).toBeDefined();
+  expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
 
   const publicView = ((await (await setVisibility(view, 'public')).json()) as { collection: DynamicCollectionView })
     .collection;
