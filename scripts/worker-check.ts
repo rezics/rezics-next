@@ -399,7 +399,12 @@ export async function waitWorkerCheck(
     }
     if (Date.now() - lastGrowth >= stallMs) {
       if (record.runnerPid !== undefined) stopRunner(record.runnerPid);
-      return await rerunInterruptedCheck(record, root, id, `log did not grow for ${Math.round(stallMs / 60_000)} minutes`);
+      return await rerunInterruptedCheck(
+        record,
+        root,
+        id,
+        `log did not grow for ${Math.round(stallMs / 60_000)} minutes`,
+      );
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
     record = readRecord(root, id);
@@ -447,8 +452,7 @@ async function rerunInterruptedCheck(record: CheckRecord, root: string, id: stri
   record.status = 'finished';
   record.exitCode = 1;
   record.log = relative(root, rerunLog);
-  record.infrastructureFailure =
-    `worker-check: infrastructure failure (${reason}) on ${host}; reran check once (rerun exit status ${rerunCode}); log ${record.log}`;
+  record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; reran check once (rerun exit status ${rerunCode}); log ${record.log}`;
   writeRecord(record);
   return waitWorkerCheck(id, root, 0);
 }

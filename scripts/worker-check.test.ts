@@ -1,6 +1,15 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
@@ -193,7 +202,19 @@ function writeRunningRecord(root: string, id: string, log: string, runnerPid: nu
   mkdirSync(resultDirectory, { recursive: true });
   writeFileSync(
     join(resultDirectory, `${id}.json`),
-    JSON.stringify({ id, cwd: root, argv: ['bun', '-e', `require('node:fs').appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, 'rerun\\n')`], status: 'running', log, runnerPid, runnerHost }),
+    JSON.stringify({
+      id,
+      cwd: root,
+      argv: [
+        'bun',
+        '-e',
+        `require('node:fs').appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, 'rerun\\n')`,
+      ],
+      status: 'running',
+      log,
+      runnerPid,
+      runnerHost,
+    }),
   );
 }
 
@@ -207,7 +228,10 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
   writeRunningRecord(root, id, log, 2_000_000_000);
   const out: string[] = [];
   const write = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    out.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write;
   try {
     await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5 })).toBe(1));
   } finally {
@@ -233,7 +257,10 @@ test('a check whose log has been silent for 10 minutes is stopped and rerun once
   writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
   const out: string[] = [];
   const write = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    out.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write;
   try {
     await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000)).toBe(1));
   } finally {
