@@ -549,9 +549,9 @@ export class WorkerJob implements GateOutcomeSink {
         !isAbsolute(path)
       );
     };
-    const candidates = store.orphanSweepCandidates().filter(
-      ({ attempt }) => (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath),
-    );
+    const candidates = store
+      .orphanSweepCandidates()
+      .filter(({ attempt }) => (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath));
     // A pending attempt exists only while a process holds its task's lease to launch it. One that is old and whose
     // lease is free lost its launcher (nine tasks sat pending for three hours): the host retries the task.
     if (adoptRunning) {
@@ -742,18 +742,14 @@ export class WorkerJob implements GateOutcomeSink {
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
       if (!kind) return;
-      const existingRefusal = store
-        .events(task.id, ref.attempt)
-        .find((event) => event.kind === 'usage-limit-refusal');
+      const existingRefusal = store.events(task.id, ref.attempt).find((event) => event.kind === 'usage-limit-refusal');
       let retrySamePool = false;
       if (existingRefusal) {
         const body = JSON.parse(existingRefusal.body) as { disposition?: string; pauseMs?: number };
         retrySamePool = body.disposition === 'retry-same-pool';
         retryDelayMs = body.pauseMs ?? 0;
       }
-      if (
-        store.events(task.id, ref.attempt).some((event) => event.kind === 'attempt-exit-classified')
-      ) {
+      if (store.events(task.id, ref.attempt).some((event) => event.kind === 'attempt-exit-classified')) {
         // A retry decided before the retry intent existed, and lost with its process, is queued again.
         if (task.state === 'running' && task.currentAttempt === ref.attempt && !store.retryIntent(ref))
           queueRetry(this.exitRetryOptions(attempt, attempt.evidencePath));

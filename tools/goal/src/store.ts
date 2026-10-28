@@ -513,7 +513,7 @@ export class WorkerStore implements AttemptFence {
             .all(taskId, attempt)
         : taskId
           ? this.db.query('SELECT * FROM worker_events WHERE task_id=? ORDER BY sequence').all(taskId)
-        : this.db.query('SELECT * FROM worker_events ORDER BY sequence').all()
+          : this.db.query('SELECT * FROM worker_events ORDER BY sequence').all()
     ) as ReturnType<WorkerStore['events']>;
   }
   landing(request: LandingRequest, enqueue: (request: LandingRequest) => void): void {

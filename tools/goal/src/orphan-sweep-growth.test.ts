@@ -52,7 +52,13 @@ function waitForFile(path: string): Promise<void> {
 }
 
 test('command and host sweeps read and lease a constant live candidate set as settled history grows', async () => {
-  const measurements: { statements: number; attemptRows: number; taskRows: number; eventRows: number; leases: number }[] = [];
+  const measurements: {
+    statements: number;
+    attemptRows: number;
+    taskRows: number;
+    eventRows: number;
+    leases: number;
+  }[] = [];
   for (const settledCount of [100, 1_000, 5_000]) {
     for (const adoptRunning of [false, true]) {
       const db = openDb(':memory:');
@@ -60,38 +66,86 @@ test('command and host sweeps read and lease a constant live candidate set as se
       const stateDirectory = join(fixture.path, 'state');
       try {
         const store = new WorkerStore(db);
-        const insertTask = db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
+        const insertTask = db.query(
+          'INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)',
+        );
         const insertAttempt = db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)');
         const settledStates = ['integrated', 'merged', 'landing', 'held', 'stopped', 'ready'];
         for (let index = 0; index < settledCount; index += 1) {
           const id = `settled-${index}`;
           const state = settledStates[index % settledStates.length]!;
-          insertTask.run(id, index + 1, 2, JSON.stringify({ id, state, currentAttempt: 2, brief: { after: [] }, createdAt: '2000-01-01T00:00:00.000Z' }));
-          insertAttempt.run(id, 1, JSON.stringify({ taskId: id, attempt: 1, state: 'superseded', logPath: `${stateDirectory}/${id}.log` }));
-          insertAttempt.run(id, 2, JSON.stringify({ taskId: id, attempt: 2, state: 'exited', logPath: `${stateDirectory}/${id}.log` }));
+          insertTask.run(
+            id,
+            index + 1,
+            2,
+            JSON.stringify({
+              id,
+              state,
+              currentAttempt: 2,
+              brief: { after: [] },
+              createdAt: '2000-01-01T00:00:00.000Z',
+            }),
+          );
+          insertAttempt.run(
+            id,
+            1,
+            JSON.stringify({ taskId: id, attempt: 1, state: 'superseded', logPath: `${stateDirectory}/${id}.log` }),
+          );
+          insertAttempt.run(
+            id,
+            2,
+            JSON.stringify({ taskId: id, attempt: 2, state: 'exited', logPath: `${stateDirectory}/${id}.log` }),
+          );
         }
         const id = 'candidate';
-        insertTask.run(id, settledCount + 1, 1, JSON.stringify({ id, state: 'running', currentAttempt: 1, brief: { after: [] }, createdAt: '2000-01-01T00:00:00.000Z' }));
-        insertAttempt.run(id, 1, JSON.stringify({ taskId: id, attempt: 1, state: 'running', logPath: `${stateDirectory}/candidate.log`, driver: deadDriver, process: null }));
+        insertTask.run(
+          id,
+          settledCount + 1,
+          1,
+          JSON.stringify({
+            id,
+            state: 'running',
+            currentAttempt: 1,
+            brief: { after: [] },
+            createdAt: '2000-01-01T00:00:00.000Z',
+          }),
+        );
+        insertAttempt.run(
+          id,
+          1,
+          JSON.stringify({
+            taskId: id,
+            attempt: 1,
+            state: 'running',
+            logPath: `${stateDirectory}/candidate.log`,
+            driver: deadDriver,
+            process: null,
+          }),
+        );
         store.event({ taskId: id, attempt: 1 }, 'landing-requested', {});
 
-        const plan = db.query(`EXPLAIN QUERY PLAN
+        const plan = db
+          .query(`EXPLAIN QUERY PLAN
           SELECT a.body FROM worker_tasks AS t JOIN worker_attempts AS a
             ON a.task_id=t.id AND a.attempt=t.current_attempt
           WHERE json_extract(t.body, '$.state')='running'
-            AND json_extract(a.body, '$.state') IN ('running', 'exited')`).all() as { detail: string }[];
+            AND json_extract(a.body, '$.state') IN ('running', 'exited')`)
+          .all() as { detail: string }[];
         const planText = plan.map((step) => step.detail).join(' ');
         expect(planText).toContain('worker_tasks_state');
         expect(planText).toContain('sqlite_autoindex_worker_attempts_1 (task_id=? AND attempt=?)');
         expect(planText).not.toContain('worker_attempts_state');
 
         const counts = { statements: 0, attemptRows: 0, taskRows: 0, eventRows: 0, leases: 0 };
-        const handle = db as unknown as { query: (sql: string) => { all: (...args: unknown[]) => unknown[]; get: (...args: unknown[]) => unknown } };
+        const handle = db as unknown as {
+          query: (sql: string) => { all: (...args: unknown[]) => unknown[]; get: (...args: unknown[]) => unknown };
+        };
         const originalQuery = handle.query.bind(db);
         handle.query = (sql: string) => {
           const statement = originalQuery(sql);
-          if (!/^\s*(?:\/\*.*?\*\/\s*)?SELECT\b/i.test(sql) || !/worker_tasks AS t|worker_events/i.test(sql)) return statement;
-          const observe = <T,>(rows: T): T => {
+          if (!/^\s*(?:\/\*.*?\*\/\s*)?SELECT\b/i.test(sql) || !/worker_tasks AS t|worker_events/i.test(sql))
+            return statement;
+          const observe = <T>(rows: T): T => {
             const count = Array.isArray(rows) ? rows.length : rows == null ? 0 : 1;
             counts.statements += 1;
             if (/worker_tasks AS t/i.test(sql)) {
@@ -119,7 +173,9 @@ test('command and host sweeps read and lease a constant live candidate set as se
           },
           dependenciesMet: () => true,
         } as unknown as WorkerTasks;
-        await new WorkerJob(tasks, { enqueue() {} }, { deliver() {} }, undefined, undefined, acquire).recoverOrphans({ adoptRunning });
+        await new WorkerJob(tasks, { enqueue() {} }, { deliver() {} }, undefined, undefined, acquire).recoverOrphans({
+          adoptRunning,
+        });
         measurements.push(counts);
       } finally {
         db.close();
@@ -155,7 +211,6 @@ test('the next command settles an exited attempt that remains current and unsett
   } finally {
     h.dispose();
   }
-
 }, 20_000);
 
 test('the host recovers a running attempt after its worker process has died', async () => {
@@ -185,7 +240,9 @@ test('per-task event reads use the task and attempt index', () => {
   const db = openDb(':memory:');
   try {
     const store = new WorkerStore(db);
-    const plan = db.query('EXPLAIN QUERY PLAN SELECT * FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence').all('task', 1) as { detail: string }[];
+    const plan = db
+      .query('EXPLAIN QUERY PLAN SELECT * FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence')
+      .all('task', 1) as { detail: string }[];
     expect(plan.map((step) => step.detail).join(' ')).toContain('worker_events_task_attempt_sequence');
     expect(plan.map((step) => step.detail).join(' ')).not.toContain('SCAN worker_events');
     expect(store.events('task', 1)).toEqual([]);
