@@ -136,6 +136,7 @@ export async function instrumentNativeCollectionWork<T>(
       const active = observing.getStore();
       if (active) {
         try {
+          active.work.assertReady();
           const checkout = active.work.reserve({ ...zero(), nativePoints: 1 });
           checkout.dispatch();
           checkout.settle();
