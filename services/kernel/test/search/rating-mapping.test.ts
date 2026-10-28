@@ -44,6 +44,10 @@ type MappingResult = Record<
   string,
   { mappings: { dynamic: string; properties: Record<string, Record<string, unknown>> } }
 >;
+type FieldMappingResult = Record<
+  string,
+  { mappings: Record<string, { mapping: Record<string, Record<string, unknown>> }> }
+>;
 type SearchResult = {
   hits: {
     hits: {
@@ -66,8 +70,16 @@ test('production rating_score is a strict double with doc values and no coercion
   const response = await search.request<MappingResult>('GET', `/${index}/_mapping`);
   const mapping = response.body[index]!.mappings;
   expect(mapping.dynamic).toBe('strict');
-  expect(mapping.properties.rating_score).toMatchObject({ type: 'double', doc_values: true, coerce: false });
+  expect(mapping.properties.rating_score).toMatchObject({ type: 'double', coerce: false });
   expect(mapping.properties.rating_score).not.toHaveProperty('null_value');
+  // Numeric GET _mapping omits default values; request native field metadata to prove doc values are enabled.
+  const fields = await search.request<FieldMappingResult>(
+    'GET',
+    `/${index}/_mapping/field/rating_score`,
+    undefined,
+    { query: { include_defaults: true } },
+  );
+  expect(fields.body[index]!.mappings.rating_score!.mapping.rating_score).toMatchObject({ doc_values: true });
   expect(mapping.properties.names).toMatchObject({ type: 'text', analyzer: 'cjk_bigram_v2' });
   expect(mapping.properties.partition).toMatchObject({ type: 'integer' });
   expect(mapping.properties.security_revision).toMatchObject({ type: 'long' });
