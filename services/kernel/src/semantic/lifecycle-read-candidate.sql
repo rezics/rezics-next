@@ -1,17 +1,20 @@
-WITH candidate AS MATERIALIZED (
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :candidate_id::uuid AS candidate_id
+), candidate AS MATERIALIZED (
   SELECT c.origin, r.recorded_transaction_id
-  FROM semantic.candidate c
+  FROM input
+  JOIN semantic.candidate c ON c.route = input.route AND c.subject_id = input.subject_id
+    AND c.candidate_id = input.candidate_id
   LEFT JOIN semantic.revision r
-    ON r.route = :route::integer AND r.subject_id = c.subject_id AND r.revision = c.revision
-  WHERE c.route = :route::integer AND c.subject_id = :subject_id::uuid
-    AND c.candidate_id = :candidate_id::uuid
+    ON r.route = input.route AND r.subject_id = c.subject_id AND r.revision = c.revision
 ), assertion AS MATERIALIZED (
   -- Exact fact_compact_candidate probe. Retraction/expansion never replaces assertion attribution.
   -- Two assertions suffice to detect ambiguous identity evidence without reading payload or history.
   SELECT f.recorded_transaction_id
-  FROM semantic.fact f
-  WHERE f.route = :route::integer AND f.subject_id = :subject_id::uuid
-    AND f.statement_id = :candidate_id::uuid AND f.statement_id IS NOT NULL
+  FROM input
+  JOIN semantic.fact f ON f.route = input.route AND f.subject_id = input.subject_id
+    AND f.statement_id = input.candidate_id
+  WHERE f.statement_id IS NOT NULL
     AND f.kind = 'statement' AND f.operation = 'assert'
     AND NOT EXISTS (SELECT 1 FROM candidate WHERE origin = 'proposal')
   ORDER BY f.log_seq ASC LIMIT 2
