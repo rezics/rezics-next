@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readCollectionFollow } from './collection-records';
 import {
@@ -35,13 +36,17 @@ export async function loadEditableCollectionPage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { id: string; cursor?: string },
+  credentialMode: ReadCredentialMode = 'session',
 ): Promise<EditableCollectionPage> {
-  // A session that cannot be read leaves the collection readable to everyone.
-  const signedOut = await prepareSession(request, sessionEnv).then(
-    (stale) => stale,
-    () => true,
-  );
-  const authorization = signedOut ? null : viewerCredential(request);
+  let authorization: string | null = null;
+  if (credentialMode === 'session') {
+    // A session that cannot be read leaves the collection readable to everyone.
+    const signedOut = await prepareSession(request, sessionEnv).then(
+      (stale) => stale,
+      () => true,
+    );
+    authorization = signedOut ? null : viewerCredential(request);
+  }
   const viewer = authorization ? sessionSubject(request) : undefined;
   const headers = authorization ? { headers: { authorization } } : {};
   const readMembers = async (cursor?: string) =>

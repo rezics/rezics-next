@@ -4,6 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import {
   changeMembership,
   loadMyRealms,
@@ -18,7 +19,13 @@ import {
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function validateAddress(input: unknown): { address: string } {
+function credentialModeOf(input: Record<string, unknown>): ReadCredentialMode {
+  if (input.credentialMode === undefined || input.credentialMode === 'anonymous') return 'anonymous';
+  if (input.credentialMode === 'session') return 'session';
+  throw new Error('Invalid read credential mode');
+}
+
+function validateAddress(input: unknown): { address: string; credentialMode: ReadCredentialMode } {
   if (
     !input ||
     typeof input !== 'object' ||
@@ -28,10 +35,10 @@ function validateAddress(input: unknown): { address: string } {
     input.address.length > 128
   )
     throw notFound();
-  return { address: input.address };
+  return { address: input.address, credentialMode: credentialModeOf(input) };
 }
 
-function validateRealm(input: unknown): { realmId: string } {
+function validateRealm(input: unknown): { realmId: string; credentialMode: ReadCredentialMode } {
   if (
     !input ||
     typeof input !== 'object' ||
@@ -41,7 +48,7 @@ function validateRealm(input: unknown): { realmId: string } {
     input.realmId.length > 128
   )
     throw notFound();
-  return { realmId: input.realmId };
+  return { realmId: input.realmId, credentialMode: credentialModeOf(input) };
 }
 
 function validateCursor(input: unknown): { cursor?: string } {
@@ -78,16 +85,8 @@ export const readSpacePage = createServerFn({ method: 'GET' })
   .validator(validateAddress)
   .handler(async ({ data }): Promise<SpacePageData> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const page = await loadSpacePage(kernelClient(), new Request('https://public.invalid/'), {}, data);
-    return namePublishedTypes(page, requestLocale(getRequest()) ?? 'en');
-  });
-
-export const readPersonalSpacePage = createServerFn({ method: 'GET' })
-  .validator(validateAddress)
-  .handler(async ({ data }): Promise<SpacePageData> => {
-    setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await loadSpacePage(kernelClient(), request, env as Partial<SessionEnv>, data);
+    const page = await loadSpacePage(kernelClient(), request, env as Partial<SessionEnv>, data, data.credentialMode);
     return namePublishedTypes(page, requestLocale(request) ?? 'en');
   });
 
@@ -96,7 +95,7 @@ export const locateRealmPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<Located> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const located = await locateRealm(kernelClient(), request, env as Partial<SessionEnv>, data);
+    const located = await locateRealm(kernelClient(), request, env as Partial<SessionEnv>, data, data.credentialMode);
     return located.kind === 'page'
       ? { ...located, page: await namePublishedTypes(located.page, requestLocale(request) ?? 'en') }
       : located;

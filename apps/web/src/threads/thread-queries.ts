@@ -1,22 +1,15 @@
 import { queryOptions } from '@tanstack/react-query';
-import { createIsomorphicFn } from '@tanstack/react-start';
-import { getRequest } from '@tanstack/react-start/server';
-import { publicRead } from '../kernel/query';
-import { cookie, SESSION_COOKIE } from '../session/cookies';
+import { publicRead, readQueryKey } from '../kernel/query';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { readBoardPage, readThreadPage, readThreadSlug } from './reads';
 
-/** Whether this navigation carries a session cookie. Anonymous reads share one cache entry. */
-export type CredentialMode = 'anonymous' | 'credential';
-
-export const credentialMode = createIsomorphicFn()
-  .server((): CredentialMode => (cookie(getRequest(), SESSION_COOKIE) ? 'credential' : 'anonymous'))
-  .client((): CredentialMode => 'anonymous');
+export type CredentialMode = ReadCredentialMode;
 
 export function threadSlugQuery(id: string, credentialMode: CredentialMode) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['thread-slug', id, credentialMode],
-    queryFn: () => readThreadSlug({ data: { id } }),
+    queryKey: readQueryKey(['thread-slug', id], credentialMode),
+    queryFn: () => readThreadSlug({ data: { id, credentialMode } }),
   });
 }
 
@@ -28,13 +21,14 @@ export function threadPageQuery(
 ) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['thread-page', id, cursor ?? null, credentialMode, expectedSlug ?? null],
+    queryKey: readQueryKey(['thread-page', id, cursor ?? null, expectedSlug ?? null], credentialMode),
     queryFn: () =>
       readThreadPage({
         data: {
           id,
           ...(cursor === undefined ? {} : { cursor }),
           ...(expectedSlug === undefined ? {} : { expectedSlug }),
+          credentialMode,
         },
       }),
   });
@@ -48,7 +42,7 @@ export function boardPageQuery(
 ) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['board-page', id, cursor ?? null, sort ?? null, credentialMode],
+    queryKey: readQueryKey(['board-page', id, cursor ?? null, sort ?? null], credentialMode),
     queryFn: () =>
       readBoardPage({
         data: {

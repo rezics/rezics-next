@@ -3,6 +3,7 @@ import { getRequest } from '@tanstack/react-start/server';
 import { requestNonce } from './security/nonce.ts';
 import { createRouter } from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
+import { anonymousReadMode } from './kernel/credential';
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
 import { ClosedErrorPage } from './shell/closed';
 import { NotFoundPage } from './shell/shell';
@@ -40,7 +41,7 @@ export function getRouter() {
   const cspNonce = nonce();
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
   const router = createRouter({
-    context: { queryClient },
+    context: { queryClient, credentialMode: anonymousReadMode },
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
     defaultPendingComponent: PendingPage,

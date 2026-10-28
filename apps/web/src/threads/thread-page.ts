@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
@@ -41,6 +42,7 @@ export function loadThreadPage(
   sessionEnv: Partial<SessionEnv>,
   data: CanonicalPageInput,
   verification: VerificationConfig,
+  credentialMode?: ReadCredentialMode,
 ): Promise<LoadedThreadPage | ThreadSlugRedirect>;
 export function loadThreadPage(
   client: KernelClient,
@@ -48,6 +50,7 @@ export function loadThreadPage(
   sessionEnv: Partial<SessionEnv>,
   data: PageInput,
   verification: VerificationConfig,
+  credentialMode?: ReadCredentialMode,
 ): Promise<LoadedThreadPage>;
 export async function loadThreadPage(
   client: KernelClient,
@@ -55,17 +58,20 @@ export async function loadThreadPage(
   sessionEnv: Partial<SessionEnv>,
   data: PageInput & { expectedSlug?: string },
   verification: VerificationConfig,
+  credentialMode: ReadCredentialMode = 'session',
 ): Promise<LoadedThreadPage | ThreadSlugRedirect> {
   let authorization: string | null = null;
   let viewerId: string | undefined;
-  try {
-    await prepareSession(request, sessionEnv);
-    authorization = viewerCredential(request);
-    viewerId = sessionSubject(request);
-  } catch {
-    // A page remains usable when the session credential cannot be read.
-    authorization = null;
-    viewerId = undefined;
+  if (credentialMode === 'session') {
+    try {
+      await prepareSession(request, sessionEnv);
+      authorization = viewerCredential(request);
+      viewerId = sessionSubject(request);
+    } catch {
+      // A page remains usable when the session credential cannot be read.
+      authorization = null;
+      viewerId = undefined;
+    }
   }
   const threadRead = authorization
     ? client.threads({ id: data.id }).get({ headers: { authorization } })

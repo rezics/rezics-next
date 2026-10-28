@@ -11,7 +11,7 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ThreadPost } from '../../threads/reads';
-import { credentialMode, threadPageQuery } from '../../threads/thread-queries';
+import { threadPageQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
 import {
   rememberThreadSlug,
@@ -43,10 +43,11 @@ function threadSearch(search: Record<string, unknown>): { cursor?: string } {
 }
 
 export const Route = createFileRoute('/threads/$id_/$slug')({
+  staticData: { sessionReread: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
   loader: async ({ params, deps, context }) => {
-    const mode = credentialMode();
+    const mode = context.credentialMode;
     const known = rememberedThreadSlug(params.id);
     const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
     const page = await context.queryClient.ensureQueryData(threadPageQuery(params.id, deps.cursor, mode, expectedSlug));

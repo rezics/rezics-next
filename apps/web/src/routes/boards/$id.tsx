@@ -27,6 +27,7 @@ function boardSearch(search: Record<string, unknown>): { cursor?: string; sort?:
 }
 
 export const Route = createFileRoute('/boards/$id')({
+  staticData: { sessionReread: true },
   validateSearch: boardSearch,
   // The router passes unvalidated keys through, so read the sort through the same check again.
   loaderDeps: ({ search }) => {
@@ -35,7 +36,7 @@ export const Route = createFileRoute('/boards/$id')({
   },
   loader: async ({ params, deps, context }) => {
     const page = await context.queryClient.ensureQueryData(
-      boardPageQuery(params.id, deps.cursor, deps.sort, 'anonymous'),
+      boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode),
     );
     for (const thread of page.threads.threads) rememberThreadSlug(thread.id, threadTitle(thread));
     return { ...page, indexable: deps.cursor === undefined && page.threads.threads.length > 0 };

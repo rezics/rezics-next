@@ -1,17 +1,18 @@
 import { queryOptions } from '@tanstack/react-query';
-import { publicRead } from '../kernel/query';
+import { publicRead, readQueryKey } from '../kernel/query';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { locateRealmPage, readSpacePage } from './space-actions';
 
-export const spaceQuery = (address: string, locale: string) =>
+export const spaceQuery = (address: string, locale: string, credentialMode: ReadCredentialMode) =>
   queryOptions({
     ...publicRead,
-    queryKey: ['space', address, locale],
-    queryFn: () => readSpacePage({ data: { address } }),
+    queryKey: readQueryKey(['space', address, locale], credentialMode),
+    queryFn: () => readSpacePage({ data: { address, credentialMode } }),
   });
 
-export const realmPageQuery = (id: string, locale: string) =>
+export const realmPageQuery = (id: string, locale: string, credentialMode: ReadCredentialMode) =>
   queryOptions({
     ...publicRead,
-    queryKey: ['realm-page', id, locale],
-    queryFn: () => locateRealmPage({ data: { realmId: id } }),
+    queryKey: readQueryKey(['realm-page', id, locale], credentialMode),
+    queryFn: () => locateRealmPage({ data: { realmId: id, credentialMode } }),
   });

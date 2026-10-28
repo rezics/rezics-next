@@ -11,6 +11,7 @@ import space from '../src/kernel/recorded/space.json';
 import realm from '../src/kernel/recorded/realm.json';
 import board from '../src/kernel/recorded/board.json';
 import thread from '../src/kernel/recorded/thread.json';
+import threadPosts from '../src/kernel/recorded/thread-posts.json';
 import collection from '../src/kernel/recorded/library-collection.json';
 import { threadHref } from '../src/threads/thread-href';
 
@@ -99,11 +100,9 @@ const kernel = Bun.serve({
     if (url.pathname === `/v1/threads/${privateThreadId}/posts` && privateThreadEnabled) {
       if (authorization !== readerCredential)
         return Response.json(notFound, { status: 404, headers: { 'content-type': 'application/problem+json' } });
-      const response = await recorded(request);
-      const body = (await response.json()) as { posts: Array<Record<string, unknown>>; next: string | null };
       return Response.json({
-        ...body,
-        posts: body.posts.map((post) => ({ ...post, threadId: privateThreadId })),
+        posts: threadPosts.posts.map((post) => ({ ...post, threadId: privateThreadId })),
+        next: threadPosts.next,
       });
     }
     return recorded(request);
@@ -154,31 +153,35 @@ function site(): Promise<string> {
             )
             .replace(
               'credential(): Promise<Credential> {',
-              'credential(): Promise<Credential> { void fetch(${JSON.stringify(credentialReadUrl)}); return Promise.resolve({ status: "active", subject: ${JSON.stringify(thread.thread.authorId)}, accessToken: "anonymous-reads-reader", csrfToken: "anonymous-reads-csrf" });',
+              'credential(): Promise<Credential> { return fetch(${JSON.stringify(credentialReadUrl)}).then(() => ({ status: "active", subject: ${JSON.stringify(thread.thread.authorId)}, accessToken: "anonymous-reads-reader", csrfToken: "anonymous-reads-csrf" }));',
             );
         }
       }] };
       `,
     );
     const port = await freePort();
-    const origin = `http://127.0.0.1:${port}`;
+    const origin = `http://localhost:${port}`;
     let output = '';
     const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12000));
-    child = spawn('bun', ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: kernel.url.origin,
-        PUBLIC_ORIGIN: origin,
-        AUTH_ISSUER: `${kernel.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
-        WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
-        API_RESOURCE: 'https://api.rezics.test',
-        WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
+    child = spawn(
+      'bun',
+      ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+      {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: kernel.url.origin,
+          PUBLIC_ORIGIN: origin,
+          AUTH_ISSUER: `${kernel.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
+          WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
+          API_RESOURCE: 'https://api.rezics.test',
+          WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
+        },
       },
-    });
+    );
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const deadline = Date.now() + 150_000;
@@ -196,7 +199,9 @@ function site(): Promise<string> {
 async function signedInPage(origin: string): Promise<Page> {
   browser ??= await chromium.launch();
   const context = await browser.newContext();
-  await context.addCookies([{ name: sessionCookie, value: sessionId, url: origin, secure: true }]);
+  await context.addCookies([
+    { name: sessionCookie, value: sessionId, url: origin, path: '/', secure: true, sameSite: 'Lax' },
+  ]);
   return context.newPage();
 }
 
@@ -224,7 +229,7 @@ test(
     for (const path of paths) {
       reset();
       const response = await fetch(`${origin}${path}`, { headers: { cookie: sessionCookieHeader } });
-      expect([200, 301, 302, 307]).toContain(response.status);
+      expect(response.status).toBe(200);
       expect(sessionReads).toBe(0);
       expect(credentialReads).toBe(0);
       expect(kernelCalls.length).toBeGreaterThan(0);
@@ -243,6 +248,8 @@ test(
     await page.goto(`${origin}/en/spaces/${spaceAddress.address}`);
     await page.locator('html[data-hydrated]').waitFor();
     await page.locator('[data-member-state]').waitFor();
+    expect(await page.locator('[data-member-state]').getAttribute('data-member-state')).toBe('none');
+    await page.getByRole('button', { name: 'Join' }).waitFor();
     await page.waitForLoadState('networkidle');
     const spaceReads = kernelCalls.filter((call) => call.path === `/v1/spaces/${spaceId}`);
     expect(spaceReads).toHaveLength(2);
@@ -265,16 +272,45 @@ test(
     const page = await signedInPage(origin);
     await page.goto(`${origin}/en/boards/${boardId}`);
     await page.locator('html[data-hydrated]').waitFor();
-    await page.getByRole('link', { href: `/en/boards/${boardId}/new` }).waitFor();
+    await page.locator(`a[href="/en/boards/${boardId}/new"]`).waitFor();
     await page.waitForLoadState('networkidle');
     const boardReads = kernelCalls.filter((call) => call.path === `/v1/boards/${boardId}`);
     const threadListReads = kernelCalls.filter((call) => call.path.startsWith(`/v1/boards/${boardId}/threads`));
     expect(boardReads).toHaveLength(2);
     expect(threadListReads).toHaveLength(2);
-    expect(boardReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
-    expect(threadListReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
-    await page.getByRole('link', { href: `/en/boards/${boardId}/new` }).click();
-    await page.waitForURL(`**/en/boards/${boardId}/new`);
+    expect(boardReads.map((call) => call.authorization)).toEqual([null, null]);
+    expect(threadListReads.map((call) => call.authorization)).toEqual([null, null]);
+    await page.locator(`a[href="${threadPath}"]`).click();
+    await page.waitForURL(`**${threadPath}`);
+    const threadRead = kernelCalls.filter((call) => call.path === `/v1/threads/${threadId}`);
+    expect(threadRead).toHaveLength(1);
+    expect(threadRead[0]?.authorization).toBe(readerCredential);
+    expect(sessionReads).toBe(1);
+    expect(credentialReads).toBe(1);
+    await page.context().close();
+  },
+  timeout,
+);
+
+test(
+  'a signed-in collection rereads once and restores the curator controls',
+  async () => {
+    const origin = await site();
+    reset();
+    const page = await signedInPage(origin);
+    await page.goto(`${origin}/en/collections/${collectionId}`);
+    await page.locator('html[data-hydrated]').waitFor();
+    await page.locator('[data-visibility="public"]').waitFor();
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    await page.getByRole('textbox', { name: 'Title' }).waitFor();
+    await page.waitForLoadState('networkidle');
+    const collectionReads = kernelCalls.filter((call) => call.path.startsWith(`/v1/collections/${collectionId}?`));
+    const memberReads = kernelCalls.filter((call) => call.path.startsWith(`/v1/collections/${collectionId}/members`));
+    expect(collectionReads).toHaveLength(2);
+    expect(memberReads).toHaveLength(2);
+    expect(collectionReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+    expect(memberReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
     await page.context().close();
@@ -292,8 +328,9 @@ test(
     spaceAccess = 'member';
     const anonymous = await fetch(`${origin}${path}`);
     expect(anonymous.status).toBe(403);
-    expect(kernelCalls.filter((call) => call.path === `/v1/space-addresses/${spaceAddress.address}`)).toHaveLength(1);
+    expect(kernelCalls.filter((call) => call.path === `/v1/spaceAddresses/${spaceAddress.address}`)).toHaveLength(1);
     expect(kernelCalls.filter((call) => call.path === `/v1/spaces/${spaceId}`)).toHaveLength(1);
+    expect(kernelCalls).toHaveLength(2);
     expect(sessionReads).toBe(0);
     expect(credentialReads).toBe(0);
 
@@ -304,13 +341,18 @@ test(
       const response = await page.goto(`${origin}${path}`);
       await page.locator('html[data-hydrated]').waitFor();
       if (access === 'member') await page.getByRole('heading', { name: space.space.title }).waitFor();
-      else await page.getByRole('heading', { name: /closed/i }).waitFor();
+      else await page.getByRole('heading', { name: /not open yet/i }).waitFor();
       await page.waitForLoadState('networkidle');
       expect(response?.status()).toBe(403);
-      expect(kernelCalls.filter((call) => call.path === `/v1/space-addresses/${spaceAddress.address}`)).toHaveLength(2);
+      expect(kernelCalls.filter((call) => call.path === `/v1/spaceAddresses/${spaceAddress.address}`)).toHaveLength(2);
       const reads = kernelCalls.filter((call) => call.path === `/v1/spaces/${spaceId}`);
       expect(reads).toHaveLength(2);
       expect(reads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+      const anonymousReads = kernelCalls.filter((call) => call.authorization === null);
+      const sessionReadsFromKernel = kernelCalls.filter((call) => call.authorization === readerCredential);
+      expect(anonymousReads).toHaveLength(2);
+      expect(sessionReadsFromKernel).toHaveLength(access === 'member' ? 12 : 2);
+      expect(kernelCalls).toHaveLength(access === 'member' ? 14 : 4);
       expect(sessionReads).toBe(1);
       expect(credentialReads).toBe(1);
       const html = await page.locator('html').innerHTML();
@@ -332,6 +374,37 @@ test(
     const response = await page.goto(`${origin}${privateThreadPath}`);
     await page.locator('html[data-hydrated]').waitFor();
     await page.getByRole('heading', { name: privateThreadTitle }).waitFor();
+    await page
+      .getByRole('button', { name: /more actions/i })
+      .first()
+      .click();
+    await page.getByRole('menuitem', { name: 'Edit' }).waitFor();
+    await page.waitForLoadState('networkidle');
+    expect(response?.status()).toBe(404);
+    const reads = kernelCalls.filter((call) => call.path === `/v1/threads/${privateThreadId}`);
+    expect(reads).toHaveLength(2);
+    expect(reads.map((call) => call.authorization)).toEqual([null, readerCredential]);
+    const postReads = kernelCalls.filter((call) => call.path === `/v1/threads/${privateThreadId}/posts`);
+    expect(postReads).toHaveLength(1);
+    expect(postReads[0]?.authorization).toBe(readerCredential);
+    expect(sessionReads).toBe(1);
+    expect(credentialReads).toBe(1);
+    privateThreadEnabled = false;
+    await page.context().close();
+  },
+  timeout,
+);
+
+test(
+  'a not-found thread stays not found for a signed-in reader without access, with only one reread',
+  async () => {
+    const origin = await site();
+    reset();
+    privateThreadEnabled = true;
+    const page = await signedInPage(origin);
+    const response = await page.goto(`${origin}${privateThreadPath}`);
+    await page.locator('html[data-hydrated]').waitFor();
+    await page.getByRole('heading', { name: 'Page not found' }).waitFor();
     await page.waitForLoadState('networkidle');
     expect(response?.status()).toBe(404);
     const reads = kernelCalls.filter((call) => call.path === `/v1/threads/${privateThreadId}`);
@@ -339,6 +412,9 @@ test(
     expect(reads.map((call) => call.authorization)).toEqual([null, readerCredential]);
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
+    expect(await page.locator('html').innerHTML()).toMatch(
+      /name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/,
+    );
     privateThreadEnabled = false;
     await page.context().close();
   },
@@ -349,7 +425,9 @@ test('closed and not-found pages return their real status and robots noindex', a
   const origin = await site();
   reset();
   spaceAccess = 'non-member';
-  const closed = await fetch(`${origin}/en/spaces/${spaceAddress.address}`, { headers: { cookie: sessionCookieHeader } });
+  const closed = await fetch(`${origin}/en/spaces/${spaceAddress.address}`, {
+    headers: { cookie: sessionCookieHeader },
+  });
   expect(closed.status).toBe(403);
   expect(await closed.text()).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
   expect(sessionReads).toBe(0);

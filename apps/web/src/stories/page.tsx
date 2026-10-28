@@ -1,5 +1,6 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { anonymousReadMode } from '../kernel/credential';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
 import '../../.storybook/route-root';
@@ -110,7 +111,7 @@ export function PageStory({ visitor, path }: { visitor: 'Signed In' | 'Signed Ou
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
     const router = createRouter({
       routeTree,
-      context: { queryClient },
+      context: { queryClient, credentialMode: anonymousReadMode },
       history: createMemoryHistory({ initialEntries: [entry] }),
       parseSearch,
       stringifySearch,

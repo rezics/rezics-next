@@ -3,6 +3,7 @@ import type { CoverSummary } from '@rezics/ui/cover';
 import { notFound } from '@tanstack/react-router';
 import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, viewerCredential } from '../session/request';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
@@ -102,7 +103,8 @@ async function readOptional<T>(read: Promise<Result<T>>): Promise<T | null> {
   return readCommunity(result);
 }
 
-async function session(request: Request, sessionEnv: Partial<SessionEnv>) {
+async function session(request: Request, sessionEnv: Partial<SessionEnv>, credentialMode: ReadCredentialMode) {
+  if (credentialMode === 'anonymous') return { signedIn: false, auth: {} as Auth };
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   const auth: Auth = authorization ? { headers: { authorization } } : {};
@@ -185,8 +187,9 @@ export async function loadSpacePage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { address: string },
+  credentialMode: ReadCredentialMode = 'session',
 ): Promise<SpacePageData> {
-  const { signedIn, auth } = await session(request, sessionEnv);
+  const { signedIn, auth } = await session(request, sessionEnv, credentialMode);
   const { spaceId } = readCommunity(await client.spaceAddresses({ address: input.address }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId }).get(auth));
   const base = { id: space.spaceId, title: space.title, summary: space.summary };
@@ -209,8 +212,9 @@ export async function locateRealm(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { realmId: string },
+  credentialMode: ReadCredentialMode = 'session',
 ): Promise<Located> {
-  const { signedIn, auth } = await session(request, sessionEnv);
+  const { signedIn, auth } = await session(request, sessionEnv, credentialMode);
   const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
   if (space.address) return { kind: 'redirect', address: space.address };
@@ -228,7 +232,7 @@ export async function loadMyRealms(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<MyRealmsPage> {
-  const { signedIn, auth } = await session(request, sessionEnv);
+  const { signedIn, auth } = await session(request, sessionEnv, 'session');
   if (!signedIn) return { signedIn: false, realms: [], next: null };
   const read = async (cursor?: string) => client.me.realms.get({ query: cursor ? { cursor } : {}, ...auth });
   let result = await read(input.cursor);
@@ -250,7 +254,7 @@ export async function changeMembership(
   sessionEnv: Partial<SessionEnv>,
   input: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string },
 ): Promise<MembershipOutcome> {
-  const { signedIn, auth } = await session(request, sessionEnv);
+  const { signedIn, auth } = await session(request, sessionEnv, 'session');
   if (!signedIn) return 'refused';
   const realm = client.realms({ realmId: input.realmId });
   const headers = {

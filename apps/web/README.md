@@ -363,6 +363,16 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** Constant per page: eight alternates, one canonical and at most one JSON-LD script.
 - **Growth check:** Page head rendering does not add a kernel request.
 
+### Anonymous reads
+
+- **Touches:** A server render of these pages makes their usual reads without a credential and no session read. A
+  signed-in reader of a marked route, or of a page they could not read anonymously, makes the page's reads once more
+  from the browser with the session.
+- **Bound:** At most one extra set of the page's reads per page load, only signed in; once the edge cache serves the
+  server render, a signed-in view costs one set of reads as on base.
+- **Growth check:** The acceptance test counts kernel and session requests for anonymous, signed-in member and
+  signed-in non-member views of a protected Realm's Space page: one set, two sets and two sets of reads.
+
 ### Sitemap files
 
 - **Touches:** Memory and processor time only: no kernel, storage or network operation.
@@ -664,9 +674,7 @@ language through the client's `accept-language`.
   read). The page's own reads are unchanged.
 - **Bound:** At most one suggestion read in flight per picker, each answering a fixed number of suggestions,
   independent of the catalogue's size and the reader's sessions.
-- **Growth check:** The acceptance test counts kernel requests with the fake kernel for the index and a session page
-  with 10, 1,000 and 10,000 sessions and expects the same reads as base at every size, and one suggestion read for
-  a typed word.
+- **Growth check:** `tests/progress-pages-layout.test.ts`, 'both pages render without JavaScript and make the same kernel reads as on base, plus at most one suggestion read per settled keystroke in the picker'
 
 ### Published logs
 

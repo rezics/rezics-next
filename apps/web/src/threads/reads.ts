@@ -5,6 +5,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { cookie } from '../session/cookies';
 import { prepareSession, viewerCredential } from '../session/request';
 import { kernelClient } from '../kernel/client';
@@ -22,7 +23,13 @@ type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type { ThreadPost };
 
-type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new'; expectedSlug?: string };
+type PageInput = {
+  id: string;
+  cursor?: string;
+  sort?: 'hot' | 'new';
+  expectedSlug?: string;
+  credentialMode?: ReadCredentialMode;
+};
 const draftCookie = 'rezics_draft_key';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -43,7 +50,11 @@ function validatePageInput(input: unknown): PageInput {
     input.id.length > 128 ||
     ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
     ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new') ||
-    ('expectedSlug' in input && input.expectedSlug !== undefined && typeof input.expectedSlug !== 'string')
+    ('expectedSlug' in input && input.expectedSlug !== undefined && typeof input.expectedSlug !== 'string') ||
+    ('credentialMode' in input &&
+      input.credentialMode !== undefined &&
+      input.credentialMode !== 'anonymous' &&
+      input.credentialMode !== 'session')
   )
     throw notFound();
   return {
@@ -51,6 +62,9 @@ function validatePageInput(input: unknown): PageInput {
     ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
     ...('sort' in input && (input.sort === 'hot' || input.sort === 'new') ? { sort: input.sort } : {}),
     ...('expectedSlug' in input && typeof input.expectedSlug === 'string' ? { expectedSlug: input.expectedSlug } : {}),
+    ...('credentialMode' in input && (input.credentialMode === 'anonymous' || input.credentialMode === 'session')
+      ? { credentialMode: input.credentialMode }
+      : {}),
   };
 }
 
@@ -86,11 +100,13 @@ export const readThreadSlug = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     let authorization: string | null = null;
-    try {
-      await prepareSession(request, env as Partial<SessionEnv>);
-      authorization = viewerCredential(request);
-    } catch {
-      authorization = null;
+    if (data.credentialMode === 'session') {
+      try {
+        await prepareSession(request, env as Partial<SessionEnv>);
+        authorization = viewerCredential(request);
+      } catch {
+        authorization = null;
+      }
     }
     const result = authorization
       ? await kernelClient().threads({ id: data.id }).get({ headers: { authorization } })
@@ -123,12 +139,19 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       setResponseHeader('cache-control', 'private, no-store');
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
       const request = getRequest();
-      const page = await loadThreadPageWithAuthors(kernelClient(), request, env as Partial<SessionEnv>, data, {
-        sitekey: config.TURNSTILE_SITE_KEY ?? '',
-        scriptUrl:
-          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
-          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
-      });
+      const page = await loadThreadPageWithAuthors(
+        kernelClient(),
+        request,
+        env as Partial<SessionEnv>,
+        data,
+        {
+          sitekey: config.TURNSTILE_SITE_KEY ?? '',
+          scriptUrl:
+            (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+            'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+        },
+        data.credentialMode ?? 'anonymous',
+      );
       if ('redirect' in page) return page;
       return { ...page, idempotencyKey: carriedDraftKey(request, data.id) ?? crypto.randomUUID() };
     },
