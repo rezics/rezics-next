@@ -3,6 +3,8 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
+import { shareAccount } from '../access/account-share.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import {
   principalCommandIdentity,
   runCommand,
@@ -81,6 +83,12 @@ function activeAccountAuthorization(accountId: string, route: number): CommandAu
     resource: Object.freeze({ route, id: accountId }),
     denied: () => new GrantDeniedError(),
     async authorize(tx) {
+      try {
+        await shareAccount(tx, accountId);
+      } catch (error) {
+        if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+        throw error;
+      }
       const current = await readAccount(tx, route, accountId);
       if (!current || current.kind !== 'actor' || current.state !== 'active') throw new GrantDeniedError();
       return 'execute';
@@ -106,6 +114,12 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => new GrantDeniedError(),
       async authorize(tx) {
+        try {
+          await shareAccount(tx, owner.accountId);
+        } catch (error) {
+          if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+          throw error;
+        }
         const current = await readAccount(tx, route, owner.accountId);
         if (
           !current ||
