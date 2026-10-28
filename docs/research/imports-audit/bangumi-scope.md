@@ -117,15 +117,15 @@ bun test packages/conversion/tests/bangumi-scope.test.ts services/importer/tests
 Observed Bun 1.4.3: **5 pass, 7 fail, 463 expect() calls; 12 tests across 2 files**.
 The precise failure observations are:
 
-| Scenario | Actual failure |
-| --- | --- |
-| Excluded type 3 | `Expected path: "outcome"`, `Expected value: "ignored"`, `Unable to find property` |
-| Excluded type 6 | `Expected path: "outcome"`, `Expected value: "ignored"`, `Unable to find property` |
-| Revision changes | `Expected: not "bangumi@2"` |
-| Mixed acquisition | `Expected path: "skipped"`, `Expected value: 2`, `Unable to find property` |
-| Resume after remote success | Same missing `skipped` property |
-| Resume before finalization | Same missing `skipped` property |
-| CLI summary | Expected `/\bskipped=2\b/`; received `Import complete: new=5 changed=0 unchanged=0 vanished=0\n` |
+| Scenario                    | Actual failure                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Excluded type 3             | `Expected path: "outcome"`, `Expected value: "ignored"`, `Unable to find property`               |
+| Excluded type 6             | `Expected path: "outcome"`, `Expected value: "ignored"`, `Unable to find property`               |
+| Revision changes            | `Expected: not "bangumi@2"`                                                                      |
+| Mixed acquisition           | `Expected path: "skipped"`, `Expected value: 2`, `Unable to find property`                       |
+| Resume after remote success | Same missing `skipped` property                                                                  |
+| Resume before finalization  | Same missing `skipped` property                                                                  |
+| CLI summary                 | Expected `/\bskipped=2\b/`; received `Import complete: new=5 changed=0 unchanged=0 vanished=0\n` |
 
 All three supported-type scenarios, invalid-type rejection and the pure hostile
 subtree/I/O scenario passed. The failing scope and accounting scenarios stop at

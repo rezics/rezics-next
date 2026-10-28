@@ -3,7 +3,12 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkBatchWrite, type BatchCommand, type BatchWriteRequest, type BatchWriteResult } from '@rezics/definitions/bulk';
+import {
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchWriteRequest,
+  type BatchWriteResult,
+} from '@rezics/definitions/bulk';
 import { Importer, type ImportMediaResolver, type ImportRunResult } from '../src/importer.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -14,12 +19,22 @@ const types = [1, 2, 4, 3, 6];
 const skipped = ['3', '6'];
 const marker = 'PRIVATE_SCOPE_MARKER';
 function dump(withImages = true, changed = false) {
-  return types.map((type) => JSON.stringify({
-    id: type, type, name: changed && type === 1 ? 'Changed book' : `Title ${type}`,
-    name_cn: `中文标题 ${type}`, summary: `Complete summary ${type}`,
-    ...(withImages ? { images: { large: `https://lain.bgm.tv/pic/cover/l/${type}.jpg` } } : {}),
-    posts: [marker], user: { email: marker },
-  })).join('\n') + '\n';
+  return (
+    types
+      .map((type) =>
+        JSON.stringify({
+          id: type,
+          type,
+          name: changed && type === 1 ? 'Changed book' : `Title ${type}`,
+          name_cn: `中文标题 ${type}`,
+          summary: `Complete summary ${type}`,
+          ...(withImages ? { images: { large: `https://lain.bgm.tv/pic/cover/l/${type}.jpg` } } : {}),
+          posts: [marker],
+          user: { email: marker },
+        }),
+      )
+      .join('\n') + '\n'
+  );
 }
 async function* bytes(text = dump()) {
   const encoded = new TextEncoder().encode(text);
@@ -35,27 +50,41 @@ function remote() {
   const media = new Map<string, { bytes: string; id: string }>();
   const mediaRequests: string[] = [];
   const transport = {
-    async readFence() { return { fenced: false, securityRevision: null }; },
+    async readFence() {
+      return { fenced: false, securityRevision: null };
+    },
     async batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
       expect(checkBatchWrite(request)).toEqual([]);
       expect(JSON.stringify(request)).not.toContain(marker);
-      return { results: request.commands.map((command) => {
-        requests.push(structuredClone(command));
-        const body = JSON.stringify(command), prior = receipts.get(command.key);
-        if (prior) { expect(body).toBe(prior.bytes); return structuredClone(prior.result); }
-        const owner = command.source.external_id;
-        if (command.op === 'create') {
-          expect(subjects.has(owner)).toBe(false);
-          subjects.set(owner, randomUUID());
-        } else if (command.op === 'propose') expect(command.subject).toBe(subjects.get(owner)!);
-        const result = { key: command.key, status: 200 as const, value:
-          command.op === 'create' ? { id: subjects.get(owner)!, revision: 1 } :
-          command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
-        };
-        receipts.set(command.key, { bytes: body, result });
-        effects.push(structuredClone(command));
-        return result;
-      }) };
+      return {
+        results: request.commands.map((command) => {
+          requests.push(structuredClone(command));
+          const body = JSON.stringify(command),
+            prior = receipts.get(command.key);
+          if (prior) {
+            expect(body).toBe(prior.bytes);
+            return structuredClone(prior.result);
+          }
+          const owner = command.source.external_id;
+          if (command.op === 'create') {
+            expect(subjects.has(owner)).toBe(false);
+            subjects.set(owner, randomUUID());
+          } else if (command.op === 'propose') expect(command.subject).toBe(subjects.get(owner)!);
+          const result = {
+            key: command.key,
+            status: 200 as const,
+            value:
+              command.op === 'create'
+                ? { id: subjects.get(owner)!, revision: 1 }
+                : command.op === 'propose'
+                  ? { candidate: randomUUID(), revision: 1 }
+                  : { revision: 1 },
+          };
+          receipts.set(command.key, { bytes: body, result });
+          effects.push(structuredClone(command));
+          return result;
+        }),
+      };
     },
   };
   const mediaResolver: ImportMediaResolver = {
@@ -63,7 +92,8 @@ function remote() {
       mediaRequests.push(owner.external_id);
       const mediaIds: Record<string, string> = {};
       for (const intent of mediaImportIntents) {
-        const body = JSON.stringify(intent), prior = media.get(intent.sourceUrl);
+        const body = JSON.stringify(intent),
+          prior = media.get(intent.sourceUrl);
         if (!prior) media.set(intent.sourceUrl, { bytes: body, id: randomUUID() });
         mediaIds[intent.sourceUrl] = media.get(intent.sourceUrl)!.id;
       }
@@ -95,13 +125,15 @@ function scope(f: ReturnType<typeof remote>, importer: Importer, images = true) 
 
 test('mixed complete dump counts both exclusions on initial, unchanged and changed runs without false disappearance', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-'));
-  const path = join(directory, 'state.sqlite'), f = remote();
+  const path = join(directory, 'state.sqlite'),
+    f = remote();
   let importer = new Importer({ path, ...f });
   try {
     expect(importer.session).toBeInstanceOf(ImportSession);
     completed(await importer.runDump(registration, bytes()), { new: 5, changed: 0, unchanged: 0, vanished: 0 });
     scope(f, importer);
-    const effects = f.effects.length, mediaCalls = f.mediaRequests.length;
+    const effects = f.effects.length,
+      mediaCalls = f.mediaRequests.length;
     completed(await importer.runDump(registration, bytes()), { new: 0, changed: 0, unchanged: 5, vanished: 0 });
     expect(f.effects).toHaveLength(effects);
     expect(f.mediaRequests).toHaveLength(mediaCalls);
@@ -110,71 +142,123 @@ test('mixed complete dump counts both exclusions on initial, unchanged and chang
     completed(await importer.runDump(registration, bytes()), { new: 0, changed: 0, unchanged: 5, vanished: 0 });
     expect(f.effects).toHaveLength(effects);
     expect(f.mediaRequests).toHaveLength(mediaCalls);
-    completed(await importer.runDump(registration, bytes(dump(true, true))), { new: 0, changed: 1, unchanged: 4, vanished: 0 });
+    completed(await importer.runDump(registration, bytes(dump(true, true))), {
+      new: 0,
+      changed: 1,
+      unchanged: 4,
+      vanished: 0,
+    });
     scope(f, importer);
-  } finally { await importer.close(); rmSync(directory, { recursive: true }); }
+  } finally {
+    await importer.close();
+    rmSync(directory, { recursive: true });
+  }
 });
 
 for (const crash of ['remote success', 'finalization'] as const) {
-test(`durable resume after ${crash} counts skipped inputs once without consuming replacement input`, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-resume-'));
-  const path = join(directory, 'state.sqlite'), f = remote();
-  let fault = true;
-  let importer = new Importer({ path, ...f, afterBulkSuccess() {
-    if (crash === 'remote success' && fault) { fault = false; throw new Error('Crash after remote success'); }
-  } });
-  if (crash === 'finalization') {
-    const finalize = importer.session.store.finalize.bind(importer.session.store);
-    importer.session.store.finalize = (...args) => {
-      if (fault) { fault = false; throw new Error('Crash before source finalization'); }
-      return finalize(...args);
-    };
-  }
-  try {
-    expect((await importer.runDump(registration, bytes())).status).toBe(crash === 'remote success' ? 'interrupted' : 'bulk-failed');
-    await importer.close();
-    importer = new Importer({ path, ...f });
-    let consumed = false;
-    const replacement = (async function* () { consumed = true; yield* bytes(dump(true, true)); })();
-    completed(await importer.runDump(registration, replacement));
-    expect(consumed).toBe(false);
-    scope(f, importer);
-    const effects = f.effects.length;
-    completed(await importer.runDump(registration, bytes()));
-    expect(f.effects).toHaveLength(effects);
-    scope(f, importer);
-  } finally { await importer.close(); rmSync(directory, { recursive: true }); }
-});
-
+  test(`durable resume after ${crash} counts skipped inputs once without consuming replacement input`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-resume-'));
+    const path = join(directory, 'state.sqlite'),
+      f = remote();
+    let fault = true;
+    let importer = new Importer({
+      path,
+      ...f,
+      afterBulkSuccess() {
+        if (crash === 'remote success' && fault) {
+          fault = false;
+          throw new Error('Crash after remote success');
+        }
+      },
+    });
+    if (crash === 'finalization') {
+      const finalize = importer.session.store.finalize.bind(importer.session.store);
+      importer.session.store.finalize = (...args) => {
+        if (fault) {
+          fault = false;
+          throw new Error('Crash before source finalization');
+        }
+        return finalize(...args);
+      };
+    }
+    try {
+      expect((await importer.runDump(registration, bytes())).status).toBe(
+        crash === 'remote success' ? 'interrupted' : 'bulk-failed',
+      );
+      await importer.close();
+      importer = new Importer({ path, ...f });
+      let consumed = false;
+      const replacement = (async function* () {
+        consumed = true;
+        yield* bytes(dump(true, true));
+      })();
+      completed(await importer.runDump(registration, replacement));
+      expect(consumed).toBe(false);
+      scope(f, importer);
+      const effects = f.effects.length;
+      completed(await importer.runDump(registration, bytes()));
+      expect(f.effects).toHaveLength(effects);
+      scope(f, importer);
+    } finally {
+      await importer.close();
+      rmSync(directory, { recursive: true });
+    }
+  });
 }
 
 test('CLI executes actual acquisition and prints skipped=2 on each same-input invocation', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-cli-'));
-  const keyPath = join(directory, 'account-key.json'), f = remote();
+  const keyPath = join(directory, 'account-key.json'),
+    f = remote();
   const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  writeFileSync(keyPath, JSON.stringify({ ...pair.privateKey.export({ format: 'jwk' }), kid: 'scope-key', alg: 'ES256', key_ops: ['sign'] }), { mode: 0o600 });
+  writeFileSync(
+    keyPath,
+    JSON.stringify({ ...pair.privateKey.export({ format: 'jwk' }), kid: 'scope-key', alg: 'ES256', key_ops: ['sign'] }),
+    { mode: 0o600 },
+  );
   const origin = 'http://127.0.0.1:43179';
-  const argv = ['--source', 'bangumi', '--dump', '-', '--state', join(directory, 'state.sqlite'),
-    '--api', origin, '--account-key', keyPath, '--account', '00000000-0000-4000-8000-000000000001',
-    '--client', 'scope-cli', '--auth', 'https://auth.importer.test'];
+  const argv = [
+    '--source',
+    'bangumi',
+    '--dump',
+    '-',
+    '--state',
+    join(directory, 'state.sqlite'),
+    '--api',
+    origin,
+    '--account-key',
+    keyPath,
+    '--account',
+    '00000000-0000-4000-8000-000000000001',
+    '--client',
+    'scope-cli',
+    '--auth',
+    'https://auth.importer.test',
+  ];
   const fetchRemote = async (request: Request) => {
     const url = new URL(request.url);
     if (url.origin === 'https://auth.importer.test') {
-      if (url.pathname === '/signin/key') return Response.json({}, { headers: { 'set-cookie': 'session=scope; HttpOnly; Secure' } });
-      if (url.pathname === '/token') return Response.json({ access_token: 'SCOPE_TOKEN', token_type: 'Bearer', expires_in: 300 });
+      if (url.pathname === '/signin/key')
+        return Response.json({}, { headers: { 'set-cookie': 'session=scope; HttpOnly; Secure' } });
+      if (url.pathname === '/token')
+        return Response.json({ access_token: 'SCOPE_TOKEN', token_type: 'Bearer', expires_in: 300 });
     }
     expect(url.origin).toBe(origin);
     if (url.pathname === '/v1/sourceFences:check') return Response.json(await f.transport.readFence());
     expect(url.pathname).toBe('/v1/subjects:batchWrite');
-    return Response.json(await f.transport.batchWrite(await request.json() as BatchWriteRequest));
+    return Response.json(await f.transport.batchWrite((await request.json()) as BatchWriteRequest));
   };
   try {
     let previousEffects: number | undefined;
     for (let run = 0; run < 2; run++) {
       let consumed = false;
       const result = await runCli(argv, {
-        stdin: (async function* () { consumed = true; yield* bytes(dump(false)); })(),
-        fetch: fetchRemote as typeof fetch, testOrigin: origin,
+        stdin: (async function* () {
+          consumed = true;
+          yield* bytes(dump(false));
+        })(),
+        fetch: fetchRemote as typeof fetch,
+        testOrigin: origin,
       });
       expect(result.code).toBe(0);
       expect(consumed).toBe(true);
@@ -186,5 +270,7 @@ test('CLI executes actual acquisition and prints skipped=2 on each same-input in
       if (previousEffects !== undefined) expect(f.effects).toHaveLength(previousEffects);
       previousEffects = f.effects.length;
     }
-  } finally { rmSync(directory, { recursive: true }); }
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
 });
