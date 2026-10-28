@@ -193,7 +193,7 @@ if (script.includes('/proc/loadavg')) {
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
-  if (hang && config.loadOnHang !== undefined) updateConfig({ load: config.loadOnHang });
+  if (hang && config.memoryHeadroomOnHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomOnHang });
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
   log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
@@ -213,7 +213,7 @@ if (script.includes('/proc/loadavg')) {
   if (hang) {
     console.log('started');
     process.on('SIGTERM', () => {
-      if (config.loadAfterHang !== undefined) updateConfig({ load: config.loadAfterHang });
+      if (config.memoryHeadroomAfterHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomAfterHang });
       process.exit(143);
     });
     setInterval(() => {}, 1000);
@@ -264,8 +264,8 @@ type HostConfig = {
   sliceProcessors?: number;
   cpuMaxUnreadable?: boolean;
   cpuMaxIsMax?: boolean;
-  loadOnHang?: number;
-  loadAfterHang?: number;
+  memoryHeadroomOnHang?: number;
+  memoryHeadroomAfterHang?: number;
   load?: number;
   cpuQuotaPercent?: number;
   memoryMaxGiB?: number;
@@ -737,7 +737,7 @@ test('acquisition prefers the host with the most free capacity', async () => {
       memoryHeadroom: 8 * CHECK_SLOT_MEMORY_BYTES,
       cpuQuotaPercent: 800,
       processors: 16,
-      load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
+      ordinaryBusy: 2,
       slots: 4,
     },
     b: {
@@ -746,7 +746,7 @@ test('acquisition prefers the host with the most free capacity', async () => {
       memoryHeadroom: 4 * CHECK_SLOT_MEMORY_BYTES,
       cpuQuotaPercent: 800,
       processors: 16,
-      load: 8 - 3 * CHECK_SLOT_PROCESSORS,
+      load: 1000,
       slots: 4,
     },
   });
@@ -1245,7 +1245,15 @@ test('a remote run takes all requested slots in one session on one host and rele
 test('single-slot runs keep starting on a host while a multi-slot run waits for it', async () => {
   const { env, events } = scenario({
     a: { available: 0, slots: 4, cpuQuotaPercent: 800 },
-    b: { available: 20e9, slots: 4, cpuQuotaPercent: 800, hang: true, hangRuns: 1, loadOnHang: 6, loadAfterHang: 0 },
+    b: {
+      available: 20e9,
+      slots: 4,
+      cpuQuotaPercent: 800,
+      hang: true,
+      hangRuns: 1,
+      memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroomAfterHang: 20e9,
+    },
   });
   const waitFile = join(env.FAKE_DIR!, 'multi-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
@@ -1287,7 +1295,14 @@ test('single-slot runs keep starting on a host while a multi-slot run waits for 
 
 test('a multi-slot waiter takes all slots or none and holds no slot or reservation while waiting', async () => {
   const { env, events } = scenario({
-    a: { available: 20e9, slots: 4, hang: true, hangRuns: 1, loadOnHang: 6, loadAfterHang: 0 },
+    a: {
+      available: 20e9,
+      slots: 4,
+      hang: true,
+      hangRuns: 1,
+      memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroomAfterHang: 20e9,
+    },
   });
   const waitFile = join(env.FAKE_DIR!, 'multi-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
@@ -1476,7 +1491,15 @@ test('a gate wait is bounded by its original slot holders with 1, 10 and 100 que
 test('while a gate waits for a host, single-slot runs prefer other hosts', async () => {
   const { env, events } = scenario({
     a: { available: 20e9, slots: 2, cpuQuotaPercent: 400 },
-    b: { available: 20e9, slots: 4, cpuQuotaPercent: 800, hang: true, hangRuns: 1, loadOnHang: 6, loadAfterHang: 0 },
+    b: {
+      available: 20e9,
+      slots: 4,
+      cpuQuotaPercent: 800,
+      hang: true,
+      hangRuns: 1,
+      memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroomAfterHang: 20e9,
+    },
   });
   const waitFile = join(env.FAKE_DIR!, 'gate-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
