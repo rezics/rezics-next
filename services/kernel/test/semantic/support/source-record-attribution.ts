@@ -44,7 +44,8 @@ export const registeredBangumi = (externalId: string): SourceRecord => ({
   name: 'Bangumi',
   url: `https://bgm.tv/subject/${encodeURIComponent(externalId)}`,
   licence: { id: 'CC-BY-SA-3.0', url: 'https://creativecommons.org/licenses/by-sa/3.0/' },
-  attribution: 'Bangumi contributors',
+  attribution:
+    'Bangumi contributors; reviewed wiki metadata only; covers, images and user writing have separate rights.',
 });
 export const cited = (property = 'schema:inLanguage', content: unknown = 'ja'): BatchStatement => ({
   property: { id: property },
@@ -137,12 +138,19 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     expect(body.results).toHaveLength(1);
     return body.results[0] as { status: number; value: Record<string, any>; problem?: unknown };
   }
-  async function create(origin = source()) {
+  async function create(
+    origin = source(),
+    terms = { labels: { en: 'Native attribution book' } } as {
+      labels: Record<string, string>;
+      descriptions?: Record<string, string>;
+      aliases?: Record<string, string[]>;
+    },
+  ) {
     const command: BatchCommand = {
       op: 'create',
       key: randomUUID(),
       source: origin,
-      subject: { type: 'schema:Book', labels: { en: 'Native attribution book' } },
+      subject: { type: 'schema:Book', ...terms },
     };
     const result = await batch(command);
     expect(result.status, JSON.stringify(result)).toBe(201);
@@ -288,6 +296,9 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     const id = newId(29100);
     const route = routeOf(id)!;
     const transaction = randomUUID();
+    // Public fixture labels have no private statement source: distinct immutable native revisions.
+    const statementTransaction = consent ? randomUUID() : transaction;
+    const statementRevision = consent ? 2 : 1;
     const property = consent ? 'rezics:penNameOf' : 'schema:inLanguage';
     const statement = consent ? { ...cited(property, consent.target), references: [] } : cited();
     const type = consent ? 'schema:Person' : 'schema:Book';
@@ -320,15 +331,28 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
               kind: 'create',
               release: bundledDigest,
               recorded_transaction_id: transaction,
-              source: origin,
+              source: consent ? null : origin,
             },
+            ...(consent
+              ? [
+                  {
+                    route,
+                    subject_id: id,
+                    revision: statementRevision,
+                    kind: 'propose',
+                    release: bundledDigest,
+                    recorded_transaction_id: statementTransaction,
+                    source: origin,
+                  },
+                ]
+              : []),
           ],
           'semantic.fact': facts.map((row) => ({
             ...row,
             route,
             subject_id: id,
             ...(consent && row.kind === 'statement' ? { operation: 'expand', statement_id: null, body: {} } : {}),
-            recorded_transaction_id: transaction,
+            recorded_transaction_id: row.kind === 'statement' ? statementTransaction : transaction,
             release: row.kind === 'statement' && !consent ? bundledDigest : null,
             relation: Boolean(consent && row.kind === 'statement'),
           })),
@@ -344,7 +368,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
                     rank: 'normal',
                     statement: fact.body,
                     release: bundledDigest,
-                    revision: 1,
+                    revision: statementRevision,
                     origin: 'compact',
                     view_order: 0,
                     relation: true,
@@ -373,7 +397,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
                     candidate_id: candidate,
                     head: 1,
                     verdict: 'accept',
-                    revision: 1,
+                    revision: statementRevision,
                   },
                 ],
                 'semantic.acceptance_current': [
@@ -385,7 +409,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
                     slot_id: fact.slot_id,
                     head: 1,
                     verdict: 'accept',
-                    revision: 1,
+                    revision: statementRevision,
                   },
                 ],
                 'semantic.adoption': [
@@ -397,7 +421,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
                     head: 1,
                     mode: 'replace',
                     selection: [{ candidate, rank: 'normal' }],
-                    revision: 1,
+                    revision: statementRevision,
                   },
                 ],
               }

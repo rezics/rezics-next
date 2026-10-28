@@ -257,6 +257,9 @@ test('native record reads and metadata writes stay bounded through replay hidden
   const privateOrigin = source();
   const privateBook = await f.historical(privateOrigin, { target: agent.subject.id, account: f.accounts.person });
   const privateRecord = await f.filled(privateOrigin);
+  const bootstrap = await f.create();
+  const bootstrapRecord = await f.filled(bootstrap.origin);
+  expect(records(await f.read(bootstrap.id))).toEqual([bootstrapRecord]);
   const hidden = await displayed();
   await f.drain(shown.book.id, hidden.book.id, privateBook.id, agent.subject.id);
   status(
@@ -277,6 +280,7 @@ test('native record reads and metadata writes stay bounded through replay hidden
   status(await f.call('POST', `/v1/subjects/${foreign.id}:hide`, { reason: 'Paused foreign target' }), 200);
   const paths = [
     { name: 'public', id: shown.book.id, as: null, expected: shown.expected },
+    { name: 'bootstrap-terms', id: bootstrap.id, as: null, expected: [bootstrapRecord] },
     { name: 'hidden-fenced', id: hidden.book.id, as: null, expected: [] },
     { name: 'foreign-withheld', id: foreignBook.id, as: null, expected: [] },
     { name: 'private-audience', id: privateBook.id, as: 'person' as const, expected: [privateRecord] },

@@ -30,8 +30,10 @@ The following are **MISSING**, to be implemented by the producer: `SourceRecord`
 `semantic.source_record` storage; and `Item.sourceRecords`/Subject read HTTP and generated consumer types.
 These names designate future production ports, not an invitation to add successful placeholder exports.
 The tests use structural types at HTTP boundaries, so their deliberate red is never a missing-module TS error.
-The current native bulk validator also reports unsupported facts rights as a per-command 400; the required
-portable 422 assertion deliberately records that remaining integration gap rather than accepting either status.
+Facts rights remain unsupported: `checkBatchWrite` returns the exact `/commands/0/rights` / `unsupported`
+violation, and native bulk reports command-local 400 `invalid_request` with that pointer and no effects.
+There is no adopted status change. Metadata validation and idempotency retain their specified 422 responses;
+metadata conflicts retain 409. Source licence metadata is not facts rights.
 
 ## Identity and closed command
 
@@ -119,26 +121,94 @@ under another alias. Unknown aliases cannot acquire a name or licence by spellin
 `Importer.bootstrap` currently returns immediately for a bound claim and reuses one lifetime
 `operationKey(owner, 'bootstrap')` with its original bytes. The unchanged-record shortcut occurs before conversion.
 The new bounded **current-run** metadata step must execute before both shortcuts, for bound and unchanged records
-as well as new ones. Keep its own durable request bytes, signature and acknowledgement through actual
+as well as new ones, within the same sealed admitted run. Keep its own durable request bytes, signature and acknowledgement through actual
 `RecordBindings`/`createImportTransport` dispatch. Do not mutate retired/bootstrap journals, forge a source revision or
 converter bump, or enumerate the archive/backfill history. This integration is required followup owned by Imports;
 the native snapshot fixture here does not simulate or claim that delivered importer wiring.
+
+Complete acquisition, validation and seal, including mass-disappearance admission, precede **all remote effects**.
+Acquisition and pure conversion emit zero metadata, bootstrap, proposals, statistics or media. Malformed,
+truncated, duplicate and mass-loss input preserve the accepted baseline. Never write metadata in the acquisition
+loop. After admission, each row follows trusted configured metadata → distinct tuple-home effect → actual ACK →
+new lifetime bootstrap → normal proposals/statistics/media. Metadata validation, authorization, conflict or
+transport failure prevents all new public material and record completion. Legacy bound material can predate a
+catch-up; failure does not rewrite or relabel it. Catch-up is bounded to exact tuples and journals in this run,
+never an archive or history backfill loop. After a crash following metadata ACK, retry the same metadata
+receipt before the same original bootstrap bytes. After bootstrap ACK loss, preserve its lifetime key/body.
+Neither upstream nor converter revision changes merely to fill attribution.
+
+| Evidence boundary               | State and required native proof                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Server metadata before claim    | Specified HTTP cases: actual metadata ACK with no external claim, rollback on receipt fault, exact replay before creation, bootstrap terms read, unchanged old bootstrap receipt/body after correction. Native red until the missing server ports exist.                                                                                                                                                                                                                                                                                   |
+| First-party sealed admitted run | **NOT YET FROZEN**: `ImportTransport` in `services/importer/src/import-contract.ts` has no metadata effect method, `SourceRegistration` has no reviewed descriptor binding, and `RecordBindings` has no metadata effect journal/ACK binding. `createImportTransport` in `import-client.ts` exports batch/fence/statistics transport, no metadata dispatch. No importer-order test can use that missing binding yet.                                                                                                                        |
+| Importer native integration     | Imports must test actual `Importer` run, `RunStore.seal`/mass-disappearance admission, `RecordBindings` journal and native transport: new success; metadata failure zero new material/completion; metadata ACK loss; bootstrap ACK loss; bound and unchanged catch-up before shortcuts; malformed/truncated/duplicate/mass-loss acquisition zero metadata/bootstrap/proposals/statistics/media and baseline unchanged. Resume/drain must respect the same barrier before dispatch. Fixture call order proves none of these run guarantees. |
+| User capability and release     | No producer, generated consumer DTO or rendered Sources capability is delivered here. Manager review/freezing of these specified API cases precedes producer implementation. Passing native API and growth acceptance, actual importer binding, Web integration and main/root gate are separate evidence.                                                                                                                                                                                                                                  |
+
+Existing insertion points are `Importer.run`'s acquisition/staging loop followed by `store.seal`, the resumed
+`drain`, `plan`'s unchanged shortcut, and `bootstrap`'s bound-claim shortcut. `RecordBindings.claim`, `journal`,
+`prepare` and acknowledgement currently preserve lifetime bootstrap operations, not the distinct metadata effect.
+These are integration obligations, not a fabricated importer callback in the Semantic fixture.
+
+### Reviewed descriptor scope
+
+Use the same closed single licence/attribution DTO for every explicitly configured provider. No licence arrays,
+new scope fields, SPDX expressions, alias matching or URL inference are introduced. Native acceptance writes and
+reads these descriptors through the same generic operation; it does not claim registration delivery.
+
+| Reviewed metadata | Single descriptor and limits                                                                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VNDB              | Contents licence `LicenseRef-DbCL-1.0`, URL `http://opendatacommons.org/licenses/dbcl/1.0/`; attribution credits VNDB and also states database `ODbL-1.0` with `http://opendatacommons.org/licenses/odbl/1.0/`. Explicitly excludes images and creative descriptions and any blanket output-database licence. |
+| Bangumi           | `CC-BY-SA-3.0`, `https://creativecommons.org/licenses/by-sa/3.0/`, reviewed wiki metadata only; covers, images and user writing have separate rights.                                                                                                                                                         |
+| Open Library      | `CC0-1.0` bibliographic metadata only; prose rights unknown and covers/media separate.                                                                                                                                                                                                                        |
+| Wikidata          | `CC0-1.0` structured data only; external references, text and images retain their own rights.                                                                                                                                                                                                                 |
+
+The inventory evidence is `packages/definitions/sources/vndb.yaml` snapshot licence database/contents URLs and
+`packages/conversion/src/vndb.ts`'s `sourceMetadata.databaseLicense`/`contentsLicense`; Bangumi's snapshot licence
+is in `packages/definitions/sources/bangumi.yaml`. `open-library.ts` retains `bibliographyPermission` and separate
+prose/media policy; `wikidata.ts` emits structured source metadata. Do not discard VNDB's database scope when
+serializing the contents licence, or invent a source/converter revision. Omit a licence when its actual scope
+cannot be expressed rather than guessing. Record URLs remain the actual source-record URLs.
 
 ## Subject projection and revocation
 
 The placement is `GET /v1/subjects/{id}` → `subject.sourceRecords: SourceRecord[]`, so Web's existing Subject DTO
 can render Sources. Empty/unknown metadata yields `[]`; omit unknown records, never invent names from aliases.
 Deduplicate exact tuple identity before hydration; collapse identical final wire records. Keep deterministic
-first displayed-support order. The array has every distinct original source supporting **currently selected,
-disclosed, actually returned/rendered** support in this response. Native references/citations remain intact.
+first displayed-support order. The array has every distinct original source supporting **currently disclosed, actually returned/rendered**
+terms and selected statements in this response. Native references/citations remain intact.
 Source records of multiple originals in a merge must survive when both actually support the rendered result.
-A subject's bootstrap alone or historical/proposed candidate is insufficient evidence.
+Bulk bootstrap type/labels/descriptions/aliases with a Source envelope already disclose native metadata before
+candidate adoption: their actual returned terms ARE support. A metadata row alone is not support. Unregistered
+aliases without a metadata row remain unknown. An unselected/private candidate supplies no public attribution,
+unless a different currently disclosed contribution genuinely uses that same tuple.
+
+Selected `schema:name` or fact replacement does not replace bootstrap labels/aliases. When A's terms remain and
+B's selected fact appears, return A+B; suppressing/retracting/hiding B's statement leaves A while A's terms remain.
+When the current facts fence hides A's contribution, remove both its attribution and its sourced text. Never
+omit attribution while still leaking licensed text, and never retain stale sourced terms as a successful fence.
+A fence for another field group must not erase unaffected facts support.
+
+Current native gaps are explicit: `read-subject.sql` joins term facts to their recorded transaction's revision,
+but does not project `revision.source`; `asFacts` retains `fact_revision` without Source. `resolveItem` folds
+label/description/alias puts/retractions independently of selected `schema:name`. `withoutFencedFacts` currently
+collects only facts with a statement ID and therefore does not fence returned bootstrap terms. The producer
+must retain each final returned term's exact original `(subject, fact_revision)` locator, resolve that exact
+revision's Source, and apply current Content fences and original/terminal Access before hydration. It must
+not fabricate a candidate ID for a term or scan all revision history. Native red freezes the missing provenance
+and final term disclosure behavior; the current term leak is not blessed.
+
+There is no general public term replacement route in `semantic/http/subjects.ts` or the bulk command union.
+`updateSubjectIdentity` is an internal identity writer, outside this specification's API boundary. Actual term
+replacement via HTTP is therefore NOT YET FROZEN until an owning API exists; selected-name replacement is tested
+now and must keep the still-returned bootstrap terms. No new replacement API or test-only privileged writer is
+invented here.
 
 Use native compact and expanded slot rank/adoption semantics, suppression, acceptance and retraction, original
 and terminal/current subject Access, audience, public consent, tuple fences and foreign target disclosure. A
 private record can appear only to its authorized audience while its supporting fact is actually returned.
-Proposed, unselected, withheld and retracted contributions reveal no metadata. Hiding one source/candidate/target,
-retracting or fencing a tuple must remove its attribution with ordinary projections paused; a partial fence keeps
+Proposed, unselected, withheld and retracted contributions alone reveal no metadata; independent disclosed
+terms from the same tuple continue to supply their own support. Hiding one source/candidate/target,
+retracting a statement removes its support; fencing a tuple must remove its affected payload and attribution with ordinary projections paused; a partial fence keeps
 unrelated visible records. Metadata correction alone can never revive a fact or consent. It grants no permission.
 Summary CreativeWork rights and cover/media credit remain separate; do not label either as general fact rights.
 
@@ -160,12 +230,14 @@ request-local and never a stored reusable permission. Pool max 1 must complete, 
 
 ### Read displayed attribution
 
-- Touches: current selected support and its exact original/terminal Access, audience, target and tuple fence
+- Touches: final returned terms, current selected support and their exact original/terminal Access, audience, target and tuple fence
   proof points, then distinct metadata tuples grouped by home. Count cross-source proof points too.
 - Bound: let P be the pinned subject type's native property set, N its nonrelation slots, and E_p the selected
   proof points actually contributing to each displayed fact. Subject relation previews are 12 entries per
   property (13 is lookahead); scalar slot selection is at most 32. Thus displayed fact capacity is
-  `32*N + 12*(|P|-N)`; attribution tuple count D is at most `sum(E_p)` for those facts, deduplicated by tuple.
+  `32*N + 12*(|P|-N)`; with T final returned term proof points, attribution tuple count D is at most
+  `T + sum(E_p)` for those facts, deduplicated by tuple. Term puts superseded/retracted in the native fold do not
+  add support. Count all native term-fold work, exact revision lookups and fence probes, not just hydration.
   This is not a universal 32/128 source-key cap: multiple originals supporting one fact still count. Metadata
   hydration examines at most D records; with K native exact proofs it is O(D+K), with constant statements for
   fixed displayed support and logarithmic blocks. Existing 100-tuple fence batches and 256-id helpers are

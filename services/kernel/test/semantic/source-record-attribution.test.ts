@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -37,7 +39,7 @@ async function supported(origin = source(), value = 'ja') {
 }
 const sorted = (values: unknown[]) => [...values].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-test('distinct metadata effects preserve native bootstrap receipts and source identity while current selected provenance alone supplies sourceRecords', async () => {
+test('distinct metadata effects preserve native bootstrap receipts and source identity while current disclosed provenance supplies sourceRecords', async () => {
   const book = await supported();
   const bootstrap = await f.receipt(book.command.key, 'subject.batch_create', book.origin);
   expect(bootstrap).toHaveLength(1);
@@ -57,7 +59,7 @@ test('distinct metadata effects preserve native bootstrap receipts and source id
   expect(actual.statements['schema:inLanguage'][0].references).toHaveLength(1);
 });
 
-test('trusted configured registration supplies the provider name; unknown aliases and bootstrap-only records stay unknown', async () => {
+test('trusted configured registration supplies the provider name; unknown aliases stay unknown and registered bootstrap terms supply support', async () => {
   const known = await supported(source(randomUUID(), 'my_configured_alias'));
   const record = await f.filled(known.origin);
   expect(records(await f.read(known.id))).toEqual([record]);
@@ -67,8 +69,8 @@ test('trusted configured registration supplies the provider name; unknown aliase
     expect(JSON.stringify(await f.read(unknown.id))).not.toContain('CC-BY-SA-3.0');
   }
   const bootstrapOnly = await f.create();
-  await f.filled(bootstrapOnly.origin);
-  expect(records(await f.read(bootstrapOnly.id))).toEqual([]);
+  const bootstrapRecord = await f.filled(bootstrapOnly.origin);
+  expect(records(await f.read(bootstrapOnly.id))).toEqual([bootstrapRecord]);
 });
 
 test('native fill, duplicate noEffect, immutable replay, typed conflict and exact metadata CAS have separate revisions', async () => {
@@ -236,7 +238,7 @@ test('a real receipt fault rolls metadata and bookkeeping back, then the same na
   status(await f.metadata(origin, { ...record, name: 'Correction after fault' }, 1, key), 200);
 });
 
-test('only current selected multi-source support is attributed, through suppression, hide and native retraction', async () => {
+test('current bootstrap and selected multi-source support is attributed, through suppression, hide and native retraction', async () => {
   const book = await supported();
   const a = await f.filled(book.origin);
   const other = source();
@@ -254,13 +256,13 @@ test('only current selected multi-source support is attributed, through suppress
   await f.adopt(book.id, [book.candidate, candidate]);
   expect(sorted(records(await f.read(book.id)))).toEqual(sorted([a, b]));
   await f.adopt(book.id, [], 'schema:inLanguage', 'suppress');
-  expect(records(await f.read(book.id))).toEqual([]);
+  expect(records(await f.read(book.id))).toEqual([a]);
   await f.adopt(book.id, [book.candidate, candidate]);
   status(
     await f.call('POST', `/v1/subjects/${book.id}/candidates/${book.candidate}:hide`, { reason: 'Withheld original' }),
     200,
   );
-  expect(records(await f.read(book.id))).toEqual([b]);
+  expect(records(await f.read(book.id))).toEqual([a, b]);
   const retraction = await f.batch({
     op: 'retract',
     key: randomUUID(),
@@ -270,9 +272,9 @@ test('only current selected multi-source support is attributed, through suppress
     references: cited().references,
   });
   expect(retraction.status).toBe(200);
-  expect(records(await f.read(book.id))).toEqual([]);
+  expect(records(await f.read(book.id))).toEqual([a]);
   status(await f.metadata(other, { ...b, attribution: 'Corrected only' }, 1), 200);
-  expect(records(await f.read(book.id))).toEqual([]);
+  expect(records(await f.read(book.id))).toEqual([a]);
 });
 
 test('actual partial Content tuple fences remove only affected support with ordinary projection paused', async () => {
@@ -370,18 +372,38 @@ test('actual private consent is attributed only to its audience and metadata cor
   status(await f.call('POST', `/v1/statements/${candidate}/disclose`, undefined, 'person'), 409);
 });
 
-test('portable facts-rights remains 422 and summary and cover rights stay separately scoped', async () => {
+test('portable facts-rights violation and native command-local 400 preserve separately scoped summary and cover rights', async () => {
   const book = await supported();
   const rights = { license: 'CC0-1.0', obligations: [], attribution: 'Summary author' };
-  const invalid = await f.batch({
-    op: 'propose',
-    key: randomUUID(),
+  const invalidKey = randomUUID();
+  const invalidCommand = {
+    op: 'propose' as const,
+    key: invalidKey,
     subject: book.id,
     source: book.origin,
     statement: cited(),
     rights,
+  };
+  expect(checkBatchWrite({ commands: [invalidCommand] }, bundledRelease)).toContainEqual({
+    pointer: '/commands/0/rights',
+    code: 'unsupported',
   });
-  expect(invalid.status).toBe(422);
+  const unchanged = await f.nativeSnapshot(book.id);
+  const outboxBefore = (await db.admin.query('SELECT count(*)::int AS count FROM core.outbox')).rows;
+  const invalid = await f.batch(invalidCommand);
+  expect(invalid.status).toBe(400);
+  expect(invalid.problem).toMatchObject({
+    code: 'invalid_request',
+    errors: [
+      {
+        pointer: '/commands/0/rights',
+        code: 'unsupported',
+      },
+    ],
+  });
+  expect(await f.nativeSnapshot(book.id)).toEqual(unchanged);
+  expect(await f.receipt(invalidKey, 'subject.batch_propose')).toEqual([]);
+  expect((await db.admin.query('SELECT count(*)::int AS count FROM core.outbox')).rows).toEqual(outboxBefore);
   const summarySource = { ...source(), field_group: 'summary' as const };
   const candidate = await f.propose(
     book.id,
@@ -400,9 +422,9 @@ test('portable facts-rights remains 422 and summary and cover rights stay separa
   const coverOrigin = { ...source(), field_group: 'cover' as const };
   await db.admin.query(
     `INSERT INTO content.media
-    (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,sha256,state,key,
-     transaction_id,source_url,credit,provenance,width,height)
-    VALUES ($1,$2,$3,$4,$5,'cover','image/jpeg',96,$6,'available',$7,$8,$9,$10,$11,12,18)`,
+    (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,
+     transaction_id,source_url,credit,provenance,width,height,thumbhash,average_color)
+    VALUES ($1,$2,$3,$4,$5,'cover','image/jpeg',96,96,$6,'available',$7,$8,$9,$10,$11,12,18,decode('0000000000','hex'),'#112233')`,
     [
       routeOf(book.id),
       media,
@@ -477,4 +499,170 @@ test('display bounds permit more than 32 source tuples across selected slots wit
   expect(actual.statements['schema:inLanguage']).toHaveLength(32);
   expect(sorted(records(actual))).toEqual(sorted(expected));
   expect(records(actual)).toHaveLength(33);
+});
+
+test('sourceRecords includes currently disclosed native bootstrap metadata and selected support with exact source fences', async () => {
+  const origin = source();
+  const a = await f.filled(origin); // Real metadata ACK before any claim.
+  const terms = {
+    labels: { en: 'Original licensed label' },
+    descriptions: { en: 'Original licensed description' },
+    aliases: { en: ['Original licensed alias'] },
+  };
+  const book = await f.create(origin, terms);
+  const bootstrap = await f.read(book.id);
+  expect(bootstrap.labels).toEqual(terms.labels);
+  expect(bootstrap.descriptions).toEqual(terms.descriptions);
+  expect(bootstrap.aliases).toEqual(terms.aliases);
+  expect(records(bootstrap)).toEqual([a]);
+  const original = await f.nativeSnapshot(book.id);
+  expect(original.revisions[0].source).toEqual(origin);
+  const other = source();
+  const b = await f.filled(other);
+  const name = await f.propose(book.id, other, cited('schema:name', { language: 'en', text: 'Selected new name' }));
+  // An unselected candidate does not disclose B, while the bootstrap term locator still supplies A.
+  expect(records(await f.read(book.id))).toEqual([a]);
+  await f.select(book.id, name, 'schema:name');
+  const selected = await f.read(book.id);
+  expect(selected.statements['schema:name'][0].value.content).toEqual({ language: 'en', text: 'Selected new name' });
+  expect(selected.labels).toEqual(terms.labels);
+  expect(selected.aliases).toEqual(terms.aliases);
+  expect(sorted(records(selected))).toEqual(sorted([a, b]));
+  await f.adopt(book.id, [], 'schema:name', 'suppress');
+  expect(records(await f.read(book.id))).toEqual([a]);
+  await f.adopt(book.id, [name], 'schema:name');
+  await f.drain(book.id);
+  status(
+    await f.call('POST', '/v1/sourceFences:takedown', {
+      source: origin.source,
+      externalId: origin.external_id,
+      fieldGroup: 'summary',
+      reason: 'Separate field group',
+    }),
+    200,
+  );
+  const factsUnaffected = await f.read(book.id);
+  expect(sorted(records(factsUnaffected))).toEqual(sorted([a, b]));
+  expect(factsUnaffected.labels).toEqual(terms.labels);
+  expect(factsUnaffected.descriptions).toEqual(terms.descriptions);
+  expect(factsUnaffected.aliases).toEqual(terms.aliases);
+  status(
+    await f.call('POST', '/v1/sourceFences:takedown', {
+      source: origin.source,
+      externalId: origin.external_id,
+      fieldGroup: 'facts',
+      reason: 'Withhold original terms',
+    }),
+    200,
+  );
+  // Current Content fences apply to the payload as well as attribution, without a projection refresh.
+  const fenced = await f.read(book.id);
+  expect(records(fenced)).toEqual([b]);
+  expect(fenced.labels).toEqual({});
+  expect(fenced.descriptions).toEqual({});
+  expect(fenced.aliases).toEqual({});
+  expect(JSON.stringify(fenced)).not.toContain('Original licensed');
+  expect(fenced.statements['schema:name'][0].value.content.text).toBe('Selected new name');
+  expect((await f.nativeSnapshot(book.id)).revisions[0]).toEqual(original.revisions[0]);
+});
+
+test('firstparty sealed admitted run commits metadata before bootstrap without mutating old receipts or emitting effects on acquisition failure: native server prerequisites', async () => {
+  // This exercises the real server ports only. Importer acquisition/seal/journal binding is NOT YET FROZEN;
+  // see the owning contract. Calling these ports in order does not prove first-party run ordering.
+  const origin = source();
+  const record = registeredBangumi(origin.external_id);
+  const key = randomUUID();
+  const before = await db.admin.query('SELECT count(*)::int AS count FROM core.outbox');
+  const claims = async () =>
+    (
+      await db.admin.query('SELECT * FROM semantic.external_claim WHERE source=$1 AND external_id=$2', [
+        origin.source,
+        origin.external_id,
+      ])
+    ).rows;
+  expect(await claims()).toEqual([]);
+  status(await f.metadata(origin, { ...record, name: '' }, null, key), 422);
+  expect(await claims()).toEqual([]);
+  expect(await f.receipt(key)).toEqual([]);
+  expect(await db.admin.query('SELECT count(*)::int AS count FROM core.outbox').then((r) => r.rows)).toEqual(
+    before.rows,
+  );
+  const fault = `attribution_preclaim_${randomUUID().replaceAll('-', '')}`;
+  await db.admin.query(`CREATE FUNCTION public.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN IF NEW.command_kind='${metadataKind}' AND NEW.idempotency_key='${key}' THEN
+      RAISE EXCEPTION 'preclaim metadata receipt fault'; END IF; RETURN NEW; END $$`);
+  await db.admin.query(
+    `CREATE TRIGGER ${fault} BEFORE INSERT ON core.receipt FOR EACH ROW EXECUTE FUNCTION public.${fault}()`,
+  );
+  try {
+    status(await f.metadata(origin, record, null, key), 500);
+    expect(await f.stored(origin)).toEqual([]);
+    expect(await claims()).toEqual([]);
+    expect(await f.receipt(key)).toEqual([]);
+    expect(await db.admin.query('SELECT count(*)::int AS count FROM core.outbox').then((r) => r.rows)).toEqual(
+      before.rows,
+    );
+  } finally {
+    await db.admin.query(`DROP TRIGGER ${fault} ON core.receipt`);
+    await db.admin.query(`DROP FUNCTION public.${fault}()`);
+  }
+  const acknowledged = await f.metadata(origin, record, null, key);
+  status(acknowledged, 201);
+  expect(await claims()).toEqual([]); // Metadata alone is not a public fact or claim.
+  const receipt = await f.receipt(key, metadataKind, origin);
+  expect(receipt).toHaveLength(1);
+  // Lost metadata ACK: retry the exact body/key before bootstrap, preserving the native receipt.
+  expect(await f.metadata(origin, record, null, key)).toEqual(acknowledged);
+  expect(await f.receipt(key)).toEqual(receipt);
+  const created = await f.create(origin);
+  const bytes = JSON.stringify(created.command);
+  const bootstrap = await f.receipt(created.command.key, 'subject.batch_create', origin);
+  expect(bootstrap).toHaveLength(1);
+  expect(records(await f.read(created.id))).toEqual([record]);
+  const snapshot = await f.nativeSnapshot(created.id);
+  expect(snapshot.revisions[0].source).toEqual(origin);
+  expect(await f.batch(created.command)).toEqual(created.result); // Lost bootstrap ACK.
+  status(await f.metadata(origin, { ...record, attribution: 'Explicit correction' }, 1), 200);
+  expect(await f.metadata(origin, record, null, key)).toEqual(acknowledged);
+  expect(await f.batch(created.command)).toEqual(created.result);
+  expect(JSON.stringify(created.command)).toBe(bytes);
+  expect(await f.receipt(created.command.key, 'subject.batch_create', origin)).toEqual(bootstrap);
+  expect(await f.nativeSnapshot(created.id)).toEqual(snapshot);
+});
+
+test('reviewed single descriptors survive native metadata serialization and bootstrap reads without expanding their rights scope', async () => {
+  // Explicit trusted snapshots are inputs to the same generic HTTP operation, never Core provider branches.
+  const descriptors = [
+    registeredBangumi('1'),
+    {
+      name: 'VNDB',
+      url: 'https://vndb.org/v1',
+      licence: { id: 'LicenseRef-DbCL-1.0', url: 'http://opendatacommons.org/licenses/dbcl/1.0/' },
+      attribution:
+        'VNDB metadata contents: DbCL-1.0; database rights: ODbL-1.0 http://opendatacommons.org/licenses/odbl/1.0/. Excludes images and creative descriptions; no blanket licence for the output database.',
+    },
+    {
+      name: 'Open Library',
+      url: 'https://openlibrary.org/works/OL1W',
+      licence: { id: 'CC0-1.0' },
+      attribution:
+        'Open Library bibliographic metadata only; prose rights unknown; covers and media have separate rights.',
+    },
+    {
+      name: 'Wikidata',
+      url: 'https://www.wikidata.org/wiki/Q1',
+      licence: { id: 'CC0-1.0' },
+      attribution:
+        'Wikidata contributors; structured data only; external references, text and images have separate rights.',
+    },
+  ];
+  for (const descriptor of descriptors) {
+    const origin = source(randomUUID(), 'explicit_configured_alias');
+    await f.filled(origin, descriptor);
+    const stored = await f.stored(origin);
+    expect(stored[0].record).toEqual(descriptor);
+    const created = await f.create(origin);
+    expect(records(await f.read(created.id))).toEqual([descriptor]);
+    expect((await f.nativeSnapshot(created.id)).revisions[0].source).toEqual(origin);
+  }
 });
