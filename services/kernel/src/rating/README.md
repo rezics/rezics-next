@@ -59,8 +59,17 @@ with its formula, member count and coverage, and is shown only when it covers at
 
 A public figure is stored for each (standard question, population, subject) in the subject's anchor partition. It
 contains the count and a display-scale mean rounded to four decimal places from the grain threshold (5 votes for work
-or release, 10 for episode or character). Below threshold only count is published. This task leaves the Bayesian
-score, prior mean `m`, prior count `C` and `priorEpoch` null. Realm-defined questions have no public figure.
+or release, 10 for episode or character). Below threshold only count is published. Realm-defined questions have no
+public figure.
+
+Counted totals per (question, population) keep additive count and sum in sixteen shards, updated in the same apply as
+the target components. For the standard question, the serial figure drain checks those totals. The first prior epoch
+starts at 50 counted votes. A later epoch starts when the total reaches twice or falls to half its count at the
+current epoch's start. Each epoch freezes its display-scale mean `m` and grain threshold `C`. Falling below 50 ends
+the active epoch. A figure's Bayesian score is `(C*m + sum)/(C + count)` when its own count reaches `C` and the
+population has an active prior epoch; otherwise the score is null. Figure events and reads always carry the frozen
+epoch mean, count and epoch number. An epoch start or end republishes every currently rated subject through durable,
+resumable pages of at most 500 figures.
 
 Aggregate applies mark affected figures pending with the anchor-partition position. A serial drain reads at most 16
 shards per pending figure and publishes at most one changed-figure event per figure in each page of at most 500. A
@@ -293,6 +302,23 @@ both votes and Realm memberships for reinstatement.
   one changed-figure event.
 - Growth check: `test/rating/growth-public-figure.test.ts`, votes on one subject at scales `[64, 256, 1024]`, with
   constant rows per drained figure.
+
+### Counted population total
+
+- Touches: one shard row per counted vote change in the same aggregate apply as the target component. The shard is
+  selected from the private counting key; no population total has one write-hot row.
+- Growth check: `test/rating/growth-prior-epoch.test.ts`, votes on one population at scales `[256, 1024, 4096]`,
+  with constant rows per vote.
+
+### Prior epoch check
+
+- Touches: reads and locks at most 16 total shards, then clears the pending-check flag on the total shards.
+
+### Prior epoch republish
+
+- Touches: marks and publishes at most 500 currently rated figures per page, with one changed-figure event per figure.
+- Growth check: `test/rating/growth-prior-epoch.test.ts`, rated subjects at scales `[256, 1024, 4096]`, with
+  constant rows per page.
 
 ### Public figure read batch
 

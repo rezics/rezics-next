@@ -1,19 +1,26 @@
 WITH input AS (
-  SELECT :partition_no::integer AS partition_no, :limit::integer AS page_limit
+  SELECT :partition_no::integer AS partition_no, :limit::integer AS page_limit,
+         :subject_ids::nullable(uuid[]) AS subject_ids,
+         :question_id::nullable(uuid) AS question_id,
+         :population_id::nullable(uuid) AS population_id
 ), candidates AS MATERIALIZED (
   SELECT figure.route, figure.question_id, figure.population_id, figure.subject_id,
-         figure.pending_position
+         figure.pending_position, figure.pending_prior_generation
   FROM rating.public_figure AS figure
   CROSS JOIN input
   WHERE figure.partition_no = input.partition_no
     AND figure.pending_position IS NOT NULL
+    AND (input.subject_ids IS NULL OR figure.subject_id = ANY(input.subject_ids))
+    AND (input.question_id IS NULL OR figure.question_id = input.question_id)
+    AND (input.population_id IS NULL OR figure.population_id = input.population_id)
   ORDER BY figure.route, figure.question_id, figure.population_id, figure.subject_id
   LIMIT (SELECT page_limit FROM input)
   FOR UPDATE OF figure
 ), totals AS (
   SELECT candidates.route, candidates.question_id, candidates.population_id, candidates.subject_id,
-         candidates.pending_position,
+         candidates.pending_position, candidates.pending_prior_generation,
          COALESCE(sum(component.count), 0)::bigint AS count,
+         COALESCE(sum(component.sum), 0)::bigint AS sum,
          CASE
            WHEN COALESCE(sum(component.count), 0) >=
              CASE WHEN question.grain IN ('work', 'release') THEN 5 ELSE 10 END
@@ -21,6 +28,16 @@ WITH input AS (
                       (COALESCE(sum(component.count), 0)::numeric * 2), 4)
            ELSE NULL
          END AS mean,
+         CASE WHEN prior.start_count IS NOT NULL THEN prior.m END AS prior_m,
+         CASE WHEN prior.start_count IS NOT NULL THEN prior.c END AS prior_c,
+         CASE WHEN prior.start_count IS NOT NULL THEN prior.epoch END AS prior_epoch,
+         COALESCE(prior.generation, 0) AS prior_generation,
+         CASE WHEN COALESCE(sum(component.count), 0) >=
+                        CASE WHEN question.grain IN ('work', 'release') THEN 5 ELSE 10 END
+                   AND prior.start_count IS NOT NULL
+              THEN round(((prior.c::numeric * prior.m) + (COALESCE(sum(component.sum), 0)::numeric / 2)) /
+                         (prior.c + COALESCE(sum(component.count), 0)), 4)
+              ELSE NULL END AS score,
          max(component.applied_at) AS as_of
   FROM candidates
   JOIN rating.question AS question ON question.id = candidates.question_id
@@ -29,20 +46,32 @@ WITH input AS (
    AND component.question_id = candidates.question_id
    AND component.population_id = candidates.population_id
    AND component.target_id = candidates.subject_id
+  LEFT JOIN rating.population_prior_epoch AS prior
+    ON prior.route = get_byte(uuid_send(candidates.population_id), 10) * 256 +
+                     get_byte(uuid_send(candidates.population_id), 11)
+   AND prior.question_id = candidates.question_id
+   AND prior.population_id = candidates.population_id
   GROUP BY candidates.route, candidates.question_id, candidates.population_id,
-           candidates.subject_id, candidates.pending_position, question.grain
+           candidates.subject_id, candidates.pending_position, candidates.pending_prior_generation,
+           question.grain, prior.start_count, prior.epoch, prior.generation, prior.m, prior.c
 ), updated AS (
   UPDATE rating.public_figure AS figure
   SET count = totals.count,
       mean = totals.mean,
-      score = NULL,
-      m = NULL,
-      c = NULL,
-      prior_epoch = NULL,
+      score = totals.score,
+      m = totals.prior_m,
+      c = totals.prior_c,
+      prior_epoch = totals.prior_epoch,
       revision = figure.revision + 1,
       as_of = totals.as_of,
       position = totals.pending_position,
-      pending_position = NULL
+      pending_position = NULL,
+      published_prior_generation = GREATEST(
+        figure.published_prior_generation,
+        totals.prior_generation,
+        COALESCE(totals.pending_prior_generation, 0)
+      ),
+      pending_prior_generation = NULL
   FROM totals
   WHERE figure.route = totals.route
     AND figure.question_id = totals.question_id

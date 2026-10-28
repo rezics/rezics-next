@@ -93,6 +93,70 @@ CREATE TABLE rating.population_pending (
 
 
 --
+-- Name: population_prior_epoch; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_prior_epoch (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    epoch integer DEFAULT 0 NOT NULL,
+    generation bigint DEFAULT 0 NOT NULL,
+    start_count bigint,
+    m numeric(12,4),
+    c bigint,
+    CONSTRAINT population_prior_epoch_c_check CHECK (((c IS NULL) OR (c >= 1))),
+    CONSTRAINT population_prior_epoch_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_prior_epoch_check1 CHECK ((((start_count IS NULL) AND (m IS NULL) AND (c IS NULL)) OR ((start_count IS NOT NULL) AND (m IS NOT NULL) AND (c IS NOT NULL)))),
+    CONSTRAINT population_prior_epoch_check2 CHECK ((((epoch = 0) AND (start_count IS NULL)) OR (epoch >= 1))),
+    CONSTRAINT population_prior_epoch_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT population_prior_epoch_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT population_prior_epoch_m_check CHECK (((m IS NULL) OR ((m >= (0)::numeric) AND (m <= (10)::numeric)))),
+    CONSTRAINT population_prior_epoch_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT population_prior_epoch_start_count_check CHECK (((start_count IS NULL) OR (start_count >= 50)))
+);
+
+
+--
+-- Name: population_prior_republish; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_prior_republish (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    after_subject_id uuid,
+    CONSTRAINT population_prior_republish_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_prior_republish_generation_check CHECK ((generation >= 1)),
+    CONSTRAINT population_prior_republish_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: population_total_component; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_total_component (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    shard smallint NOT NULL,
+    count bigint NOT NULL,
+    sum bigint NOT NULL,
+    needs_epoch_check boolean DEFAULT false NOT NULL,
+    CONSTRAINT population_total_component_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
+    CONSTRAINT population_total_component_count_check CHECK ((count >= 0)),
+    CONSTRAINT population_total_component_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT population_total_component_shard_check CHECK (((shard >= 0) AND (shard <= 15))),
+    CONSTRAINT population_total_component_sum_check CHECK ((sum >= 0))
+);
+
+
+--
 -- Name: population_vote; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -134,13 +198,17 @@ CREATE TABLE rating.public_figure (
     as_of timestamp with time zone,
     "position" bigint DEFAULT 0 NOT NULL,
     pending_position bigint,
+    pending_prior_generation bigint,
+    published_prior_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT public_figure_check CHECK (((pending_position IS NULL) OR (pending_position > "position"))),
     CONSTRAINT public_figure_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT public_figure_check2 CHECK ((((mean IS NULL) OR ((mean >= (0)::numeric) AND (mean <= (10)::numeric))) AND ((m IS NULL) OR ((m >= (0)::numeric) AND (m <= (10)::numeric))))),
     CONSTRAINT public_figure_check3 CHECK ((((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (10)::numeric))) AND ((c IS NULL) OR (c >= 1)))),
     CONSTRAINT public_figure_count_check CHECK ((count >= 0)),
+    CONSTRAINT public_figure_pending_prior_generation_check CHECK (((pending_prior_generation IS NULL) OR (pending_prior_generation > 0))),
     CONSTRAINT public_figure_position_check CHECK (("position" >= 0)),
     CONSTRAINT public_figure_prior_epoch_check CHECK (((prior_epoch IS NULL) OR (prior_epoch >= 1))),
+    CONSTRAINT public_figure_published_prior_generation_check CHECK ((published_prior_generation >= 0)),
     CONSTRAINT public_figure_revision_check CHECK ((revision >= 0)),
     CONSTRAINT public_figure_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -287,6 +355,30 @@ ALTER TABLE ONLY rating.population_pending
 
 
 --
+-- Name: population_prior_epoch population_prior_epoch_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_prior_epoch
+    ADD CONSTRAINT population_prior_epoch_pkey PRIMARY KEY (route, question_id, population_id);
+
+
+--
+-- Name: population_prior_republish population_prior_republish_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_prior_republish
+    ADD CONSTRAINT population_prior_republish_pkey PRIMARY KEY (route, question_id, population_id);
+
+
+--
+-- Name: population_total_component population_total_component_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_component
+    ADD CONSTRAINT population_total_component_pkey PRIMARY KEY (route, question_id, population_id, shard);
+
+
+--
 -- Name: population_vote population_vote_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -343,10 +435,24 @@ ALTER TABLE ONLY rating.voter_state
 
 
 --
+-- Name: aggregate_component_population_subject_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX aggregate_component_population_subject_idx ON rating.aggregate_component USING btree (question_id, population_id, target_id, route, shard) WHERE (count > 0);
+
+
+--
 -- Name: aggregate_component_target_population_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
 CREATE INDEX aggregate_component_target_population_idx ON rating.aggregate_component USING btree (route, question_id, target_id, population_id, shard) WHERE (count > 0);
+
+
+--
+-- Name: population_total_epoch_check_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX population_total_epoch_check_idx ON rating.population_total_component USING btree (question_id, population_id, shard) WHERE needs_epoch_check;
 
 
 --
@@ -385,6 +491,13 @@ CREATE INDEX public_figure_population_subject_idx ON rating.public_figure USING 
 
 
 --
+-- Name: public_figure_prior_pending_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX public_figure_prior_pending_idx ON rating.public_figure USING btree (partition_no, route, question_id, population_id, subject_id) WHERE (pending_prior_generation IS NOT NULL);
+
+
+--
 -- Name: vote_counted_target_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -418,6 +531,30 @@ CREATE TRIGGER vote_initialize_counting BEFORE INSERT ON rating.vote FOR EACH RO
 
 ALTER TABLE ONLY rating.aggregate_component
     ADD CONSTRAINT aggregate_component_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
+
+
+--
+-- Name: population_prior_epoch population_prior_epoch_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_prior_epoch
+    ADD CONSTRAINT population_prior_epoch_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
+
+
+--
+-- Name: population_prior_republish population_prior_republish_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_prior_republish
+    ADD CONSTRAINT population_prior_republish_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
+
+
+--
+-- Name: population_total_component population_total_component_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_total_component
+    ADD CONSTRAINT population_total_component_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
 
 
 --

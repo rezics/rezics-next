@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomBytes } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { applyRatingChanges } from '../../src/rating/aggregate-effect.ts';
 import {
   drainPublicFigures,
@@ -10,7 +17,11 @@ import {
 } from '../../src/rating/public-figure.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { readWorkerConfig, startWorker } from '../../src/worker.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const route = 0x4321;
 const figureEvent = 'com.rezics.rating.public_figure.changed.v1';
@@ -165,3 +176,211 @@ test('Realm-defined questions do not publish public figures', async () => {
   expect(await drainPublicFigures(database.pool, partitionOf(routeOf(targetId)!))).toBe(0);
   expect(await figureEvents(targetId)).toEqual([]);
 });
+
+test('the default worker composition turns real votes into figure events and runs the epoch check and republish', async () => {
+  database.pool.options.max = 1;
+  await database.admin.query(`DELETE FROM rating.public_figure WHERE question_id = $1 AND population_id = $2`, [
+    STANDARD_QUESTION_ID,
+    GLOBAL_CONTEXT.id,
+  ]);
+  await database.admin.query(
+    `DELETE FROM rating.population_prior_republish WHERE question_id = $1 AND population_id = $2`,
+    [STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
+  );
+  await database.admin.query(
+    `DELETE FROM rating.population_prior_epoch WHERE question_id = $1 AND population_id = $2`,
+    [STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
+  );
+  await database.admin.query(
+    `DELETE FROM rating.population_total_component WHERE question_id = $1 AND population_id = $2`,
+    [STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
+  );
+  await database.admin.query(`DELETE FROM rating.aggregate_component WHERE question_id = $1 AND population_id = $2`, [
+    STANDARD_QUESTION_ID,
+    GLOBAL_CONTEXT.id,
+  ]);
+  await database.admin.query(`DELETE FROM rating.population_vote WHERE question_id = $1 AND population_id = $2`, [
+    STANDARD_QUESTION_ID,
+    GLOBAL_CONTEXT.id,
+  ]);
+  const env = workerTestEnv({
+    DATABASE_URL: database.url,
+    KERNEL_EXECUTOR_ID: `rating-prior-epoch-${crypto.randomUUID()}`,
+  });
+  const routeKey = randomBytes(32);
+  const ownerId = newId(0x4123);
+  const owner: AccountActor = {
+    kind: 'account',
+    accountId: ownerId,
+    clientId: 'rating-prior-epoch-worker',
+    scopes: ['subject:read', 'rating:vote'],
+    requestedBy: null,
+    authnEpoch: 1,
+  };
+  let app: ReturnType<typeof createKernel>;
+  let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+  try {
+    await bootstrapRelease(database.pool, bundledRelease);
+    const signing = await generateKeyPair('ES256', { extractable: true });
+    const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'rating-prior-epoch-worker', alg: 'ES256' };
+    app = createKernel({
+      pool: database.pool,
+      requestDeadlineMs: 30_000,
+      writeRate: createWriteRateLimiter({
+        secret: 'rating-prior-epoch-worker-secret-32-bytes',
+        overrides: JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
+      }),
+      ratePeer: () => '127.0.0.1',
+      routeKey,
+      clock: () => new Date(),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+      access: (config) => {
+        const access = createAccess({
+          ...config,
+          auth: {
+            issuer: 'https://auth.rating-prior.test',
+            audience: 'https://kernel.rating-prior.test',
+            jwksUrl: 'https://auth.rating-prior.test/jwks',
+            fetch: async () => Response.json({ keys: [jwk] }),
+          },
+        });
+        access.prepare = async () => undefined;
+        access.authorize = async () => true;
+        return access;
+      },
+    });
+
+    const voters = Array.from({ length: 50 }, (_, index) => newId(0x1000 + index * 16));
+    for (const voterId of [ownerId, ...voters])
+      await database.admin.query(
+        `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+         VALUES ($1, $2, 'actor', 'active', $2)`,
+        [routeOf(voterId), voterId],
+      );
+    await database.admin.query(
+      `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+       VALUES ('personal_library', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
+      [newId(0x4123)],
+    );
+
+    const targets: string[] = [];
+    for (const label of ['Prior epoch worker target A', 'Prior epoch worker target B']) {
+      const key = crypto.randomUUID();
+      const created = await createSubject(database.pool, {
+        actor: owner,
+        target: subjectTarget(routeKey, ownerId, key),
+        idempotencyKey: key,
+        digest: createHash('sha256').update(key).digest(),
+        item: { type: 'schema:Book', labels: { en: label } },
+        release: { digest: bundledDigest, release: bundledRelease },
+        authorize: async () => true,
+      });
+      targets.push(created.subject.id);
+    }
+
+    const castVote = async (index: number): Promise<void> => {
+      const voterId = voters[index]!;
+      const token = await new SignJWT({
+        client_id: 'rating-prior-epoch-worker',
+        scope: 'subject:read rating:vote',
+        authn_epoch: 1,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd'],
+      })
+        .setProtectedHeader({ alg: 'ES256', kid: 'rating-prior-epoch-worker', typ: 'at+jwt' })
+        .setIssuer('https://auth.rating-prior.test')
+        .setAudience('https://kernel.rating-prior.test')
+        .setSubject(voterId)
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(signing.privateKey);
+      const key = JSON.stringify(crypto.randomUUID());
+      let response: Response;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        response = await app.handle(
+          new Request(
+            `http://kernel.test/v1/subjects/${targets[index % targets.length]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+            {
+              method: 'PUT',
+              headers: {
+                authorization: `Bearer ${token}`,
+                'content-type': 'application/json',
+                'idempotency-key': key,
+                'x-request-id': 'rating-prior-epoch-worker',
+              },
+              body: JSON.stringify({ units: 10 }),
+            },
+          ),
+        );
+        if (response.status !== 503) break;
+        const problem = (await response
+          .clone()
+          .json()
+          .catch(() => null)) as { code?: string; effect_status?: string } | null;
+        if (
+          !problem ||
+          !['deadline_exceeded', 'overloaded'].includes(problem.code ?? '') ||
+          problem.effect_status !== 'not_applied'
+        )
+          break;
+        await Bun.sleep(100);
+      }
+      expect(response!.status, await response!.text()).toBe(200);
+    };
+    await castVote(0);
+    await castVote(1);
+    worker = await startWorker(readWorkerConfig(env), undefined, env);
+
+    const initialDeadline = performance.now() + 15_000;
+    let initialFigures = new Map<string, PublicFigure>();
+    while (performance.now() < initialDeadline) {
+      const figures = await database.admin.query<{ subject: string; data: PublicFigure }>(
+        `SELECT subject, data FROM core.outbox
+         WHERE type = $1 AND subject = ANY($2::text[])
+         ORDER BY position, event_seq`,
+        [figureEvent, targets],
+      );
+      initialFigures = new Map(figures.rows.map(({ subject, data }) => [subject, data]));
+      if (targets.every((targetId) => initialFigures.get(targetId)?.count === 1)) break;
+      await Bun.sleep(10);
+    }
+    expect(targets.map((targetId) => initialFigures.get(targetId)?.count)).toEqual([1, 1]);
+
+    for (let index = 2; index < voters.length; index += 1) await castVote(index);
+
+    const deadline = performance.now() + 60_000;
+    while (performance.now() < deadline) {
+      const figures = await database.admin.query<{ subject: string; data: PublicFigure }>(
+        `SELECT subject, data FROM core.outbox
+         WHERE type = $1 AND subject = ANY($2::text[])
+         ORDER BY position, event_seq`,
+        [figureEvent, targets],
+      );
+      const latest = new Map<string, PublicFigure>();
+      for (const { subject, data } of figures.rows) latest.set(subject, data);
+      if (targets.every((targetId) => latest.get(targetId)?.count === 25 && latest.get(targetId)?.priorEpoch === 1))
+        break;
+      await Bun.sleep(10);
+    }
+
+    const current = await database.admin.query<{ subject: string; data: PublicFigure }>(
+      `SELECT subject, data FROM core.outbox
+       WHERE type = $1 AND subject = ANY($2::text[])
+       ORDER BY position, event_seq`,
+      [figureEvent, targets],
+    );
+    const latest = new Map<string, PublicFigure>();
+    for (const { subject, data } of current.rows) latest.set(subject, data);
+    expect(targets.map((targetId) => latest.get(targetId))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ count: 25, score: 5, m: 5, C: 5, priorEpoch: 1 }),
+        expect.objectContaining({ count: 25, score: 5, m: 5, C: 5, priorEpoch: 1 }),
+      ]),
+    );
+    expect(targets.every((targetId) => current.rows.filter(({ subject }) => subject === targetId).length >= 2)).toBe(
+      true,
+    );
+  } finally {
+    await worker?.stop();
+  }
+}, 120_000);

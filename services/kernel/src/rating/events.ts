@@ -25,6 +25,16 @@ export const RATING_EVENTS = {
     { applied: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.prior_epoch.work.v1': Type.Object(
+    {
+      action: Type.Union([Type.Literal('check'), Type.Literal('mark'), Type.Literal('advance')]),
+      questionId: Type.String({ pattern: UUID }),
+      populationId: Type.String({ pattern: UUID }),
+      generation: Type.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+      subjects: Type.Integer({ minimum: 0, maximum: 500 }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.public_figure.changed.v1': Type.Object(
     {
       questionId: Type.String({ pattern: UUID }),

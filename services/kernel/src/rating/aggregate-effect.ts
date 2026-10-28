@@ -15,6 +15,7 @@ import deletePopulationVote from './population-vote-delete.sql';
 import upsertPopulationVote from './population-vote-upsert.sql';
 import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
 import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
+import applyPopulationTotal from './population-total-component-apply.sql';
 import readQuestionScale from './question-scale-read.sql';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
@@ -156,7 +157,7 @@ function returnedRows(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
-async function applyDelta(
+async function applyComponentDelta(
   tx: Queryable,
   change: RatingChange,
   countingKey: string,
@@ -164,7 +165,7 @@ async function applyDelta(
   after: CountedVote | null,
   scale: QuestionScale,
   at: string,
-): Promise<void> {
+): Promise<ReturnType<typeof deltaFor>> {
   const keyByte = Number.parseInt(countingKey.slice(0, 2), 16);
   const delta = deltaFor(before, after, scale);
   const rows = await applyComponent.run(tx, {
@@ -179,6 +180,35 @@ async function applyDelta(
     at,
   });
   if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
+  return delta;
+}
+
+async function applyTotalDeltas(
+  tx: Queryable,
+  change: RatingChange,
+  entries: readonly { countingKey: string; delta: ReturnType<typeof deltaFor> }[],
+): Promise<void> {
+  const shards = new Map<number, { count: bigint; sum: bigint }>();
+  for (const { countingKey, delta } of entries) {
+    const shard = Number.parseInt(countingKey.slice(0, 2), 16) % 16;
+    const current = shards.get(shard) ?? { count: 0n, sum: 0n };
+    current.count += delta.count;
+    current.sum += delta.sum;
+    shards.set(shard, current);
+  }
+  for (const [shard, delta] of [...shards].sort(([left], [right]) => left - right)) {
+    if (delta.count === 0n && delta.sum === 0n) continue;
+    const rows = await applyPopulationTotal.run(tx, {
+      population_route: routeOf(change.populationId)!,
+      question_id: change.questionId,
+      population_id: change.populationId,
+      shard,
+      count_delta: delta.count.toString(),
+      sum_delta: delta.sum.toString(),
+      check_epoch: change.questionId === STANDARD_QUESTION_ID,
+    });
+    if (!returnedRows(rows)) throw new Error('Rating population total would be negative or incompatible');
+  }
 }
 
 async function applyPartition(pool: Pool, changes: readonly RatingChange[], partition: number): Promise<void> {
@@ -244,12 +274,25 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           );
           if (!wroteVote) continue;
           const newAfter = await readCountedVote.run(tx, parameters);
+          let oldTotalDelta: ReturnType<typeof deltaFor> | null = null;
           if (oldKey !== change.countingKey) {
             const oldAfter = await readCountedVote.run(tx, { ...parameters, counting_key: oldKey });
-            await applyDelta(tx, change, oldKey, oldBefore, oldAfter, scale, appliedAt);
+            oldTotalDelta = await applyComponentDelta(tx, change, oldKey, oldBefore, oldAfter, scale, appliedAt);
             applied += 1;
           }
-          await applyDelta(tx, change, change.countingKey, newBefore, newAfter, scale, appliedAt);
+          const newTotalDelta = await applyComponentDelta(
+            tx,
+            change,
+            change.countingKey,
+            newBefore,
+            newAfter,
+            scale,
+            appliedAt,
+          );
+          await applyTotalDeltas(tx, change, [
+            ...(oldKey !== change.countingKey && oldTotalDelta ? [{ countingKey: oldKey, delta: oldTotalDelta }] : []),
+            { countingKey: change.countingKey, delta: newTotalDelta },
+          ]);
           await markFigurePending(change, route);
           applied += 1;
           continue;
@@ -284,6 +327,7 @@ async function applyPartition(pool: Pool, changes: readonly RatingChange[], part
           at: appliedAt,
         });
         if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
+        await applyTotalDeltas(tx, change, [{ countingKey: change.countingKey, delta }]);
         await markFigurePending(change, route);
         applied += 1;
       }
