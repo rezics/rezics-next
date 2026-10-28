@@ -136,20 +136,9 @@ async function json(response: Response, status: number) {
 function privateFree(value: unknown) {
   if (!value || typeof value !== 'object') return;
   for (const [key, child] of Object.entries(value)) {
-    expect([
-      'pin',
-      'library_profile_pin',
-      'libraryProfilePin',
-      'provenance',
-      'releaseDigest',
-      'acceptingType',
-      'profileId',
-      'typeId',
-      'typeSourceId',
-      'sourcePartition',
-      'sourceEpoch',
-      'sourcePosition',
-    ]).not.toContain(key);
+    const fields =
+      'pin library_profile_pin libraryProfilePin provenance releaseDigest acceptingType profileId typeId typeSourceId';
+    expect([...fields.split(' '), 'sourcePartition', 'sourceEpoch', 'sourcePosition']).not.toContain(key);
     privateFree(child);
   }
 }
@@ -409,6 +398,13 @@ test('same profile sparse records retain exact opaque identities duplicate noops
     await rejectRecord(s.id, 5, { ...value });
   const maxKey = 'x'.repeat(128);
   expect((await record(s.id, 5, { add: [maxKey] })).completedUnitCount).toBe(4);
+  const historical = await contents(s.id);
+  const creation = await fact(s.id);
+  for (const head of [replacement, digest]) {
+    await native.activate(head);
+    expect(await contents(s.id)).toEqual(historical);
+    expect(await fact(s.id)).toEqual(creation);
+  }
   const reread = await start(subject, 'completed_units', 'plot-key.v2');
   expect(reread.id).not.toBe(s.id);
   expect((await contents(reread.id)).units).toEqual([]);
