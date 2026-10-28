@@ -60,11 +60,11 @@ export type NativeCollectionProbe = {
 import headerQuery from './collection-source-native-header.sql';
 const headerSQL = headerQuery.sql;
 import membersQuery from './collection-source-native-members.sql';
-const membersSQL = membersQuery.sql;
 import factsQuery from './collection-source-native-facts.sql';
-const factsSQL = factsQuery.sql;
 import probeQuery from './collection-source-native-probe.sql';
 const probeSQL = probeQuery.sql;
+const bind = (query: { params: readonly string[] }, values: Record<string, unknown>) =>
+  query.params.map((name) => values[name]);
 const fenceSQL = 'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2';
 const referenceSQL =
   'SELECT collection_id FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2';
@@ -100,13 +100,11 @@ register(entrySQL, () => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, wi
 register(pinSQL, (v) => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: Number(v[3]) }));
 for (const sql of [probeSQL, copySQL, sessionSQL])
   register(sql, () => ({ nativeRows: 6, nativePoints: 1, witnessKeys: 1, candidateKeys: 1, bytes: 256 }));
-for (const sql of [membersSQL, factsSQL])
-  register(sql, (v) => ({
-    nativeRows: 8 * Number(v[4]) + 8,
-    nativePoints: 1,
-    candidateKeys: Number(v[4]),
-    bytes: 256 * Number(v[4]),
-  }));
+for (const query of [membersQuery, factsQuery])
+  register(query.sql, (values) => {
+    const limit = Number(values[query.params.indexOf('limit')]);
+    return { nativeRows: 8 * limit + 8, nativePoints: 1, candidateKeys: limit, bytes: 256 * limit };
+  });
 register(labelSQL, (v) => ({
   nativeRows: 12 * Number(v[4]) + 8,
   nativePoints: 1 + Number(v[4]),
@@ -197,7 +195,9 @@ function validate(ref: Ref) {
 }
 async function observe(client: PoolClient, ref: Ref): Promise<NativeCollectionMetadata | null> {
   validate(ref);
-  const row = (await client.query<Header>(headerSQL, [ref.route, ref.collectionId])).rows[0];
+  const row = (
+    await client.query<Header>(headerSQL, bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
+  ).rows[0];
   if (!row) {
     if ((await client.query(referenceSQL, [ref.route, ref.collectionId])).rows.length)
       throw new ProblemError('dependency_unavailable');
@@ -349,17 +349,19 @@ export function readNativeCollectionRawPage(
       const current = await currentSource(client, metadata);
       if ((current.authority === 'curated') !== (input.driver === 'member') || input.driver === 'output')
         throw new ProblemError('dependency_unavailable');
+      const query = input.driver === 'member' ? membersQuery : factsQuery;
       const rows = (
         await client.query<{ storedSubjectId: string; factId: string }>(
-          input.driver === 'member' ? membersSQL : factsSQL,
-          [
-            current.route,
-            input.driver === 'member' ? current.collectionId : current.curatorAccountId,
-            input.after?.storedSubjectId ?? null,
-            input.after?.factId ?? null,
-            input.limit,
-            ...(input.driver === 'member' ? [] : [input.driver]),
-          ],
+          query.sql,
+          bind(query, {
+            route: current.route,
+            collection_id: current.collectionId,
+            account_id: current.curatorAccountId,
+            after_subject: input.after?.storedSubjectId ?? null,
+            after_fact: input.after?.factId ?? null,
+            limit: input.limit,
+            driver: input.driver,
+          }),
         )
       ).rows.map((row) => ({ key: { driver: input.driver, ...row } }));
       return { rows, after: rows.at(-1)?.key ?? input.after, exhausted: rows.length < input.limit };
@@ -404,11 +406,14 @@ export async function probeNativeCollectionOriginal(
         });
         if (current.authority === 'curated') {
           const row = (
-            await client.query<{ storedSubjectId: string; factId: string }>(probeSQL, [
-              current.route,
-              current.collectionId,
-              input.originalId,
-            ])
+            await client.query<{ storedSubjectId: string; factId: string }>(
+              probeSQL,
+              bind(probeQuery, {
+                route: current.route,
+                collection_id: current.collectionId,
+                subject_id: input.originalId,
+              }),
+            )
           ).rows[0];
           return row ? done('present', { driver: 'member', ...row }) : done('absent');
         }
