@@ -13,3 +13,79 @@ inverseProperties:
   schema:translator: '번역한 작품'
 typeDescriptions:
   schema:Book: '저작물'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        page: "쪽"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  book.edition:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        page: "쪽"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  legacy-fixed-v1:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        page: "쪽"
+        chapter: "장"
+        episode: "에피소드"
+        minute: "분"
+        volume: "권"
+        percent: "퍼센트"
+      cursor_position:
+        page: "쪽"
+        chapter: "장"
+        episode: "에피소드"
+        minute: "분"
+        volume: "권"
+        percent: "퍼센트"
+      completed_units:
+        page: "쪽"
+        chapter: "장"
+        episode: "에피소드"
+        minute: "분"
+        volume: "권"
+        percent: "퍼센트"
+    copyKinds:
+      legacy-unspecified: "미지정"
+    copyStatuses:
+      legacy-unspecified:
+        ordered: "주문함"
+        owned: "소장"
+        lent: "대여 중"
+        disposed: "처분함"

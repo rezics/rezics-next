@@ -5,3 +5,23 @@ properties:
   schema:recipeIngredient: ingrediente
   schema:cookTime: tiempo de cocción
   schema:recipeYield: raciones
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: "Planeado"
+      in_progress: "En curso"
+      completed: "Completado"
+      paused: "En pausa"
+      dropped: "Abandonado"
+    units:
+      scalar_amount:
+        minute: "minuto"
+    copyKinds:
+      physical: "Físico"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "En propiedad"
+        disposed: "Desprendido"
+      digital:
+        owned: "En propiedad"

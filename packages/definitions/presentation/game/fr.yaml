@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: 'publication de logiciels'
   wd:Q209163: 'extension de jeu vidéo'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"
+  game.release:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"
+  game.addon:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"

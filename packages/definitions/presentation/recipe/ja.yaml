@@ -5,3 +5,23 @@ properties:
   schema:recipeIngredient: 材料
   schema:cookTime: 調理時間
   schema:recipeYield: 人数
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: "予定"
+      in_progress: "進行中"
+      completed: "完了"
+      paused: "中断"
+      dropped: "断念"
+    units:
+      scalar_amount:
+        minute: "分"
+    copyKinds:
+      physical: "物理"
+      digital: "デジタル"
+    copyStatuses:
+      physical:
+        owned: "所持"
+        disposed: "手放した"
+      digital:
+        owned: "所持"

@@ -9,3 +9,23 @@ inverseProperties:
   wdt:P144: 'Adaptionen'
   wdt:P361: 'Bestandteile'
   rezics:spinOffOf: 'Ableger'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        percent: "Prozent"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"

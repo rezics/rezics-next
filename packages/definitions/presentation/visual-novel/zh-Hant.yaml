@@ -9,3 +9,23 @@ inverseProperties:
   wdt:P144: '衍生作品'
   wdt:P361: '組成作品'
   rezics:spinOffOf: '外傳作品'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: "計劃"
+      in_progress: "進行中"
+      completed: "已完成"
+      paused: "暫停"
+      dropped: "放棄"
+    units:
+      scalar_amount:
+        percent: "百分比"
+    copyKinds:
+      physical: "實體"
+      digital: "數位"
+    copyStatuses:
+      physical:
+        owned: "擁有"
+        disposed: "已處置"
+      digital:
+        owned: "擁有"

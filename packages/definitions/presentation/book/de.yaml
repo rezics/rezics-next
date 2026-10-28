@@ -14,3 +14,79 @@ inverseProperties:
 typeDescriptions:
   schema:Book: 'Schrifttum'
   bf:Instance: 'Ausgabe oder Version'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        page: "Seite"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  book.edition:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        page: "Seite"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  legacy-fixed-v1:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        page: "Seite"
+        chapter: "Kapitel"
+        episode: "Folge"
+        minute: "Minute"
+        volume: "Band"
+        percent: "Prozent"
+      cursor_position:
+        page: "Seite"
+        chapter: "Kapitel"
+        episode: "Folge"
+        minute: "Minute"
+        volume: "Band"
+        percent: "Prozent"
+      completed_units:
+        page: "Seite"
+        chapter: "Kapitel"
+        episode: "Folge"
+        minute: "Minute"
+        volume: "Band"
+        percent: "Prozent"
+    copyKinds:
+      legacy-unspecified: "Nicht näher bestimmt"
+    copyStatuses:
+      legacy-unspecified:
+        ordered: "Bestellt"
+        owned: "Im Besitz"
+        lent: "Verliehen"
+        disposed: "Abgegeben"

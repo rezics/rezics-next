@@ -20,3 +20,80 @@ inverseProperties:
   wdt:P7937: 'Œuvres de cette forme'
 typeDescriptions:
   schema:TVSeason: 'saison de série télévisée'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        episode: "épisode"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"
+  anime.season:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        episode: "épisode"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"
+  anime.episode:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"
+  anime.film:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"

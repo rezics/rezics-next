@@ -18,3 +18,80 @@ inverseProperties:
   schema:isPartOf: 'Episoden'
   wdt:P449: 'Erstausstrahlungen'
   wdt:P7937: 'Werke dieser Form'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        episode: "Folge"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  anime.season:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        episode: "Folge"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  anime.episode:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  anime.film:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"

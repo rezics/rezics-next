@@ -20,3 +20,80 @@ inverseProperties:
   wdt:P7937: 'Works in this form'
 typeDescriptions:
   schema:TVSeason: 'television series season'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        episode: "episode"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"
+  anime.season:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        episode: "episode"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"
+  anime.episode:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"
+  anime.film:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"

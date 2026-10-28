@@ -50,6 +50,32 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      library:
+        id: anime.series
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: episode
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
       schema_org_type: https://schema.org/TVSeries
   Movie:
@@ -84,6 +110,32 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      library:
+        id: anime.film
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished author illustrator director musicBy producer productionCompany screenwriter developer voiceActor contributor character partOfSeries
       schema_org_type: https://schema.org/Movie
   TVSeason:
@@ -118,6 +170,32 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      library:
+        id: anime.season
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: episode
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
       schema_org_type: https://schema.org/TVSeason
   Episode:
@@ -149,6 +227,32 @@ classes:
       - genre
       - keywords
     annotations:
+      library:
+        id: anime.episode
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage author illustrator screenwriter producer
       schema_org_type: https://schema.org/Episode
 slots:

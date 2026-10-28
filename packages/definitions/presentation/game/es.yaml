@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: 'release'
   wd:Q209163: 'expansión'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "Planeado"
+      in_progress: "En curso"
+      completed: "Completado"
+      paused: "En pausa"
+      dropped: "Abandonado"
+    units:
+      scalar_amount:
+        minute: "minuto"
+    copyKinds:
+      physical: "Físico"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "En propiedad"
+        disposed: "Desprendido"
+      digital:
+        owned: "En propiedad"
+  game.release:
+    states:
+      planned: "Planeado"
+      in_progress: "En curso"
+      completed: "Completado"
+      paused: "En pausa"
+      dropped: "Abandonado"
+    units:
+      scalar_amount:
+        minute: "minuto"
+    copyKinds:
+      physical: "Físico"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "En propiedad"
+        disposed: "Desprendido"
+      digital:
+        owned: "En propiedad"
+  game.addon:
+    states:
+      planned: "Planeado"
+      in_progress: "En curso"
+      completed: "Completado"
+      paused: "En pausa"
+      dropped: "Abandonado"
+    units:
+      scalar_amount:
+        minute: "minuto"
+    copyKinds:
+      physical: "Físico"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "En propiedad"
+        disposed: "Desprendido"
+      digital:
+        owned: "En propiedad"

@@ -5,3 +5,23 @@ properties:
   schema:recipeIngredient: Zutat
   schema:cookTime: Kochzeit
   schema:recipeYield: Portionen
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"

@@ -34,6 +34,34 @@ classes:
       - basedOnWork
       - spinOffOf
     annotations:
+      library:
+        id: visual-novel.reading
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: percent
+                  dimension: percent
+                  minimum: '0'
+                  maximum: '100'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: genre keywords character contributor author director illustrator musicBy translator voiceActor partOfSeries inLanguage
       schema_org_type: https://schema.org/VideoGame
 slots:

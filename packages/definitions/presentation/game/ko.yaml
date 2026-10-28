@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: '출시 버전'
   wd:Q209163: '확장팩'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        minute: "분"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  game.release:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        minute: "분"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  game.addon:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        minute: "분"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"

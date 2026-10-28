@@ -9,3 +9,23 @@ inverseProperties:
   wdt:P144: '각색 작품'
   wdt:P361: '구성 작품'
   rezics:spinOffOf: '스핀오프 작품'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        percent: "퍼센트"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"

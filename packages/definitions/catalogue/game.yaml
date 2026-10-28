@@ -27,6 +27,32 @@ classes:
     slots:
       - alternateName
     annotations:
+      library:
+        id: game.playing
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       cover_ratio: 5:7
   VideoGameRelease:
     class_uri: wd:Q20631656
@@ -64,6 +90,32 @@ classes:
       - distributionFormat
       - vndbId
     annotations:
+      library:
+        id: game.release
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
       cover_ratio: 5:7
       schema_org_type: https://schema.org/CreativeWork
@@ -130,6 +182,32 @@ classes:
       - numberOfPlayers
       - expansionOf
     annotations:
+      library:
+        id: game.addon
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
       cover_ratio: 5:7
       schema_org_type: https://schema.org/CreativeWork

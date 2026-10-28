@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:16dfd18d0c7740238d50c63f8ec4f61bb59d78859ae3b295ed8c5a75e3c32780",
+  "digest": "sha256:57f4211bebf2a5d697e624f0d87a351d11e5be2ffda1c5e3eec57f10b3000bd0",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -101,6 +101,7 @@
           "zh-Hans": "追加内容",
           "zh-Hant": "追加內容"
         },
+        "library": { "profileId": "game.addon" },
         "mappings": ["wd:Q209163"],
         "coverRatio": "5:7",
         "properties": [
@@ -191,6 +192,7 @@
           "zh-Hans": "视觉小说",
           "zh-Hant": "視覺小說"
         },
+        "library": { "profileId": "visual-novel.reading" },
         "mappings": [],
         "coverRatio": "5:7",
         "properties": [
@@ -268,6 +270,7 @@
           "zh-Hans": "版本",
           "zh-Hant": "版本"
         },
+        "library": { "profileId": "book.edition" },
         "mappings": ["wd:Q3331189"],
         "coverRatio": "5:7",
         "properties": [
@@ -344,6 +347,7 @@
           "zh-Hans": "书籍",
           "zh-Hant": "書籍"
         },
+        "library": { "profileId": "book.reading" },
         "mappings": ["wd:Q47461344"],
         "coverRatio": "5:7",
         "properties": [
@@ -519,6 +523,7 @@
           "zh-Hans": "电影",
           "zh-Hant": "電影"
         },
+        "library": { "profileId": "anime.film" },
         "mappings": ["wd:Q11424"],
         "coverRatio": "5:7",
         "properties": [
@@ -628,6 +633,7 @@
           "zh-Hans": "版本",
           "zh-Hant": "版本"
         },
+        "library": { "profileId": "game.release" },
         "mappings": [],
         "coverRatio": "5:7",
         "properties": [
@@ -715,6 +721,7 @@
           "zh-Hans": "食谱",
           "zh-Hant": "食譜"
         },
+        "library": { "profileId": "recipe.cooking" },
         "mappings": ["wd:Q219239"],
         "coverRatio": "4:3",
         "properties": [
@@ -765,6 +772,7 @@
           "zh-Hans": "集",
           "zh-Hant": "集"
         },
+        "library": { "profileId": "anime.episode" },
         "mappings": ["wd:Q1983062"],
         "coverRatio": "5:7",
         "properties": [
@@ -846,6 +854,7 @@
           "zh-Hans": "季",
           "zh-Hant": "季"
         },
+        "library": { "profileId": "anime.season" },
         "mappings": ["wd:Q3464665"],
         "coverRatio": "5:7",
         "properties": [
@@ -935,6 +944,7 @@
           "zh-Hans": "TV 动画",
           "zh-Hant": "TV 動畫"
         },
+        "library": { "profileId": "anime.series" },
         "mappings": ["wd:Q5398426"],
         "coverRatio": "5:7",
         "properties": [
@@ -1021,6 +1031,7 @@
           "zh-Hans": "电子游戏",
           "zh-Hant": "電子遊戲"
         },
+        "library": { "profileId": "game.playing" },
         "mappings": ["wd:Q7889"],
         "coverRatio": "5:7",
         "properties": [
@@ -4728,6 +4739,2447 @@
         "relation": { "group": "derivation", "order": "name", "inverse": "none" },
         "qualifiers": ["schema:inLanguage"],
         "multivalued": true
+      }
+    },
+    "libraryProfiles": {
+      "anime.film": {
+        "id": "anime.film",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "game.addon": {
+        "id": "game.addon",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "anime.season": {
+        "id": "anime.season",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "episode",
+                  "labels": {
+                    "de": "Folge",
+                    "en": "episode",
+                    "es": "episodio",
+                    "fr": "épisode",
+                    "ja": "エピソード",
+                    "ko": "에피소드",
+                    "zh-Hans": "集",
+                    "zh-Hant": "集"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "anime.series": {
+        "id": "anime.series",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "episode",
+                  "labels": {
+                    "de": "Folge",
+                    "en": "episode",
+                    "es": "episodio",
+                    "fr": "épisode",
+                    "ja": "エピソード",
+                    "ko": "에피소드",
+                    "zh-Hans": "集",
+                    "zh-Hant": "集"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "book.edition": {
+        "id": "book.edition",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "page",
+                  "labels": {
+                    "de": "Seite",
+                    "en": "page",
+                    "es": "página",
+                    "fr": "page",
+                    "ja": "ページ",
+                    "ko": "쪽",
+                    "zh-Hans": "页",
+                    "zh-Hant": "頁"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "book.reading": {
+        "id": "book.reading",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "page",
+                  "labels": {
+                    "de": "Seite",
+                    "en": "page",
+                    "es": "página",
+                    "fr": "page",
+                    "ja": "ページ",
+                    "ko": "쪽",
+                    "zh-Hans": "页",
+                    "zh-Hant": "頁"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "game.playing": {
+        "id": "game.playing",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "game.release": {
+        "id": "game.release",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "anime.episode": {
+        "id": "anime.episode",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "recipe.cooking": {
+        "id": "recipe.cooking",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "legacy-fixed-v1": {
+        "id": "legacy-fixed-v1",
+        "copies": {
+          "kinds": [
+            {
+              "id": "legacy-unspecified",
+              "labels": {
+                "de": "Nicht näher bestimmt",
+                "en": "Unspecified",
+                "es": "Sin especificar",
+                "fr": "Non précisé",
+                "ja": "未指定",
+                "ko": "미지정",
+                "zh-Hans": "未指定",
+                "zh-Hant": "未指定"
+              },
+              "statuses": [
+                {
+                  "id": "ordered",
+                  "labels": {
+                    "de": "Bestellt",
+                    "en": "Ordered",
+                    "es": "Pedido",
+                    "fr": "Commandé",
+                    "ja": "注文済み",
+                    "ko": "주문함",
+                    "zh-Hans": "已订购",
+                    "zh-Hant": "已訂購"
+                  }
+                },
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "lent",
+                  "labels": {
+                    "de": "Verliehen",
+                    "en": "Lent",
+                    "es": "Prestado",
+                    "fr": "Prêté",
+                    "ja": "貸出中",
+                    "ko": "대여 중",
+                    "zh-Hans": "已借出",
+                    "zh-Hant": "已借出"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "page",
+                  "labels": {
+                    "de": "Seite",
+                    "en": "page",
+                    "es": "página",
+                    "fr": "page",
+                    "ja": "ページ",
+                    "ko": "쪽",
+                    "zh-Hans": "页",
+                    "zh-Hant": "頁"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                },
+                {
+                  "id": "chapter",
+                  "labels": {
+                    "de": "Kapitel",
+                    "en": "chapter",
+                    "es": "capítulo",
+                    "fr": "chapitre",
+                    "ja": "章",
+                    "ko": "장",
+                    "zh-Hans": "章",
+                    "zh-Hant": "章"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                },
+                {
+                  "id": "episode",
+                  "labels": {
+                    "de": "Folge",
+                    "en": "episode",
+                    "es": "episodio",
+                    "fr": "épisode",
+                    "ja": "エピソード",
+                    "ko": "에피소드",
+                    "zh-Hans": "集",
+                    "zh-Hant": "集"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                },
+                {
+                  "id": "volume",
+                  "labels": {
+                    "de": "Band",
+                    "en": "volume",
+                    "es": "tomo",
+                    "fr": "volume",
+                    "ja": "巻",
+                    "ko": "권",
+                    "zh-Hans": "卷",
+                    "zh-Hant": "卷"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                },
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                },
+                {
+                  "id": "percent",
+                  "labels": {
+                    "de": "Prozent",
+                    "en": "percent",
+                    "es": "porcentaje",
+                    "fr": "pourcentage",
+                    "ja": "パーセント",
+                    "ko": "퍼센트",
+                    "zh-Hans": "百分比",
+                    "zh-Hant": "百分比"
+                  },
+                  "maximum": "100",
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "dimension": "percent",
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            },
+            {
+              "mode": "cursor_position",
+              "units": [
+                {
+                  "id": "page",
+                  "labels": {
+                    "de": "Seite",
+                    "en": "page",
+                    "es": "página",
+                    "fr": "page",
+                    "ja": "ページ",
+                    "ko": "쪽",
+                    "zh-Hans": "页",
+                    "zh-Hant": "頁"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "chapter",
+                  "labels": {
+                    "de": "Kapitel",
+                    "en": "chapter",
+                    "es": "capítulo",
+                    "fr": "chapitre",
+                    "ja": "章",
+                    "ko": "장",
+                    "zh-Hans": "章",
+                    "zh-Hant": "章"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "episode",
+                  "labels": {
+                    "de": "Folge",
+                    "en": "episode",
+                    "es": "episodio",
+                    "fr": "épisode",
+                    "ja": "エピソード",
+                    "ko": "에피소드",
+                    "zh-Hans": "集",
+                    "zh-Hant": "集"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "volume",
+                  "labels": {
+                    "de": "Band",
+                    "en": "volume",
+                    "es": "tomo",
+                    "fr": "volume",
+                    "ja": "巻",
+                    "ko": "권",
+                    "zh-Hans": "卷",
+                    "zh-Hant": "卷"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "percent",
+                  "labels": {
+                    "de": "Prozent",
+                    "en": "percent",
+                    "es": "porcentaje",
+                    "fr": "pourcentage",
+                    "ja": "パーセント",
+                    "ko": "퍼센트",
+                    "zh-Hans": "百分比",
+                    "zh-Hant": "百分比"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "dimension": "percent",
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                }
+              ]
+            },
+            {
+              "mode": "completed_units",
+              "units": [
+                {
+                  "id": "page",
+                  "labels": {
+                    "de": "Seite",
+                    "en": "page",
+                    "es": "página",
+                    "fr": "page",
+                    "ja": "ページ",
+                    "ko": "쪽",
+                    "zh-Hans": "页",
+                    "zh-Hant": "頁"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "chapter",
+                  "labels": {
+                    "de": "Kapitel",
+                    "en": "chapter",
+                    "es": "capítulo",
+                    "fr": "chapitre",
+                    "ja": "章",
+                    "ko": "장",
+                    "zh-Hans": "章",
+                    "zh-Hant": "章"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "episode",
+                  "labels": {
+                    "de": "Folge",
+                    "en": "episode",
+                    "es": "episodio",
+                    "fr": "épisode",
+                    "ja": "エピソード",
+                    "ko": "에피소드",
+                    "zh-Hans": "集",
+                    "zh-Hant": "集"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "volume",
+                  "labels": {
+                    "de": "Band",
+                    "en": "volume",
+                    "es": "tomo",
+                    "fr": "volume",
+                    "ja": "巻",
+                    "ko": "권",
+                    "zh-Hans": "卷",
+                    "zh-Hant": "卷"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "minute",
+                  "labels": {
+                    "de": "Minute",
+                    "en": "minute",
+                    "es": "minuto",
+                    "fr": "minute",
+                    "ja": "分",
+                    "ko": "분",
+                    "zh-Hans": "分钟",
+                    "zh-Hant": "分鐘"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                },
+                {
+                  "id": "percent",
+                  "labels": {
+                    "de": "Prozent",
+                    "en": "percent",
+                    "es": "porcentaje",
+                    "fr": "pourcentage",
+                    "ja": "パーセント",
+                    "ko": "퍼센트",
+                    "zh-Hans": "百分比",
+                    "zh-Hant": "百分比"
+                  },
+                  "minimum": "0",
+                  "identity": { "kind": "session_local" },
+                  "dimension": "percent",
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "forbidden"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
+      },
+      "visual-novel.reading": {
+        "id": "visual-novel.reading",
+        "copies": {
+          "kinds": [
+            {
+              "id": "physical",
+              "labels": {
+                "de": "Physisch",
+                "en": "Physical",
+                "es": "Físico",
+                "fr": "Physique",
+                "ja": "物理",
+                "ko": "실물",
+                "zh-Hans": "实体",
+                "zh-Hant": "實體"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                },
+                {
+                  "id": "disposed",
+                  "labels": {
+                    "de": "Abgegeben",
+                    "en": "Disposed",
+                    "es": "Desprendido",
+                    "fr": "Cédé",
+                    "ja": "手放した",
+                    "ko": "처분함",
+                    "zh-Hans": "已处置",
+                    "zh-Hant": "已處置"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "digital",
+              "labels": {
+                "de": "Digital",
+                "en": "Digital",
+                "es": "Digital",
+                "fr": "Numérique",
+                "ja": "デジタル",
+                "ko": "디지털",
+                "zh-Hans": "数字",
+                "zh-Hant": "數位"
+              },
+              "statuses": [
+                {
+                  "id": "owned",
+                  "labels": {
+                    "de": "Im Besitz",
+                    "en": "Owned",
+                    "es": "En propiedad",
+                    "fr": "Possédé",
+                    "ja": "所持",
+                    "ko": "소장",
+                    "zh-Hans": "拥有",
+                    "zh-Hant": "擁有"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "progress": {
+          "allowed": [
+            {
+              "mode": "scalar_amount",
+              "units": [
+                {
+                  "id": "percent",
+                  "labels": {
+                    "de": "Prozent",
+                    "en": "percent",
+                    "es": "porcentaje",
+                    "fr": "pourcentage",
+                    "ja": "パーセント",
+                    "ko": "퍼센트",
+                    "zh-Hans": "百分比",
+                    "zh-Hant": "百分比"
+                  },
+                  "maximum": "100",
+                  "minimum": "0",
+                  "identity": { "kind": "none" },
+                  "dimension": "percent",
+                  "structure": { "kind": "none" },
+                  "totalPolicy": "optional"
+                }
+              ]
+            }
+          ]
+        },
+        "entryStateSet": {
+          "id": "legacy-five",
+          "states": [
+            {
+              "id": "planned",
+              "role": "planned",
+              "labels": {
+                "de": "Geplant",
+                "en": "Planned",
+                "es": "Planeado",
+                "fr": "Prévu",
+                "ja": "予定",
+                "ko": "예정",
+                "zh-Hans": "计划",
+                "zh-Hant": "計劃"
+              }
+            },
+            {
+              "id": "in_progress",
+              "role": "active",
+              "labels": {
+                "de": "In Arbeit",
+                "en": "In progress",
+                "es": "En curso",
+                "fr": "En cours",
+                "ja": "進行中",
+                "ko": "진행 중",
+                "zh-Hans": "进行中",
+                "zh-Hant": "進行中"
+              }
+            },
+            {
+              "id": "completed",
+              "role": "completed",
+              "labels": {
+                "de": "Abgeschlossen",
+                "en": "Completed",
+                "es": "Completado",
+                "fr": "Terminé",
+                "ja": "完了",
+                "ko": "완료",
+                "zh-Hans": "已完成",
+                "zh-Hant": "已完成"
+              }
+            },
+            {
+              "id": "paused",
+              "role": "paused",
+              "labels": {
+                "de": "Pausiert",
+                "en": "Paused",
+                "es": "En pausa",
+                "fr": "En pause",
+                "ja": "中断",
+                "ko": "일시 중지",
+                "zh-Hans": "暂停",
+                "zh-Hant": "暫停"
+              }
+            },
+            {
+              "id": "dropped",
+              "role": "dropped",
+              "labels": {
+                "de": "Abgebrochen",
+                "en": "Dropped",
+                "es": "Abandonado",
+                "fr": "Abandonné",
+                "ja": "断念",
+                "ko": "중단",
+                "zh-Hans": "放弃",
+                "zh-Hant": "放棄"
+              }
+            }
+          ]
+        },
+        "importSources": []
       }
     }
   },

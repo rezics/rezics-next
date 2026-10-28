@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: 'Softwareveröffentlichung'
   wd:Q209163: 'Computerspiel-Erweiterung'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  game.release:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"
+  game.addon:
+    states:
+      planned: "Geplant"
+      in_progress: "In Arbeit"
+      completed: "Abgeschlossen"
+      paused: "Pausiert"
+      dropped: "Abgebrochen"
+    units:
+      scalar_amount:
+        minute: "Minute"
+    copyKinds:
+      physical: "Physisch"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Im Besitz"
+        disposed: "Abgegeben"
+      digital:
+        owned: "Im Besitz"

@@ -9,3 +9,23 @@ inverseProperties:
   wdt:P144: 'Adaptations'
   wdt:P361: 'Parties'
   rezics:spinOffOf: 'Œuvres dérivées'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: "Prévu"
+      in_progress: "En cours"
+      completed: "Terminé"
+      paused: "En pause"
+      dropped: "Abandonné"
+    units:
+      scalar_amount:
+        percent: "pourcentage"
+    copyKinds:
+      physical: "Physique"
+      digital: "Numérique"
+    copyStatuses:
+      physical:
+        owned: "Possédé"
+        disposed: "Cédé"
+      digital:
+        owned: "Possédé"

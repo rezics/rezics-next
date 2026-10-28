@@ -32,6 +32,32 @@ classes:
       - keywords
       - partOfSeries
     annotations:
+      library:
+        id: book.reading
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: page
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: author genre keywords partOfSeries datePublished contributor inLanguage
       schema_org_type: https://schema.org/Book
   Edition:
@@ -60,8 +86,78 @@ classes:
       - inLanguage
       - translator
     annotations:
+      library:
+        id: book.edition
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: page
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage illustrator director musicBy producer productionCompany screenwriter developer voiceActor
       schema_org_type: https://schema.org/Book
+  LegacyFixedProfile:
+    abstract: true
+    annotations:
+      library:
+        id: legacy-fixed-v1
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - { id: page, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - { id: chapter, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - { id: episode, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - { id: volume, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - { id: minute, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - { id: percent, dimension: percent, minimum: '0', maximum: '100', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+            - mode: cursor_position
+              units:
+                - { id: page, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - { id: chapter, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - { id: episode, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - { id: volume, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - { id: minute, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+                - { id: percent, dimension: percent, minimum: '0', totalPolicy: forbidden, identity: { kind: none }, structure: { kind: none } }
+            - mode: completed_units
+              units:
+                - { id: page, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - { id: chapter, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - { id: episode, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - { id: volume, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - { id: minute, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+                - { id: percent, dimension: percent, minimum: '0', totalPolicy: forbidden, identity: { kind: session_local }, structure: { kind: none } }
+        copies:
+          kinds:
+            - id: legacy-unspecified
+              statuses: [{ id: ordered }, { id: owned }, { id: lent }, { id: disposed }]
+        importSources: []
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork

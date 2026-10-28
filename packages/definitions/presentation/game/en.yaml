@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: 'software release'
   wd:Q209163: 'expansion add-on'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"
+  game.release:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"
+  game.addon:
+    states:
+      planned: "Planned"
+      in_progress: "In progress"
+      completed: "Completed"
+      paused: "Paused"
+      dropped: "Dropped"
+    units:
+      scalar_amount:
+        minute: "minute"
+    copyKinds:
+      physical: "Physical"
+      digital: "Digital"
+    copyStatuses:
+      physical:
+        owned: "Owned"
+        disposed: "Disposed"
+      digital:
+        owned: "Owned"

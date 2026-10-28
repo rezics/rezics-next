@@ -11,3 +11,79 @@ inverseProperties:
   schema:exampleOfWork: '版本'
   schema:publisher: '出版作品'
   schema:translator: '翻譯作品'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: "計劃"
+      in_progress: "進行中"
+      completed: "已完成"
+      paused: "暫停"
+      dropped: "放棄"
+    units:
+      scalar_amount:
+        page: "頁"
+    copyKinds:
+      physical: "實體"
+      digital: "數位"
+    copyStatuses:
+      physical:
+        owned: "擁有"
+        disposed: "已處置"
+      digital:
+        owned: "擁有"
+  book.edition:
+    states:
+      planned: "計劃"
+      in_progress: "進行中"
+      completed: "已完成"
+      paused: "暫停"
+      dropped: "放棄"
+    units:
+      scalar_amount:
+        page: "頁"
+    copyKinds:
+      physical: "實體"
+      digital: "數位"
+    copyStatuses:
+      physical:
+        owned: "擁有"
+        disposed: "已處置"
+      digital:
+        owned: "擁有"
+  legacy-fixed-v1:
+    states:
+      planned: "計劃"
+      in_progress: "進行中"
+      completed: "已完成"
+      paused: "暫停"
+      dropped: "放棄"
+    units:
+      scalar_amount:
+        page: "頁"
+        chapter: "章"
+        episode: "集"
+        minute: "分鐘"
+        volume: "卷"
+        percent: "百分比"
+      cursor_position:
+        page: "頁"
+        chapter: "章"
+        episode: "集"
+        minute: "分鐘"
+        volume: "卷"
+        percent: "百分比"
+      completed_units:
+        page: "頁"
+        chapter: "章"
+        episode: "集"
+        minute: "分鐘"
+        volume: "卷"
+        percent: "百分比"
+    copyKinds:
+      legacy-unspecified: "未指定"
+    copyStatuses:
+      legacy-unspecified:
+        ordered: "已訂購"
+        owned: "擁有"
+        lent: "已借出"
+        disposed: "已處置"

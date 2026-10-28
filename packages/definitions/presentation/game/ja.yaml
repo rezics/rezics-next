@@ -23,3 +23,61 @@ inverseProperties:
 typeDescriptions:
   wd:Q20631656: 'ソフトウェア・リリース'
   wd:Q209163: '拡張パック'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: "予定"
+      in_progress: "進行中"
+      completed: "完了"
+      paused: "中断"
+      dropped: "断念"
+    units:
+      scalar_amount:
+        minute: "分"
+    copyKinds:
+      physical: "物理"
+      digital: "デジタル"
+    copyStatuses:
+      physical:
+        owned: "所持"
+        disposed: "手放した"
+      digital:
+        owned: "所持"
+  game.release:
+    states:
+      planned: "予定"
+      in_progress: "進行中"
+      completed: "完了"
+      paused: "中断"
+      dropped: "断念"
+    units:
+      scalar_amount:
+        minute: "分"
+    copyKinds:
+      physical: "物理"
+      digital: "デジタル"
+    copyStatuses:
+      physical:
+        owned: "所持"
+        disposed: "手放した"
+      digital:
+        owned: "所持"
+  game.addon:
+    states:
+      planned: "予定"
+      in_progress: "進行中"
+      completed: "完了"
+      paused: "中断"
+      dropped: "断念"
+    units:
+      scalar_amount:
+        minute: "分"
+    copyKinds:
+      physical: "物理"
+      digital: "デジタル"
+    copyStatuses:
+      physical:
+        owned: "所持"
+        disposed: "手放した"
+      digital:
+        owned: "所持"

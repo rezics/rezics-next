@@ -17,9 +17,22 @@ const stateWords = {
 };
 const unitWords: Record<string, readonly string[]> = {
   page: ['Seite', 'page', 'página', 'page', 'ページ', '쪽', '页', '頁'],
+  chapter: ['Kapitel', 'chapter', 'capítulo', 'chapitre', '章', '장', '章', '章'],
   episode: ['Folge', 'episode', 'episodio', 'épisode', 'エピソード', '에피소드', '集', '集'],
   minute: ['Minute', 'minute', 'minuto', 'minute', '分', '분', '分钟', '分鐘'],
+  volume: ['Band', 'volume', 'tomo', 'volume', '巻', '권', '卷', '卷'],
   percent: ['Prozent', 'percent', 'porcentaje', 'pourcentage', 'パーセント', '퍼센트', '百分比', '百分比'],
+};
+const copyKindWords: Record<string, readonly string[]> = {
+  physical: ['Physisch', 'Physical', 'Físico', 'Physique', '物理', '실물', '实体', '實體'],
+  digital: ['Digital', 'Digital', 'Digital', 'Numérique', 'デジタル', '디지털', '数字', '數位'],
+  'legacy-unspecified': ['Nicht näher bestimmt', 'Unspecified', 'Sin especificar', 'Non précisé', '未指定', '미지정', '未指定', '未指定'],
+};
+const copyStatusWords: Record<string, readonly string[]> = {
+  ordered: ['Bestellt', 'Ordered', 'Pedido', 'Commandé', '注文済み', '주문함', '已订购', '已訂購'],
+  owned: ['Im Besitz', 'Owned', 'En propiedad', 'Possédé', '所持', '소장', '拥有', '擁有'],
+  lent: ['Verliehen', 'Lent', 'Prestado', 'Prêté', '貸出中', '대여 중', '已借出', '已借出'],
+  disposed: ['Abgegeben', 'Disposed', 'Desprendido', 'Cédé', '手放した', '처분함', '已处置', '已處置'],
 };
 
 export const MODES = ['scalar_amount', 'cursor_position', 'completed_units'] as const;
@@ -31,6 +44,7 @@ export function unitData(id: string, mode: string = 'scalar_amount'): ProfileDat
     totalPolicy: mode === 'scalar_amount' ? 'optional' : 'forbidden',
     identity: { kind: mode === 'completed_units' ? 'session_local' : 'none' },
     structure: { kind: 'none' },
+    ...(id === 'percent' ? { dimension: 'percent' } : {}),
     ...(id === 'percent' && mode === 'scalar_amount' ? { maximum: '100' } : {}),
   };
 }
@@ -86,11 +100,11 @@ export function libraryLabels(profile: ProfileData, locale: (typeof LIBRARY_LOCA
       : {}),
     ...(profile.copies
       ? {
-          copyKinds: Object.fromEntries(profile.copies.kinds.map((k: ProfileData) => [k.id, k.id])),
+          copyKinds: Object.fromEntries(profile.copies.kinds.map((k: ProfileData) => [k.id, copyKindWords[k.id]?.[n] ?? k.id])),
           copyStatuses: Object.fromEntries(
             profile.copies.kinds.map((k: ProfileData) => [
               k.id,
-              Object.fromEntries(k.statuses.map((s: ProfileData) => [s.id, s.id])),
+              Object.fromEntries(k.statuses.map((s: ProfileData) => [s.id, copyStatusWords[s.id]?.[n] ?? s.id])),
             ]),
           ),
         }

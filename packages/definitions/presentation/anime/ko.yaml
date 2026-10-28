@@ -18,3 +18,80 @@ inverseProperties:
   schema:isPartOf: '에피소드'
   wdt:P449: '최초 방영 작품'
   wdt:P7937: '이 형식의 작품'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        episode: "에피소드"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  anime.season:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        episode: "에피소드"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  anime.episode:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        minute: "분"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
+  anime.film:
+    states:
+      planned: "예정"
+      in_progress: "진행 중"
+      completed: "완료"
+      paused: "일시 중지"
+      dropped: "중단"
+    units:
+      scalar_amount:
+        minute: "분"
+    copyKinds:
+      physical: "실물"
+      digital: "디지털"
+    copyStatuses:
+      physical:
+        owned: "소장"
+        disposed: "처분함"
+      digital:
+        owned: "소장"
