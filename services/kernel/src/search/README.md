@@ -134,16 +134,25 @@ uses the existing transport: complete common page 200, explicit preparation 202 
 503 Problem + Retry-After without cursor. No partial common page. Web follows at most four 202 steps then renders
 private/no-store preparing with continuation retained. Progress names retained preparation/current generation,
 never cached permissions, per-leaf verdicts or a client result vector. No schema/codec/status change is selected.
-The native `createPersonas` suspended credential is a pre-suspension bearer: Accounts suspension advances the
-authentication floor before session revocation, so Search and Pages reject that old bearer with 401
-`invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"`; it never downgrades to anonymous. Auth
-mints active accounts only. A correct-password sign-in for a suspended account returns 403 `ACCOUNT_SUSPENDED`
+The [Search supervisor](../../test/search/support/outcome-supervisor.ts) calls `createSemanticDriver` in the
+[Semantic outcome driver](../../test/semantic/outcome-driver.ts), which creates its own named `suspended` account,
+issues an ordinary Auth bearer, then calls the real `createSuspensionCommands.suspend` with an authenticated
+governor and native Access. The [Pages outcome driver](../../test/presentation/outcome-driver.ts) wraps that driver.
+None calls `createPersonas`; the canonical [personas fixture](../../test/support/personas.ts) demonstrates the same
+native suspension contract with a separate builder and account instance. These drivers do not synthesize SQL
+suspension state or tokens. Accounts suspension advances the
+[authentication floor](../access/authenticate.ts) before session revocation
+([suspension command](../access/suspension.ts)), so Search and Pages reject the pre-suspension bearer with JSON
+401 `invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"`; it never downgrades to anonymous.
+Auth mints active accounts only. A correct-password sign-in for a suspended account returns 403 `ACCOUNT_SUSPENDED`
 without issuing a session, while a wrong password remains ordinary 401; Accounts owns that native producer case,
 pending its native acceptance receipt. Kernel 403 `account_suspended` for a hypothetical verified suspended bearer
-is a defensive branch, not the native suspended-persona outcome. The canonical
-[personas fixture](../../test/support/personas.ts) provisions and suspends the account natively; Search binds it
-through its [supervisor](../../test/search/support/outcome-supervisor.ts) and [Semantic outcome driver](../../test/semantic/outcome-driver.ts),
-while Pages binds it through the [Pages outcome driver](../../test/presentation/outcome-driver.ts).
+is a defensive branch, not the native suspended-persona outcome.
+
+Owner-document adoption supplies no native pass. The prior native acceptance ran once and failed inherited
+default-module startup and the Pages deadline; those failures remain required evidence. The prior root typecheck
+recorded exit 0. No native, full or root check is rerun for this adoption; the full main/root gate remains unproven.
+Native closure still requires all original cases and actual new persona/sign-in receipts, with no skips.
 
 The [integration audit](../../../../docs/research/semantic-integration-audit-zone-composition.md) establishes the
 resource substrate, not actual membership/page/default execution or Zone-specific withholding/purge/account/

@@ -5,7 +5,11 @@ This is the Search start and closure inventory required by the adopted
 It adds no product authority, endpoint, fixture implementation or frozen assertion. [Search](search.md),
 [first-public scope](../scope.md) and [Filtered lists](../filtered-lists.md) retain their authority.
 Source inspection baseline: `a42079db4768720dc6075884b5486bbfef42289c`.
-No native capability command was run for this inventory; no capability is promoted or complete.
+This owner-document adoption runs only the formatter acceptance; it supplies no native pass or promotion.
+The prior native acceptance ran once and failed inherited default-module startup and the Pages deadline; those
+failures remain required capability evidence. The prior root typecheck recorded exit 0. No native, full or root
+check is rerun for this adoption; the full main/root gate remains unproven. Native closure still requires every
+original case and actual new persona/sign-in receipts, with no skips.
 
 ## Evidence rules and common boundaries
 
@@ -23,19 +27,22 @@ credentials. Existing SearchDriver exposes only anonymous/editor/acceptor/suspen
 of acceptor.
 The other personas require real native fixture extensions; a public grant cannot stand in for them. Public output
 never borrows an editor's private authority. A grant on a Collection or Zone grants nothing in its sources.
-Bans beat independent grants. The native suspended fixture is created by `createPersonas` in
-[personas.ts](../../services/kernel/test/support/personas.ts): it receives an ordinary Auth bearer, then the
-fixture suspends the account through the native account command ([suspension](../../services/kernel/src/access/suspension.ts),
-[authentication floor](../../services/kernel/src/access/authenticate.ts)). That pre-suspension bearer is rejected as
-`401 invalid_credentials` with `WWW-Authenticate: Bearer error="invalid_token"`; revoked credentials remain a
-separate 401 control, and neither downgrades to anonymous. Auth mints active accounts only; correct-password
-sign-in for a suspended account returns `403 ACCOUNT_SUSPENDED` without a session, while wrong-password sign-in
-remains ordinary 401. Accounts owns that sign-in producer case; its native acceptance receipt is pending. A kernel
-`403 account_suspended` for a hypothetical verified suspended bearer is defensive only. Search and Pages drivers
-bind the fixture's real suspended account ([Search supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)
-via the [Semantic outcome driver](../../services/kernel/test/semantic/outcome-driver.ts), and
-[Pages outcome driver](../../services/kernel/test/presentation/outcome-driver.ts)); see their outcome suites for
-current API evidence. These rulings supersede the earlier valid-suspended-persona interpretation.
+Bans beat independent grants. The [Search supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)
+calls `createSemanticDriver` in the [Semantic outcome driver](../../services/kernel/test/semantic/outcome-driver.ts).
+That driver creates its own named `suspended` account, issues an ordinary Auth bearer, then calls the real
+`createSuspensionCommands.suspend` with an authenticated governor and native Access
+([suspension](../../services/kernel/src/access/suspension.ts),
+[authentication floor](../../services/kernel/src/access/authenticate.ts)). The
+[Pages outcome driver](../../services/kernel/test/presentation/outcome-driver.ts) wraps that Semantic driver.
+None calls `createPersonas`; the canonical [personas.ts](../../services/kernel/test/support/personas.ts) demonstrates
+the same native suspension contract with a separate builder and account instance. These drivers do not synthesize
+SQL suspension state or tokens. Accounts suspension advances the authentication floor before session revocation.
+The pre-suspension bearer is rejected as JSON `401 invalid_credentials` with
+`WWW-Authenticate: Bearer error="invalid_token"`; revoked credentials remain a separate 401 control, and neither
+downgrades to anonymous. Auth mints active accounts only; correct-password sign-in for a suspended account returns
+`403 ACCOUNT_SUSPENDED` without a session, while wrong-password sign-in remains ordinary 401. Accounts owns that
+sign-in producer case; its native acceptance receipt is pending. A kernel `403 account_suspended` for a hypothetical
+verified suspended bearer is defensive only.
 
 Shared producer/consumer boundaries: Semantic owns released meanings, complete selected-public projections,
 original/terminal identity and Zones; Imports owns reviewed provider mappings; Commerce owns common Collections,
@@ -297,22 +304,23 @@ public/hidden/taken-down controls, request budget boundaries and opaque cursors.
 
 **Frozen scenarios and binding:** reuse original typeahead, text admission, filter admission, unavailable and rebuild
 scenario titles in the ledger, plus source privacy originals. Search public service and HTTP admission must agree;
-400 malformed envelope and422 unsupported plan are distinct. Valid suspended403 conflicts with original frozen401;
-Accounts/Search own reconciliation, not a weaker duplicate. Delegated/unscoped/revoked fixture coverage remains
-REQUIRED NOT YET FROZEN/BOUND where the existing driver cannot express it.
+400 malformed envelope and422 unsupported plan are distinct. The native pre-suspension bearer returns JSON
+401 `invalid_credentials` with `WWW-Authenticate: Bearer error="invalid_token"`; the verified-suspended403 branch is
+defensive only. Delegated/unscoped/revoked fixture coverage remains REQUIRED NOT YET FROZEN/BOUND where the existing
+driver cannot express it.
 
 **Native wrapper/command:** SearchDriver via Search wrapper;
 `bun run --cwd services/kernel check test/search/outcomes.test.ts`.
 No new suggest suite is needed for already frozen prefixes/operators/budgets; extend only missing persona/source
 outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and composition-and-profile-governance.
 
-| Stage                                   | Evidence                                                                                  |
-| --------------------------------------- | ----------------------------------------------------------------------------------------- |
-| specification validated red             | Original assertions present; measured red not recorded; persona reconciliation remains.   |
-| native driver registered                | Original Search wrapper registered; expanded personas unbound.                            |
-| implementation exposed                  | Public suggest/search mounted; full current persona and cross-surface admission unproven. |
-| user-case native pass at named revision | None recorded for this capability.                                                        |
-| promoted                                | No main closure evidence.                                                                 |
+| Stage                                   | Evidence                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| specification validated red             | Original assertions present; measured red not recorded; expanded persona coverage remains unbound. |
+| native driver registered                | Original Search wrapper registered; expanded personas unbound.                                     |
+| implementation exposed                  | Public suggest/search mounted; full current persona and cross-surface admission unproven.          |
+| user-case native pass at named revision | None recorded for this capability.                                                                 |
+| promoted                                | No main closure evidence.                                                                          |
 
 ## index-and-default-runtime
 
