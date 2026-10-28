@@ -82,7 +82,8 @@ a served-page binding marked pending does not become covered merely by linking a
 - **Personas**: Anonymous, Alice, native suspended persona; real dependency outage and projection barrier.
 - **Fixture data**: Cold subject view held behind its real worker, unavailable owner, private/unknown Collection,
   empty public list, native `suspended` persona from `services/kernel/test/support/personas.ts` with a
-  pre-suspension bearer revoked by suspension (401 invalid_token); correct-password sign-in is refused with
+  pre-suspension bearer revoked by suspension (HTTP 401, problem code `invalid_credentials`,
+  `WWW-Authenticate: Bearer error="invalid_token"`); correct-password sign-in is refused with
   403 ACCOUNT_SUSPENDED and creates no session.
 - **Surfaces**:
   catalogue — preparing/unavailable cases below.  
@@ -96,7 +97,7 @@ a served-page binding marked pending does not become covered merely by linking a
   `page-states: unavailable owner read serves an unavailable page with Retry-After`;
   `page-states: private Collection is indistinguishable from missing to anonymous`;
   `page-states: empty public list explicitly says it is empty`;
-  `page-states: native suspended persona personal read is 401 invalid_token without personal content`.
+  `page-states: native suspended persona personal read is 401 invalid_credentials with invalid_token challenge and no personal content`.
 - **Acceptance command**: `bun specs/support/verify-outcome-suite.ts specs/web-publication-outcomes.test.ts WEB_PUBLICATION_DRIVER "Web publication driver is required"`.
 
 ## Search page
@@ -227,7 +228,8 @@ a served-page binding marked pending does not become covered merely by linking a
   `specs/content-thread-outcomes.test.ts` (`anonymous reads published thread post and reply but cannot create or revise`),
   `specs/content-notification-outcomes.test.ts` and native rating/moderation cases. Their full web bindings remain pending.
   New served cases use the native `suspended` persona from `services/kernel/test/support/personas.ts`:
-  its pre-suspension bearer gets `401 invalid_token`, and correct-password sign-in gets
+  its pre-suspension bearer gets HTTP 401 with problem code `invalid_credentials` and
+  `WWW-Authenticate: Bearer error="invalid_token"`, and correct-password sign-in gets
   `403 ACCOUNT_SUSPENDED` with no session; ban precedence still applies.
   Older contradictory owner assertions are not silently edited or adopted here.
 - **Acceptance command**: Publication verifier above for discovery/cache cells. Owner acceptance:

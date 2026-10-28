@@ -26,7 +26,8 @@
  * Governance and seller accounts have only fixture-scoped setup authority.
  * The suspended persona follows native `suspended` from
  * services/kernel/test/support/personas.ts: suspend('alice') retains her pre-suspension
- * credentials, now revoked (401 invalid_token), and cookies. No SQL-made token or
+ * credentials, now revoked (HTTP 401, problem code invalid_credentials,
+ * WWW-Authenticate: Bearer error="invalid_token"), and cookies. No SQL-made token or
  * fake persona is permitted; correct-password sign-in is 403 ACCOUNT_SUSPENDED
  * and creates no session.
  *

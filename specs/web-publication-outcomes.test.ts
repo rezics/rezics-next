@@ -464,12 +464,13 @@ describe('page-states', () => {
     expect(page.visible).not.toContain(data.states.unavailable);
     expect(page.visible).not.toContain(data.states.preparing);
   });
-  test('page-states: native suspended persona personal read is 401 invalid_token without personal content', async () => {
+  test('page-states: native suspended persona personal read is 401 invalid_credentials with invalid_token challenge and no personal content', async () => {
     const response = await driver.request(fixture.personalRead, 'suspended');
     expect(response.status).toBe(401);
     expect(response.headers.get('content-type')).toContain('application/problem+json');
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
     const body = await response.text();
-    expect(JSON.parse(body)).toMatchObject({ status: 401, code: 'invalid_token' });
+    expect(JSON.parse(body)).toMatchObject({ status: 401, code: 'invalid_credentials' });
     for (const value of Object.values(data.personal)) expect(body).not.toContain(value);
   });
 });
