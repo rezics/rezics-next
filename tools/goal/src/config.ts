@@ -508,6 +508,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       await pump();
       await job.drain();
     },
+    drainJobs: () => job.drain(),
     close() {
       db.close();
     },
