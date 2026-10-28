@@ -1,5 +1,6 @@
 import type { FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
+import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
@@ -19,34 +20,6 @@ export type FactClause =
       | { values: readonly string[] }
       | { range: FilterRange }
     ));
-
-function holds(subject: IndexedSubject, clause: FactClause): boolean {
-  if (clause.facet === 'type') return clause.values.includes(subject.type);
-  return subject.statements.some((statement) => {
-    if (statement.property !== clause.property) return false;
-    if ('values' in clause) {
-      if (!clause.values.includes(statement.value)) return false;
-    } else {
-      const { gte, lte, unit } = clause.range;
-      const facet = statement.facet;
-      let value: number;
-      if (unit === undefined) {
-        if (facet?.kind !== 'time') return false;
-        value = facet.year;
-      } else {
-        if (facet?.kind !== 'quantity' || facet.unit !== unit) return false;
-        value = facet.amount;
-      }
-      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
-        return false;
-    }
-    return (clause.qualifiers ?? []).every((qualifier) =>
-      statement.qualifiers?.some(
-        (value) => value.property === qualifier.property && qualifier.in.includes(value.value),
-      ),
-    );
-  });
-}
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
@@ -130,7 +103,10 @@ export async function checkHits(
             if (clause.facet === 'statement' && (overflow || live) && clause.qualifiers !== undefined)
               throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
             if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live)) {
-              values[leaf] = holds(subject, clause);
+              values[leaf] =
+                clause.facet === 'type'
+                  ? holdsCurrentType(subject.type, clause)
+                  : holdsCurrentStatements(subject.statements, clause);
               continue;
             }
             values[leaf] = sortedValues(clause.values).map((value) => {
@@ -167,7 +143,12 @@ export async function checkHits(
         if (
           !hit.matched.every((name) => {
             const clause = clauses.get(name);
-            return clause === undefined || holds(subject, clause);
+            return (
+              clause === undefined ||
+              (clause.facet === 'type'
+                ? holdsCurrentType(subject.type, clause)
+                : holdsCurrentStatements(subject.statements, clause))
+            );
           })
         )
           continue;

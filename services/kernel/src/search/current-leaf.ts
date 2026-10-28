@@ -2,9 +2,8 @@ import type { FactClause } from './disclosure/check.ts';
 import type { IndexedStatement } from './source.ts';
 
 /** Match the current type by exact membership in the clause's values. */
-export function holdsCurrentType(_type: string, _clause: Extract<FactClause, { facet: 'type' }>): boolean {
-  // Specification-stage stub; the existing disclosure matcher will be extracted here next.
-  throw new Error('Current type matching is not implemented');
+export function holdsCurrentType(type: string, clause: Extract<FactClause, { facet: 'type' }>): boolean {
+  return clause.values.includes(type);
 }
 
 /**
@@ -15,8 +14,31 @@ export function holdsCurrentType(_type: string, _clause: Extract<FactClause, { f
  * one Boolean planner. Native evidence supplies data/provenance, never another interpreter.
  */
 export function holdsCurrentStatements(
-  _statements: readonly IndexedStatement[],
-  _clause: Extract<FactClause, { facet: 'statement' }>,
+  statements: readonly IndexedStatement[],
+  clause: Extract<FactClause, { facet: 'statement' }>,
 ): boolean {
-  throw new Error('Current statement matching is not implemented');
+  return statements.some((statement) => {
+    if (statement.property !== clause.property) return false;
+    if ('values' in clause) {
+      if (!clause.values.includes(statement.value)) return false;
+    } else {
+      const { gte, lte, unit } = clause.range;
+      const facet = statement.facet;
+      let value: number;
+      if (unit === undefined) {
+        if (facet?.kind !== 'time') return false;
+        value = facet.year;
+      } else {
+        if (facet?.kind !== 'quantity' || facet.unit !== unit) return false;
+        value = facet.amount;
+      }
+      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
+        return false;
+    }
+    return (clause.qualifiers ?? []).every((qualifier) =>
+      statement.qualifiers?.some(
+        (value) => value.property === qualifier.property && qualifier.in.includes(value.value),
+      ),
+    );
+  });
 }
