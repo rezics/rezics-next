@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { loadSettings, createRuntime, type Runtime } from './config.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
-import { WorkerTasks } from './tasks.ts';
+import { BriefContractUnchangedError, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { formatUsageReport, report } from './report.ts';
@@ -92,7 +92,12 @@ export async function runWorkerCommand(
     } else if (command === 'retry') {
       if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
         throw new Error('usage: retry <task> [--brief <file>]');
-      await job.start(arg, argv.length === 3 ? { brief: argv[2]! } : {});
+      try {
+        await job.start(arg, argv.length === 3 ? { brief: argv[2]! } : {});
+      } catch (error) {
+        if (!(error instanceof BriefContractUnchangedError)) throw error;
+        print(error.message);
+      }
     } else if (command === 'stop' || command === 'cancel' || command === 'consult') {
       if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
       if (command === 'stop') await tasks.stop(arg);
