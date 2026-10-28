@@ -359,13 +359,9 @@ export async function batchCommand(
           'code' in error &&
           error.code === '23505' &&
           'constraint' in error &&
-          [
-            'external_claim_pkey',
-            'source_candidate_pkey',
-            'receipt_pkey',
-            'revision_pkey',
-            'candidate_pkey',
-          ].includes(String(error.constraint))
+          ['external_claim_pkey', 'source_candidate_pkey', 'receipt_pkey', 'revision_pkey', 'candidate_pkey'].includes(
+            String(error.constraint),
+          )
         )
           error.code = '40001';
         throw error;
