@@ -358,6 +358,13 @@ threads. Recovery reopens each Codex viewer on the current endpoint with `codex 
 Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
 window and turn-accounting hooks.
 
+When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
+`.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements
+and next actions, then message its supermanager with `continuation written`. A confirmation or a `budgetLimited` Goal
+automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
+prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
+`manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
+
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
