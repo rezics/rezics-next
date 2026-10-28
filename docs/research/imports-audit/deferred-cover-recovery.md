@@ -13,7 +13,7 @@ Bun v1.4.3 exited 1: **2 pass, 2 fail, 109 expect() calls**, four tests
 in one file. Normal deferred resolution and interruption after remote success
 before local acknowledgement passed. Both interruption-after-acknowledgement
 cases failed: a new record and a changed record replacing an older cover.
-The failing assertion was `expect(observations).toEqual(...)` at line 178,
+The failing assertion was `expect(observations).toEqual(...)` at line 179,
 with `error: expect(received).toEqual(expected)`.
 
 In both failures, expected `live: [C]`, `bound: [C]`, `proposal: [P]` and
@@ -68,3 +68,9 @@ defects subsection. No reference-project source was named for this surface.
 Decisions: use abort plus the narrow interceptor to prevent in-process retry
 from hiding the crash; retain a durable fake media receipt per request; include
 both optional scenarios because the focused test remains below 260 lines.
+
+Retry at evidence commit `10d764311cf7a2f6fe89697551271a542e096792` added an
+explicit missing-proposal guard to narrow its type for Bun's equality matcher;
+the behavioral assertions are unchanged. The exact local command above again
+exited 1 with **2 pass, 2 fail, 109 expect() calls**. Root, kernel and remote
+checks were excluded by this evidence task's specific check restriction.

@@ -148,7 +148,8 @@ for (const scenario of ['normal', 'before acknowledgement', 'after acknowledgeme
         expect(importer.session.bindings.candidates(owner, 'cover', { limit: 100 }).map((c) => c.candidate))
           .toEqual(scenario === 'before acknowledgement' ? [] : [candidate]);
       }
-      expect(proposal?.op).toBe('propose');
+      if (!proposal) throw new Error('Missing original cover proposal');
+      expect(proposal.op).toBe('propose');
       expect(f.liveCovers()).toEqual([candidate]);
       expect(f.media.size).toBe(changed ? 2 : 1);
       expect(f.availability.slice(changed ? 2 : 0)).toEqual([true, false]);
