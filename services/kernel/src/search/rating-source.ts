@@ -178,6 +178,7 @@ export function normalizePublicRatingFigure(
   if (!Number.isSafeInteger(count) || typeof count !== 'number' || count < 0) return invalidFigure();
   if (!isRatingValue(mean) || !isRatingValue(score) || !isPriorEpoch(priorEpoch)) return invalidFigure();
   if (count === 0 && (mean !== null || score !== null)) return invalidFigure();
+  if (mean !== null && count < 5) return invalidFigure();
   if (score !== null && (mean === null || count < 5 || priorEpoch === null)) return invalidFigure();
   if (!isRevision(fields.revision) || !isRfc3339(fields.asOf)) return invalidFigure();
 
