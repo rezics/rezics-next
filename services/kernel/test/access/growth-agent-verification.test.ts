@@ -192,3 +192,229 @@ test('pending agent verification page stays bounded as decided requests grow', a
     expect(sample.cost.relations?.['access.agent_verification_request']?.rows).toBe(1);
   }
 }, 60_000);
+
+type DecisionOperation = 'review' | 'withdraw' | 'revoke' | 'release';
+type DecisionFixture = {
+  accountId: string;
+  requestId?: string;
+  context: {
+    actor: Awaited<ReturnType<typeof authenticateAccount>>;
+    pool: GrowthDatabase['pool'];
+    deadline: number;
+  };
+};
+
+const decisionFixtures = new Map<DecisionOperation, Map<number, DecisionFixture[]>>();
+const historyOwner = newId(accountRoute);
+
+async function seedDecisionFixtures(
+  database: GrowthDatabase,
+  operation: DecisionOperation,
+  scale: number,
+  count: number,
+): Promise<string[]> {
+  const accountIds = Array.from({ length: count }, () => newId(accountRoute));
+  const verificationReceiptIds = Array.from({ length: count }, () => newId(0));
+  await database.admin.query(
+    `INSERT INTO access.account
+      (route, account_id, kind, state, agent_verified, agent_subject_id,
+       agent_verification_receipt_id, transaction_id)
+     SELECT $1, account_id, 'actor', 'active', $2,
+            CASE WHEN $2 THEN $3::uuid END,
+            CASE WHEN $2 THEN verification_receipt_id END, account_id
+     FROM unnest($4::uuid[], $5::uuid[]) seed(account_id, verification_receipt_id)`,
+    [
+      accountRoute,
+      operation === 'revoke' || operation === 'release',
+      catalogueSubject,
+      accountIds,
+      verificationReceiptIds,
+    ],
+  );
+  if (operation === 'withdraw' || operation === 'release') {
+    await database.admin.query(
+      `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+       SELECT $1, account_id, account_id, 'account:update', '(,)', account_id
+       FROM unnest($2::uuid[]) seed(account_id)`,
+      [accountRoute, accountIds],
+    );
+  }
+
+  const requests = operation === 'review' || operation === 'withdraw' ? accountIds.map(() => newId(0)) : [];
+  if (requests.length) {
+    await database.admin.query(
+      `INSERT INTO access.agent_verification_request
+        (route, request_id, account_id, account_kind, requested_by, catalogue_subject_id,
+         statement, links, state, transaction_id)
+       SELECT 0, request_id, account_id, 'actor', $3, $4,
+              'Pending growth fixture', '[]'::jsonb, 'pending', request_id
+       FROM unnest($1::uuid[], $2::uuid[]) seed(request_id, account_id)`,
+      [
+        requests,
+        accountIds,
+        operation === 'withdraw' ? accountIds[0] : governanceContext.actor.accountId,
+        catalogueSubject,
+      ],
+    );
+  }
+
+  const fixtures: DecisionFixture[] = [];
+  for (const [index, accountId] of accountIds.entries()) {
+    const actor = await authenticateAccount(
+      access,
+      { pool: database.pool, deadline: Date.now() + 600_000 },
+      operation === 'withdraw' || operation === 'release'
+        ? { accountId, clientId: `agent-verification-${operation}-${scale}`, scopes: ['account:update'] }
+        : {
+            accountId: governanceContext.actor.accountId,
+            clientId: governanceContext.actor.clientId,
+            scopes: ['account:verify_agent'],
+          },
+    );
+    fixtures.push({
+      accountId,
+      ...(requests[index] === undefined ? {} : { requestId: requests[index] }),
+      context: { actor, pool: database.pool, deadline: Date.now() + 600_000 },
+    });
+  }
+  const byScale = decisionFixtures.get(operation) ?? new Map<number, DecisionFixture[]>();
+  byScale.set(scale, fixtures);
+  decisionFixtures.set(operation, byScale);
+  return accountIds;
+}
+
+async function seedDecisionHistory(database: GrowthDatabase, count: number, owners: readonly string[]): Promise<void> {
+  const requestIds = Array.from({ length: count }, () => newId(0));
+  const unrelatedAccounts = Array.from({ length: count }, () => newId(0x5236));
+  const subjects = Array.from({ length: count }, () => newId(0x6545));
+  await database.admin.query(
+    `INSERT INTO access.agent_verification_request
+      (route, request_id, account_id, account_kind, requested_by, catalogue_subject_id,
+       statement, links, state, reason, decision_receipt_id, decided_by, transaction_id)
+     SELECT 0, request_id, account_id, 'actor', $3, $4, 'Previously decided request', '[]'::jsonb,
+            'rejected', 'Not approved', request_id, $3, request_id
+     FROM unnest($1::uuid[], $2::uuid[]) seed(request_id, account_id)`,
+    [
+      requestIds,
+      [
+        ...Array.from({ length: count / 2 }, (_, index) => owners[index % owners.length]!),
+        ...unrelatedAccounts.slice(count / 2),
+      ],
+      governanceContext.actor.accountId,
+      catalogueSubject,
+    ],
+  );
+  await database.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     SELECT $1, account_id, 'actor', 'active', account_id
+     FROM unnest($2::uuid[]) seed(account_id)`,
+    [0x5236, unrelatedAccounts.slice(count / 2)],
+  );
+  await database.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     SELECT $1, account_id, 'actor', 'active', account_id
+     FROM unnest($2::uuid[]) seed(account_id)`,
+    [0x5237, Array.from({ length: count / 2 }, () => newId(0x5237))],
+  );
+  const unrelatedResources = Array.from({ length: count }, () => newId(accountRoute));
+  const unrelatedSubjects = Array.from({ length: count }, () => newId(accountRoute));
+  await database.admin.query(
+    `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+     SELECT $1, account_id, 'actor', 'active', account_id
+     FROM unnest($2::uuid[]) seed(account_id)`,
+    [accountRoute, unrelatedResources],
+  );
+  await database.admin.query(
+    `INSERT INTO access.resource_grant
+      (route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT $1, resource_id, subject_id, 'account:update', '(,)', transaction_id
+     FROM unnest($2::uuid[], $3::uuid[], $4::uuid[]) seed(resource_id, subject_id, transaction_id)`,
+    [accountRoute, unrelatedResources, unrelatedSubjects, unrelatedResources],
+  );
+  const unrelatedGroups = Array.from({ length: count }, () => newId(0x5236));
+  await database.admin.query(
+    `INSERT INTO access.membership_inverse
+      (route, account_id, kind, group_id, reservation_id, transaction_id)
+     SELECT $1, account_id, 'organization', group_id, group_id, account_id
+     FROM unnest($2::uuid[], $3::uuid[]) seed(account_id, group_id)`,
+    [0x5236, unrelatedAccounts.slice(count / 2), unrelatedGroups.slice(count / 2)],
+  );
+  await database.admin.query(
+    `INSERT INTO access.resource_role_grant
+      (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
+     SELECT $1, resource_id, 'identity', subject_id, '', 'growth.unrelated', '(,)', resource_id
+     FROM unnest($2::uuid[], $3::uuid[]) seed(resource_id, subject_id)`,
+    [accountRoute, unrelatedResources, unrelatedSubjects],
+  );
+  await database.admin.query(
+    `INSERT INTO access.resource_denial
+      (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     SELECT $1, resource_id, subject_id, '', 'account:update', 'resource', '(,)', resource_id
+     FROM unnest($2::uuid[], $3::uuid[]) seed(resource_id, subject_id)`,
+    [accountRoute, unrelatedResources, unrelatedSubjects],
+  );
+  await database.admin.query(
+    `INSERT INTO access.agent_page(route, subject_id, account_id, verification_receipt_id)
+     SELECT $1, subject_id, $2, subject_id
+     FROM unnest($3::uuid[]) seed(subject_id)`,
+    [0x6545, historyOwner, subjects],
+  );
+  await database.admin.query(
+    `INSERT INTO core.receipt
+      (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
+       epoch, position, transaction_id, response)
+     SELECT 0, 'account', $2, 'growth-agent-verification-history', gen_random_uuid()::text,
+            decode(repeat('ab', 32), 'hex'), 1, 0, gen_random_uuid(), '{}'::jsonb
+     FROM generate_series(1, $1::integer)`,
+    [count, governanceContext.actor.accountId],
+  );
+}
+
+async function runDecisionGrowth(operation: DecisionOperation): Promise<void> {
+  const consumption = new Map<number, number>();
+  const invoke = async (fixture: DecisionFixture) => {
+    if (operation === 'review') {
+      const result = await commands.approve(fixture.context, { requestId: fixture.requestId!, key: randomUUID() });
+      expect(result.value.state).toBe('approving');
+    } else if (operation === 'withdraw') {
+      const result = await commands.withdraw(fixture.context, { accountId: fixture.accountId, key: randomUUID() });
+      expect(result.value.state).toBe('withdrawn');
+    } else if (operation === 'revoke') {
+      const result = await commands.revoke(fixture.context, { accountId: fixture.accountId, key: randomUUID() });
+      expect(result.value.kind).toBe('revoked');
+    } else {
+      const result = await commands.release(fixture.context, { accountId: fixture.accountId, key: randomUUID() });
+      expect(result.value.kind).toBe('released');
+    }
+  };
+  const report = await checkGrowth(db, {
+    name: 'Agent verification decisions stay within their bound as decided requests and pointer history grow',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    warmups: 1,
+    async grow(database, scale, previous) {
+      const owners = await seedDecisionFixtures(database, operation, scale, 6);
+      await seedDecisionHistory(database, (scale - previous) * 16, owners);
+    },
+    async operation(_database, scale) {
+      const fixtures = decisionFixtures.get(operation)?.get(scale);
+      const index = consumption.get(scale) ?? 0;
+      const fixture = fixtures?.[index];
+      if (!fixture) throw new Error(`Missing ${operation} fixture at scale ${scale}, run ${index}`);
+      consumption.set(scale, index + 1);
+      await invoke(fixture);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  for (const sample of report.samples) {
+    expect(sample.cost.statements).toBeGreaterThan(0);
+    expect(sample.cost.relations?.['access.account']?.rows).toBeGreaterThan(0);
+  }
+}
+
+test('Agent verification decisions stay within their bound as decided requests and pointer history grow', async () => {
+  await runDecisionGrowth('review');
+  await runDecisionGrowth('withdraw');
+  await runDecisionGrowth('revoke');
+  await runDecisionGrowth('release');
+}, 120_000);
