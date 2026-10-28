@@ -109,6 +109,8 @@ test('the worker protocol tells workers to run checks in the foreground and neve
     // A base without the wrapper (a stabilize cut older than it) is told to run checks directly.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
     expect(bare).toContain('This base has no scripts/worker-check.ts');
+    // Checks can queue for a long time; uncommitted work at the class time limit was classified as stalled.
+    expect(bare).toContain('before you start a check');
     expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
