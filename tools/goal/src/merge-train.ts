@@ -301,12 +301,13 @@ function isAncestor(cwd: string, ancestor: string, descendant: string): boolean 
   return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
 }
 
-function changedPathsBetween(cwd: string, base: string, head: string): string[] {
+export function changedPathsBetween(cwd: string, base: string, head: string): string[] {
   const changed = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], {
     cwd,
     encoding: 'utf8',
   });
-  if (changed.status !== 0) throw new Error(changed.stderr.trim() || 'Cannot read task changes');
+  if (changed.status !== 0)
+    throw new Error(changed.stderr?.trim() || changed.error?.message || 'Cannot read task changes');
   return changed.stdout.split('\0').filter(Boolean);
 }
 
@@ -1633,8 +1634,12 @@ export class MergeTrain {
         cwd: checkout,
         encoding: 'utf8',
       });
-      if (targetResult.status !== 0)
-        return { error: `branch ${targetBranch} does not exist: ${targetResult.stderr.trim() || 'missing ref'}` };
+      if (targetResult.status !== 0) {
+        const detail = targetResult.stderr?.trim() || targetResult.error?.message || 'missing ref';
+        return {
+          error: `branch ${targetBranch} does not exist: ${detail}`,
+        };
+      }
       const targetHead = targetResult.stdout.trim();
       if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
 

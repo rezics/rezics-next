@@ -72,7 +72,10 @@ function commitFrozenFiles(
 
 export function git(cwd: string, args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(`git ${args[0]}: ${result.stderr.trim()}`);
+  if (result.status !== 0) {
+    const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
+    throw new Error(`git ${args[0]}: ${detail}`);
+  }
   return result.stdout.trimEnd();
 }
 function installWorktreeDependencies(worktree: string): void {
