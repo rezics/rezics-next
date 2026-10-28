@@ -1,6 +1,7 @@
 import canonicalize from 'canonicalize';
 import { SESSION_HEADER } from '../http/request.ts';
 import type { FieldError } from '../http/problem.ts';
+import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { decodeSession, encodeSession, mergeSession } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 
@@ -349,7 +350,10 @@ export async function readPage(options: {
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, distinctReads.length) }, () => worker()));
+  // Both probes and planned reads use public hydration while retaining caller credentials and authority.
+  await withPublicStatementReader(() =>
+    Promise.all(Array.from({ length: Math.min(4, distinctReads.length) }, () => worker())),
+  );
   const failedAt = failures.findIndex((failure) => failure !== undefined);
   if (failedAt !== -1) throw failures[failedAt]!.error;
 
