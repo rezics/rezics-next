@@ -212,9 +212,12 @@ researcher: its report costs review time and adds little.
 ### Pinning a model
 
 A brief normally runs on its class route. Its front matter may instead pin a Codex model and effort, for example
-`model: gpt-6.1-sol` and `effort: max`, which bypasses the class's experiment. Pin only where the route cannot
-express the need, such as the deep researcher above; ordinary work stays on the route so its experiments measure
-it.
+`model: gpt-6.1-sol` and `effort: xhigh`. The pin sets the model and effort for every attempt, including retries, and
+bypasses the class experiment, fallbacks, pacing and three-failure model switch. Pool selection still chooses among
+available pools that serve that Codex profile. If all such pools are exhausted or unavailable, the task waits in the
+ready state rather than switching models. A reshaped brief's pin replaces the prior attempt's profile. Pin only where
+the route cannot express the need, such as the deep researcher above; ordinary work stays on the route so its
+experiments measure it.
 
 ## Watchdog
 
