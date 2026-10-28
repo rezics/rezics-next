@@ -11,9 +11,19 @@ function counter(value: unknown): value is number {
 function completeShards(value: unknown): boolean {
   if (!record(value)) return false;
   const { total, successful, skipped, failed } = value;
-  if (!counter(total) || !counter(successful) || !counter(skipped) || failed !== 0 || skipped > total) return false;
-  // Successful may already include skipped shards, so only require the counters to cover total.
-  return successful >= total - skipped;
+  if (
+    !counter(total) ||
+    !counter(successful) ||
+    !counter(skipped) ||
+    !counter(failed) ||
+    successful !== total ||
+    skipped > total ||
+    failed !== 0
+  ) {
+    return false;
+  }
+  // OpenSearch counts skipped shards as successful, so successful must equal total.
+  return true;
 }
 
 /** Checks native completion metadata only; callers must validate hits, sort tuples and aggregations. */
