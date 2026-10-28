@@ -1718,7 +1718,9 @@ async function main(): Promise<void> {
     if (only.length && !only.includes(name)) continue;
     const file = join(output, `${name}.json`);
     written.push(file);
-    const previous = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
+    const generated = name === 'definitions-active' || name === 'definitions-release';
+    const previous = !generated && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
     await writeFile(file, JSON.stringify(stableRecording(body, previous)));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.

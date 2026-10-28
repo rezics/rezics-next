@@ -1,7 +1,26 @@
 {
-  "digest": "sha256:62ffcac2e2acd972d9c96e71fbad6621aabf50ca71bbaeb78983c94a4ce2cdd5",
+  "digest": "sha256:16dfd18d0c7740238d50c63f8ec4f61bb59d78859ae3b295ed8c5a75e3c32780",
   "release": {
     "types": {
+      "wd:Q2095": {
+        "iri": "http://www.wikidata.org/entity/Q2095",
+        "bases": ["schema:Thing"],
+        "facets": [],
+        "labels": {
+          "de": "Lebensmittel",
+          "en": "food",
+          "es": "alimento",
+          "fr": "aliment",
+          "ja": "食品",
+          "ko": "식품",
+          "zh-Hans": "食物",
+          "zh-Hant": "食物"
+        },
+        "mappings": [],
+        "coverRatio": "1:1",
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "schemaOrgType": "https://schema.org/Thing"
+      },
       "wd:Q95074": {
         "iri": "http://www.wikidata.org/entity/Q95074",
         "bases": ["schema:Thing"],
@@ -83,7 +102,7 @@
           "zh-Hant": "追加內容"
         },
         "mappings": ["wd:Q209163"],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -173,7 +192,7 @@
           "zh-Hant": "視覺小說"
         },
         "mappings": [],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -250,7 +269,7 @@
           "zh-Hant": "版本"
         },
         "mappings": ["wd:Q3331189"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -326,7 +345,7 @@
           "zh-Hant": "書籍"
         },
         "mappings": ["wd:Q47461344"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -370,6 +389,51 @@
         },
         "schemaOrgType": "https://schema.org/Book"
       },
+      "wd:Q2620972": {
+        "iri": "http://www.wikidata.org/entity/Q2620972",
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
+        "labels": {
+          "de": "Handlungsbogen",
+          "en": "story arc",
+          "es": "arco argumental",
+          "fr": "arc narratif",
+          "ja": "ストーリー編",
+          "ko": "이야기 편",
+          "zh-Hans": "故事篇章",
+          "zh-Hant": "故事篇章"
+        },
+        "mappings": [],
+        "coverRatio": "5:7",
+        "properties": [
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:contributor",
+          "schema:genre",
+          "schema:image",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P361"
+        ],
+        "schemaOrgType": "https://schema.org/CreativeWork"
+      },
       "wd:Q7725310": {
         "iri": "http://www.wikidata.org/entity/Q7725310",
         "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
@@ -385,7 +449,7 @@
           "zh-Hant": "系列"
         },
         "mappings": [],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -456,7 +520,7 @@
           "zh-Hant": "電影"
         },
         "mappings": ["wd:Q11424"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -565,7 +629,7 @@
           "zh-Hant": "版本"
         },
         "mappings": [],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "schema:alternateName",
           "schema:author",
@@ -702,7 +766,7 @@
           "zh-Hant": "集"
         },
         "mappings": ["wd:Q1983062"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -783,7 +847,7 @@
           "zh-Hant": "季"
         },
         "mappings": ["wd:Q3464665"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -872,7 +936,7 @@
           "zh-Hant": "TV 動畫"
         },
         "mappings": ["wd:Q5398426"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -958,7 +1022,7 @@
           "zh-Hant": "電子遊戲"
         },
         "mappings": ["wd:Q7889"],
-        "coverRatio": "3:4",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -1031,7 +1095,7 @@
           "zh-Hant": "叢書"
         },
         "mappings": ["wd:Q277759"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -1146,7 +1210,7 @@
           "zh-Hant": "漫畫"
         },
         "mappings": ["wd:Q21198342"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -1259,7 +1323,7 @@
           "zh-Hant": "卷"
         },
         "mappings": ["wd:Q1238720"],
-        "coverRatio": "2:3",
+        "coverRatio": "5:7",
         "properties": [
           "rezics:alternativeSetting",
           "rezics:alternativeVersion",
@@ -1300,27 +1364,10 @@
         ],
         "schemaOrgType": "https://schema.org/PublicationVolume"
       },
-      "wd:Q2095": {
-        "iri": "http://www.wikidata.org/entity/Q2095",
-        "labels": {
-          "de": "Lebensmittel",
-          "en": "food",
-          "es": "alimento",
-          "fr": "aliment",
-          "ja": "食品",
-          "ko": "식품",
-          "zh-Hans": "食物",
-          "zh-Hant": "食物"
-        },
-        "mappings": [],
-        "bases": ["schema:Thing"],
-        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-        "facets": [],
-        "coverRatio": "1:1",
-        "schemaOrgType": "https://schema.org/Thing"
-      },
       "schema:SoftwareApplication": {
         "iri": "http://schema.org/SoftwareApplication",
+        "bases": ["schema:Thing"],
+        "facets": [],
         "labels": {
           "de": "Softwareanwendung",
           "en": "software application",
@@ -1332,56 +1379,9 @@
           "zh-Hant": "軟體應用程式"
         },
         "mappings": ["wd:Q166142"],
-        "bases": ["schema:Thing"],
-        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-        "facets": [],
         "coverRatio": "1:1",
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
         "schemaOrgType": "https://schema.org/SoftwareApplication"
-      },
-      "wd:Q2620972": {
-        "iri": "http://www.wikidata.org/entity/Q2620972",
-        "labels": {
-          "de": "Handlungsbogen",
-          "en": "story arc",
-          "es": "arco argumental",
-          "fr": "arc narratif",
-          "ja": "ストーリー編",
-          "ko": "이야기 편",
-          "zh-Hans": "故事篇章",
-          "zh-Hant": "故事篇章"
-        },
-        "mappings": [],
-        "bases": ["schema:CreativeWork", "schema:Thing"],
-        "properties": [
-          "rezics:alternativeSetting",
-          "rezics:alternativeVersion",
-          "rezics:artbookCounterpart",
-          "rezics:bangumiLegacyVersion",
-          "rezics:bangumiRelatedTo",
-          "rezics:collaborationWith",
-          "rezics:crossMediaCounterpart",
-          "rezics:editionCounterpart",
-          "rezics:expansionCounterpart",
-          "rezics:sameCharacters",
-          "rezics:sameSetting",
-          "rezics:sideStoryOf",
-          "rezics:spinOffOf",
-          "rezics:storyArc",
-          "rezics:summaryOf",
-          "schema:contributor",
-          "schema:genre",
-          "schema:image",
-          "schema:keywords",
-          "schema:name",
-          "schema:sameAs",
-          "schema:url",
-          "wdt:P155",
-          "wdt:P179",
-          "wdt:P361"
-        ],
-        "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
-        "coverRatio": "2:3",
-        "schemaOrgType": "https://schema.org/CreativeWork"
       }
     },
     "format": "https://rezics.com/definitions/release/1",
@@ -1509,8 +1509,8 @@
             { "type": { "in": ["schema:Recipe"] } },
             {
               "statement": {
-                "property": "schema:cookTime",
-                "range": { "lte": 30, "unit": "http://www.wikidata.org/entity/Q7727" }
+                "range": { "lte": 30, "unit": "http://www.wikidata.org/entity/Q7727" },
+                "property": "schema:cookTime"
               }
             }
           ]
@@ -1582,7 +1582,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:Book"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -1600,7 +1600,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:VideoGame"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -1631,7 +1631,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:Movie", "schema:TVSeries"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -1649,7 +1649,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:ComicSeries"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -1667,7 +1667,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:Recipe"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -1685,7 +1685,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["schema:BookSeries"] } },
-            { "statement": { "property": "schema:startDate", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:startDate" } }
           ]
         },
         "labels": {
@@ -1716,7 +1716,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["wd:Q95074"] } },
-            { "statement": { "property": "schema:birthDate", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:birthDate" } }
           ]
         },
         "labels": {
@@ -1760,7 +1760,7 @@
         "filter": {
           "and": [
             { "type": { "in": ["wd:Q20631656"] } },
-            { "statement": { "property": "schema:datePublished", "range": { "lte": 1999 } } }
+            { "statement": { "range": { "lte": 1999 }, "property": "schema:datePublished" } }
           ]
         },
         "labels": {
@@ -2102,6 +2102,47 @@
         "qualifiers": ["schema:position"],
         "multivalued": true
       },
+      "wdt:P186": {
+        "iri": "http://www.wikidata.org/prop/direct/P186",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "hergestellt aus",
+          "en": "made from material",
+          "es": "hecho de",
+          "fr": "fabriqué à partir de",
+          "ja": "材料",
+          "ko": "재료",
+          "zh-Hans": "材料",
+          "zh-Hant": "材料"
+        },
+        "targets": ["schema:Recipe", "wd:Q2095"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "derivation",
+          "order": "position",
+          "inverse": "rezics:usedIn",
+          "inverseLabels": {
+            "de": "Verwendet in",
+            "en": "Used in",
+            "es": "Se usa en",
+            "fr": "Utilisé dans",
+            "ja": "使用先",
+            "ko": "사용되는 곳",
+            "zh-Hans": "用于",
+            "zh-Hant": "用於"
+          }
+        },
+        "qualifiers": [
+          "rezics:listSection",
+          "rezics:note",
+          "schema:position",
+          "schema:sameAs",
+          "wdt:P1114",
+          "wdt:P1932"
+        ],
+        "multivalued": true
+      },
       "wdt:P361": {
         "iri": "http://www.wikidata.org/prop/direct/P361",
         "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
@@ -2259,6 +2300,26 @@
         "qualifiers": [],
         "multivalued": false
       },
+      "wdt:P518": {
+        "iri": "http://www.wikidata.org/prop/direct/P518",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Gilt für Teil",
+          "en": "Applies to part",
+          "es": "Se aplica a la parte",
+          "fr": "Concerne la partie",
+          "ja": "対象の編",
+          "ko": "해당 편",
+          "zh-Hans": "适用篇章",
+          "zh-Hant": "適用篇章"
+        },
+        "targets": ["wd:Q2620972"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": { "group": "membership", "order": "name", "inverse": "none" },
+        "qualifiers": [],
+        "multivalued": true
+      },
       "wdt:P648": {
         "iri": "http://www.wikidata.org/prop/direct/P648",
         "value": { "type": "string", "pattern": "^OL[1-9][0-9]*[AMW]$", "maxLength": 1500, "minLength": 1 },
@@ -2298,6 +2359,7 @@
           "order": "position",
           "filter": ["wdt:P3831", "wdt:P518"],
           "inverse": "rezics:voiceActorOf",
+          "slotKey": "wdt:P453",
           "inverseLabels": {
             "de": "Sprechrollen in",
             "en": "Voice roles in",
@@ -2307,8 +2369,7 @@
             "ko": "목소리로 출연한 작품",
             "zh-Hans": "配音作品",
             "zh-Hant": "配音作品"
-          },
-          "slotKey": "wdt:P453"
+          }
         },
         "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453", "wdt:P518"],
         "multivalued": true
@@ -2330,6 +2391,38 @@
         "mappings": ["wd:P973"],
         "qualifiers": [],
         "multivalued": true
+      },
+      "wdt:P1114": {
+        "iri": "http://www.wikidata.org/prop/direct/P1114",
+        "units": ["*"],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "properties": {
+            "unit": {
+              "type": "string",
+              "pattern": "^(?:1|(?:^[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u0020\\u007f-\\u009f<>\"{}|\\\\^`]*$)(?![\\s\\S]))$"
+            },
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "lowerBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "upperBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Menge",
+          "en": "quantity",
+          "es": "cantidad",
+          "fr": "quantité",
+          "ja": "数量",
+          "ko": "수량",
+          "zh-Hans": "数量",
+          "zh-Hant": "數量"
+        },
+        "datatype": "quantity",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
       },
       "wdt:P1433": {
         "iri": "http://www.wikidata.org/prop/direct/P1433",
@@ -2709,6 +2802,32 @@
         },
         "datatype": "url",
         "mappings": ["wd:P856"],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "rezics:note": {
+        "iri": "https://rezics.com/vocab/note",
+        "value": {
+          "type": "object",
+          "required": ["text", "language"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Anmerkung",
+          "en": "note",
+          "es": "nota",
+          "fr": "note",
+          "ja": "注記",
+          "ko": "비고",
+          "zh-Hans": "备注",
+          "zh-Hant": "備註"
+        },
+        "datatype": "monolingualtext",
+        "mappings": [],
         "qualifiers": [],
         "multivalued": false
       },
@@ -3134,6 +3253,59 @@
         "qualifiers": [],
         "multivalued": false
       },
+      "rezics:lastPart": {
+        "iri": "https://rezics.com/vocab/lastPart",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Letzter Teil",
+          "en": "Last part",
+          "es": "Última parte",
+          "fr": "Dernière partie",
+          "ja": "終了話・章",
+          "ko": "마지막 회차",
+          "zh-Hans": "结束话或章",
+          "zh-Hant": "結束話或章"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "rezics:storyArc": {
+        "iri": "https://rezics.com/vocab/storyArc",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Handlungsbögen",
+          "en": "Story arcs",
+          "es": "Arcos argumentales",
+          "fr": "Arcs narratifs",
+          "ja": "ストーリー編",
+          "ko": "이야기 편",
+          "zh-Hans": "故事篇章",
+          "zh-Hant": "故事篇章"
+        },
+        "targets": ["wd:Q2620972"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "membership",
+          "order": "position",
+          "acyclic": true,
+          "inverse": "rezics:storyArcOf",
+          "inverseLabels": {
+            "de": "Handlungsbogen von",
+            "en": "Story arc of",
+            "es": "Arco argumental de",
+            "fr": "Arc narratif de",
+            "ja": "この編を含む作品",
+            "ko": "이 편이 속한 작품",
+            "zh-Hans": "所属作品",
+            "zh-Hant": "所屬作品"
+          }
+        },
+        "qualifiers": ["rezics:firstPart", "rezics:lastPart", "schema:position"],
+        "multivalued": true
+      },
       "schema:abstract": {
         "iri": "http://schema.org/abstract",
         "value": {
@@ -3406,6 +3578,69 @@
         },
         "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
         "multivalued": true
+      },
+      "rezics:firstPart": {
+        "iri": "https://rezics.com/vocab/firstPart",
+        "value": { "type": "string", "maxLength": 1500, "minLength": 1 },
+        "labels": {
+          "de": "Erster Teil",
+          "en": "First part",
+          "es": "Primera parte",
+          "fr": "Première partie",
+          "ja": "開始話・章",
+          "ko": "시작 회차",
+          "zh-Hans": "起始话或章",
+          "zh-Hant": "起始話或章"
+        },
+        "datatype": "string",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
+      "rezics:penNameOf": {
+        "iri": "https://rezics.com/vocab/penNameOf",
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "labels": {
+          "de": "Pseudonym von",
+          "en": "pen name of",
+          "es": "seudónimo de",
+          "fr": "pseudonyme de",
+          "ja": "筆名の使用者",
+          "ko": "필명 사용자",
+          "zh-Hans": "笔名使用者",
+          "zh-Hant": "筆名使用者"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "datatype": "wikibase-item",
+        "mappings": [],
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:penNames",
+          "inverseLabels": {
+            "de": "Pseudonyme",
+            "en": "pen names",
+            "es": "seudónimos",
+            "fr": "pseudonymes",
+            "ja": "筆名",
+            "ko": "필명",
+            "zh-Hans": "笔名",
+            "zh-Hant": "筆名"
+          }
+        },
+        "disclosure": "sourceOrConsent",
+        "qualifiers": [],
+        "multivalued": true,
+        "descriptions": {
+          "de": "Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.",
+          "en": "The person or organization behind this pen name or collective name.",
+          "es": "La persona u organización detrás de este seudónimo o nombre colectivo.",
+          "fr": "La personne ou organisation derrière ce pseudonyme ou nom collectif.",
+          "ja": "この筆名または共同名義を使用する人物または組織。",
+          "ko": "이 필명 또는 공동 명의를 사용하는 사람이나 조직.",
+          "zh-Hans": "使用此笔名或共同名义的个人或组织。",
+          "zh-Hant": "使用此筆名或共同名義的個人或組織。"
+        }
       },
       "rezics:spinOffOf": {
         "iri": "https://rezics.com/vocab/spinOffOf",
@@ -3685,6 +3920,32 @@
         },
         "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P518", "wdt:P648"],
         "multivalued": true
+      },
+      "rezics:listSection": {
+        "iri": "https://rezics.com/vocab/listSection",
+        "value": {
+          "type": "object",
+          "required": ["text", "language"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 1500, "minLength": 1 },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Listenabschnitt",
+          "en": "list section",
+          "es": "sección de la lista",
+          "fr": "section de la liste",
+          "ja": "リストの区分",
+          "ko": "목록 구역",
+          "zh-Hans": "列表分节",
+          "zh-Hant": "清單分節"
+        },
+        "datatype": "monolingualtext",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
       },
       "rezics:sameSetting": {
         "iri": "https://rezics.com/vocab/sameSetting",
@@ -4362,6 +4623,32 @@
         "qualifiers": [],
         "multivalued": true
       },
+      "schema:recipeInstructions": {
+        "iri": "http://schema.org/recipeInstructions",
+        "value": {
+          "type": "object",
+          "required": ["language", "document"],
+          "properties": {
+            "document": { "type": "object" },
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
+          },
+          "additionalProperties": false
+        },
+        "labels": {
+          "de": "Zubereitung",
+          "en": "instructions",
+          "es": "instrucciones",
+          "fr": "instructions",
+          "ja": "作り方",
+          "ko": "조리 방법",
+          "zh-Hans": "做法",
+          "zh-Hant": "作法"
+        },
+        "datatype": "document",
+        "mappings": [],
+        "qualifiers": [],
+        "multivalued": false
+      },
       "rezics:bangumiLegacyVersion": {
         "iri": "https://rezics.com/vocab/bangumiLegacyVersion",
         "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
@@ -4441,293 +4728,6 @@
         "relation": { "group": "derivation", "order": "name", "inverse": "none" },
         "qualifiers": ["schema:inLanguage"],
         "multivalued": true
-      },
-      "rezics:listSection": {
-        "iri": "https://rezics.com/vocab/listSection",
-        "labels": {
-          "de": "Listenabschnitt",
-          "en": "list section",
-          "es": "sección de la lista",
-          "fr": "section de la liste",
-          "ja": "リストの区分",
-          "ko": "목록 구역",
-          "zh-Hans": "列表分节",
-          "zh-Hant": "清單分節"
-        },
-        "mappings": [],
-        "datatype": "monolingualtext",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": {
-          "type": "object",
-          "required": ["text", "language"],
-          "additionalProperties": false,
-          "properties": {
-            "text": { "type": "string", "minLength": 1, "maxLength": 1500 },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
-          }
-        }
-      },
-      "wdt:P186": {
-        "iri": "http://www.wikidata.org/prop/direct/P186",
-        "labels": {
-          "de": "hergestellt aus",
-          "en": "made from material",
-          "es": "hecho de",
-          "fr": "fabriqué à partir de",
-          "ja": "材料",
-          "ko": "재료",
-          "zh-Hans": "材料",
-          "zh-Hant": "材料"
-        },
-        "mappings": [],
-        "datatype": "wikibase-item",
-        "multivalued": true,
-        "qualifiers": [
-          "rezics:listSection",
-          "rezics:note",
-          "schema:position",
-          "schema:sameAs",
-          "wdt:P1114",
-          "wdt:P1932"
-        ],
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "relation": {
-          "group": "derivation",
-          "order": "position",
-          "inverse": "rezics:usedIn",
-          "inverseLabels": {
-            "de": "Verwendet in",
-            "en": "Used in",
-            "es": "Se usa en",
-            "fr": "Utilisé dans",
-            "ja": "使用先",
-            "ko": "사용되는 곳",
-            "zh-Hans": "用于",
-            "zh-Hant": "用於"
-          }
-        },
-        "targets": ["schema:Recipe", "wd:Q2095"]
-      },
-      "rezics:note": {
-        "iri": "https://rezics.com/vocab/note",
-        "labels": {
-          "de": "Anmerkung",
-          "en": "note",
-          "es": "nota",
-          "fr": "note",
-          "ja": "注記",
-          "ko": "비고",
-          "zh-Hans": "备注",
-          "zh-Hant": "備註"
-        },
-        "mappings": [],
-        "datatype": "monolingualtext",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": {
-          "type": "object",
-          "required": ["text", "language"],
-          "additionalProperties": false,
-          "properties": {
-            "text": { "type": "string", "minLength": 1, "maxLength": 1500 },
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }
-          }
-        }
-      },
-      "wdt:P1114": {
-        "iri": "http://www.wikidata.org/prop/direct/P1114",
-        "labels": {
-          "de": "Menge",
-          "en": "quantity",
-          "es": "cantidad",
-          "fr": "quantité",
-          "ja": "数量",
-          "ko": "수량",
-          "zh-Hans": "数量",
-          "zh-Hant": "數量"
-        },
-        "mappings": [],
-        "datatype": "quantity",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": {
-          "type": "object",
-          "required": ["amount", "unit"],
-          "additionalProperties": false,
-          "properties": {
-            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
-            "lowerBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
-            "upperBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
-            "unit": {
-              "type": "string",
-              "pattern": "^(?:1|(?:^[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u0020\\u007f-\\u009f<>\"{}|\\\\^`]*$)(?![\\s\\S]))$"
-            }
-          }
-        },
-        "units": ["*"]
-      },
-      "schema:recipeInstructions": {
-        "iri": "http://schema.org/recipeInstructions",
-        "labels": {
-          "de": "Zubereitung",
-          "en": "instructions",
-          "es": "instrucciones",
-          "fr": "instructions",
-          "ja": "作り方",
-          "ko": "조리 방법",
-          "zh-Hans": "做法",
-          "zh-Hant": "作法"
-        },
-        "mappings": [],
-        "datatype": "document",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": {
-          "type": "object",
-          "required": ["language", "document"],
-          "additionalProperties": false,
-          "properties": {
-            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" },
-            "document": { "type": "object" }
-          }
-        }
-      },
-      "wdt:P518": {
-        "iri": "http://www.wikidata.org/prop/direct/P518",
-        "labels": {
-          "de": "Gilt für Teil",
-          "en": "Applies to part",
-          "es": "Se aplica a la parte",
-          "fr": "Concerne la partie",
-          "ja": "対象の編",
-          "ko": "해당 편",
-          "zh-Hans": "适用篇章",
-          "zh-Hant": "適用篇章"
-        },
-        "mappings": [],
-        "datatype": "wikibase-item",
-        "multivalued": true,
-        "qualifiers": [],
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "relation": { "group": "membership", "order": "name", "inverse": "none" },
-        "targets": ["wd:Q2620972"]
-      },
-      "rezics:firstPart": {
-        "iri": "https://rezics.com/vocab/firstPart",
-        "labels": {
-          "de": "Erster Teil",
-          "en": "First part",
-          "es": "Primera parte",
-          "fr": "Première partie",
-          "ja": "開始話・章",
-          "ko": "시작 회차",
-          "zh-Hans": "起始话或章",
-          "zh-Hant": "起始話或章"
-        },
-        "mappings": [],
-        "datatype": "string",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": { "type": "string", "minLength": 1, "maxLength": 1500 }
-      },
-      "rezics:lastPart": {
-        "iri": "https://rezics.com/vocab/lastPart",
-        "labels": {
-          "de": "Letzter Teil",
-          "en": "Last part",
-          "es": "Última parte",
-          "fr": "Dernière partie",
-          "ja": "終了話・章",
-          "ko": "마지막 회차",
-          "zh-Hans": "结束话或章",
-          "zh-Hant": "結束話或章"
-        },
-        "mappings": [],
-        "datatype": "string",
-        "multivalued": false,
-        "qualifiers": [],
-        "value": { "type": "string", "minLength": 1, "maxLength": 1500 }
-      },
-      "rezics:storyArc": {
-        "iri": "https://rezics.com/vocab/storyArc",
-        "labels": {
-          "de": "Handlungsbögen",
-          "en": "Story arcs",
-          "es": "Arcos argumentales",
-          "fr": "Arcs narratifs",
-          "ja": "ストーリー編",
-          "ko": "이야기 편",
-          "zh-Hans": "故事篇章",
-          "zh-Hant": "故事篇章"
-        },
-        "mappings": [],
-        "datatype": "wikibase-item",
-        "multivalued": true,
-        "qualifiers": ["rezics:firstPart", "rezics:lastPart", "schema:position"],
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "relation": {
-          "group": "membership",
-          "order": "position",
-          "inverse": "rezics:storyArcOf",
-          "acyclic": true,
-          "inverseLabels": {
-            "de": "Handlungsbogen von",
-            "en": "Story arc of",
-            "es": "Arco argumental de",
-            "fr": "Arc narratif de",
-            "ja": "この編を含む作品",
-            "ko": "이 편이 속한 작품",
-            "zh-Hans": "所属作品",
-            "zh-Hant": "所屬作品"
-          }
-        },
-        "targets": ["wd:Q2620972"]
-      },
-      "rezics:penNameOf": {
-        "iri": "https://rezics.com/vocab/penNameOf",
-        "labels": {
-          "de": "Pseudonym von",
-          "en": "pen name of",
-          "es": "seudónimo de",
-          "fr": "pseudonyme de",
-          "ja": "筆名の使用者",
-          "ko": "필명 사용자",
-          "zh-Hans": "笔名使用者",
-          "zh-Hant": "筆名使用者"
-        },
-        "mappings": [],
-        "datatype": "wikibase-item",
-        "multivalued": true,
-        "qualifiers": [],
-        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "disclosure": "sourceOrConsent",
-        "relation": {
-          "group": "association",
-          "order": "name",
-          "inverse": "rezics:penNames",
-          "inverseLabels": {
-            "de": "Pseudonyme",
-            "en": "pen names",
-            "es": "seudónimos",
-            "fr": "pseudonymes",
-            "ja": "筆名",
-            "ko": "필명",
-            "zh-Hans": "笔名",
-            "zh-Hant": "筆名"
-          }
-        },
-        "targets": ["schema:Organization", "schema:Person"],
-        "descriptions": {
-          "de": "Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.",
-          "en": "The person or organization behind this pen name or collective name.",
-          "es": "La persona u organización detrás de este seudónimo o nombre colectivo.",
-          "fr": "La personne ou organisation derrière ce pseudonyme ou nom collectif.",
-          "ja": "この筆名または共同名義を使用する人物または組織。",
-          "ko": "이 필명 또는 공동 명의를 사용하는 사람이나 조직.",
-          "zh-Hans": "使用此笔名或共同名义的个人或组织。",
-          "zh-Hant": "使用此筆名或共同名義的個人或組織。"
-        }
       }
     }
   },
