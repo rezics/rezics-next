@@ -131,6 +131,16 @@ async function facts(body: ReturnType<typeof input>, database = { pool }) {
   });
 }
 
+async function storedTakedownPair(body: ReturnType<typeof input>) {
+  return (
+    await admin.query<{ takenDownAt: string; takedownId: string }>(
+      `SELECT taken_down_at::text AS "takenDownAt", takedown_id AS "takedownId"
+      FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+      Object.values(home(body)),
+    )
+  ).rows[0]!;
+}
+
 test('readFences returns the original takedown time and id for a taken-down fence, in one statement per partition, and omits both for a legacy or standing fence', async () => {
   const f = await fixture();
   const body = input();
@@ -371,7 +381,9 @@ test('native takedown authorizes the sole independently anchored Global root at 
   expect(trace.some((r) => /resource_initialization|resource_role_grant.*INSERT|creation_xid/.test(r.statement))).toBe(
     false,
   );
-  expect(await facts(body)).toEqual([{ ...target, takenDown: true, securityRevision: outcome.value.securityRevision }]);
+  expect(await facts(body)).toEqual([
+    { ...target, takenDown: true, securityRevision: outcome.value.securityRevision, ...storedProvenance },
+  ]);
   const events = (
     await admin.query('SELECT * FROM core.outbox WHERE partition_no=$1 AND position=$2', [
       outcome.partition,
@@ -482,7 +494,12 @@ test('authorized replay has one effect, conflict denies, and revoked replay cann
     observer.records.slice(start).some((r) => /core.receipt|^BEGIN ISOLATION LEVEL SERIALIZABLE/.test(r.statement)),
   ).toBe(false);
   expect(await facts(body)).toEqual([
-    { ...home(body), takenDown: true, securityRevision: first.value.securityRevision },
+    {
+      ...home(body),
+      takenDown: true,
+      securityRevision: first.value.securityRevision,
+      ...(await storedTakedownPair(body)),
+    },
   ]);
   expect(
     (
@@ -524,7 +541,12 @@ test('all field groups share the tuple home independently of subject merge histo
   );
   for (const [index, body] of bodies.entries())
     expect(await facts(body)).toEqual([
-      { ...home(body), takenDown: true, securityRevision: outcomes[index]!.value.securityRevision },
+      {
+        ...home(body),
+        takenDown: true,
+        securityRevision: outcomes[index]!.value.securityRevision,
+        ...(await storedTakedownPair(body)),
+      },
     ]);
   const body = bodies[0]!;
   const target = home(body);
@@ -535,7 +557,14 @@ test('all field groups share the tuple home independently of subject merge histo
   );
   const next = await f.execute(body);
   expect(BigInt(next.value.securityRevision)).toBeGreaterThan(9007199254740993n);
-  expect(await facts(body)).toEqual([{ ...target, takenDown: true, securityRevision: next.value.securityRevision }]);
+  expect(await facts(body)).toEqual([
+    {
+      ...target,
+      takenDown: true,
+      securityRevision: next.value.securityRevision,
+      ...(await storedTakedownPair(body)),
+    },
+  ]);
   expect(await facts({ ...body, external_id: `${external}-other` })).toEqual([
     { ...home({ ...body, external_id: `${external}-other` }), takenDown: false, securityRevision: null },
   ]);
