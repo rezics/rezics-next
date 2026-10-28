@@ -135,9 +135,14 @@ export async function instrumentNativeCollectionWork<T>(
     pool.connect = ((...args: unknown[]) => {
       const active = observing.getStore();
       if (active) {
-        const checkout = active.work.reserve({ ...zero(), nativePoints: 1 });
-        checkout.dispatch();
-        checkout.settle();
+        try {
+          const checkout = active.work.reserve({ ...zero(), nativePoints: 1 });
+          checkout.dispatch();
+          checkout.settle();
+        } catch (error) {
+          active.work.failure = error instanceof Error ? error : new Error('Native checkout admission failed');
+          throw error;
+        }
       }
       return (connect as unknown as (...args: unknown[]) => unknown)(...args);
     }) as Pool['connect'];
