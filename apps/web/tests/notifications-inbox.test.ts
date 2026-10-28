@@ -93,7 +93,14 @@ test('report outcomes use the reporter-readable report and appeal or takedown de
     {
       items: [
         notice({ id: 'report-outcome', decisionId: null, reportId: report, threadId: null, postId: null }),
-        notice({ id: 'appeal-outcome', decisionId: decision, reportId: null, threadId: null, postId: null }),
+        notice({
+          id: 'appeal-outcome',
+          kind: 'moderation_decision',
+          decisionId: decision,
+          reportId: null,
+          threadId: null,
+          postId: null,
+        }),
       ],
       next: null,
     },

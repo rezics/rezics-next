@@ -55,7 +55,7 @@ export function InboxPageView() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [older, setOlder] = useState<ResolvedInboxPage | null>(null);
   const marked = useRef<string | null>(null);
-  const accumulatedCursor = useRef<string | undefined>();
+  const accumulatedCursor = useRef<string | undefined>(undefined);
   const pageQuery = useQuery({
     queryKey: [...queryKey, cursor ?? null],
     queryFn: () => readInboxPage({ data: cursor ? { cursor } : {} }) as Promise<InboxPage>,
