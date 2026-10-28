@@ -14,17 +14,23 @@ const db = await openGrowthDatabase();
 afterAll(() => db.close());
 
 const scales = [256, 1024, 4096] as const;
-const route = randomInt(0, ROUTES - 64);
+const firstRoute = randomInt(0, ROUTES - 64 - scales.length + 1);
 const forbiddenPlannerSetting = /\b(SET|set_config)\b[^;]*\benable_/is;
 const NOTICE_INDEX_ENTRY_OVERHEAD = NOTICE_PAGE_SIZE + 8;
 const NOTICE_PLAN_ROW_OVERHEAD = NOTICE_PAGE_SIZE * 2 + 8;
+
+function routeAtScale(scale: number): number {
+  const index = scales.indexOf(scale as (typeof scales)[number]);
+  if (index < 0) throw new RangeError('Unknown notice growth scale');
+  return firstRoute + index;
+}
 
 function recipients(atRoute: number): string[] {
   return Array.from({ length: 32 }, () => newId(atRoute));
 }
 
-function otherPartitionRecipients(): string[] {
-  return [1, 2, 3, 4].flatMap((offset) => Array.from({ length: 8 }, () => newId(route + offset * 16)));
+function otherPartitionRecipients(atRoute: number): string[] {
+  return [1, 2, 3, 4].flatMap((offset) => Array.from({ length: 8 }, () => newId(atRoute + offset * 16)));
 }
 
 async function seedNotices(account: string, count: number, createdAt: Date): Promise<void> {
@@ -115,32 +121,31 @@ function expectConstantNoticeCost(report: Awaited<ReturnType<typeof checkGrowth>
 }
 
 test('notice writes and bounded pages stay constant while other recipients and partitions grow', async () => {
-  const writeRecipients = recipients(route);
-  const writeOtherPartitionRecipients = otherPartitionRecipients();
-  const writer = newId(route);
   const writeReport = await checkGrowth(db, {
     name: 'Notice write',
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
     warmups: 1,
-    async grow(_growthDb, scale, previous) {
-      const added = scale - previous;
-      for (const account of writeRecipients) await seedNotices(account, added, new Date('2026-10-01T00:00:00Z'));
-      for (const account of writeOtherPartitionRecipients)
-        await seedNotices(account, added, new Date('2026-10-01T00:00:00Z'));
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      for (const account of recipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
-    async operation(growthDb) {
+    async operation(growthDb, scale) {
+      const atRoute = routeAtScale(scale);
       const input = {
-        recipientId: writer,
-        noticeId: newId(route),
+        recipientId: newId(atRoute),
+        noticeId: newId(atRoute),
         kind: 'reply' as const,
         actorId: null,
         threadId: null,
         postId: null,
         decisionId: null,
         reportId: null,
-        sourceId: newId(route),
+        sourceId: newId(atRoute),
         createdAt: new Date('2026-10-02T00:00:00Z'),
       };
       const result = await observed(growthDb.pool, () => writeNotices(growthDb.pool, [input]));
@@ -150,10 +155,8 @@ test('notice writes and bounded pages stay constant while other recipients and p
   });
   expectConstantNoticeCost(writeReport, 1);
 
-  const retentionWarmupAccount = newId(route);
-  const retentionAccount = newId(route);
-  const retentionRecipients = recipients(route);
-  const retentionOtherPartitionRecipients = otherPartitionRecipients();
+  const retentionWarmupAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const retentionAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
   const warmupCutoff = new Date('2000-01-01T00:00:00Z');
   const cutoff = new Date('2000-01-02T00:00:00Z');
   const retentionReport = await checkGrowth(db, {
@@ -162,15 +165,17 @@ test('notice writes and bounded pages stay constant while other recipients and p
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmups: 1,
-    async grow(_growthDb, scale, previous) {
-      await seedNotices(retentionWarmupAccount, NOTICE_PAGE_SIZE, new Date('1999-12-31T00:00:00Z'));
-      await seedNotices(retentionAccount, NOTICE_PAGE_SIZE, new Date('2000-01-01T12:00:00Z'));
-      for (const account of retentionRecipients)
-        await seedNotices(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
-      for (const account of retentionOtherPartitionRecipients)
-        await seedNotices(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      await seedNotices(retentionWarmupAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('1999-12-31T00:00:00Z'));
+      await seedNotices(retentionAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2000-01-01T12:00:00Z'));
+      for (const account of recipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
-    async warmup(growthDb) {
+    async warmup(growthDb, scale) {
+      const atRoute = routeAtScale(scale);
       const result = await observed(growthDb.pool, async () => {
         await explainPage(
           growthDb.admin,
@@ -178,42 +183,43 @@ test('notice writes and bounded pages stay constant while other recipients and p
            SELECT ctid, notice_id FROM content.notice
            WHERE route = $1 AND created_at < $2::timestamptz
            ORDER BY created_at, notice_id LIMIT 1000 FOR UPDATE`,
-          [route, warmupCutoff],
+          [atRoute, warmupCutoff],
           'notice_route_created_idx',
           ['route', 'created_at'],
         );
-        return deleteExpiredNoticesPage(growthDb.pool, route, warmupCutoff);
+        return deleteExpiredNoticesPage(growthDb.pool, atRoute, warmupCutoff);
       });
       expect(result.value).toBe(NOTICE_PAGE_SIZE);
       expectNoPlannerSettings(result.statements);
     },
-    async operation(growthDb) {
-      const result = await observed(growthDb.pool, () => deleteExpiredNoticesPage(growthDb.pool, route, cutoff));
+    async operation(growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      const result = await observed(growthDb.pool, () => deleteExpiredNoticesPage(growthDb.pool, atRoute, cutoff));
       expect(result.value).toBe(NOTICE_PAGE_SIZE);
       expectNoPlannerSettings(result.statements);
     },
   });
   expectConstantNoticeCost(retentionReport, NOTICE_PAGE_SIZE);
 
-  const erasedWarmupAccount = newId(route);
-  const erasedAccount = newId(route);
-  const erasureRecipients = recipients(route);
-  const erasureOtherPartitionRecipients = otherPartitionRecipients();
+  const erasedWarmupAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const erasedAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
   const erasureReport = await checkGrowth(db, {
     name: 'Account notice erasure page',
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmups: 1,
-    async grow(_growthDb, scale, previous) {
-      await seedNotices(erasedWarmupAccount, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
-      await seedNotices(erasedAccount, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
-      for (const account of erasureRecipients)
-        await seedNotices(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
-      for (const account of erasureOtherPartitionRecipients)
-        await seedNotices(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      await seedNotices(erasedWarmupAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
+      await seedNotices(erasedAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
+      for (const account of recipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
-    async warmup(growthDb) {
+    async warmup(growthDb, scale) {
+      const atRoute = routeAtScale(scale);
       const result = await observed(growthDb.pool, async () => {
         await explainPage(
           growthDb.admin,
@@ -221,17 +227,17 @@ test('notice writes and bounded pages stay constant while other recipients and p
            SELECT ctid, notice_id FROM content.notice
            WHERE route = $1 AND recipient_id = $2::uuid
            ORDER BY created_at, notice_id LIMIT 1000 FOR UPDATE`,
-          [route, erasedWarmupAccount],
+          [atRoute, erasedWarmupAccounts.get(scale)!],
           'notice_recipient_created_idx',
           ['route', 'recipient_id'],
         );
-        return deleteAccountNoticePage(growthDb.pool, erasedWarmupAccount);
+        return deleteAccountNoticePage(growthDb.pool, erasedWarmupAccounts.get(scale)!);
       });
       expect(result.value).toBe(NOTICE_PAGE_SIZE);
       expectNoPlannerSettings(result.statements);
     },
-    async operation(growthDb) {
-      const result = await observed(growthDb.pool, () => deleteAccountNoticePage(growthDb.pool, erasedAccount));
+    async operation(growthDb, scale) {
+      const result = await observed(growthDb.pool, () => deleteAccountNoticePage(growthDb.pool, erasedAccounts.get(scale)!));
       expect(result.value).toBe(NOTICE_PAGE_SIZE);
       expectNoPlannerSettings(result.statements);
     },
