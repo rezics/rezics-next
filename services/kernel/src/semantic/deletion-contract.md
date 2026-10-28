@@ -88,6 +88,12 @@ private (for example an unsourced private pen-name linkage). Account tombstoning
 only owned record deletion has the restoration window. Retained public contributions are de-identified; private
 ones enter bounded durable purge at the injected account confirmation time, with no account grace period. No new privacy permission engine or account deletion barrier is introduced.
 
+Terminal account confirmation immediately fences owner reads and writes; account erasure is final. This fence
+does not wait for payload cleanup and cannot be reversed through an individual record's thirty-day restore.
+A valid suspended bearer receives `403 account_suspended`, including on otherwise public reads. Only missing,
+invalid or revoked credentials receive 401 where authentication is required; suspension never falls back to
+anonymous authority. These outcomes follow the existing Access and account owner contracts.
+
 ## Executable surfaces and native adapter
 
 The independent native test files use the migrated database, native HTTP creation/proposal/editorial commands, `createRealAccess`,
@@ -312,3 +318,12 @@ later assertions or larger growth scales were exercised. This specification chan
 acceptance file, role catalogue, planner, deadline or growth slack. Aggregate disclosure remains owned by
 aggregate-disclosure.md. Attributed reads pass the original native AuthoritativeTime object unchanged, never a
 Date or string substitute.
+
+This independent lifecycle acceptance preserves the [filtered-list contract](../../../../docs/filtered-lists.md):
+complete indexed observations, current disclosure and the pending identity epoch remain separate obligations.
+Individual delete/restore and the ordinary subject-publication component checks do not certify query-level
+privacy acknowledgement, filtered-list execution or durable identity publication. Existing native Source chunk
+limits retain their own scope. These tests require neither universal raw-leaf replay nor whole-slot list proofs,
+per-page identity sweeps or a copied personal-fact witness store. Those engines and their native acceptance remain
+with their existing owners; no README serialization or unrelated publication-store implementation is a dependency
+of this specification.
