@@ -316,6 +316,13 @@ test('durable Relay delivers dependency and original-time owner changes with res
     const requests = (await observed(ownerHome)).filter((e) => e.type === repairType);
     expect(requests.length, 'bounded fanout emits durable target handoff').toBeGreaterThan(0);
     // Inject the same crash at the second durable handoff, then recreate the adapter.
+    const ownerCheckpoint = await checkpoint(restarted, ownerHome);
+    const priorTarget = (
+      await db.admin.query('SELECT version FROM semantic.subject_page_repair WHERE route=$1 AND subject_id=$2', [
+        subject.route,
+        subject.id,
+      ])
+    ).rows;
     fault.arm();
     await expect(restarted.run(ownerHome)).rejects.toThrow(
       'Injected loss after destination commit before checkpoint CAS',
@@ -327,6 +334,8 @@ test('durable Relay delivers dependency and original-time owner changes with res
       ])
     ).rows;
     expect(target).toHaveLength(1);
+    if (priorTarget.length) expect(String(target[0]!.version)).not.toBe(String(priorTarget[0]!.version));
+    expect(await checkpoint(restarted, ownerHome)).toEqual(ownerCheckpoint);
     restarted = p.fresh();
     await drainRelay(restarted, ownerHome);
     await drain(p.runner);
@@ -506,4 +515,21 @@ test('Content native original period evidence survives repeated takeDown, readFe
   expect(otherGroup.takenDown).toBe(false);
   expect(Object.hasOwn(otherGroup, 'takenDownAt')).toBe(false);
   expect(Object.hasOwn(otherGroup, 'takedownId')).toBe(false);
+  // Legal old Content row: takedown happened before the original-period pair was retained.
+  const legacyId = randomUUID();
+  const legacyRoute = tupleRoute(routeKey, 'openlibrary', legacyId);
+  await db.admin.query(
+    `INSERT INTO content.source_fences(route,source,external_id,field_group,taken_down,security_revision)
+     VALUES ($1,'openlibrary',$2,'facts',true,7)`,
+    [legacyRoute, legacyId],
+  );
+  const old = (
+    await readFences(db.admin, [
+      { route: legacyRoute, source: 'openlibrary', external_id: legacyId, field_group: 'facts' },
+    ])
+  )[0] as any;
+  expect(old.takenDown).toBe(true);
+  expect(old.securityRevision).toBe('7');
+  expect(Object.hasOwn(old, 'takenDownAt')).toBe(false);
+  expect(Object.hasOwn(old, 'takedownId')).toBe(false);
 }, 240_000);
