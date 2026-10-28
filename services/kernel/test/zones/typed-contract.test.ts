@@ -15,8 +15,12 @@ test('Zone page request is a closed route-or-subject target with the shared view
 test('public Zone schema cannot serialize private owner mount or scope descriptors', () => {
   const check = Compile(ZonePublicSchema);
   const visible = {
-    id, revision: '1', labels: { en: 'A site' }, visibility: 'public',
-    appearance: { density: 'compact', surface: 'cards' }, navigation: [{ route: '' }],
+    id,
+    revision: '1',
+    labels: { en: 'A site' },
+    visibility: 'public',
+    appearance: { density: 'compact', surface: 'cards' },
+    navigation: [{ route: '' }],
   };
   expect(check.Check(visible)).toBe(true);
   expect(check.Check({ ...visible, labels: {} })).toBe(true);
