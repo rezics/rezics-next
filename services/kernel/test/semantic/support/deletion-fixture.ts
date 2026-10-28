@@ -46,6 +46,7 @@ export async function createDeletionFixture() {
   }
 
   const actions = [
+    'definitions:read',
     'definitions:publish',
     'definitions:activate',
     'subject:create',
@@ -288,7 +289,7 @@ export async function createGrowthDeletionFixture() {
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
-          authorization: `Bearer ${await bearer(account, ['subject:create', 'subject:read', 'statement:propose', 'statement:delete', 'statement:restore', 'context:accept', 'context:adopt'])}`,
+          authorization: `Bearer ${await bearer(account, ['definitions:read', 'subject:create', 'subject:read', 'statement:propose', 'statement:delete', 'statement:restore', 'context:create', 'context:read', 'context:delete', 'context:restore', 'context:accept', 'context:adopt'])}`,
           'idempotency-key': `"${randomUUID()}"`,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
@@ -317,15 +318,20 @@ export async function createGrowthDeletionFixture() {
   const db = await openGrowthDatabase(url);
   await bootstrapRelease(db.pool, bundledRelease);
   const real = await createRealAccess(db.admin, { owner: account }, [
+    'definitions:read',
     'subject:create',
     'subject:read',
     'statement:propose',
     'statement:delete',
     'statement:restore',
+    'context:create',
+    'context:read',
+    'context:delete',
+    'context:restore',
     'context:accept',
     'context:adopt',
   ]);
-  for (const action of ['subject:create', 'statement:propose', 'context:accept', 'context:adopt'])
+  for (const action of ['subject:create', 'statement:propose', 'context:create', 'context:accept', 'context:adopt'])
     await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', action);
   const kernel = createKernel({
     pool: db.pool,

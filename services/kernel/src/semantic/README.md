@@ -45,28 +45,31 @@ Access. Editorial revisions do not alter the identity version, and a redirect ch
 
 Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
 
-| Semantic write                     | Action                 | Authority anchor                           |
-| ---------------------------------- | ---------------------- | ------------------------------------------ |
-| Subject creation                   | `subject:create`       | Global Context                             |
-| Subject merge                      | `subject:merge`        | Global Context                             |
-| Subject moderation: hide           | `moderation:hide`      | Global Context                             |
-| Subject moderation: take down      | `moderation:takedown`  | Global Context                             |
-| Subject moderation: restore        | `moderation:takedown`  | Global Context                             |
-| Statement disclosure               | `statement:propose`    | Global Context and target account consent  |
-| Statement proposal                 | `statement:propose`    | Global Context                             |
-| Candidate acceptance and rejection | `context:accept`       | Selected Global or community Context       |
-| Candidate adoption                 | `context:adopt`        | Selected Global or community Context       |
-| Statement moderation: hide         | `moderation:hide`      | Global Context                             |
-| Statement moderation: take down    | `moderation:takedown`  | Global Context                             |
-| Statement moderation: restore      | `moderation:takedown`  | Global Context                             |
-| Bulk write request                 | `subject:batch_write`  | Global Context                             |
-| Each bulk create command           | `subject:create`       | Global Context                             |
-| Each bulk proposal command         | `statement:propose`    | Global Context                             |
-| Definition publication             | `definitions:publish`  | Global Context                             |
-| Definition activation              | `definitions:activate` | Global Context                             |
-| Extension publication              | `definitions:publish`  | Selected Global or community Context       |
-| Extension activation               | `definitions:activate` | Selected Global or community Context       |
-| Community Context creation         | `context:create`       | Global Context parent, with creation proof |
+| Semantic write                     | Action                               | Authority anchor                                 |
+| ---------------------------------- | ------------------------------------ | ------------------------------------------------ |
+| Subject creation                   | `subject:create`                     | Global Context                                   |
+| Subject merge                      | `subject:merge`                      | Global Context                                   |
+| Subject moderation: hide           | `moderation:hide`                    | Global Context                                   |
+| Subject moderation: take down      | `moderation:takedown`                | Global Context                                   |
+| Subject moderation: restore        | `moderation:takedown`                | Global Context                                   |
+| Statement disclosure               | `statement:propose`                  | Global Context and target account consent        |
+| Statement proposal                 | `statement:propose`                  | Global Context                                   |
+| Candidate acceptance and rejection | `context:accept`                     | Selected Global or community Context             |
+| Candidate adoption                 | `context:adopt`                      | Selected Global or community Context             |
+| Statement moderation: hide         | `moderation:hide`                    | Global Context                                   |
+| Statement moderation: take down    | `moderation:takedown`                | Global Context                                   |
+| Statement moderation: restore      | `moderation:takedown`                | Global Context                                   |
+| Bulk write request                 | `subject:batch_write`                | Global Context                                   |
+| Each bulk create command           | `subject:create`                     | Global Context                                   |
+| Each bulk proposal command         | `statement:propose`                  | Global Context                                   |
+| Definition publication             | `definitions:publish`                | Global Context                                   |
+| Definition activation              | `definitions:activate`               | Global Context                                   |
+| Extension publication              | `definitions:publish`                | Selected Global or community Context             |
+| Extension activation               | `definitions:activate`               | Selected Global or community Context             |
+| Contribution delete (required)     | `statement:delete`                   | Original write-revision author anchor            |
+| Contribution restore (required)    | `statement:restore`                  | Original revision AND Global `statement:propose` |
+| Context delete/restore (required)  | `context:delete` / `context:restore` | Current `semantic.context.owner`, community only |
+| Community Context creation         | `context:create`                     | Global Context parent, with creation proof       |
 
 ## Identity references
 
@@ -701,8 +704,20 @@ state and owner-evidence reader defined in the contract. Native author/write-bas
 grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
 Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
 
-| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
-| Owned lifecycle and retention | DELETE/restore/purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.                                                                            |
-| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
+| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                     |
+| Contribution lifecycle        | Native revision-author producer and DELETE/restore remain required; independent `contribution-lifecycle.test.ts` and `growth-contribution-lifecycle.test.ts` retain original outcomes and add compact-author/revocation evidence.      |
+| Context lifecycle             | Existing `semantic.context.owner` gains delete/restore; independent `context-lifecycle.test.ts` and `growth-context-lifecycle.test.ts` require current ownership, settings/extension and overlay availability without dependent scans. |
+| Retention and account cleanup | Purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.                                                                                                       |
+| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters.             |
+
+The lifecycle tests specify pending production behavior. Contribution commands authorize on one original
+write-revision anchor using semantic.revision.author; compact expansion never transfers that authority.
+Restore also requires current Global statement:propose. Native subject/proposal creation must use the bounded
+Access creation manifest and actual transaction/write-basis evidence, after compatible Content custody binding;
+no candidate/fact grants, backfill or subject ownership are implied. Context lifecycle extends its existing owner
+role, and real role revocation controls fresh commands and receipt replays. Its authorized settings, extension
+and overlay points return 404 while deleted, including warm caches; strict thirty-day expiry returns 409 on
+restore. Restoring availability preserves current editorial and moderation decisions. The contract records the
+exact dependency and acceptance matrix; these specification changes implement no lifecycle command or role.

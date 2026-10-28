@@ -6,8 +6,6 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import * as semantic from '../../src/semantic/index.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { readCandidateDisclosure } from '../../src/semantic/disclosure.ts';
-import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
 
 const fixture = await createDeletionFixture();
@@ -22,7 +20,6 @@ const {
   bearer,
   actions,
   real,
-  routeKey,
   call,
   status,
   snak,
@@ -41,69 +38,6 @@ const {
   setNow,
 } = fixture;
 const day = 86_400_000;
-
-test('user-owned semantic records soft-delete and restore without resurrecting superseded decisions', async () => {
-  const subject = await person();
-  const old = await proposal(subject);
-  await accept(old);
-  const head = await adopt(old, null);
-  const before = await revisions(subject);
-  status(await call('DELETE', path(old), 'stranger'), 403);
-  const deletedAt = clock().getTime();
-  status(await call('DELETE', path(old), 'owner'), 200);
-  expect(JSON.stringify(await current(subject))).not.toContain(old.payload);
-  const candidates = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl`, 'owner');
-  status(candidates, 200);
-  expect(candidates.body.candidates).toContainEqual(expect.objectContaining({ id: old.candidate, deleted: true }));
-  expect(JSON.stringify(candidates.body)).not.toContain(old.payload);
-  expect(await readCandidateDisclosure(admin, old)).toEqual(expect.objectContaining({ disclosed: false }));
-  const source = await subjectSource(pool, routeKey).read(partitionOf(routeOf(subject)!), [subject]);
-  expect(JSON.stringify(source.subjects)).not.toContain(old.payload);
-  const replacement = await proposal(subject);
-  await accept(replacement);
-  await adopt(replacement, head);
-  setNow(new Date(deletedAt + 29 * day));
-  status(await call('POST', `${path(old)}:restoreDeleted`, 'stranger', {}), 403);
-  status(await call('POST', `${path(old)}:restoreDeleted`, 'owner', {}), 200);
-  const shown = JSON.stringify(await current(subject));
-  expect(shown).toContain(replacement.payload);
-  expect(shown).not.toContain(old.payload);
-  const after = await revisions(subject);
-  expect(after.slice(0, before.length)).toEqual(before);
-  expect(new Set(after.map((row) => row.revision)).size).toBe(after.length);
-});
-
-test('owner restore expires at thirty days and cannot reverse current moderation', async () => {
-  const record = await proposal(await person());
-  const deletedAt = clock().getTime();
-  status(await call('DELETE', path(record), 'owner'), 200);
-  status(
-    await call('POST', `${path(record)}:takedown`, 'platform', {
-      notice: { complaint: 'One field', received_at: clock().toISOString(), scope: '/value' },
-    }),
-    200,
-  );
-  setNow(new Date(deletedAt + 29 * day));
-  status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
-  expect((await readCandidateDisclosure(admin, record))?.disclosed).toBe(false);
-  const expired = await proposal(await person());
-  status(await call('DELETE', path(expired), 'owner'), 200);
-  setNow(new Date(clock().getTime() + 30 * day));
-  status(await call('POST', `${path(expired)}:restoreDeleted`, 'owner', {}), 409);
-});
-
-test('community Context deletion uses its real owner and restores the same identity', async () => {
-  const created = await call('POST', '/v1/contexts', 'owner', { labels: { en: 'Owned editorial context' } });
-  status(created, 201);
-  const id = created.body.context.id;
-  status(await call('DELETE', `/v1/contexts/${id}`, 'stranger'), 403);
-  status(await call('DELETE', `/v1/contexts/${id}`, 'owner'), 200);
-  status(await call('GET', `/v1/contexts/${id}`), 404);
-  status(await call('POST', `/v1/contexts/${id}:restore`, 'owner', {}), 200);
-  expect((await call('GET', `/v1/contexts/${id}`)).body.context.id).toBe(id);
-  // Neither the seeded authority nor a communal subject becomes creator-private data.
-  status(await call('DELETE', `/v1/contexts/${GLOBAL_CONTEXT}`, 'owner'), 403);
-});
 
 test('semantic takedown withholds only covered fields and retains reversible data', async () => {
   const record = await proposal(await person('Unaffected label'));
@@ -241,32 +175,6 @@ test('paused consumers do not disclose a revoked source in inverse links or publ
   expect(stored.rows).toEqual([{ value: 1 }]);
   expect(withheld.body.links).toEqual([]);
   expect(Object.hasOwn(withheld.body, 'count'), JSON.stringify(withheld.body)).toBe(false);
-});
-
-test('deleted community Context cannot disclose its adopted overlay while consumers pause', async () => {
-  const record = await proposal(await person());
-  const created = await call('POST', '/v1/contexts', 'owner', { labels: { en: 'Overlay lifecycle' } });
-  status(created, 201);
-  const context = created.body.context.id;
-  status(await call('POST', `${path(record)}:accept`, 'owner', { context, expected_head: null }), 200);
-  status(
-    await call('POST', `/v1/subjects/${record.subject}:adopt`, 'owner', {
-      context,
-      property: 'schema:url',
-      mode: 'replace',
-      selection: [{ candidate: record.candidate, rank: 'normal' }],
-      expected_head: null,
-    }),
-    200,
-  );
-  const read = () => call('GET', `/v1/subjects/${record.subject}?context=${context}`, 'owner');
-  expect(JSON.stringify((await read()).body)).toContain(record.payload);
-  status(await call('DELETE', `/v1/contexts/${context}`, 'owner'), 200);
-  const withheld = await read();
-  status(withheld, 404);
-  expect(JSON.stringify(withheld.body)).not.toContain(record.payload);
-  status(await call('POST', `/v1/contexts/${context}:restore`, 'owner', {}), 200);
-  expect(JSON.stringify((await read()).body)).toContain(record.payload);
 });
 
 test('account erasure de-identifies retained public contributions and automatically purges private assertions', async () => {
