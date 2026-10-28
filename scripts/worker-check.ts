@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { spawn } from 'node:child_process';
-import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { checkWaitRecorder } from './remote-check.ts';
@@ -19,6 +19,38 @@ const SIGNALS = {
   SIGINT: 2,
   SIGTERM: 15,
 } as const;
+
+type CheckRecord = {
+  id: string;
+  cwd: string;
+  argv: string[];
+  status: 'running' | 'finished';
+  log: string;
+  exitCode?: number;
+};
+
+function recordPath(cwd: string, id: string): string {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`Invalid check id: ${id}`);
+  return join(cwd, '.temp', 'goal', 'checks', 'results', `${id}.json`);
+}
+
+function readRecord(cwd: string, id: string): CheckRecord {
+  const file = recordPath(cwd, id);
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as CheckRecord;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error(`Unknown check id: ${id}`);
+    throw error;
+  }
+}
+
+function writeRecord(record: CheckRecord): void {
+  const file = recordPath(record.cwd, record.id);
+  mkdirSync(join(record.cwd, '.temp', 'goal', 'checks', 'results'), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+  renameSync(temporary, file);
+}
 
 function logPath(cwd: string): string {
   const directory = join(cwd, '.temp', 'goal', 'checks');
@@ -52,10 +84,15 @@ function failureSummary(file: string): string {
   }
 }
 
-export async function runWorkerCheck(argv: readonly string[], cwd = process.cwd()): Promise<number> {
+export async function runWorkerCheck(
+  argv: readonly string[],
+  cwd = process.cwd(),
+  report = true,
+  recordedLog?: string,
+): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
-  const file = logPath(root);
+  const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   const env = { ...process.env };
@@ -189,10 +226,75 @@ export async function runWorkerCheck(argv: readonly string[], cwd = process.cwd(
   }
   rmSync(peakFile, { force: true });
   const relativeLogPath = relative(root, file);
-  process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
-  if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
-  process.stdout.write(`check: log ${relativeLogPath}\n`);
+  if (report) {
+    process.stdout.write(`check: exit status ${signalNumber === undefined ? code : 128 + signalNumber}\n`);
+    if (code !== 0) process.stdout.write(`check: failure summary\n${failureSummary(file)}\n`);
+    process.stdout.write(`check: log ${relativeLogPath}\n`);
+  }
   return signalNumber === undefined ? code : 128 + signalNumber;
+}
+
+/** Start a detached check whose durable result can be retrieved by id after this process exits. */
+export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
+  if (argv.length === 0) throw new Error('A check command is required');
+  const root = resolve(cwd);
+  const id = randomUUID();
+  const file = logPath(root);
+  const record: CheckRecord = { id, cwd: root, argv: [...argv], status: 'running', log: relative(root, file) };
+  writeRecord(record);
+  const child = spawn(process.execPath, [resolve(import.meta.path), '--run', id], {
+    cwd: root,
+    detached: true,
+    env: process.env,
+    stdio: 'ignore',
+  });
+  child.once('error', (error) => {
+    record.status = 'finished';
+    record.exitCode = 1;
+    writeRecord(record);
+    process.stderr.write(`worker-check: could not start check ${id}: ${error.message}\n`);
+  });
+  child.unref();
+  return id;
+}
+
+/** Wait for a previously started check; timeoutMs is useful to callers that need to yield and retry later. */
+export async function waitWorkerCheck(
+  id: string,
+  cwd = process.cwd(),
+  timeoutMs = Number.POSITIVE_INFINITY,
+): Promise<number> {
+  const root = resolve(cwd);
+  const started = Date.now();
+  let record = readRecord(root, id);
+  while (record.status === 'running') {
+    if (Date.now() - started >= timeoutMs) throw new Error(`Wait timed out for check ${id}`);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    record = readRecord(root, id);
+  }
+  const code = record.exitCode ?? 1;
+  const absoluteLog = join(root, record.log);
+  process.stdout.write(`check: exit status ${code}\n`);
+  if (code !== 0 && existsSync(absoluteLog)) process.stdout.write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
+  process.stdout.write(`check: log ${record.log}\n`);
+  return code;
+}
+
+async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number> {
+  const root = resolve(cwd);
+  const record = readRecord(root, id);
+  try {
+    const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log));
+    record.status = 'finished';
+    record.exitCode = exitCode;
+    writeRecord(record);
+    return exitCode;
+  } catch (error) {
+    record.status = 'finished';
+    record.exitCode = 1;
+    writeRecord(record);
+    throw error;
+  }
 }
 
 function parse(argv: string[]): string[] {
@@ -206,7 +308,13 @@ function parse(argv: string[]): string[] {
 
 if (import.meta.main) {
   try {
-    process.exitCode = await runWorkerCheck(parse(Bun.argv.slice(2)));
+    const args = Bun.argv.slice(2);
+    if (args[0] === '--wait' && args[1]) process.exitCode = await waitWorkerCheck(args[1]);
+    else if (args[0] === '--run' && args[1]) process.exitCode = await runRecordedCheck(args[1]);
+    else {
+      const id = startWorkerCheck(parse(args));
+      process.stdout.write(`check: id ${id}\n`);
+    }
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
