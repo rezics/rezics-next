@@ -1,16 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -28,6 +18,7 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
+import { installShared } from './shared-dependencies.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 function normalizedBriefText(markdown: string): string {
@@ -130,35 +121,7 @@ export function git(cwd: string, args: string[]): string {
   return result.stdout.trimEnd();
 }
 function installWorktreeDependencies(worktree: string): void {
-  if (!existsSync(join(worktree, 'package.json'))) return;
-  const result = spawnSync('bun', ['install', '--frozen-lockfile'], {
-    cwd: worktree,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (result.status !== 0)
-    throw new Error(
-      `Dependency install failed in ${worktree}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`,
-    );
-  const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as {
-    workspaces?: string[] | { packages?: string[] };
-  };
-  const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : (manifest.workspaces?.packages ?? []);
-  for (const pattern of patterns) {
-    const wildcard = pattern.indexOf('*');
-    const parent = wildcard < 0 ? pattern : pattern.slice(0, wildcard).replace(/\/$/, '');
-    const candidates = wildcard < 0 ? [parent] : readdirSync(join(worktree, parent)).map((name) => join(parent, name));
-    for (const relative of candidates) {
-      const packageFile = join(worktree, relative, 'package.json');
-      if (!existsSync(packageFile)) continue;
-      const workspace = JSON.parse(readFileSync(packageFile, 'utf8')) as { name?: string };
-      if (!workspace.name) continue;
-      const link = join(worktree, 'node_modules', workspace.name);
-      if (existsSync(link)) continue;
-      mkdirSync(dirname(link), { recursive: true });
-      symlinkSync(join(worktree, relative), link, 'dir');
-    }
-  }
+  installShared(worktree);
 }
 export type RetryOptions = {
   brief?: string;
