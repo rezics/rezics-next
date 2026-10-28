@@ -160,12 +160,16 @@ test('production page aggregates preserve each standalone read authority and dis
       if (!seen) return handle(request);
       seen.active += 1;
       seen.peak = Math.max(seen.peak, seen.active);
+      // customMethod rewrites the genuine Request URL in place while routing.
+      // Capture arrival metadata before dispatch, not that internal transport URL.
+      const path = new URL(request.url).pathname + new URL(request.url).search;
+      const headers = new Headers(request.headers);
       try {
         const response = await handle(request);
         seen.requests.push({
-          path: new URL(request.url).pathname + new URL(request.url).search,
+          path,
           method: request.method,
-          headers: new Headers(request.headers),
+          headers,
           status: response.status,
           responseHeaders: new Headers(response.headers),
           body: await response.clone().json(),
