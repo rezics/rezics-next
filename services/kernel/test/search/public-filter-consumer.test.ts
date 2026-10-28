@@ -383,7 +383,9 @@ test('native query revalidation detects a reduction even when repair is acknowle
       },
       { includeBackends: true },
     );
-    void measured.catch(() => {});
+    // Capture can fail before invoking its callback (for example, on native instrumentation setup).
+    // Release the controller with that original failure instead of waiting for the barrier timeout.
+    void measured.catch((error: unknown) => started.reject(error));
     try {
       const start = await started.promise;
       // No candidates to recheck: a stale negative exclusion still discloses the removed fact.
@@ -446,6 +448,14 @@ test('native query revalidation detects a reduction even when repair is acknowle
       const operation = (text: string) =>
         /^\s*\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//.exec(text)?.[1];
       const coverageStatement = (text: string) => ['privacy-start', 'privacy-final'].includes(operation(text) ?? '');
+      const evidence = new URL('../../../../.temp/goal/public-filter-consumer-ack-before-final.json', import.meta.url);
+      // Retain the inclusive native evidence even when attribution itself fails.
+      await Bun.write(evidence, JSON.stringify({ whole, preparationCosts }));
+      expect(whole.statementBackends).toHaveLength(whole.statements.length);
+      expect(whole.planBackends).toHaveLength(whole.plans.length);
+      expect(whole.requestBytes).toHaveLength(whole.statements.length);
+      expect(whole.responseBytes).toHaveLength(whole.statements.length);
+      expect(whole.statementErrors).toEqual(whole.statements.map(() => null));
       const statements = whole.statements.flatMap((text, i) => (coverageStatement(text) ? [i] : []));
       const plans = whole.plans.flatMap((document, i) => {
         const entries: unknown[] = Array.isArray(document) ? document : [document];
@@ -467,15 +477,7 @@ test('native query revalidation detects a reduction even when repair is acknowle
         statementBackends: statements.map((i) => whole.statementBackends![i]),
         planBackends: coveragePlans.map(({ backend }) => backend),
       };
-      await Bun.write(
-        new URL('../../../../.temp/goal/public-filter-consumer-ack-before-final.json', import.meta.url),
-        JSON.stringify({ whole, coverage, preparationCosts }),
-      );
-      expect(whole.statementBackends).toHaveLength(whole.statements.length);
-      expect(whole.planBackends).toHaveLength(whole.plans.length);
-      expect(whole.requestBytes).toHaveLength(whole.statements.length);
-      expect(whole.responseBytes).toHaveLength(whole.statements.length);
-      expect(whole.statementErrors).toEqual(whole.statements.map(() => null));
+      await Bun.write(evidence, JSON.stringify({ whole, coverage, preparationCosts }));
       // Match occurrences, not distinct SQL. This also checks own-row and unclassified bookkeeping plans.
       const key = (text: string, backend: number | undefined) => JSON.stringify([backend, text]);
       expect(plans.map(({ text, backend }) => key(text, backend)).sort()).toEqual(
@@ -489,6 +491,7 @@ test('native query revalidation detects a reduction even when repair is acknowle
         expect(operation(rest), 'Exactly one leading semantic operation annotation is required').toBeUndefined();
       }
       const privacy = costOf(coverage);
+      expect(privacy.plans).toBe(coverage.statements.length);
       expect(privacy.statements).toBe(coverage.statements.length);
       expect(privacy.statements).toBeLessThanOrEqual(2);
       const behindHomes = new Set(final.pending.map((head) => head.partition));

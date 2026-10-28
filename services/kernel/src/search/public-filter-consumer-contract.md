@@ -220,7 +220,9 @@ of own-row/nested work is permitted.
 
 Derive the subset from actual `Capture.statements` and native plans' `Query Text`, matching backend and every call
 occurrence, including duplicate SQL; retain parallel byte/backend/error arrays. Keep the raw subset and whole
-capture together. Unclassified operations stay charged to the whole read; only the existing shared catalog-only
+capture together, preserving the whole evidence even when attribution fails. Require a native plan for each
+non-control statement occurrence; unmatched plans or statements fail rather than disappearing from the budget.
+Unclassified operations stay charged to the whole read; only the existing shared catalog-only
 classification applies. The same whole capture independently meets the one-read ceiling of 12 statements and one
 connection per PostgreSQL backend, with the existing direct candidate/point/row/block/byte budgets. Composed pages
 retain `8 + 4R` statements per backend. Count actual candidates including rejected/duplicate/lookahead work, not
