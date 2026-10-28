@@ -968,7 +968,6 @@ test('migration target digest stays fixed across activation changes and bundle c
   expect((await active()).digest).toBe(second.digest);
 });
 
-
 test('unprofiled readable subjects accept labels without default state but reject new state progress and holding', async () => {
   await setupProfiles('profile-absent');
   const subjectId = await driver.provisionSubject(fixture, 'people');
@@ -976,8 +975,16 @@ test('unprofiled readable subjects accept labels without default state but rejec
   const before = await driver.inspect(fixture);
   expect(before.independentLabels.length).toBeGreaterThan(0);
   await expectProblem(await entry(subjectId, 'planned'), 422, 'unsupported_library_profile');
-  await expectProblem(await session({ subjectId, mode: 'scalar_amount', unit: 'page' }), 422, 'unsupported_library_profile');
-  await expectProblem(await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()), 422, 'unsupported_library_profile');
+  await expectProblem(
+    await session({ subjectId, mode: 'scalar_amount', unit: 'page' }),
+    422,
+    'unsupported_library_profile',
+  );
+  await expectProblem(
+    await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()),
+    422,
+    'unsupported_library_profile',
+  );
   const after = await driver.inspect(fixture);
   for (const field of ['entries', 'sessions', 'copies', 'receipts', 'events', 'independentLabels'] as const)
     expect(after[field]).toEqual(before[field]);
@@ -987,12 +994,22 @@ test('removed profile values remain pinned and readable and their owner can clea
   await setupProfiles();
   const subjectId = await driver.provisionSubject(fixture, 'game');
   expect((await entry(subjectId, 'planned')).status).toBe(201);
-  const before = (await driver.inspect(fixture)).entries.find(row => row.subjectId === subjectId)!;
+  const before = (await driver.inspect(fixture)).entries.find((row) => row.subjectId === subjectId)!;
   await setupProfiles('profile-v3-removed-ids');
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(200);
-  expect((await driver.inspect(fixture)).entries.find(row => row.subjectId === subjectId)).toEqual(before);
+  expect((await driver.inspect(fixture)).entries.find((row) => row.subjectId === subjectId)).toEqual(before);
   await expectProblem(await entry(subjectId, 'planned'), 422, 'unsupported_library_profile');
-  expect((await api('owner', 'DELETE', `/v1/libraryEntries/${subjectId}?revision=${before.revision}`, undefined, idempotencyKey())).status).toBe(200);
+  expect(
+    (
+      await api(
+        'owner',
+        'DELETE',
+        `/v1/libraryEntries/${subjectId}?revision=${before.revision}`,
+        undefined,
+        idempotencyKey(),
+      )
+    ).status,
+  ).toBe(200);
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
 });
 
@@ -1008,13 +1025,15 @@ test('migration bounds examined source keys through a long pinned prefix and int
   await driver.migrateOwner(fixture, release.digest);
   const after = await driver.inspect(fixture);
   expect(after.entries.map(sameUserEntry)).toEqual(before.entries.map(sameUserEntry));
-  expect(after.entries.every(row => row.pin !== null)).toBe(true);
+  expect(after.entries.every((row) => row.pin !== null)).toBe(true);
   const pages = after.migration.pages;
-  expect(pages.some(page => page.committed && page.ownerRowsChanged === 0 && page.sourceRowsExamined === 100)).toBe(true);
+  expect(pages.some((page) => page.committed && page.ownerRowsChanged === 0 && page.sourceRowsExamined === 100)).toBe(
+    true,
+  );
   for (const page of pages) {
     expect(page.sourceRowsExamined).toBeLessThanOrEqual(100);
     expect(page.sourcePlans.reduce((n, plan) => n + plan.rowsExamined, 0)).toBe(page.sourceRowsExamined);
-    expect(page.sourcePlans.some(plan => plan.relation === 'library.entry' && plan.indexName.length > 0)).toBe(true);
+    expect(page.sourcePlans.some((plan) => plan.relation === 'library.entry' && plan.indexName.length > 0)).toBe(true);
     if (page.committed && page.sourceRowsExamined > 0) expect(page.checkpointAfter).not.toEqual(page.checkpointBefore);
   }
   expect(pages.reduce((n, page) => n + page.sourceRowsExamined, 0)).toBe(1024);
@@ -1027,24 +1046,53 @@ test('removing a profile preserves historic state progress and holding pins whil
   const progress = await session({ subjectId, mode: 'scalar_amount', unit: 'minute' });
   expect(progress.status).toBe(201);
   const progressId = (await body(progress)).progressSession.id as string;
-  const holding = await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey());
+  const holding = await api(
+    'owner',
+    'POST',
+    '/v1/copies',
+    { subjectId, kind: 'physical', status: 'owned' },
+    idempotencyKey(),
+  );
   expect(holding.status).toBe(201);
   const copyId = (await body(holding)).copy.id as string;
   const before = await driver.inspect(fixture);
-  const state = before.entries.find(row => row.subjectId === subjectId)!;
+  const state = before.entries.find((row) => row.subjectId === subjectId)!;
   await setupProfiles('profile-absent');
   const absent = await driver.inspect(fixture);
   for (const field of ['entries', 'sessions', 'copies'] as const) expect(absent[field]).toEqual(before[field]);
   for (const path of [`/v1/libraryEntries/${subjectId}`, `/v1/progressSessions/${progressId}`, `/v1/copies/${copyId}`])
     expect((await api('owner', 'GET', path)).status).toBe(200);
-  await expectProblem(await entry(subjectId, 'planned', idempotencyKey(), state.revision), 422, 'unsupported_library_profile');
-  await expectProblem(await session({ subjectId, mode: 'scalar_amount', unit: 'minute' }), 422, 'unsupported_library_profile');
-  await expectProblem(await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()), 422, 'unsupported_library_profile');
+  await expectProblem(
+    await entry(subjectId, 'planned', idempotencyKey(), state.revision),
+    422,
+    'unsupported_library_profile',
+  );
+  await expectProblem(
+    await session({ subjectId, mode: 'scalar_amount', unit: 'minute' }),
+    422,
+    'unsupported_library_profile',
+  );
+  await expectProblem(
+    await api('owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, idempotencyKey()),
+    422,
+    'unsupported_library_profile',
+  );
   const rejected = await driver.inspect(fixture);
-  for (const field of ['entries', 'sessions', 'copies', 'receipts', 'events'] as const) expect(rejected[field]).toEqual(absent[field]);
+  for (const field of ['entries', 'sessions', 'copies', 'receipts', 'events'] as const)
+    expect(rejected[field]).toEqual(absent[field]);
   expect((await api('other', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(404);
   expect(await driver.inspect(fixture)).toEqual(rejected);
-  expect((await api('owner', 'DELETE', `/v1/libraryEntries/${subjectId}?revision=${state.revision}`, undefined, idempotencyKey())).status).toBe(200);
+  expect(
+    (
+      await api(
+        'owner',
+        'DELETE',
+        `/v1/libraryEntries/${subjectId}?revision=${state.revision}`,
+        undefined,
+        idempotencyKey(),
+      )
+    ).status,
+  ).toBe(200);
   expect((await api('owner', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(204);
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
   expect((await api('owner', 'GET', `/v1/copies/${copyId}`)).status).toBe(404);
@@ -1057,8 +1105,8 @@ test('migration shares one examined-source allowance across pinned entries and p
   for (const row of (await driver.inspect(fixture)).entries)
     expect((await entry(row.subjectId, row.state, idempotencyKey(), row.revision)).status).toBe(200);
   const before = await driver.inspect(fixture);
-  expect(before.entries.every(row => row.pin !== null)).toBe(true);
-  expect([...before.sessions, ...before.copies].every(row => row.pin === null)).toBe(true);
+  expect(before.entries.every((row) => row.pin !== null)).toBe(true);
+  expect([...before.sessions, ...before.copies].every((row) => row.pin === null)).toBe(true);
 
   await driver.migrateOwner(fixture, release.digest);
   const after = await driver.inspect(fixture);
@@ -1066,9 +1114,11 @@ test('migration shares one examined-source allowance across pinned entries and p
   expect(after.sessions.map(sameUserSession)).toEqual(before.sessions.map(sameUserSession));
   expect(after.copies.map(sameUserCopy)).toEqual(before.copies.map(sameUserCopy));
   expect(after.receipts).toEqual(before.receipts);
-  expect([...after.sessions, ...after.copies].every(row => row.pin !== null)).toBe(true);
+  expect([...after.sessions, ...after.copies].every((row) => row.pin !== null)).toBe(true);
   const pages = after.migration.pages;
-  expect(pages.some(page => page.committed && page.sourceRowsExamined === 100 && page.ownerRowsChanged === 0)).toBe(true);
+  expect(pages.some((page) => page.committed && page.sourceRowsExamined === 100 && page.ownerRowsChanged === 0)).toBe(
+    true,
+  );
   for (const page of pages) {
     expect(page.sourceRowsExamined).toBeLessThanOrEqual(100);
     expect(page.sourcePlans.reduce((total, plan) => total + plan.rowsExamined, 0)).toBe(page.sourceRowsExamined);
@@ -1081,6 +1131,7 @@ test('migration shares one examined-source allowance across pinned entries and p
   }
   expect(pages.reduce((total, page) => total + page.sourceRowsExamined, 0)).toBe(322);
   expect(pages.reduce((total, page) => total + page.ownerRowsChanged, 0)).toBe(202);
-  expect(new Set(pages.flatMap(page => page.sourcePlans.map(plan => plan.relation))))
-    .toEqual(new Set(['library.entry', 'library.progress_session', 'library.copy']));
+  expect(new Set(pages.flatMap((page) => page.sourcePlans.map((plan) => plan.relation)))).toEqual(
+    new Set(['library.entry', 'library.progress_session', 'library.copy']),
+  );
 });

@@ -288,9 +288,16 @@ export interface LibraryLabelsDriver {
   setTime(instant: string): Promise<void>;
   /** Real shared deletion commands when implemented, with native admission/receipts; no invented HTTP route. */
   restoreLabel(as: LibraryLabelsPersona, labelId: string, expectedRevision: number, key: string): Promise<Response>;
-  restoreAssignment(as: LibraryLabelsPersona, input: {
-    subjectId: string; labelId: string; assignmentId: string; expectedRevision: number;
-  }, key: string): Promise<Response>;
+  restoreAssignment(
+    as: LibraryLabelsPersona,
+    input: {
+      subjectId: string;
+      labelId: string;
+      assignmentId: string;
+      expectedRevision: number;
+    },
+    key: string,
+  ): Promise<Response>;
   /** Park actual committed purge delivery after durable capture, BEFORE its due wait/writing guard; retain that episode. */
   holdNextAssignmentPurge(): Promise<CleanupLatch>;
   holdCleanup(): Promise<void>;

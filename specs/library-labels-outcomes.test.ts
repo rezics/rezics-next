@@ -186,9 +186,9 @@ test('reapplying one assignment has one native row and one private assignment ef
   expect(concurrent.assignment).toEqual(first.assignment);
   const afterRepeated = await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] });
   expect(assignmentRows(afterRepeated.assignments, label.id, subject.id)).toHaveLength(1);
-  expect(afterRepeated.subjectFacts.filter((fact) => fact.kind === 'label' && fact.sourceId === first.assignment.id)).toHaveLength(
-    1,
-  );
+  expect(
+    afterRepeated.subjectFacts.filter((fact) => fact.kind === 'label' && fact.sourceId === first.assignment.id),
+  ).toHaveLength(1);
   expect(labelEventRows(afterRepeated, label.id)).toEqual(outboxAfterFirst);
   expect(afterRepeated.receipts.length).toBe(afterFirst.receipts.length + 2);
   expect(afterRepeated.ownerFactFence).toBe(afterFirst.ownerFactFence);
@@ -386,7 +386,12 @@ test('stale label and assignment CAS revisions conflict without changing native 
   const removed = await driver.invoke(
     'owner',
     'library_label.unassign',
-    { labelId: label.id, subjectId: subject.id, assignmentId: assignment.assignment.id, expectedRevision: assignment.assignment.revision },
+    {
+      labelId: label.id,
+      subjectId: subject.id,
+      assignmentId: assignment.assignment.id,
+      expectedRevision: assignment.assignment.revision,
+    },
     key(),
   );
   expect(removed.status).toBe(200);
@@ -397,7 +402,12 @@ test('stale label and assignment CAS revisions conflict without changing native 
   const staleUnassign = await driver.invoke(
     'owner',
     'library_label.unassign',
-    { labelId: label.id, subjectId: subject.id, assignmentId: assignment.assignment.id, expectedRevision: assignment.assignment.revision },
+    {
+      labelId: label.id,
+      subjectId: subject.id,
+      assignmentId: assignment.assignment.id,
+      expectedRevision: assignment.assignment.revision,
+    },
     key(),
   );
   expect(staleUnassign.status).toBe(409);
@@ -454,7 +464,12 @@ test('state changes leave labels and label changes leave the current exclusive s
   const removed = await driver.invoke(
     'owner',
     'library_label.unassign',
-    { labelId: first.label.id, subjectId: subject.id, assignmentId: firstAssignment.assignment.id, expectedRevision: 1 },
+    {
+      labelId: first.label.id,
+      subjectId: subject.id,
+      assignmentId: firstAssignment.assignment.id,
+      expectedRevision: 1,
+    },
     key(),
   );
   expect(removed.status).toBe(200);
@@ -559,9 +574,11 @@ test('logical deletion revokes assignment reads and query facts before physical 
   const assigned = await assignLabel(subject.id, label.id);
   const before = await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] });
   expect(before.assignments.filter((row) => row.labelId === label.id)).toHaveLength(1);
-  expect(before.subjectFacts.some((fact) => fact.kind === 'label' && fact.sourceId === assigned.assignment.id && fact.active)).toBe(
-    true,
-  );
+  expect(
+    before.subjectFacts.some(
+      (fact) => fact.kind === 'label' && fact.sourceId === assigned.assignment.id && fact.active,
+    ),
+  ).toBe(true);
 
   expect((await deleteLabel(label.id, label.revision)).status).toBe(200);
   const catalog = await labelPage('owner', { limit: 100 });
@@ -571,9 +588,9 @@ test('logical deletion revokes assignment reads and query facts before physical 
   const after = await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] });
   expect(liveLabelRows(after.labels, label.id)).toHaveLength(0);
   expect(assignmentRows(after.assignments, label.id, subject.id)).toHaveLength(1);
-  expect(after.subjectFacts.some((fact) => fact.kind === 'label' && fact.sourceId === assigned.assignment.id && fact.active)).toBe(
-    false,
-  );
+  expect(
+    after.subjectFacts.some((fact) => fact.kind === 'label' && fact.sourceId === assigned.assignment.id && fact.active),
+  ).toBe(false);
   expect(labelEventRows(after, label.id).every((event) => event.subject === driver.accounts.owner.id)).toBe(true);
   expect(after.publicSubjectRows).toEqual([]);
 });
@@ -793,7 +810,6 @@ test('assignment rename and logical delete stay fixed-cost as owner data grows a
   ).toBeLessThanOrEqual(logarithmicAllowance);
 });
 
-
 test('readable unprofiled labels and curated membership use real admission while new profiled facts stay unsupported', async () => {
   const subject = await driver.provisionSubject({ unprofiled: true });
   const { label } = await createLabel('unprofiled owner label');
@@ -804,12 +820,21 @@ test('readable unprofiled labels and curated membership use real admission while
   expect(await (await driver.readPublicCollection(collection.id)).text()).toContain(subject.id);
   const before = await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] });
   expect(before.entries).toEqual([]);
-  for (const response of [await driver.setState('owner', subject.id, 'planned'), await driver.createProgressSession('owner', subject.id), await driver.createHolding('owner', subject.id)]) {
+  for (const response of [
+    await driver.setState('owner', subject.id, 'planned'),
+    await driver.createProgressSession('owner', subject.id),
+    await driver.createHolding('owner', subject.id),
+  ]) {
     expect(response.status).toBe(422);
     expect(await body<{ code: string }>(response)).toMatchObject({ code: 'unsupported_library_profile' });
   }
   expect(await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] })).toEqual(before);
-  const input = { subjectId: subject.id, labelId: label.id, assignmentId: assigned.assignment.id, expectedRevision: assigned.assignment.revision };
+  const input = {
+    subjectId: subject.id,
+    labelId: label.id,
+    assignmentId: assigned.assignment.id,
+    expectedRevision: assigned.assignment.revision,
+  };
   const denied = await driver.invoke('other', 'library_label.unassign', input, key());
   expect(denied.status).toBe(404);
   expect(await driver.inspect({ owner: 'owner', subjectIds: [subject.id], labelIds: [label.id] })).toEqual(before);
@@ -823,9 +848,11 @@ test('real hidden unprofiled subjects remain concealed and failed label admissio
   const { label } = await createLabel('hidden target');
   const before = await driver.inspect({ owner: 'owner' });
   for (const subjectId of [subject.id, driver.unknown.subjectId]) {
-    const traced = await driver.traceCommand(() => driver.invoke('owner', 'library_label.assign', { subjectId, labelId: label.id }, key()));
+    const traced = await driver.traceCommand(() =>
+      driver.invoke('owner', 'library_label.assign', { subjectId, labelId: label.id }, key()),
+    );
     expect(traced.value.status).toBe(404);
-    expect(traced.events.some(event => event.phase === 'receipt_read')).toBe(false);
+    expect(traced.events.some((event) => event.phase === 'receipt_read')).toBe(false);
   }
   expect(await driver.inspect({ owner: 'owner' })).toEqual(before);
 });
@@ -869,8 +896,10 @@ test('logical built-ins are read without writes and keep their identity through 
   for (const collection of [everything[0]!, ...states]) expect(collection.revision).toBe(0);
   for (const collection of [everything[0]!, ...states]) {
     const tuple = collection.builtin!;
-    const name = tuple.kind === 'everything' ? ['library.collection.builtin', 1, 'everything']
-      : ['library.collection.builtin', 1, 'state', tuple.profileId, tuple.stateSetId, tuple.stateId];
+    const name =
+      tuple.kind === 'everything'
+        ? ['library.collection.builtin', 1, 'everything']
+        : ['library.collection.builtin', 1, 'state', tuple.profileId, tuple.stateSetId, tuple.stateId];
     expect(collection.id).toBe(derivedId(driver.accounts.owner.id, JSON.stringify(name), driver.accounts.owner.route));
   }
 
@@ -882,7 +911,10 @@ test('logical built-ins are read without writes and keep their identity through 
     });
     expect(response.status).toBe(200);
     const page = await body<{ members: { subjectId: string }[] }>(response);
-    memberIds.set(collection.id, page.members.map((member) => member.subjectId));
+    memberIds.set(
+      collection.id,
+      page.members.map((member) => member.subjectId),
+    );
     expect(await driver.inspect({ owner: 'owner', subjectIds: [subject.id], collectionIds: ids })).toEqual(beforeReads);
   }
   expect(memberIds.get(everything[0]!.id)).toEqual([subject.id]);
@@ -920,18 +952,25 @@ test('logical built-ins are read without writes and keep their identity through 
   });
   expect(updated.status).toBe(200);
   expect((await body<{ collection: { id: string; revision: number } }>(updated)).collection).toMatchObject({
-    id: states[0]!.id, revision: 1,
+    id: states[0]!.id,
+    revision: 1,
   });
   const firstStored = await driver.inspect({ owner: 'owner', collectionIds: ids });
-  expect(firstStored.collections.map(row => row.collectionId).sort()).toEqual([everything[0]!.id, states[0]!.id].sort());
+  expect(firstStored.collections.map((row) => row.collectionId).sort()).toEqual(
+    [everything[0]!.id, states[0]!.id].sort(),
+  );
   for (const state of states.slice(1)) {
     const response = await driver.request('owner', {
-      method: 'PATCH', path: `/v1/collections/${state.id}`, headers: { 'Idempotency-Key': key() },
+      method: 'PATCH',
+      path: `/v1/collections/${state.id}`,
+      headers: { 'Idempotency-Key': key() },
       body: { revision: state.revision, title: 'Owner state title' },
     });
     expect(response.status).toBe(200);
-    expect((await body<{ collection: { id: string; revision: number } }>(response)).collection)
-      .toMatchObject({ id: state.id, revision: 1 });
+    expect((await body<{ collection: { id: string; revision: number } }>(response)).collection).toMatchObject({
+      id: state.id,
+      revision: 1,
+    });
   }
 
   const afterWrites = await list();
@@ -944,18 +983,22 @@ test('logical built-ins are read without writes and keep their identity through 
 
 async function everythingPath() {
   const response = await driver.request('ownerReadOnly', {
-    method: 'GET', path: `/v1/collections?curatorAccountId=${driver.accounts.owner.id}&limit=100`,
+    method: 'GET',
+    path: `/v1/collections?curatorAccountId=${driver.accounts.owner.id}&limit=100`,
   });
   expect(response.status).toBe(200);
   const page = await body<{ collections: { id: string; builtin?: { kind: string } }[] }>(response);
-  const everything = page.collections.find(row => row.builtin?.kind === 'everything');
+  const everything = page.collections.find((row) => row.builtin?.kind === 'everything');
   expect(everything).toBeDefined();
   return `/v1/collections/${everything!.id}/members?limit=100`;
 }
 const readEverything = (path: string) => driver.request('ownerReadOnly', { method: 'GET', path });
 const plusHours = (instant: string, hours: number) => new Date(Date.parse(instant) + hours * 3_600_000).toISOString();
 const removal = (subjectId: string, labelId: string, assignment: AssignmentView) => ({
-  subjectId, labelId, assignmentId: assignment.id, expectedRevision: assignment.revision,
+  subjectId,
+  labelId,
+  assignmentId: assignment.id,
+  expectedRevision: assignment.revision,
 });
 
 test('empty logical Everything detail and members remain read-only without a stored resource', async () => {
@@ -969,7 +1012,8 @@ test('empty logical Everything detail and members remain read-only without a sto
 
   for (let repetition = 0; repetition < 2; repetition++) {
     const listed = await driver.request('ownerReadOnly', {
-      method: 'GET', path: `/v1/collections?curatorAccountId=${owner.id}&limit=100`,
+      method: 'GET',
+      path: `/v1/collections?curatorAccountId=${owner.id}&limit=100`,
     });
     expect(listed.status).toBe(200);
     const page = await body<{ collections: DynamicCollectionView[]; next: string | null }>(listed);
@@ -980,8 +1024,12 @@ test('empty logical Everything detail and members remain read-only without a sto
     expect(detail.status).toBe(200);
     const { collection } = await body<{ collection: DynamicCollectionView }>(detail);
     expect(collection).toMatchObject({
-      id, curatorAccountId: owner.id, membershipKind: 'dynamic', builtinKind: 'everything',
-      visibility: 'private', revision: 0,
+      id,
+      curatorAccountId: owner.id,
+      membershipKind: 'dynamic',
+      builtinKind: 'everything',
+      visibility: 'private',
+      revision: 0,
     });
     expect(collection.title == null).toBe(true);
     for (const field of ['createdAt', 'updatedAt', 'memberCount', 'orderEpoch'])
@@ -1011,17 +1059,29 @@ test('one stale reservation is reclaimed and parent undo cannot revive it above 
   expect(admitted.parentPoints).toBeLessThanOrEqual(33);
   expect(admitted.chargedKeys).toBeLessThanOrEqual(100);
   const after = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
-  const reclaimed = after.retainedAssignments.filter(row => row.deletedAt !== null);
+  const reclaimed = after.retainedAssignments.filter((row) => row.deletedAt !== null);
   expect(reclaimed).toHaveLength(1);
-  expect(reclaimed[0]).toMatchObject({ labelId: labels[0]!.id, slotNo: null, deletedAt, purgeAfter: plusHours(deletedAt, 720) });
-  expect(reclaimed[0]!.revision).toBeGreaterThan(before.retainedAssignments.find(row => row.labelId === labels[0]!.id)!.revision);
-  expect(after.retainedAssignments.filter(row => row.slotNo !== null)).toHaveLength(32);
-  const parent = after.labels.find(row => row.labelId === labels[0]!.id)!;
+  expect(reclaimed[0]).toMatchObject({
+    labelId: labels[0]!.id,
+    slotNo: null,
+    deletedAt,
+    purgeAfter: plusHours(deletedAt, 720),
+  });
+  expect(reclaimed[0]!.revision).toBeGreaterThan(
+    before.retainedAssignments.find((row) => row.labelId === labels[0]!.id)!.revision,
+  );
+  expect(after.retainedAssignments.filter((row) => row.slotNo !== null)).toHaveLength(32);
+  const parent = after.labels.find((row) => row.labelId === labels[0]!.id)!;
   expect((await driver.restoreLabel('owner', parent.labelId, parent.revision, key())).status).toBe(200);
   expect((await assignmentPage('owner', { subjectId: subject.id })).page.assignments).toHaveLength(32);
   expect((await assignmentPage('owner', { labelId: parent.labelId })).page.assignments).toEqual([]);
   const current = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
-  const input = { subjectId: subject.id, labelId: parent.labelId, assignmentId: reclaimed[0]!.assignmentId!, expectedRevision: reclaimed[0]!.revision };
+  const input = {
+    subjectId: subject.id,
+    labelId: parent.labelId,
+    assignmentId: reclaimed[0]!.assignmentId!,
+    expectedRevision: reclaimed[0]!.revision,
+  };
   for (const persona of ['other', 'anonymous', 'suspended', 'unscoped'] as const)
     expect((await driver.restoreAssignment(persona, input, key())).ok).toBe(false);
   expect((await driver.restoreAssignment('owner', input, key())).status).toBe(409);
@@ -1044,16 +1104,20 @@ test('parent hiding and unchanged-claim undo affect Everything before any cleanu
   const hidden = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
   expect(hidden.retainedAssignments).toEqual(before.retainedAssignments);
   expect(hidden.ownerFactFence).not.toBe(before.ownerFactFence);
-  const parent = hidden.labels.find(row => row.labelId === label.id)!;
+  const parent = hidden.labels.find((row) => row.labelId === label.id)!;
   expect((await driver.restoreLabel('owner', label.id, parent.revision, key())).status).toBe(200);
-  expect((await assignmentPage('owner', { subjectId: subject.id })).page.assignments)
-    .toEqual([{ ...first.assignment, subjectId: subject.id, labelId: label.id }]);
+  expect((await assignmentPage('owner', { subjectId: subject.id })).page.assignments).toEqual([
+    { ...first.assignment, subjectId: subject.id, labelId: label.id },
+  ]);
   expect(await body(await readEverything(path))).toMatchObject({ members: [{ subjectId: subject.id }] });
   const restored = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
   expect(restored.ownerFactFence).not.toBe(hidden.ownerFactFence);
-  expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first.assignment), key())).status).toBe(200);
+  expect(
+    (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first.assignment), key()))
+      .status,
+  ).toBe(200);
   expect(await body(await readEverything(path))).toMatchObject({ members: [] });
-  const parentRevision = restored.labels.find(row => row.labelId === label.id)!.revision;
+  const parentRevision = restored.labels.find((row) => row.labelId === label.id)!.revision;
   const deletedAt = driver.now();
   expect((await deleteLabel(label.id, parentRevision)).status).toBe(200);
   const deleted = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
@@ -1074,25 +1138,53 @@ test('retained assignment identity survives reassign reclear and stale purge but
   const first = (await assignLabel(subject.id, label.id)).assignment;
   const latch = await driver.holdNextAssignmentPurge();
   const deletedAt = driver.now();
-  expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status).toBe(200);
+  expect(
+    (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status,
+  ).toBe(200);
   try {
     await latch.reached;
     await driver.setTime(plusHours(deletedAt, 24));
     const again = (await assignLabel(subject.id, label.id)).assignment;
     expect(again.id).toBe(first.id);
     expect(again.revision).toBeGreaterThan(first.revision);
-    expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status).toBe(409);
-    expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, again), key())).status).toBe(200);
+    expect(
+      (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status,
+    ).toBe(409);
+    expect(
+      (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, again), key())).status,
+    ).toBe(200);
     await driver.setTime(plusHours(deletedAt, 720));
-  } finally { latch.resume(); }
+  } finally {
+    latch.resume();
+  }
   await driver.settle();
   const retained = (await driver.inspect({ owner: 'owner', subjectIds: [subject.id] })).retainedAssignments[0]!;
-  expect(retained).toMatchObject({ assignmentId: first.id, deletedAt: plusHours(deletedAt, 24), purgeAfter: plusHours(deletedAt, 744), slotNo: null });
-  expect((await driver.restoreAssignment('owner', { subjectId: subject.id, labelId: label.id, assignmentId: retained.assignmentId!, expectedRevision: retained.revision }, key())).status).toBe(200);
+  expect(retained).toMatchObject({
+    assignmentId: first.id,
+    deletedAt: plusHours(deletedAt, 24),
+    purgeAfter: plusHours(deletedAt, 744),
+    slotNo: null,
+  });
+  expect(
+    (
+      await driver.restoreAssignment(
+        'owner',
+        {
+          subjectId: subject.id,
+          labelId: label.id,
+          assignmentId: retained.assignmentId!,
+          expectedRevision: retained.revision,
+        },
+        key(),
+      )
+    ).status,
+  ).toBe(200);
   const undone = (await assignmentPage('owner', { subjectId: subject.id })).page.assignments[0]!;
   expect(undone.id).toBe(first.id);
   expect(undone.revision).toBeGreaterThan(retained.revision);
-  expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, undone), key())).status).toBe(200);
+  expect(
+    (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, undone), key())).status,
+  ).toBe(200);
   await driver.setTime(plusHours(driver.now(), 720));
   await driver.settle();
   expect((await driver.inspect({ owner: 'owner', subjectIds: [subject.id] })).retainedAssignments).toEqual([]);
@@ -1101,7 +1193,9 @@ test('retained assignment identity survives reassign reclear and stale purge but
   expect(first.revision).toBe(1);
   expect(fresh.revision).toBe(1);
   const beforeStale = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
-  expect((await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status).toBe(409);
+  expect(
+    (await driver.invoke('owner', 'library_label.unassign', removal(subject.id, label.id, first), key())).status,
+  ).toBe(409);
   expect(await driver.inspect({ owner: 'owner', subjectIds: [subject.id] })).toEqual(beforeStale);
 });
 
@@ -1118,10 +1212,11 @@ test('read-only reserved source and current parent plans stay bounded through sa
     await driver.growInactiveHistory(subject.id, scale);
     const path = await everythingPath();
     for (const shape of ['stale', 'live'] as const) {
-      if (shape === 'live') for (let index = 0; index < 32; index++) {
-        const { label } = await createLabel(`source ${scale} ${index}`);
-        expect((await assignLabel(subject.id, label.id)).response.status).toBe(200);
-      }
+      if (shape === 'live')
+        for (let index = 0; index < 32; index++) {
+          const { label } = await createLabel(`source ${scale} ${index}`);
+          expect((await assignLabel(subject.id, label.id)).response.status).toBe(200);
+        }
       const before = await driver.inspect({ owner: 'owner', subjectIds: [subject.id] });
       expect(before.retainedAssignments.length).toBeGreaterThanOrEqual(scale);
       const source = await driver.measureLabelSource(() => readEverything(path));
@@ -1129,7 +1224,9 @@ test('read-only reserved source and current parent plans stay bounded through sa
       expect(await body(source.value)).toMatchObject({ members: shape === 'stale' ? [] : [{ subjectId: subject.id }] });
       expect(await driver.inspect({ owner: 'owner', subjectIds: [subject.id] })).toEqual(before);
       expect(source.rowsWritten).toBe(0);
-      const reservedIds = before.retainedAssignments.filter(row => row.slotNo !== null).map(row => row.assignmentId!);
+      const reservedIds = before.retainedAssignments
+        .filter((row) => row.slotNo !== null)
+        .map((row) => row.assignmentId!);
       expect(source.reservedSourceKeys.length).toBeGreaterThan(0);
       expect(source.reservedSourceKeys.length).toBeLessThanOrEqual(32);
       expect(new Set(source.reservedSourceKeys).size).toBe(source.reservedSourceKeys.length);
@@ -1142,28 +1239,41 @@ test('read-only reserved source and current parent plans stay bounded through sa
       expect(source.bytesRead).toBeLessThanOrEqual(64 * 1024);
       expect(source.sourceSql.length).toBeGreaterThan(0);
       const nodes = source.plans.flatMap(planNodes);
-      const reserved = nodes.filter(node => node['Index Name'] === source.reservedIndex.name);
+      const reserved = nodes.filter((node) => node['Index Name'] === source.reservedIndex.name);
       expect(reserved.length).toBeGreaterThan(0);
-      const assignmentScans = nodes.filter(node => node['Relation Name'] === 'label_assignment');
+      const assignmentScans = nodes.filter((node) => node['Relation Name'] === 'label_assignment');
       expect(assignmentScans.length).toBeGreaterThan(0);
-      const examined = (scans: LabelSourcePlan[]) => scans.reduce((n, node) => n + (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0)) * node['Actual Loops'], 0);
+      const examined = (scans: LabelSourcePlan[]) =>
+        scans.reduce(
+          (n, node) =>
+            n +
+            (node['Actual Rows'] +
+              (node['Rows Removed by Filter'] ?? 0) +
+              (node['Rows Removed by Index Recheck'] ?? 0)) *
+              node['Actual Loops'],
+          0,
+        );
       expect(examined(reserved)).toBeLessThanOrEqual(32);
-      expect(source.reservedIndex.definition).toMatch(/\(route, account_id, subject_id, assignment_id\).*WHERE \(slot_no IS NOT NULL\)/s);
-      const parents = nodes.filter(node => node['Relation Name'] === 'personal_label');
+      expect(source.reservedIndex.definition).toMatch(
+        /\(route, account_id, subject_id, assignment_id\).*WHERE \(slot_no IS NOT NULL\)/s,
+      );
+      const parents = nodes.filter((node) => node['Relation Name'] === 'personal_label');
       expect(parents.length).toBeGreaterThan(0);
       expect(examined([...assignmentScans, ...parents])).toBeLessThanOrEqual(100);
       for (const node of parents) {
         expect(node['Node Type']).toMatch(/^Index (Only )?Scan$/);
         for (const key of ['route', 'account_id', 'label_id']) expect(node['Index Cond']).toContain(key);
       }
-      expect(nodes.some(node => node['Relation Name'] === 'label_assignment' && node['Node Type'] === 'Seq Scan')).toBe(false);
+      expect(
+        nodes.some((node) => node['Relation Name'] === 'label_assignment' && node['Node Type'] === 'Seq Scan'),
+      ).toBe(false);
       samples.push({ shape, source });
     }
   }
   for (const shape of ['stale', 'live']) {
-    const costs = samples.filter(sample => sample.shape === shape).map(sample => sample.source);
+    const costs = samples.filter((sample) => sample.shape === shape).map((sample) => sample.source);
     for (const metric of ['statements', 'bytesRead', 'chargedKeys'] as const)
-      expect(new Set(costs.map(cost => cost[metric])).size).toBe(1);
+      expect(new Set(costs.map((cost) => cost[metric])).size).toBe(1);
     expect(costs.at(-1)!.buffers - costs[0]!.buffers).toBeLessThanOrEqual(64);
   }
 });
