@@ -30,6 +30,44 @@ test('the worker prompt says failures outside the declared paths are reported, n
   expect(prompt).toContain('A test that passes on your base and fails after your change is yours');
 });
 
+test('an implementation worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
+  const task = {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      kind: 'implementation',
+      paths: ['src/a.ts'],
+      acceptance: { command: ['bun', 'test'], tests: ['x'] },
+    },
+  } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain('The AGENTS.md that applies is already in your instructions; follow it.');
+  expect(prompt).not.toContain('Read and follow its AGENTS.md');
+  expect(prompt).toContain(
+    "Keep recursive searches and listings (find, grep -r, rg, du, ls -R and the like) inside the worktree or a directory this prompt names (the reference directory or a retry evidence directory); never run them on the worktree's parent, the main checkout's root or .temp, or the home directory, which hold every other task's worktree; read files outside the worktree by exact path.",
+  );
+});
+
+test('a research worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
+  const task = {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      kind: 'research',
+      paths: ['docs/research/x.md'],
+      acceptance: { command: ['test', '-s', 'docs/research/x.md'], tests: ['x'] },
+    },
+  } as unknown as Task;
+  const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+  expect(prompt).toContain('The AGENTS.md that applies is already in your instructions; follow it.');
+  expect(prompt).not.toContain('Read and follow its AGENTS.md');
+  expect(prompt).toContain(
+    "Keep recursive searches and listings (find, grep -r, rg, du, ls -R and the like) inside the worktree or a directory this prompt names (the reference directory or a retry evidence directory); never run them on the worktree's parent, the main checkout's root or .temp, or the home directory, which hold every other task's worktree; read files outside the worktree by exact path.",
+  );
+});
+
 test('the worker prompt forbids touching resources the attempt did not start', () => {
   const task = {
     worktree: '/work/trees/t1',

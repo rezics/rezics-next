@@ -40,6 +40,7 @@ import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt } from './types.ts';
 import type { RunningWorker } from './launch.ts';
 import { capacityWaiters, checkWaitMs } from './launch.ts';
+import { removeFinishedWorktree } from './worktree-lifetime.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -271,8 +272,8 @@ export class WorkerJob implements GateOutcomeSink {
           lastLogActivityAt = Date.now();
           checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
         }
-        // Check tools append elapsed slot-wait time beside the run log. Subtract it from idle time so a
-        // worker blocked on a check host does not look silent while its check is still waiting.
+        // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
+        // a local or remote check does not look silent while the command is running.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
         if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
@@ -320,8 +321,8 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
     };
-    // Time spent waiting for a check slot does not count against the class limit: under load, slot waits of half an
-    // hour or more ended attempts whose work was done.
+    // Time spent waiting for or running a check does not count against the class limit: workers do no model work while
+    // the check wrapper is silent.
     const remainingMs = () => limits.maxMs + checkWaitMs(ref.logPath) - (Date.now() - Date.parse(ref.startedAt));
     let timer: ReturnType<typeof setTimeout> | undefined;
     const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(SILENCE_CHECK_MS, silenceMs)));
@@ -515,6 +516,7 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    if (adoptRunning) this.track(removeFinishedWorktree(this.tasks.settings, store).then(() => {}));
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
     // it. Commands leave it to the host, so released tasks are not started from every command at once. The host
     // also releases tasks whose dependency reached their branch later, through a stabilize-to-dev merge.

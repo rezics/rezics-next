@@ -417,6 +417,7 @@ export class WorkerTasks {
   private async startReleasedTask(taskId: string): Promise<RunningWorker> {
     let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
+    this.ensureWorktree(task);
     this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.taskBaseHead(task.brief);
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
@@ -462,6 +463,23 @@ export class WorkerTasks {
     const worker = await this.retryTask(taskId, {}, true);
     if (!worker) throw new Error('released task was unexpectedly held again');
     return worker;
+  }
+  /** Recreate a finished task's removed checkout while holding its task lease. */
+  private ensureWorktree(task: Task): void {
+    if (existsSync(task.worktree)) return;
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
+    try {
+      mkdirSync(dirname(task.worktree), { recursive: true });
+      try {
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
+      } catch {
+        git(this.settings.mainCheckout, ['worktree', 'prune']);
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
+      }
+      installWorktreeDependencies(task.worktree);
+    } finally {
+      lease.release();
+    }
   }
   /** Whether a retry only records a held contract: it needs no worker, so it never waits for host capacity. */
   /** Whether a retry can skip the capacity wait (it only holds, or replaces a running worker) and whether it goes first. */
@@ -532,6 +550,7 @@ export class WorkerTasks {
         );
         return null;
       }
+      this.ensureWorktree(task);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const oldConfigDirectory = old
         ? this.settings.pools.find((candidate) => candidate.name === old.pool)?.configDirectory

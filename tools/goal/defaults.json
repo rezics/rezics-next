@@ -66,9 +66,9 @@
       "command": ["bun", "install"]
     },
     {
-      "path": "services/kernel/db/**/schema.sql",
+      "path": "services/kernel/db/*/schema.sql",
       "stage": "integration",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived", "schema"]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
     },
     {
       "path": "packages/client/src/kernel/**",
@@ -103,7 +103,8 @@
       "luna": 200000
     },
     "solContextWindow": 500000,
-    "toolOutputTokens": 4000
+    "toolOutputTokens": 4000,
+    "backgroundTerminalMaxTimeoutMs": 7200000
   },
   "gate": ["bun", "scripts/gate.ts"]
 }

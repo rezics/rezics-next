@@ -35,6 +35,7 @@ export type Pool = {
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };
+export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export type AffectedTestResult = {
   command: string[];
   status: 'passed' | 'failed' | 'unverified';
@@ -60,6 +61,7 @@ export type Settings = {
   gate: string[];
   formatCommand: string[];
   affectedTests?: AffectedTestCheck[];
+  derivedFiles?: DerivedFile[];
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
   startGraceMs?: number;
@@ -70,6 +72,7 @@ export type Settings = {
     compactTokens: { sol: number; luna: number };
     solContextWindow: number;
     toolOutputTokens: number;
+    backgroundTerminalMaxTimeoutMs: number;
   };
   integration: {
     batchSize: number;
