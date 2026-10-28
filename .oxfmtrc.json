@@ -5,6 +5,7 @@
   "ignorePatterns": [
     "services/kernel/test/zones/resource-core.test.ts",
     "services/kernel/test/semantic/subject-reference-contract.test.ts",
+    "services/kernel/test/semantic/outcome-fixture-capabilities.test.ts",
     "services/kernel/test/library/shelf-active.test.ts",
     "services/kernel/test/library/shelf-heads.test.ts",
     "services/kernel/test/library/shelf-http-schema.test.ts",

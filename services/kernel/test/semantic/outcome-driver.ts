@@ -95,11 +95,11 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authAudience: string;
       authJwksUrl: string;
     };
-    person(name: string): Promise<Account>;
+    person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
     send(
       account: Account | null,
-      method: 'GET' | 'POST' | 'PUT',
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
       path: string,
       body?: unknown,
       headers?: Record<string, string>,
@@ -228,6 +228,7 @@ async function startDriver(
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
+    const knownScopes = new Set(scopes);
     const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
     const { ports: registrationPorts } = createRegistrationPorts({
       pool,
@@ -246,7 +247,7 @@ async function startDriver(
     await auth.registerClient(clientId, scopes);
     timer.mark('auth side');
 
-    async function issue(email: string): Promise<string> {
+    async function issue(email: string, scopes: readonly string[]): Promise<string> {
       const signed = await service.handler(
         new Request(`${issuer}/signin`, {
           method: 'POST',
@@ -270,15 +271,36 @@ async function startDriver(
       return ((await issued.json()) as { access_token: string }).access_token;
     }
 
-    async function person(name: string): Promise<Account> {
-      const email = `${name}-${suffix}@semantic.test`;
-      const result = await host.workflows.register({
-        key: `${name}-${suffix}`,
-        handle: `${name}_${suffix}`,
-        email,
-        password,
+    const people = new Map<string, { scopes: string; account: Promise<Account> }>();
+    async function person(name: string, options?: { scopes?: readonly string[] }): Promise<Account> {
+      const requested = options?.scopes === undefined ? scopes : options.scopes;
+      if (!Array.isArray(requested)) throw new Error('Semantic fixture scopes must be an array');
+      for (const scope of requested) {
+        if (typeof scope !== 'string' || !knownScopes.has(scope))
+          throw new Error(`Unknown semantic fixture scope: ${String(scope)}`);
+      }
+      const chosen = [...new Set(requested)].sort();
+      const canonical = JSON.stringify(chosen);
+      const existing = people.get(name);
+      if (existing) {
+        if (existing.scopes !== canonical)
+          throw new Error(`Semantic fixture person ${name} is already bound to a different scope set`);
+        return existing.account;
+      }
+
+      // Reserve the name before native registration starts, including while issuance is still pending.
+      const account = Promise.resolve().then(async () => {
+        const email = `${name}-${suffix}@semantic.test`;
+        const result = await host.workflows.register({
+          key: `${name}-${suffix}`,
+          handle: `${name}_${suffix}`,
+          email,
+          password,
+        });
+        return { accountId: result.accountId, bearer: await issue(email, chosen) };
       });
-      return { accountId: result.accountId, bearer: await issue(email) };
+      people.set(name, { scopes: canonical, account });
+      return account;
     }
 
     const [governor, editor, acceptor, steward, suspended] = await Promise.all([
@@ -313,7 +335,7 @@ async function startDriver(
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
       account: Account | null,
-      method: 'GET' | 'POST' | 'PUT',
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
       path: string,
       body?: unknown,
       headers?: Record<string, string>,
@@ -336,6 +358,14 @@ async function startDriver(
     }
 
     const key = () => `"${randomUUID()}"`;
+    const collectionExposure = await send(governor, 'POST', '/v1/platform/exposure/collections:open', undefined, {
+      'Idempotency-Key': key(),
+    });
+    if (collectionExposure.status !== 200)
+      throw new Error(
+        `Collection exposure setup failed: ${collectionExposure.status}: ${JSON.stringify(collectionExposure.body)}`,
+      );
+
     async function grantAccount(
       account: Account,
       actions: string[],
