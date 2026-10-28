@@ -57,10 +57,13 @@ export interface NativeMediaObservation {
 export interface MediaBoundary {
   /** Production MediaStorage interface (also implemented by R2Storage), faked here ONLY. */
   configuration: Pick<MediaImportJobDependencies, 'storage' | 'fetchConfig'>;
-  /** Serve this exact native HTTPS URL. Stream overflow omits Content-Length;
-   * timeout stalls the response. Neither mode changes production limits.
+  /** Serve this exact native HTTPS URL. Optional encoded bytes are copied and
+   * bounded to the production 20 MiB source cap, including their backing buffer;
+   * shared/resizable backing and combination with a fault are rejected.
+   * Stream overflow omits Content-Length; timeout stalls the response.
+   * Neither mode changes production limits.
    */
-  source(url: string, fault?: SourceFault): Promise<SourceFixture>;
+  source(url: string, fault?: SourceFault, encodedBytes?: Uint8Array): Promise<SourceFixture>;
   /** Fail one real object-store operation; never fabricate a content job result. */
   failNextPut(): void;
   /** Test facade over real registered dispatch; not a new production queue API.
@@ -227,27 +230,44 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
   }
   const boundary: MediaBoundary = {
     configuration: { storage, fetchConfig: options.fetchConfig },
-    async source(url, fault) {
+    async source(url, fault, encodedBytes) {
       const parsed = new URL(url);
       if (parsed.protocol !== 'https:' || !options.fetchConfig.allowedHosts.includes(parsed.hostname))
         throw new Error('Fixture requires an actual configured source URL');
+      if (encodedBytes !== undefined) {
+        if (fault !== undefined) throw new TypeError('Supplied source bytes cannot be combined with a source fault');
+        if (
+          !(encodedBytes instanceof Uint8Array) ||
+          !(encodedBytes.buffer instanceof ArrayBuffer) ||
+          encodedBytes.buffer.resizable
+        )
+          throw new TypeError('Supplied source bytes require a fixed, non-shared backing buffer');
+        if (
+          encodedBytes.byteLength === 0 ||
+          encodedBytes.byteLength > 20 * 1024 * 1024 ||
+          encodedBytes.buffer.byteLength > 20 * 1024 * 1024
+        )
+          throw new RangeError('Supplied source bytes and backing must fit the production source byte cap');
+      }
       const bytes =
-        fault === 'stream-over-20-mib'
-          ? new Uint8Array(20 * 1024 * 1024 + 1)
-          : fault === 'corrupt-image'
-            ? new TextEncoder().encode('corrupt encoded image')
-            : new Uint8Array(
-                await sharp({
-                  create: {
-                    width: fault === 'over-40-megapixels' ? 6400 : 48,
-                    height: fault === 'over-40-megapixels' ? 6400 : 32,
-                    channels: 3,
-                    background: { r: 19, g: 81, b: 143 },
-                  },
-                })
-                  .png()
-                  .toBuffer(),
-              );
+        encodedBytes !== undefined
+          ? new Uint8Array(encodedBytes)
+          : fault === 'stream-over-20-mib'
+            ? new Uint8Array(20 * 1024 * 1024 + 1)
+            : fault === 'corrupt-image'
+              ? new TextEncoder().encode('corrupt encoded image')
+              : new Uint8Array(
+                  await sharp({
+                    create: {
+                      width: fault === 'over-40-megapixels' ? 6400 : 48,
+                      height: fault === 'over-40-megapixels' ? 6400 : 32,
+                      channels: 3,
+                      background: { r: 19, g: 81, b: 143 },
+                    },
+                  })
+                    .png()
+                    .toBuffer(),
+                );
       peak = Math.max(peak, bytes.byteLength);
       sources.set(url, { bytes, ...(fault === undefined ? {} : { fault }) });
       return { url, bytes: bytes.slice() };
