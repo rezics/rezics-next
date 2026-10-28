@@ -148,7 +148,7 @@ async function problem(response: Response, status: number, code: string, effect 
   expect(body.effect_status).toBe(effect);
   expect(JSON.stringify(body)).not.toContain('ex:');
   expect(JSON.stringify(body)).not.toContain('fixture.sessions');
-  return body;
+  expect(body).not.toHaveProperty('progressSession');
 }
 const send = (method: string, url: string, body?: unknown, key = entryKey(), bearer = owner.bearer) =>
   native.send(bearer, method, url, body, key);
