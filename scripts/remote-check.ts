@@ -1213,6 +1213,33 @@ async function finished(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal
   }
 }
 
+async function finishedRsync(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal): Promise<{ code: number; stderr: string }> {
+  const stderrStream = child.stderr;
+  let stderr = '';
+  const forwardStderr = async (): Promise<void> => {
+    if (!(stderrStream instanceof ReadableStream)) return;
+    const reader = stderrStream.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      process.stderr.write(value);
+      stderr += decoder.decode(value, { stream: true });
+    }
+    stderr += decoder.decode();
+  };
+  const [code] = await Promise.all([finished(child, signal), forwardStderr()]);
+  return { code, stderr };
+}
+
+function vanishedFileCount(stderr: string): number {
+  return stderr.split('\n').filter((line) => line.includes('file has vanished')).length;
+}
+
+function reportVanishedFiles(direction: 'to' | 'from', host: string, count: number): void {
+  console.error(`remote-check: rsync ${direction} ${host}: ${count} files vanished during transfer`);
+}
+
 function reportDuration(phase: string, started: number, host: string): void {
   console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}`);
 }
@@ -1279,12 +1306,13 @@ async function copyReturns(host: Host, directory: string, options: RemoteCheck, 
       `${host.address}:${directory}/`,
       `${resolve(options.workspace)}/`,
     ],
-    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'inherit' },
+    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
   );
-  const synced = await finished(sync, signal);
+  const { code: synced, stderr } = await finishedRsync(sync, signal);
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
-  if (synced !== 0) throw new Error(`rsync from ${host.name} failed with exit code ${synced}`);
+  if (synced === 24) reportVanishedFiles('from', host.name, vanishedFileCount(stderr));
+  else if (synced !== 0) throw new Error(`rsync from ${host.name} failed with exit code ${synced}`);
 }
 
 /** Runs the command on the lease's host and always removes the run's directory and releases the lease. */
@@ -1313,13 +1341,14 @@ async function runLeased(
         `${resolve(options.workspace)}/`,
         `${host.address}:${directory}/`,
       ],
-      { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'inherit' },
+      { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
     );
-    const synced = await finished(sync, signal);
+    const { code: synced, stderr } = await finishedRsync(sync, signal);
     reportDuration('rsync', rsyncStarted, host.name);
     if (signal.aborted) throw new Aborted();
     if ([12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload');
-    if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
+    if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
+    else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
 
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);

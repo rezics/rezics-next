@@ -312,7 +312,8 @@ const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
 const address = remote?.slice(0, remote.indexOf(':'));
 const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config.json', 'utf8'))[address] ?? {} : {};
 const rshIndex = args.indexOf('-e');
-const code = config.rsyncExit ?? 0;
+const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
+const code = isBack ? (config.rsyncBackExit ?? 0) : (config.rsyncExit ?? 0);
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   destination: args.at(-1),
@@ -320,6 +321,7 @@ appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   files: input.split('\\0').filter(Boolean),
   code,
 }) + '\\n');
+for (const file of config.vanishedFiles ?? []) console.error('rsync: [sender] file has vanished: ' + file);
 process.exit(code);
 `;
 
@@ -354,6 +356,8 @@ type HostConfig = {
   exit?: number;
   transportFailures?: number;
   rsyncExit?: number;
+  rsyncBackExit?: number;
+  vanishedFiles?: string[];
   stdout?: string;
   stderr?: string;
   hang?: boolean;
@@ -986,6 +990,17 @@ test('rsync connection errors are reported as transport failures before the comm
     expect(result.stderr).toContain('connection to a failed during workspace upload before a result');
     expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
   }
+});
+
+test('an upload with vanished source files runs and reports the vanished count', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, rsyncExit: 24, vanishedFiles: ['src/one.ts', 'src/two.ts'] },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('remote-check: rsync to a: 2 files vanished during transfer');
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
 });
 
 test('a host with no free slot is skipped and with none free the check waits', async () => {
@@ -2341,6 +2356,17 @@ test('a remote run copies the declared output paths back after it ends, also whe
   const copied = succeeded.events().filter((event) => event.kind === 'rsync');
   expect(copied).toHaveLength(2);
   expect(copied[1]!.files).toEqual(['.temp/screenshots', 'apps/web/src/kernel/recorded']);
+});
+
+test('copying outputs back accepts vanished files and reports their count', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, present: ['.temp/screenshots'], rsyncBackExit: 24, vanishedFiles: ['.temp/screenshots/old.png'] },
+  });
+  const result = await remote(env, workspace(), ['true'], ['--returns', '.temp/screenshots']);
+
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('remote-check: rsync from a: 1 files vanished during transfer');
+  expect(events().filter((event) => event.kind === 'rsync')).toHaveLength(2);
 });
 
 test('the returns probe runs under bash with nothing on stderr and lists present and absent outputs', () => {
