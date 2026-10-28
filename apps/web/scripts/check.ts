@@ -23,7 +23,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stackRun } from '../../../scripts/stack-run.ts';
+import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
@@ -324,6 +324,29 @@ async function runCommand(label: string, command: string, args: string[], env: N
   if (status !== 0) throw new Error(`${label} failed with status ${status}`);
 }
 
+/** Places Docker-backed host tests on a check host, with stack-run's local fallback and lease. */
+export async function runHostTests(
+  env: NodeJS.ProcessEnv = process.env,
+  place: typeof stackRun = stackRun,
+  execute: typeof runCommand = runCommand,
+): Promise<void> {
+  const run: StackRun = {
+    label: 'web host tests',
+    root,
+    cwd: app,
+    command: ['bun', 'run', 'test:host'],
+  };
+  const code = await place(
+    run,
+    async (slotEnv) => {
+      await execute('host tests', 'bun', ['run', 'test:host'], { ...env, ...slotEnv });
+      return 0;
+    },
+    env,
+  );
+  if (code !== 0) throw new Error(`host tests failed with status ${code}`);
+}
+
 /** Give Wrangler's local Worker a test-only signing key without replacing developer configuration. */
 export function ensureLocalWorkerVars(directory = app): void {
   const destination = join(directory, '.dev.vars');
@@ -437,7 +460,7 @@ async function main(args: string[]): Promise<void> {
     runCommand('typecheck', 'bun', ['check', '--no-script', '-p', 'tsconfig.json'], env),
     runTests(files, env, testScript),
   ]);
-  const hostResult = await Promise.allSettled([runCommand('host tests', 'bun', ['run', 'test:host'], env)]);
+  const hostResult = await Promise.allSettled([runHostTests(env)]);
   const failures = results
     .flatMap((result) =>
       result.status === 'rejected'
