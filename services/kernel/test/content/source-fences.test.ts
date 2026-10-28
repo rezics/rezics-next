@@ -6,6 +6,7 @@ import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { authoritativeTimeValue, IdempotencyConflictError } from '../../src/command/command.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../../src/content/imported-contract.ts';
+import fenceRead from '../../src/content/read-source-fences.sql';
 import { takedownSourceFence } from '../../src/content/source-fence-command.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../../src/content/source-fences.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
@@ -129,6 +130,69 @@ async function facts(body: ReturnType<typeof input>, database = { pool }) {
     return readFences(client, [home(body)]);
   });
 }
+
+test('readFences returns the original takedown time and id for a taken-down fence, in one statement per partition, and omits both for a legacy or standing fence', async () => {
+  const f = await fixture();
+  const body = input();
+  const target = home(body);
+  const partition = partitionOf(target.route);
+  const deps = await f.dependencies();
+  const firstTime = new Date();
+  const first = await takedownSourceFence({ ...deps, clock: () => firstTime }, f.actor, body, context());
+  const repeated = await takedownSourceFence(
+    { ...deps, clock: () => new Date(firstTime.getTime() + 1000) },
+    f.actor,
+    body,
+    context(),
+  );
+  const original = (
+    await admin.query('SELECT data FROM core.outbox WHERE partition_no=$1 AND position=$2', [
+      first.partition,
+      first.position,
+    ])
+  ).rows[0].data;
+  expect(new Date(original.takenDownAt).toISOString()).toBe(firstTime.toISOString());
+  expect(routeOf(original.takedownId)).toBe(target.route);
+  const legacy = { ...target, field_group: 'facts' as const };
+  const standing = { ...target, field_group: 'cover' as const };
+  for (const [row, takenDown] of [
+    [legacy, true],
+    [standing, false],
+  ] as const)
+    await admin.query(
+      `INSERT INTO content.source_fences
+      (route,source,external_id,field_group,taken_down,security_revision,taken_down_at,takedown_id)
+      VALUES ($1,$2,$3,$4,$5,1,NULL,NULL)`,
+      [...Object.values(row), takenDown],
+    );
+  let missing: SourceFenceTuple;
+  do {
+    missing = home(input());
+  } while (partitionOf(missing.route) !== partition);
+  const tuples = [target, legacy, standing, missing];
+  const rows = await withConnection(pool, async (client) => {
+    await readPartition(client, partition);
+    const start = observer.records.length;
+    const result = await readFences(client, tuples);
+    expect(observer.records.slice(start).map(({ statement, parameters }) => ({ statement, parameters }))).toEqual([
+      { statement: fenceRead.sql, parameters: [partition, JSON.stringify(tuples)] },
+    ]);
+    return result;
+  });
+  const expected = [
+    {
+      ...target,
+      takenDown: true,
+      securityRevision: repeated.value.securityRevision,
+      takenDownAt: original.takenDownAt,
+      takedownId: original.takedownId,
+    },
+    { ...legacy, takenDown: true, securityRevision: '1' },
+    { ...standing, takenDown: false, securityRevision: '1' },
+    { ...missing, takenDown: false, securityRevision: null },
+  ];
+  expect(rows).toEqual(expected);
+});
 
 test('the first takedown records its command time and a takedown id, and later takedowns and every event keep both', async () => {
   const f = await fixture();
