@@ -569,5 +569,14 @@
   "thread_write_unavailable": "Der Beitrag ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.",
   "threads_next_page": "Nächste Seite",
   "threads_sign_in_to_reply": "Anmelden, um zu antworten",
-  "threads_untitled": "Ohne Titel"
+  "threads_untitled": "Ohne Titel",
+  "inbox_heading": "Posteingang",
+  "inbox_sign_in": "Melde dich an, um deinen Posteingang zu sehen.",
+  "inbox_loading": "Posteingang wird geladen …",
+  "inbox_unavailable": "Der Posteingang ist vorübergehend nicht verfügbar.",
+  "inbox_empty": "Du bist auf dem neuesten Stand.",
+  "inbox_unavailable_item": "Dieser Eintrag ist nicht mehr verfügbar.",
+  "inbox_load_more": "Mehr laden",
+  "inbox_unread_count": "{count} ungelesene Benachrichtigungen",
+  "nav_inbox": "Posteingang"
 }

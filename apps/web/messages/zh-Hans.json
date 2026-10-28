@@ -569,5 +569,14 @@
   "thread_write_unavailable": "当前无法发布，请稍后再试。",
   "threads_next_page": "下一页",
   "threads_sign_in_to_reply": "登录后回复",
-  "threads_untitled": "无标题"
+  "threads_untitled": "无标题",
+  "inbox_heading": "收件箱",
+  "inbox_sign_in": "登录后查看收件箱。",
+  "inbox_loading": "正在加载收件箱…",
+  "inbox_unavailable": "收件箱暂时无法使用。",
+  "inbox_empty": "目前没有新通知。",
+  "inbox_unavailable_item": "此内容已不可用。",
+  "inbox_load_more": "加载更多",
+  "inbox_unread_count": "{count} 条未读通知",
+  "nav_inbox": "收件箱"
 }

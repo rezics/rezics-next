@@ -569,5 +569,14 @@
   "thread_write_unavailable": "Cette contribution est temporairement indisponible. Veuillez réessayer.",
   "threads_next_page": "Page suivante",
   "threads_sign_in_to_reply": "Connectez-vous pour répondre",
-  "threads_untitled": "Sans titre"
+  "threads_untitled": "Sans titre",
+  "inbox_heading": "Notifications",
+  "inbox_sign_in": "Connectez-vous pour consulter vos notifications.",
+  "inbox_loading": "Chargement des notifications…",
+  "inbox_unavailable": "Les notifications sont temporairement indisponibles.",
+  "inbox_empty": "Vous êtes à jour.",
+  "inbox_unavailable_item": "Cet élément n’est plus disponible.",
+  "inbox_load_more": "Afficher la suite",
+  "inbox_unread_count": "{count} notifications non lues",
+  "nav_inbox": "Notifications"
 }

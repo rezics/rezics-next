@@ -1,7 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { resolveInboxItems, type InboxNotice, type InboxReads } from '../src/inbox/inbox-read';
-import { unreadBadgeLabel } from '../src/inbox/unread-badge';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { resolveInboxItems } = await import('../src/inbox/inbox-read');
+const { unreadBadgeLabel } = await import('../src/inbox/unread-badge');
+type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
+type InboxReads = import('../src/inbox/inbox-read').InboxReads;
 
 const thread = 'thread-1';
 const post = 'post-1';
@@ -103,7 +106,7 @@ test('report outcomes use the reporter-readable report and appeal or takedown de
 });
 
 test('page and badge use private browser reads, open marks only the newest notice once, and the inbox is noindex', async () => {
-  const source = await readFile(new URL('../src/inbox/inbox-page.tsx', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../src/inbox/inbox-read.ts', import.meta.url), 'utf8');
   const route = await readFile(new URL('../src/routes/inbox.tsx', import.meta.url), 'utf8');
   const shell = await readFile(new URL('../src/shell/shell.tsx', import.meta.url), 'utf8');
 
@@ -135,4 +138,3 @@ test('inbox resolves repeated records once and stays within one list read plus o
     expect(1 + postReads + 1).toBeLessThanOrEqual(1 + 3 + 1);
   }
 });
-

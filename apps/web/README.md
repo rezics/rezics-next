@@ -1099,3 +1099,10 @@ reuse the isolate's anonymous entry. The fake defaults to no admitted groups: se
 Public composition previews keep their readable content when a group is closed. Links to individual collections
 require `collection.get`; an account collection list's continuation requires `account.collections`, since later
 pages use that standalone operation rather than the public composition read.
+
+### Notifications inbox (`/inbox`)
+
+- **Touches:** One private notification page read, then at most one existing post, decision or report read per distinct target; the navigation badge reads the capped count after hydration.
+- **Bound:** A page contains at most 20 notices; at most `1 + D + 1` kernel reads for `D` distinct targets, plus one count read per navigation inside its 60-second stale time. Opening marks the newest notice once.
+- **Growth check:** `tests/notifications-inbox.test.ts` checks pages of 5 and 20 notices naming three repeated posts and limits reads to the list, distinct targets and count.
+- **Visual check:** Inbox stories cover empty, mixed, unavailable and more-than-99 unread states in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.

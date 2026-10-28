@@ -30,10 +30,12 @@ import { m } from '../paraglide/messages.js';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/search.tsx';
+import { UnreadBadge } from '../inbox/unread-badge';
 import {
   Folders,
   Globe,
   House,
+  Inbox as InboxIcon,
   Library,
   LogIn,
   LogOut,
@@ -80,6 +82,7 @@ const messages = {
   shell_theme_dark: m.shell_theme_dark,
   nav_home: m.nav_home,
   nav_library: m.nav_library,
+  nav_inbox: m.nav_inbox,
   nav_search: m.nav_search,
   shell_open_navigation: m.shell_open_navigation,
   shell_close_navigation: m.shell_close_navigation,
@@ -166,6 +169,20 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                 </SidebarMenuItem>
               );
             })}
+            {session === 'signed-in' ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  className="h-10"
+                  isActive={pathname === '/inbox'}
+                  tooltip={messages.nav_inbox()}
+                  render={<Link to="/inbox" onClick={() => setOpenMobile(false)} />}
+                >
+                  <InboxIcon aria-hidden="true" className="text-sidebar-primary" />
+                  <span>{messages.nav_inbox()}</span>
+                  <UnreadBadge />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
@@ -232,6 +249,18 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
               </li>
             );
           })}
+          {session === 'signed-in' ? (
+            <li>
+              <Link
+                to="/inbox"
+                aria-current={pathname === '/inbox' ? 'page' : undefined}
+                className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+              >
+                <InboxIcon aria-hidden="true" className="size-4 text-sidebar-primary" />
+                {messages.nav_inbox()}
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </nav>
       <style>{'[data-open-navigation]{display:none!important}'}</style>

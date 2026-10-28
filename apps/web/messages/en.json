@@ -569,5 +569,14 @@
   "thread_write_unavailable": "This contribution is temporarily unavailable. Please try again.",
   "threads_next_page": "Next page",
   "threads_sign_in_to_reply": "Sign in to reply",
-  "threads_untitled": "Untitled"
+  "threads_untitled": "Untitled",
+  "inbox_heading": "Inbox",
+  "inbox_sign_in": "Sign in to see your inbox.",
+  "inbox_loading": "Loading your inbox…",
+  "inbox_unavailable": "Your inbox is temporarily unavailable.",
+  "inbox_empty": "You are all caught up.",
+  "inbox_unavailable_item": "This item is no longer available.",
+  "inbox_load_more": "Load more",
+  "inbox_unread_count": "{count} unread notifications",
+  "nav_inbox": "Inbox"
 }
