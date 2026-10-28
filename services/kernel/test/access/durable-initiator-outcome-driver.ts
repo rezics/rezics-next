@@ -54,6 +54,19 @@ const barrierTable = 'content.erasure_operation_test_barrier';
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 15));
 let workerBundle: Promise<string> | undefined;
 
+function retryableFixtureFailure(error: unknown): boolean {
+  if (error instanceof AccessUnavailableError) return true;
+  if (!(error instanceof Error)) return false;
+  const response = /\b503\s+(\{[^\r\n]+\})/.exec(error.message)?.[1];
+  if (!response) return false;
+  try {
+    const body = JSON.parse(response) as { retryable?: unknown; effect_status?: unknown };
+    return body.retryable === true && body.effect_status === 'not_applied';
+  } catch {
+    return false;
+  }
+}
+
 async function buildErasureBoard(
   resources: FixtureResources,
 ): Promise<Awaited<ReturnType<typeof buildBoardAndThreads>>> {
@@ -61,10 +74,7 @@ async function buildErasureBoard(
     try {
       return await buildBoardAndThreads(resources, 101, 1, randomUUID());
     } catch (error) {
-      const retryable =
-        error instanceof AccessUnavailableError ||
-        (error instanceof Error && /\b503\b.*"code":"deadline_exceeded"/s.test(error.message));
-      if (!retryable || attempt > 0) throw error;
+      if (!retryableFixtureFailure(error) || attempt > 0) throw error;
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
   }
