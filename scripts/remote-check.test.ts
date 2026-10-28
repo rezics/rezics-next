@@ -1021,7 +1021,9 @@ test('an upload with vanished source files runs and reports the vanished count',
 });
 
 test('the workspace upload compresses with zstd and sends only what differs from the host base tree', async () => {
-  const { env, events } = scenario({ a: { available: 8e9, base: '/srv/rezics-check/bases/base-one', baseAgeSeconds: 60 } });
+  const { env, events } = scenario({
+    a: { available: 8e9, base: '/srv/rezics-check/bases/base-one', baseAgeSeconds: 60 },
+  });
   const directory = workspace();
   const result = await remote(env, directory, ['true']);
 
@@ -1062,7 +1064,7 @@ test("a run whose upload finds no base on the host uploads the whole workspace a
   expect(args.some((argument) => argument.startsWith('--copy-dest='))).toBe(false);
   expect((upload.files as string[]).sort()).toEqual(expected);
   expect(seen.find((event) => event.kind === 'run')!.script).toContain('bun install --frozen-lockfile');
-  expect(seen.find(event => event.kind === 'run')!.script).toContain('REMOTE_CHECK_BASE_REFRESH');
+  expect(seen.find((event) => event.kind === 'run')!.script).toContain('REMOTE_CHECK_BASE_REFRESH');
 });
 
 test('after a successful upload the host refreshes an old base atomically without disturbing a run that reads it', async () => {

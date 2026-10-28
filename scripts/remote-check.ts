@@ -1334,7 +1334,12 @@ async function baseState(host: Host): Promise<{ base: string | null; zstd: boole
   const base = output.match(/^BASE (.+)$/m)?.[1];
   const age = output.match(/^AGE (.+)$/m)?.[1];
   const zstd = output.match(/^ZSTD ([01])$/m)?.[1];
-  if (base === undefined || age === undefined || zstd === undefined || (base !== '-' && !base.startsWith(`${ROOT}/bases/`))) {
+  if (
+    base === undefined ||
+    age === undefined ||
+    zstd === undefined ||
+    (base !== '-' && !base.startsWith(`${ROOT}/bases/`))
+  ) {
     throw new Error(`remote-check: invalid base state from ${host.name}`);
   }
   return { base: base === '-' ? null : base, zstd: zstd === '1' };
