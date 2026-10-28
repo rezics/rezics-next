@@ -18,8 +18,7 @@ function safeCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER): value is 
 
 function uuid(value: unknown): value is string {
   return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+    typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
   );
 }
 
@@ -31,7 +30,8 @@ function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
       !record(nativeTotal) ||
       !safeCount(nativeTotal.value, 10_000) ||
       (nativeTotal.relation !== 'eq' && nativeTotal.relation !== 'gte')
-    ) fail();
+    )
+      fail();
   }
   return body.hits.hits.map((hit) => {
     if (!record(hit) || !uuid(hit._id) || typeof hit._index !== 'string' || !record(hit._source)) fail();
@@ -45,7 +45,8 @@ function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
       !safeCount(hit._source.partition, 4095) ||
       hit._source.partition !== partition ||
       !safeCount(hit._source.security_revision)
-    ) fail();
+    )
+      fail();
     return hit;
   });
 }
@@ -64,7 +65,8 @@ export function admitSearchPayload(
       !Array.isArray(hit.sort) ||
       ('matched_queries' in hit &&
         (!Array.isArray(hit.matched_queries) || !hit.matched_queries.every((item) => typeof item === 'string')))
-    ) fail();
+    )
+      fail();
     const tuple = hit.sort as unknown[];
     const id = tuple[plan.sort === 'id' ? 0 : tuple.length - 1];
     if (!uuid(id)) fail();
@@ -78,9 +80,11 @@ export function admitSearchPayload(
         !safeCount(tuple[0]) ||
         (tuple[1] !== null && typeof tuple[1] !== 'string') ||
         tuple[2] !== hit._id
-      ) fail();
+      )
+        fail();
     } else if (plan.sort === 'relevance') {
-      if (tuple.length !== 2 || typeof tuple[0] !== 'number' || !Number.isFinite(tuple[0]) || tuple[1] !== hit._id) fail();
+      if (tuple.length !== 2 || typeof tuple[0] !== 'number' || !Number.isFinite(tuple[0]) || tuple[1] !== hit._id)
+        fail();
     } else fail();
   }
 }
@@ -98,7 +102,11 @@ export function admitSuggestPayload(body: unknown, size: number, prefix: string)
   for (const hit of hits) if (!physicalIndex.test(hit._index as string)) fail();
 }
 
-type FacetPlan = { facets: readonly { property: string; size: number }[]; sample: number; overflowProperties?: readonly string[] };
+type FacetPlan = {
+  facets: readonly { property: string; size: number }[];
+  sample: number;
+  overflowProperties?: readonly string[];
+};
 
 function buckets(node: unknown, maximum: number, nested: boolean, sample: number): void {
   if (!record(node) || !Array.isArray(node.buckets) || node.buckets.length > maximum) fail();
@@ -121,11 +129,7 @@ function admitFacetNodes(nodes: RecordValue, plan: FacetPlan): void {
       terms = outer.values;
     } else {
       nested = true;
-      if (
-        !record(outer.facts) ||
-        !record(outer.facts.property) ||
-        !record(outer.facts.property.values)
-      ) fail();
+      if (!record(outer.facts) || !record(outer.facts.property) || !record(outer.facts.property.values)) fail();
       terms = outer.facts.property.values;
     }
     buckets(terms, facet.size * 2, nested, plan.sample);
@@ -138,7 +142,8 @@ export function admitFacetPayload(body: unknown, plan: FacetPlan): asserts body 
     !safeCount(body.hits.total.value, 10_000) ||
     (body.hits.total.relation !== 'eq' && body.hits.total.relation !== 'gte') ||
     !record(body.aggregations)
-  ) fail();
+  )
+    fail();
   const aggs = body.aggregations;
   const definite = (plan.overflowProperties?.length ?? 0) > 0;
   for (let index = 0; index < plan.facets.length; index++) {
