@@ -360,6 +360,15 @@ const faults = [
   ['non-error', () => ({ private: 'callback failure' }), null],
 ] as const;
 
+const commandEvidenceSites = new Set([
+  'resource anchor validate',
+  'page anchor validate',
+  'parent anchor validate',
+  'creation validate',
+  'manifest creation validate',
+  'standing parent validate',
+]);
+
 for (const [site, invoke] of Object.entries(sites)) {
   for (const [name, error, reason] of faults) {
     test(`${site}: ${name} closes the request without effects`, async () => {
