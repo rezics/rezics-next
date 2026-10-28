@@ -1027,7 +1027,11 @@ test('rsync connection errors retry on another host before the command runs', as
 
     expect(result.code).toBe(0);
     expect(result.stderr).toContain(`retrying transport failure on a with code ${exit}`);
-    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
+    expect(
+      events()
+        .filter((event) => event.kind === 'run')
+        .map((event) => event.address),
+    ).toEqual(['ops@b.test']);
   }
 });
 
@@ -1148,12 +1152,17 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
     });
     const result = await remote(env, workspace(), ['true']);
     expect(result.code).toBe(0);
-    expect(events().filter((event) => event.kind === 'rsync').map((event) => event.destination)).toEqual([
-      expect.stringContaining('ops@a.test:'),
-      expect.stringContaining('ops@b.test:'),
-    ]);
+    expect(
+      events()
+        .filter((event) => event.kind === 'rsync')
+        .map((event) => event.destination),
+    ).toEqual([expect.stringContaining('ops@a.test:'), expect.stringContaining('ops@b.test:')]);
     expect(result.stderr).toContain(`retrying transport failure on a with code ${code}`);
-    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
+    expect(
+      events()
+        .filter((event) => event.kind === 'run')
+        .map((event) => event.address),
+    ).toEqual(['ops@b.test']);
   }
 
   const ssh = scenario({
@@ -1163,7 +1172,12 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
   const result = await remote(ssh.env, workspace(), ['true']);
   expect(result.code).toBe(0);
   expect(result.stderr).toContain('retrying transport failure on a with code 255');
-  expect(ssh.events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@b.test']);
+  expect(
+    ssh
+      .events()
+      .filter((event) => event.kind === 'run')
+      .map((event) => event.address),
+  ).toEqual(['ops@b.test']);
 
   const exhausted = scenario({ a: { available: 8e9, rsyncFailures: 5, rsyncFailureCode: 30 } });
   const failed = await remote(exhausted.env, workspace(), ['true']);

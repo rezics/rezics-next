@@ -663,8 +663,11 @@ export function workspaceFiles(workspace: string): string[] {
       parts[0] === '.git' ||
       parts[0] === '.temp' ||
       parts.includes('node_modules') ||
-      parts.some((part) => ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part))
-    ) return false;
+      parts.some((part) =>
+        ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),
+      )
+    )
+      return false;
     try {
       return lstatSync(resolve(workspace, file)).isFile() || lstatSync(resolve(workspace, file)).isSymbolicLink();
     } catch {
@@ -1471,8 +1474,7 @@ async function runLeased(
     const { code: synced, stderr } = await finishedRsync(sync, signal);
     reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
     if (signal.aborted) throw new Aborted();
-    if ([10, 12, 30, 35, 255].includes(synced))
-      throw new RemoteTransportError(host.name, 'workspace upload', synced);
+    if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
     // rsync documents 24 as a vanished source file; generated outputs are excluded above, and remaining races
     // should not fail a check because the source snapshot is already best-effort.
@@ -1501,7 +1503,11 @@ async function runLeased(
       if (signal.aborted) throw new Aborted();
       const recorded = output.trim();
       const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
-      if (statusCode !== 0 || (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') || parsed > 255) {
+      if (
+        statusCode !== 0 ||
+        (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
+        parsed > 255
+      ) {
         throw new RemoteTransportError(host.name, 'remote command', 255, false);
       }
       if (recorded === 'NOT_STARTED') throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
@@ -1561,11 +1567,29 @@ async function runWithTransportRetries(
     const retryHosts = attempt > 0 && preferred.length > 0 ? preferred : hosts;
     let lease: Lease | null;
     if (attempt === 0) {
-      lease = await acquire(retryHosts, slots, options.estimateMs, options.pollMs ?? 5000, signal, giveUpIfUnanswered, onAnswered, options.gate ?? false);
+      lease = await acquire(
+        retryHosts,
+        slots,
+        options.estimateMs,
+        options.pollMs ?? 5000,
+        signal,
+        giveUpIfUnanswered,
+        onAnswered,
+        options.gate ?? false,
+      );
     } else {
       lease = await acquireOnce(retryHosts, slots, options.estimateMs, signal, options.gate ?? false);
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
-        lease = await acquire(hosts, slots, options.estimateMs, options.pollMs ?? 5000, signal, false, onAnswered, options.gate ?? false);
+        lease = await acquire(
+          hosts,
+          slots,
+          options.estimateMs,
+          options.pollMs ?? 5000,
+          signal,
+          false,
+          onAnswered,
+          options.gate ?? false,
+        );
       }
     }
     if (!lease) return null;
@@ -1611,10 +1635,20 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       await sleep(100 * 2 ** (attempt - 1), signal);
     }
     const preferred = hosts.filter((host) => !failedHosts.has(host.name));
-    const lease = await acquireOnce(attempt > 0 && preferred.length > 0 ? preferred : hosts, slots, options.estimateMs, signal, options.gate ?? false);
+    const lease = await acquireOnce(
+      attempt > 0 && preferred.length > 0 ? preferred : hosts,
+      slots,
+      options.estimateMs,
+      signal,
+      options.gate ?? false,
+    );
     if (!lease) return { status: 'no-slot' };
     try {
-      return { status: 'ran', host: lease.host.name, code: await runLeased(lease, options, files, slotWaitStarted, signal) };
+      return {
+        status: 'ran',
+        host: lease.host.name,
+        code: await runLeased(lease, options, files, slotWaitStarted, signal),
+      };
     } catch (error) {
       if (!(error instanceof RemoteTransportError) || !error.retryable || attempt === 2 || signal.aborted) throw error;
       lastFailure = error;
