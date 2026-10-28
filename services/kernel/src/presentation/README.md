@@ -62,142 +62,22 @@ page dispatch retain the Cost bounds below.
 
 ## Cost
 
-These bounds follow `profiles.ts`, its SQL, and the presentation profile migration and schema dump; they are derivations, not measurements.
-Let P be the number of stored profiles and H the activation head count. A body is at most `MAX_PROFILE_BYTES` (1 MiB); growth checks hold that size fixed.
-Rows means rows examined, including filtered rows, not just returned rows; blocks means shared blocks accessed, including index, heap, and payload blocks.
-A primary-key probe examines O(1) rows and O(log size) blocks. Logarithms mean `log(2 + size)`. No operation scans earlier profiles.
-Publish and activate are receipted commands on partition 0. K denotes the seven framework statements of one fresh attempt; add one receipt read when a receipt is configured.
+Bounds count examined rows, shared index and heap blocks, and SQL statements. `P` is the number of stored profiles and
+`H` the number of activation heads in route 0. Profile bodies are bounded by `MAX_PROFILE_BYTES` (1 MiB); body
+validation and hashing are linear in that fixed input. Page bounds assume a valid published profile, fixed descriptor
+and page limits, and each dispatched route's own Cost bound. These are source-derived bounds, not latency measurements.
 
-### Page read execution
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Profile publish | Validate and hash one body; insert 0 or 1 `presentation.profile` row through `(route, digest)`. A conflict is a no-op. The receipted command also reads/writes its fixed partition-0 receipt, basis, position and outbox state, authorizes on the Global Context, and emits one event. | Constant rows and statements, logarithmic blocks in profile and fixed command history (`P`, `H`, and command history); validation and hashing are linear in body bytes, capped at 1 MiB. | `test/presentation/growth-profiles.test.ts`: “Profile publish stays within its bound as P grows” |
+| Profile activate | Read 0 or 1 profile by `(route, digest)`, probe the latest activation by `(route, head)`, and conditionally insert one activation row. The receipted command also touches its fixed command state and emits one event. | Constant rows and statements, logarithmic blocks in `P`, `H`, and fixed command history; no scan of earlier profiles or heads. | `test/presentation/growth-profiles.test.ts`: “Profile activate stays within its bound as P grows” |
+| Profile read | For a well-formed digest, read 0 or 1 body by `(route, digest)`; a cached body still checks database existence. A cold body is validated and its digest verified. | Constant rows and statements, logarithmic blocks in `P`; no scan of profile history. Cold validation and hashing are linear in the body, capped at 1 MiB. | `test/presentation/growth-profiles.test.ts`: “Profile read stays within its bound as P grows” |
+| Active profile lookup | Read the latest activation head by `(route, head)` with `LIMIT 1`; on a cache miss, also read the referenced profile by `(route, digest)`. | Constant rows and statements, logarithmic blocks in `H` and `P`; one or two data statements, independent of earlier heads. | `test/presentation/growth-profiles.test.ts`: “Active profile lookup stays within its bound as P grows” |
+| Subject page read | Authorize the Global Context, resolve the active profile and (for subject or account targets) active release, resolve the template and plan up to 256 nodes. Dispatch at most 16 distinct reads, at most four concurrently; dispatches with the same canonical descriptor share one request. Subject address resolution can follow the bounded redirect into its account page. | Constant profile, release and authorization rows/statements with logarithmic indexed blocks as their populations grow. Planning is linear in at most 256 nodes; sub-read costs compose from their cited rows below and their owning README rows. At most 16 dispatches and 128 returned subjects. | `test/presentation/growth-pages.test.ts`: “Page read stays within its bound as N grows” |
+| Inverse links and public collections page reads | Inverse links check visibility and Access, read indexed inverse rows, and fill labels for returned holders. Public collections read the exact count from `subject_listing`, scan indexed subject-collection pairs, then check current visibility of returned Collections. | Inverse links return at most `limit`; candidates are at most `4 × limit + 1` with a type filter or `limit + 1` without, plus at most 1,000 count candidates. Public collections use `limit` 1–6, scan at most `limit + 1` pairs, and inspect at most `limit` Collections. Rows are bounded by these fixed limits and statements stay constant as the anchor's lists grow. | `test/presentation/page-read-kinds.test.ts`: “inverse links read stays within its bound at 1, 10 and 100 holders”; “public collections read stays within its bound at 1, 10 and 100 collections” |
+| Account page, identity, discussions, replies and collections reads | Account pages probe the handle claim and account, then dispatch at most 16 distinct reads with summed published `readCost` at most 128. Identity reads may add one avatar summary. Discussion/review pages read at most `4 × limit` candidates and hydrate returned threads; replies hydrate each reply and containing thread; collections use the BASIC view. | Constant rows and statements and logarithmic blocks as unrelated accounts and account activity grow, at fixed limits. Each list does O(limit) candidate and hydration work: thread limit 1–20, reply limit 1–20, and collection limit 1–24. | `test/presentation/agent-read-kinds.test.ts`: “account page read stays within its bound at 1, 10 and 100 threads”; “account identity read stays within its bound at 1, 10 and 100 unrelated accounts”; “account discussions read stays within its bound at 1, 10 and 100 threads”; “account replies read stays within its bound at 1, 10 and 100 replies”; “account collections read stays within its bound at 1, 10 and 100 collections” |
+| Profile and active-profile HTTP reads | Each route authorizes the Global Context through Access, then reads a profile by `(route, digest)` or the latest head by `(route, head)`; active-profile reads also resolve the profile on a cache miss. | Constant rows and statements, logarithmic blocks in profile, activation and unrelated Global Context counts. Includes route authorization; fixed profile body validation applies on a cold cache miss. | `test/presentation/growth-profile-routes.test.ts`: “Profile routes stay within their bound with Global Context authorization as profiles grow” |
+| Reaction counts page read | Check subject visibility and Access, then read the subject's reaction-total range; the page does not read the viewer's own reaction. | At most seven reaction-total rows in one statement, independent of contributor count; visibility and authorization add a constant number of point reads and statements with logarithmic blocks. | `test/presentation/page-read-kinds.test.ts`: “reaction counts read stays within its bound at 1, 10 and 100 contributors” |
 
-- Touches: `readPage` dispatches each distinct descriptor through its standalone route: `Anchored subject read` in `src/semantic/README.md`, `Search planning and engine page` in `src/search/README.md`, or one of the account reads below. A subject `308` adds one subject route.
-- Bound: For k <= 16 descriptors, equal canonical JSON descriptors share a dispatch, so there are at most k distinct dispatches, with at most four running at once. SQL rows, blocks and statements are the sum of those route costs, plus any followed subject route; this executor issues no SQL. Cost is independent of N, P and H beyond those routes. Session merging is O(k x 32) components.
-- Growth check: `test/presentation/reads.test.ts`: `a page holds at most sixteen valid reads, runs at most four at a time and dispatches identical reads once`; dispatches stay at most k at every page size.
-
-### Page read languages
-
-The optional `languages` chain uses the search request's 1–8 unique language tags. A site sends the reader's locale and
-that locale's sibling scripts in priority order, without appending `en`; search label choice falls back to the work's
-original language and then `en`.
-
-- **Touches:** nothing new; the existing search reads carry one more body field.
-- **Bound:** the page read's reads, statements and engine requests are unchanged. Label choice is linear in at most 8 ranges per hit, inside the search read.
-- **Growth check:** none; no read changes. `test/presentation/page-languages.test.ts`, "a page read passes the reader's language chain to its search reads", proves the behaviour.
-
-### Page read
-
-A subject target follows its merge survivor, then resolves current verification through Access's public agent lookup.
-For a verified active account it answers `308` directly to the account's handle page, preserving the view,
-languages and query. The JSON body is `{ redirect: { from: subjectId, to: handle } }`; `Location` names
-`/v1/pages:read` with an encoded JSON `target` query parameter replacing the POST body's target when followed.
-Never verified, pending, suspended, released, revoked and deleted accounts do not redirect or disclose an account handle.
-When no active verified account resolves, the subject page clears the account reference in its embedded subject read.
-Subject reads and account reads retain their existing behavior.
-
-An account without a named subject uses `schema:Organization` for an organization, `schema:SoftwareApplication` for
-an automated account, and `schema:Person` for a person. Automation and its `operatorId` come from the public account
-identity, as in `GET /v1/accounts?ids=`, and remain available in the account identity read on the page.
-
-A subject or account target may name a `view`; the page is then that view's document, planned and read the same way, and
-`views` lists the views the page's templates define. A view no template defines, and a `view` on a route target, are
-refused (`404` and `400`).
-
-- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject or account target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` runs once and is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read`, `Search planning and engine page`, or an account read below). The subject and account probes are reused. This request releases its admission slot before those sub-reads; each sub-read takes its own.
-- Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
-- Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
-
-### Page read for a subject address
-
-- Touches: the existing subject probe plus one indexed public agent lookup by subject id in the subject's partition. Access confirms the current verification against the account authority.
-- Bound: one extra indexed point lookup per subject page read; statements and rows constant, blocks O(log N).
-- Growth check: `test/presentation/agent-page-address.test.ts` grows verified agents and unrelated subjects at three scales and measures subject and handle page reads.
-
-### Account page read
-
-- Touches: one handle claim and one account row (the account probe), one subject probe when the account is verified, then at most 16 distinct reads in one `readPage` call.
-- Bound: two probes plus the planned reads, whose summed `readCost` is at most 128 (checked at publish). Nothing grows with the number of accounts or with the account's activity beyond each list's `limit`.
-- Growth check: `test/presentation/agent-read-kinds.test.ts`, "account page read stays within its bound at 1, 10 and 100 threads", scales [1, 10, 100].
-
-### Page inverse links read
-
-- Touches: One `GET /v1/subjects/:id/links` property-page call. The standalone route checks subject visibility and Access, reads the indexed inverse page, returns its exact property count or bounded type-filter count, and fills labels for returned holders.
-- Bound: At most `limit` holders are returned. With a type filter, the established route scans at most `4 × limit + 1` page candidates and samples at most 1,000 count candidates; without a type filter the page scan is at most `limit + 1`. Label work is bounded by the returned holders. Rows stay within those fixed limits and statements remain constant as the anchor's in-degree grows.
-- Growth check: `test/presentation/page-read-kinds.test.ts`: `inverse links read stays within its bound at 1, 10 and 100 holders`.
-
-### Page public collections read
-
-- Touches: One `GET /v1/subjects/:id/collections` call with a limit of 1–6. The standalone route resolves the subject, reads its public collection count from `subject_listing`, scans at most `limit + 1` indexed pairs, then checks at most `limit` Collection rows for current public visibility.
-- Bound: The count is one primary-key probe and remains exact. Pair and Collection work is bounded by `limit + 1` and `limit`, respectively. At the fixed preview limit, rows and statements grow only until six collections are considered, then stay constant as the subject's public collection count grows.
-- Growth check: `test/presentation/page-read-kinds.test.ts`: `public collections read stays within its bound at 1, 10 and 100 collections`.
-
-### Page reaction counts read
-
-- Touches: One `GET /v1/subjects/:id/reactions` call. The standalone route checks subject visibility and Access, then uses the existing reaction-total read for the subject id; it does not read or return the viewer's own reaction.
-- Bound: The reaction-total range returns at most seven rows in one statement, independent of reaction contributors. Subject visibility and authorization add a constant number of point reads and statements.
-- Growth check: `test/presentation/page-read-kinds.test.ts`: `reaction counts read stays within its bound at 1, 10 and 100 contributors`.
-
-### Page account identity read
-
-- Touches: One `GET /v1/accounts?handle=<h>` call. The standalone public profile read probes the handle claim and then the account identity, and adds one avatar summary read only when an avatar exists.
-- Bound: Constant rows and statements, logarithmic blocks in account and handle-claim counts; at most one account identity is returned. Unknown handles stop after the claim probe and answer `accounts: []`.
-- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account identity read stays within its bound at 1, 10 and 100 unrelated accounts`.
-
-### Page account threads read
-
-- Touches: One `GET /v1/accounts/{accountId}/threads?kind=discussion|review&limit=&cursor=` call. Discussion reads the account's discussions; review reads its reviews. Content checks the account's public-view flag, reads at most `4 × limit` author-item candidates, then hydrates candidates through the existing thread disclosure route.
-- Bound: At most `limit` thread summaries are returned. Candidate and hydration work is O(limit) for `limit` 1–20, independent of the account's thread count; statements remain constant as activity grows for a fixed limit.
-- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account discussions read stays within its bound at 1, 10 and 100 threads`.
-
-### Page account posts read
-
-- Touches: One `GET /v1/accounts/{accountId}/posts?limit=&cursor=` call. Content checks the account's public posts view, reads at most `4 × limit` author-item candidates, then hydrates each reply and its containing thread. A hidden thread title remains null in the returned reply context.
-- Bound: At most `limit` replies are returned. Candidate and hydration work is O(limit) for `limit` 1–20, independent of the account's reply count; statements remain constant as activity grows for a fixed limit.
-- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account replies read stays within its bound at 1, 10 and 100 replies`.
-
-### Page account collections read
-
-- Touches: One `GET /v1/accounts/{accountId}/collections?view=BASIC&limit=&cursor=` call. The standalone Commerce route checks public-view visibility and reads the account's public collections in its existing order.
-- Bound: At most `limit` collections are returned for `limit` 1–24; indexed page work is bounded by that limit and independent of the account's collection count. The page read always selects BASIC to keep the result bounded.
-- Growth check: `test/presentation/agent-read-kinds.test.ts`: `account collections read stays within its bound at 1, 10 and 100 collections`.
-
-### Profile publish
-
-- Touches: `publishProfile` validates and hashes one body (linear in at most 1 MiB, once per publish, before a connection is checked out) and inserts 0 or 1 `presentation.profile` row through `profile_pkey(route, digest)`; a conflict does nothing. The receipted command emits one `com.rezics.presentation.profile.published.v1` event even when the digest exists. Grow P and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log P + log H), one body statement, nine including the command; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile publish stays within its bound as P grows`
-
-### Profile activate
-
-- Touches: `activateProfile` reads 0 or 1 body through `profile_pkey`, then reads the latest head through a backward `profile_activation_pkey(route, head)` probe and inserts 0 or 1 activation when that head is the expected head, with a profile foreign-key probe. A stale head writes nothing and rolls back. A missing digest raises `ProfileNotFoundError` after authorization. Grow P and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log P + log H), two body statements, ten including the command; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile activate stays within its bound as P grows`
-
-### Profile read
-
-- Touches: `readProfile`: a malformed digest does no SQL; otherwise one `profile_pkey` probe reads 0 or 1 body, including on a cache hit. A cold body is validated once, its digest verified with `profileDigest`, frozen and cached by digest. Grow P and H; fix body size.
-- Bound: Rows O(1), blocks O(log P + log H), zero or one data statement; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile read stays within its bound as P grows`
-
-### Active profile lookup
-
-- Touches: `activeProfile`: a backward `profile_activation_pkey` probe with LIMIT 1 reads 0 or 1 head; a cache miss adds Profile read, which has its own growth check. Grow P and H; fix the active body size. The check runs the default warm-up at each scale and takes the median of the default repetitions, measuring the warm lookup.
-- Bound: Rows O(1), blocks O(log P + log H), one or two data statements; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Active profile lookup stays within its bound as P grows`
-
-### Profile bootstrap
-
-- Touches: `bootstrapProfile`: one latest-head probe when a profile is active, returning that digest. When none is active, one command repeats the probe, publishes 0 or 1 profile, inserts the first activation and emits two events, without a receipt or basis. Grow P and H; fix body size, including the already-active path.
-- Bound: Rows O(1), blocks O(log P + log H), one statement when active, otherwise eleven including the command; a race may add one head lookup after rollback. No scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile bootstrap stays within its bound as P grows`
-
-### Profile read route
-
-- Touches: `GET /v1/presentation/profiles/:digest`: one Global Context authorization, then Profile read above; the route adds no SQL of its own.
-- Bound: Profile read plus one Global Context authorization: rows O(1), blocks O(log P + log H), constant statement count.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile read stays within its bound as P grows`. This check measures the lookup without the route or its Global Context authorization.
-
-### Active profile route
-
-- Touches: `GET /v1/presentation/active`: one Global Context authorization, then Active profile lookup above; the route adds no SQL of its own.
-- Bound: Active profile lookup plus one Global Context authorization: rows O(1), blocks O(log P + log H), constant statement count.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Active profile lookup stays within its bound as P grows`. This check measures the lookup without the route or its Global Context authorization.
+The profile-route growth check exercises both HTTP routes with Global Context authorization while profile and unrelated
+Context populations grow. It supplies the route-level evidence that the direct profile lookup checks alone did not cover.
