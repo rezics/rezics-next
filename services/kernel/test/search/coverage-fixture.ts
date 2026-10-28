@@ -80,7 +80,8 @@ export async function createCoverageFixture() {
     expect(response.status, JSON.stringify(result)).toBe(path === '/v1/subjects' ? 201 : 200);
     return result;
   }
-  async function books(count = 3) {
+  async function books(count = 3): Promise<[string, ...string[]]> {
+    if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Book count must be a positive integer');
     const ids: string[] = [];
     for (let n = 0; n < count; n++)
       ids.push(
@@ -91,7 +92,9 @@ export async function createCoverageFixture() {
           })
         ).subject.id,
       );
-    return ids.sort();
+    const [first, ...rest] = ids.sort();
+    if (first === undefined) throw new Error('Native book creation returned no subjects');
+    return [first, ...rest];
   }
   const options = (prefix: string, transport = search) => ({ pool, search: transport, source, listing, prefix });
   async function population(transport = search) {
