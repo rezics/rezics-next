@@ -337,6 +337,180 @@ releases, add-ons and story arcs use `CreativeWork`. `DefinedTerm` and
 select the explicit native-profile classes for games, anime and manga, series,
 people, organizations, applications, recipes and music.
 
+### Public classification and genuine measurements
+
+These are adopted meanings and required released-data obligations. The
+[catalogue filter mapping report](../../docs/research/catalogue-filter-data-mappings.md)
+records reviewed source revisions and evidence; it does not create native data.
+
+`schema:Book` remains a work independent of `bf:Instance` editions and translations.
+Light novel is a work-form Concept scoped to the Japanese literary form represented
+by Q747381, not a Book subtype. Only that deliberately matching meaning has exact
+external identity with Q747381. Reuse `workFormat` / `wdt:P7937`, with exact external
+property mapping P7937: its declaration must move from anime to classification and
+Book admission must follow through the normal released-data producer. Do not duplicate
+it or infer light novel from novel, language, publisher, title, length or popularity.
+
+First-scope public harem classification uses `schema:keywords` and the source-scoped
+Bangumi editor metadata-tag 后宫 Concept in the reviewed public-tag scheme, whose
+external key is `https://rezics.com/schemes/bangumi/public-tags`. Correspondence to the
+canonical media-harem Concept represented by Q690342 stays **close** until actual
+category boundaries and reverse-harem equivalence are reconciled. Source and canonical
+Concepts remain distinct despite matching labels. The public harem filter must name
+the adopted source scope and actual Concept explicitly; labels and close mappings
+never supply implicit equality or expansion. Existing exact P136 genre mapping stays
+distinct from keywords; P921 is only a close inventory correspondence, with no
+executable exact mapping or automatic double-emission.
+
+The Bangumi key is public subject `meta_tags`, exact member `后宫`, maintained by wiki
+editors. An explicitly configured trusted source alias may bind it; alias spelling
+alone establishes no identity. Ordinary tags, popularity/votes, personal or private
+Collection tags, arbitrary infobox strings and novel platform supply neither public
+harem nor light-novel facts. No fuzzy spelling or fallback is allowed when metadata
+is missing, empty or withheld. Bangumi has no demonstrated explicit light-novel public
+category. Wikidata P7937=Q747381 or a trusted explicit cited assertion can supply that
+form only after actual holder and Concept bindings exist. Personal-library import
+remains outside first scope.
+
+Concepts and schemes are ordinary native subjects. Create or resolve them through
+existing APIs and external claims, propose and adopt their scheme membership and
+reviewed correspondence, and record returned real IDs and receipts before conversion.
+External QIDs, scheme keys and research evidence are not native IDs. Never derive
+UUIDs from QIDs or labels, assume label equality, or make release YAML a second
+Concept authority. Use actual `record-bindings` and `resolvedReferences`; the importer's
+optional identifier lookup is not evidence of CLI wiring or already adopted bindings.
+
+Adopt `schema:wordCount` with exact P6570 correspondence for **words**, and a separately
+named local **character-count** property with no invented external exact mapping.
+Both require exact integer amounts >= 0 and unit `1`; zero must be explicitly measured.
+Absence, withheld, unavailable and unmeasured remain unknown. Negative, fractional,
+bounded or rounded estimates and incompatible units cannot become exact counts.
+Characters, code points, UTF-16 units, bytes, pages and reading-time estimates never
+become words.
+
+Every accepted count must retain the following together on its own statement and
+provenance association:
+
+- The actual counted native holder, identified text/version and language. A direct
+  Book-work assertion explicitly names the realization measured.
+- Declared complete or partial body/volumes scope, including exclusions such as
+  titles, notes, appendices, markup, ruby readings or whitespace.
+- A named, versioned method. CJK word counts declare segmentation/tailoring and which
+  segments count; grapheme character counts declare their distinct character convention.
+- Evidence/citation with available native source revision/date, or an auditable trusted
+  measurement record retaining text/version digest and measurement time.
+
+First scope uses direct, properly scoped Book-work assertions. Edition-only counts
+remain edition facts: no implicit series sum, edition-to-work transfer, translation,
+language or version inheritance, or `representativeEdition` projection. Never drop
+method/scope qualifiers or combine them across count statements. Existing
+`appliesToPart` / P518 StoryArc semantics stay unchanged. Exact new qualifier
+representation and the local character property's definition/name require later native
+definition acceptance; this prose does not select an executable representation.
+
+Feasible first producers are trusted contributor/publisher cited assertions through
+existing propose/adopt. Genuine self-measurement uses legally available text locally
+and retains method and digest; nothing here grants permission to fetch or upload text.
+External Wikidata counts require holder mapping and qualifier-preserving conversion
+or rejection of the **entire** measurement. The current converter diagnoses and drops
+item qualifiers, so enabling P6570 alone is unsafe. Arbitrary fixture numbers,
+inventory entries, source URLs and QIDs prove no measured native data. Narou character
+metadata is not an approved adapter.
+
+Reviewed meaning/binding, released property admission, actual native Concept adoption
+receipts, executable converter/importer support, adopted measurements, complete
+projection and admitted indexed execution are separate statuses. At the report pin
+there is no delivered harem `meta_tags` converter, explicit light-novel producer,
+qualifying native million-word Book batch or genuine character producer. This owner
+adoption does not change those implementation statuses.
+
+Future definition acceptance must preserve all existing anime uses when moving
+`workFormat`, all eight locales, full package acceptance, and the sole normal release
+producer with matching immutable consumer pins. Native data acceptance must create,
+resolve and adopt actual schemes/Concepts and prove replay returns the same ID.
+A genuine word count of 1,000,001 matches the threshold; exactly 1,000,000 and absence
+do not. Characters alone cannot match words, novel alone cannot match light-novel
+form, and private/personal/withheld tags cannot become public classification.
+Incompatible units or missing per-statement method/scope cannot supply a complete
+measurement. Qualification stays with its own count and correct language/text/holder.
+
+The [shared filtered-list matrix](../../docs/filtered-lists.md#shared-acceptance-matrix)
+requires these predicates separately and together in public Zones/Collections and
+one's library without and with state, including mounted Zones and configured TypeLists.
+Native projection, compiler, privacy, preparation and growth remain separate required
+producers; grammar expressibility and this adoption prove none of them.
+
+### Anime publication releases
+
+`rezics:AnimeRelease` (`https://rezics.com/vocab/AnimeRelease`) is the adopted native
+publication-release grain under `schema:CreativeWork`. This narrow ADR-0031 local
+domain-term exception is necessary because no evaluated standard class fits the grain
+without altering an existing native class; it grants no blanket local vocabulary
+permission. The [anime release grain report](../../docs/research/anime-release-profile-grain.md)
+records that comparison and source evidence. There is no exact Wikidata mapping;
+`schemaOrgType: https://schema.org/CreativeWork` is presentation only. Existing Movie
+is a work, `bf:Instance` is Book edition and Q20631656 is software release. Do not
+generalize, reparent or alias them, or inherit their profiles.
+
+An AnimeRelease is an independently referable, identified published/distributed anime
+version. Language/format differences do not create a Cartesian product of subjects;
+no filler subject, playback file, personal Copy or event supplies its identity.
+Single-work embodiment links through existing `schema:exampleOfWork` to the actual
+anime work (series, film, season or episode). Anthologies use standard `bf:hasPart`
+with inverse metadata `bf:partOf`, retaining each included work's identity. The
+standard `marcrel:fds` film-distributor credit uses qualified credits as described in
+the report, only when actually asserted. Existing language, date, format and credits
+retain their actual scope, source precision and qualifiers; do not copy work facts
+onto releases. Source-record `schema:version` is never a cut/edition label.
+
+For first public release, this catalogue subject appears in its **work page's
+releases/editions view** and can be curated in Collections. AnimeRelease has **no
+library profile**; typed tracking stays on the anime work. The existing eleven
+profile contracts remain unchanged. There is no Book/game/movie fallback or runtime
+inference. A release-level profile is a later separately specified addition. Generic
+label/curation capability retains existing owner rules and invents no automatic
+state, session or holding. The capability manifest must explain inapplicable release
+typed-state cells explicitly while retaining catalogue, page, curated, mounted and
+TypeList coverage and the rest of the anime vertical.
+
+Before subsequent release implementation, register the required native API/grain case:
+actual released type and labels in all eight locales, saved filters, Context defaults
+and Zone starter; native create/propose/accept/adopt/read using returned IDs; independent
+work/season/episode/release and anthology cases; generic operation at ten and one
+hundred manifests with no backend/table/DDL/deployment/code path changes; and the
+original anonymous, editor, Context-acceptor and suspended personas. Required does
+not mean implemented. No provider, QID, Source ID or source binding may be guessed;
+report evidence alone supplies none. No new runtime/configuration or library-profile
+expansion follows from this adoption.
+
+### Recipe diet and cooking time
+
+Adopt `schema:suitableForDiet` as the required released Concept-valued Recipe
+classification and a reviewed native VegetarianDiet Concept explicitly corresponding
+to `https://schema.org/VegetarianDiet`. Obtain its actual ID through ordinary
+create/resolve and adoption. No guessed Wikidata mapping, private label or
+ingredient-name heuristic supplies dietary suitability.
+
+Existing `schema:cookTime` is a nonnegative integer **minute** quantity, distinct from
+total preparation/rest duration. `MINUTE` in fixture/filter notation stands for the
+current released unit `wd:Q7727` as admitted by the filter DTO; canonical expanded
+storage is `http://www.wikidata.org/entity/Q7727`. Do not send the placeholder as a
+new unit or silently mix CURIE and expanded storage spellings. Publication converts
+25 minutes to `PT25M` at the Schema.org boundary. No new kernel duration parser or
+recipe-specific filtering branch is needed. Unknown diet/time stays unknown; absent
+quantity is not zero. Public reads and filtering never borrow private cooking facts.
+Native cases must distinguish vegetarian cookTime 25/30/31 minutes, nonvegetarian and
+unknown-diet controls, and one's own versus another account's completed cooking.
+
+The [API acceptance gap report](../../docs/research/api-acceptance-gaps.md#definitions-and-fixtures-the-missing-cases-require)
+records fixture and Semantic cases. Adopt its ordering: actual native released-data
+fixtures/API cases and a complete capability manifest are required **before** later
+data implementation. The shared fixture builder's output must be reviewed and frozen
+and the actual data producer registered. This document proves neither new YAML data
+nor native API bindings. Completed-session/not-cooked interpretation and the concrete
+owner-query wire remain Commerce's prerequisite; `state != cooked`, public NOT and
+private-index inference cannot supply it.
+
 ### Shared terms
 
 `CreativeWork`, `Character` and `CreativeWorkSeries` are abstract anchors. Book
@@ -585,6 +759,11 @@ use a type reference and one registry lookup. Validation retains the complete
 format, with no extra per-profile byte cap. The two library acceptance files cover
 closure, exact bounds, provenance, full cardinalities and 10/100 manifest growth.
 
+These compiler/registry, nearest-whole-reference and immutable-pin contracts do not
+establish delivered launch-profile YAML/data. The capability manifest and shared
+released-fixture/native API cases must prove those bindings through the normal sole
+release producer and matching consumer pins; owner prose does not implement them.
+
 ## Term extensions
 
 `@rezics/definitions/extension` holds the format of a Context's custom relation types: an immutable body
@@ -738,10 +917,23 @@ so its source-candidate key can track refresh and retraction.
 Every group supports `propose` and `retract`, and a retraction carries no rights. The following
 commands share this setup:
 
-Each imported record fact cites the exact source record with its URL, its
-catalogued source identifier property, its source revision in `schema:version`,
-and its last-modified date in `schema:dateModified`. For example, an Open Library
-work can use one reference with these four parts:
+Each imported record fact cites the exact source URL and catalogued source identifier.
+Include the native upstream revision in `schema:version` and last-modified date in
+`schema:dateModified` **when available**, preserving native date precision. Missing
+dates stay absent: ingestion time, the current clock and publication time are never
+substitutes. Missing upstream revision means Source `record_revision: unversioned`
+plus the actual SHA-256 input digest, never a fabricated revision. Converter revision
+and native REZICS revision remain separate. Available VNDB `lastmod` must be retained;
+Imports owns its converter correction. Existing direct fixtures and Bangumi records
+without dates remain valid; this changes no converter, validation or source policy.
+
+Source name/URL/licence attribution is separate from facts-rights. The general
+source-record metadata producer/read admission is not delivered; this policy invents
+no registry or licence inference. Facts-rights rejection and separately scoped summary
+and cover rights remain unchanged.
+
+For example, an Open Library work with available revision and last-modified data can
+use one reference with these four parts; this is not mandatory on every fact:
 
 ```ts
 const openLibraryReference = {
