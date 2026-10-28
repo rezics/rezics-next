@@ -27,7 +27,15 @@
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
     "semantic.context.owner": ["context:accept", "context:adopt", "access:grant"],
     "semantic.context.moderator": ["context:accept"],
-    "library.collection.owner": ["collection:read", "collection:update", "collection:delete"]
+    "library.collection.owner": ["collection:read", "collection:update", "collection:delete"],
+    "semantic.zone.owner": [
+      "zone:read",
+      "zone:configure",
+      "zone:publish",
+      "zone:delete",
+      "zone:restore",
+      "access:grant"
+    ]
   },
   "types": {
     "community.realm": {
@@ -71,6 +79,10 @@
     },
     "library.collection": {
       "owner": "library.collection.owner",
+      "standing": []
+    },
+    "semantic.zone": {
+      "owner": "semantic.zone.owner",
       "standing": []
     }
   }

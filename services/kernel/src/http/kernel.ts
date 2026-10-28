@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -370,9 +371,15 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });
-  declareKernelWriteRates(sourceStatistics);
+  const zones = zoneRoutes(sourceStatistics, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+  });
+  declareKernelWriteRates(zones);
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
-  for (const route of sourceStatistics.routes) {
+  for (const route of zones.routes) {
     const segments = route.path.split('/');
     for (const [position, segment] of segments.entries()) {
       if (segment.startsWith(':')) {
@@ -396,11 +403,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  assertDeclaredResourceTypes(sourceStatistics);
-  return sourceStatistics as Kernel;
+  assertDeclaredResourceTypes(zones);
+  return zones as Kernel;
 }
 
-type KernelComposition = ReturnType<typeof sourceStatisticRoutes> &
+type KernelComposition = ReturnType<typeof zoneRoutes> &
+  ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof ratingRoutes> &
   ReturnType<typeof collectionRoutes> &
   ReturnType<typeof personalLibraryRoutes> &

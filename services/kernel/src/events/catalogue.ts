@@ -1,4 +1,5 @@
 import { Type, type TSchema } from 'typebox';
+import { ZONE_EVENTS } from '../zones/events.ts';
 import { Compile, type Validator } from 'typebox/compile';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { COMMERCE_EVENTS } from '../commerce/events.ts';
@@ -11,6 +12,7 @@ import { SEMANTIC_EVENTS } from '../semantic/events.ts';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 const productEventTypes = {
+  ...ZONE_EVENTS,
   ...ACCESS_EVENTS,
   ...COMMERCE_EVENTS,
   ...COMMUNITY_EVENTS,

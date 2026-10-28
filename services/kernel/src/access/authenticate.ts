@@ -39,6 +39,12 @@ const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
 const routeOf = (id: string) => Number.parseInt(id.slice(24, 28), 16);
 const invalid = () => new AuthenticationError(401, 'Bearer error="invalid_token"');
+const suspendedFailures = new WeakSet<object>();
+/** Native 401 provenance for an otherwise verified bearer refused solely for suspension.
+ * No actor is minted; only an explicit resource HTTP contract may distinguish this refusal. */
+export function isSuspendedAccountAuthenticationError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && suspendedFailures.has(error);
+}
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
 
 function remaining(deadline: number): number {
@@ -219,7 +225,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         account.accountId !== accountId ||
         account.route !== routeOf(accountId) ||
         account.kind !== 'actor' ||
-        account.state !== 'active' ||
+        (account.state !== 'active' && account.state !== 'suspended') ||
         account.fenced !== false ||
         BigInt(payload.authn_epoch as number) < account.minimumAuthnEpoch
       )
@@ -235,6 +241,11 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       const expires = payload.exp! * 1000;
       remaining(context.deadline);
       if (clock().getTime() >= expires) throw invalid();
+      if (account.state === 'suspended') {
+        const error = invalid();
+        suspendedFailures.add(error);
+        throw error;
+      }
       const actor: AccountActor = Object.freeze({
         kind: 'account',
         accountId,
@@ -254,6 +265,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       return actor;
     } catch (error) {
       throwAccessUnavailable(error, context.deadline);
+      if (isSuspendedAccountAuthenticationError(error)) throw error;
       throw invalid();
     }
   };

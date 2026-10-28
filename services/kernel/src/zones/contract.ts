@@ -111,8 +111,8 @@ export const ZonePageRequestSchema = t.Object(
 /** The existing common page response with a top-level public Zone shell. */
 export const ZonePageResponseSchema = extendPageResponseSchema({ zone: ZonePublicSchema });
 
-// Keep the shared CompositionDocument envelope while leaving registry-specific validation to
-// validateZoneStarter when resource commands are added.
+// Keep the shared CompositionDocument envelope; resource commands apply validateZoneStarter
+// for registry-specific admission.
 const compositionNodeSchema = t.Object(
   {
     type: t.String(),
@@ -158,3 +158,35 @@ export type ZonePageRequest = Static<typeof ZonePageRequestSchema>;
 export type ZonePageResponse = Static<typeof ZonePageResponseSchema>;
 export type ZoneCreateInput = Static<typeof ZoneCreateInputSchema>;
 export type ZoneConfigureInput = Static<typeof ZoneConfigureInputSchema>;
+
+// Additive resource envelopes. Page schemas above retain their common presentation ABI.
+export const ZoneOwnedSchema = t.Object(
+  {
+    ...ZonePublicSchema.properties,
+    ownerId: routedUuidSchema,
+    deletedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    restoreUntil: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  },
+  closed,
+);
+export const ZoneResponseSchema = t.Object({ zone: ZoneOwnedSchema }, closed);
+export const ZoneMetadataResponseSchema = t.Object({ zone: ZonePublicSchema }, closed);
+export const ZoneConfigurationResponseSchema = t.Object(
+  {
+    zone: ZoneOwnedSchema,
+    configuration: zoneStarterSchema,
+    mounts: mountsSchema,
+  },
+  closed,
+);
+export const ZoneListSchema = t.Object(
+  { zones: t.Array(ZoneOwnedSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  closed,
+);
+export const ZonePublishInputSchema = t.Object({ visibility: visibilitySchema }, closed);
+export type ZoneOwned = Static<typeof ZoneOwnedSchema>;
+export type ZoneResponse = Static<typeof ZoneResponseSchema>;
+export type ZoneMetadataResponse = Static<typeof ZoneMetadataResponseSchema>;
+export type ZoneConfigurationResponse = Static<typeof ZoneConfigurationResponseSchema>;
+export type ZoneList = Static<typeof ZoneListSchema>;
+export type ZonePublishInput = Static<typeof ZonePublishInputSchema>;

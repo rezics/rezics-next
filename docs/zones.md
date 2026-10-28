@@ -124,6 +124,11 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 
 ## Configuration, publication and Access
 
+The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
+It exposes resource metadata; page reads, source lists, union evaluation and destructive lifecycle work
+remain separate implementations. No unavailable page or worker endpoint is mounted by the resource base.
+The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
+
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the
 validated configuration plus at most 16 distinct Collection IDs. The creating actor initializes primary owner metadata and the ordinary owner role. Parent
 creation authority is not a permanent right to edit other Zones. In the same Zone command partition,
@@ -320,6 +325,16 @@ receipt/outbox raw effects before claiming that the routes are implemented.
 | Routed page read  | Add Zone read/eligibility and reuse presentation `planReads`/`readPage`, credential/session forwarding and profile lookup. Preserve existing routes and renderer. Depends on query eligibility probe, not on lifecycle worker.                             |
 | Lifecycle         | Add delete/restore/withholding and bounded `purge.ts`/worker registration, account-erasure adapter, receipt/evidence scrubbing and platform authorization. Depends on resource commands, not on Web.                                                       |
 | Native growth     | Exercise fixed reads at 64/512/4096 unrelated Zone/page/history scales through unchanged shared growth capture; constant rows/statements and logarithmic blocks. Add bounded cleanup pages with held/ineligible keys, real CAS races and retry effects.    |
+
+The resource base keeps one authoritative row in `zones.zone`. `resource-store.ts` owns all row SQL.
+`readZoneHead(client, route, id)` reads an exact point; `lockZoneHead(tx, route, id)` locks the current head.
+`compareAndSetZone(tx, before, next, {at, transactionId})` updates payload/state against both the resource
+and lifecycle revisions. Callers own the surrounding native command transaction, including receipt,
+grants and outbox; these ports never open or commit a transaction. Ordinary mutations retain independent
+withholding, hold and write-fence evidence. New lifecycle writers must use these ports.
+Zones use the owner's route for the bounded `(route, owner_id, state, zone_id)` owned index. Index attribution
+never replaces current owner-role evidence and native Access. Owned cursors also bind the partition epoch
+and position plus the actor's current security snapshot; concurrent writes may require restarting a list.
 
 Read cost touches Zone-home metadata and current page points, at most 16 shared reads/cost 128, and separately
 anchored source Access probes for at most 16 scopes and 16 mounts. No full owner/library/Zone/history scan,
