@@ -30,6 +30,7 @@ let operation: Awaited<ReturnType<typeof durable.fixture>>;
 let account: Awaited<ReturnType<(typeof import('../../src/access/account-data.ts'))['readAccount']>>;
 let requestDeadlineMs = 5000;
 const context = () => ({ pool, deadline: Date.now() + requestDeadlineMs });
+let advanceDurableFailureClock: (() => void) | undefined;
 const actions = new Map([
   ['subject:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
@@ -255,25 +256,20 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
   async 'durable operation reader'(fail) {
     await durable.step(operation, { reader: fail });
   },
-  async 'durable anchor validate'() {
+  async 'durable anchor validate'(fail) {
     // The durable test helper owns a fixed ten-second request deadline. Advance
     // its clock only after the Access callback starts so this command-site case
     // exercises deadline exhaustion without adding ten seconds to the suite.
     const realNow = Date.now;
     let simulatedNow = realNow();
     Date.now = () => simulatedNow;
+    advanceDurableFailureClock = () => {
+      simulatedNow += 10_001;
+    };
     try {
-      await durable.step({
-        ...operation,
-        anchor: {
-          ...operation.anchor,
-          validate: async () => {
-            simulatedNow += 10_001;
-            throw new AccessUnavailableError('contention');
-          },
-        },
-      });
+      await durable.step({ ...operation, anchor: { ...operation.anchor, validate: fail } });
     } finally {
+      advanceDurableFailureClock = undefined;
       Date.now = realNow;
     }
   },
@@ -357,7 +353,11 @@ for (const [site, invoke] of Object.entries(sites)) {
   for (const [name, error, reason] of faults) {
     test(`${site}: ${name} closes the request without effects`, async () => {
       requestDeadlineMs =
-        reason === 'contention' ? (site === 'standing parent validate' && name === '40001' ? 1000 : 250) : 5000;
+        reason === 'contention'
+          ? ['standing parent validate', 'creation validate'].includes(site) && name === '40001'
+            ? 1000
+            : 250
+          : 5000;
       const cause = error();
       let calls = 0;
       const before = await effects(site.startsWith('durable') ? durable.db.pool : pool);
@@ -371,6 +371,10 @@ for (const [site, invoke] of Object.entries(sites)) {
       try {
         result = await invoke(async () => {
           calls++;
+          if (advanceDurableFailureClock && reason === 'contention') {
+            advanceDurableFailureClock();
+            throw new AccessUnavailableError('contention');
+          }
           throw cause;
         });
       } catch (error) {
