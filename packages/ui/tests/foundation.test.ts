@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,10 +121,19 @@ test('the logo red never colors text', async () => {
 });
 
 const probe = join(components, 'accessibility-probe.stories.tsx');
+const fixture = join(root, 'tests', 'fixtures', 'accessibility-probe.stories.tsx');
 const output = mkdtempSync(join(tmpdir(), 'rezics-ui-stories-'));
 afterAll(() => {
   rmSync(probe, { force: true });
   rmSync(output, { recursive: true, force: true });
+});
+
+test('the accessibility probe is an opt-in test fixture', async () => {
+  expect(existsSync(fixture)).toBe(true);
+  expect(existsSync(probe)).toBe(false);
+  const config = await Bun.file(join(root, '.storybook', 'main.ts')).text();
+  expect(config).toContain('REZICS_UI_ACCESSIBILITY_PROBE');
+  expect(config).toContain('../tests/fixtures/accessibility-probe.stories.tsx');
 });
 
 test('every ported component has stories that pass as accessible browser tests', async () => {
@@ -145,11 +155,13 @@ test('every ported component has stories that pass as accessible browser tests',
     ].join('\n'),
   );
   const report = join(output, 'stories.json');
+  const status = () => execFileSync('git', ['status', '--porcelain'], { cwd: join(root, '..', '..'), encoding: 'utf8' });
+  const statusBefore = status();
   const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`], {
     cwd: root,
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, CI: '1' },
+    env: { ...process.env, CI: '1', REZICS_UI_ACCESSIBILITY_PROBE: '1' },
   });
   const [stdout, stderr] = await Promise.all([
     new Response(run.stdout).text(),
@@ -157,6 +169,7 @@ test('every ported component has stories that pass as accessible browser tests',
     run.exited,
   ]);
   rmSync(probe, { force: true });
+  expect(status(), 'the story run must not change repository files').toBe(statusBefore);
   expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
 
   const result = JSON.parse(readFileSync(report, 'utf8')) as {
