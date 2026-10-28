@@ -1,4 +1,4 @@
-import { spawnSync, type ChildProcess } from 'node:child_process';
+import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -7,6 +7,7 @@ import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { processIdentity, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
 import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
+import { launchWorkerProcess } from './worker-slice.ts';
 
 export type LaunchOptions = {
   profile: Profile;
@@ -443,11 +444,20 @@ export async function launch(
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
       if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree }))
         throw new Error(`Worker CLI not found: ${program}`);
-      const started = spawnSync('python3', ['-c', WRAPPER, exitPath, pidPath, program, ...args], {
+      const wrapperArgs = ['-c', WRAPPER, exitPath, pidPath, program, ...args];
+      const startOptions: SpawnSyncOptions = {
         cwd: task.worktree,
         stdio: ['ignore', out, err],
         env,
-      });
+      };
+      const started = launchWorkerProcess(
+        task.id,
+        attempt.attempt,
+        'python3',
+        wrapperArgs,
+        startOptions,
+        () => existsSync(pidPath) || existsSync(exitPath),
+      );
       if (started.error) throw started.error;
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);

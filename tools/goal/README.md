@@ -4,6 +4,12 @@ One Bun control plane owns worker dispatch, attempt records, the landing train a
 one local SQLite file, independent of the product database. `config.ts` composes the real worker fence, outcome sink,
 landing queue, manager inbox, train and completion checker. Production commands need no runtime module or plugin.
 
+Each worker attempt runs its detached process tree in its own transient `rezics-workers.slice` scope under the user's
+systemd manager. The slice uses CPUWeight 50 and IOWeight 50 so workers yield processor time and disk to checks,
+managers and the control plane when the host is busy, without a hard quota on worker width. IOWeight affects only
+devices whose scheduler honours weights, such as the BFQ-scheduled SATA member on host c. When a user systemd manager
+is unavailable, workers start in the existing detached process group and the launch logs the fallback reason.
+
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
 bun run --cwd tools/goal check
