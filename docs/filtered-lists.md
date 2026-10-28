@@ -40,20 +40,43 @@ For example, withholding a harem tag must prevent disclosure through a positive 
 A stale index can exclude a readable book using the withheld tag. Checking only the returned subjects never checks
 that excluded book. The same problem applies to ordering, counts and source metadata.
 
-A required abstract producer/consumer seam therefore provides **query-level privacy-reduction invalidation and
-acknowledgement in addition to candidate checks**:
+Semantic produces a complete selected-public-facet projection and a per-home privacy-reduction log. Each
+reduction appends a bounded cause, affected property/order dependency keys and subject-wide scope at a monotonic
+lossless position in the **same authoritative native transaction**. Rollback leaves neither reduction nor log
+advance; receipt replay and genuine noEffect do not append. Foreign tuple, target, consent and Collection
+reductions record their actual home immediately, independently of ordinary relay delivery.
 
-- Local privacy reductions invalidate public use in their authoritative transaction.
-- Foreign source-fence, target, consent and Collection reductions invalidate affected public use immediately.
-- Acknowledgement covers actual refresh-visible projection repair, including all dependent foreign repair, before
-  query disclosure. Dispatch, an event checkpoint or local repair alone is not acknowledgement of that work.
-- Observe the required current safety state before execution and revalidate it before disclosure. Unsafe, changed,
-  missing or pending acknowledgement means preparation/readiness, never stale exclusion, order or results.
+A public filtered read waits only for **unacknowledged reductions whose affected property keys occur in its
+filter or order**. Every returned row is additionally checked against unacknowledged reductions of **its own
+subject**. Subject-wide reductions, including takedown, affect every key of that subject. Excluded subjects'
+matching-key reductions remain covered, preserving NOT and order safety. Keys come from the actual shared
+filter/plan/sort declarations. Foreign dependencies map to affected **source** property/order keys; the foreign
+target's own property name cannot establish irrelevance. Unknown or incomplete routing stays preparing. Internal
+repair locators include selected but currently ineligible inputs so restoration remains discoverable; private or
+withheld values and IDs never enter the public index.
 
-Ordinary relay checkpoints, local `securityRevision`, complete ordinary index generations, returned-row checks and
-omitting counts cannot certify query privacy. Keep this seam separate from ordinary catalogue progress and its
-allowed lag. This specifies producer and consumer responsibilities; it selects no certificate database, safety-token
-ABI, global identity/home sweep or new permission authority. Current native ports do not yet establish the seam.
+Search acknowledges a contiguous log prefix only after actual refresh-visible local **and all dependent foreign**
+repair and complete dependency registration/routing. ACK belongs to the actual physical target/incarnation and
+consumer/projection generation, plus meaning/read definition where relevant. Aliases, ordinary delivery/checkpoints
+and local repair alone cannot transfer or advance it. Late registration, old snapshots, ambiguous sink failure,
+lost CAS and delete-version pruning must not permit ACK or resurrect unsafe data. Source/sink version fencing
+remains required; a foreign privacy position is not a subject's anchored external version.
+
+Observe current required safety before execution and revalidate immediately before disclosure. Logical coverage
+includes all 4,096 homes, including excluded subjects and foreign dependencies, through the indexed behind/changed
+path in [Cost](#cost), not start/final head vectors or a scan hidden in an aggregate/hash/JSON. Native start evidence
+must detect a reduction committed during execution **even if repaired and ACKed before final observation**; current
+clean/dirty state alone is insufficient. Missing, moved or unavailable owners cannot become pristine zero homes.
+Changed relevant safety, incomplete coverage, pending ACK or the independent pending identity epoch yields
+preparation. Current Access, source/population authorization and candidate/field checks remain independently
+required. Neither an index nor key narrowing can supply that authority.
+
+This is a required future native boundary; current ports do not establish it. The
+[native producer contract](../services/kernel/src/semantic/public-filter-source-contract.md) records exact future
+operations, missing primitives and pending integration scenarios. It adds no permission certificate or identity
+basis sweep. Coarse global blocking may be an initial launch slice, but completion requires native 64/512/4,096
+checks with reduction arrival rate rising with population, actual repair/ACK latency, and served share that does
+not fall between scales. Permanent preparation or absent native data cannot satisfy that gate.
 
 Omit unsafe engine totals and facet counts over unchecked populations. Approximate or `as_of` labels give no privacy
 exemption. Do not substitute zero or returned-row length for an unavailable safe aggregate. No new common list DTO

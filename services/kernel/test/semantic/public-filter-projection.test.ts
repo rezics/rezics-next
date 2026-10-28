@@ -31,7 +31,7 @@ test('native complete selected public facet projection retains bounded frontier 
       'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
     });
     const first = await capturedStep(f.db, () =>
-      source.pagePublicFacets({ subject, meaning: f.meaning, inputLimit: 16, frontier: null }),
+      source.readPublicFilterProjectionPage({ subject, meaning: f.meaning, inputLimit: 16, frontier: null }),
     );
     expect(first.status).toBe('progress');
     if (first.status !== 'progress') throw new Error('High-degree source must retain its bounded frontier');
@@ -39,8 +39,13 @@ test('native complete selected public facet projection retains bounded frontier 
     const saved = { ...first.frontier };
     // New producer object has no process-local build state; replay cannot skip or duplicate identities.
     source = publicFilterSource(f.config);
-    const replay = await source.pagePublicFacets({ subject, meaning: f.meaning, inputLimit: 16, frontier: saved });
-    const replayAgain = await publicFilterSource(f.config).pagePublicFacets({
+    const replay = await source.readPublicFilterProjectionPage({
+      subject,
+      meaning: f.meaning,
+      inputLimit: 16,
+      frontier: saved,
+    });
+    const replayAgain = await publicFilterSource(f.config).readPublicFilterProjectionPage({
       subject,
       meaning: f.meaning,
       inputLimit: 16,
@@ -59,7 +64,7 @@ test('native complete selected public facet projection retains bounded frontier 
       expect(record.subject).toBe(subject);
       expect(record.candidate).toBe(record.statement.id);
       expect(record.release).toBe(record.statement.rezics.release);
-      expect(record.rank).toBe(record.statement.rank);
+      expect(record.statement.rank).toBe(record.rank);
       expect(record.dependencies).toContainEqual({
         kind: 'subject',
         route: (await import('../../src/route/route.ts')).routeOf(subject)!,
@@ -122,11 +127,16 @@ test('native complete selected public facet projection retains bounded frontier 
     });
     expect((await complete(f, source, subject)).page.source.currentRelease).toBe(f.meaning.digest);
 
-    const start = await source.pagePublicFacets({ subject, meaning: f.meaning, inputLimit: 16, frontier: null });
+    const start = await source.readPublicFilterProjectionPage({
+      subject,
+      meaning: f.meaning,
+      inputLimit: 16,
+      frontier: null,
+    });
     expect(start.status).toBe('progress');
     if (start.status !== 'progress') throw new Error('Expected retained build');
     await f.post(`/v1/subjects/${subject}/candidates/${pending}:hide`, { reason: 'Selection privacy reduction' });
-    const changed = await source.pagePublicFacets({
+    const changed = await source.readPublicFilterProjectionPage({
       subject,
       meaning: f.meaning,
       inputLimit: 16,
@@ -157,6 +167,17 @@ test('native complete selected public facet projection retains bounded frontier 
     );
     expect(hidden.records.filter((record) => record.indexed.property === 'schema:author')).toEqual([]);
     expect(hidden.page.status).toBe('complete');
+    // Retain internal reverse routing even when public foreign values are all withheld.
+    for (const record of survivingAuthors) {
+      expect(
+        hidden.repairLocators.some(
+          (locator) =>
+            locator.subject === subject &&
+            locator.property === 'schema:author' &&
+            locator.candidate === record.candidate,
+        ),
+      ).toBe(true);
+    }
     const absent = await f.create('schema:Book');
     expect((await complete(f, source, absent)).records).toEqual([]);
     const witnessTarget = await f.create();

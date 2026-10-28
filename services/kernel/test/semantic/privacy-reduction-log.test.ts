@@ -9,14 +9,13 @@ import {
   fixture,
   head,
   home,
-  missingSearchDependency,
   nativeProducer,
   statement,
 } from './support/public-filter-source.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import type { PrivacyLogEntry } from '../../src/semantic/public-filter-source-contract.ts';
+import type { PrivacyReductionLogEntry } from '../../src/semantic/public-filter-source-contract.ts';
 
 const name =
   'perhome privacy reductions commit monotonic log positions atomically and public query acknowledgement waits actual local and dependent foreign refresh';
@@ -58,18 +57,29 @@ test(name, async () => {
     expect(tupleHead.position > 0n).toBe(true);
     const last = await head(source, partition);
     expect(last.position > after.position).toBe(true);
-    const entries: PrivacyLogEntry[] = [];
+    const entries: PrivacyReductionLogEntry[] = [];
     let cursor = before.position;
     for (let step = 0; step < 100; step++) {
       const page = await capturedStep(f.db, () =>
-        source.pagePrivacyLog({ partition, epoch: last.epoch, after: cursor, through: last.position, inputLimit: 1 }),
+        source.readPrivacyReductionPage({
+          partition,
+          epoch: last.epoch,
+          after: cursor,
+          through: last.position,
+          inputLimit: 1,
+        }),
       );
       expect(['progress', 'complete']).toContain(page.status);
       if (page.status !== 'progress' && page.status !== 'complete') throw new Error(`Native log ${page.status}`);
       expect(page.cost.inputKeys).toBeLessThanOrEqual(1);
       expect(page.entries.length).toBeLessThanOrEqual(1);
       entries.push(...page.entries);
-      if (page.status === 'complete') break;
+      expect(page.head.position).toBe(last.position);
+      expect(page.head.epoch).toBe(last.epoch);
+      if (page.status === 'complete') {
+        expect(page.after).toBe(last.position);
+        break;
+      }
       expect(page.after > cursor).toBe(true);
       cursor = page.after;
       expect(step).toBeLessThan(99);
@@ -82,7 +92,10 @@ test(name, async () => {
     expect(
       entries.every((entry) => entry.affected.some((key) => key.kind === 'subject' && key.subject === subject)),
     ).toBe(true);
-    const tupleLog = await source.pagePrivacyLog({
+    expect(
+      entries.every((entry) => entry.impacts.some((impact) => impact.kind === 'subject' && impact.subject === subject)),
+    ).toBe(true);
+    const tupleLog = await source.readPrivacyReductionPage({
       partition: tupleHome,
       epoch: tupleHead.epoch,
       after: 0n,
@@ -95,7 +108,13 @@ test(name, async () => {
         tupleLog.entries.some(
           (entry) =>
             entry.cause === 'sourceTuple' &&
-            entry.affected.some((key) => key.kind === 'sourceTuple' && key.tuple.external_id === 'privacy'),
+            entry.affected.some((key) => key.kind === 'sourceTuple' && key.tuple.external_id === 'privacy') &&
+            entry.impacts.some(
+              (impact) =>
+                impact.kind === 'dependency' &&
+                impact.locator.kind === 'sourceTuple' &&
+                impact.locator.tuple.external_id === 'privacy',
+            ),
         ),
       ).toBe(true);
 
@@ -136,27 +155,12 @@ test(name, async () => {
       await f.db.admin.query('DROP TRIGGER public_filter_test_fault ON semantic.subject');
       await f.db.admin.query('DROP FUNCTION semantic.public_filter_test_fault()');
     }
-    // No fake Search acknowledgement is invoked after these producer assertions.
-    missingSearchDependency(
-      'positive harem, NOT harem and order remain preparing until local AND dependent foreign refresh, including excluded subjects',
-    );
   } finally {
     await f.close();
   }
 });
 
-for (const scenario of [
-  'reduction between execution and disclosure: revalidated current head changes and prepares',
-  'late old source snapshot cannot resurrect an indexed or prepared row after ACK',
-  'late foreign dependency registration checks already-reduced owner and blocks ACK until repaired',
-  'crash after sink effect with ambiguous response cannot ACK before actual winner refresh',
-  'pending identity epoch prepares independently; published epoch alone does not acknowledge privacy',
-  'missing moved or unavailable owner is not pristine; explicit initialized empty home has head zero',
-  'privacy log rejected-key history resumes all keys under bounded pages and lossless positions beyond Number.MAX_SAFE_INTEGER',
-])
-  test(`native dependency: ${scenario}`, () => missingSearchDependency(scenario));
-
-test('native coarse head capture includes all 4096 genuine homes and privacy history', async () => {
+test('native efficient privacy observation covers all 4096 genuine homes and excluded-subject history', async () => {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   try {
@@ -166,26 +170,72 @@ test('native coarse head capture includes all 4096 genuine homes and privacy his
       const key = randomUUID();
       keys.set(partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, key).route), key);
     }
+    const subjects = new Map<number, string>();
     for (const [partition, key] of keys) {
       const id = await f.create('schema:Book', {}, key);
+      subjects.set(partition, id);
       expect(home(id)).toBe(partition);
       await f.post(`/v1/subjects/${id}:hide`, { reason: 'Real home privacy history' });
     }
-    const measured = await capture(f.db, () => source.readPrivacyHeads([...keys.keys()].sort((a, b) => a - b)), {
-      includeBackends: true,
-    });
-    expect(measured.value.status).toBe('observed');
-    if (measured.value.status !== 'observed') throw new Error('No growth evidence from unavailable coarse observation');
-    expect(measured.value.heads).toHaveLength(4096);
-    expect(measured.value.heads.every((entry) => entry.position > 0n)).toBe(true);
-    const physical = costOf(measured.capture);
-    // A zero-candidate read still pays for ALL control work. Native capture decides feasibility.
-    expect(measured.value.cost.accessPoints + measured.value.cost.dependencyPoints).toBeLessThanOrEqual(16);
-    expect(physical.rows).toBeLessThanOrEqual(64);
-    expect(physical.blocks).toBeLessThanOrEqual(384);
-    expect(physical.statements).toBeLessThanOrEqual(12);
-    expect(physical.responseBytes!).toBeLessThanOrEqual(16 * 1024);
-    expect(physical.requestBytes!).toBeLessThanOrEqual(64 * 1024);
+    // No registered consumer means no ACK at all, not a fabricated caught-up consumer.
+    const before = await capture(
+      f.db,
+      () =>
+        source.readPrivacyReductionHeads({
+          kind: 'population',
+          consumer: null,
+          start: null,
+        }),
+      { includeBackends: true },
+    );
+    expect(before.value.status).toBe('observed');
+    if (before.value.status !== 'observed') throw new Error('No native coverage evidence from unavailable observation');
+    expect(before.value.coverage).toBe('all_native_homes');
+    expect(new Set(before.value.unacknowledged.map((entry) => entry.partition)).size).toBe(4096);
+    expect(before.value.unacknowledged.every((entry) => entry.position > 0n)).toBe(true);
+    expect(before.value.changed).toEqual([]);
+    // These subjects are excluded by native moderation; their reductions still belong to coverage.
+    const subject = subjects.get(0)!;
+    await f.post(`/v1/subjects/${subject}:restore`, { reason: 'Prepare changed-home schedule' });
+    await f.post(`/v1/subjects/${subject}:hide`, { reason: 'Reduction after native start cut' });
+    const after = await capture(
+      f.db,
+      () =>
+        source.readPrivacyReductionHeads({
+          kind: 'population',
+          consumer: null,
+          start: before.value.status === 'observed' ? before.value.start : null,
+        }),
+      { includeBackends: true },
+    );
+    expect(after.value.status).toBe('observed');
+    if (after.value.status !== 'observed') throw new Error('No native revalidation evidence');
+    expect(after.value.coverage).toBe('all_native_homes');
+    expect(after.value.changed.map((entry) => entry.partition)).toEqual([0]);
+    expect(after.value.unacknowledged).toHaveLength(4096);
+    const changed = after.value.changed[0]!;
+    expect(changed.position > before.value.unacknowledged.find((entry) => entry.partition === 0)!.position).toBe(true);
+    const captures = [before, after];
+    // The allowance is shared by BOTH observations of this page, including removed rows/physical work.
+    const physical = captures.map((measured) => costOf(measured.capture));
+    const behindHomes = new Set(
+      captures.flatMap((measured) =>
+        measured.value.status === 'observed' ? measured.value.unacknowledged.map((entry) => entry.partition) : [],
+      ),
+    );
+    const changedHomes = new Set(after.value.changed.map((entry) => entry.partition));
+    expect(physical.reduce((sum, cost) => sum + cost.statements, 0)).toBeLessThanOrEqual(2);
+    expect(physical.reduce((sum, cost) => sum + cost.rows, 0)).toBeLessThanOrEqual(
+      64 + 2 * (behindHomes.size + changedHomes.size),
+    );
+    for (const measured of captures) {
+      expect(measured.capture.statementBackends).toBeDefined();
+      expect(costOf(measured.capture).requestBytes).toBeDefined();
+      expect(costOf(measured.capture).responseBytes).toBeDefined();
+      // Points and bytes remain captured/charged; no superseded vector-specific 16-point/16-KiB assertion.
+      for (const unit of Object.values(measured.value.cost)) expect(Number.isSafeInteger(unit) && unit >= 0).toBe(true);
+    }
+    // Caught-up and reduce-then-ACK schedules require the missing real Search consumer; see integration matrix.
   } finally {
     await f.close();
   }

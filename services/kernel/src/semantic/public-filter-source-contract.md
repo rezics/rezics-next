@@ -8,7 +8,7 @@ necessary; a typed fixture is not main/runtime proof.
 
 The shared authority is [Filtered lists](../../../../docs/filtered-lists.md). This boundary follows complete
 indexed observations, immutable accepted meaning, public disclosure now, same-statement qualifiers and the existing
-pure matcher. It selects the approved coarse per-home reduction log mechanism. It does not revive sampled witnesses,
+pure matcher. It selects the per-home reduction log with property/order-key narrowing and all-home logical coverage. It does not revive sampled witnesses,
 leaf verdicts, final replay, home certificates or an identity-basis sweep. Original `subjectSource.read/count`,
 256 IDs **per native Source call**, the separate 64-envelope relay limit and Search's source-chunk repair stay intact.
 No private Library predicate or fact enters this projection.
@@ -37,33 +37,42 @@ The following are actual code, not proposed ports:
 | `command/fence.sql`, `partition/partition.ts:readPartition`, `route/route.ts:partitionOf/routeOf`                                  | Native home is one of 4096 partitions containing 16 routes; partition position advances at successful command fence. Ownership epoch is independent of catalogue identity epoch.                                                            |
 
 Missing producer module: `services/kernel/src/semantic/public-filter-source.ts` with exactly
-`publicFilterSource(config)` and `recordPrivacyReduction(tx, reduction)`. Factory methods are exactly
-`pagePublicFacets`, `readPrivacyHeads`, `pagePrivacyLog`, as declared beside this document. No runtime stub is added.
+`publicFilterSource(config)` and `recordPrivacyReduction(tx, reduction)`. The selected factory methods are exactly
+`readPublicFilterProjectionPage`, `readPrivacyReductionHeads`, `readPrivacyReductionPage`, as declared beside this document. No runtime stub is added.
 All methods return actual counted work even on changed/unready/unavailable outcomes. Invalid shape or impossible
 route/digest/limit rejects before enumeration. Missing metadata is an explicit unready/unavailable result.
 
-Search's actual compiler, preparation freshness observation, refresh-visible reduction ACK writer, complete
+Search's complete-plan compiler/admission, preparation freshness observation, refresh-visible reduction ACK writer, complete
 foreign registration barrier and query start/revalidation integration are missing on this base. This document
 names their evidence needs through `PublicFilterAcknowledgementNeeds`; it does not create a competing consumer
 interface, metadata validator, factory, index format or sink. Existing source/indexer/checkpoint interfaces do not
 satisfy these needs. Search owns the exact executable consumer surface and receives this producer for review.
 
+Actual consumer call sites inspected are `search/service.ts:createSearchService` (its local `admitQuery` calls
+`admitFilter`/`compileFilter` and current hit disclosure) and `search/indexer.ts:createSubjectIndexer`. They do not
+export the complete-plan start/revalidation or consumer-specific privacy ACK ports described here. Actual
+`semantic/list-outbound-links-by-property.sql` pages `(order_key, target_subject_id, statement_id)` and
+`list-inbound-links-by-property.sql` pages `(order_key, source_subject_id, statement_id)`, with Context-over-Global
+suppression. Those projected relation keysets are useful native evidence but neither a complete current descriptive
+selection stream nor immediate authoritative reduction observation. Their relay positions cannot substitute for
+the missing log/cut. No Search or publication-hook implementation is changed here.
+
 ## Complete bounded selected facets
 
-`pagePublicFacets` receives an actual original subject, immutable `meaning.digest/release/type`, input limit and
+`readPublicFilterProjectionPage` receives an actual original subject, immutable `meaning.digest/release/type`, input limit and
 nullable retained frontier. Verify the digest and accepted meaning against stored releases; active release changes
 must not substitute another meaning. Facet declarations come from that accepted release. Preserve the selected
 statement's own release and datatype/unit meaning independently of the request pin. Include selected descriptive
 facets and outgoing declared relation facets, never inbound edges or undeclared relation properties.
 
-`PublicFacetSource` fields have one spelling: `partition/epoch/position` from `readPartition`, `subject` from the
+`PublicFilterProjectionObservation` fields have one spelling: `partition/epoch/position` from `readPartition`, `subject` from the
 original native anchor, `terminal` from current direct redirect resolution, `revision` from latest subject revision,
 `securityRevision` from `semantic.subject.security_revision::text`, `currentRelease` from stored subject release.
 Read these coherently in the source snapshot. No missing subject/release/owner becomes a zero-version complete
 empty result. Genuine existing label-only subjects can complete an empty facet stream. A hidden subject yields no
 public facets only after a complete current native observation; its safety dependency still matters to queries.
 
-`PublicFacetRecord` preserves `subject`, `terminal`, actual `slot`, `candidate`, selected `rank` and `ordinal`, native
+`PublicFilterProjectionRecord` preserves `subject`, `terminal`, actual `slot`, `candidate`, selected `rank` and `ordinal`, native
 revision/release, original revision `source`, typed native `statement` and matcher `indexed` representation.
 `statement.id` equals candidate; `statement.rezics` preserves its pin/revision. Qualifiers remain attached to this
 statement. Typed native values preserve exact quantity amount/unit and unknown values even where existing indexed
@@ -76,6 +85,12 @@ and source subject/candidate, and Collection population dependencies when applic
 not permission verdicts. No dependency is optional merely because a value was excluded or failed Access. Public
 reads use real anonymous/public Access, native T and current fences; caller editor rights do not change the view.
 Release an owner before checking another owner. Never hold a transaction/checkout across foreign I/O or a sink call.
+
+Page `repairLocators` are INTERNAL maintainer-only metadata, separate from public `records`. They retain the
+original subject/slot/candidate/property and complete dependency locators for selected but currently INELIGIBLE
+inputs as well as eligible ones. Neither withheld values nor those dependency IDs enter the public index. Public
+record dependencies are also internal provenance, not public fields. Retain locators through suppression and
+restoration as required by native selection history; a visible-output-only reverse map cannot establish coverage.
 
 ### Frontier and version stability
 
@@ -91,7 +106,8 @@ owner epoch and complete dependency heads before publishing complete. Partition 
 for the observation and downstream sink, not an assertion that all unrelated partition writes changed this subject.
 An unchanged subject can retain its frontier across unrelated commands; the producer must account for any changed
 required dependency. Local selection/source changes abandon partial generation publication with `changed` and a
-retained replacement frontier; do not mix its rows into complete. Foreign head changes likewise prevent complete.
+retained replacement frontier; do not mix its rows into complete. Foreign head changes likewise prevent complete. `requiredHeads` on the final page contains only that bounded
+step's heads; earlier dependency observations stay in the retained build, never an unbounded last-step sweep.
 Retain pending work rather than erase the active frontier on every poll. Under quiescence finite current input
 finishes; a replay rereads at most one step. Native implementation must supply indexed current-selection access
 where current helpers still fold history; no schema/runtime implementation is claimed here.
@@ -112,7 +128,8 @@ missing, moved or unavailable ownership cannot be inferred pristine. New owner a
 ownership epoch mismatch forces a new current observation, never resets the counter or inherits an old ACK.
 
 `recordPrivacyReduction` accepts only a live existing authorized `CommandTransaction`, its executor-minted
-`transactionId` and `AuthoritativeTime`. Verify `currentCommand(tx).partition` and T. It performs no independent
+`transactionId` and `AuthoritativeTime`. Verify `currentCommand(tx).partition` and T; `transactionId` comes from the existing `runCommand` body context,
+not `currentCommand`, which does not export it. It performs no independent
 checkout, cross-home write or post-commit callback. Lock/increment the native home head and append its bounded cause
 and affected keys in this SAME reduction transaction. Head/log/domain state all commit or all roll back. Concurrent
 serializable reductions cannot reuse/regress positions; retry uses the existing command executor. Uncommitted
@@ -135,39 +152,105 @@ in the transaction. Existing outbox/durable owner work routes repair; no new wor
 | Consent withdrawal                                                 | `semantic/statement-disclosure.ts:changeStatementDisclosure` terminal retract body, candidate/subject home, using native account-agent ownership. Missing append. No invented account epoch. Account unlink/erasure that removes eligibility also needs the account-agent native command's authoritative home before async cleanup.                              |
 | Imported source tuple takedown                                     | `content/source-fence-command.ts:takedownSourceFence`, `tupleRoute(routeKey, source, external_id)` home; `content/takedown-source-fence.sql` increments real security revision. Missing privacy append. Content event delivery alone is too late.                                                                                                                |
 | Collection public population reduction                             | `library/collections.ts:createCollectionCommands`'s `updateCollection/deleteCollection/removeMember` native bodies, actual Collection/owner route. Missing privacy append; ordinary `collectionEvents`/source projection is not immediate invalidation. Dynamic completed-publication replacement must append where that generation is authoritatively replaced. |
-| Source eligibility/identity unlink                                 | Native `semantic/account-agents.ts` verification reversal/erasure and subject identity command when public support is lost. Missing append, with source original retained; shared pending identity epoch is additional gating.                                                                                                                                   |
+| Source eligibility/identity unlink                                 | Native `semantic/account-agents.ts:unverifyAccountAgent` reversal and the native erasure/subject identity command when public support is lost. Missing append, with source original retained; shared pending identity epoch is additional gating.                                                                                                                |
 
 These are integration obligations, not changes to any shared writer here. Existing publication hooks remain closed.
 Native implementation owners must distinguish actual removal from restore, unchanged proposal, rejection of an
 unselected candidate, successful replay and genuine noEffect. Whole-query safety must include excluded-subject homes.
 
+### Affected keys and narrowed admission
+
+`PrivacyReductionLogEntry.impacts` is a bounded union: `subject` affects EVERY key of that original subject;
+`keys` records affected source keys; `dependency` records the authoritative foreign locator requiring complete
+reverse routing. `affected` preserves bounded cause/provenance; it is not a list of copied facts. Both arrays share
+the append's 1000-key input ceiling. Index affected keys and subject-wide scope, not translated labels or invented
+catalogue IDs. `PublicFilterDependencyKey.property` uses `FilterStatement['property']` from `@rezics/filter`;
+the `type` branch matches `FilterDocument.type`/`FactClause.facet: 'type'`; `order` uses actual
+`search/query.ts:SearchPlan['sort']` (`relevance/name/id/collections/rating`). These are dependency identities,
+not a second grammar or an assertion that all these orders are admitted. Actual `currentClauseKey` includes
+values/ranges/qualifiers for matcher identity; reduction routing uses the affected containing source property,
+including changes to any qualifier on that statement. Saved filters must already be expanded by admission.
+Order dependencies include the admitted order's actual inputs (including name/id tie breakers); incomplete
+mapping cannot be noEffect. No property whitelist is introduced here.
+
+A query waits only for unacknowledged reductions whose affected keys occur in its FILTER OR ORDER. Every returned
+row additionally checks unacknowledged reductions of ITS OWN SUBJECT. A subject-wide foreign target reduction
+routes to every affected SOURCE property/order key, including sources excluded by the engine result. Comparing
+only the target's own changed property is unsafe. Source/population authorization, original/terminal and current
+candidate/field checks remain required independently of narrowing. Missing reverse registration, unknown cause,
+withheld source or incomplete foreign routing stays preparing, never irrelevant. Global blocking is permitted
+only as an initial launch slice; it does not satisfy the final served-share gate.
+
 ### Current heads, history and ACK
 
-`readPrivacyHeads` returns exactly requested current homes or a typed failure, charging every control read and all
-owner pools. It cannot return partial successful coverage. Coarse population coverage includes all possible source,
-excluded-subject, tuple, qualifier, consent and Collection homes: conservatively all 4096 native homes. This is
-privacy control coverage, not resurrected 4096-original identity traversal. Narrowing requires independently
-reviewed complete population/dependency proof; returned-candidate homes are insufficient.
+`readPrivacyReductionHeads({kind: 'home', partition})` reads one actual current home head for native history and
+producer verification. Its `home` result distinguishes explicit initialized zero from failure. It is not a query
+coverage algorithm. The `population` request always logically covers ALL4096 homes/current physical owners,
+including excluded subjects, tuple/qualifier/consent and Collection dependencies. `consumer` identifies an actual
+Search registration: physical target/incarnation, consumer/projection generation, and nullable meaning/read
+identity where inapplicable. The operation must read actual ACK state; request fields are locators, never ACK
+positions or callback truth. `consumer: null` means NO ACK exists and all nonzero heads are behind. It cannot
+pretend history is caught up. An unknown non-null registration is unready, not an empty successful observation.
 
-`pagePrivacyLog` is a bounded `(after, through]` native keyset page in one home/epoch. Validate nonnegative positions,
-`after <= through`, 1..1000 raw-key limit and real retained head. Progress advances after every examined key,
-including rejected/tombstoned entries; lookahead is charged but not skipped. Complete means that fixed through
-position was exhausted, never that future reductions cannot occur. Preserve history needed by live consumers;
-missing/pruned required history is unready and requires complete repair, not an empty complete page.
+With `start: null`, `observed.start` identifies a retained native consistent start cut. Revalidation passes that
+same token, returning current `unacknowledged` and `changed` home heads. `coverage: all_native_homes` means current
+complete logical coverage, NOT an array of every home. `changed` contains homes with reductions committed since
+the start even if already repaired/ACKed now; it is empty at start. Duplicate heads are not emitted within either
+array; a home may occur in both. Both arrays use current epochs/lossless positions. `routingComplete: false`
+prevents a complete irrelevance classification. Partial coverage, expired/lost start evidence, ownership movement
+or missing retained change history is unready/unavailable. A token never authorizes disclosure on its own.
 
-Search records required heads BEFORE execution and requires its actual refresh-visible ACKs to cover them. After
-execution it rereads all current required heads immediately before disclosure; a changed head, pending owner,
-missing ACK or pending identity epoch prepares. The consistency boundary is the final current authoritative
-observation, not an index timestamp. Candidate disclosure checks remain separately required. Ordinary 60-second
-freshness and five-minute readiness are independent of immediate reduction safety.
+Search records this actual start evidence before execution, reads the relevant log intervals and compares actual
+contiguous ACKs, then revalidates immediately before disclosure. Changed relevant heads prepare/restart even if
+current ACK covers them: the earlier engine result might still contain the removed evidence. Irrelevant changes
+may proceed only under complete source-key routing plus returned-subject checks. No saved allow, wall-clock or
+UUID ordering substitutes for the native cut. Independent pending identity epoch also prepares. The final
+current authoritative observation is the disclosure consistency boundary; ordinary 60-second/five-minute
+freshness remains separate.
 
-ACK is monotonic only after affected local searchable/prepared repair AND every dependent foreign repair is
-refresh-visible. Ordinary relay delivery, outbox/checkpoint settlement, dispatch and local repair alone cannot
-advance it. Dependency registration must observe already-down tuples/targets: registration racing an ACK is either
-included in its complete repair frontier or fenced from publication until a later repaired observation. Source/sink
-versions and generation lifecycle must prevent late old snapshots from resurrecting data after ACK. A crash after
-external effect or ambiguous sink response cannot acknowledge assumed success; replay establishes actual winner
-refresh visibility/shard success under real sink fencing. No new certificate can fill a missing sink guarantee.
+`readPrivacyReductionPage` uses an exclusive `after` and observed inclusive `through` in one home/epoch. Validate
+nonnegative positions, `after <= through`, 1..1000 raw-key limit and real retained head. Its `head.position` is
+exactly the requested observed `through`, not a later unbounded window. `after` advances over EVERY examined key,
+including rejected/tombstoned entries; charge lookahead without skipping it. Complete exhausts that fixed window,
+not future reductions. `after == through` is complete empty only with real retained coverage. A window limit is
+not EOF. Pruned required history or epoch mismatch is unready/changed, never empty complete repair.
+
+ACK is monotonic only after local searchable/prepared repair AND all dependent FOREIGN repair is refresh-visible.
+Delivery, outbox/checkpoint settlement, dispatch and local repair alone cannot advance it. Registration racing
+an ACK either belongs to its complete repair frontier or stays fenced from publication until a later repaired
+observation. Sink/source generation fencing must prevent late old snapshots, lost CAS and delete-version pruning
+from resurrecting data. A crash after sink effect/ambiguous response cannot acknowledge assumed success: replay
+must establish actual winner visibility and shard success. Foreign privacy position is NOT native subject source
+external version. Dependent own-home refresh must genuinely advance the anchored source version before an
+external-version sink repair; existing unchanged-version 409 responses cannot prove repair. That native refresh
+producer and Search's guarded ACK advancement are missing here; no fictitious default composition is named.
+
+### Efficient native observation feasibility and missing primitive
+
+The required physical path is indexed behind/changed access, not 8192 examined head rows. Start and final reads
+SHARE at most 2 statements and `64 + 2 * (unacknowledged homes + changed homes)` examined rows per PAGE, counting
+removed rows and all owners. Even a native aggregate/hash/JSON over all heads examines all underlying rows and
+fails the caught-up bound. Head/ACK comparison via an unindexed join is not an efficient behind index. PostgreSQL
+cannot use a cross-table partial-index predicate to index `head > consumer_ack`; implementation needs a native
+transactionally maintained behind relation/index for the actual consumer identity, or an equivalently proven
+access path. ACK advancement and new reductions must update that relation without a lost-dirty race.
+
+There is NO current native behind index, retained commit-visible change cut, privacy log/counter or atomic
+registration/ACK composition in this base. `core.partition.position` and `command/fence.sql` serialize only a
+home; they provide no total commit ordering across homes. A sequence allocated before COMMIT is not such ordering:
+an earlier allocated reduction can commit after the start read. A clean/dirty bit alone loses reduce-then-ACK
+changes. Ordinary relay arrival time, `AuthoritativeTime` or a transaction UUID cannot fill this hole. An opaque
+`PrivacyReductionStart` deliberately specifies required evidence, NOT a claim that storing a token solves it.
+
+Before native implementation can return `observed`, the owner must supply the exact same-transaction reduction
+registration and commit-visible indexed changed-since-start primitive, its owner-availability coverage and native
+SQL/captures proving the two-statement shared ceiling. It must preserve changes through ACK until all live start
+cuts no longer need them, bound retained-cut lifecycle, and fail closed on crash/pruning/lost cuts. Cross-owner
+availability itself is charged; pooled per-owner queries cannot secretly exceed two statements. Existing
+per-home fences alone do not prove feasibility. This specification does not choose a new coordination service,
+Search ACK storage or a fake commit-order field. No actual plan/capture exists to report a numeric pass or to
+justify raising a budget. The missing primitive is an explicit implementation dependency for Semantic/Search
+and Performance review, not an exemption from logical coverage or accounting.
 
 ## Native acceptance and cost
 
@@ -178,14 +261,43 @@ noncombinable crossed qualifiers, compact expansion, rank, retained frontier/rep
 source mutation and foreign target reduction. Public audience is checked inside an editor AsyncLocal context.
 The support fixture captures native rows (including removed rows), blocks, statements, backend IDs and wire bytes.
 
-`privacy-reduction-log.test.ts` requires authoritative native subject and tuple reductions with ordinary indexers
-absent, lossless monotonic pages, authorization-before-receipt/revoked replay, nonreduction restore and a deferred
-transaction fault rolling back subject/head/log together. Its named explicit dependency failures preserve the
-remaining same-home concurrency/noEffect, consent/Collection, empty/moved home, rejected-history and whole-query
-positive/NOT/order/race/crash scenarios. These are red requirements, not mock tests or runtime evidence. Search
-must bind its real ports before those consumer cases can execute; no guessed callback makes them pass.
-The 4096-home scenario creates real subjects and real privacy history in every native home and captures coarse
-observation. Missing factory/404/503 is never a growth pass. No numerical feasibility claim exists until it runs.
+`privacy-reduction-log.test.ts` requires actual subject/tuple/consent/Collection reductions with ordinary
+indexers absent, monotonic bounded history, same-home concurrency, receipt/revoked replay, nonreduction/noEffect
+and a deferred COMMIT fault rolling domain/head/log back together. Its 4096-home test genuinely creates/hides one
+subject in every home; no consumer means all heads are behind. It measures both start and final observation
+against the shared two-statement/behind+changed ceiling, retaining excluded subjects and an additional reduction
+between reads. Bytes, points, blocks and backend work remain captured/charged. The former vector-specific
+16-point/16-KiB assertions are removed; no replacement control byte/point allocation is invented. Actual captures
+must resolve any remaining allocation with Performance. Missing factory/404/503 is not growth evidence.
+
+Only this task's unconditional missing-Search throws were removed from executable producer acceptance. No native
+behavior assertion was replaced by skip/todo/mock truth. The exact scenarios and prerequisites remain REQUIRED
+below. Green producer tests would not prove NOT/order/default/API safety.
+
+### Pending native integration/readiness matrix
+
+| Required scenario                                                                                                                                                                                          | Actual prerequisite missing / evidence status                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Complete projection, retained crash frontier, compact expansion, accepted release A after B, crossed qualifiers, hidden prefixes/absence, current dependencies/public audience/internal ineligible routing | `semantic/public-filter-source.ts:publicFilterSource` and native current-selection keysets/retained build; executable native producer assertions, red before DB work today.                                                         |
+| Atomic home log, replay/revoked replay, noEffect, concurrency, tuple/consent/Collection immediate reduction                                                                                                | `recordPrivacyReduction` plus append in each listed authoritative writer; executable native producer assertions, red before DB work today.                                                                                          |
+| All4096 initialized homes with genuine history; excluded-subject coverage; behind and changed pre/post capture                                                                                             | Native behind/commit-visible cut and complete owner coverage; executable producer capture scenario, red/unexecuted today.                                                                                                           |
+| Caught-up small-page observation with all4096 homes/history                                                                                                                                                | Real Search registered physical consumer, all local+foreign refresh-visible repair/ACK; zero behind/changed homes must fit shared 2 statements/64 rows, with native bytes/points/blocks measured. No fake caught-up callback.       |
+| Reduce then ACK during query: final current heads are clean but changed-since-start remains visible                                                                                                        | Same real consumer plus native commit-visible cut; pause actual query between engine result and final observation, reduce and genuinely repair/ACK, then require preparing/restart. Unimplemented/unexecuted.                       |
+| positive harem, NOT harem and order remain preparing until local AND dependent foreign refresh, including excluded subjects                                                                                | Search complete admitted plan execution, native local+foreign sink refresh ACK and current key routing; unimplemented/unexecuted.                                                                                                   |
+| reduction between execution and disclosure: revalidated current head changes and prepares                                                                                                                  | Actual query execution/disclosure seam plus native start/revalidation; unimplemented/unexecuted.                                                                                                                                    |
+| late old source snapshot cannot resurrect an indexed or prepared row after ACK                                                                                                                             | Actual sink external-version fencing, dependent own-home refresh and prepared generation CAS; unimplemented/unexecuted.                                                                                                             |
+| late foreign dependency registration checks already-reduced owner and blocks ACK until repaired                                                                                                            | Complete internal ineligible locators, actual native registration/publication barrier plus foreign repair routing; unimplemented/unexecuted.                                                                                        |
+| crash after sink effect with ambiguous response cannot ACK before actual winner refresh                                                                                                                    | Actual sink crash/ambiguous-response schedule, refresh-visible winner verification and guarded ACK; unimplemented/unexecuted.                                                                                                       |
+| pending identity epoch prepares independently; published epoch alone does not acknowledge privacy                                                                                                          | Actual Search query seam and independent identity epoch read; unimplemented/unexecuted.                                                                                                                                             |
+| missing moved or unavailable owner is not pristine; explicit initialized empty home has head zero                                                                                                          | Native observation initialization/ownership-failure schedules; producer dependency unimplemented/unexecuted, not a Search-only scenario.                                                                                            |
+| privacy log rejected-key history resumes all keys under bounded pages and lossless positions beyond Number.MAX_SAFE_INTEGER                                                                                | Native history maintenance/pruning/rejected-key fixture and real counter boundary; producer dependency unimplemented/unexecuted.                                                                                                    |
+| Narrowing: unrelated key reductions do not block; matching-key reductions on excluded subjects do block; returned subject-wide reductions block every key                                                  | Actual admitted filter/order inputs, indexed complete reverse routing and real consumer ACK/revalidation; unimplemented/unexecuted.                                                                                                 |
+| Three-scale served share at64/512/4096 with arrival rate rising with population                                                                                                                            | Search direct/prepared native plans, actual repair/ACK latency and served/preparing counters; unimplemented/unexecuted. Zero data, fabricated ACK, lowered mutation rate, omitted foreign work and permanent preparing cannot pass. |
+
+Search owns the real consumer functions (review responsibility names `readPrivacyAcknowledgement` and guarded
+monotonic advancement are NOT current exports), compiler/preparation/freshness/admission and default/API tests.
+Semantic owns complete projection, authoritative append, native log/observation and dependent own-home refresh.
+Performance reviews native physical captures. The manager obtains co-owner review before runtime implementation.
 
 ### Projection and preparation step
 
@@ -212,20 +324,17 @@ observation. Missing factory/404/503 is never a growth pass. No numerical feasib
 
 ### Public query head observation and revalidation
 
-- Touches: entire coarse population/dependency home set, both current head observations and actual Search ACK reads,
-  candidate disclosure, source-to-searchable lag and independent identity epoch gating.
-- Bound: direct per-read candidates `min(600, 6s + 3)`, at most six catalogue searches or three owner seeks; ready
-  candidates `2s + 2`, at most two index reads. Both use points `16 + 8c`, rows `64 + 16c`, blocks six per budgeted
-  row, responses `16 KiB + 4 KiB × c`, requests `64 KiB + 1 KiB × c`, 12 statements per PostgreSQL backend and one
-  connection per backend/page. Head observations are included, never exempted. Coarse capture has zero candidates
-  and therefore tests the fixed control allowance. If native work exceeds it, send the exact capture to Performance
-  and the manager; retain correctness, never silently narrow homes or raise budgets. No conflict is claimed without
-  that native evidence. Composed pages retain 16 reads/128 total slots, totals 816 candidates/6784 points/14080 rows,
-  72 statements/96 searches and one connection per backend; fixed control work is shared. Preparation remains bounded
-  separately, but cached authority cannot replace the final current observation.
-- Growth check: Search owns direct catalogue/prepared public native checks (Commerce owner-local, page owner
-  composed), at 64/512/4096 population and matches, sparse `s+1` positives, independent history, owner pools, aliases/
-  duplicates and deep cursor pages. First/deep/sparse and composed 16-read/128-slot cases all obey exact ceilings;
-  engine profile iterator work constant/logarithmic, no full-match sort/count. Include all 4096 genuine privacy
-  homes/history and current revalidation, crash after sink effect and registration races. Existing 256 proof tests
-  and the type-only contract do not satisfy this evidence.
+- Touches: logical all4096-home population/dependency coverage through indexed behind/changed reads, actual
+  consumer-specific ACK, source-key routing, returned-subject reductions, current candidate/source authority and
+  independent identity epoch. Include every raw/rejected/reread/removed row, byte, backend and owner checkout.
+- Bound: both observations together at most 2 statements and
+  `64 + 2 * (homes with unacknowledged reduction + homes whose head changed since start)` examined rows per PAGE.
+  Never scan all heads or hide scans in aggregates/hashes/JSON. Physical bytes/points/blocks/connections are
+  measured and charged; unresolved control byte/point allocation goes to Performance with actual capture, not an
+  invented exemption or larger limit. Main direct/ready/composed page budgets in Filtered lists remain unchanged;
+  the observation is shared once across composed reads. No connection is held across another owner or engine I/O.
+- Growth check: genuine4096-home history plus caught-up zero/small pages, behind/changed and reduce-then-ACK
+  schedules with native pre/post capture. Search additionally owns 64/512/4096 population/matches/sparse/history/
+  owner/alias/deep-page and composed16-read/128-slot cases, actual repair/ACK latency and served share that does not
+  fall as reduction arrival grows with population. Existing Source256 checks or this type-only fixture are not
+  that evidence. Report exact missing primitive/capture before claiming feasibility or growth success.

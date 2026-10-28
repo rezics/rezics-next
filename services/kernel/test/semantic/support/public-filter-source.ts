@@ -9,13 +9,14 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { partitionOf, routeOf, newId } from '../../../src/route/route.ts';
 import type {
-  PublicFacetFrontier,
-  PublicFacetMeaning,
-  PublicFacetRecord,
+  PublicFilterProjectionFrontier,
+  PublicFilterProjectionMeaning,
+  PublicFilterProjectionRecord,
+  PublicFilterRepairLocator,
   PublicFilterSource,
   PublicFilterSourceFactory,
   RecordPrivacyReduction,
-  PrivacyHead,
+  PrivacyReductionHead,
 } from '../../../src/semantic/public-filter-source-contract.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createRealAccess } from '../real-access.ts';
@@ -105,7 +106,7 @@ export async function fixture() {
     }),
   });
   let session: string | null = null;
-  async function call(path: string, body: unknown, key = randomUUID(), method = 'POST') {
+  async function call(path: string, body: unknown, key: string = randomUUID(), method = 'POST') {
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
@@ -154,18 +155,18 @@ export async function fixture() {
     await post(`/v1/definitions/releases/${digest}:activate`, { expected_head: active?.head ?? null });
   }
   const config = { pool: db.pool, routeKey, access: real.access({ actions: actionCatalogue(kernel) }) };
-  const meaning: PublicFacetMeaning = { digest, release, type: 'schema:Book' };
+  const meaning: PublicFilterProjectionMeaning = { digest, release, type: 'schema:Book' };
   return { db, real, accounts, config, meaning, create, propose, post, call, close: () => db.close() };
 }
 export type Fixture = Awaited<ReturnType<typeof fixture>>;
 export const home = (subject: string) => partitionOf(routeOf(subject)!);
 
-export async function head(source: PublicFilterSource, partition: number): Promise<PrivacyHead> {
-  const page = await source.readPrivacyHeads([partition]);
-  expect(page.status).toBe('observed');
-  if (page.status !== 'observed') throw new Error(`Native privacy heads ${page.status}`);
-  expect(page.heads.map((entry) => entry.partition)).toEqual([partition]);
-  return page.heads[0]!;
+export async function head(source: PublicFilterSource, partition: number): Promise<PrivacyReductionHead> {
+  const page = await source.readPrivacyReductionHeads({ kind: 'home', partition });
+  expect(page.status).toBe('home');
+  if (page.status !== 'home') throw new Error(`Native privacy head ${page.status}`);
+  expect(page.head.partition).toBe(partition);
+  return page.head;
 }
 
 export async function capturedStep<
@@ -198,22 +199,24 @@ export async function complete(
   f: Fixture,
   source: PublicFilterSource,
   subject: string,
-  frontier: PublicFacetFrontier | null = null,
+  frontier: PublicFilterProjectionFrontier | null = null,
 ) {
-  const records: PublicFacetRecord[] = [];
+  const records: PublicFilterProjectionRecord[] = [];
+  const repairLocators: PublicFilterRepairLocator[] = [];
   let steps = 0;
   let inputKeys = 0;
   for (;;) {
     const page = await capturedStep(f.db, () =>
-      source.pagePublicFacets({ subject, meaning: f.meaning, inputLimit: 16, frontier }),
+      source.readPublicFilterProjectionPage({ subject, meaning: f.meaning, inputLimit: 16, frontier }),
     );
     expect(['progress', 'complete']).toContain(page.status);
     if (page.status !== 'progress' && page.status !== 'complete') throw new Error(`Native projection ${page.status}`);
     expect(page.cost.inputKeys).toBeLessThanOrEqual(16);
     inputKeys += page.cost.inputKeys;
     records.push(...page.records);
+    repairLocators.push(...page.repairLocators);
     expect(++steps, 'Finite quiescent input must not restart at zero forever').toBeLessThan(10000);
-    if (page.status === 'complete') return { records, page, steps, inputKeys };
+    if (page.status === 'complete') return { records, repairLocators, page, steps, inputKeys };
     expect(page.frontier).not.toEqual(frontier);
     frontier = JSON.parse(
       JSON.stringify(page.frontier, (_, value) => (typeof value === 'bigint' ? value.toString() : value)),
@@ -221,11 +224,4 @@ export async function complete(
     // Preserve the lossless native bigint across a process-style retained frontier reload.
     frontier = { ...frontier!, generation: BigInt(frontier!.generation) };
   }
-}
-
-/** Search has not published a native preparation/ACK seam; no guessed factory or fake sink is accepted. */
-export function missingSearchDependency(scenario: string): never {
-  throw new Error(
-    `Missing Search native producer/consumer dependency: ${scenario}. Requires real admitted plan execution, refresh-visible local and foreign repair ACK, and pre-disclosure head revalidation; no current export proves this.`,
-  );
 }
