@@ -155,7 +155,7 @@ async function placed(
   moduleDirectory?: string,
   unsetEnvironment: string[] = [],
 ): Promise<{ code: number | null; stderr: string }> {
-  const childEnvironment = {
+  const childEnvironment: Record<string, string | undefined> = {
     ...process.env,
     ...env,
     PLAN: JSON.stringify(plan),
