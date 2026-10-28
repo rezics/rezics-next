@@ -133,7 +133,11 @@ test('collection export follows every opaque cursor and reads once per page', as
         return originalGet.call(feed, cursor);
       },
     };
-    const runner = { async do<T>(_name: string, run: () => Promise<T>) { return run(); } };
+    const runner = {
+      async do<T>(_name: string, run: () => Promise<T>) {
+        return run();
+      },
+    };
     await exportSitemapFeed(`collections-${pageCount}`, pagedFeed, {
       runId: `collections-${pageCount}`,
       origin: 'https://public.example',
@@ -143,9 +147,12 @@ test('collection export follows every opaque cursor and reads once per page', as
       pack: async () => [],
     });
     expect(cursors).toEqual(pageCount === 1 ? [null] : [null, 'opaque-1', 'opaque-2']);
-    expect(calls.filter(({ feed: name }) => name === 'collections').slice(-pageCount).map(({ query }) => query.limit)).toEqual(
-      Array(pageCount).fill(1_000),
-    );
+    expect(
+      calls
+        .filter(({ feed: name }) => name === 'collections')
+        .slice(-pageCount)
+        .map(({ query }) => query.limit),
+    ).toEqual(Array(pageCount).fill(1_000));
     pages.collections = original;
   }
 });
@@ -154,7 +161,11 @@ test('a non-200 collection feed response rejects the export read', async () => {
   const { feed } = await import('../src/sitemap/feeds/collections.ts');
   const statusBefore = statuses.collections;
   statuses.collections = 503;
-  const runner = { async do<T>(_name: string, run: () => Promise<T>) { return run(); } };
+  const runner = {
+    async do<T>(_name: string, run: () => Promise<T>) {
+      return run();
+    },
+  };
   try {
     await expect(
       exportSitemapFeed('collections-failed', feed, {
@@ -169,5 +180,5 @@ test('a non-200 collection feed response rejects the export read', async () => {
   } finally {
     if (statusBefore === undefined) delete statuses.collections;
     else statuses.collections = statusBefore;
-  };
+  }
 });
