@@ -11,6 +11,7 @@ import readPendingPriorGroup from './public-figure-prior-pending-group.sql';
 import readPendingPriorSubjects from './public-figure-prior-pending-subjects.sql';
 import pagePublicFiguresSql from './public-figures-page.sql';
 import readPublicFiguresSql from './public-figures-read.sql';
+import readPendingFigure from './public-figure-pending-read.sql';
 import lockPriorEpochTotals from './population-prior-epoch-totals-lock.sql';
 import readPriorEpoch from './population-prior-epoch-read.sql';
 import readPriorGrain from './population-prior-grain-read.sql';
@@ -412,6 +413,46 @@ function figureFromRow(row: PublicFigureRow): PublicFigure {
     asOf: row.asOf === null ? null : new Date(row.asOf).toISOString(),
     position: row.position,
   };
+}
+
+/** Compute consumer readiness from the published count, never from pending votes or shard totals. */
+export function publicFigureState(
+  figure: Pick<PublicFigure, 'count'> | null,
+  grain: string,
+  pending: boolean,
+): 'ready' | 'insufficient_data' | 'updating' {
+  let threshold: number;
+  switch (grain) {
+    case 'work':
+    case 'release':
+      threshold = 5;
+      break;
+    case 'episode':
+    case 'character':
+      threshold = 10;
+      break;
+    default:
+      throw new TypeError('Unknown rating question grain');
+  }
+  if ((figure?.count ?? 0) >= threshold) return 'ready';
+  return pending ? 'updating' : 'insufficient_data';
+}
+
+/** Point-read the pending mark, including an unpublished row; no vote or aggregate data is read. */
+export async function readPublicFigurePending(
+  client: Queryable,
+  input: { questionId: string; populationId: string; subjectId: string },
+): Promise<boolean> {
+  const route = routeOf(input.subjectId);
+  if (route === null || !validId(input.questionId) || !validId(input.populationId))
+    throw new TypeError('Invalid public rating figure address');
+  const row = await readPendingFigure.run(client, {
+    route,
+    question_id: input.questionId,
+    population_id: input.populationId,
+    subject_id: input.subjectId,
+  });
+  return row?.pending ?? false;
 }
 
 /** Read up to 256 current, published figures for subjects in their anchor partition with one statement. */

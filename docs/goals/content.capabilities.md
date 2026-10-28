@@ -175,7 +175,7 @@ array does not permit adding response fields. Request paths and fixture IDs may 
 | `takedown`, `revokeBoardRead`   | `board.takedown/post.takedown`: POST `/v1/boards/{id}:takeDown` or `/v1/posts/{id}:takeDown`, `{ reason }`, 200. `grant.revoke`: POST `/v1/grants:revoke`, exact resource/subject/actions/valid grant tuple, 200 `{ grant }`. Fixture grants must cover board and post takedown independently, and the protected reader must have no alternative board-read grant. [Content, Subject threads](../../services/kernel/src/content/README.md#subject-threads), [Access, Grant create/change/revoke](../../services/kernel/src/access/README.md#grant-createchangerevoke). |
 | `page`, `holdPage`              | `board_threads.list` / `post.list`: GET `/v1/boards/{id}/threads?sort=&limit=&cursor=` or `/v1/threads/{id}/posts?limit=&cursor=`, 200 `{ threads, next, rankRefreshedAt }` or `{ posts, next, reactionsAsOf }`. Preserve metadata; map the array to items. All literal sort/post, first/continuation, takedown/grant and unchanged-control scenarios stay intact. `holdPage` remains a timing-only native test barrier; its implementation belongs to the binding.                                                                                                    |
 | `provision`, `effects`, `close` | Isolated native test lifecycle, not public endpoints. Subjects/Realms/boards use production creation APIs; accounts/grants and delivery controls are permitted fixture setup. Effects drain/replay production events and workers; cleanup joins held requests. No manufactured votes, figures or relay rows. Global boards remain a provisioning gap below.                                                                                                                                                                                                            |
-| `subjectFigure`, `searchCard`   | Intended consumers are GET `/v1/subjects/{id}` (`subject.get`) and POST `/v1/subjects:search` (`subject.search`), both 200. Their OpenAPI schemas have no rating figure. Keep the assertions as missing product behaviour below; the driver cannot build consumer cards from aggregate reads.                                                                                                                                                                                                                                                                          |
+| `subjectFigure`, `searchCard`   | The subject consumer is GET `/v1/subjects/{id}/figure` (`rating.figure_get`), 200 `{ figure }` with the named `PublicFigure` DTO. `subject.get` stays without a figure: its ETag follows the subject head revision, so frequently changing figures stay outside it. POST `/v1/subjects:search` (`subject.search`) still needs the same DTO on search hits. [Rating, HTTP](../../services/kernel/src/rating/README.md#http).                                                                                                                                            |
 
 The suite composes vote target/question identifiers from its own request arguments solely for citations; the driver's
 Vote contains only units, revision and at. Citation comparisons and own-vote comparisons therefore use different
@@ -194,11 +194,14 @@ replay checks remain unchanged. No literal scenario or title is removed.
 
 Missing product behaviours retained by this suite:
 
-- **Rating and semantic/presentation:** `subject.get` has no public rating figure or explicit readiness field.
-  `subjectFigure` still requires the standard-question Global figure, count, display mean/Bayesian score,
-  question/population identifiers, units metadata and `ready` / `insufficient_data` / `updating` states. These names
-  are prospective consumer requirements, not landed HTTP readiness names. The internal figure producer is not an
-  HTTP consumer DTO. Do not synthesize states from nulls or rescale aggregate HTTP means in the driver.
+- **Rating and semantic/presentation:** the subject figure consumer is GET `/v1/subjects/{id}/figure`, with
+  standard-question Global identifiers, the question's stored-unit scale, count, published display mean/Bayesian
+  score and explicit `ready` / `insufficient_data` / `updating` states in the named OpenAPI `PublicFigure` component.
+  `subject.get` stays without a figure; its ETag follows the subject head revision, keeping frequently changing
+  figure publications out of that response. Native evidence is `test/rating/public-figure-http.test.ts`, using vote
+  HTTP writes and the default worker, including pending publication and private-Realm non-disclosure. The frozen
+  subject/search scenario still awaits search's matching consumer; the driver must not synthesize states from nulls
+  or rescale aggregate HTTP means.
 - **Search with rating:** `subject.search` has no figure on hits. `searchCard` still requires the same current public
   figure and explicit readiness as the subject consumer, preserving private-vote and private-Realm non-disclosure.
   [Search, Global rating order](../../services/kernel/src/search/README.md#global-rating-order) documents the public

@@ -1,3 +1,4 @@
+import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -18,6 +19,7 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
 import questionRead from './question-read.sql';
+import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage, readRatingQuestion } from './aggregate-read.ts';
 import {
@@ -125,6 +127,32 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
   const config = () => ({ ...dependencies, access: dependencies.access() });
   const votes = () => createVoteCommands(config());
   return app
+    .model('PublicFigure', PublicFigureSchema)
+    .get(
+      '/v1/subjects/:id/figure',
+      {
+        params: t.Object({ id }, closed),
+        response: {
+          200: withHeaders(t.Object({ figure: t.Ref('PublicFigure') }, closed), {
+            etag: t.String(),
+            'cache-control': t.Literal('no-cache'),
+          }),
+          ...aggregateFailures,
+        },
+        detail: publicReadDetail('rating.figure_get', 'subject:read'),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        requireRoutableIds(params.id);
+        return admission.run('normal', job, async () => {
+          if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
+          const result = await readSubjectPublicFigure(dependencies.pool, params.id, job.deadline);
+          if (!result) throw new ProblemError('not_found');
+          set.headers.etag = `"${result.revision}"`;
+          set.headers['cache-control'] = 'no-cache';
+          return { figure: result.figure };
+        });
+      },
+    )
     .get(
       '/v1/subjects/:id/ratings',
       {
