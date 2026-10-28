@@ -7,7 +7,11 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
+import { readPartition } from '../../src/partition/partition.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linksCaughtUp } from '../../src/semantic/link-freshness.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -50,10 +54,48 @@ async function call(method: string, path: string, body?: unknown, editor = false
   return { response, body: (await response.json()) as Record<string, any> };
 }
 const read = (target: unknown) => call('POST', '/v1/pages:read', { target });
+const setupSubjects = new Set<string>();
+// Definition and profile bootstrap both commit in the Global Context's home.
+const setupHomes = new Set([partitionOf(routeOf(GLOBAL_CONTEXT)!)]);
+
+async function projectSetup(): Promise<void> {
+  const projection = linkProjection(pool);
+  for (let round = 0; round < 50; round++) {
+    let progressed = false;
+    for (const partition of setupHomes) {
+      const result = await projection.run(partition);
+      if (result.status !== 'read')
+        throw new Error(
+          `Semantic setup projection ${partition}: ${result.status}${result.status === 'stopped' ? ` (${result.reason}) at ${result.position}` : ''}`,
+        );
+      progressed ||= result.envelopes > 0;
+    }
+    // Applying a batch can emit more events, including back into an earlier home.
+    if (progressed) continue;
+    const seen = [];
+    for (const partition of setupHomes) {
+      const head = await readPartition(pool, partition);
+      if (!head) throw new Error(`Semantic setup home ${partition} is unavailable`);
+      seen.push({ partition, epoch: head.epoch, position: head.position });
+    }
+    for (const subject of setupSubjects)
+      expect(
+        await linksCaughtUp(pool, seen, subject, undefined, [...setupSubjects]),
+        `Semantic setup must cover ${subject} at ${seen.map((head) => `${head.partition}.${head.epoch}:${head.position}`).join(', ')}`,
+      ).toBe(true);
+    return;
+  }
+  throw new Error('Semantic setup projection did not reach quiescence in 50 bounded relay rounds');
+}
+
 async function create(type: string, label: string): Promise<string> {
   const created = await call('POST', '/v1/subjects', { type, labels: { en: label } }, true);
-  expect(created.response.status).toBe(201);
-  return created.body.subject.id;
+  expect(created.response.status, JSON.stringify(created.body)).toBe(201);
+  const id: string = created.body.subject.id;
+  setupSubjects.add(id);
+  setupHomes.add(partitionOf(routeOf(id)!));
+  await projectSetup();
+  return id;
 }
 const node = (type: string, id: string, props: Record<string, unknown> = {}) => ({ type, props: { id, ...props } });
 const page = (...content: ReturnType<typeof node>[]) => ({ root: { props: {} }, content });
@@ -104,7 +146,7 @@ test('a page read answers presentation_not_ready until a profile is active', asy
 test('a subject page resolves its type template and runs its reads in one round trip', async () => {
   const id = await create('schema:Book', 'Kokoro');
   const answer = await read({ subject: id });
-  expect(answer.response.status).toBe(200);
+  expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.response.headers.get('cache-control')).toBe('private, no-store');
   expect(answer.body.subject).toBe(id);
   expect(answer.body.profile).toBe(profileDigest(profile));
@@ -122,7 +164,7 @@ test('a subject page resolves its type template and runs its reads in one round 
 test('a subject without a type template falls back through its structural bases', async () => {
   const id = await create(base.type, 'Based');
   const answer = await read({ subject: id });
-  expect(answer.response.status).toBe(200);
+  expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.body.template).toEqual({ scope: 'base', key: base.base });
   expect(answer.body.document).toEqual(profile.bases[0]!.document);
   expect(answer.body.reads).toEqual({ r0: { status: 200, body: (await call('GET', `/v1/subjects/${id}`)).body } });

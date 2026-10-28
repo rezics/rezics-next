@@ -4,27 +4,20 @@ import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
+import { readPartition } from '../../src/partition/partition.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
-import { accountAgentId } from '../../src/semantic/agents.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linksCaughtUp } from '../../src/semantic/link-freshness.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
-const editor = {
-  kind: 'account' as const,
-  accountId: accounts.editor,
-  clientId: 'web',
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
 const routeKey = new Uint8Array(32).fill(7);
 const body = Buffer.from(JSON.stringify(fromPlainText('Agent profile reply')));
 const bodyHash = new Uint8Array(new Bun.CryptoHasher('sha256').update(body).digest());
@@ -252,11 +245,18 @@ async function seedUnrelatedAccounts(count: number): Promise<void> {
   }
 }
 
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, editor = false) {
+  const headers: Record<string, string> = {};
+  if (editor) {
+    headers.authorization = `Bearer ${realAccess.bearer('editor')}`;
+    headers['idempotency-key'] = `"${randomUUID()}"`;
+  }
+  if (body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
-      ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
   return { response, body: (await response.json()) as Record<string, any> };
@@ -267,17 +267,49 @@ async function readPage(target: Record<string, unknown>) {
 }
 
 async function createCatalogueSubject(type: string, label: string): Promise<string> {
-  const idempotencyKey = randomUUID();
-  const created = await createSubject(pool, {
-    actor: editor,
-    target: subjectTarget(routeKey, editor.accountId, idempotencyKey),
-    idempotencyKey,
-    digest: createHash('sha256').update(idempotencyKey).digest(),
-    item: { type, labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return created.subject.id;
+  const created = await call('POST', '/v1/subjects', { type, labels: { en: label } }, true);
+  expect(created.response.status, JSON.stringify(created.body)).toBe(201);
+  return trackSetupSubject(created.body.subject.id);
+}
+
+const setupSubjects = new Set<string>();
+// Definition and profile bootstrap both commit in the Global Context's home.
+const setupHomes = new Set([partitionOf(routeOf(GLOBAL_CONTEXT)!)]);
+
+function trackSetupSubject(id: string): string {
+  setupSubjects.add(id);
+  setupHomes.add(partitionOf(routeOf(id)!));
+  return id;
+}
+
+async function projectSetup(): Promise<void> {
+  const projection = linkProjection(pool);
+  for (let round = 0; round < 50; round++) {
+    let progressed = false;
+    for (const partition of setupHomes) {
+      const result = await projection.run(partition);
+      if (result.status !== 'read')
+        throw new Error(
+          `Semantic setup projection ${partition}: ${result.status}${result.status === 'stopped' ? ` (${result.reason}) at ${result.position}` : ''}`,
+        );
+      progressed ||= result.envelopes > 0;
+    }
+    // Applying a merge batch can emit events back into a home already visited.
+    if (progressed) continue;
+    const seen = [];
+    for (const partition of setupHomes) {
+      const head = await readPartition(pool, partition);
+      if (!head) throw new Error(`Semantic setup home ${partition} is unavailable`);
+      seen.push({ partition, epoch: head.epoch, position: head.position });
+    }
+    for (const subject of setupSubjects)
+      expect(
+        await linksCaughtUp(pool, seen, subject, undefined, [...setupSubjects]),
+        `Semantic setup must cover ${subject} at ${seen.map((head) => `${head.partition}.${head.epoch}:${head.position}`).join(', ')}`,
+      ).toBe(true);
+    return;
+  }
+  throw new Error('Semantic setup projection did not reach quiescence in 50 bounded relay rounds');
 }
 
 async function getJson(path: string): Promise<Record<string, any>> {
@@ -303,6 +335,7 @@ beforeAll(async () => {
     requestDeadlineMs: 30_000,
   });
   await bootstrapRelease(pool, bundledRelease);
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   await admin.query(
     `INSERT INTO access.exposure_opening (route,"group",valid,transaction_id)
      VALUES (0,'collections',tstzrange(now()-interval '1 day',NULL,'[)'),$1)`,
@@ -339,24 +372,33 @@ beforeAll(async () => {
   await seedAgentCollections(pageAccount.id, 2);
 
   // The organization is unverified: its page is its own graph agent's page, resolved by the agent's type.
-  organizationAgent = accountAgentId(organizationAccount.id);
-  await ensureAccountAgent(pool, {
+  const organization = await ensureAccountAgent(pool, {
     account: organizationAccount.id,
     kind: 'organization',
     name: 'Agent organization',
     language: 'en',
   });
+  organizationAgent = trackSetupSubject(organization.subject.id);
 
   // The verified account's agent is merged into a catalogue subject; accounts stores the verification on the row.
-  await ensureAccountAgent(pool, {
+  const verified = await ensureAccountAgent(pool, {
     account: verifiedAccount.id,
     kind: 'person',
     name: 'Verified agent',
     language: 'en',
   });
+  trackSetupSubject(verified.subject.id);
   catalogueSubject = await createCatalogueSubject('schema:Person', 'Catalogue Person');
   const receipt = randomUUID();
-  await verifyAccountAgent(pool, { account: verifiedAccount.id, catalogue: catalogueSubject, receipt });
+  const verification = await verifyAccountAgent(pool, {
+    account: verifiedAccount.id,
+    catalogue: catalogueSubject,
+    receipt,
+  });
+  setupHomes.add(verification.component.partition);
+  trackSetupSubject(verification.subject.id);
+  trackSetupSubject(verification.survivor);
+  trackSetupSubject(verification.redirected);
   await admin.query(
     `UPDATE access.account
      SET agent_verified = true, agent_subject_id = $3, agent_verification_receipt_id = $4
@@ -379,6 +421,8 @@ beforeAll(async () => {
     routes: [],
   };
   await bootstrapProfile(pool, profile);
+  // Real setup work is complete before any page/read or checkGrowth operation is measured.
+  await projectSetup();
 });
 
 afterAll(async () => {
@@ -448,7 +492,7 @@ test.serial(
   "an account verified as a catalogue subject answers that subject's page with the account's reads",
   async () => {
     const answer = await readPage({ account: verifiedAccount.handle });
-    expect(answer.response.status).toBe(200);
+    expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
     expect(answer.body.account).toBe(verifiedAccount.id);
     expect(answer.body.subject).toBe(catalogueSubject);
     expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Person' });
@@ -472,7 +516,7 @@ test.serial(
   "an unverified organization account answers its agent subject's page with the organization template",
   async () => {
     const answer = await readPage({ account: organizationAccount.handle });
-    expect(answer.response.status).toBe(200);
+    expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
     expect(answer.body.account).toBe(organizationAccount.id);
     expect(answer.body.subject).toBe(organizationAgent);
     expect(answer.body.template).toEqual({ scope: 'type', key: 'schema:Organization' });
