@@ -223,7 +223,7 @@ test('notice writes and bounded pages stay constant while other recipients and p
           `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
            SELECT ctid, notice_id FROM content.notice
            WHERE route = $1 AND recipient_id = $2::uuid
-           ORDER BY created_at, notice_id LIMIT 1000 FOR UPDATE`,
+           ORDER BY created_at DESC, notice_id DESC LIMIT 1000 FOR UPDATE`,
           [atRoute, erasedWarmupAccounts.get(scale)!],
           'notice_recipient_created_idx',
           ['route', 'recipient_id'],

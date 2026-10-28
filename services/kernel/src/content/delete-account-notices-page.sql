@@ -2,7 +2,7 @@ WITH page AS MATERIALIZED (
   SELECT ctid, notice_id
   FROM content.notice
   WHERE route = :route::integer AND recipient_id = :account_id::uuid
-  ORDER BY created_at, notice_id
+  ORDER BY created_at DESC, notice_id DESC
   LIMIT 1000
   FOR UPDATE
 )
