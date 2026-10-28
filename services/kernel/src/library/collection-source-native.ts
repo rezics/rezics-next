@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { types, type Pool, type PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
@@ -58,11 +57,14 @@ export type NativeCollectionProbe = {
   witness: { incarnation: string; sourceGeneration: string; factFence: string | null } | null;
   work: WorkReceipt;
 };
-const sqlFile = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
-const headerSQL = sqlFile('./collection-source-native-header.sql');
-const membersSQL = sqlFile('./collection-source-native-members.sql');
-const factsSQL = sqlFile('./collection-source-native-facts.sql');
-const probeSQL = sqlFile('./collection-source-native-probe.sql');
+import headerQuery from './collection-source-native-header.sql';
+const headerSQL = headerQuery.sql;
+import membersQuery from './collection-source-native-members.sql';
+const membersSQL = membersQuery.sql;
+import factsQuery from './collection-source-native-facts.sql';
+const factsSQL = factsQuery.sql;
+import probeQuery from './collection-source-native-probe.sql';
+const probeSQL = probeQuery.sql;
 const fenceSQL = 'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2';
 const referenceSQL =
   'SELECT collection_id FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2';

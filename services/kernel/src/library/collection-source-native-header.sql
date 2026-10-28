@@ -4,4 +4,4 @@ SELECT route, collection_id AS "collectionId", curator_account_id AS "curatorAcc
        builtin_kind AS "builtinKind", builtin_release_digest AS "releaseDigest",
        builtin_profile_id AS "profileId", builtin_state_set_id AS "stateSetId", builtin_state_id AS "stateId"
 FROM library.collection
-WHERE route = $1 AND collection_id = $2;
+WHERE route = :route AND collection_id = :collection_id;
