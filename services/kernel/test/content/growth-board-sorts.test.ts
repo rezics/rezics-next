@@ -20,6 +20,36 @@ const body = Buffer.from(serializeDocument(document));
 const bodyHash = createHash('sha256').update(body).digest();
 const title =
   'board pages under new active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow';
+// seed() spreads the threads across all sixteen routes in their anchor partition. Access also
+// reads the board route and the fixed Global Context, so populate every one of those routes.
+const accessRoutes = [
+  0,
+  boardRoute,
+  ...Array.from({ length: 16 }, (_, index) => partitionOf(threadRoute) * 16 + index),
+];
+const accessPopulation: Population = {
+  name: 'board-sorts-unrelated-access',
+  hotPartition: partitionOf(threadRoute),
+  hotShare: 1,
+  rows: () => {
+    const resources = accessRoutes.map((route) => ({
+      route,
+      resource_id: newId(route),
+      subject_id: newId(threadRoute),
+      valid: '(,)',
+      transaction_id: randomUUID(),
+    }));
+    return {
+      'access.resource_grant': resources.map((resource) => ({ ...resource, action: 'thread:read' })),
+      'access.resource_role_grant': resources.map((resource) => ({ ...resource, grant_role: 'content.thread.owner' })),
+      'access.resource_denial': resources.map((resource) => ({
+        ...resource,
+        action: 'thread:read',
+        reason: 'resource',
+      })),
+    };
+  },
+};
 
 test(
   title,
@@ -27,7 +57,8 @@ test(
     // HTTP calls use the production "newest" spelling for the contract's "new" sort.
     for (const sort of ['newest', 'active', 'hot'] as const) {
       await db.admin.query(
-        'TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision CASCADE',
+        `TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision,
+          access.resource_grant, access.resource_role_grant, access.resource_denial CASCADE`,
       );
       const boardId = newId(boardRoute);
       await db.admin.query(
@@ -132,6 +163,9 @@ test(
           };
         },
       };
+      // Keep even the first scale off empty/tiny-table planner scans. These resources and subjects
+      // never belong to the probe; the disjoint baseline ordinals follow the inverse-membership fixture.
+      await seed(db, accessPopulation, { from: 1_000_000, to: 1_004_000 });
       const report = await checkGrowth(db, {
         name: `Board page ${sort}, including candidate and final disclosure`,
         scales,
@@ -139,6 +173,8 @@ test(
         repetitions: 1,
         grow: async (growthDb, scale, previous) => {
           await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale });
+          await seed(growthDb, accessPopulation, { from: previous, to: scale });
+          // checkGrowth runs VACUUM (ANALYZE) after grow, covering all three Access tables too.
         },
         operation: async () => {
           const response = await app.handle(
