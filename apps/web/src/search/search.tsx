@@ -549,8 +549,14 @@ function renderResults(
 }
 
 /** The route's loader call; the page locale travels with the request so the server asks for the right languages. */
-function readSearch({ data }: { data: Omit<SearchParams, 'locale'> }): Promise<SearchPageData> {
-  return readSearchWithLocale({ data: { ...data, locale: getLocale() } });
+function readSearch({
+  data,
+  locale = getLocale(),
+}: {
+  data: Omit<SearchParams, 'locale'>;
+  locale?: string;
+}): Promise<SearchPageData> {
+  return readSearchWithLocale({ data: { ...data, locale } });
 }
 
 export { readSearch };
@@ -614,7 +620,7 @@ export function ShellSearch() {
     if (inputValue.trim())
       void navigate({
         to: '/search',
-        search: { q: inputValue.trim(), type: undefined, facetValues: {}, cursor: undefined },
+        search: { q: inputValue.trim(), type: undefined, cursor: undefined },
       });
   };
   // One frame for the list, so covers of mixed types line up.

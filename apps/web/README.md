@@ -265,6 +265,8 @@ Space and Realm pages render from anonymous public reads on the server. A signed
 
 **Search params**: Every route that reads search params declares a Valibot schema in `validateSearch`, with defaults for missing or invalid values. A loader that depends on them declares `loaderDeps`.
 
+The search route keeps its schema in `search/search-params.ts`; its query key includes the locale and every validated read param, and its results page is `noindex, follow` without JSON-LD.
+
 **Head**: Every route's `head()` builds tags with `pageHead()` from `apps/web/src/shell/head.ts`: title, description, card, robots and JSON-LD. Canonical and `hreflang` alternates are emitted once for the page by the root, from the leaf route's locale paths.
 
 **Statuses**: Loaders end with real statuses: `notFound()` for 404, with unknown, unreadable and removed ids answering alike; `redirect({ statusCode: 301 })` for moved pages and outdated slugs; and the closed page for 403. A page never answers 200 with an error inside.
