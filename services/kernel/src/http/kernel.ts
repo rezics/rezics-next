@@ -24,6 +24,7 @@ import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
+import { noticeRoutes } from '../content/notice-routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
@@ -316,6 +317,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     },
   };
   content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
+  noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    access: contentDependencies.access,
+    clock,
+  });
   subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
@@ -427,6 +434,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof accessRoutes> &
   ReturnType<typeof mediaRoutes> &
   ReturnType<typeof contentRoutes> &
+  ReturnType<typeof noticeRoutes> &
   ReturnType<typeof subjectReactionRoutes> &
   ReturnType<typeof searchRoutes> &
   ReturnType<typeof payoutRoutes> &

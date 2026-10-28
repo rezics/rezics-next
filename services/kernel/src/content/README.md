@@ -39,8 +39,10 @@ Deleted accounts receive nothing. Moderation decisions are mandatory through the
 they still use accounts' check, but turning the kind off cannot suppress them. They do not require the recipient
 to read the taken-down target.
 
-The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. Route
-spelling follows the content routes' conventions and is left to implementation. The GET list returns newest
+`GET /v1/accounts/{accountId}/notifications?limit=&cursor=` lists the authenticated account's inbox;
+`GET /v1/accounts/{accountId}/notifications/count` returns its unread count, and
+`POST /v1/accounts/{accountId}/notifications:markSeen` advances its seen marker with `{ through: <notice id> }` and an
+`Idempotency-Key`. The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. The GET list returns newest
 first, using an immutable notice ordering to break time ties. `limit` is 1–50, default 20. Its opaque shared list
 cursor (`src/tokens/list-cursor.ts`) binds the viewer and list query. Each item contains `id`, `kind`, `createdAt`,
 `actorId`, target ids and `unread`. Reply and mention candidates pass a current batched post read check; unreadable
@@ -463,6 +465,11 @@ Board candidates cap `s` at 200 and collection caps it at 100. Post and revision
   reviews the board or subject has. Thread insert and update guards read no table.
 - **Growth check:** `test/content/growth-threads.test.ts`, `Review creation stays within its bound as the reviews board grows`:
   256, 1024 and 4096 reviews, seeded set-based at their authors' routes, with a spare review for each scale's warm-up.
+
+### Notice inbox
+- **Touches:** List reads one recipient index range of at most `4 × limit` rows and checks candidate post readability in one batch. Count reads at most 101 unread index rows. Mark seen reads and writes one marker row.
+- **Bound:** List examines at most 200 notices per call, count at most 101, and mark seen one marker, independent of inbox size.
+- **Growth check:** `test/content/growth-notice-inbox.test.ts`, notices per recipient at 256, 1024 and 4096, with constant rows per call.
 
 ### Author item index
 
