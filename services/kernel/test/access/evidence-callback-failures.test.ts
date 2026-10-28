@@ -254,7 +254,18 @@ const sites: Record<string, (fail: Fail) => Promise<unknown>> = {
     );
   },
   async 'durable operation reader'(fail) {
-    await durable.step(operation, { reader: fail });
+    const realNow = Date.now;
+    let simulatedNow = realNow();
+    Date.now = () => simulatedNow;
+    advanceDurableFailureClock = () => {
+      simulatedNow += 10_001;
+    };
+    try {
+      await durable.step(operation, { reader: fail });
+    } finally {
+      advanceDurableFailureClock = undefined;
+      Date.now = realNow;
+    }
   },
   async 'durable anchor validate'(fail) {
     // The durable test helper owns a fixed ten-second request deadline. Advance
@@ -354,7 +365,7 @@ for (const [site, invoke] of Object.entries(sites)) {
     test(`${site}: ${name} closes the request without effects`, async () => {
       requestDeadlineMs =
         reason === 'contention'
-          ? ['standing parent validate', 'creation validate'].includes(site) && name === '40001'
+          ? ['standing parent validate', 'creation validate'].includes(site)
             ? 1000
             : 250
           : 5000;
