@@ -127,22 +127,26 @@ if (command === 'node') process.exit(0);
           .map((line) => JSON.parse(line))
       : [];
   const run = (address = options.address ?? 'root@check.test') =>
-    spawnSync('bash', [options.playwrightVersion === undefined ? script : scenarioScript, address, identity, '16', '800'], {
-      cwd: repository,
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
-        PROVISION_BIN: bin,
-        PROVISION_DIRECTORY: directory,
-        PROVISION_INSTALLED: JSON.stringify(options.installed ?? []),
-        PROVISION_LOG: log,
-        PROVISION_OS_RELEASE: osRelease,
-        PROVISION_RECEIVED: received,
-        TMPDIR: temporaryDirectory,
+    spawnSync(
+      'bash',
+      [options.playwrightVersion === undefined ? script : scenarioScript, address, identity, '16', '800'],
+      {
+        cwd: repository,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          PROVISION_BIN: bin,
+          PROVISION_DIRECTORY: directory,
+          PROVISION_INSTALLED: JSON.stringify(options.installed ?? []),
+          PROVISION_LOG: log,
+          PROVISION_OS_RELEASE: osRelease,
+          PROVISION_RECEIVED: received,
+          TMPDIR: temporaryDirectory,
+        },
+        encoding: 'utf8',
+        timeout: 20_000,
       },
-      encoding: 'utf8',
-      timeout: 20_000,
-    });
+    );
 
   return { directory, events, received, run, sshdConfig };
 }
@@ -216,7 +220,8 @@ test('loopback hosts without an exemption argument leave sshd unchanged through 
 });
 
 test('a remote host keeps existing exemptions without an exemption argument through ssh word splitting', () => {
-  const existing = 'MaxStartups 10:30:100\nPerSourcePenaltyExemptList 192.0.2.0/24,2001:db8::/32\n# preserve nothing else\n';
+  const existing =
+    'MaxStartups 10:30:100\nPerSourcePenaltyExemptList 192.0.2.0/24,2001:db8::/32\n# preserve nothing else\n';
   const fixture = scenario({
     osRelease: 'ID=debian\nID_LIKE="debian"\n',
     existingSshdConfig: existing,
@@ -241,9 +246,12 @@ test('arguments with spaces and shell characters reach the remote script unchang
   const result = fixture.run();
 
   expect(result.status, result.stderr).toBe(0);
-  expect(
-    fixture.events().find((event) => event.command === 'bun' && event.args[0] === 'x')?.args,
-  ).toEqual(['x', `playwright@${specialArgument}`, 'install', 'chromium']);
+  expect(fixture.events().find((event) => event.command === 'bun' && event.args[0] === 'x')?.args).toEqual([
+    'x',
+    `playwright@${specialArgument}`,
+    'install',
+    'chromium',
+  ]);
   expect(existsSync(sentinel)).toBe(false);
 });
 
