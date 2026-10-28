@@ -158,7 +158,7 @@ silently truncating them. The main caps are:
 - Bangumi: 64 KiB normalized projection, at most 64 tags, and a serialized Text
   snapshot no larger than 32 KiB.
 - VNDB: 64 KiB projection, at most 64 titles, at most 32 external links, and at
-  most 97 commands.
+  most 98 commands (1 identifier + 64 names + 32 URLs + 1 original language).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -170,6 +170,13 @@ See the source implementations for detailed field validation and limits:
 [`open-library.ts`](src/open-library.ts), and [`wikidata.ts`](src/wikidata.ts).
 The canonical digest and source-envelope helpers are in
 [`support.ts`](src/support.ts).
+
+VNDB revision `vndb@6` cites the required native `entry_meta.revision` as
+`schema:version` on every bound fact, alongside its identifier and revision URL.
+When available, `entry_meta.lastmod` is retained exactly in the sanitized source
+projection and digest, and cited as a Gregorian day-precision
+`schema:dateModified` using its native calendar day. Missing modification dates
+remain absent; no fetched, ingested, current or publication time is substituted.
 
 ### Provider facts required for catalogue use
 
@@ -268,6 +275,19 @@ source disappearance or replacement through public retraction; converters
 cannot retract an earlier candidate from source data alone.
 
 ## Cost derivation and verification
+
+### Cite a VNDB record
+
+- Touches: the bounded native revision and optional modification timestamp in
+  one source record, and each bound fact's reference.
+- Bound: one constant-size native timestamp retained within the 64 KiB
+  projection; one version part and at most one date part per statement, within
+  the existing 98-command cap. CPU and serialized output remain `O(record bytes)`;
+  no retained record state, SQL, network or lookup calls are added.
+- Growth check: `vndb-growth.test.ts` covers 1, 8 and 64 titles and unchanged
+  conversion under unrelated catalogue/history growth. `vndb-native-metadata.test.ts`
+  verifies all 98 facts at the combined title/link limit and native timestamp
+  semantics; `vndb-native-citations.test.ts` covers citation parts and digest replay.
 
 ### Dispatch a Bangumi record
 

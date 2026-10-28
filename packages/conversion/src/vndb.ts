@@ -10,7 +10,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'vndb@5';
+export const converter_revision = 'vndb@6';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
@@ -24,7 +24,7 @@ export const vndbLimits = Object.freeze({
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
   vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null };
-  entry_meta: { id: string; revision: number };
+  entry_meta: { id: string; revision: number; lastmod?: string };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
   extlinks: { id: number; site: string; value: string }[];
@@ -83,6 +83,24 @@ function integer(value: unknown, pointer: string): number {
     fail('Expected a positive dump integer', pointer);
   return value as number;
 }
+function nativeTimestamp(value: unknown, pointer: string): string {
+  const result = text(value, pointer);
+  if (
+    result.trim() !== result ||
+    !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/u.test(result)
+  )
+    fail('Invalid native modification timestamp', pointer);
+  const day = result.slice(0, 10);
+  const parsed = new Date(`${day}T00:00:00Z`);
+  if (
+    !Number.isFinite(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== day ||
+    (result.length > 10 &&
+      (Number(result.slice(11, 13)) > 23 || Number(result.slice(14, 16)) > 59 || Number(result.slice(17, 19)) > 59))
+  )
+    fail('Invalid native modification timestamp', pointer);
+  return result;
+}
 function rows(value: unknown, pointer: string, cap: number, optional = false): unknown[] {
   if (value === undefined && optional) return [];
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
@@ -120,7 +138,7 @@ function latinLanguageTag(tag: string): string | null {
 /**
  * Projection of decoded dump tables, not a live API response. Schema authority:
  * https://g.blicky.net/vndb.git/tree/sql/schema.sql and https://vndb.org/d14.
- * Allowlist: vn.id/olang/c_average/c_votecount; entry_meta.id/revision;
+ * Allowlist: vn.id/olang/c_average/c_votecount; entry_meta.id/revision/lastmod;
  * vn_titles.id/lang/official/title/latin;
  * vn_extlinks.id/link; extlinks.id/site/value. All other fields/tables are untouched.
  * https://vndb.org/d17#4 distinguishes ODbL database and DbCL contents licensing.
@@ -156,6 +174,9 @@ function project(input: ConversionInput): NormalizedRecord {
   const revision = integer(field(meta, 'revision', '/entry_meta/revision'), '/entry_meta/revision');
   if (input.record_revision !== String(revision))
     fail('Source envelope revision does not match entry_meta', '/record_revision');
+  const projectedMeta: NormalizedRecord['entry_meta'] = { id, revision };
+  const lastmod = field(meta, 'lastmod', '/entry_meta/lastmod');
+  if (lastmod !== undefined) projectedMeta.lastmod = nativeTimestamp(lastmod, '/entry_meta/lastmod');
   const titles = rows(field(record, 'vn_titles', '/vn_titles'), '/vn_titles', vndbLimits.maxTitles).map((value, i) => {
     const p = `/vn_titles/${i}`;
     const entry = row(value, p);
@@ -206,7 +227,7 @@ function project(input: ConversionInput): NormalizedRecord {
     fail('External link group has mismatched or duplicate IDs', '/vn_extlinks');
   const normalized = {
     vn: projectedVn,
-    entry_meta: { id, revision },
+    entry_meta: projectedMeta,
     vn_titles: titles,
     vn_extlinks: links,
     extlinks: external,
@@ -243,8 +264,23 @@ export function convertVndb(
       parts: [
         { property: { id: 'wdt:P3180' }, value: { type: 'value', content: id } },
         { property: { id: 'schema:url' }, value: { type: 'value', content: `https://vndb.org/${id}.${revision}` } },
+        { property: { id: 'schema:version' }, value: { type: 'value', content: revision } },
       ],
     };
+    if (normalizedRecord.entry_meta.lastmod !== undefined) {
+      reference.parts.push({
+        property: { id: 'schema:dateModified' },
+        value: {
+          type: 'value',
+          content: {
+            // Cite the native calendar day, without shifting it through the timestamp's offset.
+            time: `+${normalizedRecord.entry_meta.lastmod.slice(0, 10)}T00:00:00Z`,
+            precision: 11,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
+      });
+    }
     const statement = (property: string, content: unknown): BatchStatement => ({
       property: { id: property },
       value: { type: 'value', content },
