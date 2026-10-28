@@ -27,7 +27,9 @@ import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
-const defaultTimingsFile = join(app, 'check-timings.json');
+const defaultTimingsFile = join(app, '.cache', 'check-timings.json');
+const seedTimingsFile = join(app, 'check-timings.json');
+export const webCheckTimingsFile = defaultTimingsFile;
 const browserTest =
   /from\s+['"](?:playwright|@playwright\/|@vitest\/browser)|\b(?:chromium|browser)\.launch\b|\.goto\s*\(|\b(?:spawn|createServer|Bun\.serve)\s*\(/;
 
@@ -35,6 +37,8 @@ export type WebTestLanesOptions = {
   files: string[];
   directory?: string;
   timingsFile?: string;
+  previousTimingsFile?: string;
+  seedTimingsFile?: string;
   env?: NodeJS.ProcessEnv;
   testScript?: string;
   onComplete?: (outcome: FileOutcome<string>) => void;
@@ -50,12 +54,12 @@ export type WebTestLanesResult = {
   timings: Record<string, FileTiming>;
 };
 
-function readTimings(path: string): Record<string, FileTiming> {
+function readTimings(path: string): Record<string, FileTiming> | null {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { files?: unknown };
-    return parsed.files && typeof parsed.files === 'object' ? (parsed.files as Record<string, FileTiming>) : {};
+    return parsed.files && typeof parsed.files === 'object' ? (parsed.files as Record<string, FileTiming>) : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
@@ -105,7 +109,11 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
   const stackConcurrency = env.REZICS_STACK_SLOT === undefined ? browserConcurrency : 1;
   const browserFiles = options.files.filter((file) => isBrowserTest(file, directory));
   const unitFiles = options.files.filter((file) => !browserFiles.includes(file));
-  const previous = readTimings(timingsFile);
+  const previous =
+    readTimings(timingsFile) ??
+    readTimings(options.previousTimingsFile ?? defaultTimingsFile) ??
+    readTimings(options.seedTimingsFile ?? seedTimingsFile) ??
+    {};
   mkdirSync(join(root, '.temp'), { recursive: true });
   const reportDirectory = options.reportDirectory
     ? resolve(options.reportDirectory)
@@ -233,6 +241,7 @@ export async function runBrowserWorker(input: {
     ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
     reportDirectory,
     timingsFile: join(reportDirectory, 'timings.json'),
+    previousTimingsFile: defaultTimingsFile,
     retainReport: true,
   });
   if (result.failed.length > 0) writeFileSync(join(reportDirectory, 'failed.txt'), `${result.failed.join('\n')}\n`);
@@ -405,7 +414,13 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
       if (unitFiles.length === 0) return;
       const fragment = join(root, '.temp', `web-unit-timings-${process.pid}-${Date.now()}.json`);
       try {
-        const result = await runWebTestLanes({ files: unitFiles, env, testScript, timingsFile: fragment });
+        const result = await runWebTestLanes({
+          files: unitFiles,
+          env,
+          testScript,
+          timingsFile: fragment,
+          previousTimingsFile: defaultTimingsFile,
+        });
         unitTimings = result.timings;
         failed.push(...result.failed);
       } finally {
@@ -413,7 +428,10 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
       }
     })(),
   ]);
-  writeTimings(defaultTimingsFile, readTimings(defaultTimingsFile), { ...unitTimings, ...browserTimings });
+  writeTimings(defaultTimingsFile, readTimings(defaultTimingsFile) ?? readTimings(seedTimingsFile) ?? {}, {
+    ...unitTimings,
+    ...browserTimings,
+  });
   const unique = [...new Set(failed)].sort();
   if (unique.length > 0) throw new Error(`Web tests failed for ${unique.length} file(s):\n${unique.join('\n')}`);
 }

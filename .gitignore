@@ -1,5 +1,6 @@
 .temp/
 node_modules/
+/apps/web/.cache/
 .DS_Store
 .env
 .env.*
