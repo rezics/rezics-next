@@ -176,7 +176,15 @@ export function readHosts(file: string): Host[] {
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
-    return { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots: slots as number, ...(fallback ? { fallback: true } : {}) };
+    return {
+      name,
+      address,
+      identity,
+      memoryMaxGiB,
+      cpuQuotaPercent,
+      slots: slots as number,
+      ...(fallback ? { fallback: true } : {}),
+    };
   });
 }
 
@@ -1274,12 +1282,7 @@ async function acquire(
       } else if (giveUpIfUnanswered && !answered) return null;
       const globallyStartable = startableHosts(ranked, slots, gate);
       const markedHost = ranked.find(({ host }) => host.name === markerHost)?.host;
-      if (
-        multiWaiterId &&
-        markerHost &&
-        markedHost?.fallback &&
-        globallyStartable.some(({ host }) => !host.fallback)
-      ) {
+      if (multiWaiterId && markerHost && markedHost?.fallback && globallyStartable.some(({ host }) => !host.fallback)) {
         if (marker) await marker.release();
         marker = undefined;
         markerHost = undefined;

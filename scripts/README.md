@@ -13,13 +13,13 @@ This section owns the operational rules. The implementation is in [remote-check.
 [provision-check-host.sh](provision-check-host.sh) and the [Docker wrapper](check-host/docker).
 Their adjacent tests exercise placement, admission, accounting and cleanup.
 
-| Check        | Placement                                                                                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Check        | Placement                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Worker       | Classes weighted at least 2 GiB run on check hosts first when `KERNEL_CHECK_REMOTE` names a readable hosts file; lighter classes run locally under the memory lease. `--local` forces local placement. A remote transport failure is logged and retried once locally under the lease; command failures are not retried. Hosts marked `fallback: true` run non-gate checks only when no other host can start them. |
-| Kernel       | `bun run --cwd services/kernel check [files...]` selects files locally, then sends that plan to a host. An empty affected selection stays local.                                                             |
-| Auth service | `bun run --cwd services/auth check [files...]` places the database, compiler and test work through `stackRun`.                                                                                               |
-| Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate. |
-| Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.              |
+| Kernel       | `bun run --cwd services/kernel check [files...]` selects files locally, then sends that plan to a host. An empty affected selection stays local.                                                                                                                                                                                                                                                                  |
+| Auth service | `bun run --cwd services/auth check [files...]` places the database, compiler and test work through `stackRun`.                                                                                                                                                                                                                                                                                                    |
+| Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                                                                                                      |
+| Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                                                                                                                                   |
 
 The gate requests four slots per group by default (`GATE_REMOTE_SLOTS` overrides this).
 It partitions eligible hosts between groups when at least two qualify by configured slot count.
@@ -59,14 +59,14 @@ The root gate has its own placement rule: it uses the explicit hosts file and su
 }
 ```
 
-| Field             | Meaning                                                                                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | Nonempty host name used in logs and gate targeting. Use distinct names.                                                                                    |
-| `address`         | SSH destination in `user@host` form. It identifies the machine, not a resource limit.                                                                      |
-| `identity`        | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                              |
-| `memoryMaxGiB`    | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.              |
-| `cpuQuotaPercent` | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota. |
-| `slots`           | Positive integer ceiling on concurrent slot units, including the express slot. This does not change systemd limits.                                        |
+| Field             | Meaning                                                                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | Nonempty host name used in logs and gate targeting. Use distinct names.                                                                                                                                          |
+| `address`         | SSH destination in `user@host` form. It identifies the machine, not a resource limit.                                                                                                                            |
+| `identity`        | Nonempty path to the caller's SSH private key. SSH uses only the specified identity and batch authentication.                                                                                                    |
+| `memoryMaxGiB`    | Positive memory limit in GiB. Admission uses this for capacity when slice memory cannot be read. Provision the slice with the matching value.                                                                    |
+| `cpuQuotaPercent` | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                       |
+| `slots`           | Positive integer ceiling on concurrent slot units, including the express slot. This does not change systemd limits.                                                                                              |
 | `fallback`        | Optional boolean. Non-gate checks prefer hosts without this field or with `false` whenever one can start now. A `true` host is selected when no other host can start the run; gate placement ignores this field. |
 
 Editing JSON alone does not resize the slice. Provisioning takes memory and CPU values as arguments.

@@ -226,7 +226,11 @@ function workerEnv(fixture: ReturnType<typeof workerFixture>, hostsPath?: string
 }
 
 function localCommand(marker: string): string[] {
-  return [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.REZICS_CHECK_MEMORY_LEASE ?? 'missing')`];
+  return [
+    process.execPath,
+    '-e',
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.REZICS_CHECK_MEMORY_LEASE ?? 'missing')`,
+  ];
 }
 
 test('worker checks at least 2 GiB run remotely and record the remote peak under their class', async () => {
@@ -248,11 +252,24 @@ test('worker checks at least 2 GiB run remotely and record the remote peak under
       2 * 2 ** 30,
       3 * 2 ** 30,
     ]);
-    expect(readFileSync(join(fixture.root, '.temp/goal/checks', readdirSync(join(fixture.root, '.temp/goal/checks'))[0]!), 'utf8'))
-      .toContain('peak memory 3072 MiB');
+    expect(
+      readFileSync(
+        join(fixture.root, '.temp/goal/checks', readdirSync(join(fixture.root, '.temp/goal/checks'))[0]!),
+        'utf8',
+      ),
+    ).toContain('peak memory 3072 MiB');
   } finally {
-    for (const key of ['REZICS_CHECK_MEMORY','REZICS_CHECK_MEMORY_DIR','REZICS_CHECK_MEMORY_GIB','REZICS_CHECK_SCOPE','WORKER_REMOTE_EVENTS','WORKER_REMOTE_MODE','KERNEL_CHECK_REMOTE']) {
-      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
     }
   }
 });
@@ -276,8 +293,17 @@ test('lighter classes, --local, and unreadable hosts files run locally under the
       expect(readFileSync(fixture.localMarker, 'utf8')).not.toBe('missing');
       expect(() => readFileSync(fixture.remoteEvents, 'utf8')).toThrow();
     } finally {
-      for (const key of ['REZICS_CHECK_MEMORY','REZICS_CHECK_MEMORY_DIR','REZICS_CHECK_MEMORY_GIB','REZICS_CHECK_SCOPE','WORKER_REMOTE_EVENTS','WORKER_REMOTE_MODE','KERNEL_CHECK_REMOTE']) {
-        if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+      for (const key of [
+        'REZICS_CHECK_MEMORY',
+        'REZICS_CHECK_MEMORY_DIR',
+        'REZICS_CHECK_MEMORY_GIB',
+        'REZICS_CHECK_SCOPE',
+        'WORKER_REMOTE_EVENTS',
+        'WORKER_REMOTE_MODE',
+        'KERNEL_CHECK_REMOTE',
+      ]) {
+        if (old[key] === undefined) delete process.env[key];
+        else process.env[key] = old[key]!;
       }
       rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -296,7 +322,9 @@ test('a remote transport failure is logged and rerun once locally, but a failed 
     expect(readFileSync(fixture.localMarker, 'utf8')).not.toBe('missing');
     const logDirectory = join(fixture.root, '.temp/goal/checks');
     const log = readFileSync(join(logDirectory, readdirSync(logDirectory)[0]!), 'utf8');
-    expect(log).toContain('remote transport failed: remote-check: connection to host failed during rsync before a result');
+    expect(log).toContain(
+      'remote transport failed: remote-check: connection to host failed during rsync before a result',
+    );
 
     rmSync(fixture.remoteEvents, { force: true });
     rmSync(fixture.localMarker, { force: true });
@@ -311,8 +339,17 @@ test('a remote transport failure is logged and rerun once locally, but a failed 
     expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
     expect(() => readFileSync(fixture.localMarker, 'utf8')).toThrow();
   } finally {
-    for (const key of ['REZICS_CHECK_MEMORY','REZICS_CHECK_MEMORY_DIR','REZICS_CHECK_MEMORY_GIB','REZICS_CHECK_SCOPE','WORKER_REMOTE_EVENTS','WORKER_REMOTE_MODE','KERNEL_CHECK_REMOTE']) {
-      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key]!;
+    for (const key of [
+      'REZICS_CHECK_MEMORY',
+      'REZICS_CHECK_MEMORY_DIR',
+      'REZICS_CHECK_MEMORY_GIB',
+      'REZICS_CHECK_SCOPE',
+      'WORKER_REMOTE_EVENTS',
+      'WORKER_REMOTE_MODE',
+      'KERNEL_CHECK_REMOTE',
+    ]) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
     }
   }
 });

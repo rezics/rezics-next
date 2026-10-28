@@ -513,7 +513,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     if (config.expressBusy) mkdirSync(join(dir, `${hostKey}.slot.express`));
   }
   const env: Record<string, string> = {
-    ...(cleanTestEnvironment(process.env as Record<string, string>)),
+    ...cleanTestEnvironment(process.env as Record<string, string>),
     PATH: `${join(root, 'bin')}:${process.env.PATH}`,
     FAKE_DIR: dir,
     XDG_RUNTIME_DIR: join(dir, 'runtime'),
