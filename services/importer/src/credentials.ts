@@ -176,6 +176,7 @@ function cookie(response: Response): string {
 type AuthRequest = {
   fetch: typeof fetch;
   url: string;
+  origin: string;
   body: string;
   cookie?: string;
 };
@@ -188,7 +189,7 @@ async function authRequest(options: AuthRequest): Promise<{ response: Response; 
     MAX_IMPORT_DEADLINE_MS,
   );
   try {
-    const headers = new Headers({ 'content-type': 'application/json' });
+    const headers = new Headers({ 'content-type': 'application/json', origin: options.origin });
     if (options.cookie) headers.set('cookie', options.cookie);
     const response = await options.fetch(
       new Request(options.url, {
@@ -242,6 +243,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     const signin = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/signin/key`,
+      origin: options.authOrigin,
       body: JSON.stringify({
         account_id: options.account,
         client_id: options.client,
@@ -253,6 +255,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     const token = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/token`,
+      origin: options.authOrigin,
       body: '{}',
       cookie: session,
     });
