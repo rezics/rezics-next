@@ -302,6 +302,11 @@ test can still use `SET LOCAL` for a planner option inside its transaction.
 
 Use `includeBackends` for captures spanning multiple connections; it matches each plan to statements from the same
 backend PID.
+Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
+sets a ceiling at every scale and `bounds` sets a growth rule; reports include each unit's median and measured values.
+The harness provides `connections` as the number of distinct backend processes used by the operation when
+`includeBackends` is enabled. The filtered-list plan counts live in [Filtered lists](../../docs/filtered-lists.md#cost),
+under Cost.
 Reylo freshness probes (statements selecting `fresh_table`, `fresh_column` and `fresh_type` with a catalog-only plan)
 are set apart without a bound: Reylo repeats them by time and concurrency, never by data size. Other catalog-only
 statements are counted apart, with one allowed per distinct non-catalog query text across the measured run; a

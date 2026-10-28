@@ -1,7 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import {
-  assertGrowth,
   DEFAULT_BYTE_SLACK,
   DEFAULT_SLACK,
   GrowthBoundError,
@@ -27,6 +26,16 @@ import {
 } from './growth-cost.ts';
 import { classifySeries, type SeriesClassification } from './growth-model.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
+import {
+  countedSample,
+  countedViolations,
+  validateCountedConfig,
+  validateCountedRun,
+  type CountedCheck,
+  type CountedSample,
+} from './growth-counters.ts';
+
+export * from './growth-counters.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-bound.ts';
@@ -48,6 +57,9 @@ export type GrowthCheck = {
   readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
   readonly rule?: 'step' | 'series';
   readonly slack?: Partial<Record<GrowthMetric, Slack>>;
+  /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
+  readonly counted?: CountedCheck;
+  readonly includeBackends?: boolean;
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
   /**
    * Unmeasured runs per scale, after `grow` and before the measured runs, default 1. Calls `warmup` when given,
@@ -82,6 +94,7 @@ export type ReportSample = {
   readonly repetitions: readonly Cost[];
   readonly relationSizes: Readonly<Record<string, RelationSize>>;
   readonly seeding: SeedingCost;
+  readonly counted?: CountedSample;
 };
 
 export type GrowthReport = {
@@ -91,6 +104,7 @@ export type GrowthReport = {
   readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
   readonly samples: readonly ReportSample[];
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
+  readonly counted?: Readonly<Record<string, { readonly limits?: number; readonly bounds?: Bound }>>;
 };
 
 export type ShadowVerdict = (
@@ -144,6 +158,9 @@ function appendProfile(report: GrowthReport): void {
           ...(failedStatements === undefined ? {} : { failedStatements }),
         })),
       ),
+      ...(samples.some(({ counted }) => counted !== undefined)
+        ? { counted: samples.map(({ counted }) => counted ?? {}) }
+        : {}),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
       shadow: Object.fromEntries(
         Object.entries(shadow).map(([metric, verdict]) => [
@@ -272,6 +289,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
+  if (check.counted) validateCountedConfig(check.counted);
   if (scales.length < 3 || scales.length > 5) throw new TypeError('Growth checks require three to five scales');
   const [first, second] = scales;
   const firstRatio = second / first;
@@ -313,14 +331,34 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     }
 
     const costs: Cost[] = [];
+    const countedRuns: Record<string, number>[] = [];
     for (let run = 0; run < repetitions; run++) {
       // DBOS return-existing enqueues update workflow_status; vacuum its tuple chain before every measured repetition.
       const workflowStatus = await db.admin.query<{ exists: boolean }>(
         `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
       );
       if (workflowStatus.rows[0]!.exists) await db.admin.query('VACUUM (ANALYZE) "dbos".workflow_status');
-      const measured = await capture(db, () => check.operation(db, scale, repetition));
+      const measured = await capture(db, () => check.operation(db, scale, repetition), {
+        ...(check.includeBackends === undefined ? {} : { includeBackends: check.includeBackends }),
+      });
       const cost = costOf(measured.capture);
+      if (check.counted) {
+        const values = check.counted.read(measured.value, scale);
+        const merged = { ...values };
+        const configuredNames = [
+          ...Object.keys(check.counted.limits ?? {}),
+          ...Object.keys(check.counted.bounds ?? {}),
+        ];
+        if (configuredNames.includes('connections')) {
+          const backends = measured.capture.statementBackends;
+          if (backends === undefined)
+            throw new Error(
+              `Counted unit connections is unavailable at scale ${scale}: capture did not include backends`,
+            );
+          merged.connections = new Set(backends.filter((backend): backend is number => backend !== undefined)).size;
+        }
+        countedRuns.push({ ...validateCountedRun(check.counted, merged, scale) });
+      }
       assertCatalogBound(check.name, scale, measured.capture, samples);
       costs.push(cost);
       repetition++;
@@ -329,6 +367,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       scale,
       cost: medianCost(costs),
       repetitions: costs,
+      ...(check.counted === undefined ? {} : { counted: countedSample(countedRuns) }),
       relationSizes: sizesForMeasuredRelations(costs, availableRelationSizes),
       seeding,
     });
@@ -347,21 +386,63 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     ...(check.byteBounds === undefined ? {} : { byteBounds: check.byteBounds }),
     samples,
     shadow,
+    ...(check.counted === undefined
+      ? {}
+      : {
+          counted: Object.fromEntries(
+            [...new Set([...Object.keys(check.counted.limits ?? {}), ...Object.keys(check.counted.bounds ?? {})])].map(
+              (name) => [
+                name,
+                {
+                  ...(check.counted!.limits?.[name] === undefined ? {} : { limits: check.counted!.limits[name] }),
+                  ...(check.counted!.bounds?.[name] === undefined ? {} : { bounds: check.counted!.bounds[name] }),
+                },
+              ],
+            ),
+          ),
+        }),
   };
   appendProfile(report);
   assertBackgroundBound(check.name, samples);
   try {
+    const countedFailures = check.counted
+      ? countedViolations(
+          check.counted,
+          samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
+        )
+      : [];
     if (rule === 'step') {
-      if (check.byteBounds === undefined) {
-        assertGrowth(samples, check.bounds, check.slack);
-      } else {
-        const violations = [
-          ...growthViolations(samples, check.bounds, check.slack),
-          ...growthByteViolations(samples, check.byteBounds, check.slack),
-        ];
-        if (violations.length > 0) throw new GrowthBoundError(violations, samples, check.byteBounds);
+      const metricViolations =
+        check.byteBounds === undefined
+          ? growthViolations(samples, check.bounds, check.slack)
+          : [
+              ...growthViolations(samples, check.bounds, check.slack),
+              ...growthByteViolations(samples, check.byteBounds, check.slack),
+            ];
+      if (countedFailures.length > 0 || metricViolations.length > 0) {
+        const error = new GrowthBoundError(metricViolations, samples, check.byteBounds);
+        if (countedFailures.length > 0)
+          error.message += `${error.message ? '\n' : ''}${countedFailures
+            .map(({ unit, scale, value, limit, kind }) =>
+              kind === 'limit'
+                ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
+                : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
+            )
+            .join('\n')}`;
+        throw error;
       }
     } else {
+      if (countedFailures.length > 0) {
+        const error = new GrowthBoundError([], samples, check.byteBounds);
+        error.message = countedFailures
+          .map(({ unit, scale, value, limit, kind }) =>
+            kind === 'limit'
+              ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
+              : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
+          )
+          .join('\n');
+        throw error;
+      }
       for (const metric of ['rows', 'blocks', 'statements'] as const) {
         const uncertainties = shadow[metric].uncertainties;
         const verdict = classifySeries(
