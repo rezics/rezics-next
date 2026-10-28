@@ -234,105 +234,20 @@ both votes and Realm memberships for reinstatement.
 
 ## Cost
 
-### Own-vote batch
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Put vote | Reads the voter's account, capped Realm memberships, existing vote by `(route, voter_id, question_id, target_id)`, and any counted-target match by its unique index; writes the vote and command/event records. Membership input is capped at 100. | Rows and statements are constant for one vote; index blocks grow logarithmically with same-partition vote history. Membership work is capped at 100 rows independently of other voters and waiting Realms. | `test/rating/growth-votes.test.ts`: `putting a vote has constant rows and statements as same-partition votes grow`; `putting a vote reads only the capped memberships as other voters and waiting Realms grow` |
+| Own-vote batch | Reads the account by primary key and seeks a vote for each distinct requested target by `(route, voter_id, question_id, target_id)`; input has at most 100 target IDs. | Rows grow linearly with distinct targets `k` (at most `k` vote rows plus one account); statements are constant (two when nonempty, one when empty); index blocks grow logarithmically with vote history. | `test/rating/growth-own-votes.test.ts`: `own vote batch has input-bounded rows and constant statements as votes grow` |
+| Aggregate apply | Upserts or deletes the counted population-vote by primary key, applies the target component to its selected shard, updates the private-key-selected population-total shard, and probes before/after winners through the counted-vote index. | Rows and statements are constant per changed vote; index blocks grow logarithmically with votes, targets, accounts and source partitions. Each winner probe touches one counted-index entry. The population total is spread over 16 private-key-selected shards, with one shard updated per counted vote change. | `test/rating/growth-aggregate.test.ts`: `aggregate updates keep bounded rows and statements as votes, targets, accounts and source partitions grow` |
+| Aggregate read | Reads at most 16 aggregate-component shards for one target and population, plus one population-pending row. A request can include at most 20 populations. | Rows are constant per population (at most 17); statements are constant per population; index blocks grow logarithmically with target-voter history. Request rows are linear in the fixed population limit of 20 (at most 340 shard and pending rows). | `test/rating/growth-aggregate-read.test.ts`: `one population aggregate read has constant rows and statements as target voters grow` |
+| Population page | Seeks the target-first population index for at most 20 positive populations and one continuation probe, then reads up to 16 component shards per returned population. | Rows are constant (at most 20 × 16 shard rows plus the continuation seek); statements are constant; index blocks grow logarithmically with rated-population history. | `test/rating/growth-aggregate-read.test.ts`: `a target population page has constant rows and statements as rated populations grow` |
+| Segment and re-key page | Reads at most 100 vote rows by `(question_id, target_id)` keyset in the voter partition, the active Realm/job checkpoint and, for re-key, capped population memberships. Applies page changes through the aggregate effect, grouping commands by target partition. | The page input `k` is at most 100 votes. Rows and statements are linear in `k` and affected target partitions, with at most 101 populations per re-keyed vote; index blocks grow logarithmically with voter vote history. Total workflow work is linear in pages. | `test/rating/growth-segment-job.test.ts`: `segment page has constant rows and statements as voter votes grow`; `re-key page has constant rows and statements as voter votes grow` |
+| Eligibility page | Reads at most 100 vote rows by keyset and at most 100 capped voter-Realm rows, then applies each vote to Global and up to 100 Realm populations through the aggregate effect. | Page rows and statements are linear in `k × p`, where `k` is at most 100 votes and `p` is at most 101 populations per vote; index blocks grow logarithmically with voter vote history. Total work is linear in page count. | `test/rating/growth-segment-job.test.ts`: `eligibility page has constant rows and statements as voter votes grow` |
+| Merge page | Reads up to 100 Global population voters by keyset, their questions for the merged target, vote rows by counted-target and vote primary-key indexes, and applicable capped Realm populations; groups commands by voter partition. | Rows and statements are linear in page voters `k` (at most 100) and affected questions; index blocks grow logarithmically with merged-target voter history. Each page is bounded separately; total work is linear in page count. | `test/rating/subject-merge.test.ts`: `merge page has constant rows and statements as merged target voters grow` |
+| Voter-Realm membership change | Reads and writes the affected membership and, on removal, the earliest waiting membership through capped/waiting partial indexes; vote population selection reads at most 100 non-uncounted memberships. | Membership-change rows and statements are constant (at most two membership rows); index blocks grow logarithmically with membership history. Vote membership selection is linear in the fixed cap of 100, independent of other voters and waiting-set size. | `test/rating/voter-realms.test.ts`: `membership join and promotion cost constant rows and statements as other voters grow` |
+| Public figure drain | Drains at most 500 pending figures per page; for each figure reads up to 16 aggregate shards, updates one figure and emits one changed-figure event. | Rows and statements are linear in page size `k` (at most 500), constant per drained figure; index blocks grow logarithmically with figure history. | `test/rating/growth-public-figure.test.ts`: `figure drain has constant rows and statements as votes on one subject grow` |
+| Public figure batch and page reads | The batch seeks up to 256 requested IDs by `(route, question, population, subject)`; the page reads same-partition figures after its cursor with a limit up to 500. | One statement per call; returned rows are linear in batch input `k` (at most 256) or page limit `k` (at most 500). The page currently examines rows and blocks linear in same-partition figure history: known defect, owner fix pending. | `test/rating/growth-figures-statistics.test.ts`: `Public figure batches and pages stay within their bound as figure and voter history grows` |
+| Source-statistic write, point read and list | The write resolves one subject and upserts one `(route, subject_id, source)` row; point read/list seeks the subject's source-statistic index. The mounted list currently returns the supported `vndb` source. | Rows and statements are constant per operation; index blocks grow logarithmically with unrelated statistic history. | `test/rating/growth-figures-statistics.test.ts`: `Source statistic writes and reads stay within their bound as statistics grow` |
+| Own-vote and question GET reads | Each command and mounted GET reads the account by primary key, then seeks one vote by `(route, voter_id, question_id, target_id)` or one question by primary key. | Rows and statements are constant per read (two point reads); index blocks grow logarithmically with vote history. | `test/rating/growth-figures-statistics.test.ts`: `Own vote and question reads stay within their bound as votes grow` |
 
-- Touches: one account primary-key point read and one vote batch with a point seek per distinct target by
-  `(route, voter_id, question_id, target_id)`.
-- Bound: at most 100 raw targets; at most one account row and one vote row per distinct target, with two statements
-  for nonempty input and one for empty input.
-- Growth check: `test/rating/growth-own-votes.test.ts`, test "own vote batch has input-bounded rows and constant statements as votes grow".
-
-### Merge page
-
-- Touches: at most 100 Global population voters by keyset, all their questions for the merged target, and their vote
-  rows by the counted-target and vote primary-key indexes. Voters are grouped by partition and each partition receives
-  one command per step.
-- Bound: 100 voters per step.
-- Growth check: `test/rating/subject-merge.test.ts`, test "merge page has constant rows and statements as merged target
-  voters grow", at scales `[256, 1024, 4096]`.
-
-### Put vote
-
-- Touches: the existing vote row and one lookup by the counted-target unique index, which finds a merged vote that is
-  counting on the survivor.
-- Bound: constant.
-- Growth check: `test/rating/growth-votes.test.ts`, unchanged.
-
-### Segment page
-
-- Touches: at most 100 vote rows by keyset in the voter's partition and one `voter_realm` row; the aggregate effect
-  groups the page into at most 100 target partitions and uses one command per partition.
-- Bound: 100 votes per page.
-- Growth check: `test/rating/growth-segment-job.test.ts`, test "segment page has constant rows and statements as voter
-  votes grow", at scales `[256, 1024, 4096]`.
-
-### Eligibility page
-
-- Touches: at most 100 vote rows by keyset and one capped set of at most 100 voter Realm rows in the voter's
-  partition. Each vote applies to Global and at most 100 Realm populations.
-- Bound: 100 votes and 101 populations per vote per page.
-- Growth check: `test/rating/growth-segment-job.test.ts`, test "eligibility page has constant rows and statements as
-  voter votes grow", at scales `[256, 1024, 4096]`.
-
-### Re-key page
-
-- Touches: at most 100 votes per page, each in at most 101 populations, with the apply's per-population cost.
-- Bound: 100 votes per page.
-- Growth check: `test/rating/growth-segment-job.test.ts`, test "re-key page has constant rows and statements as voter
-  votes grow", at scales `[256, 1024, 4096]`.
-
-### Aggregate read
-
-- Touches: one population reads at most 16 shard rows in the target partition and one pending row in the population's
-  partition. A request is bounded to 20 populations.
-- Bound: at most 340 rows and a constant number of statements per population.
-- Growth check: `test/rating/growth-aggregate-read.test.ts`, test "one population aggregate read has constant rows
-  and statements as target voters grow" at scales `[64, 256, 1024]`.
-
-### Aggregate apply
-
-- Touches: the vote upsert and component apply by primary key, plus before and after winner probes through the counted-vote index.
-- Bound: each winner probe touches one counted-index entry; rows stay constant and blocks grow logarithmically.
-- Growth check: `test/rating/growth-aggregate.test.ts`, test "aggregate updates keep bounded rows and statements as votes, targets, accounts and source partitions grow".
-
-### Population page
-
-- Touches: up to 16 shard rows for each of 20 populations, plus at most 21 index-only population-id seeks on
-  `(route, question_id, target_id, population_id)` to find the page and its continuation.
-- Bound: 20 × 16 shard rows.
-- Growth check: `test/rating/growth-aggregate-read.test.ts`, test "a target population page has constant rows and
-  statements as rated populations grow" at scales `[256, 1024, 4096]`.
-
-### Public figure drain
-
-- Touches: at most 500 pending figures per page; for each figure, at most 16 aggregate shard rows, one figure row and
-  one changed-figure event.
-- Growth check: `test/rating/growth-public-figure.test.ts`, votes on one subject at scales `[64, 256, 1024]`, with
-  constant rows per drained figure.
-
-### Counted population total
-
-- Touches: one shard row per counted vote change in the same aggregate apply as the target component. The shard is
-  selected from the private counting key; no population total has one write-hot row.
-- Growth check: `test/rating/growth-prior-epoch.test.ts`, votes on one population at scales `[256, 1024, 4096]`,
-  with constant rows per vote.
-
-### Prior epoch check
-
-- Touches: reads and locks at most 16 total shards, then clears the pending-check flag on the total shards.
-
-### Prior epoch republish
-
-- Touches: marks and publishes at most 500 currently rated figures per page, with one changed-figure event per figure.
-- Growth check: `test/rating/growth-prior-epoch.test.ts`, rated subjects at scales `[256, 1024, 4096]`, with
-  constant rows per page.
-
-### Public figure read batch
-
-- Touches: at most 256 figure rows by primary key `(route, question, population, subject)`.
-- Bound: one statement per call.
-
-### Public figure page
-
-- Touches: one index range of at most 500 figure rows through the `(partition, question, population, subject)` index.
-- Bound: one statement per call.
+Page sizes bound each workflow step independently: segment and eligibility pages process at most 100 votes, merge pages at most 100 voters, and figure drain/republish work is admitted in pages of at most 500 figures. Total affected work grows with page count and affected keys; a page bound does not bound the complete workflow.
