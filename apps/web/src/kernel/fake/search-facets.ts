@@ -42,7 +42,6 @@ function responseFromRecording(recording: KernelRecording, requested: Record<str
         values: limited,
       };
     }),
-    total: isRecord(recording.total) ? (recording.total as FacetsResponse['total']) : { value: 0, relation: 'exact' },
     as_of: typeof recording.as_of === 'string' ? recording.as_of : '2026-10-27T00:00:00Z',
   } as FacetsResponse;
 }
@@ -103,7 +102,6 @@ function fixtureResponse(
   });
   return {
     facets,
-    total: { value: matched.length, relation: 'exact' },
     as_of: '2026-10-27T00:00:00Z',
   } as FacetsResponse;
 }
