@@ -11,6 +11,7 @@ import {
   type CanonicalRangeKey,
 } from '../../src/library/collection-source-native.ts';
 import type { WorkReceipt } from '../../src/library/collection-source.ts';
+import factsQuery from '../../src/library/collection-source-native-facts.sql';
 import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let db: GrowthDatabase, native: NativeProfileFixture;
@@ -109,6 +110,103 @@ test('actual curated first/deep source seeks and exact original probes retain bo
   expect(bounded.result).toBe('not_proven');
   expect(bounded.work.used.nativeRows).toBe(0);
 }, 1800000);
+test('native admission settles partial work and closes its read transaction before rejecting an unaffordable point', async () => {
+  const owner = await native.identity(['collection:create', 'collection:read']);
+  const created = await native.send(owner.bearer, 'POST', '/v1/collections', {
+    title: 'Admission',
+    visibility: 'private',
+  });
+  expect(created.status).toBe(201);
+  const id = (await created.json()).collection.id as string;
+  const result = await capture(db, async () => {
+    try {
+      await observe(
+        db.pool,
+        { route: routeOf(id)!, collectionId: id },
+        {
+          ...options(),
+          allowance: { ...allowance(), remaining: { ...allowance().remaining, nativePoints: 1 } },
+        },
+      );
+      throw new Error('Unaffordable native query dispatched');
+    } catch (error) {
+      expect(error).toHaveProperty('code', 'dependency_unavailable');
+      return (error as Error & { work: WorkReceipt }).work;
+    }
+  });
+  expect(result.value.used.nativePoints).toBe(1);
+  expect(result.value.used.nativeRows).toBe(0);
+  expect(result.value.used.statements).toBe(2);
+  expect(result.capture.statements).toHaveLength(2);
+  expect(result.capture.statements[0]).toMatch(/^BEGIN/);
+  expect(result.capture.statements[1]).toBe('ROLLBACK');
+});
+test('actual raw fact SQL limits the selected native driver before union and leaves unselected relations unread', async () => {
+  for (const group of ['personal_library', 'reading_progress'])
+    expect((await native.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
+  const owner = await native.identity([
+    'subject:read',
+    'library_entry:update',
+    'copy:create',
+    'progress_session:create',
+  ]);
+  const subject = await native.createSubject('game');
+  expect((await native.send(owner.bearer, 'PUT', `/v1/libraryEntries/${subject}`, { state: 'planned' })).status).toBe(
+    201,
+  );
+  const expected: Record<string, string[]> = { entry: [subject], copy: [], session: [], label: [] };
+  for (let n = 0; n < 16; n++) {
+    const copy = await native.send(owner.bearer, 'POST', '/v1/copies', {
+      subjectId: subject,
+      kind: 'physical',
+      status: 'owned',
+    });
+    expect(copy.status).toBe(201);
+    expected.copy!.push((await copy.json()).copy.id);
+    const session = await native.send(owner.bearer, 'POST', '/v1/progressSessions', {
+      subjectId: subject,
+      mode: 'scalar_amount',
+      unit: 'minute',
+    });
+    expect(session.status).toBe(201);
+    expected.session!.push((await session.json()).progressSession.id);
+  }
+  const tables = { entry: 'entry', copy: 'copy', session: 'progress_session', label: 'label_assignment' };
+  for (const [driver, table] of Object.entries(tables)) {
+    const values = {
+      route: routeOf(owner.actor.accountId)!,
+      account_id: owner.actor.accountId,
+      driver,
+      after_subject: null,
+      after_fact: null,
+      limit: 8,
+    };
+    const run = () =>
+      withConnection(db.pool, (client) =>
+        client.query<{ storedSubjectId: string; factId: string }>(
+          factsQuery.sql,
+          factsQuery.params.map((name) => values[name as keyof typeof values]),
+        ),
+      );
+    const result = await capture(db, run, { includeBackends: true });
+    expect(result.value.rows.map((row) => row.factId)).toEqual(expected[driver]!.sort().slice(0, 8));
+    expect(costOf(result.capture).rows).toBeLessThanOrEqual(72);
+    for (const other of Object.values(tables).filter((name) => name !== table))
+      expect(costOf(result.capture).relations[`library.${other}`]?.rows ?? 0).toBe(0);
+    const walk = (value: unknown): void => {
+      if (!value || typeof value !== 'object') return;
+      const node = value as Record<string, unknown>;
+      if (typeof node['Relation Name'] === 'string' && node['Relation Name'] !== table) {
+        expect(node['Actual Loops']).toBe(0);
+        expect(node['Rows Removed by Filter'] ?? 0).toBe(0);
+      }
+      for (const child of Object.values(node))
+        if (Array.isArray(child)) child.forEach(walk);
+        else if (child && typeof child === 'object') walk(child);
+    };
+    result.capture.plans.forEach(walk);
+  }
+}, 120000);
 test('native current source authorization preserves anonymous visibility, private fences and gate closure without observation grants', async () => {
   const owner = await native.identity(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
   const created = await native.send(owner.bearer, 'POST', '/v1/collections', {
