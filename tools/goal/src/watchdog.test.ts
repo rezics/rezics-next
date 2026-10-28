@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { migrate, openDb } from './db.ts';
 import { sshProbe, violations, watch } from './watchdog.ts';
+import { processIdentity } from './process.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
 
@@ -53,6 +54,33 @@ test('a running task whose attempt ended and that nothing will retry is a violat
   const found = violations(store(tasks, attempts, intents), now);
   expect(found.map((violation) => violation.key)).toEqual(['no-worker:stuck:2', 'no-worker:lost:3']);
   expect(found[1]!.summary).toContain('pending retry for 45 min');
+});
+
+test('an exited attempt with a live driver is not reported while its driver settles it', () => {
+  const driver = processIdentity();
+  expect(driver).not.toBeNull();
+  const tasks = [
+    { id: 'settling', state: 'running' as const, currentAttempt: 1 },
+    { id: 'orphan', state: 'running' as const, currentAttempt: 2 },
+  ];
+  const attempts = [
+    {
+      taskId: 'settling',
+      attempt: 1,
+      state: 'exited' as const,
+      endedAt: minutesAgo(30),
+      driver: driver!,
+    },
+    {
+      taskId: 'orphan',
+      attempt: 2,
+      state: 'exited' as const,
+      endedAt: minutesAgo(30),
+      driver: { ...driver!, pid: 0 },
+    },
+  ];
+
+  expect(violations(store(tasks, attempts), now).map((violation) => violation.key)).toEqual(['no-worker:orphan:2']);
 });
 
 test('stabilize missing from dev is reported after thirty minutes, once per period, and forgotten once merged', () => {

@@ -331,19 +331,26 @@ export class WorkerStore implements AttemptFence {
       return task;
     });
   }
-  /** Update a ready or stopped task without creating or replacing an attempt. */
-  updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void): Task {
+  /** Update a ready or stopped task; abandoning pending is valid only while the caller holds the task lease. */
+  updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void, options: { abandonPending?: boolean } = {}): Task {
     return this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
+        const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        const abandonPending = options.abandonPending === true && attempt?.state === 'pending';
         if (
           task.currentAttempt !== ref.attempt ||
-          (ref.attempt > 0 && !['stopped', 'exited'].includes(this.attempt(ref).state)) ||
+          (attempt && !['stopped', 'exited'].includes(attempt.state) && !abandonPending) ||
           !['ready', 'stopped', 'held'].includes(task.state)
         )
           throw new Error(
-            `task cannot be held for retry: ${ref.taskId} attempt ${ref.attempt} (task ${task.state} at attempt ${task.currentAttempt}${ref.attempt > 0 ? `, attempt ${this.attempt(ref).state}` : ''})`,
+            `task cannot be held for retry: ${ref.taskId} attempt ${ref.attempt} (task ${task.state} at attempt ${task.currentAttempt}${attempt ? `, attempt ${attempt.state}` : ''})`,
           );
+        if (abandonPending && attempt) {
+          attempt.state = 'stopped';
+          attempt.endedAt ??= new Date().toISOString();
+          this.saveAttempt(attempt);
+        }
         update(task);
         if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
           throw new Error('task identity cannot be updated');

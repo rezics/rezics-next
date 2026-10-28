@@ -221,11 +221,13 @@ experiments measure it.
 
 ## Watchdog
 
-The watchdog runs with reminder delivery and reports running tasks, or ready tasks with pending retries, that have had
-no worker for ten minutes after an attempt ended. It also reports a `stabilize` branch that has stayed out of the
-integration branch for thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are
-grouped: three matching failures across at least two tasks produce one incident with the attempt and task counts,
-affected Goal names and one example. The incident repeats after two hours while the signature remains present.
+The watchdog runs with reminder delivery and reports running tasks, or ready tasks with a pending retry intent, that
+have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
+PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
+or waiting for a check-host slot. It also reports a `stabilize` branch that has stayed out of the integration branch for
+thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are grouped: three matching
+failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
+example. The incident repeats after two hours while the signature remains present.
 
 When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every listed check host no more than once per
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
@@ -379,7 +381,11 @@ delivered after the manager stops. Manager commands are attributed through `GOAL
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
 unknown task ids are refused, and already integrated or merged dependencies are ready immediately. For a Goal that uses
 `after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one
-waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again.
+waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again. The host releases held
+tasks under their task lease and starts them from the updated target branch. A pending attempt whose launcher was
+lost is abandoned only while the task lease is held, then superseded by the replacement. The host recovery sweep also
+retries an old pending attempt when the task is ready and its lease is free; released `after` tasks stay on the release
+path so they refresh their worktree base first.
 
 A manual smoke test for an authenticated local Codex manager is available without embedding any account name:
 

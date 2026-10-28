@@ -462,21 +462,38 @@ export class WorkerJob implements GateOutcomeSink {
   private releaseMetDependents(): string[] {
     const store = this.tasks.store;
     const tasks = store.tasks();
-    const released = tasks
+    const candidates = tasks
       .filter((candidate) => candidate.state === 'held' && this.tasks.dependenciesMet(candidate, tasks))
       .map((candidate) => candidate.id);
-    for (const taskId of released) {
-      const candidate = store.task(taskId),
-        ref = { taskId, attempt: candidate.currentAttempt };
-      if (candidate.state !== 'held') continue;
-      if (candidate.currentAttempt)
-        store.updateHeldRetryTask(ref, (current) => {
-          current.state = 'ready';
-        });
-      else
-        store.updateTask(ref, (current) => {
-          current.state = 'ready';
-        });
+    const released: string[] = [];
+    for (const taskId of candidates) {
+      let lease: DirectoryLease;
+      try {
+        lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', taskId));
+      } catch (error) {
+        if (error instanceof LeaseHeldError) continue;
+        throw error;
+      }
+      try {
+        const candidate = store.task(taskId);
+        if (candidate.state !== 'held' || !this.tasks.dependenciesMet(candidate, store.tasks())) continue;
+        const ref = { taskId, attempt: candidate.currentAttempt };
+        if (candidate.currentAttempt)
+          store.updateHeldRetryTask(
+            ref,
+            (current) => {
+              current.state = 'ready';
+            },
+            { abandonPending: true },
+          );
+        else
+          store.updateTask(ref, (current) => {
+            current.state = 'ready';
+          });
+        released.push(taskId);
+      } finally {
+        lease.release();
+      }
     }
     return released;
   }
@@ -530,6 +547,8 @@ export class WorkerJob implements GateOutcomeSink {
         if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
         const task = store.task(attempt.taskId);
         if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
+        // A released `after` task must refresh its worktree base under the task lease before it starts.
+        if (task.brief.after.length && this.tasks.dependenciesMet(task, tasks)) continue;
         try {
           acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
         } catch (error) {
