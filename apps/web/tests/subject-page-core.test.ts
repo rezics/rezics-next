@@ -218,7 +218,7 @@ test("the subject header shows the cover at the type's ratio, the title in the r
   expect(french).not.toMatch(/>fr</);
 });
 
-test("the cover's credit is a caption at lg and listed again in Sources at the end of the overview", () => {
+test("the cover's credit appears once in the viewer and once in Sources at the end of the overview", () => {
   const referenced = statement('schema:isbn', 'external-id', value('978-0156012195'), {
     references: [{ parts: [snak('schema:url', 'url', value('https://example.com/isbn'))], hash: 'a' }],
   });
@@ -234,6 +234,7 @@ test("the cover's credit is a caption at lg and listed again in Sources at the e
   expect(caption![1]).toContain('href="https://openlibrary.org/"');
   // The caption belongs to the large cover; the thumbnail has none.
   expect(html.match(/<figcaption/g)).toHaveLength(1);
+  expect(text(html).match(/© Reynal & Hitchcock/g)).toHaveLength(2);
 
   // Sources close the overview, after every fact row, and list the credit, the fact's source and the identifier.
   const sources = html.lastIndexOf('Sources');

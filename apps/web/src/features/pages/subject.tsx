@@ -247,7 +247,7 @@ export function SubjectPage({
   ) : null;
   return (
     <>
-      <PageHost actions={renderedActions} afterHeader={header ? afterHeader : null}>
+      <PageHost actions={page.account ? renderedActions : null} afterHeader={header ? afterHeader : null}>
         <PageData
           locale={locale}
           subject={page.subject}
@@ -262,6 +262,7 @@ export function SubjectPage({
           {...(typeLabel ? { typeLabel } : {})}
           {...(ratio ? { ratio } : {})}
           {...(relations ? { relations } : {})}
+          {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">
             {!overview && heading && (

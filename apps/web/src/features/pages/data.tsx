@@ -88,6 +88,7 @@ type Options = {
   reader: Reader;
   frame: Frame;
   labels: ValueLabels;
+  headerActions?: ReactNode;
 };
 type SubjectRead = {
   subject: Subject;
@@ -286,47 +287,54 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
           <div className="sm:hidden">{cover('sm')}</div>
           <div className="hidden w-60 sm:block">{cover('lg')}</div>
         </div>
-        <div className="min-w-0 flex-1 space-y-2 in-data-[density=compact]:space-y-1.5">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h1
-              lang={label.lang}
-              className={`min-w-0 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
-            >
-              {title}
-            </h1>
-            {label.text && <LanguageTag lang={label.lang} locale={options.locale} />}
-          </div>
-          {quiet && (
-            <p lang={quiet.lang} className="font-serif text-lg text-muted-foreground">
-              {quiet.text}
-            </p>
-          )}
-          {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
-          {creators.length > 0 && (
-            <p data-slot="subject-creators" className="text-sm font-medium">
-              {creators.map((creator, index) => (
-                <span key={creator.id}>
-                  {index > 0 && ', '}
-                  {creator.node}
-                </span>
-              ))}
-            </p>
-          )}
-          {aliases.length > 0 && (
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-muted-foreground">{options.messages.aliases}</h2>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                {aliases.map((alias, index) => {
-                  const text = pageText({ [aliasLanguage!]: alias }, options.locale);
-                  return (
-                    <li key={index} lang={text.lang}>
-                      {text.text}
-                    </li>
-                  );
-                })}
-              </ul>
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:grid-rows-[min-content_auto]">
+          <div className="min-w-0 space-y-2 in-data-[density=compact]:space-y-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1
+                lang={label.lang}
+                className={`min-w-0 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
+              >
+                {title}
+              </h1>
+              {label.text && <LanguageTag lang={label.lang} locale={options.locale} />}
             </div>
-          )}
+            {quiet && (
+              <p lang={quiet.lang} className="font-serif text-lg text-muted-foreground">
+                {quiet.text}
+              </p>
+            )}
+            {facts.length > 0 && <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>}
+            {creators.length > 0 && (
+              <p data-slot="subject-creators" className="text-sm font-medium">
+                {creators.map((creator, index) => (
+                  <span key={creator.id}>
+                    {index > 0 && ', '}
+                    {creator.node}
+                  </span>
+                ))}
+              </p>
+            )}
+            {aliases.length > 0 && (
+              <dl
+                data-slot="subject-aliases"
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-x-4 gap-y-1 text-sm"
+              >
+                <dt className="font-semibold text-muted-foreground">{options.messages.aliases}</dt>
+                <dd className="min-w-0 break-words">
+                  {aliases.map((alias, index) => {
+                    const text = pageText({ [aliasLanguage!]: alias }, options.locale);
+                    return (
+                      <span key={index} lang={text.lang}>
+                        {index > 0 ? ' · ' : ''}
+                        {text.text}
+                      </span>
+                    );
+                  })}
+                </dd>
+              </dl>
+            )}
+          </div>
+          {options.headerActions}
         </div>
       </div>
     </div>
@@ -490,25 +498,30 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       ? [{ statement, text: statement.value.content }]
       : [],
   );
-  const tags = keywords.length ? (
+  const visibleKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) <= reader.spoilerLevel);
+  const spoilerKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) > reader.spoilerLevel);
+  const tagList = (items: typeof keywords, slot: string) => (
     <ul
-      data-slot="subject-tags"
+      data-slot={slot}
       aria-label={m.subject_tags({}, { locale: options.locale as never })}
       className="flex flex-wrap gap-2"
     >
-      {keywords.map(({ statement, text }) => {
-        const chip = <span className="rounded-full border border-border px-2.5 py-0.5 text-sm">{text}</span>;
-        return (
-          <li key={statement.id}>
-            {spoilerLevel(statement) > reader.spoilerLevel ? (
-              <SpoilerGate label={options.messages.spoilerShow}>{chip}</SpoilerGate>
-            ) : (
-              chip
-            )}
-          </li>
-        );
-      })}
+      {items.map(({ statement, text }) => (
+        <li key={statement.id}>
+          <span className="rounded-full border border-border px-2.5 py-0.5 text-sm">{text}</span>
+        </li>
+      ))}
     </ul>
+  );
+  const tags = keywords.length ? (
+    <>
+      {visibleKeywords.length ? tagList(visibleKeywords, 'subject-tags') : null}
+      {spoilerKeywords.length ? (
+        <SpoilerGate label={options.messages.spoilerShow}>
+          {tagList(spoilerKeywords, 'subject-spoiler-tags')}
+        </SpoilerGate>
+      ) : null}
+    </>
   ) : null;
   const creators = (named[CREATOR_PROPERTIES.find((property) => named[property]?.length) ?? ''] ?? []).slice(
     0,
@@ -554,6 +567,7 @@ export function PageData({
   typeLabel,
   ratio,
   relations = {},
+  headerActions,
   children,
 }: {
   locale: string;
@@ -571,6 +585,8 @@ export function PageData({
   ratio?: Frame['ratio'];
   /** How each relation property reads from this page, from the definition release. */
   relations?: Record<string, RelationDefinition>;
+  /** Subject-only actions placed alongside the title in its header. */
+  headerActions?: ReactNode;
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
@@ -595,6 +611,7 @@ export function PageData({
     reader,
     frame: { ...(typeLabel ? { typeLabel } : {}), ...(ratio ? { ratio } : {}) },
     labels,
+    ...(headerActions ? { headerActions } : {}),
   };
   const prepared = new Map<string, PreparedRead>();
   let overviewSubjectLabel = subjectLabel;

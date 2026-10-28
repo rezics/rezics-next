@@ -408,7 +408,7 @@ export function RelationGroups(props: Record<string, unknown>) {
     exact: entries.every((entry) => entry.count.exact),
   };
   return (
-    <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={`${sectionClass} space-y-6`}>
+    <section data-slot="relation-groups" aria-labelledby={`${id}-title`} className={sectionClass}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id={`${id}-title`} lang={title.text ? title.lang : undefined} className={headingClass}>
           {heading}
@@ -791,7 +791,7 @@ export function SourcesSection({
     <section
       data-slot="subject-sources"
       aria-labelledby={id}
-      className="min-w-0 space-y-3 border-t border-border/60 pt-6"
+      className={`${sectionClass} border-t border-border/60 pt-6`}
     >
       <h2 id={id} className={headingClass}>
         {value.sources}

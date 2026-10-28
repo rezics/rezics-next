@@ -4,6 +4,7 @@ import { DocumentBody } from '@rezics/ui/document-body';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { Eye } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { foreignLanguageName } from '../../subject/language';
@@ -32,7 +33,10 @@ export function LanguageTag({ lang, locale }: { lang: string | null | undefined;
 export function SpoilerGate({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Collapsible className="space-y-2">
-      <CollapsibleTrigger render={<Button variant="outline" size="sm" />}>{label}</CollapsibleTrigger>
+      <CollapsibleTrigger render={<Button variant="outline" size="sm" />}>
+        <Eye aria-hidden="true" className="size-4" />
+        {label}
+      </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2">{children}</CollapsibleContent>
     </Collapsible>
   );

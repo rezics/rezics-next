@@ -26,8 +26,11 @@ export function SubjectHeaderActions({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3 sm:items-end" data-slot="subject-actions">
-      <div className="flex items-start gap-2 sm:justify-end">
+    <>
+      <div
+        className="flex min-w-0 flex-nowrap items-start justify-end gap-2 sm:col-start-2 sm:row-start-1"
+        data-slot="subject-header-actions"
+      >
         {reactions ? (
           <div className="min-w-0 flex-1 sm:flex-none">
             <ThreadReactions
@@ -47,7 +50,14 @@ export function SubjectHeaderActions({
           <PostActions target={{ kind: 'subject', id }} verification={verification} />
         </div>
       </div>
-      {children}
-    </div>
+      {children ? (
+        <div
+          className="flex min-w-0 flex-wrap items-center gap-2 sm:col-start-1 sm:row-start-2"
+          data-slot="subject-library-actions"
+        >
+          {children}
+        </div>
+      ) : null}
+    </>
   );
 }
