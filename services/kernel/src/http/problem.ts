@@ -45,6 +45,7 @@ export const PROBLEMS = {
     title: 'Library Entry Restore Expired',
     retryable: false,
   },
+  library_label_capacity: { status: 409, title: 'Library Label Capacity Reached', retryable: false },
   semantic_not_ready: { status: 503, title: 'Semantic Layer Not Ready', retryable: true },
   presentation_not_ready: { status: 503, title: 'Presentation Not Ready', retryable: true },
   not_found: { status: 404, title: 'Not Found', retryable: false },
