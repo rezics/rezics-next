@@ -11,7 +11,7 @@ test('an opaque label ID is scoped by its owner partition and rename preserves i
     labelId: sameId,
     normalizedName: 'Reading later',
     revision: 2,
-    generation: 1,
+    generation: 2,
     deletedAt: null,
   };
   const secondOwner: NativeLabelRow = { ...firstOwner, ownerAccountId: 'account-b', ownerRoute: 64 };

@@ -314,7 +314,9 @@ The inheritance fixture gives the child distinct complete profiles at two ancest
 incompatible profile ID and must fail compilation; the absence fixture removes library references from fixture verticals,
 including People and Concepts. The fixtures are source data sent through the real compiler, never prebuilt release objects.
 
-For migration, inspect every actual page's read/write rows and bytes. Assert at most 100 owner facts per transaction,
+For migration, inspect every actual page's read/write rows and bytes, including a fully pinned entry prefix followed
+by pending sessions and copies. The 100 examined-source-key allowance is shared across phases in one transaction;
+changing phase does not reset it. Assert at most 100 owner facts per transaction,
 constant bounded checkpoint work, exact-row CAS, unchanged user revisions/timestamps/values/history/receipts, restart
 after both sides of commit, concurrent-write behavior, and the deletion fence. No test may use a synchronous account
 count or transaction, or derive fake progress from an expected count.

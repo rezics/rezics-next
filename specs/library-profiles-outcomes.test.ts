@@ -1050,3 +1050,37 @@ test('removing a profile preserves historic state progress and holding pins whil
   expect((await api('owner', 'GET', `/v1/copies/${copyId}`)).status).toBe(404);
   expect((await driver.inspect(fixture)).sessions).toEqual(before.sessions);
 });
+
+test('migration shares one examined-source allowance across pinned entries and pending session and copy phases', async () => {
+  await driver.seedLegacyFacts(fixture, { entries: 120, sessions: 101, copies: 101 });
+  const release = await setupProfiles();
+  for (const row of (await driver.inspect(fixture)).entries)
+    expect((await entry(row.subjectId, row.state, idempotencyKey(), row.revision)).status).toBe(200);
+  const before = await driver.inspect(fixture);
+  expect(before.entries.every(row => row.pin !== null)).toBe(true);
+  expect([...before.sessions, ...before.copies].every(row => row.pin === null)).toBe(true);
+
+  await driver.migrateOwner(fixture, release.digest);
+  const after = await driver.inspect(fixture);
+  expect(after.entries).toEqual(before.entries);
+  expect(after.sessions.map(sameUserSession)).toEqual(before.sessions.map(sameUserSession));
+  expect(after.copies.map(sameUserCopy)).toEqual(before.copies.map(sameUserCopy));
+  expect(after.receipts).toEqual(before.receipts);
+  expect([...after.sessions, ...after.copies].every(row => row.pin !== null)).toBe(true);
+  const pages = after.migration.pages;
+  expect(pages.some(page => page.committed && page.sourceRowsExamined === 100 && page.ownerRowsChanged === 0)).toBe(true);
+  for (const page of pages) {
+    expect(page.sourceRowsExamined).toBeLessThanOrEqual(100);
+    expect(page.sourcePlans.reduce((total, plan) => total + plan.rowsExamined, 0)).toBe(page.sourceRowsExamined);
+    expect(page.ownerRowsChanged).toBeLessThanOrEqual(page.sourceRowsExamined);
+    expect(page.ownerFenceChecked).toBe(true);
+    if (page.sourceRowsExamined > 0) {
+      expect(page.committed).toBe(true);
+      expect(page.checkpointAfter).not.toEqual(page.checkpointBefore);
+    }
+  }
+  expect(pages.reduce((total, page) => total + page.sourceRowsExamined, 0)).toBe(322);
+  expect(pages.reduce((total, page) => total + page.ownerRowsChanged, 0)).toBe(202);
+  expect(new Set(pages.flatMap(page => page.sourcePlans.map(plan => plan.relation))))
+    .toEqual(new Set(['library.entry', 'library.progress_session', 'library.copy']));
+});

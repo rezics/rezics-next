@@ -241,8 +241,10 @@ authoritative time under those locks, and commits effects/checkpoint/next intent
 parent purge. No local timer.
 
 Fresh-key duplicate assignment requires an idempotent minimal receipt with NO domain fact event or source-fence
-write. Current `runCommand` requires at least one event; shared command `noEffect(value)` support is the actual
-dependency for the later writer. A new-key duplicate commits a minimal receipt with ZERO domain events, outbox,
+write. The shared `noEffect(value)` export now exists in `services/kernel/src/command/command.ts`, with
+`no-effect-fence.sql` committing the receipt at the observed partition position. Ordinary unmarked empty-event
+results still fail. The later assignment writer must use this existing command capability without domain writes
+or registered work. A new-key duplicate commits a minimal receipt with ZERO domain events, outbox,
 write basis or position advance; ordinary finalize/current authorization still run. Do not bypass the command,
 skip its receipt, or mint a fixture/no-op domain event. Runnable bounded purge and cleanup of owned private
 receipt/outbox/workflow payload remain integration work; no label-local engine or invented shared custody port.

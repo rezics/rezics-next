@@ -118,6 +118,7 @@ export interface NativeOutboxRow {
 export interface NativeCleanupRow {
   ownerAccountId: string;
   labelId: string;
+  /** Captured parent revision for this deletion episode, not another generation authority. */
   generation: number;
   state: 'pending' | 'running' | 'complete' | 'superseded';
   lastSubjectId: string | null;
