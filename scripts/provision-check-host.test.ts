@@ -13,6 +13,7 @@ type ScenarioOptions = {
   installed?: string[];
   osRelease?: string;
   existingSshdConfig?: string;
+  playwrightVersion?: string;
 };
 
 let root: string;
@@ -35,6 +36,7 @@ function scenario(options: ScenarioOptions = {}) {
   const received = join(directory, 'received-remote-script');
   const osRelease = join(directory, 'os-release');
   const identity = join(directory, 'identity');
+  const scenarioScript = join(directory, 'provision-check-host.sh');
   mkdirSync(bin, { recursive: true });
   mkdirSync(temporaryDirectory, { recursive: true });
   mkdirSync(join(directory, 'etc/systemd/system'), { recursive: true });
@@ -42,6 +44,11 @@ function scenario(options: ScenarioOptions = {}) {
   writeFileSync(identity, 'fake identity');
   writeFileSync(osRelease, options.osRelease ?? 'ID=fedora\nID_LIKE="rhel fedora"\n');
   if (options.existingSshdConfig !== undefined) writeFileSync(sshdConfig, options.existingSshdConfig);
+  if (options.playwrightVersion !== undefined) {
+    const source = readFileSync(script, 'utf8');
+    const quotedVersion = `'${options.playwrightVersion.replaceAll("'", "'\\''")}'`;
+    writeFileSync(scenarioScript, source.replace('playwright_version=1.64.1', `playwright_version=${quotedVersion}`));
+  }
 
   const fakeSsh = `#!${bunExecutable}
 import { spawnSync } from 'node:child_process';
@@ -61,10 +68,12 @@ const replacements: Array<[string, string]> = [
 let remote = original;
 for (const [from, to] of replacements) remote = remote.split(from).join(to);
 const args = process.argv.slice(2);
-const separator = args.indexOf('--');
-if (separator < 0) throw new Error('expected remote bash arguments');
-const result = spawnSync('bash', ['-c', remote, 'provision-test', ...args.slice(separator + 1)], {
+const destination = args.findIndex((arg) => /^[A-Za-z0-9._-]+@[A-Za-z0-9.:-]+$/.test(arg));
+if (destination < 0) throw new Error('expected ssh destination');
+const remoteCommand = args.slice(destination + 1).join(' ');
+const result = spawnSync('bash', ['-c', remoteCommand], {
   env: process.env,
+  input: remote,
   encoding: 'utf8',
 });
 process.stdout.write(result.stdout ?? '');
@@ -118,7 +127,7 @@ if (command === 'node') process.exit(0);
           .map((line) => JSON.parse(line))
       : [];
   const run = (address = options.address ?? 'root@check.test') =>
-    spawnSync('bash', [script, address, identity, '16', '800'], {
+    spawnSync('bash', [options.playwrightVersion === undefined ? script : scenarioScript, address, identity, '16', '800'], {
       cwd: repository,
       env: {
         ...process.env,
@@ -150,6 +159,10 @@ test('a Fedora host installs missing packages with dnf', () => {
     packages.map((name) => ['-q', name]),
   );
   expect(events.find((event) => event.command === 'dnf')?.args).toEqual(['install', '-y', ...packages]);
+  expect(events.find((event) => event.command === 'systemctl' && event.args[0] === 'reload')?.args).toEqual([
+    'reload',
+    'sshd.service',
+  ]);
   expect(events.some((event) => event.command === 'apt-get')).toBe(false);
 });
 
@@ -179,10 +192,14 @@ test('a Debian host still installs missing packages with apt', () => {
     '--with-deps',
     'chromium',
   ]);
+  expect(events.find((event) => event.command === 'systemctl' && event.args[0] === 'reload')?.args).toEqual([
+    'reload',
+    'ssh.service',
+  ]);
   expect(events.some((event) => event.command === 'dnf')).toBe(false);
 });
 
-test('a loopback host keeps its sshd configuration', () => {
+test('loopback hosts without an exemption argument leave sshd unchanged through ssh word splitting', () => {
   for (const address of ['root@127.0.0.1', 'root@::1', 'root@localhost']) {
     const previous = 'Maintainer sshd settings\n';
     const fixture = scenario({ address, existingSshdConfig: previous });
@@ -196,6 +213,38 @@ test('a loopback host keeps its sshd configuration', () => {
     expect(events.some((event) => event.command === 'sshd')).toBe(false);
     expect(events.some((event) => event.command === 'systemctl' && event.args[0] === 'reload')).toBe(false);
   }
+});
+
+test('a remote host keeps existing exemptions without an exemption argument through ssh word splitting', () => {
+  const existing = 'MaxStartups 10:30:100\nPerSourcePenaltyExemptList 192.0.2.0/24,2001:db8::/32\n# preserve nothing else\n';
+  const fixture = scenario({
+    osRelease: 'ID=debian\nID_LIKE="debian"\n',
+    existingSshdConfig: existing,
+  });
+  const expected = 'MaxStartups 100:30:300\nMaxSessions 64\nPerSourcePenaltyExemptList 192.0.2.0/24,2001:db8::/32\n';
+
+  const result = fixture.run();
+
+  expect(result.status, result.stderr).toBe(0);
+  expect(readFileSync(fixture.sshdConfig, 'utf8')).toBe(expected);
+  expect(fixture.events().find((event) => event.command === 'systemctl' && event.args[0] === 'reload')?.args).toEqual([
+    'reload',
+    'ssh.service',
+  ]);
+});
+
+test('arguments with spaces and shell characters reach the remote script unchanged', () => {
+  const sentinel = join(repository, `provision-shell-was-evaluated-${process.pid}`);
+  const specialArgument = `space value; $(touch provision-shell-was-evaluated-${process.pid})`;
+  const fixture = scenario({ playwrightVersion: specialArgument });
+
+  const result = fixture.run();
+
+  expect(result.status, result.stderr).toBe(0);
+  expect(
+    fixture.events().find((event) => event.command === 'bun' && event.args[0] === 'x')?.args,
+  ).toEqual(['x', `playwright@${specialArgument}`, 'install', 'chromium']);
+  expect(existsSync(sentinel)).toBe(false);
 });
 
 test('a Fedora host installs the Playwright browser without the apt dependency installer', () => {

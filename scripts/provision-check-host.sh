@@ -8,9 +8,10 @@
 #
 # Loopback host setup:
 #   mkdir -p .secrets/server/<name>
-#   ssh-keygen -t ed25519 -f .secrets/server/<name>/id_ed25519
-#   sudo sh -c 'cat .secrets/server/<name>/id_ed25519.pub >> /root/.ssh/authorized_keys'  # only step needing sudo
-#   scripts/provision-check-host.sh root@127.0.0.1 .secrets/server/<name>/id_ed25519 <memoryMaxGiB> <cpuQuotaPercent>
+#   ssh-keygen -t ed25519 -f .secrets/server/<name>/operator-ed25519
+#   sudo install -d -m 0700 /root/.ssh
+#   { printf 'from="127.0.0.1,::1" '; cat .secrets/server/<name>/operator-ed25519.pub; } | sudo tee -a /root/.ssh/authorized_keys >/dev/null
+#   scripts/provision-check-host.sh root@127.0.0.1 .secrets/server/<name>/operator-ed25519 <memoryMaxGiB> <cpuQuotaPercent>
 set -euo pipefail
 
 if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
@@ -89,8 +90,8 @@ case "${address#*@}" in
   127.0.0.1|::1|localhost) loopback=1 ;;
 esac
 
-ssh -i "$identity" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$address" \
-  bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" "$penalty_exemptions" "$loopback" <<'REMOTE'
+printf -v remote_command '%q ' bash -s -- "$bun_version" "$node_version" "$memory" "$cpu" "$playwright_version" "$penalty_exemptions" "$loopback"
+ssh -i "$identity" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "$address" "$remote_command" <<'REMOTE'
 set -euo pipefail
 bun_version=$1
 node_version=$2
@@ -106,9 +107,11 @@ host_os_like=${ID_LIKE:-}
 case " $host_os_id $host_os_like " in
   *" fedora "*|*" rhel "*)
     package_manager=fedora
+    sshd_service=sshd.service
     ;;
   *" debian "*)
     package_manager=debian
+    sshd_service=ssh.service
     export DEBIAN_FRONTEND=noninteractive
     ;;
   *)
@@ -224,7 +227,7 @@ else
   fi
 
   if sshd -t; then
-    if [ "$sshd_changed" -eq 1 ]; then systemctl reload ssh; fi
+    if [ "$sshd_changed" -eq 1 ]; then systemctl reload "$sshd_service"; fi
   else
     if [ "$sshd_changed" -eq 1 ]; then
       if [ "$sshd_had_previous" -eq 1 ]; then cp -p "$sshd_backup" "$sshd_dropin"; else rm -f "$sshd_dropin"; fi

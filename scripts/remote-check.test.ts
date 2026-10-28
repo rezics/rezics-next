@@ -937,12 +937,26 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const source = await Bun.stdin.text();
 writeFileSync(process.env.PROVISION_RECEIVED!, source);
-const header = source.slice(0, source.indexOf('export DEBIAN_FRONTEND'));
-const start = source.indexOf('sshd_config_dir=');
+const start = source.indexOf('if [ "$loopback" -eq 1 ]; then');
 const end = source.indexOf('\\necho "chromium', start);
 const block = source.slice(start, end).replace('sshd_config_dir=/etc/ssh/sshd_config.d', 'sshd_config_dir=$PROVISION_DIRECTORY');
-const args = process.argv.slice(process.argv.indexOf('--') + 1);
-const result = spawnSync('bash', ['-c', header + block, 'provision-test', ...args], { env: process.env, encoding: 'utf8' });
+const args = process.argv.slice(2);
+const destination = args.findIndex((arg) => /^[A-Za-z0-9._-]+@[A-Za-z0-9.:-]+$/.test(arg));
+if (destination < 0) throw new Error('expected ssh destination');
+const remoteCommand = args.slice(destination + 1).join(' ');
+const testRemoteScript = [
+  'set -euo pipefail',
+  'bun_version=$1',
+  'node_version=$2',
+  'memory=$3',
+  'cpu=$4',
+  'playwright_version=$5',
+  'penalty_exemptions=\${6-}',
+  'loopback=\${7-0}',
+  'sshd_service=sshd.service',
+  block,
+].join('\\n');
+const result = spawnSync('bash', ['-c', remoteCommand], { env: process.env, input: testRemoteScript, encoding: 'utf8' });
 process.stdout.write(result.stdout);
 process.stderr.write(result.stderr);
 process.exit(result.status ?? 1);
@@ -1011,15 +1025,46 @@ test('provision-check-host installs and validates the sshd limits before reloadi
   const ssh = join(bin, 'ssh');
   writeFileSync(
     ssh,
-    `#!/usr/bin/env bun\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(process.env.PROVISION_SCRIPT_FILE!, await Bun.stdin.text());\n`,
+    `#!/usr/bin/env bun
+import { spawnSync } from 'node:child_process';
+const args = process.argv.slice(2);
+const destination = args.findIndex((arg) => /^[A-Za-z0-9._-]+@[A-Za-z0-9.:-]+$/.test(arg));
+if (destination < 0) throw new Error('expected ssh destination');
+const remoteCommand = args.slice(destination + 1).join(' ');
+const source = await Bun.stdin.text();
+const result = spawnSync('/bin/bash', ['-c', remoteCommand], {
+  env: { ...process.env, PATH: process.env.PROVISION_BIN + ':' + process.env.PATH },
+  input: source,
+  encoding: 'utf8',
+});
+process.stdout.write(result.stdout ?? '');
+process.stderr.write(result.stderr ?? '');
+process.exit(result.status ?? 1);
+`,
   );
   chmodSync(ssh, 0o755);
+  const remoteBash = join(bin, 'bash');
+  writeFileSync(
+    remoteBash,
+    `#!/usr/bin/env bun
+import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === '-s') {
+  writeFileSync(process.env.PROVISION_SCRIPT_FILE!, await Bun.stdin.text());
+  process.exit(0);
+}
+const result = spawnSync('/bin/bash', args, { stdio: 'inherit' });
+process.exit(result.status ?? 1);
+`,
+  );
+  chmodSync(remoteBash, 0o755);
   const result = spawnSync(
-    'bash',
+    '/bin/bash',
     [join(repository, 'scripts/provision-check-host.sh'), 'root@check.test', identity, '16', '800'],
     {
       cwd: repository,
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PROVISION_SCRIPT_FILE: received },
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, PROVISION_BIN: bin, PROVISION_SCRIPT_FILE: received },
       encoding: 'utf8',
       timeout: 20_000,
     },
@@ -1032,12 +1077,12 @@ test('provision-check-host installs and validates the sshd limits before reloadi
   expect(sent).toContain('sshd_candidate=$(mktemp "$sshd_config_dir/.90-rezics-checks.XXXXXX")');
   expect(sent).toContain('if sshd -t; then');
   const validationStart = sent.indexOf('if sshd -t; then');
-  const validationElse = sent.indexOf('\nelse\n', validationStart);
-  const validationEnd = sent.indexOf('\nfi\n', validationElse);
+  const validationElse = sent.indexOf('\n  else\n', validationStart);
+  const validationEnd = sent.indexOf('\n  fi\n', validationElse);
   expect(validationElse).toBeGreaterThan(validationStart);
   expect(validationEnd).toBeGreaterThan(validationElse);
-  expect(sent.slice(validationStart, validationElse)).toContain('systemctl reload ssh');
-  expect(sent.slice(validationElse, validationEnd)).not.toContain('systemctl reload ssh');
+  expect(sent.slice(validationStart, validationElse)).toContain('systemctl reload "$sshd_service"');
+  expect(sent.slice(validationElse, validationEnd)).not.toContain('systemctl reload "$sshd_service"');
   expect(sent).toContain('sshd configuration validation failed; sshd was not reloaded');
 });
 
@@ -1063,7 +1108,7 @@ test('provision-check-host writes the whole sshd drop-in with the penalty exempt
   expect(statSync(fixture.config).mode & 0o777).toBe(0o644);
   expect(fixture.events()).toEqual([
     { command: 'sshd', args: ['-t'], config: wanted },
-    { command: 'systemctl', args: ['reload', 'ssh'] },
+    { command: 'systemctl', args: ['reload', 'sshd.service'] },
   ]);
   expect(fixture.run(exemptions).status).toBe(0);
   expect(fixture.events().filter((event) => event.command === 'systemctl')).toHaveLength(1);
@@ -1085,7 +1130,7 @@ test('provision-check-host keeps an existing penalty exemption list when it is g
   expect(readFileSync(fixture.config, 'utf8')).toBe(wanted);
   expect(fixture.events()).toEqual([
     { command: 'sshd', args: ['-t'], config: wanted },
-    { command: 'systemctl', args: ['reload', 'ssh'] },
+    { command: 'systemctl', args: ['reload', 'sshd.service'] },
   ]);
   expect(fixture.run().status).toBe(0);
   expect(fixture.events().filter((event) => event.command === 'systemctl')).toHaveLength(1);
