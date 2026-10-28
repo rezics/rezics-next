@@ -219,16 +219,16 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
 
 1. **Direct plans: direct catalogue index and direct owner index.** Each read within a page has these ceilings:
 
-   | Unit | Per-read ceiling |
-   | ---- | ---------------- |
-   | Candidates | `min(600, 6s + 3)` |
-   | Catalogue index reads | 6 engine searches, including count-only searches; at most two per refill round |
-   | Owner index reads | 3 keyset seeks; at most one per refill round |
-   | Access and dependency points | `16 + 8c` |
-   | PostgreSQL examined rows, including removed rows | `64 + 16c` |
-   | Shared blocks | Six per budgeted examined row |
-   | Response bytes, PostgreSQL and engine together | `16 KiB + 4 KiB × c` |
-   | Request bytes, PostgreSQL and engine together | `64 KiB + 1 KiB × c` |
+   | Unit                                             | Per-read ceiling                                                               |
+   | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+   | Candidates                                       | `min(600, 6s + 3)`                                                             |
+   | Catalogue index reads                            | 6 engine searches, including count-only searches; at most two per refill round |
+   | Owner index reads                                | 3 keyset seeks; at most one per refill round                                   |
+   | Access and dependency points                     | `16 + 8c`                                                                      |
+   | PostgreSQL examined rows, including removed rows | `64 + 16c`                                                                     |
+   | Shared blocks                                    | Six per budgeted examined row                                                  |
+   | Response bytes, PostgreSQL and engine together   | `16 KiB + 4 KiB × c`                                                           |
+   | Request bytes, PostgreSQL and engine together    | `64 KiB + 1 KiB × c`                                                           |
 
    Use at most three refill rounds, each asking for at most `2 × remaining slots + 1`, the existing Search refill
    quota. A read that neither fills its page nor proves exhaustion within these ceilings returns preparation,
@@ -257,14 +257,14 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
    batch per round across reads, and one summaries read. Statements per PostgreSQL backend are at most `8 + 4R`.
    At the limits of 16 reads and 128 slots, all direct, the page ceilings are:
 
-   | Unit | Composed-page ceiling |
-   | ---- | --------------------- |
-   | Candidates | 816 |
-   | Access and dependency points | 6,784 |
-   | PostgreSQL examined rows | 14,080 |
-   | Statements per PostgreSQL backend | 72 |
-   | Engine searches | 96 |
-   | Connections per backend | 1 |
+   | Unit                              | Composed-page ceiling |
+   | --------------------------------- | --------------------- |
+   | Candidates                        | 816                   |
+   | Access and dependency points      | 6,784                 |
+   | PostgreSQL examined rows          | 14,080                |
+   | Statements per PostgreSQL backend | 72                    |
+   | Engine searches                   | 96                    |
+   | Connections per backend           | 1                     |
 
    Reject a page whose summed budget exceeds these ceilings at admission with `422 unsupported_query`, or
    prepare the reads that put it over. Sixteen reads at 100 slots each are never admitted: slots, not reads,
@@ -279,17 +279,17 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
 
 4. **Preparation.** Each durable step has these ceilings:
 
-   | Unit | Per-step ceiling |
-   | ---- | ---------------- |
-   | Input candidates or keys read | 1,000 |
-   | Result rows written | 1,000 |
-   | Retained-frontier writes | 1 |
-   | Access and dependency points | 8 per input candidate |
-   | PostgreSQL examined rows, including removed rows | `64 + 16 × input` |
-   | Statements per backend | 16 |
-   | Engine searches | 4 |
-   | Connections per backend | 1 |
-   | Response bytes | 4 MiB |
+   | Unit                                             | Per-step ceiling      |
+   | ------------------------------------------------ | --------------------- |
+   | Input candidates or keys read                    | 1,000                 |
+   | Result rows written                              | 1,000                 |
+   | Retained-frontier writes                         | 1                     |
+   | Access and dependency points                     | 8 per input candidate |
+   | PostgreSQL examined rows, including removed rows | `64 + 16 × input`     |
+   | Statements per backend                           | 16                    |
+   | Engine searches                                  | 4                     |
+   | Connections per backend                          | 1                     |
+   | Response bytes                                   | 4 MiB                 |
 
    In total, read each relevant input item once per build; replay rereads at most one step's input. A source
    change touches only prepared results whose admitted leaves it affects, found through an index, never by
