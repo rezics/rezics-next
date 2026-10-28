@@ -179,7 +179,7 @@ const statusCards = () => (
       cover={{ subject: subjects[0]!, cover: null, src: () => '' }}
       status={{ label: 'In progress', href: '/library?status=active' }}
       progress={{ value: 0.4, label: '40%' }}
-      menu={<DropdownMenuItem>Remove</DropdownMenuItem>}
+      menuEntries={[{ type: 'destructive', label: 'Remove', onSelect: () => {} }]}
     />
     <CoverCard
       href="/album"
