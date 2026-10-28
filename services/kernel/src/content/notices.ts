@@ -41,8 +41,7 @@ async function withWritableNoticeRoute<T>(
       const partition = partitionOf(route);
       const state = await noticePartitionState.run(client, { partition_no: partition });
       if (!state) throw new CommandUnavailableError('deadline', partition);
-      if (state.write_state === 'moved')
-        throw new CommandUnavailableError('moved', partition, state.moved_to);
+      if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partition, state.moved_to);
       if (state.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
       const result = await action(client);
       await client.query('COMMIT');
@@ -127,8 +126,7 @@ export async function deleteExpiredNoticesPage(pool: Pool, route: number, cutoff
   return withWritableNoticeRoute(
     pool,
     route,
-    async (client) =>
-      (await deleteExpiredPage.run(client, { route, cutoff: cutoff.toISOString() })).length,
+    async (client) => (await deleteExpiredPage.run(client, { route, cutoff: cutoff.toISOString() })).length,
   );
 }
 
@@ -138,8 +136,7 @@ export async function deleteAccountNoticePage(pool: Pool, accountId: string): Pr
   return withWritableNoticeRoute(
     pool,
     route,
-    async (client) =>
-      (await deleteAccountNoticePageSql.run(client, { route, account_id: accountId })).length,
+    async (client) => (await deleteAccountNoticePageSql.run(client, { route, account_id: accountId })).length,
   );
 }
 
