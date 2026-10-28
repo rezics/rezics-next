@@ -158,7 +158,6 @@ test('actual raw fact SQL limits the selected native driver before union and lea
   for (let n = 0; n < 16; n++) {
     const copy = await native.send(owner.bearer, 'POST', '/v1/copies', {
       subjectId: subject,
-      kind: 'physical',
       status: 'owned',
     });
     expect(copy.status).toBe(201);
