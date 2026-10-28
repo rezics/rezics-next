@@ -226,7 +226,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         const languages = languagePreferences(query.languages);
         return admission.run('normal', job, async () => {
           const offer = await store.readOffer(pool, route, params.offerId);
-          if (!offer) throw new ProblemError('not_found');
+          if (!offer || offer.state === 'delisted') throw new ProblemError('not_found');
           const summaryDependencies = { pool, access: deps.access(), actor, deadline: job.deadline };
           const summaries =
             languages === undefined

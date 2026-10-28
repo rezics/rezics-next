@@ -10,7 +10,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
 let db: GrowthDatabase;
@@ -269,6 +269,79 @@ test('unknown offers are hidden and delisted offers conflict, while existing ord
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
   expect(await order(selling.id, requestKey)).toEqual(created);
+});
+
+test('delisted public offers are concealed as unknown while captured purchases and entitlements remain usable', async () => {
+  const selling = await offer();
+  const active = await capture(db, () => request(`/v1/offers/${selling.id}`, null));
+  expect(active.value.status).toBe(200);
+  expect((await active.value.json()).offer).toMatchObject({ id: selling.id, state: 'active', subject: null });
+  expect(active.capture.statements.some((sql) => /semantic\./.test(sql))).toBe(true);
+
+  const entitlement = await paid(selling.id);
+  const captured = (await store.readOrder(db.pool, routeOf(entitlement.orderId)!, entitlement.orderId))!;
+  expect(captured).toMatchObject({
+    offerId: selling.id,
+    targetSubjectId: selling.targetSubjectId,
+    title: selling.title,
+    currency: selling.currency,
+    unitAmountMinor: selling.unitAmountMinor,
+    settlement: 'paid',
+  });
+  const orderBefore = await request(`/v1/orders/${captured.id}`);
+  const entitlementBefore = await request(`/v1/entitlements/${entitlement.id}`);
+  expect(orderBefore.status).toBe(200);
+  expect(entitlementBefore.status).toBe(200);
+  const orderBody = await orderBefore.json();
+  const entitlementBody = await entitlementBefore.json();
+  expect(orderBody.order).toMatchObject({
+    id: captured.id,
+    title: captured.title,
+    targetSubjectId: captured.targetSubjectId,
+    settlement: 'paid',
+    entitlementId: entitlement.id,
+  });
+  expect(entitlementBody.entitlement).toMatchObject({
+    offerId: selling.id,
+    orderId: captured.id,
+    targetSubjectId: captured.targetSubjectId,
+    active: true,
+    revokedAt: null,
+    revokeReason: null,
+  });
+
+  const delisted = await request(`/v1/offers/${selling.id}:delist`, seller, {});
+  expect(delisted.status).toBe(200);
+  expect((await delisted.json()).offer).toMatchObject({ id: selling.id, state: 'delisted' });
+  const unknownId = newId(routeOf(selling.id)!);
+  for (const account of [null, buyer, seller]) {
+    const unknown = await capture(db, () => request(`/v1/offers/${unknownId}`, account));
+    const concealed = await capture(db, () => request(`/v1/offers/${selling.id}`, account));
+    for (const result of [unknown, concealed]) {
+      expect(result.value.status).toBe(404);
+      expect(result.value.headers.get('content-type')).toBe('application/problem+json');
+      expect(result.capture.statements.some((sql) => /commerce\.offer\b/.test(sql))).toBe(true);
+      expect(result.capture.statements.some((sql) => /semantic\./.test(sql))).toBe(false);
+    }
+    const problem = stableProblem(await unknown.value.json());
+    expect(problem).toMatchObject({ code: 'not_found', effect_status: 'not_applicable' });
+    expect(stableProblem(await concealed.value.json())).toEqual(problem);
+  }
+
+  const providerCalls = fake.requests.length;
+  const refused = await request('/v1/orders', buyer, { offerId: selling.id });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
+  expect(fake.requests).toHaveLength(providerCalls);
+  const orderAfter = await request(`/v1/orders/${captured.id}`);
+  const entitlementAfter = await request(`/v1/entitlements/${entitlement.id}`);
+  expect(orderAfter.status).toBe(200);
+  expect(await orderAfter.json()).toEqual(orderBody);
+  expect(entitlementAfter.status).toBe(200);
+  expect(await entitlementAfter.json()).toEqual(entitlementBody);
+  expect(await store.readOrder(db.pool, routeOf(captured.id)!, captured.id)).toEqual(captured);
+  expect(await store.readEntitlement(db.pool, routeOf(entitlement.id)!, entitlement.id)).toEqual(entitlement);
+  expect(await store.readOffer(db.pool, routeOf(selling.id)!, selling.id)).toMatchObject({ state: 'delisted' });
 });
 
 test('rejected Checkout settles failed and lost creates settle unknown then reconcile under the same key', async () => {
