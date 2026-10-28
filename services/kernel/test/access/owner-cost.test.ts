@@ -1,45 +1,36 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { LifecycleDeniedError } from '../../src/access/lifecycle.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { resetGrowthTables } from './growth-reset.ts';
 import { nodes, ownerCostFixture, type Plan } from './owner-cost-fixture.ts';
 
 let f: Awaited<ReturnType<typeof ownerCostFixture>>;
+let growth: GrowthDatabase;
 beforeAll(async () => {
-  f = await ownerCostFixture();
+  growth = await openGrowthDatabase();
+  f = await ownerCostFixture({ pool: growth.openPool(), reader: growth.openPool() });
 });
 afterAll(async () => {
   if (f) await f.close();
+  if (growth) await growth.close();
 });
 
-test('the real owner guard has constant examined rows and logarithmic buffers at three scales', async () => {
-  const measurements: { scale: number; label: string; buffers: number; examined: number; scans: Plan[] }[] = [];
-  function record(scale: number, label: string, plan: Plan) {
+test('the owner guard and its lifecycle commands stay within constant rows and logarithmic blocks as members grow', async () => {
+  async function resetCommandState() {
+    await resetGrowthTables(growth.admin, [
+      'core.receipt',
+      'core.outbox',
+      'editorial.write_basis',
+      'access.lifecycle_coordination',
+      'access.lifecycle_membership_slot',
+      'access.membership_inverse',
+      'access.membership_inverse_terminal',
+    ]);
+  }
+
+  function assertPlanShape(plan: Plan) {
     // Count table/index visits, not rows passed through a Subquery Scan.
     const scans = nodes(plan).filter((node) => node['Relation Name'] || node['Index Name']);
-    const examined = scans.reduce(
-      (sum, node) =>
-        sum +
-        node['Actual Loops'] *
-          (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0)),
-      0,
-    );
-    const buffers = (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0);
-    measurements.push({ scale, label, buffers, examined, scans });
-    console.info('owner guard EXPLAIN', { scale, label, buffers, examined });
-  }
-  for (const scale of [64, 512, 4096]) {
-    await f.seed(scale);
-    for (const target of [f.actor, f.member, f.expired, f.absent]) {
-      record(scale, target, await f.explain(target));
-    }
-    f.commandPlans.length = 0;
-    await f.change(f.member, 'member');
-    await f.change(f.owners[1]!, null);
-    await expect(f.tombstone()).rejects.toBeInstanceOf(LifecycleDeniedError);
-    expect(f.commandPlans).toHaveLength(3);
-    f.commandPlans.forEach((plan, index) => record(scale, `command-${index}`, plan));
-  }
-  for (const { scans, examined } of measurements) {
-    expect(examined).toBeLessThanOrEqual(3);
     expect(scans).toHaveLength(2);
     expect(scans[0]!['Index Name']).toBe('organization_member_owner_probe');
     expect(scans[1]!['Index Cond']).toContain('member_account_id =');
@@ -50,14 +41,41 @@ test('the real owner guard has constant examined rows and logarithmic buffers at
       expect(scan['Index Cond']).toContain('valid @>');
     }
   }
-  for (const baseline of measurements.filter((sample) => sample.scale === 64)) {
-    for (const sample of measurements.filter((sample) => sample.label === baseline.label)) {
-      // A native tree needs only O(log R) page visits. Allow four extra pages
-      // per doubling (two probes, internal/leaf pages), never a linear factor.
-      expect(sample.buffers).toBeLessThanOrEqual(baseline.buffers + 4 * Math.log2(sample.scale / baseline.scale));
-      expect(sample.examined).toBe(baseline.examined);
+
+  async function exercise(memberToChange: string, ownerToRemove: string) {
+    const plans: Plan[] = [];
+    for (const target of [f.actor, f.member, f.expired, f.absent]) {
+      plans.push(await f.explain(target));
     }
+    f.commandPlans.length = 0;
+    await f.change(memberToChange, 'member');
+    await f.change(ownerToRemove, null);
+    await expect(f.tombstone()).rejects.toBeInstanceOf(LifecycleDeniedError);
+    expect(f.commandPlans).toHaveLength(3);
+    plans.push(...f.commandPlans);
+    for (const plan of plans) assertPlanShape(plan);
   }
+
+  const report = await checkGrowth(growth, {
+    name: 'the owner guard and its lifecycle commands stay within constant rows and logarithmic blocks as members grow',
+    scales: [64, 512, 4096],
+    repetitions: 1,
+    warmups: 1,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(_database, scale) {
+      await f.seed(scale);
+    },
+    async warmup(_database, scale) {
+      await exercise(f.owners[2]!, f.owners[3]!);
+      await resetCommandState();
+      await f.seed(scale);
+    },
+    async operation(_database, scale) {
+      await exercise(f.member, f.owners[1]!);
+      await resetCommandState();
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
 }, 30000);
 
 test('zero, one and many owner outcomes distinguish owners from current and expired members', async () => {

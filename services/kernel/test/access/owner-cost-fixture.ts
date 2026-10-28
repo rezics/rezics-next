@@ -18,13 +18,18 @@ export type Plan = {
   'Relation Name'?: string;
   Plans?: Plan[];
 };
+type OwnerCostPools = {
+  readonly pool: ReturnType<typeof createPool>;
+  readonly reader: ReturnType<typeof createPool>;
+};
 export const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes)];
 
-export async function ownerCostFixture() {
+export async function ownerCostFixture(pools?: OwnerCostPools) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
-  const reader = createPool(url);
+  const ownsPools = pools === undefined;
+  const pool = pools?.pool ?? createPool(url);
+  const reader = pools?.reader ?? createPool(url);
   const commandPlans: Plan[] = [];
   // Observe the private guard on the actual command client, with its real
   // authoritative-time parameters, before the membership mutation or denial.
@@ -168,8 +173,10 @@ export async function ownerCostFixture() {
     change,
     tombstone: async () => commands.tombstone(await context(), { accountId: organizationId, key: key() }),
     close: async () => {
-      await pool.end();
-      await reader.end();
+      if (ownsPools) {
+        await pool.end();
+        await reader.end();
+      }
     },
   };
 }
