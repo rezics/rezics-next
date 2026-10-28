@@ -956,9 +956,13 @@ No Number conversion or new native position API is needed.
 7. Quarantine ambiguous old targets; recovery creates a fresh controlled generation and completes real population.
    Retirement conditionally fences enrollment/publication before draining confirmed writes and deleting the engine
    index plus bounded coverage/checkpoint rows. Late completion cannot recreate retired control. Names of unresolved
-   targets are never reused; automatic index creation must be disabled for those write targets and verified in
-   deployment acceptance. Physical UUID checking alone does not prevent a late name-targeted write. This protocol
-   introduces neither permanent public tombstone documents nor a silent change to external-version deletes.
+   targets are never reused; the development and check nodes use the ordered native setting
+   `action.auto_create_index=-*subjects-g*,+*` to reject implicit creation of subject generations while allowing
+   other names. This is a setup safeguard, not a substitute for durable unknown-attempt guards, monotonic names or
+   coverage and retirement proof. No production OpenSearch node startup configuration exists in this repository, so
+   every production node must receive the same setting and have it verified in deployment acceptance. Physical UUID
+   checking alone does not prevent a late name-targeted write. This protocol introduces neither permanent public
+   tombstone documents nor a silent change to external-version deletes.
 
 ### Internal projection seam and pending store correction
 

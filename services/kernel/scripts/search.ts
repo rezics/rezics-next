@@ -10,6 +10,7 @@ const imageDirectory = resolve(directory, 'db/search/opensearch');
 const container = 'rezics-search-dev';
 const volume = 'rezics-search-dev';
 const port = Number(process.env.KERNEL_SEARCH_PORT ?? '59200');
+export const subjectAutoCreateIndexSetting = 'action.auto_create_index=-*subjects-g*,+*';
 
 function command(program: string, args: string[], cwd = directory): string {
   const result = spawnSync(program, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -92,6 +93,8 @@ export function searchRunArgs(image: string): string[] {
     `${volume}:/usr/share/opensearch/data`,
     '-e',
     'discovery.type=single-node',
+    '-e',
+    subjectAutoCreateIndexSetting,
     '-e',
     'DISABLE_SECURITY_PLUGIN=true',
     '-e',

@@ -28,7 +28,7 @@ import {
 import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
-import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
+import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -704,6 +704,8 @@ async function main(): Promise<void> {
     '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
     '-e',
     'discovery.type=single-node',
+    '-e',
+    subjectAutoCreateIndexSetting,
     '-e',
     'DISABLE_SECURITY_PLUGIN=true',
     '-e',
