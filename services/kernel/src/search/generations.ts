@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
 import { discardConnection } from '../database/pool.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { assertCompleteSearch } from './complete-search.ts';
 import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
 import lockRebuild from './rebuild-lock.sql';
@@ -28,12 +29,12 @@ export class RebuildError extends Error {
 }
 
 type ReconcileRow = { partition: number; head: string | bigint; checkpoint: string | bigint };
-type AggregationResponse = {
-  aggregations?: { partitions?: { buckets?: { key: number; doc_count: number }[] } };
-};
-
 const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const numeric = (value: string | bigint): bigint => BigInt(value);
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 async function readPartitions(
   pool: Pool,
@@ -56,13 +57,40 @@ async function sourceCounts(source: SubjectSource, partitions: number[]): Promis
 }
 
 async function indexCounts(search: OpenSearch, index: string): Promise<Map<number, number>> {
-  const response = await search.request<AggregationResponse>('POST', `/${index}/_search`, {
-    size: 0,
-    aggs: { partitions: { terms: { field: 'partition', size: 4096 } } },
-  });
-  return new Map(
-    (response.body.aggregations?.partitions?.buckets ?? []).map((bucket) => [bucket.key, bucket.doc_count]),
+  const response = await search.request<unknown>(
+    'POST',
+    `/${index}/_search`,
+    {
+      size: 0,
+      aggs: { partitions: { terms: { field: 'partition', size: 4096 } } },
+    },
+    { query: { allow_partial_search_results: false } },
   );
+  assertCompleteSearch(response.body);
+
+  if (!record(response.body) || !record(response.body.aggregations)) {
+    throw new SearchUnavailableError('OpenSearch reconciliation aggregation is missing or malformed');
+  }
+  const partitions = response.body.aggregations.partitions;
+  if (!record(partitions) || !Array.isArray(partitions.buckets) || partitions.buckets.length > 4096) {
+    throw new SearchUnavailableError('OpenSearch reconciliation partitions are missing or malformed');
+  }
+
+  const counts = new Map<number, number>();
+  for (const bucket of partitions.buckets) {
+    if (!record(bucket)) {
+      throw new SearchUnavailableError('OpenSearch reconciliation bucket is malformed');
+    }
+    const { key, doc_count: count } = bucket;
+    if (typeof key !== 'number' || !Number.isInteger(key) || key < 0 || key > 4095 || counts.has(key)) {
+      throw new SearchUnavailableError('OpenSearch reconciliation partition is invalid');
+    }
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+      throw new SearchUnavailableError('OpenSearch reconciliation count is invalid');
+    }
+    counts.set(key, count);
+  }
+  return counts;
 }
 
 export async function rebuildSubjects(options: {
