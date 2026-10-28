@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import defaults from '../defaults.json';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   lstatSync,
@@ -86,6 +87,25 @@ function earliestSharedWriter(
     if (sharedFile) return { task, file: sharedFile };
   }
   return undefined;
+}
+
+function normalizedBriefText(markdown: string): string {
+  return markdown.replace(/\r\n?/g, '\n').trimEnd();
+}
+
+function briefHash(markdown: string): string {
+  return createHash('sha256').update(normalizedBriefText(markdown)).digest('hex');
+}
+
+function sameBriefText(left: string, right: string): boolean {
+  return normalizedBriefText(left) === normalizedBriefText(right);
+}
+
+export class BriefContractUnchangedError extends Error {
+  constructor() {
+    super('The contract is unchanged.');
+    this.name = 'BriefContractUnchangedError';
+  }
 }
 
 function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
@@ -449,6 +469,8 @@ export class WorkerTasks {
     try {
       const task = this.store.task(taskId);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
+      if (task.currentAttempt > 0 && reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
+        return { hold: true, first: startsFirst(task) };
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
       const hold = (reshaped !== undefined || task.state === 'held') && !this.dependenciesMet({ brief: next.brief });
       // Replacing a running worker adds none, so it never waits behind the worker it replaces.
@@ -478,6 +500,15 @@ export class WorkerTasks {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
         throw new Error('a reshaped brief must keep the same goal and manager');
+      if (task.currentAttempt > 0 && reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
+        throw new BriefContractUnchangedError();
+      const changedBrief = reshaped !== undefined && !sameBriefText(reshaped.brief.markdown, task.brief.markdown);
+      const briefChange = changedBrief
+        ? {
+            previousBriefHash: task.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+            newBriefHash: briefHash(reshaped.brief.markdown),
+          }
+        : task.pendingBriefChange;
       const nextBrief = reshaped?.brief ?? task.brief;
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length)
@@ -495,6 +526,7 @@ export class WorkerTasks {
             current.briefPath = briefPath;
             current.taskClass = nextTaskClass;
             current.state = 'held';
+            if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
           },
           { abandonPending: true },
         );
@@ -576,6 +608,7 @@ export class WorkerTasks {
         taskId,
         attempt: n,
         state: 'pending',
+        ...(briefChange ?? {}),
         profile,
         pool: pool.name,
         tableVersion: route.tableVersion,
@@ -631,6 +664,11 @@ export class WorkerTasks {
           current.brief = reshaped.brief;
           current.briefPath = briefPath;
           current.taskClass = nextTaskClass;
+          delete current.pendingBriefChange;
+        });
+      } else if (briefChange) {
+        task = this.store.updateTask({ taskId, attempt: next.attempt }, (current) => {
+          delete current.pendingBriefChange;
         });
       } else task = this.store.task(taskId);
       let setupStep = 'checking worktree leftovers';
