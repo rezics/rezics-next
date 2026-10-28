@@ -373,6 +373,7 @@ export async function searchRatingSubjects(
       undefined,
       bSize === 0,
     );
+    hits.push(...b.hits);
   } else {
     if (epoch !== null) {
       a = await searchPhase(
