@@ -288,7 +288,11 @@ function taskIntegrationTarget(
 }
 
 const CONTROL_PLANE_PATH = 'tools/goal/';
+// A train worktree lies outside the main checkout with nothing installed: the first control-plane landing on main
+// failed its typecheck with exit 127. The root tests' preloads need the root packages, tsc needs tools/goal's own.
 const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
+  ['bun', 'install', '--frozen-lockfile'],
+  ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
   ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
   ['bun', 'test', 'tools/goal/src'],
 ];
