@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
@@ -185,6 +186,64 @@ test('a finished check result remains readable by id after its worker session en
     expect(out.join('')).toContain('finished failure marker');
     expect(out.join('')).toContain(`check: log .temp/goal/checks/worker-check-`);
   });
+});
+
+function writeRunningRecord(root: string, id: string, log: string, runnerPid: number, runnerHost = 'check-host-a') {
+  const resultDirectory = join(root, '.temp/goal/checks/results');
+  mkdirSync(resultDirectory, { recursive: true });
+  writeFileSync(
+    join(resultDirectory, `${id}.json`),
+    JSON.stringify({ id, cwd: root, argv: ['bun', '-e', `require('node:fs').appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, 'rerun\\n')`], status: 'running', log, runnerPid, runnerHost }),
+  );
+}
+
+test('worker-check --wait reruns once when the runner is gone but its result still says running', async () => {
+  const root = mkdtempSync('/tmp/worker-check-dead-runner-');
+  dirs.push(root);
+  const log = '.temp/goal/checks/dead-runner.log';
+  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
+  writeFileSync(join(root, log), '');
+  const id = '00000000-0000-4000-8000-000000000001';
+  writeRunningRecord(root, id, log, 2_000_000_000);
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  try {
+    await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5 })).toBe(1));
+  } finally {
+    process.stdout.write = write;
+  }
+  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+  expect(out.join('')).toContain('infrastructure failure (runner process exited) on check-host-a');
+  expect(out.join('')).toContain('reran check once (rerun exit status 0)');
+  expect(out.join('')).toContain('check: log .temp/goal/checks/worker-check-');
+});
+
+test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
+  const root = mkdtempSync('/tmp/worker-check-stalled-runner-');
+  dirs.push(root);
+  const log = '.temp/goal/checks/stalled.log';
+  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
+  writeFileSync(join(root, log), '');
+  const stale = new Date(Date.now() - 10 * 60 * 1000 - 1_000);
+  utimesSync(join(root, log), stale, stale);
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  await new Promise<void>((resolveRunner) => runner.once('spawn', resolveRunner));
+  const id = '00000000-0000-4000-8000-000000000002';
+  writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  try {
+    await withQuietAdmission(async () => expect(await waitWorkerCheck(id, root, 5_000)).toBe(1));
+  } finally {
+    process.stdout.write = write;
+    runner.kill('SIGKILL');
+  }
+  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+  expect(out.join('')).toContain('infrastructure failure (log did not grow for 10 minutes) on stall-host-b');
+  expect(out.join('')).toContain('reran check once (rerun exit status 0)');
+  expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
 });
 
 function workerFixture(): { root: string; memory: string; remoteEvents: string; localMarker: string } {

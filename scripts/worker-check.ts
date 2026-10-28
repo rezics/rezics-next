@@ -10,12 +10,14 @@ import {
   openSync,
   readFileSync,
   readSync,
+  statSync,
   renameSync,
   rmSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { checkWaitRecorder } from './remote-check.ts';
 import { acquireStackSlot } from './stack-lease.ts';
@@ -41,8 +43,14 @@ type CheckRecord = {
   argv: string[];
   status: 'running' | 'finished';
   log: string;
+  runnerPid?: number;
+  runnerHost?: string;
   exitCode?: number;
+  infrastructureFailure?: string;
 };
+
+const LOG_STALL_MS = 10 * 60 * 1000;
+const WAIT_POLL_MS = 25;
 
 function recordPath(cwd: string, id: string): string {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`Invalid check id: ${id}`);
@@ -340,6 +348,9 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
     env: process.env,
     stdio: 'ignore',
   });
+  record.runnerPid = child.pid;
+  record.runnerHost = hostname();
+  writeRecord(record);
   child.once('error', (error) => {
     record.status = 'finished';
     record.exitCode = 1;
@@ -355,14 +366,48 @@ export async function waitWorkerCheck(
   id: string,
   cwd = process.cwd(),
   timeoutMs = Number.POSITIVE_INFINITY,
+  monitor: { stallMs?: number; pollMs?: number } = {},
 ): Promise<number> {
   const root = resolve(cwd);
   const started = Date.now();
+  const stallMs = monitor.stallMs ?? LOG_STALL_MS;
+  const pollMs = monitor.pollMs ?? WAIT_POLL_MS;
   let record = readRecord(root, id);
+  let observedSize = -1;
+  let lastGrowth = Date.now();
   while (record.status === 'running') {
     if (Date.now() - started >= timeoutMs) throw new Error(`Wait timed out for check ${id}`);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    const file = join(root, record.log);
+    let size = 0;
+    let modifiedAt = Date.now();
+    try {
+      const stats = statSync(file);
+      size = stats.size;
+      modifiedAt = stats.mtimeMs;
+    } catch {
+      // A runner can create its log just after publishing its result record.
+    }
+    if (observedSize === -1) {
+      observedSize = size;
+      lastGrowth = modifiedAt;
+    } else if (size > observedSize || modifiedAt > lastGrowth) {
+      observedSize = size;
+      lastGrowth = modifiedAt;
+    }
+    if (record.runnerPid !== undefined && !isProcessAlive(record.runnerPid)) {
+      return await rerunInterruptedCheck(record, root, id, 'runner process exited');
+    }
+    if (Date.now() - lastGrowth >= stallMs) {
+      if (record.runnerPid !== undefined) stopRunner(record.runnerPid);
+      return await rerunInterruptedCheck(record, root, id, `log did not grow for ${Math.round(stallMs / 60_000)} minutes`);
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
     record = readRecord(root, id);
+  }
+  if (record.infrastructureFailure) {
+    process.stdout.write(`${record.infrastructureFailure}\n`);
+    process.stdout.write(`check: log ${record.log}\n`);
+    return 1;
   }
   const code = record.exitCode ?? 1;
   const absoluteLog = join(root, record.log);
@@ -373,9 +418,47 @@ export async function waitWorkerCheck(
   return code;
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function stopRunner(pid: number): void {
+  try {
+    // startWorkerCheck creates a detached process group for this runner and its check process.
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      // The runner may have exited between the liveness check and signal.
+    }
+  }
+}
+
+async function rerunInterruptedCheck(record: CheckRecord, root: string, id: string, reason: string): Promise<number> {
+  const host = record.runnerHost ?? hostname();
+  const rerunLog = logPath(root);
+  const rerunCode = await runWorkerCheck(record.argv, root, false, rerunLog);
+  record.status = 'finished';
+  record.exitCode = 1;
+  record.log = relative(root, rerunLog);
+  record.infrastructureFailure =
+    `worker-check: infrastructure failure (${reason}) on ${host}; reran check once (rerun exit status ${rerunCode}); log ${record.log}`;
+  writeRecord(record);
+  return waitWorkerCheck(id, root, 0);
+}
+
 async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number> {
   const root = resolve(cwd);
   const record = readRecord(root, id);
+  record.runnerPid = process.pid;
+  record.runnerHost = hostname();
+  writeRecord(record);
   try {
     const exitCode = await runWorkerCheck(record.argv, root, false, join(root, record.log));
     record.status = 'finished';
