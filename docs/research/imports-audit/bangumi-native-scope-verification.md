@@ -36,12 +36,12 @@ No test, helper, runtime, product, README or manifest was edited.
 
 Relevant tested implementation blobs:
 
-| File | Git blob |
-| --- | --- |
-| `packages/conversion/src/bangumi.ts` | `c121c6bafea8238d562446fbcc17e44ba523c424` |
-| `services/importer/src/importer.ts` | `d9b03da0bded03eb407701970a60c2a9a5750e35` |
-| `services/importer/src/run-store.ts` | `b935858a2e7ae9e4a68adeaafe4e8b6d92404507` |
-| `services/importer/src/cli.ts` | `d5d7a530cda37524a644342d1e52d338017c8258` |
+| File                                          | Git blob                                   |
+| --------------------------------------------- | ------------------------------------------ |
+| `packages/conversion/src/bangumi.ts`          | `c121c6bafea8238d562446fbcc17e44ba523c424` |
+| `services/importer/src/importer.ts`           | `d9b03da0bded03eb407701970a60c2a9a5750e35` |
+| `services/importer/src/run-store.ts`          | `b935858a2e7ae9e4a68adeaafe4e8b6d92404507` |
+| `services/importer/src/cli.ts`                | `d5d7a530cda37524a644342d1e52d338017c8258` |
 | `services/kernel/test/imports/api-runtime.ts` | `6cd4f6bee03c5eccbd8d97c829e111054b7f0a75` |
 
 ## Execution and environment
@@ -88,13 +88,13 @@ not disk persistence or crash/power-loss durability evidence.
 
 ## Exact native outcomes
 
-| Frozen scenario | Observed result |
-| --- | --- |
-| mixed complete JSON-lines import creates only three native subjects and no skipped output | Pass: only 1/2/4 have bound, publicly readable subjects; three media imports target those subjects; no 3/6 commands or private sentinel in captured bodies; real persisted receipts and five present acknowledged members. |
-| supported native public types and proposals preserve real identity and absent revision | Pass: Book/TVSeries/VideoGame, original and Chinese labels, bounded native title candidates, source/external identity, SHA-256 digest, current converter revision and `unversioned` record revision. |
+| Frozen scenario                                                                               | Observed result                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| mixed complete JSON-lines import creates only three native subjects and no skipped output     | Pass: only 1/2/4 have bound, publicly readable subjects; three media imports target those subjects; no 3/6 commands or private sentinel in captured bodies; real persisted receipts and five present acknowledged members.     |
+| supported native public types and proposals preserve real identity and absent revision        | Pass: Book/TVSeries/VideoGame, original and Chinese labels, bounded native title candidates, source/external identity, SHA-256 digest, current converter revision and `unversioned` record revision.                           |
 | reopen unchanged and change book preserve identity and all five members without disappearance | Pass: reopened unchanged input causes no POST or subject change; changing only the book yields new title proposals/digest, stable subject IDs, unchanged other subjects, no 3/6 bindings, five members and zero disappearance. |
-| unsupported and malformed types reject complete acquisition before native effects | Pass: 0, 5, 7, string `1`, null, 1.5 and missing type all reject after a preceding valid record with zero exchanges/POSTs, no new binding, and unchanged baseline/public subjects. |
-| existing native importer seam returns genuine skipped count on unchanged complete membership | Pass: direct `runRecords` returns committed, `counts={new:0,changed:0,unchanged:5,vanished:0}`, `vanished=[]`, `skipped=2`, no writes and complete five-member baseline/acknowledgement. |
+| unsupported and malformed types reject complete acquisition before native effects             | Pass: 0, 5, 7, string `1`, null, 1.5 and missing type all reject after a preceding valid record with zero exchanges/POSTs, no new binding, and unchanged baseline/public subjects.                                             |
+| existing native importer seam returns genuine skipped count on unchanged complete membership  | Pass: direct `runRecords` returns committed, `counts={new:0,changed:0,unchanged:5,vanished:0}`, `vanished=[]`, `skipped=2`, no writes and complete five-member baseline/acknowledgement.                                       |
 
 There is no native first failure. The log contains a timing-recorder warning
 about missing remote Git metadata and a `pg` client-query deprecation warning;
