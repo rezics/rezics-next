@@ -439,8 +439,11 @@ async function open(path: string, cookie: string | undefined, viewport: Viewport
   const context = await browser.newContext({
     viewport,
     reducedMotion: 'reduce',
-    ...(cookie ? { extraHTTPHeaders: { cookie: `${session}=${cookie}` } } : {}),
   });
+  if (cookie)
+    await context.addCookies([
+      { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+    ]);
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });

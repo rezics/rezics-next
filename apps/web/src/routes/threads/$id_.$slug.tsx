@@ -3,7 +3,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
 import type { ReactionKind } from '@rezics/ui/reactions';
-import { createFileRoute, redirect, useLoaderData, useLocation } from '@tanstack/react-router';
+import { createFileRoute, redirect, useLocation } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';

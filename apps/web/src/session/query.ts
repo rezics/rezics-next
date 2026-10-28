@@ -1,13 +1,13 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { createServerFn } from '@tanstack/react-start';
+import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
 import { useSyncExternalStore } from 'react';
 import { personalRead } from '../kernel/query';
 import type { SessionEnv } from './client';
 import { readSessionState, type SessionState } from './state';
 
 const readSession = createServerFn({ method: 'GET' }).handler(async () => {
+  const { env } = await import('cloudflare:workers');
   setResponseHeader('Cache-Control', 'private, no-store');
   const { state, csrfToken } = await readSessionState(getRequest(), env as Partial<SessionEnv>);
   return { state, csrfToken };
@@ -37,7 +37,9 @@ export const sessionQuery = queryOptions({
 });
 
 const subscribe = () => () => {};
-export function useSession(): { state: 'unknown' | SessionState; csrfToken: string | null } {
+type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null };
+
+function useBrowserSession(): ClientSession {
   const hydrated = useSyncExternalStore(
     subscribe,
     () => true,
@@ -46,3 +48,7 @@ export function useSession(): { state: 'unknown' | SessionState; csrfToken: stri
   const { data } = useQuery({ ...sessionQuery, enabled: personalRead.enabled && hydrated });
   return hydrated && data ? data : { state: 'unknown', csrfToken: null };
 }
+
+export const useSession = createIsomorphicFn()
+  .server((): ClientSession => ({ state: 'unknown', csrfToken: null }))
+  .client(useBrowserSession);

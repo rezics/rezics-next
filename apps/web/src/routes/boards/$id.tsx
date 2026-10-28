@@ -8,7 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { boardPageHead } from '../../threads/thread-head';
 import { rememberThreadSlug, threadHref, threadTitle } from '../../threads/thread-href';
-import { boardPageQuery, credentialMode } from '../../threads/thread-queries';
+import { boardPageQuery } from '../../threads/thread-queries';
 import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
 import { Byline, fullDateTime, timeText } from '../../threads/byline';
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/boards/$id')({
   },
   loader: async ({ params, deps, context }) => {
     const page = await context.queryClient.ensureQueryData(
-      boardPageQuery(params.id, deps.cursor, deps.sort, credentialMode()),
+      boardPageQuery(params.id, deps.cursor, deps.sort, 'anonymous'),
     );
     for (const thread of page.threads.threads) rememberThreadSlug(thread.id, threadTitle(thread));
     return { ...page, indexable: deps.cursor === undefined && page.threads.threads.length > 0 };

@@ -287,8 +287,11 @@ async function pageOf(origin: string, value?: string) {
     viewport: { width: 1280, height: 860 },
     reducedMotion: 'reduce',
     javaScriptEnabled: false,
-    extraHTTPHeaders: value ? { cookie: `${session}=${value}` } : {},
   });
+  if (value)
+    await context.addCookies([
+      { name: session, value, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+    ]);
   try {
     const page = await context.newPage();
     const response = await page.goto(`${origin}/en`, { waitUntil: 'networkidle' });

@@ -285,7 +285,14 @@ test('the root has no session, cookie or request header loader and consumers use
   expect(root).not.toContain('readSession');
   expect(root).not.toContain('getRequestHeader');
   expect(root).toContain('suppressHydrationWarning');
-  for (const route of ['boards/$id', 'boards/$id_.new', 'collections/new', 'settings', 'subjects/$id', 'threads/$id']) {
+  for (const route of [
+    'boards/$id',
+    'boards/$id_.new',
+    'collections/new',
+    'settings',
+    'subjects/$id',
+    'threads/$id_.$slug',
+  ]) {
     const source = await Bun.file(join(app, `src/routes/${route}.tsx`)).text();
     expect(source).not.toMatch(/useLoaderData\(\{ from: '__root__' \}\)/);
     expect(source).toContain('useSession()');
