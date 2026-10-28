@@ -50,6 +50,22 @@ function lostObservation(): never {
   throw Object.assign(new Error('Label assignment observation changed; retry the native command'), { code: '40001' });
 }
 
+/** The existing subject guard; the optional label only preserves admission's canonical UUID result. */
+export async function lockLabelAssignmentSubject(
+  client: Pick<PoolClient, 'query'>,
+  input: { route: number; accountId: string; subjectId: string; labelId?: string },
+) {
+  return guard.run(
+    { query: client.query.bind(client) },
+    {
+      route: input.route,
+      account_id: input.accountId,
+      subject_id: input.subjectId,
+      label_id: input.labelId ?? input.subjectId,
+    },
+  );
+}
+
 /** Private admission storage, called inside one admitted SERIALIZABLE native command transaction.
  * The caller owns transaction rollback/retry. A result supplies neither Access nor a receipt capability.
  */
@@ -65,7 +81,7 @@ export async function setLabelAssignment(
     subject_id: input.subjectId,
     label_id: input.labelId,
   };
-  const guarded = await guard.run(db, tuple);
+  const guarded = await lockLabelAssignmentSubject(client, input);
   const labelId = guarded.labelId;
   if (!labelId) throw new Error('Label assignment guard returned no canonical label identity');
   const rows = await reservations.run(db, tuple);
