@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
-import { subjectAlias } from './indices.ts';
+import { subjectAlias, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import { searchRatingSubjects } from './rating-query.ts';
@@ -109,7 +109,8 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
   validateSize(plan.size, 200);
   if (plan.sort === 'rating')
     return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
-  const alias = subjectAlias(prefix);
+  const target =
+    plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
     plan.sort === 'relevance'
@@ -121,7 +122,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
           : [{ id: 'asc' }];
 
   return search
-    .request<SearchResponse>('POST', `/${alias}/_search/template`, {
+    .request<SearchResponse>('POST', `/${target}/_search/template`, {
       id: `${prefix}${SEARCH_TEMPLATE}`,
       params: {
         query: plan.query,
@@ -141,6 +142,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
       },
     })
     .then(({ body }) => ({
+      ...(plan.generation === undefined ? {} : { generation: plan.generation }),
       hits: body.hits.hits.map((hit) => ({
         ...subjectHit(hit),
         matched: hit.matched_queries ?? [],
