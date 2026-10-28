@@ -105,7 +105,18 @@ async function record(driver: SemanticOutcomeDriver, type: string) {
     'editor',
     'POST',
     `${path}/candidates`,
-    { statement: { property: { id: 'schema:name' }, value: { type: 'value', content }, rank: 'normal' } },
+    {
+      statement: {
+        property: { id: 'schema:name' },
+        value: { type: 'value', content },
+        rank: 'normal',
+        references: [
+          {
+            parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: `http://kernel.test${path}` } }],
+          },
+        ],
+      },
+    },
     key(),
   );
   status(proposed, 201, `native name proposal ${type}`);
