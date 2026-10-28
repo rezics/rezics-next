@@ -51,11 +51,11 @@ in this worktree's ignored `.temp/check-capacity/`: `measure.py`, `analyze.py`,
 
 The denominator matters: many document tasks use no remote check at all.
 
-| Landing cohort | Landings | Tasks with observed remote starts | Remote starts | Runs/landing | Runs/remote-using task | Observed slot-minutes/landing |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| October 27, full UTC day | 391 | 107 | 654 | 1.67 | 6.11 | 4.91 |
-| October 28, 00:00–05:00 | 66 | 19 | 68 | 1.03 | 3.58 | 3.61 |
-| October 28, 03:00–05:00 | 8 | 2 | 13 | 1.63 | 6.50 | 7.74 |
+| Landing cohort           | Landings | Tasks with observed remote starts | Remote starts | Runs/landing | Runs/remote-using task | Observed slot-minutes/landing |
+| ------------------------ | -------: | --------------------------------: | ------------: | -----------: | ---------------------: | ----------------------------: |
+| October 27, full UTC day |      391 |                               107 |           654 |         1.67 |                   6.11 |                          4.91 |
+| October 28, 00:00–05:00  |       66 |                                19 |            68 |         1.03 |                   3.58 |                          3.61 |
+| October 28, 03:00–05:00  |        8 |                                 2 |            13 |         1.63 |                   6.50 |                          7.74 |
 
 The first cohort has 549 printed command durations: mean 177.11 seconds, median
 69.97, p95 380.97, maximum 5,179.92. Its 604 printed waits have median 61.55
@@ -67,10 +67,10 @@ Among attempts **started since October 28 00:00**, including still unlanded work
 the observed host distributions are:
 
 | Host | Calls with starts | Mean printed command seconds | Median wait seconds | p95 wait seconds |
-| --- | ---: | ---: | ---: | ---: |
-| a | 90 | 108.37 (87 durations) | 2,205.02 | 11,884.81 |
-| b | 19 | 394.24 (19 durations) | 2,207.70 | 9,112.25 |
-| c | 20 | 99.64 (20 durations) | 93.91 | 1,228.89 |
+| ---- | ----------------: | ---------------------------: | ------------------: | ---------------: |
+| a    |                90 |        108.37 (87 durations) |            2,205.02 |        11,884.81 |
+| b    |                19 |        394.24 (19 durations) |            2,207.70 |         9,112.25 |
+| c    |                20 |         99.64 (20 durations) |               93.91 |         1,228.89 |
 
 These are different workloads, not a controlled host-speed comparison. They do
 show that c is already useful express/worker capacity, and that stopping a silent
@@ -106,10 +106,10 @@ observations. Credit this existing change; do not predict the whole historical
 Measured broad-call replacement sensitivity, using each cohort's own mean
 targeted cost, is:
 
-| Cohort | Broad calls and slot-minutes | Replacement targeted cost/call | Replacement total | Reduction in all observed worker service |
-| --- | --- | ---: | ---: | ---: |
-| October 27 | 28; 365.40 | 2.378 slot-minutes | 66.58 | 15.57% |
-| October 28, 00:00–05:00 | 6; 130.30 | 2.268 slot-minutes | 13.61 | 48.93% |
+| Cohort                  | Broad calls and slot-minutes | Replacement targeted cost/call | Replacement total | Reduction in all observed worker service |
+| ----------------------- | ---------------------------- | -----------------------------: | ----------------: | ---------------------------------------: |
+| October 27              | 28; 365.40                   |             2.378 slot-minutes |             66.58 |                                   15.57% |
+| October 28, 00:00–05:00 | 6; 130.30                    |             2.268 slot-minutes |             13.61 |                                   48.93% |
 
 This is a counterfactual sensitivity range, not measured savings after rollout.
 Use it only for discretionary broad calls that can be replaced by sufficient
@@ -122,11 +122,11 @@ The task brief described a/b/c as 7/8/4 slots. At measurement,
 `.temp/goal/remote-check-hosts.json` instead contained **7/7/4**. Read-only SSH
 probes at 05:49:42–05:49:47 verified the actual cgroup limits, not just the JSON.
 
-| Host | Processors | Physical RAM GiB | Slice CPU quota | Slice RAM GiB | Configured slots | Resource-backed capacity | Ordinary / express slots |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| a | 12 | 31.35 | 1,100% = 11 cores | 24 | 7 | 5 | 4 / 1 |
-| b | 16 | 62.80 | 1,400% = 14 cores | 48 | 7 | 7 | 6 / 1 |
-| c | 64 | 62.64 | 2,400% = 24 cores | 24 | 4 | 4 | 3 / 1 |
+| Host | Processors | Physical RAM GiB |   Slice CPU quota | Slice RAM GiB | Configured slots | Resource-backed capacity | Ordinary / express slots |
+| ---- | ---------: | ---------------: | ----------------: | ------------: | ---------------: | -----------------------: | ------------------------ |
+| a    |         12 |            31.35 | 1,100% = 11 cores |            24 |                7 |                        5 | 4 / 1                    |
+| b    |         16 |            62.80 | 1,400% = 14 cores |            48 |                7 |                        7 | 6 / 1                    |
+| c    |         64 |            62.64 | 2,400% = 24 cores |            24 |                4 |                        4 | 3 / 1                    |
 
 In `remote-check.ts`, `hostCapacity` takes
 `min(configured slots, floor(slice RAM / 2.5 GiB), floor(slice cores / 2))`.
@@ -162,10 +162,10 @@ that web average to six-lane kernel checks or claim a measured kernel CPU speedu
 Two additional read-only cgroup samples, 05:52:31–05:53:22, measured these deltas:
 
 | Host | Interval seconds | Whole check-slice average cores | Share of periods throttled |
-| --- | ---: | ---: | ---: |
-| a | 44.42 | 9.33 / 11 | 14.4% |
-| b | 44.57 | 8.78 / 14 | 0% |
-| c | 46.83 | 5.15 / 24 | 5.2% |
+| ---- | ---------------: | ------------------------------: | -------------------------: |
+| a    |            44.42 |                       9.33 / 11 |                      14.4% |
+| b    |            44.57 |                       8.78 / 14 |                         0% |
+| c    |            46.83 |                       5.15 / 24 |                       5.2% |
 
 The surviving old gate scope on b used 4.45 cores during its interval; an old
 full-kernel scope on a used 2.79, another single-file kernel scope 0.74. **Old
@@ -277,14 +277,14 @@ entries: 645 pass, 134 fail. It is a merged historical table, not a passing full
 run or the current suite inventory. Total file wall time is 19,312.15 seconds;
 median 5.95, p95 85.68. The four largest entries consume **27.16%** of this sum.
 
-| File under services/kernel/ | Wall seconds | Recorded create seconds | Result |
-| --- | ---: | ---: | --- |
-| test/access/native-account-workflow-outcome.test.ts | 3,092.34 | 95.79 | fail |
-| test/access/credential-effect-outcome.test.ts | 826.61 | 95.01 | pass |
-| test/access/account-authorization-outcome.test.ts | 715.10 | 179.16 | pass |
-| test/imports/growth-outcomes.test.ts | 611.35 | 438.36 | pass |
-| test/imports/api-outcomes.test.ts | 554.19 | 174.25 | fail |
-| test/library/outcomes.test.ts | 451.49 | 133.78 | pass |
+| File under services/kernel/                         | Wall seconds | Recorded create seconds | Result |
+| --------------------------------------------------- | -----------: | ----------------------: | ------ |
+| test/access/native-account-workflow-outcome.test.ts |     3,092.34 |                   95.79 | fail   |
+| test/access/credential-effect-outcome.test.ts       |       826.61 |                   95.01 | pass   |
+| test/access/account-authorization-outcome.test.ts   |       715.10 |                  179.16 | pass   |
+| test/imports/growth-outcomes.test.ts                |       611.35 |                  438.36 | pass   |
+| test/imports/api-outcomes.test.ts                   |       554.19 |                  174.25 | fail   |
+| test/library/outcomes.test.ts                       |       451.49 |                  133.78 | pass   |
 
 The native access files wrap specification suites; the imports growth wrapper
 spawns another Bun suite with a 300-second test timeout and a 1,800-second outer
@@ -328,16 +328,16 @@ progress. Gate times are lower bounds, missing commands remain missing, and
 memory pressure can erase the projected gain. This is a planning sensitivity,
 not a fitted queueing distribution or a benchmark result.
 
-| Option, independently unless marked combined | S | Average gate slots | Worker-service reduction r | Scenario landings/hour |
-| --- | ---: | ---: | --- | ---: |
-| Observed plateau calibration | 13 | 4.109 | 0 | 4.0 |
-| c=6, after pressure clears | 15 | 4.109 | 0 | 4.9 |
-| c=8, after pressure clears | 17 | 4.109 | 0 | 5.8 |
-| Five-slot b gate every 90 minutes only | 13 | 2.282 | 0 | 4.8 |
-| Replace discretionary broad calls only | 13 | 4.109 | 15.57–48.93% | 4.7–7.8 |
-| c=8 plus gate budget | 17 | 2.282 | 0 | 6.6 |
-| Combined, including broad-call replacement | 17 | 2.282 | 15.57–48.93% | **7.8–13.0** |
-| c=9 plus all changes, not recommended | 18 | 2.282 | 15.57–48.93% | 8.4–13.8 |
+| Option, independently unless marked combined |   S | Average gate slots | Worker-service reduction r | Scenario landings/hour |
+| -------------------------------------------- | --: | -----------------: | -------------------------- | ---------------------: |
+| Observed plateau calibration                 |  13 |              4.109 | 0                          |                    4.0 |
+| c=6, after pressure clears                   |  15 |              4.109 | 0                          |                    4.9 |
+| c=8, after pressure clears                   |  17 |              4.109 | 0                          |                    5.8 |
+| Five-slot b gate every 90 minutes only       |  13 |              2.282 | 0                          |                    4.8 |
+| Replace discretionary broad calls only       |  13 |              4.109 | 15.57–48.93%               |                4.7–7.8 |
+| c=8 plus gate budget                         |  17 |              2.282 | 0                          |                    6.6 |
+| Combined, including broad-call replacement   |  17 |              2.282 | 15.57–48.93%               |           **7.8–13.0** |
+| c=9 plus all changes, not recommended        |  18 |              2.282 | 15.57–48.93%               |               8.4–13.8 |
 
 Two-lane kernel concurrency and outlier repair receive **no extra speed multiplier**
 in this table. If lane changes actually triple all worker service, the combined
