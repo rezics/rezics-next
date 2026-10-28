@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { grantAccountRole } from '../access/account-role-grant.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -245,7 +246,6 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
             basis_points: order.royaltyBasisPoints,
             period,
             at,
-            transaction_id: command.transactionId,
             lines: lines.map((line) => ({
               id: line.balanceTransactionId,
               kind: line.kind,
@@ -261,6 +261,10 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           });
           // Roll back a no-op, including its receipt/outbox position. Old IDs cannot create an empty later statement.
           if (!rows.length) throw new Unchanged();
+          await grantAccountRole(tx, {
+            account: { route, id: order.creatorAccountId },
+            role: 'commerce.payout.owner',
+          });
           return {
             value: rows.map(statement),
             events: rows.map((row) => ({

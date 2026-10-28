@@ -64,7 +64,7 @@ test('settlement and royalty read only named keys with equal statements and rows
       connection.query = ((sql: string | QueryConfig, ...args: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text;
         function record(result: { rowCount: number | null }) {
-          if (/commerce\./.test(text))
+          if (/commerce\.|INSERT INTO access\.resource_role_grant/.test(text))
             captured?.push({
               sql: text,
               rows: result.rowCount ?? 0,
@@ -124,6 +124,9 @@ test('settlement and royalty read only named keys with equal statements and rows
         if (recording) {
           expect(JSON.stringify(recording.values)).toContain(next.id);
           expect(JSON.stringify(recording.values)).not.toContain('txn_seed');
+          // Order, named transactions, statement upsert, and the in-transaction Access port.
+          expect(queries).toHaveLength(4);
+          expect(queries.filter((q) => /INSERT INTO access\.resource_role_grant/.test(q.sql))).toHaveLength(1);
         }
       }
     } finally {

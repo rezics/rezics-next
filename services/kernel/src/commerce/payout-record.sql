@@ -35,11 +35,6 @@ WITH input AS NOT MATERIALIZED (
     weighted_net_minor = s.weighted_net_minor + EXCLUDED.weighted_net_minor,
     revision = s.revision + 1
   RETURNING s.*
-), grants AS (
-  -- Accounting reads are granted on the creator account anchor, with the same hard owner filter as the pages.
-  INSERT INTO access.resource_role_grant(route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
-  SELECT input.route, owner.creator_account_id, 'identity', owner.creator_account_id, '', 'commerce.payout.owner', '(,)'::tstzrange, :transaction_id::uuid
-  FROM input, (SELECT DISTINCT creator_account_id FROM statements) AS owner ON CONFLICT DO NOTHING
 )
 SELECT statement_id AS id, creator_account_id AS "creatorAccountId", period, currency,
        gross_minor::text AS "grossMinor", tax_minor::text AS "taxMinor", fee_minor::text AS "feeMinor",

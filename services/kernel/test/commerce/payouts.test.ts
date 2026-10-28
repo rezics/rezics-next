@@ -289,6 +289,57 @@ async function detail(id: string) {
   return (await response.json()).statement;
 }
 
+test('royalty recording grants creator route access atomically and repeated recordings add no owner grant', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  const refund = transaction('refund', -100);
+  await settle(o, [charge, refund]);
+  const ownerGrants = async () =>
+    (
+      await pool.query(
+        `SELECT subject_kind, subject_id, subject_role, grant_role, valid::text, transaction_id
+         FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id=$2 AND grant_role='commerce.payout.owner'`,
+        [routeOf(creator), creator],
+      )
+    ).rows;
+  expect(await ownerGrants()).toEqual([]);
+  const commandKey = key();
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
+  const [statement] = await statements();
+  expect((await detail(statement!.id)).id).toBe(statement!.id);
+  const response = await request(`/${statement!.id}/lines`);
+  expect(response.status).toBe(200);
+  expect((await response.json()).lines).toMatchObject([{ balanceTransactionId: charge.id }]);
+  expect(
+    (
+      await pool.query(
+        `SELECT g.xmin=s.xmin AND g.xmin=l.xmin AS same_transaction,
+                lower(g.valid)=l.recorded_at AS starts_at_recording, upper_inf(g.valid) AS open
+         FROM access.resource_role_grant g
+         JOIN commerce.payout_statement s ON s.route=g.route AND s.creator_account_id=g.resource_id
+         JOIN commerce.royalty_line l ON l.route=s.route AND l.statement_id=s.statement_id
+         WHERE g.route=$1 AND g.resource_id=$2 AND g.grant_role='commerce.payout.owner'`,
+        [routeOf(creator), creator],
+      )
+    ).rows,
+  ).toEqual([{ same_transaction: true, starts_at_recording: true, open: true }]);
+  for (const path of ['', `/${statement!.id}`, `/${statement!.id}/lines`])
+    expect((await request(path, otherCreator)).status).toBe(404);
+  const before = await ownerGrants();
+  expect(before).toHaveLength(1);
+  expect(before[0]).toMatchObject({
+    subject_kind: 'identity',
+    subject_id: creator,
+    subject_role: '',
+    grant_role: 'commerce.payout.owner',
+  });
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
+  await payouts.recordTransactions(o.id, [charge.id], key());
+  await payouts.recordTransactions(o.id, [refund.id], key());
+  expect(await ownerGrants()).toEqual(before);
+});
+
 test('legacy worked example runs through fulfilment, real royalty worker, exact creator statement and closed events', async () => {
   // legacy-final:docs/legal/creator-distribution-agreement-outline.md §4:
   // $12 received, $2 tax, $0.50 actual processing fee, $1 refund => $8.50 net, $7.65 creator.
