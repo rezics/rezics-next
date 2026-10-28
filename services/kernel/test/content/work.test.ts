@@ -27,7 +27,7 @@ import { R2Storage } from '../../src/content/r2-storage.ts';
 import { collectPartition } from '../../src/content/collection-job.ts';
 import { eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { decideDownload } from '../../src/content/media.ts';
-import { runCommand } from '../../src/command/command.ts';
+import { runCommand, type CommandOutcome } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
@@ -240,34 +240,55 @@ if (process.argv.includes('--content-worker')) {
     pool: pg.Pool,
     store: Store,
     bytes: Uint8Array,
+    targetRoute?: number,
+    reservation?: { mediaId: string; containerId: string; uploaderId: string },
+    options?: { events?: true },
+  ): Promise<UploadedFixture>;
+  async function uploaded(
+    pool: pg.Pool,
+    store: Store,
+    bytes: Uint8Array,
+    targetRoute: number,
+    reservation: { mediaId: string; containerId: string; uploaderId: string } | undefined,
+    options: { events: false },
+  ): Promise<UploadedFixtureWithoutEvents>;
+  async function uploaded(
+    pool: pg.Pool,
+    store: Store,
+    bytes: Uint8Array,
     targetRoute = route,
     reservation?: { mediaId: string; containerId: string; uploaderId: string },
-  ) {
+    options: { events?: boolean } = {},
+  ): Promise<UploadedFixture | UploadedFixtureWithoutEvents> {
     const mediaId = reservation?.mediaId ?? newId(targetRoute);
     const containerId = reservation?.containerId ?? newId(targetRoute);
     const key = `m/${mediaId}/original`;
     const uploaderId = reservation?.uploaderId ?? newId(targetRoute + 1);
     store.objects.set(key, bytes);
+    const insert = `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
+        VALUES ($1,$2,$3,$4,$5,'post-image','image/png',$6,$6,$7,'uploaded',$8,$9)
+ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EXCLUDED.actual_byte_count,sha256=EXCLUDED.sha256,transaction_id=EXCLUDED.transaction_id`;
+    const values = (transactionId: string) => [
+      targetRoute,
+      mediaId,
+      containerId,
+      uploaderId,
+      randomUUID(),
+      bytes.byteLength,
+      sha(bytes),
+      key,
+      transactionId,
+    ];
+    if (options.events === false) {
+      // runCommand requires at least one event, so eventless collection fixtures are inserted directly.
+      await pool.query(insert, values(randomUUID()));
+      return { mediaId, key, targetRoute };
+    }
     const command = await runCommand(
       pool,
       { partition: partitionOf(targetRoute), deadline: Date.now() + 10_000 },
       async (tx, context) => {
-        await tx.query(
-          `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
-        VALUES ($1,$2,$3,$4,$5,'post-image','image/png',$6,$6,$7,'uploaded',$8,$9)
-ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EXCLUDED.actual_byte_count,sha256=EXCLUDED.sha256,transaction_id=EXCLUDED.transaction_id`,
-          [
-            targetRoute,
-            mediaId,
-            containerId,
-            uploaderId,
-            randomUUID(),
-            bytes.byteLength,
-            sha(bytes),
-            key,
-            context.transactionId,
-          ],
-        );
+        await tx.query(insert, values(context.transactionId));
         return {
           value: mediaId,
           events: [
@@ -283,9 +304,17 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
     return { mediaId, key, command, targetRoute };
   }
 
+  type UploadedFixture = {
+    mediaId: string;
+    key: string;
+    command: CommandOutcome<string>;
+    targetRoute: number;
+  };
+  type UploadedFixtureWithoutEvents = Omit<UploadedFixture, 'command'>;
+
   async function enqueue(
     client: Awaited<ReturnType<typeof createWorkClient>>,
-    fixture: Awaited<ReturnType<typeof uploaded>>,
+    fixture: UploadedFixture,
     kind: 'image' | 'purge',
   ) {
     const source = contentWorkSource(
@@ -618,10 +647,10 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       const now = new Date().toISOString();
       running = await worker(store, databaseUrl, { CONTENT_TEST_NOW: now });
       const bytes = new Uint8Array([1]);
-      const old = await uploaded(pool, store, bytes);
-      const young = await uploaded(pool, store, bytes);
-      const claimed = await uploaded(pool, store, bytes);
-      const other = await uploaded(pool, store, bytes, route + 16);
+      const old = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const young = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const claimed = await uploaded(pool, store, bytes, route, undefined, { events: false });
+      const other = await uploaded(pool, store, bytes, route + 16, undefined, { events: false });
       await pool.query(
         `UPDATE content.media SET created_at=$2::timestamptz-interval '24 hours' WHERE media_id=ANY($1)`,
         [[old.mediaId, claimed.mediaId, other.mediaId], now],
@@ -635,9 +664,12 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         [route, young.mediaId, now],
       );
       await result(await client.triggerSchedule(CONTENT_COLLECTION_SCHEDULE));
+      expect(store.deletes).not.toHaveLength(0);
+      expect(store.deletes.filter((key) => !key.startsWith(`m/${old.mediaId}/`))).toEqual([]);
+      const deletesAfterFirstSweep = store.deletes.length;
       expect(store.objects.has(old.key)).toBe(false);
       for (const fixture of [young, claimed, other]) expect(store.objects.has(fixture.key)).toBe(true);
-      const pending = await uploaded(pool, store, bytes);
+      const pending = await uploaded(pool, store, bytes, route, undefined, { events: false });
       await pool.query(
         "UPDATE content.media SET created_at=clock_timestamp()-interval '25 hours' WHERE route=$1 AND media_id=$2",
         [route, pending.mediaId],
@@ -656,14 +688,22 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       await running.kill();
       running = undefined;
       store.fail(false);
-      running = await worker(store);
+      running = await worker(store, databaseUrl, { CONTENT_TEST_NOW: now });
       await result(schedule);
+      expect(
+        store.deletes.slice(deletesAfterFirstSweep).filter((key) => !key.startsWith(`m/${pending.mediaId}/`)),
+      ).toEqual([]);
       expect(store.objects.has(pending.key)).toBe(false);
       expect(await client.listSchedules({ scheduleNamePrefix: CONTENT_COLLECTION_SCHEDULE })).toHaveLength(1);
       expect(await client.getSchedule(CONTENT_COLLECTION_SCHEDULE)).toMatchObject({
         schedule: '0 * * * *',
         queueName: 'maintenance',
       });
+      expect(
+        store.deletes.filter((key) =>
+          [young, claimed, other].some((fixture) => key.startsWith(`m/${fixture.mediaId}/`)),
+        ),
+      ).toEqual([]);
     } finally {
       await running?.stop();
       // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
