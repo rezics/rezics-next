@@ -69,7 +69,7 @@ beforeAll(async () => {
 
   const keys = await generateKeyPair('ES256');
   const jwks = { keys: [{ ...(await exportJWK(keys.publicKey)), kid: 'gate-growth', alg: 'ES256' }] };
-  const now = Math.floor(fixedTime.getTime() / 1000);
+  const now = Math.floor(Date.now() / 1000);
   token = await new SignJWT({
     iss: issuer,
     aud: audience,
