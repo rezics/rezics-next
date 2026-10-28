@@ -16,17 +16,39 @@ const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } a
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
-  id: string; goal: string; objective: string; brief: string; cwd: string;
-  engine: 'codex' | 'claude'; pool: CodexPool; budget: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  supermanager: string; compactTokens?: number; limits: ManagerLimits;
+  id: string;
+  goal: string;
+  objective: string;
+  brief: string;
+  cwd: string;
+  engine: 'codex' | 'claude';
+  pool: CodexPool;
+  budget: number;
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  supermanager: string;
+  compactTokens?: number;
+  limits: ManagerLimits;
 };
-export type GoalState = { status: 'active' | 'paused' | 'complete' | 'blocked' | 'usageLimited' | 'budgetLimited';
-  tokensUsed: number; timeUsedSeconds: number; tokenBudget: number | null };
+export type GoalState = {
+  status: 'active' | 'paused' | 'complete' | 'blocked' | 'usageLimited' | 'budgetLimited';
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  tokenBudget: number | null;
+};
 export type ManagerSessionSnapshot = ManagerSpec & {
-  threadId: string | null; activeTurnId: string | null; status: 'starting' | 'running' | 'paused' | 'complete';
-  startedAt: number; turns: number; turnsWithoutDecision: number; decision: boolean;
-  countedTurn: string | null; goalState: GoalState | null; usage: unknown;
-  continuationAsked?: boolean; continuationRenewed?: boolean; continuationTokensUsed?: number;
+  threadId: string | null;
+  activeTurnId: string | null;
+  status: 'starting' | 'running' | 'paused' | 'complete';
+  startedAt: number;
+  turns: number;
+  turnsWithoutDecision: number;
+  decision: boolean;
+  countedTurn: string | null;
+  goalState: GoalState | null;
+  usage: unknown;
+  continuationAsked?: boolean;
+  continuationRenewed?: boolean;
+  continuationTokensUsed?: number;
   pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
 };
 export type ManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
@@ -49,24 +71,48 @@ export class ManagerSessions {
   private watcher: Watching;
   private closed = false;
   private unsubscribers: (() => void)[] = [];
-  constructor(private readonly db: Database, readonly inbox: SqliteManagerInbox, private readonly services: ManagerServices) {
-    migrate(db, [{ module: 'managers', version: 1, sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);' }]);
-    this.watcher = watchOrPoll(inbox.signalDirectory, () => {
-      for (const state of this.list()) if (state.status === 'running') this.background(state.id, () => this.dispatch(state.id));
-    }, 2_000);
+  constructor(
+    private readonly db: Database,
+    readonly inbox: SqliteManagerInbox,
+    private readonly services: ManagerServices,
+  ) {
+    migrate(db, [
+      {
+        module: 'managers',
+        version: 1,
+        sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);',
+      },
+    ]);
+    this.watcher = watchOrPoll(
+      inbox.signalDirectory,
+      () => {
+        for (const state of this.list())
+          if (state.status === 'running') this.background(state.id, () => this.dispatch(state.id));
+      },
+      2_000,
+    );
   }
-  private now(): number { return (this.services.now ?? Date.now)(); }
-  private error(error: unknown): void { (this.services.onError ?? console.error)(error); }
+  private now(): number {
+    return (this.services.now ?? Date.now)();
+  }
+  private error(error: unknown): void {
+    (this.services.onError ?? console.error)(error);
+  }
   get(id: string): ManagerState {
     const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
     return JSON.parse(row.state);
   }
   list(): ManagerState[] {
-    return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map(row => JSON.parse(row.state));
+    return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map((row) =>
+      JSON.parse(row.state),
+    );
   }
   private save(state: ManagerState): void {
-    this.db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state')
+    this.db
+      .query(
+        'INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',
+      )
       .run(state.id, JSON.stringify(state));
   }
   private serial<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -74,12 +120,18 @@ export class ManagerSessions {
     this.chains.set(id, next);
     return next;
   }
-  private background(id: string, action: () => Promise<unknown>): void { void this.serial(id, action).catch(error => this.error(error)); }
+  private background(id: string, action: () => Promise<unknown>): void {
+    void this.serial(id, action).catch((error) => this.error(error));
+  }
   async flush(): Promise<void> {
     for (;;) {
       const snapshot = [...this.chains.values()];
       await Promise.all(snapshot);
-      if (snapshot.length === this.chains.size && [...this.chains.values()].every((chain, index) => chain === snapshot[index])) return;
+      if (
+        snapshot.length === this.chains.size &&
+        [...this.chains.values()].every((chain, index) => chain === snapshot[index])
+      )
+        return;
     }
   }
   private client(pool: CodexPool): Promise<AppServer> {
@@ -93,17 +145,16 @@ export class ManagerSessions {
       tracked.add(key);
       this.services.onAppServerStart?.(identity);
     };
-    const connecting = this.services.connect
-      ? this.services.connect(pool, onStart)
-      : connectPool(pool, onStart);
-    const client = connecting.then(async server => {
+    const connecting = this.services.connect ? this.services.connect(pool, onStart) : connectPool(pool, onStart);
+    const client = connecting.then(async (server) => {
       try {
         if (server.identity) onStart(server.identity);
       } catch (error) {
         await server.close();
         throw error;
       }
-      this.unsubscribers.push(server.onNotification(notification => this.notification(notification))); return server;
+      this.unsubscribers.push(server.onNotification((notification) => this.notification(notification)));
+      return server;
     });
     this.pools.set(key, client);
     void client.catch(() => this.pools.delete(key));
@@ -111,7 +162,7 @@ export class ManagerSessions {
   }
   private notification(notification: Notification): void {
     if (this.closed) return;
-    const state = this.list().find(state => state.threadId === notification.params?.threadId);
+    const state = this.list().find((state) => state.threadId === notification.params?.threadId);
     if (state) this.background(state.id, () => this.handleNotification(state.id, notification));
   }
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
@@ -131,7 +182,7 @@ export class ManagerSessions {
     else return;
     this.save(state);
     if (state.status === 'running') {
-      if (method === 'thread/goal/updated' && await this.handleGoalUpdate(state)) return;
+      if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
     }
@@ -140,34 +191,58 @@ export class ManagerSessions {
     return join(spec.cwd, '.temp', 'goal', spec.id, 'CONTINUATION.md');
   }
   private opening(spec: ManagerSpec, continuationFile?: string): string {
-    return `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
+    return (
+      `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
       `Export GOAL_MANAGER=${spec.id} for control-plane commands. Completion is a proposal: run ` +
       `${this.services.command.join(' ')} manager complete ${spec.id}; the control plane verifies every scoped task is merged and the main gate passes. ` +
-      (continuationFile ? `Read the continuation file at ${continuationFile} completely, then continue from it. ` : '') +
+      (continuationFile
+        ? `Read the continuation file at ${continuationFile} completely, then continue from it. `
+        : '') +
       (spec.engine === 'codex'
         ? 'When no decision is pending, use clock.sleep inside the active turn; do not poll or end an empty turn. '
         : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
-      'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.';
+      'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.'
+    );
   }
   private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
     const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
-    const settings = { skipDangerousModePermissionPrompt: true, hooks: {
-      UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
-      Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
-    } };
+    const settings = {
+      skipDangerousModePermissionPrompt: true,
+      hooks: {
+        UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
+        Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
+      },
+    };
     // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
     // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
-    const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
-    return ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', ...session, '--model', 'claude-opus-5-5',
-      '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
-      '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), prompt];
+    const configDirectory =
+      resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
+    return [
+      'env',
+      `GOAL_MANAGER=${spec.id}`,
+      ...configDirectory,
+      spec.pool.executable ?? 'claude',
+      ...session,
+      '--model',
+      'claude-opus-5-5',
+      '--permission-mode',
+      'bypassPermissions',
+      '--name',
+      `${spec.goal} manager`,
+      '--autocompact',
+      String(spec.compactTokens ?? 300000),
+      '--settings',
+      JSON.stringify(settings),
+      prompt,
+    ];
   }
   // The opening goes to a file, not argv: the CLI process would otherwise match a `pgrep -f` for any command the
   // opening names, and a manager that stopped its inbox watcher by pattern once killed its own session that way.
   private openingPointer(spec: ManagerSpec): string {
     const path = join(this.inbox.stateDirectory, 'managers', `${spec.id}.opening.md`);
-    mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, this.opening(spec));
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, this.opening(spec));
     return `Read ${path} completely and follow it.`;
   }
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
@@ -176,48 +251,97 @@ export class ManagerSessions {
     if (!state.threadId || !this.inbox.pending(state.id).length) return;
     const alive = this.services.windows.alive?.(state.id);
     if (alive === false) {
-      this.services.windows.respawn?.(state.id, this.claudeArgv(state, ['--resume', state.threadId],
-        'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.'), state.cwd);
+      this.services.windows.respawn?.(
+        state.id,
+        this.claudeArgv(
+          state,
+          ['--resume', state.threadId],
+          'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.',
+        ),
+        state.cwd,
+      );
       return;
     }
     // A live session that ended its turn without a watcher never wakes on its own (web sat 2 h on 13 unread events on
     // 2026-10-26): type the wake into it, once per event.
     const waking = this.inbox.notifications(state.id);
     if (!waking.length || !this.services.windows.prompt) return;
-    this.services.windows.prompt(state.id, `You have ${waking.length} new inbox event(s). Read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act on them and acknowledge them; keep bun tools/goal/src/cli.ts inbox wait ${state.id} running in the background before you end a turn.`);
+    this.services.windows.prompt(
+      state.id,
+      `You have ${waking.length} new inbox event(s). Read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act on them and acknowledge them; keep bun tools/goal/src/cli.ts inbox wait ${state.id} running in the background before you end a turn.`,
+    );
     for (const event of waking) this.inbox.notified(event.id);
   }
   private registerCodexViewer(state: ManagerState, client: AppServer): void {
     const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
-    this.services.windows.register(state.id, ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`,
-      ...viewer], state.cwd);
+    this.services.windows.register(
+      state.id,
+      ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`, ...viewer],
+      state.cwd,
+    );
   }
   private validateSpec(spec: ManagerSpec): void {
-    if (!Number.isSafeInteger(spec.budget) || spec.budget <= 0 || Object.values(spec.limits).some(n => !Number.isFinite(n) || n <= 0))
+    if (
+      !Number.isSafeInteger(spec.budget) ||
+      spec.budget <= 0 ||
+      Object.values(spec.limits).some((n) => !Number.isFinite(n) || n <= 0)
+    )
       throw new Error('Manager budget and limits must be positive');
   }
-  private async startSession(spec: ManagerSpec, history?: ManagerSessionSnapshot[], pendingRenewal?: ManagerSessionSnapshot['pendingRenewal']): Promise<ManagerState> {
-    const state: ManagerState = { ...spec, threadId: null, activeTurnId: null, status: 'starting', startedAt: this.now(),
-      turns: 0, turnsWithoutDecision: 0, decision: false, countedTurn: null, goalState: null, usage: null,
-      continuationAsked: false, continuationRenewed: false,
+  private async startSession(
+    spec: ManagerSpec,
+    history?: ManagerSessionSnapshot[],
+    pendingRenewal?: ManagerSessionSnapshot['pendingRenewal'],
+  ): Promise<ManagerState> {
+    const state: ManagerState = {
+      ...spec,
+      threadId: null,
+      activeTurnId: null,
+      status: 'starting',
+      startedAt: this.now(),
+      turns: 0,
+      turnsWithoutDecision: 0,
+      decision: false,
+      countedTurn: null,
+      goalState: null,
+      usage: null,
+      continuationAsked: false,
+      continuationRenewed: false,
       ...(pendingRenewal ? { pendingRenewal } : {}),
-      ...(history?.length ? { history } : {}) };
+      ...(history?.length ? { history } : {}),
+    };
     this.save(state);
     try {
       if (spec.engine === 'codex') {
         const client = await this.client(spec.pool);
-        const started = await client.request('thread/start', { ...FULL_ACCESS, cwd: spec.cwd, model: 'gpt-6.1-sol',
-          config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 } });
+        const started = await client.request('thread/start', {
+          ...FULL_ACCESS,
+          cwd: spec.cwd,
+          model: 'gpt-6.1-sol',
+          config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 },
+        });
         state.threadId = started.thread.id;
         this.save(state);
-        const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
-          status: 'active', tokenBudget: spec.budget, origin: 'user' });
-        state.goalState = goal.goal; state.status = 'running'; this.save(state);
+        const goal = await client.request('thread/goal/set', {
+          threadId: state.threadId,
+          objective: spec.objective,
+          status: 'active',
+          tokenBudget: spec.budget,
+          origin: 'user',
+        });
+        state.goalState = goal.goal;
+        state.status = 'running';
+        this.save(state);
         this.registerCodexViewer(state, client);
         const continuationFile = history?.length ? this.continuationPath(spec) : undefined;
-        const opening = continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
-        const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(opening) });
+        const opening =
+          continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
+        const turn = await client.request('turn/start', {
+          threadId: state.threadId,
+          effort: spec.effort,
+          input: textInput(opening),
+        });
         this.turnStarted(state, turn.turn.id);
         if (state.pendingRenewal) {
           state.pendingRenewal.ready = true;
@@ -227,15 +351,25 @@ export class ManagerSessions {
         }
       } else {
         state.threadId = randomUUID();
-        this.services.windows.register(spec.id, this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec)), spec.cwd);
+        this.services.windows.register(
+          spec.id,
+          this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec)),
+          spec.cwd,
+        );
         state.status = 'running';
       }
-      this.save(state); this.armDeadline(state);
+      this.save(state);
+      this.armDeadline(state);
       await this.dispatch(spec.id);
       return this.get(spec.id);
     } catch (error) {
-      state.status = 'paused'; this.save(state);
-      try { await this.pauseRemote(state); } catch (stopError) { this.error(stopError); }
+      state.status = 'paused';
+      this.save(state);
+      try {
+        await this.pauseRemote(state);
+      } catch (stopError) {
+        this.error(stopError);
+      }
       throw error;
     }
   }
@@ -243,8 +377,9 @@ export class ManagerSessions {
     return this.serial(spec.id, async () => {
       this.validateSpec(spec);
       // A start that failed before its session existed leaves a paused record without a thread; it may start again.
-      const existing = this.list().find(state => state.id === spec.id);
-      if (existing && !(existing.status === 'paused' && !existing.threadId)) throw new Error(`Manager already exists: ${spec.id}`);
+      const existing = this.list().find((state) => state.id === spec.id);
+      if (existing && !(existing.status === 'paused' && !existing.threadId))
+        throw new Error(`Manager already exists: ${spec.id}`);
       return this.startSession(spec, existing?.history);
     });
   }
@@ -253,7 +388,8 @@ export class ManagerSessions {
       if (spec.id !== id) throw new Error(`Manager renewal id does not match: ${id}`);
       this.validateSpec(spec);
       const current = this.get(id);
-      const goalCanRenew = current.engine === 'codex' &&
+      const goalCanRenew =
+        current.engine === 'codex' &&
         (current.goalState?.status === 'budgetLimited' || current.goalState?.status === 'blocked');
       if (current.status !== 'paused' && !goalCanRenew) throw new Error(`Manager must be paused to renew: ${id}`);
       return this.renewInternal(id, spec);
@@ -269,26 +405,56 @@ export class ManagerSessions {
   }
 
   private specFromState(state: ManagerState): ManagerSpec {
-    const { threadId: _threadId, activeTurnId: _activeTurnId, status: _status, startedAt: _startedAt,
-      turns: _turns, turnsWithoutDecision: _turnsWithoutDecision, decision: _decision, countedTurn: _countedTurn,
-      goalState: _goalState, usage: _usage, history: _history, continuationAsked: _continuationAsked,
-      continuationRenewed: _continuationRenewed, continuationTokensUsed: _continuationTokensUsed,
-      pendingRenewal: _pendingRenewal, ...spec } = state;
+    const {
+      threadId: _threadId,
+      activeTurnId: _activeTurnId,
+      status: _status,
+      startedAt: _startedAt,
+      turns: _turns,
+      turnsWithoutDecision: _turnsWithoutDecision,
+      decision: _decision,
+      countedTurn: _countedTurn,
+      goalState: _goalState,
+      usage: _usage,
+      history: _history,
+      continuationAsked: _continuationAsked,
+      continuationRenewed: _continuationRenewed,
+      continuationTokensUsed: _continuationTokensUsed,
+      pendingRenewal: _pendingRenewal,
+      ...spec
+    } = state;
     return spec;
   }
   private async askForContinuation(state: ManagerState): Promise<void> {
-    if (state.engine !== 'codex' || state.continuationAsked || !state.goalState ||
-      state.goalState.tokenBudget === null || state.goalState.tokenBudget <= 0 ||
-      state.goalState.tokensUsed < state.goalState.tokenBudget * 0.9) return;
-    this.db.transaction(() => {
-      const current = this.get(state.id);
-      if (current.continuationAsked || !current.goalState || current.goalState.tokenBudget === null ||
-        current.goalState.tokenBudget <= 0 || current.goalState.tokensUsed < current.goalState.tokenBudget * 0.9) return;
-      current.continuationAsked = true;
-      this.save(current);
-      this.inbox.deliver({ managerId: current.id, kind: 'instruction', summary:
-        `This Goal has used at least 90% of its token budget. Write .temp/goal/${current.id}/CONTINUATION.md with live task IDs and states, decisions in force, pending cross-owner agreements, and next actions. Then send ${current.supermanager} a message containing “continuation written”.` });
-    }).immediate();
+    if (
+      state.engine !== 'codex' ||
+      state.continuationAsked ||
+      !state.goalState ||
+      state.goalState.tokenBudget === null ||
+      state.goalState.tokenBudget <= 0 ||
+      state.goalState.tokensUsed < state.goalState.tokenBudget * 0.9
+    )
+      return;
+    this.db
+      .transaction(() => {
+        const current = this.get(state.id);
+        if (
+          current.continuationAsked ||
+          !current.goalState ||
+          current.goalState.tokenBudget === null ||
+          current.goalState.tokenBudget <= 0 ||
+          current.goalState.tokensUsed < current.goalState.tokenBudget * 0.9
+        )
+          return;
+        current.continuationAsked = true;
+        this.save(current);
+        this.inbox.deliver({
+          managerId: current.id,
+          kind: 'instruction',
+          summary: `This Goal has used at least 90% of its token budget. Write .temp/goal/${current.id}/CONTINUATION.md with live task IDs and states, decisions in force, pending cross-owner agreements, and next actions. Then send ${current.supermanager} a message containing “continuation written”.`,
+        });
+      })
+      .immediate();
   }
   private async handleGoalUpdate(state: ManagerState): Promise<boolean> {
     if (state.engine !== 'codex') return false;
@@ -299,15 +465,20 @@ export class ManagerSessions {
     return true;
   }
   private async deliverRenewalNotice(id: string): Promise<void> {
-    this.db.transaction(() => {
-      const state = this.get(id);
-      const pending = state.pendingRenewal;
-      if (!pending || !pending.ready || !state.threadId || state.threadId === pending.oldThreadId) return;
-      delete state.pendingRenewal;
-      this.save(state);
-      this.inbox.deliver({ managerId: state.supermanager, kind: 'environment', summary:
-        `Manager ${state.id} renewed after using ${pending.tokensUsed} tokens; new thread ${state.threadId}.` });
-    }).immediate();
+    this.db
+      .transaction(() => {
+        const state = this.get(id);
+        const pending = state.pendingRenewal;
+        if (!pending || !pending.ready || !state.threadId || state.threadId === pending.oldThreadId) return;
+        delete state.pendingRenewal;
+        this.save(state);
+        this.inbox.deliver({
+          managerId: state.supermanager,
+          kind: 'environment',
+          summary: `Manager ${state.id} renewed after using ${pending.tokensUsed} tokens; new thread ${state.threadId}.`,
+        });
+      })
+      .immediate();
   }
   private async renewForContinuation(id: string, tokensUsed: number): Promise<ManagerState> {
     const state = this.get(id);
@@ -329,13 +500,24 @@ export class ManagerSessions {
   async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
-      if (state.engine !== 'codex' || !state.continuationAsked || state.continuationRenewed || state.pendingRenewal ||
-        recipient !== state.supermanager || !/continuation written/i.test(summary)) return;
+      if (
+        state.engine !== 'codex' ||
+        !state.continuationAsked ||
+        state.continuationRenewed ||
+        state.pendingRenewal ||
+        recipient !== state.supermanager ||
+        !/continuation written/i.test(summary)
+      )
+        return;
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }
   private turnStarted(state: ManagerState, turn: string): void {
-    if (state.countedTurn !== turn) { state.turns++; state.decision = false; state.countedTurn = turn; }
+    if (state.countedTurn !== turn) {
+      state.turns++;
+      state.decision = false;
+      state.countedTurn = turn;
+    }
     state.activeTurnId = turn;
   }
   private turnEnded(state: ManagerState, turn: string): void {
@@ -344,7 +526,11 @@ export class ManagerSessions {
     state.activeTurnId = null;
   }
   async noteCommand(id: string): Promise<void> {
-    return this.serial(id, async () => { const state = this.get(id); state.decision = true; this.save(state); });
+    return this.serial(id, async () => {
+      const state = this.get(id);
+      state.decision = true;
+      this.save(state);
+    });
   }
   async claudeTurn(id: string, start: boolean): Promise<void> {
     return this.serial(id, async () => {
@@ -358,44 +544,90 @@ export class ManagerSessions {
         if (!state.decision) state.turnsWithoutDecision++;
         state.decision = false;
       }
-      this.save(state); await this.checkLimits(state);
+      this.save(state);
+      await this.checkLimits(state);
     });
   }
   private armDeadline(state: ManagerState): void {
     clearTimeout(this.timers.get(state.id));
     if (this.closed) return;
     const remaining = state.startedAt + state.limits.wallMs - this.now();
-    this.timers.set(state.id, setTimeout(() => this.background(state.id, async () => {
-      const current = this.get(state.id); await this.checkLimits(current);
-    }), Math.max(0, Math.min(remaining + 1, 2_147_483_647))));
+    this.timers.set(
+      state.id,
+      setTimeout(
+        () =>
+          this.background(state.id, async () => {
+            const current = this.get(state.id);
+            await this.checkLimits(current);
+          }),
+        Math.max(0, Math.min(remaining + 1, 2_147_483_647)),
+      ),
+    );
   }
   private async checkLimits(state: ManagerState): Promise<boolean> {
     if (state.status !== 'running') return false;
-    const reason = state.turns > state.limits.turns ? 'turn limit' : state.turnsWithoutDecision > state.limits.turnsWithoutDecision
-      ? 'turns without a decision limit' : this.now() - state.startedAt > state.limits.wallMs ? 'wall-clock limit' : null;
-    if (!reason) { this.armDeadline(state); return false; }
+    const reason =
+      state.turns > state.limits.turns
+        ? 'turn limit'
+        : state.turnsWithoutDecision > state.limits.turnsWithoutDecision
+          ? 'turns without a decision limit'
+          : this.now() - state.startedAt > state.limits.wallMs
+            ? 'wall-clock limit'
+            : null;
+    if (!reason) {
+      this.armDeadline(state);
+      return false;
+    }
     // Turn and wall-clock limits bound one session's context, so the host replaces the session and the brief carries
     // the work over. A manager that keeps turning without a decision stops for the supermanager to look at.
     if (reason !== 'turns without a decision limit') {
-      const { threadId: _thread, activeTurnId: _turn, status: _status, startedAt: _started, turns: _turns,
-        turnsWithoutDecision: _empty, decision: _decision, countedTurn: _counted, goalState: _goal, usage: _usage,
-        history: _history, ...spec } = state;
-      try { await this.renewInternal(state.id, spec); return true; }
-      catch (error) { this.error(error); }
+      const {
+        threadId: _thread,
+        activeTurnId: _turn,
+        status: _status,
+        startedAt: _started,
+        turns: _turns,
+        turnsWithoutDecision: _empty,
+        decision: _decision,
+        countedTurn: _counted,
+        goalState: _goal,
+        usage: _usage,
+        history: _history,
+        ...spec
+      } = state;
+      try {
+        await this.renewInternal(state.id, spec);
+        return true;
+      } catch (error) {
+        this.error(error);
+      }
     }
-    try { await this.stopInternal(state.id); }
-    catch (error) { this.error(error); }
-    this.inbox.deliver({ managerId: state.supermanager, kind: 'round-limit', summary: `Manager ${state.id} paused after exceeding its ${reason}.` });
+    try {
+      await this.stopInternal(state.id);
+    } catch (error) {
+      this.error(error);
+    }
+    this.inbox.deliver({
+      managerId: state.supermanager,
+      kind: 'round-limit',
+      summary: `Manager ${state.id} paused after exceeding its ${reason}.`,
+    });
     return true;
   }
   private async pauseRemote(state: ManagerState): Promise<void> {
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.client(state.pool);
-      const goal = await client.request('thread/goal/set', { threadId: state.threadId, status: 'paused', origin: 'user' });
-      state.goalState = goal.goal; this.save(state);
+      const goal = await client.request('thread/goal/set', {
+        threadId: state.threadId,
+        status: 'paused',
+        origin: 'user',
+      });
+      state.goalState = goal.goal;
+      this.save(state);
       if (state.activeTurnId) {
-        try { await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId }); }
-        catch {
+        try {
+          await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId });
+        } catch {
           const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
           if (active) await client.request('turn/interrupt', { threadId: state.threadId, turnId: active.id });
@@ -404,11 +636,19 @@ export class ManagerSessions {
     }
   }
   private async stopInternal(id: string): Promise<void> {
-    const state = this.get(id); state.status = 'paused'; this.save(state);
+    const state = this.get(id);
+    state.status = 'paused';
+    this.save(state);
     clearTimeout(this.timers.get(id));
-    try { await this.pauseRemote(state); } finally { this.services.windows.unregister(id); }
+    try {
+      await this.pauseRemote(state);
+    } finally {
+      this.services.windows.unregister(id);
+    }
   }
-  stop(id: string): Promise<void> { return this.serial(id, () => this.stopInternal(id)); }
+  stop(id: string): Promise<void> {
+    return this.serial(id, () => this.stopInternal(id));
+  }
 
   private async dispatch(id: string): Promise<void> {
     let state = this.get(id);
@@ -419,13 +659,23 @@ export class ManagerSessions {
       state = this.get(id);
       if (state.activeTurnId) {
         try {
-          await client.request('turn/steer', { threadId: state.threadId, expectedTurnId: state.activeTurnId, input: textInput(event.event.summary) });
+          await client.request('turn/steer', {
+            threadId: state.threadId,
+            expectedTurnId: state.activeTurnId,
+            input: textInput(event.event.summary),
+          });
         } catch (error) {
           // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
           const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: state.threadId });
           const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
-          state.activeTurnId = active?.id ?? null; this.save(state);
-          if (active) await client.request('turn/steer', { threadId: state.threadId, expectedTurnId: active.id, input: textInput(event.event.summary) });
+          state.activeTurnId = active?.id ?? null;
+          this.save(state);
+          if (active)
+            await client.request('turn/steer', {
+              threadId: state.threadId,
+              expectedTurnId: active.id,
+              input: textInput(event.event.summary),
+            });
           else await this.startWakeTurn(client, state, event.event.summary);
         }
       } else await this.startWakeTurn(client, state, event.event.summary);
@@ -434,9 +684,12 @@ export class ManagerSessions {
   }
   private async startWakeTurn(client: AppServer, state: ManagerState, summary: string): Promise<void> {
     const turn = await client.request('turn/start', { threadId: state.threadId, input: textInput(summary) });
-    this.turnStarted(state, turn.turn.id); this.save(state);
+    this.turnStarted(state, turn.turn.id);
+    this.save(state);
   }
-  async wake(id: string): Promise<void> { return this.serial(id, () => this.dispatch(id)); }
+  async wake(id: string): Promise<void> {
+    return this.serial(id, () => this.dispatch(id));
+  }
 
   private async completeInternal(id: string): Promise<boolean> {
     const state = this.get(id);
@@ -446,22 +699,47 @@ export class ManagerSessions {
       // A model-completed Codex goal must become active before the unmet event starts a new turn.
       if (state.engine === 'codex' && state.threadId && state.goalState?.status === 'complete') {
         const client = await this.client(state.pool);
-        const updated = await client.request('thread/goal/set', { threadId: state.threadId, status: 'active', origin: 'user' });
-        state.goalState = updated.goal; this.save(state);
+        const updated = await client.request('thread/goal/set', {
+          threadId: state.threadId,
+          status: 'active',
+          origin: 'user',
+        });
+        state.goalState = updated.goal;
+        this.save(state);
       }
-      this.inbox.deliver({ managerId: id, kind: 'goal-unmet', summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath });
-      if (state.supermanager !== id) this.inbox.deliver({ managerId: state.supermanager, kind: 'goal-unmet', summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath });
+      this.inbox.deliver({
+        managerId: id,
+        kind: 'goal-unmet',
+        summary: evidence.summary.replace(/[\r\n]+/g, ' '),
+        evidencePath: evidence.evidencePath,
+      });
+      if (state.supermanager !== id)
+        this.inbox.deliver({
+          managerId: state.supermanager,
+          kind: 'goal-unmet',
+          summary: evidence.summary.replace(/[\r\n]+/g, ' '),
+          evidencePath: evidence.evidencePath,
+        });
       return false;
     }
     await this.stopInternal(id);
-    const completed = this.get(id); completed.status = 'complete';
+    const completed = this.get(id);
+    completed.status = 'complete';
     if (completed.engine === 'codex' && completed.threadId) {
       const client = await this.client(completed.pool);
-      const updated = await client.request('thread/goal/set', { threadId: completed.threadId, status: 'complete', origin: 'user' });
+      const updated = await client.request('thread/goal/set', {
+        threadId: completed.threadId,
+        status: 'complete',
+        origin: 'user',
+      });
       completed.goalState = updated.goal;
     }
     this.save(completed);
-    const event = { kind: 'goal-met' as const, summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath };
+    const event = {
+      kind: 'goal-met' as const,
+      summary: evidence.summary.replace(/[\r\n]+/g, ' '),
+      evidencePath: evidence.evidencePath,
+    };
     this.inbox.deliver({ managerId: id, ...event });
     if (completed.supermanager !== id) this.inbox.deliver({ managerId: completed.supermanager, ...event });
     return true;
@@ -474,11 +752,17 @@ export class ManagerSessions {
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(): Promise<void> {
-    for (const state of this.list().filter(state => state.status === 'running' || state.status === 'starting' || state.pendingRenewal)) {
+    for (const state of this.list().filter(
+      (state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal,
+    )) {
       await this.serial(state.id, async () => {
         let current = this.get(state.id);
         if (current.pendingRenewal) {
-          if (current.threadId && current.threadId !== current.pendingRenewal.oldThreadId && current.pendingRenewal.ready) {
+          if (
+            current.threadId &&
+            current.threadId !== current.pendingRenewal.oldThreadId &&
+            current.pendingRenewal.ready
+          ) {
             await this.deliverRenewalNotice(current.id);
             current = this.get(current.id);
           } else {
@@ -490,11 +774,17 @@ export class ManagerSessions {
         if (current.engine === 'codex' && current.threadId) {
           const client = await this.client(current.pool);
           const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
-          current.activeTurnId = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
+          current.activeTurnId =
+            resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
           const goal = await client.request('thread/goal/get', { threadId: current.threadId });
           current.goalState = goal.goal;
         }
-        if (current.status === 'starting') { current.status = 'paused'; this.save(current); await this.pauseRemote(current); return; }
+        if (current.status === 'starting') {
+          current.status = 'paused';
+          this.save(current);
+          await this.pauseRemote(current);
+          return;
+        }
         this.save(current);
         if (current.engine === 'codex' && current.threadId) {
           const client = await this.client(current.pool);
@@ -502,7 +792,7 @@ export class ManagerSessions {
           this.registerCodexViewer(current, client);
         }
         if (await this.handleGoalUpdate(current)) return;
-        if (!await this.checkLimits(current)) {
+        if (!(await this.checkLimits(current))) {
           if (current.goalState?.status === 'complete') await this.completeInternal(current.id);
           else await this.dispatch(current.id);
         }
@@ -511,10 +801,15 @@ export class ManagerSessions {
   }
   async close(): Promise<void> {
     if (this.closed) return;
-    this.closed = true; this.watcher.close();
+    this.closed = true;
+    this.watcher.close();
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     for (const timer of this.timers.values()) clearTimeout(timer);
     await this.flush();
-    for (const client of this.pools.values()) { try { await (await client).close(); } catch {} }
+    for (const client of this.pools.values()) {
+      try {
+        await (await client).close();
+      } catch {}
+    }
   }
 }
