@@ -3,11 +3,10 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { CommandUnavailableError } from '../../src/command/command.ts';
 import { contentStepRetryOptions } from '../../src/content/work.ts';
 
-const retry = contentStepRetryOptions(0.05);
 const attempts = new Map<string, number[]>();
 
 const workflow = DBOS.registerWorkflow(
-  async (name: string, failCount: number, errorMessage: string) =>
+  async (name: string, failCount: number, errorMessage: string, intervalSeconds: number) =>
     DBOS.runStep(
       async () => {
         const times = attempts.get(name) ?? [];
@@ -19,7 +18,7 @@ const workflow = DBOS.registerWorkflow(
         }
         return times.length;
       },
-      { ...retry, name: `content.retry.${name}` },
+      { ...contentStepRetryOptions(intervalSeconds), name: `content.retry.${name}` },
     ),
   { name: 'content.retry.workflow' },
 );
@@ -43,7 +42,7 @@ afterAll(async () => {
 
 test('a content step refused as overloaded is retried at growing intervals and completes once the partition has capacity', async () => {
   const name = crypto.randomUUID();
-  const handle = await DBOS.startWorkflow(workflow)(name, 3, 'overloaded');
+  const handle = await DBOS.startWorkflow(workflow)(name, 3, 'overloaded', 0.05);
   expect(await handle.getResult()).toBe(4);
   const times = attempts.get(name)!;
   expect(times).toHaveLength(4);
@@ -54,7 +53,7 @@ test('a content step refused as overloaded is retried at growing intervals and c
 
 test('a content step that keeps failing stops after its bounded attempts and reports the last error', async () => {
   const name = crypto.randomUUID();
-  const handle = await DBOS.startWorkflow(workflow)(name, 100, 'dependency unavailable');
+  const handle = await DBOS.startWorkflow(workflow)(name, 100, 'dependency unavailable', 0.001);
   await expect(handle.getResult()).rejects.toThrow('dependency unavailable 11');
   expect(attempts.get(name)).toHaveLength(11);
 });
