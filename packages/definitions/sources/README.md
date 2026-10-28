@@ -58,10 +58,11 @@ source conditions on the affected columns.
 ## Reviewed binding and producer status
 
 The owning [classification and measurement contract](../README.md#public-classification-and-genuine-measurements)
-adopts the meanings. The [mapping report](../../../docs/research/catalogue-filter-data-mappings.md)
-records revision/source evidence. Inventory statuses describe a pinned schema, not
-released property admission, native Concept adoption receipts, executable conversion,
-adopted measurements, complete projections or admitted indexed execution.
+is the sole authority for count meanings and word-count discovery eligibility. The
+[mapping report](../../../docs/research/catalogue-filter-data-mappings.md) records
+revision/source evidence. Inventory statuses describe a pinned schema, not released
+property admission, native Concept adoption receipts, executable conversion, admitted
+producer inputs, complete projections or admitted indexed execution.
 
 - Bangumi public harem binds `schema:keywords` to the exact editor-maintained public
   subject `meta_tags` member `后宫`, using the adopted source Concept in the scheme
@@ -82,13 +83,21 @@ adopted measurements, complete projections or admitted indexed execution.
   Genre's exact P136 remains distinct from keywords; P921 stays close inventory
   correspondence, never executable exact mapping or automatic double-emission.
 - Words use `schema:wordCount`, exact P6570; characters require a distinct named
-  local property without an invented external exact mapping. Both require exact
-  nonnegative integers, unit `1`, explicit zero, and their own holder/text/version/
-  language, complete/partial scope, versioned method and evidence association.
-  Unknown stays unknown; characters, pages, estimates and incompatible units never
-  become words. Wikidata must preserve all measurement qualifiers with resolved
-  identities or reject the entire measurement. Current item-qualifier dropping makes
-  enabling P6570 alone unsafe. Narou character metadata is not an approved adapter.
+  local property without an invented external exact mapping. Word-count discovery
+  requires admitted producer input that machine-readably declares whole-holder
+  coverage, exact holder identity, language and version; a text-supplied input also
+  carries its digest. An actual reviewed producer may declare its own whole-work or
+  serial total, including a web-novel platform's 字数 convention or a publisher's
+  stated length, without full-text ingestion. Do not infer the declaration from a
+  source label, platform name, alias, title, genre or excerpt. Partial, unknown or
+  unsupported multilingual coverage omits the evidence; a summary count covers only
+  that summary. Missing evidence cannot mean false absence or a positive exclusion
+  under `NOT`. Exact amount structure and property mapping alone establish no scope or
+  producer eligibility. Character counts, pages and estimates never become words.
+  Preserve every actual measurement qualifier losslessly on the same statement, or
+  withhold the entire measurement if any qualifier would be skipped, unsupported,
+  unresolved or semantically narrowed. Current item-qualifier dropping makes enabling
+  P6570 alone unsafe. Narou character metadata is not an approved word-count producer.
 
 At the report pin no harem metadata-tag converter, explicit light-novel producer,
 qualifying native million-word Book batch or genuine character producer is delivered.

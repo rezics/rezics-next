@@ -423,42 +423,62 @@ UUIDs from QIDs or labels, assume label equality, or make release YAML a second
 Concept authority. Use actual `record-bindings` and `resolvedReferences`; the importer's
 optional identifier lookup is not evidence of CLI wiring or already adopted bindings.
 
-Adopt `schema:wordCount` with exact P6570 correspondence for **words**, and a separately
-named local **character-count** property with no invented external exact mapping.
-Both require exact integer amounts >= 0 and unit `1`; zero must be explicitly measured.
-Absence, withheld, unavailable and unmeasured remain unknown. Negative, fractional,
-bounded or rounded estimates and incompatible units cannot become exact counts.
-Characters, code points, UTF-16 units, bytes, pages and reading-time estimates never
-become words.
+`schema:wordCount` has exact P6570 correspondence for **words**. A separately named
+local character-count property has no invented external exact mapping. For either
+property, exact quantity structure means only a fixed amount and unit with no lower or
+upper uncertainty bound. It does not establish the counted holder, scope, producer,
+method or eligibility for discovery. Portable/native amount storage and admissible
+filter evidence remain distinct.
 
-Every accepted count must retain the following together on its own statement and
-provenance association:
+Word-count discovery evidence comes only from an **admitted producer input** that
+machine-readably declares complete whole-holder coverage, exact holder identity,
+language and version. When text is supplied, the input also carries that text's digest;
+a digest is not fabricated for a source-reported number. This producer may report its
+own declared total for a whole work or serial, including a reviewed web-novel
+platform's 字数 convention or a publisher's stated length. Such a reported total is
+usable without ingesting or hosting the text when that actual producer declaration
+meets the same coverage, holder, language and version requirements. Do not infer any
+of them from a platform name, alias, title, genre or excerpt.
 
-- The actual counted native holder, identified text/version and language. A direct
-  Book-work assertion explicitly names the realization measured.
-- Declared complete or partial body/volumes scope, including exclusions such as
-  titles, notes, appendices, markup, ruby readings or whitespace.
-- A named, versioned method. CJK word counts declare segmentation/tailoring and which
-  segments count; grapheme character counts declare their distinct character convention.
-- Evidence/citation with available native source revision/date, or an auditable trusted
-  measurement record retaining text/version digest and measurement time.
+Partial, unknown or unsupported multilingual coverage omits word-count discovery
+evidence. Missing evidence remains unknown; it cannot be treated as false absence or
+as positive exclusion under `NOT`. A summary field measures only that summary and
+never establishes whole-book coverage. This rule is generic: it does not add a
+Book-specific backend, holder-type switch or per-property heuristic. Free English
+scope prose, a source label, a copied count, an exact amount schema or property
+mapping alone cannot establish eligibility. Generic string-qualifier support is a
+separate primitive and does not decide eligibility.
 
-First scope uses direct, properly scoped Book-work assertions. Edition-only counts
-remain edition facts: no implicit series sum, edition-to-work transfer, translation,
-language or version inheritance, or `representativeEdition` projection. Never drop
-method/scope qualifiers or combine them across count statements. Existing
-`appliesToPart` / P518 StoryArc semantics stay unchanged. Exact new qualifier
-representation and the local character property's definition/name require later native
-definition acceptance; this prose does not select an executable representation.
+Counts preserve their stated values and precision. A character counter remains
+`characterCount` with its own meaning; never estimate or convert characters, reading
+time, pages or title length into `wordCount`. A reviewed source-reported word-total
+convention is not such a conversion. Zero is a count only when explicitly reported or
+measured; absence, withheld, unavailable and unmeasured remain unknown. Do not guess a
+native revision or date. For unversioned sources, preserve `record_revision: unversioned`
+and the source's actual SHA-256 digest; do not substitute a fabricated revision or digest.
 
-Feasible first producers are trusted contributor/publisher cited assertions through
-existing propose/adopt. Genuine self-measurement uses legally available text locally
-and retains method and digest; nothing here grants permission to fetch or upload text.
-External Wikidata counts require holder mapping and qualifier-preserving conversion
-or rejection of the **entire** measurement. The current converter diagnoses and drops
-item qualifiers, so enabling P6570 alone is unsafe. Arbitrary fixture numbers,
-inventory entries, source URLs and QIDs prove no measured native data. Narou character
-metadata is not an approved adapter.
+Do not infer holder, language, coverage or method from metadata. A true word threshold
+therefore requires admitted evidence for the whole relevant holder: a value over
+1,000,000 qualifies, exactly 1,000,000 does not, and an absent or ineligible value
+cannot qualify or support exclusion. Edition-only facts do not transfer to a work,
+translation, language or version, combine into a series total, or inherit through
+`representativeEdition`. Existing `appliesToPart` / P518 StoryArc semantics stay
+unchanged.
+
+On source handoff, preserve every actual measurement qualifier losslessly on the same
+statement through reviewed bindings and admitted schema. If any actual qualifier
+would be skipped, unsupported, unresolved or semantically narrowed, withhold the
+entire measurement. Never strip language, method or part scope into an unqualified
+count. Qualified P6570 cannot pass through current no-qualifier property admission by
+dropping its qualifiers. Bare controlled ab3 quantities and automatically mapped
+Wikidata P6570 do not prove a genuine scoped measurement producer; released property
+admission alone does not provide provider support. No guessed method/scope vocabulary,
+SourceRegistration option or new identity is introduced here.
+
+The exact producer representation, schema/signature and native receipts remain future
+work in the existing native measurement specification. No rule here requires full-text
+ingestion or grants permission to fetch or upload text. These meanings add no runtime,
+YAML, provider adapter, new schema or API.
 
 Reviewed meaning/binding, released property admission, actual native Concept adoption
 receipts, executable converter/importer support, adopted measurements, complete
@@ -471,11 +491,9 @@ Future definition acceptance must preserve all existing anime uses when moving
 `workFormat`, all eight locales, full package acceptance, and the sole normal release
 producer with matching immutable consumer pins. Native data acceptance must create,
 resolve and adopt actual schemes/Concepts and prove replay returns the same ID.
-A genuine word count of 1,000,001 matches the threshold; exactly 1,000,000 and absence
-do not. Characters alone cannot match words, novel alone cannot match light-novel
-form, and private/personal/withheld tags cannot become public classification.
-Incompatible units or missing per-statement method/scope cannot supply a complete
-measurement. Qualification stays with its own count and correct language/text/holder.
+Characters alone cannot match words, novel alone cannot match light-novel form, and
+private/personal/withheld tags cannot become public classification. Qualification
+stays with its own count and correct language/text/holder.
 
 The [shared filtered-list matrix](../../docs/filtered-lists.md#shared-acceptance-matrix)
 requires these predicates separately and together in public Zones/Collections and
