@@ -199,6 +199,10 @@ files automatically once per process, with no shared index or import line.
 
 The recording check is in `tests/recorded-responses.test.ts`; it type-checks every committed kernel response against `@rezics/client`.
 
+Treat the bundled definitions release and its `definitions-active` and `definitions-release` recordings as one generated
+change: whenever the bundled release changes, run `bun apps/web/scripts/record.ts definitions-active definitions-release`
+in that same change.
+
 Run `bun run storybook` from this directory to browse the page stories. The browser stories replay the committed
 kernel responses and run as part of `bun run check`. To refresh those responses, run `bun run record`. It needs Bun,
 Docker access to start a disposable PostgreSQL container and a disposable OpenSearch container, and permission to run
