@@ -633,6 +633,9 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
         [route, young.mediaId, now],
       );
       await result(await client.triggerSchedule(CONTENT_COLLECTION_SCHEDULE));
+      expect(store.deletes).not.toHaveLength(0);
+      expect(store.deletes.filter((key) => !key.startsWith(`m/${old.mediaId}/`))).toEqual([]);
+      const deletesAfterFirstSweep = store.deletes.length;
       expect(store.objects.has(old.key)).toBe(false);
       for (const fixture of [young, claimed, other]) expect(store.objects.has(fixture.key)).toBe(true);
       const pending = await uploaded(pool, store, bytes);
@@ -656,12 +659,18 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       store.fail(false);
       running = await worker(store);
       await result(schedule);
+      expect(store.deletes.filter((key) => !key.startsWith(`m/${pending.mediaId}/`)).slice(deletesAfterFirstSweep)).toEqual([]);
       expect(store.objects.has(pending.key)).toBe(false);
       expect(await client.listSchedules({ scheduleNamePrefix: CONTENT_COLLECTION_SCHEDULE })).toHaveLength(1);
       expect(await client.getSchedule(CONTENT_COLLECTION_SCHEDULE)).toMatchObject({
         schedule: '0 * * * *',
         queueName: 'maintenance',
       });
+      expect(
+        store.deletes.filter((key) =>
+          [young, claimed, other].some((fixture) => key.startsWith(`m/${fixture.mediaId}/`)),
+        ),
+      ).toEqual([]);
     } finally {
       await running?.stop();
       // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
