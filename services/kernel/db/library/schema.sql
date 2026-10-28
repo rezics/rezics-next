@@ -517,8 +517,10 @@ CREATE TABLE library.entry (
     type_source_position bigint,
     incarnation_id uuid,
     library_profile_pin jsonb,
+    owner_write_seq bigint,
     CONSTRAINT entry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT entry_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
+    CONSTRAINT entry_owner_write_seq_check CHECK ((owner_write_seq > 0)),
     CONSTRAINT entry_revision_check CHECK ((revision >= 1)),
     CONSTRAINT entry_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))),
@@ -554,9 +556,11 @@ CREATE TABLE library.entry_deleted (
     deleted_at timestamp with time zone NOT NULL,
     restore_until timestamp with time zone NOT NULL,
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    owner_write_seq bigint,
     CONSTRAINT entry_deleted_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT entry_deleted_legacy_state_check CHECK (((library_profile_pin IS NOT NULL) OR (state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text])))),
     CONSTRAINT entry_deleted_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
+    CONSTRAINT entry_deleted_owner_write_seq_check CHECK ((owner_write_seq > 0)),
     CONSTRAINT entry_deleted_restore_window CHECK ((restore_until = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT entry_deleted_revision_check CHECK (((revision >= 1) AND (revision <= 2147483644))),
     CONSTRAINT entry_deleted_revision_step CHECK ((deleted_revision = (revision + 1))),
@@ -627,6 +631,20 @@ CREATE TABLE library.label_assignment (
     CONSTRAINT label_assignment_revision_check CHECK ((revision >= 1)),
     CONSTRAINT label_assignment_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT label_assignment_slot_range CHECK (((slot_no IS NULL) OR ((slot_no >= 0) AND (slot_no <= 31))))
+);
+
+
+--
+-- Name: owner_write_counter; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.owner_write_counter (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    seq bigint NOT NULL,
+    CONSTRAINT owner_write_counter_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT owner_write_counter_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT owner_write_counter_seq_check CHECK ((seq >= 0))
 );
 
 
@@ -1301,6 +1319,14 @@ ALTER TABLE ONLY library.label_assignment
 
 ALTER TABLE ONLY library.label_assignment
     ADD CONSTRAINT label_assignment_pkey PRIMARY KEY (route, account_id, subject_id, label_id);
+
+
+--
+-- Name: owner_write_counter owner_write_counter_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_write_counter
+    ADD CONSTRAINT owner_write_counter_pkey PRIMARY KEY (route, account_id);
 
 
 --
