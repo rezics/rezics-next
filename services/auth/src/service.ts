@@ -74,10 +74,10 @@ interface Client {
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
 const assignmentUuid = '[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const assignmentReference = new RegExp(`^urn:rezics:request:(${assignmentUuid}):(${assignmentUuid})$`);
-function scopes(value: unknown): string[] {
+function normalizeScopes(value: unknown, limit: number): string[] {
   if (
     !Array.isArray(value) ||
-    value.length > 100 ||
+    value.length > limit ||
     value.some((v) => typeof v !== 'string' || v.length > 128 || !scopePattern.test(v))
   )
     throw new Denied(400);
@@ -137,6 +137,10 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const { trustedAccess } = options;
+  const scopeLimit = options.siteActions
+    ? new Set(['openid', 'offline_access', 'media:complete', ...options.siteActions.keys()]).size
+    : 1000;
+  const scopes = (value: unknown) => normalizeScopes(value, scopeLimit);
   const authority = clientAuthority(
     options.database,
     trustedAccess,
@@ -315,6 +319,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
   const website = websiteRoutes({
     options,
+    scopeLimit,
     database,
     native: getAuth,
     withIssuance,

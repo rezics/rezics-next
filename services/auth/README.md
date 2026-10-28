@@ -166,6 +166,16 @@ These are in-process methods, with no internal HTTP authorization endpoint.
 Registration command durability, retries and Access activation remain the
 registration workflow's responsibility.
 
+Scope-list validation uses a bound computed once at service creation: the size
+of the union of `openid`, `offline_access`, `media:complete` and every mounted
+`siteActions` key, including anonymous actions. Without `siteActions`, the bound
+is 1,000 entries. Generic registration, session proofs, consent and token requests
+apply it before deduplication; website registration applies it after deduplication.
+Each scope still has a 128-character limit and the existing OAuth scope character rules.
+Validation touches only the request's scopes, costs O(scopes in the request),
+at most O(mounted actions), and adds no reads. Token scope claims and stored
+consent remain O(mounted actions), which is platform configuration, not user data.
+
 Better Auth 1.8.0-beta.2's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that
 facility with `user.id = account_id`, and credential `accountId = userId`.
@@ -1148,7 +1158,9 @@ slash. Isolated tests use `https://api.rezics.test`.
   allowance.
 - Scopes must include `openid`, `offline_access` and `media:complete`. When the
   composition supplies the trusted mounted action catalogue (`siteActions`),
-  every other scope must be one of its actions. Scope changes are additive;
+  every other scope must be one of its actions. The deduplicated list is bounded
+  by the known scope set described under client registration (1,000 entries
+  without a mounted catalogue). Scope changes are additive;
   removing a scope is refused here and belongs to the client reduction workflow.
 - The call is idempotent. It replaces keys and redirect lists, so rotate a key
   by registering both keys, switching the website, then registering the new key

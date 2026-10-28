@@ -129,6 +129,7 @@ interface NativePort {
 }
 export function websiteRoutes(input: {
   options: AuthServiceOptions;
+  scopeLimit: number;
   database: Pool;
   native: () => NativePort;
   withIssuance<T>(clientId: string, run: () => Promise<T>): Promise<T>;
@@ -392,7 +393,7 @@ export function websiteRoutes(input: {
     async register(registration: WebsiteClientRegistration) {
       const scopes = [...new Set(registration.scopes)].sort();
       if (
-        scopes.length > 100 ||
+        scopes.length > input.scopeLimit ||
         scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
         ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
       )
