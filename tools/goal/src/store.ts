@@ -50,6 +50,16 @@ CREATE INDEX worker_attempts_ended_at ON worker_attempts(json_extract(body, '$.e
 CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.state'));
 `,
   },
+  {
+    module: 'worker',
+    version: 5,
+    sql: `CREATE INDEX worker_events_task_attempt_sequence ON worker_events(task_id, attempt, sequence);`,
+  },
+  {
+    module: 'worker',
+    version: 6,
+    sql: `CREATE INDEX worker_tasks_state ON worker_tasks(json_extract(body, '$.state'));`,
+  },
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
@@ -80,6 +90,40 @@ export class WorkerStore implements AttemptFence {
       ? this.db.query('SELECT body FROM worker_attempts WHERE task_id=? ORDER BY attempt').all(taskId)
       : this.db.query('SELECT body FROM worker_attempts ORDER BY task_id, attempt').all();
     return rows.map((row) => decode<Attempt>(row)!);
+  }
+  /** Reads one state through the attempt state index; used for the host's pending launcher recovery. */
+  attemptsInState(state: Attempt['state']): Attempt[] {
+    return this.db
+      .query("SELECT body FROM worker_attempts WHERE json_extract(body, '$.state') = ? ORDER BY task_id, attempt")
+      .all(state)
+      .map((row) => decode<Attempt>(row)!);
+  }
+  /**
+   * Candidate work is anchored by running tasks, then follows each task's current-attempt primary key.
+   * settle calls store.updateTask to write `landing`; failure paths write `ready`/`stopped`,
+   * removing the task from the running-state range.
+   */
+  orphanSweepCandidates(): { attempt: Attempt; taskState: string; currentAttempt: number }[] {
+    return this.db
+      .query(`
+        /* worker_tasks_state bounds work to unsettled tasks; each current attempt is a primary-key lookup. */
+        SELECT a.body AS attempt_body,
+               json_extract(t.body, '$.state') AS task_state,
+               t.current_attempt AS current_attempt
+        FROM worker_tasks AS t
+        JOIN worker_attempts AS a ON a.task_id = t.id AND a.attempt = t.current_attempt
+        WHERE json_extract(t.body, '$.state') = 'running'
+          AND json_extract(a.body, '$.state') IN ('running', 'exited')
+      `)
+      .all()
+      .map((row) => {
+        const value = row as { attempt_body: string; task_state: string; current_attempt: number };
+        return {
+          attempt: JSON.parse(value.attempt_body) as Attempt,
+          taskState: value.task_state,
+          currentAttempt: value.current_attempt,
+        };
+      });
   }
   /** Counts running attempts through the state index without reading or decoding attempt bodies. */
   runningAttemptsCount(): number {
@@ -460,11 +504,16 @@ export class WorkerStore implements AttemptFence {
   }
   events(
     taskId?: string,
+    attempt?: number,
   ): { sequence: number; task_id: string; attempt: number; kind: string; at: string; body: string }[] {
     return (
-      taskId
-        ? this.db.query('SELECT * FROM worker_events WHERE task_id=? ORDER BY sequence').all(taskId)
-        : this.db.query('SELECT * FROM worker_events ORDER BY sequence').all()
+      taskId && attempt !== undefined
+        ? this.db
+            .query('SELECT * FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence')
+            .all(taskId, attempt)
+        : taskId
+          ? this.db.query('SELECT * FROM worker_events WHERE task_id=? ORDER BY sequence').all(taskId)
+          : this.db.query('SELECT * FROM worker_events ORDER BY sequence').all()
     ) as ReturnType<WorkerStore['events']>;
   }
   landing(request: LandingRequest, enqueue: (request: LandingRequest) => void): void {
