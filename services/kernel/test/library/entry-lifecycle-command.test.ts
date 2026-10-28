@@ -301,7 +301,7 @@ test('native delete and restore receipts require current owner scope active acco
     }
     try {
       const before = await observed(subjectId, who.actor.accountId);
-      const callerBefore = actor.kind === 'account' ? await observed(subjectId, actor.accountId) : null;
+      const callerBefore = await observed(subjectId, actor.kind === 'account' ? actor.accountId : who.actor.accountId);
       for (const run of [() => remove(actor, row, deleteKey), () => restore(actor, subjectId, d, restoreKey)]) {
         const error = await run().then(
           () => {
@@ -367,11 +367,24 @@ test('native pinned custom entry clear and exact undo preserve all eighteen sour
   await f.activate(f.replacementDigest);
   expect(f.replacement.types['ex:Record']!.library).toBeUndefined();
   time += 60_000;
-  const deletion = await remove(f.owner.actor, row);
+  const deleteKey = entryKey(),
+    restoreKey = entryKey();
+  const deletion = await remove(f.owner.actor, row, deleteKey);
   const { d } = await snapshot(row, deletion);
   time += 60_000;
-  const undo = await restore(f.owner.actor, subjectId, d);
+  const undo = await restore(f.owner.actor, subjectId, d, restoreKey);
   await restored(row, undo);
+  const occupied = await observed(subjectId);
+  expect(await remove(f.owner.actor, row, deleteKey)).toEqual({ ...deletion, replayed: true });
+  expect(await observed(subjectId)).toEqual(occupied);
+  const originalAgain = await live(subjectId);
+  const clearedAgain = await remove(f.owner.actor, originalAgain);
+  await snapshot(originalAgain, clearedAgain);
+  const absent = await observed(subjectId);
+  expect(await restore(f.owner.actor, subjectId, d, restoreKey)).toEqual({ ...undo, replayed: true });
+  expect(await remove(f.owner.actor, row, deleteKey)).toEqual({ ...deletion, replayed: true });
+  expect(await observed(subjectId)).toEqual(absent);
+  expect(absent.archived.map((r) => r.deletion_id)).toEqual([clearedAgain.transactionId]);
   const freshSubject = await f.createSubject('record');
   const before = await observed(subjectId);
   const unsupported = await f.send('owner', 'PUT', `/v1/libraryEntries/${freshSubject}`, { state: 'listening' });
