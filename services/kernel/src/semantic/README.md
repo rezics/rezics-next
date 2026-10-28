@@ -1144,6 +1144,33 @@ The global context is inserted once by migration and has no runtime semantic rea
 
 Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.
 
+## Native lifecycle evidence
+
+`readSemanticLifecycle(client,{target,accountId,nativeT})` is trusted internal metadata, never a permission
+proof or an HTTP surface. The caller owns authorization, branded authoritative time and its RR or command
+snapshot. The reader opens no connection or transaction, performs no writes, follows no redirects and hydrates
+no payload. See [the deletion contract](deletion-contract.md#first-independent-state-and-attribution-slice)
+for its closed shapes and exact pre-IO rejection behavior. Known native identity currently returns
+`active/null/null/false` state; unknown or mismatched locators return null. Later owned commands must extend
+this reader with actual mutable lifecycle state. These greens prove attribution, not deletion.
+
+Proposals use the exact revision transaction and partitioned write basis. Compact identity uses its assertion
+fact transaction before and after expansion, with ambiguous/missing author evidence yielding null owner.
+Community Context ownership uses Access's direct `semantic.context.owner` grant at the original branded T
+on the same client; Global has no personal owner. Creator, adopter, provenance and action grants are not owners.
+
+- Touches: candidate PK, exact revision PK for a proposal, and exact `(partition_no,transaction_id)` write basis;
+  compact candidates instead use `fact_compact_candidate` with at most two assertion rows from the finite compact
+  log (33 entries maximum per slot), sufficient to detect ambiguity. Context uses its PK and, for a community,
+  one direct temporal role-grant probe. No subject proposal/revision history scan or property inference.
+- Bound: one statement for a candidate or Global, two for a community Context; constant point rows and
+  statements, logarithmic B-tree blocks in actual history/population. No cost depends on unrelated revisions.
+- Growth check: `test/semantic/growth-lifecycle-state.test.ts` measures the native reader at 64/512/4096 actual
+  unrelated proposals on the same subject with constant rows/statements and logarithmic blocks. Native
+  `lifecycle-state.test.ts` covers original authors, mismatched subject and current owner revocation;
+  `lifecycle-input.test.ts` covers only negative pre-IO validation. Access's native `resource-role-held.test.ts`
+  separately covers microsecond validity, branded T, direct grants and anchored RR after revocation.
+
 ## Deletion and retention
 
 The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,
@@ -1169,13 +1196,13 @@ creates its deadline. Workflow-history retention does not establish semantic era
 `graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
 links and absent count after source revocation with consumers paused.
 
-The required first independent slice is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
+The implemented first independent slice is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
 state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
 grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
 Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
 
 | Surface                       | Actual pending work and independent acceptance                                                                                                                                                                             |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| State and owner evidence      | Native reader and read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                  |
+| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
 | Owned lifecycle and retention | DELETE/restore/purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.                                                                            |
 | Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
