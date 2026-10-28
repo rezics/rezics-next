@@ -16,7 +16,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'open-library@2';
+export const converter_revision = 'open-library@3';
 
 // Explicit allowlist: fifteen top-level fields; each collection <=64 entries,
 // authors + works <=64 relations; <=100 commands; <=64 deferred cover assets.
@@ -319,7 +319,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       ),
     ],
   };
-  const key = (field: string, group: FieldGroup) =>
+  const key = (field: string, group: FieldGroup, statement?: BatchStatement) =>
     commandKey([
       metadata.source,
       record.key,
@@ -329,6 +329,9 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       group,
       field,
       context.subjectId ?? 'bootstrap',
+      // Bind identity to this bounded semantic body, not the resolution map.
+      // The source digest above remains independent of native bindings.
+      ...(statement === undefined ? [] : [sourceDigest(statement)]),
     ]);
   const proposals: BatchCommand[] = [];
   const diagnostics: OpenLibraryConversion['diagnostics'][number][] = [];
@@ -338,7 +341,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     if (context.subjectId !== undefined)
       proposals.push({
         op: 'propose',
-        key: key(field, group),
+        key: key(field, group, statement),
         source: envelope(group),
         subject: context.subjectId,
         statement,
