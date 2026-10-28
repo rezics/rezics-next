@@ -79,5 +79,32 @@ Native command (one final execution):
 bun run --cwd services/kernel check test/imports/cover-native-recovery.test.ts
 ```
 
-Execution results and source revision are recorded below after the check. Bootstrap failure is not scenario proof.
-Required root command: `bun run typecheck`. No full workspace/kernel/module gate is requested.
+At source revision `facb2d0b1d7431227815e423f7e3c10eeba694bb`, the final command exited **0**:
+**3 pass, 0 fail, 326 expect() calls**, three tests in one file, no skips/todos and no load reruns.
+Bun reported `1.4.4-canary.1 (a0cc096ce)`. Scenario durations were 11,618.59 ms, 10,650.32 ms and
+9,624.81 ms respectively; Bun's test duration was 55.83 s. The focused check also passed its compiler gate.
+All three scenarios reach the native ACK/local fault and their subsequent disclosure assertions. The repaired
+coordinator already satisfies this native evidence slice: no product failure is manufactured and no implementation
+change is needed for these cases. Main/promotion and the remaining consumer matrix are not established.
+
+Earlier authoring checks are not concealed or counted as native product failures:
+
+- The first focused invocation failed its compiler gate with three `TS2339` errors accessing `content` without
+  narrowing the statement value union. Zero scenarios ran. Explicit value/reference guards corrected the new tests.
+- The first actual scenario execution had **0 pass, 3 fail, 214 expect() calls**. Its first failure was
+  `Expected: false / Received: undefined` in `disclose`, checking a denied original download as a successful
+  `{allowed:false}` body. The existing production route and existing media HTTP tests require `404 not_found`.
+  The new assertions were corrected to that actual schema, including fenced-download denial; existing/frozen tests
+  were untouched. Native crash/recovery and available-variant disclosure had already been reached before this
+  fixture expectation failed. The final run additionally checks publicly selected original source references.
+
+Required root command `bun run typecheck` ran once and exited **1** on the earlier snapshot, with exactly the
+same three new-test `TS2339` diagnostics; all other workspace results passed. The corrected final kernel compiler
+and three native cases passed in the focused command above. The root command was not repeated, so this report
+claims no final whole-root green result. No extra full-root/kernel/module gate ran. Initial shell log redirection
+failed because `.temp/` did not yet exist; creating the directory preceded actual command execution.
+
+Decisions: use ordinary Global acceptance/adoption rather than relying on imported proposals being selected;
+model pending state by withholding bounded job delivery until the deferred status pass; keep source URLs and native
+reservation identities distinct while reporting the existing source fixture's identical-pixel limitation; use the
+production 404 denial schema. No files outside the four declared paths changed.
