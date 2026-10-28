@@ -19,6 +19,11 @@ import { partitionOf, routeOf } from '../route/route.ts';
 
 export const WORK_STEP_DEADLINE_MS = 5_000;
 
+/** Shared deadline policy for native Library work steps outside actor commands. */
+export function workStepDeadline(): number {
+  return deadlineFor(WORK_STEP_DEADLINE_MS);
+}
+
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
 export type LibraryCommandBody<T> = (
   tx: CommandTransaction,

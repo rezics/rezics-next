@@ -9,9 +9,8 @@ import {
   type CommandEvent,
   type CommandOutcome,
 } from '../command/command.ts';
-import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
-import { requireRoute, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './command-support.ts';
 import purgeCopy from './account-fact-purge-copy.sql';
 import purgeEntry from './account-fact-purge-entry.sql';
 import purgeFollow from './account-fact-purge-follow.sql';
@@ -81,7 +80,7 @@ export async function purgeAccountFactsPage(
     pool,
     {
       partition: partitionOf(route),
-      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+      deadline: workStepDeadline(),
       clock,
       authorization,
       // Only an internal receipt namespace: no request actor or write basis.
