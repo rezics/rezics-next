@@ -97,12 +97,12 @@ export async function deployment(
     await native.request('PUT', `/${index}/_mapping`, {
       properties: { rating_score: { type: 'double' }, rating_prior_epoch: { type: 'long' } },
     });
-    const lines: string[] = [];
+    const lines: unknown[] = [];
     for (const { subject, score, epoch: indexedEpoch = 1 } of entries) {
       fake.put(subject);
       lines.push(
-        JSON.stringify({ index: { _index: index, _id: subject.id } }),
-        JSON.stringify({
+        { index: { _index: index, _id: subject.id } },
+        {
           id: subject.id,
           partition: 10,
           security_revision: 1,
@@ -110,11 +110,11 @@ export async function deployment(
           name_sort: subject.labels[0]!.value.toLowerCase(),
           search_text: ['book'],
           ...(score === undefined ? {} : { rating_score: score, rating_prior_epoch: indexedEpoch }),
-        }),
+        },
       );
       if (score !== undefined) figures.set(subject.id, figure(subject.id, score, indexedEpoch));
     }
-    if (lines.length) await native.bulk(`${lines.join('\n')}\n`, { query: { refresh: 'wait_for' } });
+    if (lines.length) await native.bulk(lines, { query: { refresh: 'wait_for' } });
     await native.request('POST', '/_aliases', {
       actions: [
         ...(generation === 1 ? [] : [{ remove: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }]),
