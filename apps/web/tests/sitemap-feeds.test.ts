@@ -1,15 +1,20 @@
 import { expect, mock, test } from 'bun:test';
-import {
-  exportSitemapFeed,
-  exportSitemapFeedSegment,
-  type SitemapExportFeed,
-  type SitemapExportOptions,
-  type SitemapObject,
-  type SitemapStore,
-  type SitemapStepRunner,
-  type SitemapWriteCondition,
+import type {
+  SitemapExportFeed,
+  SitemapExportOptions,
+  SitemapObject,
+  SitemapStore,
+  SitemapStepRunner,
+  SitemapWriteCondition,
 } from '../src/sitemap/export.ts';
 import type { SitemapFamily } from '../src/sitemap/pack.ts';
+
+mock.module('../src/sitemap/pack.ts', () => ({
+  packShards: async () => [],
+  sitemapIndexXml: () => '',
+}));
+
+const { exportSitemapFeed, exportSitemapFeedSegment } = await import('../src/sitemap/export.ts');
 
 const origin = 'https://public.example';
 const locales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const;
