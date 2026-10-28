@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { loadMyRealms } from '../src/community/space';
+import { subjectPageMessages } from '../src/features/pages/route-support';
+import { SubjectViewPage } from '../src/features/pages/subject-frame';
 import { createFakeKernelFetch } from '../src/kernel/fake';
 import fixtures from '../src/kernel/fixtures.json';
 import boardRecording from '../src/kernel/recorded/board.json';
@@ -195,6 +199,31 @@ test('the subject Reviews view offers board selection to members and a sign-in p
   expect(action).toMatch(/\?subject=/);
   expect(action).toContain('thread_review_no_realms');
   expect(action).toContain('thread_review_no_board');
+});
+
+test('the subject Reviews view renders its write action beside the view heading', () => {
+  const markup = renderToStaticMarkup(
+    createElement(SubjectViewPage, {
+      page: {
+        subject: id(3),
+        profile: 'test',
+        template: { scope: 'generic', key: 'generic' },
+        document: { root: { props: {} }, content: [] },
+        reads: {},
+      },
+      locale: 'en',
+      messages: subjectPageMessages(),
+      frame: createElement('div', null, 'Kokoro'),
+      label: 'Reviews',
+      actions: createElement('button', { type: 'button' }, 'Write a review'),
+      view: 'reviews',
+      renderJsonLd: false,
+    }),
+  );
+  const heading = markup.indexOf('Reviews');
+  const action = markup.indexOf('Write a review');
+  expect(heading).toBeGreaterThanOrEqual(0);
+  expect(action).toBeGreaterThan(heading);
 });
 
 test('review writing uses one current vote and bounded Realm and board pages', () => {
