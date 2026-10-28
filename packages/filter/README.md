@@ -62,7 +62,24 @@ and the facets of its bases. The exported `facetProperties(release, types)` prov
 supplied type order, it returns each type's own facets followed by each base's facets in base order, without repeats.
 Lookups use own properties only. A registered string facet admits `in` only when its
 definition declares `value.pattern`: each value must be 1 to 128 code units and match that pattern, compiled with the
-`u` flag once per property definition; without a pattern the condition stays unsupported, and qualifiers stay item-only.
+`u` flag once per property definition; without a pattern the catalogue facet condition stays unsupported.
+
+A declared qualifier admits either `wikibase-item` values (canonical UUIDs, unchanged) or any `string` datatype.
+String qualifiers need no pattern to opt in. Values obey the grammar's nonempty, no-control, 256 UTF-8 byte
+limit, plus the native fixed string schema's `minLength`, `maxLength` and optional full-match `pattern` when
+present. The 128-code-unit catalogue code-facet limit does not apply to qualifiers. Equality preserves exact
+bytes: no coercion, trimming, case folding, Unicode normalization, language guessing or label lookup. Canonical
+language and SHA-256 patterns retain their exact spelling. Monolingual text, quantity and range qualifiers remain
+unsupported. The existing qualified-relation admission barrier remains until a complete native plan supports it.
+
+Native `subjectSource` retains concrete item and string qualifiers from each selected statement's pinned release
+on that same statement, for both compact and expanded storage. Existing nested keyword terms and the current pure
+matcher compare these strings directly. This extraction primitive does not establish complete public query safety:
+the old SubjectSource samples relations and drops unknown snaks, and cannot distinguish missing, unknown or withheld
+qualifiers from complete known absence. Its false matcher result must not certify a negative. At a complete
+source/plan boundary essential uncertainty must be `not_proven`, including under NOT. Complete projection,
+query privacy/foreign repair, native unknown conformance and measurement schema/scope/eligibility remain separate
+requirements; generic fixture vocabulary is no bundled measurement release or capability claim.
 
 Saved definitions come from the release's `filters` map and are parsed with the same grammar. Expansion is one level:
 a missing definition, malformed stored filter, or stored filter containing another saved leaf is an unsupported query.
