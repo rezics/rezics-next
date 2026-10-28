@@ -2,7 +2,13 @@ import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import retire from './retire.sql';
-import { createSubjectIndex, subjectGenerations, subjectIndexName, subjectAlias } from './indices.ts';
+import {
+  createSubjectIndex,
+  ensureSubjectRatingMapping,
+  subjectGenerations,
+  subjectIndexName,
+  subjectAlias,
+} from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 
@@ -76,6 +82,10 @@ export async function startSearchIndexing(options: {
       }
 
       if (!currentGenerations || liveGenerations.join(',') !== currentGenerations.join(',')) {
+        // Strict mappings on generations created before public rating fields need the two
+        // compatible additions before any relay can bulk a rating-bearing document.
+        for (const generation of liveGenerations)
+          await ensureSubjectRatingMapping(options.search, options.prefix, generation);
         const previous = current;
         current = undefined;
         currentGenerations = undefined;

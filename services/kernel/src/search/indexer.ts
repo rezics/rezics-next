@@ -1,5 +1,8 @@
 import type { Pool } from 'pg';
 import { projectBatch, type Envelope } from '../events/log.ts';
+import { lookupEventType } from '../events/catalogue.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions } from './document.ts';
@@ -36,17 +39,38 @@ export function createSubjectIndexer(options: {
             const ids: string[] = [];
             const seen = new Set<string>();
             for (const envelope of envelopes) {
+              if (envelope.partition !== partition) continue;
               for (const event of envelope.events) {
                 if (
-                  (!event.type.startsWith('com.rezics.subject.') &&
-                    event.type !== 'com.rezics.library.subject.listed.v1') ||
-                  !event.subject ||
-                  seen.has(event.subject)
+                  event.type.startsWith('com.rezics.subject.') ||
+                  event.type === 'com.rezics.library.subject.listed.v1'
+                ) {
+                  if (!event.subject || seen.has(event.subject)) continue;
+                  if (subjectPartition(event.subject) !== partition) continue;
+                  seen.add(event.subject);
+                  ids.push(event.subject);
+                  continue;
+                }
+                if (event.type !== 'com.rezics.rating.public_figure.changed.v1') continue;
+                const validator = lookupEventType(event.type);
+                if (!validator?.Check(event.data)) continue;
+                const data = event.data as { questionId: string; populationId: string; subjectId: string };
+                // Event metadata is an invalidation hint only. Accept its anchor after proving the
+                // registered identity agrees with the envelope and the current public contract.
+                if (
+                  data.questionId !== STANDARD_QUESTION_ID ||
+                  data.populationId !== GLOBAL_CONTEXT.id ||
+                  event.subject !== data.subjectId ||
+                  seen.has(data.subjectId)
                 )
                   continue;
-                if (subjectPartition(event.subject) !== partition) continue;
-                seen.add(event.subject);
-                ids.push(event.subject);
+                try {
+                  if (subjectPartition(data.subjectId) !== partition) continue;
+                } catch {
+                  continue;
+                }
+                seen.add(data.subjectId);
+                ids.push(data.subjectId);
               }
             }
             if (ids.length === 0) return;
