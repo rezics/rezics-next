@@ -271,8 +271,8 @@ export class WorkerJob implements GateOutcomeSink {
           lastLogActivityAt = Date.now();
           checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
         }
-        // Check tools append elapsed slot-wait time beside the run log. Subtract it from idle time so a
-        // worker blocked on a check host does not look silent while its check is still waiting.
+        // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
+        // a local or remote check does not look silent while the command is running.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
         if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
@@ -320,8 +320,8 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
     };
-    // Time spent waiting for a check slot does not count against the class limit: under load, slot waits of half an
-    // hour or more ended attempts whose work was done.
+    // Time spent waiting for or running a check does not count against the class limit: workers do no model work while
+    // the check wrapper is silent.
     const remainingMs = () => limits.maxMs + checkWaitMs(ref.logPath) - (Date.now() - Date.parse(ref.startedAt));
     let timer: ReturnType<typeof setTimeout> | undefined;
     const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(SILENCE_CHECK_MS, silenceMs)));

@@ -107,6 +107,10 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
       '-c',
       `tool_output_token_limit=${codex.toolOutputTokens}`,
       '-c',
+      'features.unified_exec=true',
+      '-c',
+      `background_terminal_max_timeout=${codex.backgroundTerminalMaxTimeoutMs}`,
+      '-c',
       // Only settings choose the tier: Fast spends included allowance 2.5 times as fast, so neither a routing profile nor
       // the profile a retry keeps from an earlier attempt can select it.
       `service_tier=${JSON.stringify(codex.serviceTier)}`,
@@ -187,7 +191,7 @@ export function workerPrompt(
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
     'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
-    'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit, plus the root typecheck. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one, never to obtain a success summary or after the acceptance passed; an extra check you choose names at most 12 test files, those closest to your change.',
+    'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit, plus the root typecheck. Run each as one foreground command through `bun scripts/worker-check.ts -- <command...>` from the worktree root. The wrapper writes live output under `.temp/goal/checks/` and stays silent until exit, then prints the exit status, a short failure summary when needed, and the log path. If Codex returns a session while the wrapper runs, use one blocking wait for the configured `background_terminal_max_timeout`; never poll or rerun the check. Run a whole-workspace check (a workspace check with no files named, or a full web check) only when the contract names one, never to obtain a success summary or after the acceptance passed; an extra check you choose names at most 12 test files, those closest to your change.',
     'You have the authority to finish. Your declared paths are where the work is expected, not a fence: change any other file the acceptance or a defect blocking it needs, including a defect another Goal left in your base, keep such changes minimal, and list each file outside your paths with its reason in your summary. Your landing runs only your own acceptance, so run the tests that cover every file you change outside your paths before you finish (in services/kernel, `bun run --cwd services/kernel check` without file arguments runs the tests your changes affect); the Goal that owns such a file is told of your change. Files in a risk area your contract does not declare stay closed.',
     'Decide ambiguities yourself from the contract, the specs, the code and the tests, and record each decision in your summary. Report a blocker only when the acceptance tests contradict each other or the specs, when the work needs a product decision the contract does not make, or when a tool or access you need fails.',
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
@@ -229,7 +233,7 @@ export function attemptEnvironment(
     GOAL_ATTEMPT: String(attempt.attempt),
     KERNEL_CHECK_AFFECTED: task.base,
     ...remoteCheckEnvironment(stateDirectory),
-    // Check tools append each wait for a check slot here, in milliseconds per line; the class limit adds it back.
+    // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
     ...(stateDirectory
       ? { GOAL_CHECK_WAIT_FILE: join(stateDirectory, 'runs', task.id, `${attempt.attempt}.check-wait`) }
       : {}),

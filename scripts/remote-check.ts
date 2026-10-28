@@ -443,10 +443,10 @@ async function sleep(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) throw new Aborted();
 }
 
-type WaitRecorder = { begin(): void; record(): void; stop(): void };
+export type CheckWaitRecorder = { begin(): void; record(): void; stop(): void };
 
 /** Records elapsed wait time in full-line appends, without allowing a reporting error to fail the check. */
-function waitRecorder(file = process.env.GOAL_CHECK_WAIT_FILE): WaitRecorder {
+export function checkWaitRecorder(file = process.env.GOAL_CHECK_WAIT_FILE): CheckWaitRecorder {
   if (!file) return { begin() {}, record() {}, stop() {} };
   let started: number | undefined;
   let recordedThrough = 0;
@@ -863,7 +863,7 @@ async function acquire(
   let warnedGateReduction = false;
   let marker: SessionLease | undefined;
   let markerHost: string | undefined;
-  const wait = waitRecorder();
+  const wait = checkWaitRecorder();
   const announceWait = (): void => {
     wait.begin();
     if (announced) return;

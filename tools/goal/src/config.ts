@@ -264,6 +264,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       },
       solContextWindow: positive(codex.solContextWindow, 'solContextWindow'),
       toolOutputTokens: positive(codex.toolOutputTokens, 'toolOutputTokens'),
+      backgroundTerminalMaxTimeoutMs: positive(codex.backgroundTerminalMaxTimeoutMs, 'backgroundTerminalMaxTimeoutMs'),
     },
     integration: {
       managerSocket: path(integration.managerSocket, join(stateDirectory, 'manager.sock')),
