@@ -393,7 +393,7 @@ async function kernelCheck(
   return { code, stdout, stderr };
 }
 
-test('a queue of long runs never delays a short run beyond one short run at any queue length', () => {
+test('a queue of long runs never delays a short run beyond one short run', () => {
   const shortDurationMs = 120_000;
   for (const queueLength of [1, 10, 100]) {
     const host = { ordinaryCapacity: 2, ordinaryUsed: 2, expressBusyUntil: shortDurationMs, now: 0 };
@@ -456,7 +456,7 @@ test('the gate never takes the express slot', async () => {
   expect(takes[0]?.script).toContain('# REMOTE_CHECK_SLOT_LIMIT 2');
 });
 
-test('a short run takes a free ordinary slot before the express slot', async () => {
+test('a short run takes an ordinary free slot before the express slot', async () => {
   const ordinary = scenario({ a: { available: 20e9, slots: 2 } });
   expect((await remote(ordinary.env, workspace(), ['true'], ['--estimate-ms', '40'])).code).toBe(0);
   expect(ordinary.events().find((event) => event.kind === 'slot' && event.granted)).toMatchObject({
@@ -477,7 +477,7 @@ test('a short run takes a free ordinary slot before the express slot', async () 
   );
 });
 
-test('--estimate-ms accepts only non-negative safe integer milliseconds', async () => {
+test('--estimate-ms is a non-negative integer of milliseconds', async () => {
   const valid = scenario({ a: { available: 20e9 } });
   const completed = await remote(valid.env, workspace(), ['true'], ['--estimate-ms', '0']);
   expect(completed.code).toBe(0);

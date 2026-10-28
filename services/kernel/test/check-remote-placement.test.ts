@@ -142,6 +142,7 @@ const runner = `import { placeKernelCheck } from ${JSON.stringify(checkScript)};
 const code = await placeKernelCheck(JSON.parse(process.env.PLAN ?? ''), process.env, {
   root: process.env.WORKSPACE ?? '',
   cwd: process.env.WORK_CWD ?? '',
+  moduleDirectory: process.env.MODULE_DIRECTORY,
 });
 console.log(JSON.stringify({ code }));
 `;
@@ -151,10 +152,22 @@ async function placed(
   plan: { files: string[] | null; tests: string[] },
   workspace: string,
   cwd: string,
+  moduleDirectory?: string,
+  unsetEnvironment: string[] = [],
 ): Promise<{ code: number | null; stderr: string }> {
+  const childEnvironment = {
+    ...process.env,
+    ...env,
+    PLAN: JSON.stringify(plan),
+    WORKSPACE: workspace,
+    WORK_CWD: cwd,
+    ...(moduleDirectory === undefined ? {} : { MODULE_DIRECTORY: moduleDirectory }),
+  };
+  for (const name of unsetEnvironment) delete childEnvironment[name];
+
   const child = Bun.spawn(['bun', '-e', runner], {
     cwd: repository,
-    env: { ...process.env, ...env, PLAN: JSON.stringify(plan), WORKSPACE: workspace, WORK_CWD: cwd },
+    env: childEnvironment,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -244,3 +257,21 @@ test('the kernel check estimates only a fully timed named plan', async () => {
     '# REMOTE_CHECK_ESTIMATE_MS none',
   );
 }, 30_000);
+
+test('a kernel check without Git metadata runs without an estimate', async () => {
+  const { directory, env, workspace } = prepare();
+
+  const result = await placed(
+    env,
+    { files: ['test/check-remote-placement.test.ts'], tests: ['test/check-remote-placement.test.ts'] },
+    workspace,
+    join(workspace, 'src'),
+    directory,
+    ['KERNEL_CHECK_TIMINGS'],
+  );
+
+  expect(result.code).toBe(0);
+  expect(eventsOf(directory).find((event) => event.kind === 'slot')?.script).toContain(
+    '# REMOTE_CHECK_ESTIMATE_MS none',
+  );
+});
