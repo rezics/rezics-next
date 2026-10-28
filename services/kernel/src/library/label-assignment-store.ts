@@ -69,7 +69,8 @@ export async function setLabelAssignment(
   const rows = await reservations.run(db, tuple);
   const desired = rows.find((row) => row.labelId === labelId);
   const locked = await parents.run(db, {
-    ...tuple,
+    route: input.route,
+    account_id: input.accountId,
     label_ids: [...new Set([...rows.map((row) => row.labelId), labelId])],
   });
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
