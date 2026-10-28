@@ -1,51 +1,242 @@
 # Commerce
 
 Commerce owns offers, checkout orders, payment evidence, buyer entitlements and creator royalty statements.
+This document specifies first-public behavior and identifies current implementation gaps. The
+[Commerce Goal](../../../../docs/goals/commerce.md) owns completion evidence;
+[shared deletion policy](../../../../docs/deletion.md) and
+[Accounts' erasure contract](../access/README.md#erasure-consumers) remain shared authorities.
+The [integrated review](../../../../docs/research/commerce-integrated-done-review.md) is historical evidence,
+not proof that the current runtime or main satisfies this contract.
 
-## Checkout return URLs
+## Purchase journey and provider boundary
 
-Configure `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` as absolute HTTPS URLs. Either URL may include `{ORDER_ID}`; the kernel replaces every occurrence with the order's ID for both the initial Checkout Session create and reconciliation retries. Stripe's `{CHECKOUT_SESSION_ID}` placeholder is also allowed and passes through unchanged. For example, `https://rezics.com/orders/{ORDER_ID}?checkout=success` returns to the order page. Other brace placeholders are rejected at startup.
+Use one direct US Stripe account, hosted Checkout and Managed Payments. REZICS is the catalogue authority:
+Sessions receive the order's captured product and price inline; there is no Product/Price catalogue synchronization.
+Inline `product_data` can create a provider Product; it does not mean that Stripe stores no provider objects
+([pinned SDK](https://github.com/stripe/stripe-node/blob/3af59f7c86a2350a8ea5298473f258d622bd8651/src/resources/Checkout/Sessions.ts#L5449)).
+[The adapter](stripe.ts) sends one payment item, captured title/currency/amount/tax code, order correlation and
+`managed_payments.enabled`. Its automatic-tax fallback exists but does not establish Managed Payments completion.
+Points remain outside first public scope.
 
-## Deletion and account-private minimization (first public)
+The minimum journey starts at a subject's purchasable benefit, reaches an active offer, completes hosted Checkout,
+and lets the buyer later find the owned entitlement and understand its subject, benefit and active/revoked status.
+Payment ownership is independent of private [Library holdings and reading history](../library/README.md): buying
+must not silently create a holding or publish reading activity, and Library Undo cannot reverse payment truth.
+This journey does not require a broad marketplace.
 
-[Shared deletion policy](../../../../docs/deletion.md) is authoritative. Commerce currently has no record soft-delete,
-restore, early-purge route or account-erasure consumer. Offer delisting, settlement, refund/dispute processing,
-entitlement revocation, royalty recording and marking a payout paid are business state transitions. They do not
-create deletion tombstones, a 30-day record undo or an erasure guarantee. A Library restore or terminal account
-deletion cannot reverse those business facts.
+Current [routes](routes.ts) expose known-ID offer/order reads, order creation and entitlement read/list.
+They have no subject-to-active-offer listing or buyer order-history list. The web has
+[known-ID offer](../../../../apps/web/src/checkout/offer-page.tsx) and
+[order-status pages](../../../../apps/web/src/checkout/order-page.tsx), but these do not supply the subject benefit
+entry, later purchase/entitlement navigation or actual benefit-consumption authorization. The
+[subject page](../../../../apps/web/src/features/pages/subject.tsx) has no purchase path, and an entitlement row alone does not prove access to its benefit. Those are remaining journey gaps.
 
-| Record / supported mutation                                 | Current reads, authority and state                                                                                                                                                                                                                                                                                                                                                                     | First-scope deletion requirement and actual gap                                                                                                                                                                                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `commerce.offer` / delist or revise                         | The seller changes offer state through `offer:manage`; delisting stops new checkout. This is not a deleted tombstone or an undo. Public catalogue reads do not expose delisted offers; the seller's Commerce record remains.                                                                                                                                                                           | Delisting does not minimize account-linked offer fields or erase the record. The account event currently has no Commerce consumer, so offer-linked personal fields are not cleaned up by account erasure; no public-offer retention rule is inferred here.        |
-| `commerce.purchase_order` / checkout and settlement         | The buyer reads their order; captured buyer, offer, creator, target and price terms are immutable. Pending/paid/failed/unknown settlement and Checkout reconciliation are payment facts, not deletion. No delete or restore route exists.                                                                                                                                                              | Withhold account-private order reads at terminal account deletion T. Buyer/target relations and Checkout payload can identify a private purchase, but no Commerce account consumer or field-minimization path exists.                                             |
-| `commerce.entitlement` / grant or refund/dispute revocation | The buyer reads their entitlement. Stripe settlement grants or revokes it for refund/dispute facts; changing `revokedAt`/reason is a business state transition. Provider reconciliation may reactivate it only when a newer authoritative Stripe snapshot makes the benefit active again. A Library restore or account-deletion flow must never reactivate a revoked benefit or reverse payment truth. | Withhold the buyer's entitlement at T and minimize or erase account-to-order/offer/subject facts when personal. The current Commerce schema has no deletion/restore lifecycle or account consumer.                                                                |
-| `commerce.order_transaction` / recorded Stripe facts        | These rows record charge, refund, dispute and reversal transactions; they have no user delete or restore API. The `order_transaction_guard` rejects every UPDATE and DELETE.                                                                                                                                                                                                                           | The trigger enforces the current database contract; it does not create a financial-retention exemption. No field-minimization or account-private erasure path exists. The retained evidence boundary is an owner gap, not permission to keep every private field. |
-| `commerce.royalty_line` / payout recording                  | Royalty lines are derived from named order transactions and have no user delete or restore API. The `royalty_line_guard` rejects every UPDATE and DELETE.                                                                                                                                                                                                                                              | The trigger does not create a financial-retention exemption. Account links, source IDs and amounts have no minimization path or agreed safe retained skeleton. No account consumer or erasure path exists.                                                        |
-| `commerce.payout_statement` / mark paid                     | A creator reads their statement and lines. Mark-paid is a state change with current `payout_statement:mark_paid` authority; paid statements cannot be updated. It is not a deletion or restore operation.                                                                                                                                                                                              | Withhold account-private statement reads at T and minimize personal fields under the shared policy. Keep only a safe nonpersonal skeleton where permitted; otherwise erase the row. No account-private consumer or cleanup currently exists.                      |
+### External maintainer setup
 
-Account deletion is terminal at T. Accounts publishes the terminal
-`com.rezics.access.account-tombstoned.v1` event and does not wait for consumers; account erasure requires no platform
-action. Commerce has no account restore or account-generation port. The current `commerceWorkModule` registers
-Stripe reconciliation and royalty recording only, not an account-private consumer. `commerce/work.ts` contributes
-`commerce_royalty` and `commerce_reconcile_order` effects through `addEffects`; the shared `work/registry.ts`
-registers those effects, but no Commerce effect handles account tombstones. Commerce therefore has no durable path
-to minimize its private data or locate retained payment evidence on account deletion. Account-private cleanup
-starts from T without a 30-day wait or platform grant, and account deletion does not wait for the Commerce consumer.
-The immutable transaction
-triggers in `db/commerce/migrations/20261025104721_commerce_orders.sql` and
-`20261025104722_commerce_payouts.sql` prevent ordinary UPDATE/DELETE; they are not a financial-retention exception.
-This contract does not authorize either a blanket physical erase of shared/provider stores or a blanket retention
-exemption. Exact Commerce-owned payload and evidence locators, with the minimal permitted retained fields, remain
-unimplemented.
+Stripe must confirm REZICS's direct-seller eligibility under its actual distribution arrangement for
+[Managed Payments](https://docs.stripe.com/payments/managed-payments/eligibility) and activate the intended US account.
+One API key and outside-Stripe creator royalties do not prove eligibility. Required actual configuration names are
+`STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`, `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL` and HTTP endpoint
+`STRIPE_WEBHOOK_SECRETS`; matching mode and endpoint secrets, migrations and the shared worker/effects relay must
+be configured. `STRIPE_API_HOST` is the fixture override, not a production qualification step.
+[Configuration](config.ts) rejects partial/invalid settings; without Commerce configuration, provider operations
+are unavailable. Signed fixtures and implementation work do not wait for live keys.
 
-Any future account-private work must reuse the shared kernel lifecycle, durable checkpoint, cursor and retention
-protocols, not a Commerce-local deletion engine. It must bind the exact terminal account and T, check the current
-legal hold in each destructive transaction, and persist effect, receipt, checkpoint and continuation atomically.
-Select **1 <= P <= 100 indexed source rows before filtering**, or prove a partial due/pending index; advance past held
-and rejected rows so they cannot starve later work. Bound bytes and effects, page from the source before filtering,
-and avoid OFFSET, broad account/principal/JSON/history scans and default cascades. A legal hold suspends purge without
-restoring disclosure. No early-purge route or parameter is exposed; if one is introduced, it requires its own
-explicit platform permission on the exact target.
+Configure public HTTPS `POST /v1/webhooks/stripe` for this direct account, snapshot events matching
+[the handled set](model.ts), and an API version compatible with the installed SDK. Thin notifications are not the
+current classifier's input. Supply rotated signing secrets with overlap. Refunds, disputes and evidence management
+stay in Stripe, including Stripe-initiated refunds. Creator payments occur outside Stripe; an agreed payout method
+and actual external reference are operational conditions, not evidence supplied by a statement row.
+
+### Checkout return URLs
+
+Configure `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` as absolute HTTPS URLs. Either URL may include `{ORDER_ID}`;
+the kernel replaces every occurrence with the order ID for initial Session creation and reconciliation retries.
+Stripe's `{CHECKOUT_SESSION_ID}` passes through unchanged. For example,
+`https://rezics.com/orders/{ORDER_ID}?checkout=success` returns to the order page. Other brace placeholders fail startup.
+A return URL never proves payment or grants a benefit.
+
+## Commands, receipts and delisted concealment
+
+Native command receipts remain principal-scoped: partition, verified principal kind/id, command kind and idempotency
+key identify replay. Each target command must hash complete semantic intent, including `offerId` and other path
+identifiers. Token bytes or receipt email are not identities. Every client replay reauthorizes at command time before
+receipt lookup or disclosure, including revoked or suspended authority. Another principal cannot retrieve its result.
+[Commands](commands.ts) use [the shared command envelope](../command/command.ts), not a Commerce receipt engine.
+
+Actual defect: `reviseOffer` authorizes the target but hashes only `unitAmountMinor`. Two owned offers in the same
+partition can therefore collide under one key; the second target can receive the first target's receipt. Its native
+command port needs the target in the digest; there is currently no HTTP revise route. `createOrder` already includes
+`offerId`, delist includes its ID, and [mark-paid](payouts.ts) includes statement ID and payment reference.
+Trusted refresh intent must include order and Session with a stable per-refresh receipt, rather than hashing a
+changing provider response; current `applyCheckoutSnapshot` hashes only order ID under its workflow-step key.
+
+A public GET for a delisted offer, even by known ID and even by its seller, must match an unknown offer's `404`
+problem body apart from `request_id`. Conceal before reading its subject summary. Keep generic internal offer reads
+for authorized management and historical processing. Actual defect: [the public handler](routes.ts) checks existence
+only and still returns a delisted row. New purchases already reject delisted offers with `409 offer_unavailable`.
+Existing orders and Sessions keep their captured terms after price revision or delisting; neither delisting nor
+Library Undo revokes a paid benefit or expires every outstanding Session.
+
+[Checkout](checkout.ts) commits the order before the provider call and retries identical captured parameters with
+`order:<orderId>`. This provider key is separate from principal receipts, event deduplication and accounting keys.
+Provider idempotency is not permanent duplicate prevention; unresolved creation beyond provider key retention needs
+identification/reconciliation, not automatic creation of another purchase.
+
+## Session refresh and payment truth
+
+[Webhook intake](webhook-routes.ts) verifies the exact raw signed bytes through [SDK verification](webhook.ts),
+bounds the body at 256 KiB and awaits durable enqueue before acknowledging. Invalid signatures have no effects;
+valid payload claims about payment never substitute for a provider read. Event-ID dedupe uses the durable identity
+in [enqueue](enqueue.ts), independently of entitlement uniqueness and Balance Transaction accounting dedupe.
+
+Every trigger must resolve a Checkout Session ID: direct Session events, PaymentIntent-derived refund/dispute events,
+initial/expiry reconciliation, provider event recovery and explicit known-order repair. Serialize refreshes for that
+Session on the shared [DBOS `effects` queue](../work/queues.ts) with `partitionConcurrency: 1`, using a namespaced
+provider-account/mode/Session partition key. Each distinct trigger retains a distinct durable refresh identity;
+one permanent Session workflow would suppress later refunds. Different Sessions may progress concurrently.
+Resolvers/coordinators that await a child must not occupy that child's Session partition.
+
+Serialize a fresh bounded provider read and idempotent apply as one retriable DBOS step; provider HTTP stays outside
+the SQL transaction. An unfinished retry must fetch current state, not reuse an old durable read. A committed apply
+is protected by its stable receipt if the process dies before step completion. Preserve atomic buyer-partition
+order, named transaction and entitlement updates. A business no-op changes no revision, outbox event or partition
+position; do not hide an observation write in a no-op or authorization finalizer. Neither local timestamps nor event
+creation order is last-writer authority. Multiple provider reads are not an atomic Stripe snapshot: later events
+and explicit repair supply convergence. A safe workflow-version cutover must prevent old cached readers remaining writers.
+
+Actual [work implementation](work.ts) uses the unpartitioned `workflows` queue and Session-plus-event child IDs.
+It durably clocks, reads and applies in separate steps. Those identities deduplicate triggers but do not serialize
+Session refreshes. [Settlement](settlement.ts) rejects an older `observedAt`, while a newer business no-op is rolled
+back without retaining that observation. A delayed old pending-full-refund response with no Balance Transaction can
+therefore revoke after a newer canceled-refund no-op. Equal clocks also supply no ordering proof. Serialization,
+fresh retry reads and no-op/order-observation acceptance remain missing; the existing timestamp tests do not prove them.
+
+Paid orders remain repairable. Use bounded provider event recovery and bounded known-order/Session repair, including
+paid orders, through this same refresh path. No global paid-history sweep or paid-order exclusion is permitted.
+Recovery distinguishes unaccepted delivery (provider retry/resend or bounded outage-window event pages), accepted
+but failed work (DBOS recovery or fresh repair), and events outside provider retention (known-order repair).
+Batch continuations, exact event types and Event-ID dedupe must bound recovery. Current initial/expiry workflows
+exit for paid/failed orders; their completion shortcuts are not late-payment recovery. There is no current explicit
+known-order repair route or implemented bounded event-recovery path in Commerce.
+
+### Settlement, benefits and accounting
+
+Settlement has `pending`, `paid`, `failed` and `unknown`; reconciliation is work, not a fifth state.
+An order once paid remains paid. Benefit access follows current provider state separately:
+
+- Complete and paid without a blocker grants/retains the benefit; unpaid completion never grants.
+- Partial refunds retain access. Full pending/requires-action refunds provisionally revoke; full succeeded refunds
+  stay revoked. Failed/canceled refunds restore the same entitlement when no other blocker remains.
+- Active chargebacks revoke; won disputes restore absent a full refund; lost disputes stay revoked. Warnings,
+  inquiries and prevented disputes retain access under the existing policy.
+- At terminal buyer T, the fence always prevents benefit restoration or private reads, even when financial truth
+  still needs reconciliation. Current trusted settlement does not implement that terminal-benefit fence.
+
+Pending refund revocation is REZICS access policy, not proof money moved. Financial accounting uses actual signed
+Balance Transactions once, including refund/dispute reversals, with separate currencies and integer shares.
+[Royalty calculation](royalty.ts) has tax/FX/reversal assumptions that require supported provider fixture evidence;
+missing evidence must fail visibly rather than silently justify unsupported payouts. Retained fees/tax can leave a
+nonzero balance after a full customer refund; only exact reversal of every relevant movement implies zero totals.
+
+[Payout recording](payouts.ts) incrementally aggregates newly inserted lines in [Commerce SQL](payout-record.sql),
+placing late adjustments in the current recording UTC month while preserving paid prior statements. Mark-paid
+records an external payment reference; it performs no Stripe transfer. Commerce already calls Accounts'
+[`grantAccountRole`](../access/account-role-grant.ts) after statement upsert in the same creator transaction at command
+T. The current grant is unchanged on redelivery. Modules never write Access SQL; preserve this implemented port and
+its additional statement cost below.
+
+## Terminal erasure and retained financial records
+
+Account confirmation T immediately conceals private/unlisted reads, exports and counts and fences producers,
+workers and late webhooks against recreating private data or benefits. Lawful financial truth may still be
+reconciled inside its restricted retained subset. Payment facts and ordinary offer delisting, refund/dispute,
+entitlement revocation and mark-paid transitions have no record Undo; account deletion never reverses them.
+
+Financial Commerce is an explicit participant in Accounts' one versioned fixed-list erasure coordinator, separate
+from Library. It must acknowledge actual minimized cleanup or attest no applicable data. Dispatch success is not
+completion; overall completion requires every fixed participant and a minimal durable PostgreSQL completion record
+outside DBOS history so an old event cannot reopen activity. Accounts owns that coordinator and its participant
+contract; Commerce must not add a lifecycle engine, account restore, legal-hold engine or deletion service.
+The current [Access consumer section](../access/README.md#erasure-consumers) still describes independent tombstone
+effects without fixed-list completion; it does not demonstrate the required coordinator. The terminal event remains
+`com.rezics.access.account-tombstoned.v1`. No Commerce erasure effect, participant acknowledgement, exact payload
+locator inventory, cleanup SQL or retained-field expiry is currently registered in [Commerce work](work.ts).
+[Shared authentication](../access/authenticate.ts) already rejects terminal/fenced actors on new requests; that
+does not prove an admitted private read racing T or trusted settlement cannot recreate a terminal buyer's benefit.
+
+Disposition applies to each Commerce store, with actual implementation still missing:
+
+- `offer`: delist is a business mutation, not erasure. Minimize account-linked personal fields; no public retention
+  exemption follows from being an offer. Current known-ID concealment also needs correction as described above.
+- `purchase_order`: immediately conceal buyer-private reads; erase/minimize identifying buyer, target relations and
+  Checkout payload except the restricted legally required subset. Captured-term immutability does not authorize retention.
+- `entitlement`: fence benefit use and private reads at T; erase personal account/order/offer/subject relations.
+  A later paid or won-dispute refresh cannot recreate them.
+- `order_transaction`: retain only required payment/tax evidence with restriction and expiry, minimizing remaining
+  personal fields. Its UPDATE/DELETE guard is not a blanket retention exemption.
+- `royalty_line`: minimize creator/buyer-linked source relations and personal payload; retain only the required
+  accounting subset under the same restriction/expiry rule. Its immutable guard grants no exemption either.
+- `payout_statement`: conceal creator-private reads at T, minimize personal fields and external payment references
+  except scheduled required evidence; keep a nonpersonal skeleton only where safe, otherwise erase it.
+
+Commerce producers must enumerate exact receipt, outbox, write-basis and work payload locators. Their shared store
+owners minimize those copies and acknowledge actual custody cleanup; Commerce cannot claim completion from local
+row cleanup or blindly purge provider/shared history. Start from account-linked owner indexes, use bounded child
+pages/checkpoints, bind terminal account and T, and persist cleanup progress and continuation atomically. No broad
+principal/JSON/history scans, global sweeps or mass cascades. Required owner indexes and locator ports remain gaps.
+
+The external retention schedule must specify jurisdiction, record category, fields, purpose and expiry for payment
+and tax evidence. Do not invent a legal duration or retain every field behind an immutable trigger. Required retained
+records remain restricted and expire; shared policy governs other erasure. Mandatory legal-hold checks and an early
+platform-purge hypothesis are not first-scope Commerce requirements. Missing live keys or a not-yet-supplied legal
+schedule does not stop fixture, fence, coordinator or bounded cleanup implementation work.
+
+## Native acceptance and completion gaps
+
+[The native entry](../../test/commerce/outcomes.test.ts) imports
+[Commerce outcomes](../../../../specs/commerce-outcomes.test.ts) through
+[the actual driver](../../test/commerce/support/outcome-driver.ts): migrated PostgreSQL, real Auth/Access personas,
+production kernel, real DBOS and official Stripe SDK against the signed loopback provider fixture.
+[The fixture](../../test/commerce/support/fake-stripe.ts) is a provider boundary substitute, not live qualification.
+Keep frozen outcomes intact and add missing native evidence; a documentation acceptance executes none of it.
+
+Remaining proof must cover buyer, another buyer in the same route, refunded buyer, seller/other seller, creator/other
+creator, anonymous, suspended and terminal accounts, and an authorized/unauthorized repair operator. Require:
+
+- Two owned offers in one partition: same-key same-target revision replays; changed target conflicts without changing
+  the second offer; fresh key succeeds. Revoked authority denies replay before receipt disclosure; another principal
+  sees no receipt. A refreshed token for the same verified identity/attribution creates no second order.
+- Active known-ID offer reads for anonymous/buyer/other buyer/seller; delisted reads match unknown `404` ignoring only
+  `request_id`. Existing Session settlement retains captured price/target after revision/delisting; private reads
+  stay hidden from another account. Complete subject-to-benefit purchase and later entitlement discovery.
+- Exact signed-byte replay before/after processing and executor restart; wrong secret, tampering, missing header and
+  stale signature produce no durable change. A validly signed false-paid payload and public return URL never grant
+  unpaid access; enqueue failure remains retryable. Preserve valid controls in the existing outcomes/webhook suites.
+- Controlled barriers and executor drain prove one-Session exclusion, different-Session concurrency, distinct-event
+  and redelivery uniqueness, equal-clock independence, nullable pending-refund balance evidence, newer canceled
+  no-op followed by a delayed old effective observation, fresh read after failed-step resume, and crash after SQL
+  commit before step completion. A newer no-op leaves business revisions/events/position unchanged. Existing
+  [work tests](../../test/commerce/work.test.ts) explicitly assert unpartitioned work and cached-read recovery;
+  those historical assertions do not establish the adopted serialization contract.
+- A paid order with missed late full-refund/dispute notification is repaired through authorized known-order work;
+  order remains paid, benefit becomes inactive, duplicate requests produce one durable request, and another account
+  learns no private fields. A fresh later repair observes reversals; revoked operators cannot replay receipts.
+  Exercise bounded event recovery and provider failure/retry without global scans.
+- Creator statements, exact worked totals, currencies/rounding, paid-reference authorization and denied replay,
+  effect redelivery, later adjustments preserving prior paid statements, and refund/dispute reversal through the
+  native API/worker boundary. Cover signed keyset pages, current-month mark-paid conflict, completed prior-month
+  payment, same-intent replay and changed-intent conflict. The worked fixture is gross 1200, tax 200, fee 50, refund
+  100: net 850, creator 765 and REZICS 85 at 90%. Add exact full reversal to zero, full refund with retained fees,
+  retained tax without synthetic credit, and refund-failure/dispute-win reinstatement recorded once.
+  [Payout tests](../../test/commerce/payouts.test.ts) and
+  [royalty tests](../../test/commerce/royalty.test.ts) contain component evidence, not a fresh complete API run.
+- Native terminal-T read-fence, concurrent producer exclusion, late-webhook no-resurrection, every fixed participant's
+  real completion/no-data acknowledgement, exact shared-copy cleanup and retained-field expiry.
+
+The integrated review's historical focused 23-case pass does not prove current main, whole Commerce completion,
+payout lifecycle, erasure or the root gate. Record current candidate/check/promoted-main evidence through the
+integration owner; neither source inspection nor this README's local acceptance supplies it.
 
 ## Cost
 
@@ -57,7 +248,7 @@ Bounds below distinguish rows examined (`R`), shared blocks (`B`) and SQL statem
 `PK` means the relation's `_pkey`; commerce PKs are B-trees beginning with `route`, and a partition is `route >>> 4`, not a physically partitioned SQL table.
 Index bounds assume selective indexed access and fixed row width; unbounded JSON fee details, provider arrays and receipt payloads add their byte/element costs, and cache warmth does not make block touches constant.
 HTTP and store entitlement pages cap `s` at 100; HTTP and payout pages fetch at most `s+1 = 101` rows, while the entitlement store helper fetches at most 100.
-The adapter and trusted snapshot command cap balance transactions at 256 per complete snapshot; Stripe also caps refund objects at 100 and dispute objects at 10. Settlement and royalty recording read only named transaction keys, at most 256 per run. Fee details remain uncapped.
+The adapter and trusted snapshot command cap balance transactions at 256 per complete snapshot; the Stripe adapter also caps refund objects at 100 and dispute objects at 10. Settlement and royalty recording read only named transaction keys, at most 256 per run. Fee details remain uncapped.
 The checkout recorder permits pending → unknown once, then a session or failed outcome; unchanged outcomes roll back, and session/failed/paid orders exit before counting, so successful numbered receipts have `c <= 2` (the range count itself has no LIMIT).
 
 | Operation                              | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Growth check                                                                                                                            |
@@ -88,3 +279,35 @@ Payout recording aggregates inserted lines rather than q sales, while entitlemen
 Settlement grants use the target subject captured on the order at creation and read no seller-partition offer.
 Every successful command serializes on its partition-wide `core.partition.position` counter (not a single all-partitions counter), and creator-period-currency payout upserts also contend on one statement row.
 Parent/root authorization and royalty source reads are separate anchored checkouts rather than cross-partition joins, but the shared pool and shared DBOS system database in the current composition do not prove independently routed multi-machine execution costs.
+
+### Session refresh and known-order repair
+
+- Touches: one explicit Session/known order, its fresh bounded provider snapshot, buyer-partition order/entitlement
+  and named transaction changes, incremental creator accounting, current authority checks and shared DBOS queue/step
+  persistence. Add the command envelope, receipts, outbox, retries and payload bytes to the existing SQL derivations.
+- Bound: per-Session concurrency one; bounded named-key changes and repair batches, with no paid-history scan.
+  Current adapter caps are 100 refunds, 10 disputes and 256 Balance Transactions; excess fails visibly. Fee-detail
+  arrays and payload bytes still need explicit limits. Stripe steps currently allow five attempts and the SDK adds
+  network retries; fresh-refresh retry and total persistence budgets need evidence. HTTP array limits and constant
+  wrapper calls do not establish examined rows, shared blocks or DBOS database cost. Account/Session partitioning
+  does not replace current authority or the terminal fence.
+- Growth check: retain the existing named-key histories 1/64/255 and 256/257 boundary evidence in
+  [growth transactions](../../test/commerce/growth-transactions.test.ts) and
+  [order bounds](../../test/commerce/order-bounds.test.ts). Require native first/deep known-order repair plus
+  concurrent and redelivered signed-event runs at three legal scales, for example 1/64/255 order transactions,
+  growing unrelated orders, creator history and queue history independently with the selected changes fixed.
+  Measure examined rows, buffers, statements, provider elements/bytes, authority and persistence including retries.
+  These refresh/repair measurements are absent. The old growth-orders “Webhook and commerce jobs” case measures
+  a known-order read, not a real signed-event queue run; its pass cannot fill this gap.
+
+### Financial erasure participation
+
+- Touches: exact account-linked owner indexes, the restricted retained subset and producer-owned exact shared
+  receipt/outbox/work payload locators, plus Accounts' participant completion acknowledgement.
+- Bound: bounded child pages and durable checkpoints, terminal fence before effects, byte/effect limits and actual
+  cleanup/no-data acknowledgements. No global history/principal/JSON scan or mass cascade; index and locator design
+  must precede a cost claim. The existing Erasure row measures rejected point deletion, not erasure participation.
+- Growth check: require native T read-fence, late-webhook no-resurrection, full fixed-participant completion and
+  retained-field expiry at three legal scales, growing account history and unrelated data separately while fixing
+  child-page size. Measure source rows before filtering, retained/shared bytes, buffers, statements and retries.
+  No such Commerce operation or measurements exist yet; this documentation change executes none of them.
