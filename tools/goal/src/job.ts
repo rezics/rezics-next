@@ -242,7 +242,10 @@ export class WorkerJob implements GateOutcomeSink {
       : Date.parse(ref.startedAt);
     let checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
     if (adopted)
-      checkWaitAtLastLogActivity = Math.max(0, checkWaitAtLastLogActivity - (Date.now() - lastLogActivityAt));
+      checkWaitAtLastLogActivity = Math.max(
+        0,
+        checkWaitAtLastLogActivity - (Date.now() - lastLogActivityAt),
+      );
     const checkSilence = () => {
       if (silenceStopping || silenceFailure) return;
       try {

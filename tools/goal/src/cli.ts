@@ -18,6 +18,8 @@ const workerCommands = [
 ];
 const integrationCommands = ['land', 'train', 'promote', 'manager', 'inbox', '_manager-host'];
 export const commands = [...workerCommands, ...integrationCommands];
+/** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
+export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox']);
 
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(
@@ -35,8 +37,11 @@ export async function run(
   if (!['land', 'train'].includes(command)) process.env.GOAL_TRAIN_MODE = 'detached';
   try {
     runtime = await factory();
-    // A command settles only orphans whose worker has exited; the host adopts the ones still running.
-    if (runtime.recoverOrphans) await runtime.recoverOrphans({ adoptRunning: false });
+    // A command settles only orphans whose worker has exited; the host adopts the ones still running. The train and
+    // the inbox leave that to the host's sweep: every settle spawns a train, and each spawned train swept the whole
+    // store before finding the train lease held, so dozens swept at once (load 146 on 2026-10-28).
+    if (runtime.recoverOrphans && !SWEEP_FREE_COMMANDS.has(command))
+      await runtime.recoverOrphans({ adoptRunning: false });
     if (workerCommands.includes(command)) {
       if (!('job' in runtime)) throw new Error('Worker commands require the shared runtime');
       await recordManagerCommand(runtime);
