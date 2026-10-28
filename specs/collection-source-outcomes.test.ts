@@ -272,7 +272,7 @@ test('257 aliases with only the last readable retain the boundary and recover th
   if ('error' in first.value) expect(['dependency_unavailable', 'semantic_not_ready']).toContain(first.value.error);
   else expect(first.value.result).toBe('not_proven');
   const pending = await union([collection]);
-  expect(pending.status).toBe(503); // No earlier settled prefix and no approved pending-group progress format yet.
+  expect(pending.status).toBe(503); // Held identity maintenance produced no resumable group progress.
   expect(await pending.json()).toMatchObject({ retryable: true });
   await driver.repairIdentity();
   const repaired = await prepare(collection);
