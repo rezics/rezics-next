@@ -196,7 +196,7 @@ export function workerPrompt(
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
-    'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
+    'Work until every acceptance condition holds. Do not send progress reports. Commit your changes on this branch before you start a check and again after each fix: a commit does not claim that checks pass, and an attempt that ends without a commit counts as stalled.',
     'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
     // A stabilize base can predate the check wrapper (dev tooling reaches stabilize at a cut); without it every check
     // failed with 'Module not found' before acceptance (2026-10-28).
