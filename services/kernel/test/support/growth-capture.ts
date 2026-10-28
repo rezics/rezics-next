@@ -31,9 +31,16 @@ type StatementRecord = {
   readonly text: string;
   readonly background: boolean;
   readonly backend: number | undefined;
+  requestBytes: number;
+  responseBytes: number;
   failed: boolean;
   errorCode: string | null;
   planCount: number;
+};
+type WireStatement = {
+  readonly record: StatementRecord | undefined;
+  parsed: boolean;
+  bound: boolean;
 };
 type Attribution = {
   readonly capture: ActiveCapture;
@@ -51,6 +58,10 @@ const states = new WeakMap<GrowthDatabase, CaptureState>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
 const clientStatement = new WeakMap<PoolClient, StatementRecord | undefined>();
+// pg can submit the next queued query before the previous query's promise settles.
+const clientWireQueue = new WeakMap<PoolClient, WireStatement[]>();
+const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>();
+const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
 const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
@@ -134,6 +145,115 @@ function countWrites(counter: SeedingCount | undefined, result: unknown): void {
   }
 }
 
+function parameterBytes(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (Buffer.isBuffer(value)) return value.length;
+  if (typeof value === 'string') return Buffer.byteLength(value, 'utf8');
+  return 0;
+}
+
+function byteaPayloadLength(value: string | Buffer): number {
+  if (Buffer.isBuffer(value)) return value.length;
+  if (value.startsWith('\\x') && (value.length - 2) % 2 === 0 && /^[0-9a-f]*$/i.test(value.slice(2)))
+    return (value.length - 2) / 2;
+
+  let length = 0;
+  for (let index = 0; index < value.length;) {
+    if (value[index] !== '\\') {
+      length++;
+      index++;
+    } else if (/^[0-7]{3}$/.test(value.slice(index + 1, index + 4))) {
+      length++;
+      index += 4;
+    } else if (value[index + 1] === '\\') {
+      length++;
+      index += 2;
+    } else {
+      // A valid escape-format bytea output never has an unpaired backslash, but count malformed text as one byte.
+      length++;
+      index++;
+    }
+  }
+  return length;
+}
+
+function instrumentBytes(client: PoolClient): void {
+  const connection = client.connection;
+  const nextWireStatement = (): WireStatement | undefined => {
+    const statement = clientWireQueue.get(client)?.shift();
+    clientWireStatement.set(client, statement);
+    return statement;
+  };
+  const query = connection.query.bind(connection);
+  connection.query = ((text: string) => {
+    const record = nextWireStatement()?.record;
+    const result = query(text);
+    if (record) record.requestBytes += Buffer.byteLength(text, 'utf8');
+    return result;
+  }) as typeof connection.query;
+
+  const parse = connection.parse.bind(connection);
+  connection.parse = ((statement, more) => {
+    const wireStatement = nextWireStatement();
+    if (wireStatement) wireStatement.parsed = true;
+    const record = wireStatement?.record;
+    const result = parse(statement, more);
+    if (record) record.requestBytes += Buffer.byteLength(statement.text, 'utf8');
+    return result;
+  }) as typeof connection.parse;
+
+  const bind = connection.bind.bind(connection);
+  connection.bind = ((config, more) => {
+    let wireStatement = clientWireStatement.get(client);
+    if (!wireStatement?.parsed || wireStatement.bound) wireStatement = nextWireStatement();
+    if (wireStatement) wireStatement.bound = true;
+    const record = wireStatement?.record;
+    if (config?.values && config.valueMapper) {
+      const valueMapper = config.valueMapper;
+      let requestBytes = 0;
+      const result = bind(
+        {
+          ...config,
+          valueMapper: (value, index) => {
+            const prepared = valueMapper(value, index);
+            requestBytes += parameterBytes(prepared);
+            return prepared;
+          },
+        },
+        more,
+      );
+      if (record) record.requestBytes += requestBytes;
+      return result;
+    }
+    return bind(config, more);
+  }) as typeof connection.bind;
+
+  connection.on('message', (message) => {
+    const protocolMessage = message as {
+      readonly name?: string;
+      readonly fields?: readonly ({ readonly dataTypeID: number } | string | null | Buffer)[];
+    };
+    if (protocolMessage.name === 'rowDescription') {
+      clientRowDescription.set(client, (protocolMessage.fields ?? []) as readonly { readonly dataTypeID: number }[]);
+      return;
+    }
+    if (protocolMessage.name !== 'dataRow') return;
+    const record = clientWireStatement.get(client)?.record;
+    if (!record) return;
+    const fields = protocolMessage.fields as readonly (string | null | Buffer)[] | undefined;
+    if (!fields) return;
+    const descriptions = clientRowDescription.get(client) ?? [];
+    for (let index = 0; index < fields.length; index++) {
+      const value = fields[index];
+      if (value === null || value === undefined) continue;
+      const typeID = descriptions[index]?.dataTypeID;
+      if (typeID === 17) record.responseBytes += byteaPayloadLength(value);
+      else if (Buffer.isBuffer(value)) record.responseBytes += value.length;
+      else record.responseBytes += Buffer.byteLength(value, 'utf8');
+    }
+  });
+}
+
 /**
  * Records the client's statements and the rows they write, and, when `explain` is set, turns auto_explain on for the
  * statements of a capture and off otherwise. Statements in the operation's async scope and statements issued inside
@@ -195,6 +315,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         text,
         background: attribution.background,
         backend: capture.includeBackends ? backendPid(client) : undefined,
+        requestBytes: 0,
+        responseBytes: 0,
         failed: false,
         errorCode: null,
         planCount: 0,
@@ -213,6 +335,10 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
       if (text !== undefined && MAY_RESET_SETTING.test(text)) explaining = undefined;
     }
+    const wireStatement: WireStatement = { record, parsed: false, bound: false };
+    const wireQueue = clientWireQueue.get(client) ?? [];
+    wireQueue.push(wireStatement);
+    clientWireQueue.set(client, wireQueue);
     pending.push(attribution);
     pendingStatements.push(record);
     refreshAttribution();
@@ -221,6 +347,9 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     const done = (failed: boolean, result?: unknown, error?: unknown): void => {
       if (completed) return;
       completed = true;
+      const wireQueue = clientWireQueue.get(client);
+      const queuedIndex = wireQueue?.indexOf(wireStatement) ?? -1;
+      if (queuedIndex >= 0) wireQueue!.splice(queuedIndex, 1);
       if (record) {
         record.failed = failed;
         if (failed) {
@@ -302,6 +431,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
 }
 
 function instrument(client: PoolClient, state: CaptureState): void {
+  instrumentBytes(client);
+
   client.on('notice', (notice) => {
     const attribution = clientAttribution.get(client);
     const message = notice.message;
@@ -454,12 +585,16 @@ export async function capture<T>(
       value,
       capture: {
         statements: foreground.map(({ text }) => text),
+        requestBytes: foreground.map(({ requestBytes }) => requestBytes),
+        responseBytes: foreground.map(({ responseBytes }) => responseBytes),
         plans: active.plans,
         statementErrors: foreground.map(({ errorCode }) => errorCode),
         ...(active.includeBackends
           ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
           : {}),
         backgroundStatements: background.map(({ text }) => text),
+        backgroundRequestBytes: background.map(({ requestBytes }) => requestBytes),
+        backgroundResponseBytes: background.map(({ responseBytes }) => responseBytes),
         backgroundPlans: active.backgroundPlans,
         backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
         ...(active.includeBackends

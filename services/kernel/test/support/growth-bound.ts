@@ -1,4 +1,6 @@
 export type Metric = 'rows' | 'blocks' | 'statements';
+export type ByteMetric = 'requestBytes' | 'responseBytes';
+export type GrowthMetric = Metric | ByteMetric;
 export type Bound = 'constant' | 'logarithmic' | 'linear';
 export type Slack = { readonly absolute: number; readonly relative: number };
 export const DEFAULT_SLACK: Readonly<Record<Metric, Slack>> = {
@@ -6,9 +8,15 @@ export const DEFAULT_SLACK: Readonly<Record<Metric, Slack>> = {
   blocks: { absolute: 4, relative: 0.5 },
   statements: { absolute: 0, relative: 0 },
 };
+export const DEFAULT_BYTE_SLACK: Readonly<Record<ByteMetric, Slack>> = {
+  requestBytes: { absolute: 0, relative: 0.1 },
+  responseBytes: { absolute: 0, relative: 0.1 },
+};
 
 /** Structural, so the harness's Cost type is assignable without an import. */
 export type Measured = Readonly<Record<Metric, number>> & {
+  readonly requestBytes?: number;
+  readonly responseBytes?: number;
   readonly relations?: Readonly<
     Record<string, { readonly rows: number; readonly blocks: number; readonly sequentialScans?: number }>
   >;
@@ -17,11 +25,11 @@ export type RelationSize = { readonly reltuples: number; readonly relpages: numb
 export type GrowthSample = {
   readonly scale: number;
   readonly cost: Measured;
-  readonly repetitions?: readonly Readonly<Record<Metric, number>>[];
+  readonly repetitions?: readonly (Readonly<Record<Metric, number>> & Partial<Record<ByteMetric, number>>)[];
   readonly relationSizes?: Readonly<Record<string, RelationSize>>;
 };
 export type Violation = {
-  readonly metric: Metric;
+  readonly metric: GrowthMetric;
   readonly bound: Bound;
   readonly scales: readonly [number, number, number];
   readonly values: readonly [number, number, number];
@@ -32,12 +40,18 @@ export type Violation = {
 export class GrowthBoundError extends Error {
   readonly violations: readonly Violation[];
   readonly samples: readonly GrowthSample[];
+  readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
 
-  constructor(violations: readonly Violation[], samples: readonly GrowthSample[]) {
+  constructor(
+    violations: readonly Violation[],
+    samples: readonly GrowthSample[],
+    byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>,
+  ) {
     super(formatMessage(violations, samples));
     this.name = 'GrowthBoundError';
     this.violations = violations;
     this.samples = samples;
+    if (byteBounds !== undefined) this.byteBounds = byteBounds;
   }
 }
 
@@ -76,7 +90,7 @@ function validateSamples(samples: readonly GrowthSample[]): void {
   }
 }
 
-function validateSlack(slack: Slack, metric: Metric): void {
+function validateSlack(slack: Slack, metric: GrowthMetric): void {
   if (
     !Number.isFinite(slack.absolute) ||
     slack.absolute < 0 ||
@@ -90,7 +104,7 @@ function validateSlack(slack: Slack, metric: Metric): void {
 export function growthViolations(
   samples: readonly GrowthSample[],
   bounds: Readonly<Record<Metric, Bound>>,
-  slack: Partial<Record<Metric, Slack>> = {},
+  slack: Partial<Record<GrowthMetric, Slack>> = {},
 ): Violation[] {
   validateSamples(samples);
   const violations: Violation[] = [];
@@ -105,6 +119,44 @@ export function growthViolations(
       const scales = triple.map(({ scale }) => scale) as [number, number, number];
       const ratio = scales[1] / scales[0];
       const values = triple.map(({ cost }) => cost[metric]) as [number, number, number];
+      const firstStep = values[1] - values[0];
+      const secondStep = values[2] - values[1];
+      const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
+      const observed = bound === 'constant' ? Math.max(values[1], values[2]) - values[0] : secondStep;
+      const allowed =
+        bound === 'constant'
+          ? allowance
+          : (bound === 'logarithmic' ? 2 : 1.5 * ratio) * Math.max(firstStep, 0) + allowance;
+      if (observed > allowed) violations.push({ metric, bound, scales, values, observed, allowed });
+    }
+  }
+  return violations;
+}
+
+export function growthByteViolations(
+  samples: readonly GrowthSample[],
+  bounds: Readonly<Partial<Record<ByteMetric, Bound>>>,
+  slack: Partial<Record<GrowthMetric, Slack>> = {},
+): Violation[] {
+  const metrics = (Object.keys(bounds) as ByteMetric[]).filter((metric) => bounds[metric] !== undefined);
+  if (metrics.length === 0) return [];
+  validateSamples(samples);
+  const violations: Violation[] = [];
+  for (const metric of metrics) {
+    const bound = bounds[metric]!;
+    if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
+      throw new TypeError(`Unknown growth bound for ${metric}`);
+    const tolerance = slack[metric] ?? DEFAULT_BYTE_SLACK[metric];
+    validateSlack(tolerance, metric);
+    for (const sample of samples)
+      if (!Number.isFinite(sample.cost[metric]) || sample.cost[metric]! < 0)
+        throw new TypeError(`Growth value for ${metric} must be finite and non-negative`);
+
+    for (let index = 0; index < samples.length - 2; index++) {
+      const triple = samples.slice(index, index + 3);
+      const scales = triple.map(({ scale }) => scale) as [number, number, number];
+      const ratio = scales[1] / scales[0];
+      const values = triple.map(({ cost }) => cost[metric]!) as [number, number, number];
       const firstStep = values[1] - values[0];
       const secondStep = values[2] - values[1];
       const allowance = Math.max(tolerance.absolute, tolerance.relative * values[0]);
@@ -164,7 +216,7 @@ function formatMessage(violations: readonly Violation[], samples: readonly Growt
   const repetitionLines = violations.flatMap(({ metric }) => {
     if (!samples.some(({ repetitions }) => repetitions !== undefined)) return [];
     const byScale = samples.map(
-      ({ scale, repetitions }) => `${scale} [${repetitions?.map((cost) => cost[metric]).join(', ') ?? ''}]`,
+      ({ scale, repetitions }) => `${scale} [${repetitions?.map((cost) => cost[metric] ?? '').join(', ') ?? ''}]`,
     );
     return [`${metric} repetitions by scale: ${byScale.join(', ')}`];
   });
@@ -174,7 +226,7 @@ function formatMessage(violations: readonly Violation[], samples: readonly Growt
 export function assertGrowth(
   samples: readonly GrowthSample[],
   bounds: Readonly<Record<Metric, Bound>>,
-  slack?: Partial<Record<Metric, Slack>>,
+  slack?: Partial<Record<GrowthMetric, Slack>>,
 ): void {
   const violations = growthViolations(samples, bounds, slack);
   if (violations.length > 0) throw new GrowthBoundError(violations, samples);

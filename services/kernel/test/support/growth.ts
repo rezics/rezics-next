@@ -2,10 +2,15 @@ import { appendFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import {
   assertGrowth,
+  DEFAULT_BYTE_SLACK,
   DEFAULT_SLACK,
   GrowthBoundError,
   GrowthEvidenceError,
+  growthByteViolations,
+  growthViolations,
   type Bound,
+  type ByteMetric,
+  type GrowthMetric,
   type Metric,
   type RelationSize,
   type Slack,
@@ -40,8 +45,9 @@ export type GrowthCheck = {
     | readonly [number, number, number, number]
     | readonly [number, number, number, number, number]; // default [1, 8, 64]
   readonly bounds: Readonly<Record<Metric, Bound>>;
+  readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
   readonly rule?: 'step' | 'series';
-  readonly slack?: Partial<Record<Metric, Slack>>;
+  readonly slack?: Partial<Record<GrowthMetric, Slack>>;
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
   /**
    * Unmeasured runs per scale, after `grow` and before the measured runs, default 1. Calls `warmup` when given,
@@ -82,6 +88,7 @@ export type GrowthReport = {
   readonly name: string;
   readonly rule: 'step' | 'series';
   readonly bounds: Readonly<Record<Metric, Bound>>;
+  readonly byteBounds?: Readonly<Partial<Record<ByteMetric, Bound>>>;
   readonly samples: readonly ReportSample[];
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
 };
@@ -119,18 +126,21 @@ function appendProfile(report: GrowthReport): void {
   if (!path) return;
   try {
     const file = relative(process.cwd(), Bun.main);
-    const { name, bounds, samples, shadow } = report;
+    const { name, bounds, byteBounds, samples, shadow } = report;
     const line = JSON.stringify({
       file,
       check: name,
       scales: samples.map(({ scale }) => scale),
       seeding: samples.map(({ seeding }) => seeding),
       bounds,
+      ...(byteBounds === undefined ? {} : { byteBounds }),
       repetitions: samples.map(({ repetitions }) =>
-        repetitions.map(({ rows, blocks, statements, failedStatements }) => ({
+        repetitions.map(({ rows, blocks, statements, requestBytes, responseBytes, failedStatements }) => ({
           rows,
           blocks,
           statements,
+          ...(requestBytes === undefined ? {} : { requestBytes }),
+          ...(responseBytes === undefined ? {} : { responseBytes }),
           ...(failedStatements === undefined ? {} : { failedStatements }),
         })),
       ),
@@ -330,12 +340,27 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     blocks: shadowVerdict(samples, check, 'blocks'),
     statements: shadowVerdict(samples, check, 'statements'),
   };
-  const report: GrowthReport = { name: check.name, rule, bounds: check.bounds, samples, shadow };
+  const report: GrowthReport = {
+    name: check.name,
+    rule,
+    bounds: check.bounds,
+    ...(check.byteBounds === undefined ? {} : { byteBounds: check.byteBounds }),
+    samples,
+    shadow,
+  };
   appendProfile(report);
   assertBackgroundBound(check.name, samples);
   try {
     if (rule === 'step') {
-      assertGrowth(samples, check.bounds, check.slack);
+      if (check.byteBounds === undefined) {
+        assertGrowth(samples, check.bounds, check.slack);
+      } else {
+        const violations = [
+          ...growthViolations(samples, check.bounds, check.slack),
+          ...growthByteViolations(samples, check.byteBounds, check.slack),
+        ];
+        if (violations.length > 0) throw new GrowthBoundError(violations, samples, check.byteBounds);
+      }
     } else {
       for (const metric of ['rows', 'blocks', 'statements'] as const) {
         const uncertainties = shadow[metric].uncertainties;
@@ -353,8 +378,48 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           );
         }
         if (verdict.outcome === 'violation') {
-          const error = new GrowthBoundError([], samples);
+          const error = new GrowthBoundError([], samples, check.byteBounds);
           error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
+            verdict.families,
+          )
+            .map(([family, fit]) => `${family} factor ${fit.factor}`)
+            .join(', ')}`;
+          throw error;
+        }
+      }
+      for (const metric of ['requestBytes', 'responseBytes'] as const) {
+        const bound = check.byteBounds?.[metric];
+        if (bound === undefined) continue;
+        const tolerance = check.slack?.[metric] ?? DEFAULT_BYTE_SLACK[metric];
+        if (
+          !Number.isFinite(tolerance.absolute) ||
+          tolerance.absolute < 0 ||
+          !Number.isFinite(tolerance.relative) ||
+          tolerance.relative < 0
+        )
+          throw new TypeError(`Slack for ${metric} must be finite and non-negative`);
+        const points = samples.map(({ scale, cost, repetitions }) => {
+          const median = cost[metric];
+          if (median === undefined || !Number.isFinite(median) || median < 0)
+            throw new TypeError(`Growth value for ${metric} must be finite and non-negative`);
+          const repetitionBytes = repetitions.map((value) => value[metric]);
+          if (repetitionBytes.some((value) => value === undefined || !Number.isFinite(value) || value < 0))
+            throw new TypeError(`Growth repetitions for ${metric} must be finite and non-negative`);
+          return {
+            scale,
+            repetitions: repetitionBytes as number[],
+            uncertainty: Math.max(tolerance.absolute, tolerance.relative * median),
+          };
+        });
+        const verdict = classifySeries(points, bound);
+        if (verdict.outcome === 'insufficient-evidence') {
+          throw new GrowthEvidenceError(
+            `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${points.map(({ uncertainty }) => uncertainty).join(', ')}`,
+          );
+        }
+        if (verdict.outcome === 'violation') {
+          const error = new GrowthBoundError([], samples, check.byteBounds);
+          error.message = `${metric} violates ${bound} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
             verdict.families,
           )
             .map(([family, fit]) => `${family} factor ${fit.factor}`)

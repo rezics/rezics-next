@@ -256,24 +256,36 @@ and replaces `latest.json` there. Files run longest first by `latest.json`, file
 | ----------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Containers        | One PostgreSQL and one search container, both labelled `rezics.kernel.check.pid` and removed at exit | Reuses the run's containers                                                                                 | Each has a 1 GiB data tmpfs; search has a 512 MiB JVM heap. Stale cleanup reads one `docker ps` listing and does linear work only in labelled containers.                                                             |
 | Database copies   | Migrated `rezics` template plus at most one live `kernel_test_*` copy                                | Created from the template, dropped in `finally` after the file                                              | Disk is the template plus one copy and the largest file's writes, rather than all files' copies. `check-resources.test.ts` guards one live copy and a template of at most 256 MiB, a quarter of the PostgreSQL tmpfs. |
-| Connections       | Files run sequentially; no pool is retained between files                                            | The file closes its pools                                                                                   | Each pool has a fixed connection limit. `GrowthDatabase.close()` closes its instrumented pool (max 10) and admin pool (max 2).                                                                                        |
+| Connections       | Files run sequentially; no pool is retained between files                                            | The file closes its pools                                                                                   | Each pool has a fixed connection limit. `GrowthDatabase.close()` closes its instrumented pool (max 10), admin pool (max 2) and every pool created by `openPool()`.                                                |
 | Growth-check data | Lives in the current file's database copy                                                            | Each population uses at most the largest scale times its declared per-unit ordinals, times rows per ordinal | Checks declare scales (default largest 64), populations and operation writes; reset data between checks. Seeding batches at most 1,000 ordinals or uses at most four concurrent production writes.                    |
+| Cost              | Captures request and response payload bytes for each measured statement                              | Recording adds two numbers per captured statement and scans each returned field once                       | Added recording work is linear in the statements and fields returned; stored byte totals are linear in captured statements.                                                                                         |
 
 Findings: the sorted test-file list and total execution work grow with the number of files. Stale-cleanup listing
 memory and work grow with labelled containers, including concurrent checks and interrupted runs; live checks keep
 their containers. Growth checks do not automatically reset populations between checks, so distinct populations and
-operation writes can accumulate within a file unless it resets them. Capture memory grows with statements and plans
-in one operation. `GrowthDatabase` currently has no `openPool` API; if added, its pools must also be closed by
-`close()`.
+operation writes can accumulate within a file unless it resets them. Capture memory grows with statements, byte totals
+and plans in one operation. `openPool()` creates an instrumented pool that `GrowthDatabase.close()` also closes.
 
 ## Growth checks
 
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
-shared blocks and statements, never time. Use `checkGrowth` from `test/support/growth.ts` with `seed` in `grow` to
-add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
-fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
-`linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
-API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not exceed 4096.
+shared blocks and statements, never time. An optional `byteBounds` can also bound `requestBytes` and/or `responseBytes`
+using the same `constant`, `logarithmic` and `linear` rules. Its default slack is 0 absolute and 10% relative, and a
+check can override that slack with `slack.requestBytes` or `slack.responseBytes`. A check without `byteBounds` is
+unchanged. That 10% allowance covers about four extra bytes per value for integer text keys through scale 4096 when
+the payload is at least 40 bytes. `bounds` remains required for rows, blocks and statements. Use `checkGrowth`
+from `test/support/growth.ts` with `seed` in `grow` to add rows between scales. Grow both the total data and hot
+partition, while keeping the operation's own neighbourhood fixed. Seed through production writes or bulk rows of
+identical shape. The existing default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules
+import the public API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not
+exceed 4096.
+
+Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
+unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after
+node-postgres prepares it: UTF-8 bytes for strings, the length for buffers, and zero for null or undefined. Response
+bytes sum each returned data row's field payload before type parsing: null is zero, `bytea` (OID 17) uses its decoded
+length, and every other text field uses its UTF-8 byte length. Command tags, notices, `auto_explain` output and the
+harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
 Growth checks support `step` and `series` rules: `check.rule` selects a rule, then `GROWTH_RULE=series` selects series,
 and otherwise step remains the default. Series checks report `GrowthBoundError` when no allowed family fits, and
 `GrowthEvidenceError` when repetitions do not provide enough evidence.

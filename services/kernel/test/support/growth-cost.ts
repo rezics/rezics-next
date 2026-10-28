@@ -1,11 +1,15 @@
 export type Capture = {
   readonly statements: readonly string[];
+  readonly requestBytes?: readonly number[];
+  readonly responseBytes?: readonly number[];
   readonly plans: readonly unknown[];
   readonly statementErrors?: readonly (string | null)[];
   /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
   readonly statementBackends?: readonly (number | undefined)[];
   readonly planBackends?: readonly (number | undefined)[];
   readonly backgroundStatements?: readonly string[];
+  readonly backgroundRequestBytes?: readonly number[];
+  readonly backgroundResponseBytes?: readonly number[];
   readonly backgroundPlans?: readonly unknown[];
   readonly backgroundStatementErrors?: readonly (string | null)[];
   /** Backend process ID parallel to each background statement and plan, when backends are included. */
@@ -22,6 +26,8 @@ export type RelationCost = {
 
 export type Cost = {
   readonly statements: number;
+  readonly requestBytes?: number;
+  readonly responseBytes?: number;
   readonly failedStatements?: Readonly<Record<string, number>>;
   readonly controlStatements: number;
   readonly catalogStatements: number;
@@ -32,6 +38,8 @@ export type Cost = {
   readonly sharedRead: number;
   readonly relations: Readonly<Record<string, RelationCost>>;
   readonly backgroundStatements?: number;
+  readonly backgroundRequestBytes?: number;
+  readonly backgroundResponseBytes?: number;
   readonly backgroundRows?: number;
   readonly backgroundBlocks?: number;
   readonly backgroundCosts?: Readonly<
@@ -252,6 +260,12 @@ export function withoutCatalogTexts(
   });
   return {
     statements: statements.map((index) => capture.statements[index]!),
+    ...(capture.requestBytes === undefined
+      ? {}
+      : { requestBytes: statements.map((index) => capture.requestBytes![index]!) }),
+    ...(capture.responseBytes === undefined
+      ? {}
+      : { responseBytes: statements.map((index) => capture.responseBytes![index]!) }),
     plans: plans.map((index) => capture.plans[index]!),
     ...(capture.statementErrors === undefined
       ? {}
@@ -261,6 +275,10 @@ export function withoutCatalogTexts(
       : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
     ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
     ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
+    ...(capture.backgroundRequestBytes === undefined ? {} : { backgroundRequestBytes: capture.backgroundRequestBytes }),
+    ...(capture.backgroundResponseBytes === undefined
+      ? {}
+      : { backgroundResponseBytes: capture.backgroundResponseBytes }),
     ...(capture.backgroundPlans === undefined ? {} : { backgroundPlans: capture.backgroundPlans }),
     ...(capture.backgroundStatementErrors === undefined
       ? {}
@@ -440,15 +458,30 @@ export function costOf(capture: Capture): Cost {
     sharedRead,
     relations: Object.fromEntries(relations),
   };
+  const requestBytes = capture.requestBytes?.reduce((sum, value) => sum + value, 0);
+  const responseBytes = capture.responseBytes?.reduce((sum, value) => sum + value, 0);
+  const hasBackgroundWork =
+    (capture.backgroundStatements?.length ?? 0) > 0 ||
+    (capture.backgroundRequestBytes?.length ?? 0) > 0 ||
+    (capture.backgroundResponseBytes?.length ?? 0) > 0;
+  const backgroundRequestBytes = capture.backgroundRequestBytes?.reduce((sum, value) => sum + value, 0);
+  const backgroundResponseBytes = capture.backgroundResponseBytes?.reduce((sum, value) => sum + value, 0);
   const failedStatements = new Map<string, number>();
   for (const error of capture.statementErrors ?? [])
     if (error !== null) failedStatements.set(error, (failedStatements.get(error) ?? 0) + 1);
   return {
     ...cost,
+    ...(requestBytes === undefined ? {} : { requestBytes }),
+    ...(responseBytes === undefined ? {} : { responseBytes }),
     ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
-    ...(capture.backgroundStatements !== undefined || capture.backgroundPlans !== undefined
+    ...(capture.backgroundStatements !== undefined ||
+    capture.backgroundPlans !== undefined ||
+    capture.backgroundRequestBytes !== undefined ||
+    capture.backgroundResponseBytes !== undefined
       ? {
           backgroundStatements: (capture.backgroundStatements ?? []).length,
+          ...(hasBackgroundWork && backgroundRequestBytes !== undefined ? { backgroundRequestBytes } : {}),
+          ...(hasBackgroundWork && backgroundResponseBytes !== undefined ? { backgroundResponseBytes } : {}),
           backgroundRows,
           backgroundBlocks,
           backgroundCosts: Object.fromEntries(backgroundCosts),
@@ -465,9 +498,19 @@ export function medianCost(costs: readonly Cost[]): Cost {
   if (costs.length === 0) throw new RangeError('Cannot take the median of no costs');
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
+  const requestBytes = costs.flatMap(({ requestBytes }) => (requestBytes === undefined ? [] : [requestBytes]));
+  const responseBytes = costs.flatMap(({ responseBytes }) => (responseBytes === undefined ? [] : [responseBytes]));
+  const backgroundRequestBytes = costs.flatMap(({ backgroundRequestBytes }) =>
+    backgroundRequestBytes === undefined ? [] : [backgroundRequestBytes],
+  );
+  const backgroundResponseBytes = costs.flatMap(({ backgroundResponseBytes }) =>
+    backgroundResponseBytes === undefined ? [] : [backgroundResponseBytes],
+  );
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
+    ...(requestBytes.length === 0 ? {} : { requestBytes: lowerMedian(requestBytes) }),
+    ...(responseBytes.length === 0 ? {} : { responseBytes: lowerMedian(responseBytes) }),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
     catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
     plans: lowerMedian(costs.map((cost) => cost.plans)),
@@ -486,6 +529,12 @@ export function medianCost(costs: readonly Cost[]): Cost {
     ...(costs.some((cost) => cost.backgroundStatements !== undefined)
       ? {
           backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements ?? 0)),
+          ...(backgroundRequestBytes.length === 0
+            ? {}
+            : { backgroundRequestBytes: lowerMedian(backgroundRequestBytes) }),
+          ...(backgroundResponseBytes.length === 0
+            ? {}
+            : { backgroundResponseBytes: lowerMedian(backgroundResponseBytes) }),
           backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)),
           backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)),
           backgroundCosts: Object.fromEntries(
