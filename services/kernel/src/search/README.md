@@ -546,9 +546,11 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Bound: At most 200 combined raw hits per round and 600 per three-round response; current-figure reads are batched
   by anchor partition, at most 256 figure IDs per source call. OpenSearch sort and count work is match-dependent;
   no SQL, latency or O(1) engine-work claim follows from these request bounds.
-- Growth check: Pinned 3.9.0 runtime coverage remains required for mixed epochs, zero scores, raw A/B continuation,
-  shared quotas, phase counts, source rejection, generation switches, failed searches and live phase movement. This
-  README is the adopted contract, not a runtime result.
+- Growth check: [test/search/growth-rating-query.test.ts](../../test/search/growth-rating-query.test.ts): “native rating
+  candidate delivery remains within shared phase quotas as the real indexed matching population grows”. The test is
+  present; its runtime pass status is unverified here. Its native phase request and returned-key quotas do not prove
+  default worker/native vote composition, the current disclosed total, PIT/live top-N behavior, or constant engine
+  postings, sort or latency work.
 
 ### Bounded native name sort
 
