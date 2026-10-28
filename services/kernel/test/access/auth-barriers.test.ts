@@ -343,3 +343,49 @@ test('a consent barrier advances the floor without taking over an already raised
   });
   expect(await lifecycle.readFenceState(other)).toMatchObject(kept);
 });
+
+test('barrier confirmation propagates an unavailable Access lifecycle and preserves genuine negative receipts', async () => {
+  const input = {
+    accountId: human,
+    purpose: 'consent-reduction' as const,
+    operationKey: 'unavailable-confirmation',
+    receiptId: newId(routeOf(human)!),
+    minimumAuthnEpoch: 1,
+  };
+  const failure = new Error('Access connection terminated unexpectedly');
+  const before = await floor();
+  const unavailable = createAuthBarrierCapabilities({
+    lifecycle: {
+      ...lifecycle,
+      confirmBarrier: async () => {
+        throw failure;
+      },
+    },
+    proofs: createBarrierProofVerifier({ database }),
+  });
+  await expect(unavailable.trustedAccess.confirmBarrier(input)).rejects.toBe(failure);
+  expect(await barriers.trustedAccess.confirmBarrier(input)).toBe(false);
+  expect(await floor()).toEqual(before);
+});
+
+test('a failed Auth proof read propagates before any native barrier mutation', async () => {
+  const failure = new Error('Auth unavailable');
+  const before = await floor();
+  const unavailable = createAuthBarrierCapabilities({
+    lifecycle,
+    proofs: {
+      verify: async () => {
+        throw failure;
+      },
+    },
+  });
+  await expect(
+    unavailable.authorizeRecovery({
+      accountId: human,
+      proofEpoch: Number(before!.minimumAuthnEpoch),
+      proofReference: 'a'.repeat(64),
+      operationKey: 'unavailable-proof',
+    }),
+  ).rejects.toBe(failure);
+  expect(await floor()).toEqual(before);
+});

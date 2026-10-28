@@ -8,7 +8,7 @@ import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
-import { verifyKeyAssertion } from './key-credentials.ts';
+import { InvalidKeyAssertion, verifyKeyAssertion } from './key-credentials.ts';
 import { passkeyPlugin, passkeyCeremonies, registrationInput, type PasskeyAssertion } from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
@@ -423,8 +423,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                     authMethods: selected.method ?? 'pwd',
                   },
                 };
-              } catch {
-                throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
+              } catch (error) {
+                if (error instanceof Denied) throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
+                throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
               }
             },
           },
@@ -644,6 +645,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return { receipt, subject, previousEpoch, human };
   }
   async function established(response: Response): Promise<Response> {
+    if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
     if (!response.ok) throw new Denied();
     const setCookies = response.headers.getSetCookie();
     const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
@@ -733,14 +735,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     }
   }
   async function presentedSession(headers: Headers) {
-    try {
-      return await getAuth().api.getSession({
-        headers,
-        query: { disableCookieCache: true, disableRefresh: true },
-      });
-    } catch {
-      return null;
-    }
+    return await getAuth().api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
   }
   async function replacePreviousSession(previous: Awaited<ReturnType<typeof presentedSession>>, response: Response) {
     if (!previous || !response.ok) return response;
@@ -1826,6 +1824,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 headers: new Headers({ origin: options.issuer }),
                 asResponse: true,
               });
+          if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
           if (!response.ok) throw new Denied();
           const result = await response.json();
           if (!registering) result.userVerification = 'required';
@@ -1938,8 +1937,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(400);
           try {
             await verifyKeyAssertion(database, account.accountId, body.assertion, `${options.issuer}/token`);
-          } catch {
-            throw new Denied();
+          } catch (error) {
+            if (error instanceof InvalidKeyAssertion) throw new Denied();
+            throw error;
           }
           return await establish(selected, request.headers);
         }

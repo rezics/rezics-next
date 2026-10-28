@@ -78,7 +78,7 @@ export function createAuthBarrierCapabilities({
         return await proofs.verify(reference, expected);
       } catch (error) {
         throwAccessUnavailable(error);
-        return null;
+        throw error;
       }
     };
     const proof = await resolve();
@@ -161,11 +161,7 @@ export function createAuthBarrierCapabilities({
     invalidateAccount: async (input) => translate(await capabilities.invalidateAccount(input)),
     authorizeRecovery: async (input) => translate(await capabilities.authorizeRecovery(input)),
     async confirmBarrier(input) {
-      try {
-        return await lifecycle.confirmBarrier({ ...input });
-      } catch {
-        return false;
-      }
+      return await lifecycle.confirmBarrier({ ...input });
     },
     async completeBarrier(input) {
       allowed(input.purpose === 'consent-reduction');
