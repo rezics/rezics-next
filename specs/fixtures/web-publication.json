@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "locales": ["en", "zh-Hans", "zh-Hant", "ja", "ko", "de", "fr", "es"],
+  "definitions": {
+    "release": "bundled immutable released definitions, not a test-only extension",
+    "wordCount": "schema:wordCount",
+    "wordCountUnit": "1",
+    "form": "FORM: resolve the released work-form property",
+    "lightNovel": "LN: adopted public Concept with labels and attribution",
+    "harem": "HAREM: adopted public Concept carried by schema:keywords",
+    "diet": "schema:suitableForDiet with released classification representation",
+    "vegetarian": "public Concept mapped to https://schema.org/VegetarianDiet",
+    "cookTime": "schema:cookTime, integer minutes, unit wd:Q7727"
+  },
+  "personas": {
+    "alice": "independent state, label, completed history, holding and own vote; private source access",
+    "bob": "independent facts, no Alice personal read grant",
+    "editor": "consented editorial scopes and explicit proposal grant",
+    "suspended": "real valid Auth bearer, suspended after issuance; personal-read grant retained",
+    "anonymous": "no cookies or bearer"
+  },
+  "subjects": {
+    "book": {
+      "type": "Book",
+      "schemaOrgType": "Book",
+      "title": "Lantern Archive",
+      "zhHansTitle": "灯笼档案",
+      "description": "A journey through a lantern library.",
+      "author": "Mira Quill",
+      "wordCount": 1200001,
+      "form": "Light novel",
+      "tag": "Harem"
+    },
+    "recipe": {
+      "type": "Recipe",
+      "schemaOrgType": "Recipe",
+      "title": "Garden Lantern Soup",
+      "description": "A quick vegetarian soup.",
+      "ingredients": ["2 carrots", "1 litre water"],
+      "instructions": ["Chop the carrots.", "Simmer until tender."],
+      "diet": "Vegetarian",
+      "cookTimeMinutes": 25,
+      "publishedCookTime": "PT25M"
+    },
+    "game": {
+      "type": "VideoGame",
+      "schemaOrgType": "VideoGame",
+      "title": "Lantern Voyage",
+      "description": "Explore the archive.",
+      "platform": "PC"
+    },
+    "release": {
+      "type": "released game release profile",
+      "schemaOrgType": "CreativeWork",
+      "title": "Lantern Voyage Switch Release",
+      "description": "The Switch edition.",
+      "platform": "Nintendo Switch",
+      "date": "2025-03-04",
+      "language": "ja"
+    },
+    "person": {
+      "type": "Person",
+      "schemaOrgType": "Person",
+      "title": "Mira Quill",
+      "description": "Author and performer."
+    },
+    "organization": {
+      "type": "Organization",
+      "schemaOrgType": "Organization",
+      "title": "Lantern Studio",
+      "description": "An independent studio."
+    },
+    "automated": {
+      "type": "released automated agent profile",
+      "schemaOrgType": "SoftwareApplication",
+      "title": "Lantern Indexer",
+      "description": "An automated catalogue account."
+    }
+  },
+  "traversal": {
+    "countPerView": 105,
+    "maximumPageSize": 100,
+    "views": ["editions", "contents", "cast", "crew", "inverse", "relations"],
+    "targetKeys": "<view>-001 through <view>-105, API-written in reverse order with explicit ascending positions; inverse credits target works from person",
+    "excludedKey": "<view>-withheld",
+    "credit": {
+      "character": "Keeper Neri",
+      "creditedName": "M. Lantern",
+      "role": "Voice actor",
+      "position": "7",
+      "spoiler": "The keeper is the missing heir"
+    },
+    "date": {
+      "original": "2024-01-02",
+      "competing": "2024-02-03",
+      "sourceOriginal": "Archive Gazette issue 7",
+      "sourceCompeting": "Lantern Bibliography issue 9"
+    }
+  },
+  "withheld": ["Withheld Author Sentinel", "Withheld Harem Sentinel", "Privileged Source Sentinel"],
+  "personal": {
+    "state": "Alice State Sentinel",
+    "label": "Alice Label Sentinel",
+    "history": "Alice History Sentinel",
+    "holding": "Alice Holding Sentinel",
+    "ownVote": "Alice Vote Sentinel"
+  },
+  "discovery": {
+    "kinds": ["subject", "collection", "realm", "space", "board", "thread"],
+    "eligiblePerKind": 23,
+    "feedPageSize": 2,
+    "controlsPerKind": {
+      "subject": ["withheld", "private-context", "taken-down"],
+      "collection": ["unlisted", "private", "taken-down"],
+      "realm": ["protected", "taken-down"],
+      "space": ["unreadable", "taken-down"],
+      "board": ["protected-realm", "taken-down"],
+      "thread": ["draft", "protected-realm", "taken-down"]
+    },
+    "feedLayout": "eligible entries after excluded runs; at least one empty nonterminal candidate page; opaque continuation",
+    "knownLastmod": "2026-10-01T12:34:56.000Z",
+    "banControl": "Alice has an independent read grant on a protected board but is banned; no private hydration disclosure",
+    "clock": "advance trusted fixture time for API publication writes; expected lastmod comes from those writes, never from the feed under test"
+  },
+  "states": {
+    "preparing": "Preparing this view",
+    "retry": "Retry",
+    "unavailable": "Unavailable",
+    "empty": "This list is empty"
+  },
+  "search": {
+    "locale": "zh-Hans",
+    "query": "灯笼档案",
+    "type": "Book",
+    "matchingBooks": ["灯笼档案：晨卷", "灯笼档案：夜卷", "灯笼档案：续卷"],
+    "facetLabels": ["轻小说", "后宫"],
+    "forbiddenFallbackLabels": ["Light novel", "Harem"],
+    "order": "native search response order, deliberately different from fixture insertion order"
+  },
+  "alternatePublicOrigin": "https://alternate-public.example",
+  "routing": {
+    "verifiedHandle": "lantern-verified",
+    "verifiedAgent": "separate verified person; the three metadata agent subjects are unverified catalogue agents",
+    "staleBookSlug": "former-lantern-title",
+    "canonicalLocale": "zh-Hans"
+  }
+}
