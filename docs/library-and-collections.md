@@ -172,7 +172,8 @@ both together, sparse matches, and withheld harem under positive and NOT predica
 properties/mappings and fixture configuration; holding-derived game-platform filters and user-saved queries remain
 deferred. Manual platform filtering uses the admitted catalogue contract.
 
-Required membership/filter measurements cover actual first/deep pages at 1,000/10,000/100,000 subjects with duplicate
+Required membership/filter measurements cover actual first/deep pages under
+[the shared three-scale checks](filtered-lists.md#three-scale-checks), with duplicate
 histories, stale labels and sparse filters. Charge private owner indexes, native fact points, catalogue/disclosure
 anchors, rows, statements, buffers, bytes and bounded background/epoch maintenance; no account/history scan or free
 witness work. Terminal measurements cover complete indexed child inventories and exact cross-store locators, bounded

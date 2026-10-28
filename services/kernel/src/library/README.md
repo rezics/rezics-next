@@ -661,7 +661,8 @@ Where a named test does not call the operation, or does not grow the rows that o
   duplicate histories, stale labels, rejected candidates and background work. No account/history scan, free witness
   work, universal candidate multiplier or universal raw-key budget. Direct page-bounded execution, prepared indexed
   results or rejection before enumeration must preserve filled/final pages or preparing.
-- Growth check: actual first/deep pages at 1,000/10,000/100,000 subjects with duplicate histories, stale label parents
+- Growth check: actual first/deep pages under
+  [the shared three-scale checks](../../../../docs/filtered-lists.md#three-scale-checks), with duplicate histories, stale label parents
   and sparse filters are required. Native helpers and existing curated measurements below do not supply these
   results. Complete built-in/filter runtime and these measurements are missing; no native check ran for adoption.
 
