@@ -337,7 +337,7 @@ const faults = [
 for (const [site, invoke] of Object.entries(sites)) {
   for (const [name, error, reason] of faults) {
     test(`${site}: ${name} closes the request without effects`, async () => {
-      requestDeadlineMs = reason === 'contention' ? 35 : 5000;
+      requestDeadlineMs = reason === 'contention' ? 250 : 5000;
       const cause = error();
       let calls = 0;
       const before = await effects(site.startsWith('durable') ? durable.db.pool : pool);

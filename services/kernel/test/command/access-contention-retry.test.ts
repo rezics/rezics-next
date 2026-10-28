@@ -86,8 +86,8 @@ test('a serialization failure raised through an Access query inside a command tr
     `SELECT
        (SELECT count(*)::int FROM public.access_contention_effect) AS body,
        (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
-       (SELECT count(*)::int FROM core.outbox WHERE transaction_id=$2) AS events`,
-    [key, result.transactionId],
+       (SELECT count(*)::int FROM core.outbox WHERE partition_no=$2 AND position=$3) AS events`,
+    [key, partition, result.position.toString()],
   );
   expect(rows).toEqual([{ body: 1, receipts: 1, events: 1 }]);
 });
