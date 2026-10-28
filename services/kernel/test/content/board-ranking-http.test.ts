@@ -1,10 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createBoardEffect } from '../../src/content/board-projection.ts';
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
+import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
@@ -21,16 +25,23 @@ type RankedThread = Thread & { createdAt: number; activityAt: number; score: num
 type Board = { id: string; route: number };
 type Page = { threads: Thread[]; next: string | null };
 let system: NativeContentSystem;
+let kernel: NativeContentSystem['kernel'];
+let instant = setupAt;
+let bearer = async (actor: ContentCredential) => actor.bearer;
 let banned: ContentCredential;
+const writeRateOverrides = JSON.stringify({
+  'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
+  member: { write: { maximum: 10_000, seconds: 86_400 } },
+});
 const sources = new Set<number>();
 const consumer = `ranking_http_${crypto.randomUUID().replaceAll('-', '')}`;
 
 async function request(actor: Persona, method: string, path: string, body?: unknown, ifMatch?: string) {
-  return system.kernel.handle(
+  return kernel.handle(
     new Request(`https://content.test${path}`, {
       method,
       headers: {
-        ...(actor ? { authorization: `Bearer ${actor.bearer}` } : {}),
+        ...(actor ? { authorization: `Bearer ${await bearer(actor)}` } : {}),
         ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(ifMatch === undefined ? {} : { 'if-match': JSON.stringify(ifMatch) }),
@@ -49,11 +60,9 @@ async function json<T>(actor: Persona, method: string, path: string, body?: unkn
 beforeAll(async () => {
   system = await createNativeContentSystemWithWriteRateOverrides(
     { databaseUrl: process.env.DATABASE_URL! },
-    JSON.stringify({
-      'new-account': { write: { maximum: 10_000, seconds: 86_400 } },
-      member: { write: { maximum: 10_000, seconds: 86_400 } },
-    }),
+    writeRateOverrides,
   );
+  kernel = system.kernel;
   await bootstrapRelease(system.database.pool, bundledRelease);
   const governance = await system.database.pool.query<{ account_id: string }>(
     'SELECT account_id FROM access.governance_bootstrap',
@@ -71,6 +80,52 @@ beforeAll(async () => {
     clientId: system.auth.ordinaryClient.id,
     scopes: system.actors.author.actor.scopes,
   });
+  // Native provisioning uses Auth's wall clock. As in the community HTTP fixture,
+  // sign each persona's bearer locally so its lifetime follows the fixed clock.
+  // The kernel still verifies signatures, account state, scopes and permissions.
+  const pair = await generateKeyPair('ES256', { extractable: true });
+  const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'ranking', alg: 'ES256', use: 'sig' };
+  const issuer = 'https://ranking.auth.test';
+  const audience = 'https://content.test';
+  bearer = async ({ actor }) => {
+    const iat = Math.floor(instant / 1000) - 2;
+    return new SignJWT({
+      client_id: actor.clientId,
+      scope: actor.scopes.join(' '),
+      authn_epoch: actor.authnEpoch,
+      auth_time: iat,
+      amr: ['pwd'],
+    })
+      .setSubject(actor.accountId)
+      .setIssuedAt(iat)
+      .setExpirationTime(iat + 300)
+      .setIssuer(issuer)
+      .setAudience(audience)
+      .setProtectedHeader({ alg: 'ES256', kid: 'ranking', typ: 'at+jwt' })
+      .sign(pair.privateKey);
+  };
+  kernel = createKernel({
+    pool: system.database.pool,
+    routeKey: system.routeKey,
+    tokens: system.tokenKeys,
+    clock: () => new Date(instant),
+    content: { cursorNow: () => instant },
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async () => Response.json({ keys: [jwk] }),
+        },
+      }),
+    writeRate: createWriteRateLimiter({
+      secret: crypto.randomUUID() + crypto.randomUUID(),
+      overrides: writeRateOverrides,
+    }),
+    ratePeer: () => '127.0.0.1',
+  });
   for (const actor of [system.actors.author, system.actors.other, system.actors.moderator])
     sources.add(partitionOf(routeOf(actor.actor.accountId)!));
 }, 120_000);
@@ -79,7 +134,7 @@ afterAll(async () => {
 });
 
 async function board(visibility: 'public' | 'protected'): Promise<{ board: Board; realmId: string }> {
-  await system.clock.setCommandTime(new Date(setupAt).toISOString());
+  instant = setupAt;
   const owner = system.actors.author;
   const { space } = await json<{ space: { spaceId: string } }>(owner, 'POST', '/v1/spaces', { title: 'Ranking host' });
   const { realm } = await json<{ realm: { realmId: string; headRevisionId: string } }>(owner, 'POST', '/v1/realms', {
@@ -140,7 +195,7 @@ async function publicBoard() {
 }
 
 async function reply(thread: RankedThread, time: number) {
-  await system.clock.setCommandTime(new Date(time).toISOString());
+  instant = time;
   await json(system.actors.other, 'POST', `/v1/threads/${thread.id}/posts`, {
     parentId: thread.firstPost.id,
     body: fromPlainText('Recent reply'),
@@ -157,7 +212,7 @@ async function vote(thread: RankedThread, actor: ContentCredential, kind: 'upvot
 
 async function thread(board: Board, age: number, score = 0, replyAge?: number): Promise<RankedThread> {
   const createdAt = at - Math.round(age * hour);
-  await system.clock.setCommandTime(new Date(createdAt).toISOString());
+  instant = createdAt;
   const result = await json<{ thread: Thread }>(system.actors.author, 'POST', '/v1/threads', {
     boardId: board.id,
     title: `Age ${age}, score ${score}`,
@@ -200,7 +255,7 @@ async function refresh(board: Board, time = at) {
       }
     }
   }
-  await system.clock.setCommandTime(new Date(time).toISOString());
+  instant = time;
   await refreshBoardRankBatch(system.database.pool, new Date(time), [partitionOf(board.route)]);
 }
 
@@ -314,7 +369,7 @@ test.serial(
     expect(order(threads, 'hot', at)).toEqual(beforeHot);
     await pages(board, threads);
     const votedAt = at + 10 * 60_000;
-    await system.clock.setCommandTime(new Date(votedAt).toISOString());
+    instant = votedAt;
     await vote(voted, system.actors.other, 'upvote');
     await refresh(board, votedAt);
     expect(order(threads, 'hot', votedAt)).toEqual([voted.id, leader.id, replied.id]);
