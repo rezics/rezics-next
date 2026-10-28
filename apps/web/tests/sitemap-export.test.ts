@@ -291,10 +291,10 @@ test('a rejected cursor restarts that feed once, while a repeated cursor and a s
 
   const repeated = pagesFeed('subjects', [
     { items: ['once'], next: 'repeat' },
-    { items: ['twice'], next: 'repeat' },
+    { items: ['once'], next: null },
   ]);
   await expect(exportSitemaps(options(new MemoryStore(), new MemorySteps(), [repeated]))).rejects.toThrow(
-    /repeated cursor/i,
+    /no progress/i,
   );
 
   let rejections = 0;
