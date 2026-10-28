@@ -157,6 +157,7 @@ export async function createProfileEntryFixture(options: { clock?: KernelClock; 
     }
     const steward = await identity([
       'access:grant',
+      'offer:create',
       'subject:create',
       'statement:propose',
       'definitions:read',
