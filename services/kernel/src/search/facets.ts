@@ -130,16 +130,27 @@ export async function discloseFacetValues(source: SubjectSource, values: readonl
     ids.add(value);
   }
   const visible = new Map<string, IndexedSubject>();
-  const partitions = groups.entries();
+  const partitions = [...groups].map(([partition, ids]) => ({
+    partition,
+    chunks: Array.from({ length: Math.ceil(ids.size / 256) }, (_, index) =>
+      [...ids].slice(index * 256, (index + 1) * 256),
+    ),
+  }));
+  let next = 0;
   async function worker() {
-    for (const [partition, ids] of partitions) {
-      const snapshot = await source.read(partition, [...ids]);
-      for (const subject of snapshot.subjects) {
-        if (ids.has(subject.id) && subject.visibility === 'visible' && subject.redirect === null)
-          visible.set(subject.id, subject);
+    while (next < partitions.length) {
+      const home = partitions[next++];
+      if (!home) return;
+      for (const chunk of home.chunks) {
+        const requested = new Set(chunk);
+        const snapshot = await source.read(home.partition, chunk);
+        for (const subject of snapshot.subjects) {
+          if (requested.has(subject.id) && subject.visibility === 'visible' && subject.redirect === null)
+            visible.set(subject.id, subject);
+        }
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(8, groups.size) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(8, partitions.length) }, () => worker()));
   return visible;
 }
