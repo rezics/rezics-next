@@ -151,7 +151,11 @@ async function hidden(c: Awaited<ReturnType<typeof community>>) {
     const missing = await call('GET', unknown, fixture.member);
     expect(denied.status).toBe(404);
     expect(denied.status).toBe(missing.status);
-    expect(await denied.json()).toEqual(await missing.json());
+    const { request_id: deniedRequest, ...deniedBody } = await denied.json();
+    const { request_id: missingRequest, ...missingBody } = await missing.json();
+    expect(deniedRequest).toEqual(expect.any(String));
+    expect(missingRequest).toEqual(expect.any(String));
+    expect(deniedBody).toEqual(missingBody);
   }
   const { space } = await json<{ space: { realmId: string | null } }>(
     await call('GET', `/v1/spaces/${c.space.spaceId}`, fixture.member),
