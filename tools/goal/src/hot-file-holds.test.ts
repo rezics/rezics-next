@@ -39,15 +39,19 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
       await h.start(task);
       h.advanceDev('bun.lock', 'integration lock\n');
       process.env.PATH = `${bin}:${originalPath}`;
-      h.store.updateTask({ taskId: task.id, attempt: task.currentAttempt }, (current) => {
+      const current = h.store.task(task.id);
+      h.store.updateTask({ taskId: task.id, attempt: current.currentAttempt }, (current) => {
         current.state = 'stopped';
       });
 
       const retried = await h.tasks.retry(task.id);
 
-      expect(retried.currentAttempt).toBe(task.currentAttempt + 1);
+      expect(retried.currentAttempt).toBe(current.currentAttempt + 1);
       expect(git(task.worktree, 'show', `${task.branch}:bun.lock`)).toBe('installed from integration\n');
-      expect((await Bun.file(installLog).text()).trim()).toBe('install --frozen-lockfile');
+      expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual([
+        'install',
+        'install --frozen-lockfile',
+      ]);
       expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U')).toBe('');
     } finally {
       process.env.PATH = originalPath;
@@ -80,7 +84,7 @@ test('a bun.lock-only rebase conflict in the train keeps integration, installs, 
 
       await h.train();
 
-      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).state).toBe('integrated', JSON.stringify(h.outcomes));
       expect(h.outcomes[0]?.passed).toBe(true);
       expect(git(h.root, 'show', 'dev:bun.lock')).toBe('installed from integration\n');
       expect((await Bun.file(installLog).text()).trim()).toBe('install');
@@ -98,6 +102,7 @@ test('a bun.lock conflict mixed with another file stays with the worker', async 
   try {
     h.ensureDev();
     const task = h.tasks.dispatch(briefFile(h, ['bun.lock', ordinary]));
+    mkdirSync(join(task.worktree, '.temp'), { recursive: true });
     writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file: 'bun.lock', content: 'worker lock\n' }));
     await h.start(task);
     git(task.worktree, 'reset', '--soft', 'HEAD^');
