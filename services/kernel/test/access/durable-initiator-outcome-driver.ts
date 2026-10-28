@@ -54,7 +54,9 @@ const barrierTable = 'content.erasure_operation_test_barrier';
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 15));
 let workerBundle: Promise<string> | undefined;
 
-async function buildErasureBoard(resources: FixtureResources): Promise<Awaited<ReturnType<typeof buildBoardAndThreads>>> {
+async function buildErasureBoard(
+  resources: FixtureResources,
+): Promise<Awaited<ReturnType<typeof buildBoardAndThreads>>> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await buildBoardAndThreads(resources, 101, 1, randomUUID());
@@ -380,6 +382,8 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
   let authorSessionCookie = '';
   let externalSessionCookie = '';
   let spareAuthors: string[] = [];
+  let initialAuthorId = '';
+  let governanceAccountId = '';
   let executorId = `durable-initiator-${randomUUID()}`;
   let fixtureDirty = false;
   let restoreMutation: (() => Promise<void>) | undefined;
@@ -393,16 +397,27 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     | undefined;
   type PreparedBoard = Awaited<ReturnType<typeof buildBoardAndThreads>>;
   let preparedTargets: { authorId: string; result: Promise<{ board: PreparedBoard } | { error: unknown }> } | undefined;
+  let preparedSpareTargets:
+    | { authorId: string; result: Promise<{ board: PreparedBoard } | { error: unknown }> }
+    | undefined;
   const finishPublishing = async () => {
     if (!preparedTargets) return undefined;
     const result = await preparedTargets.result;
     if ('error' in result) throw result.error;
     return result.board;
   };
+  const finishSparePublishing = async () => {
+    const pending = preparedSpareTargets;
+    if (!pending) return;
+    const result = await pending.result;
+    if (preparedSpareTargets === pending) preparedSpareTargets = undefined;
+    if ('error' in result) throw result.error;
+  };
   const retireFixture = async () => {
     const failures: unknown[] = [];
     try {
       await finishPublishing();
+      await finishSparePublishing();
     } catch (error) {
       failures.push(error);
     }
@@ -461,9 +476,17 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
     principalCredential = undefined;
     authorSessionCookie = '';
     externalSessionCookie = '';
-    spareAuthors = [native.accountIds.legal, native.accountIds.suspended];
+    const governance = await pool.query<{ account_id: string }>(
+      'SELECT account_id FROM access.governance_bootstrap WHERE route=$1 AND resource_id=$2',
+      [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id],
+    );
+    governanceAccountId = governance.rows[0]?.account_id ?? '';
+    if (!governanceAccountId) throw new Error('Native governance identity is missing');
+    initialAuthorId = native.accountIds.author;
+    spareAuthors = [native.accountIds.legal, native.accountIds.suspended, governanceAccountId];
     unusedTargets = undefined;
     preparedTargets = undefined;
+    preparedSpareTargets = undefined;
     fixtureDirty = false;
   };
   try {
@@ -526,6 +549,50 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
       native.updateBearer('author', authorCredential.bearer);
       return native.system.access.authenticate(authorCredential.bearer, { pool, deadline });
     };
+    const buildSpareBoard = async (authorId: string): Promise<PreparedBoard> => {
+      if (authorId === native.accountIds.suspended) {
+        const account = await readAccount(pool, routeOf(authorId)!, authorId);
+        if (account?.state === 'suspended') {
+          const deadline = Date.now() + 120_000;
+          const governance = await freshGovernanceActor(deadline);
+          await createReinstatementCommands({
+            pool,
+            access: native.system.access,
+            clock: () => new Date(),
+          }).reinstate({ pool, actor: governance, deadline }, { accountId: authorId, key: randomUUID() });
+        }
+      }
+      const credential = await native.system.auth.issue({
+        accountId: authorId,
+        clientId: native.system.auth.ordinaryClient.id,
+        scopes: [...native.system.actions.keys()].filter((action) => action !== 'media:complete'),
+      });
+      const publishing: FixtureResources = {
+        ...native,
+        accountIds: { ...native.accountIds, author: authorId },
+        bearer: (persona) => (persona === 'author' ? credential.bearer : native.bearer(persona)),
+      };
+      return buildErasureBoard(publishing);
+    };
+    const prepareNextSpareBoard = () => {
+      const authorId = spareAuthors[0];
+      if (!authorId || preparedSpareTargets?.authorId === authorId) return;
+      if (preparedSpareTargets) throw new Error('A different native spare author board is still pending');
+      preparedSpareTargets = {
+        authorId,
+        result: buildSpareBoard(authorId).then(
+          (board) => ({ board }),
+          (error: unknown) => ({ error }),
+        ),
+      };
+    };
+    const takeSpareBoard = async (authorId: string): Promise<PreparedBoard | undefined> => {
+      if (preparedSpareTargets?.authorId !== authorId) return undefined;
+      const result = await preparedSpareTargets.result;
+      preparedSpareTargets = undefined;
+      if ('error' in result) throw result.error;
+      return result.board;
+    };
     const committedAt = async (transactionId: string) => {
       const result = await pool.query<{ at: string }>(
         'SELECT created_at::text AS at FROM core.receipt WHERE transaction_id=$1 ORDER BY created_at DESC LIMIT 1',
@@ -541,6 +608,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         if (!['direct', 'delegated', 'organization', 'realm'].includes(mode)) throw new TypeError('Unknown seed mode');
         await finishPublishing();
         await retireOperations();
+        let spareBoard: PreparedBoard | undefined;
         if (restoreMutation) {
           await restoreMutation();
           restoreMutation = undefined;
@@ -550,15 +618,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           // Use that genuine account after an irreversible identity mutation,
           // retiring its moderator grants through the grant commands first.
           const nextAuthor = spareAuthors.shift()!;
+          spareBoard = (await takeSpareBoard(nextAuthor)) ?? (await buildSpareBoard(nextAuthor));
           const deadline = Date.now() + 120_000;
           const governance = await freshGovernanceActor(deadline);
-          const nextAccount = await readAccount(pool, routeOf(nextAuthor)!, nextAuthor);
-          if (nextAccount?.state === 'suspended')
-            await createReinstatementCommands({
-              pool,
-              access: native.system.access,
-              clock: () => new Date(),
-            }).reinstate({ pool, actor: governance, deadline }, { accountId: nextAuthor, key: randomUUID() });
           const commands = createGrantCommands({
             pool,
             access: native.system.access,
@@ -609,7 +671,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
           mode === 'delegated' && preparedTargets?.authorId === native.accountIds.author
             ? await finishPublishing()
             : undefined;
-        const board = retained?.board ?? prepared ?? (await buildErasureBoard(native));
+        const board = retained?.board ?? prepared ?? spareBoard ?? (await buildErasureBoard(native));
         if (!retained || preparedTargets?.authorId !== native.accountIds.author || mode !== 'delegated')
           preparedTargets = undefined;
         sentinelByThread.set(board.thread, board.sentinelThread);
@@ -1026,6 +1088,7 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
             ),
           };
         }
+        if (mode === 'delegated' && native.accountIds.author !== initialAuthorId) prepareNextSpareBoard();
         return fixture;
       },
       async create(fixture) {
@@ -1539,7 +1602,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
               key: randomUUID(),
             },
           );
-          return changedAt(outcome.transactionId);
+          const at = await changedAt(outcome.transactionId);
+          prepareNextSpareBoard();
+          return at;
         }
         if (mutation === 'epoch-floor-increased') {
           // Complete a native consent reduction, then restore its original
@@ -1560,7 +1625,9 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         if (mutation === 'fenced') {
           fixtureDirty = true;
           const outcome = await internals.raiseFence({ accountId: fixture.tuple.actor, key: randomUUID() });
-          return changedAt(outcome.transactionId);
+          const at = await changedAt(outcome.transactionId);
+          prepareNextSpareBoard();
+          return at;
         }
         if (mutation === 'organization-membership') {
           const organizationId = fixture.principalId;
@@ -1786,9 +1853,11 @@ export async function createDurableInitiatorDriver(): Promise<DurableInitiatorDr
         }
         if (mutation === 'account-missing') {
           fixtureDirty = true;
-          return isolatedFault(pool, async (connection) => {
+          const at = await isolatedFault(pool, async (connection) => {
             await connection.query('DELETE FROM access.account WHERE account_id=$1', [fixture.tuple.actor]);
           });
+          prepareNextSpareBoard();
+          return at;
         }
         throw new Error(`Unknown native mutation ${mutation}`);
       },
