@@ -63,6 +63,8 @@ const fixtures = {
   'com.rezics.content.media.collected.v1': media,
   'com.rezics.content.media.import-requested.v1': { mediaId },
   'com.rezics.content.media.taken-down.v1': { mediaId, securityRevision: '9223372036854775807' },
+  'com.rezics.content.moderation.appeal-created.v1': { appealId: itemId },
+  'com.rezics.content.moderation.appeal-resolved.v1': { appealId: itemId },
   'com.rezics.content.moderation.takedown.v1': {
     targetKind: 'post',
     targetId: itemId,

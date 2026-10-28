@@ -10,6 +10,7 @@ import { readPartition, type Partition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
+import { createAppealEffect } from './appeals.ts';
 import { writeNotices } from './notices.ts';
 import readDecision from './read-moderation-decision.sql';
 import findDecision from './find-moderation-decision.sql';
@@ -26,6 +27,18 @@ export const ModerationDecisionSchema = t.Object(
     statement: t.String(),
     decidedAt: t.String({ format: 'date-time' }),
     appealDeadline: t.String({ format: 'date-time' }),
+    appeal: t.Union([
+      t.Object(
+        {
+          id: t.String(),
+          outcome: t.Union([t.Literal('upheld'), t.Literal('reversed'), t.Null()]),
+          statement: t.Union([t.String(), t.Null()]),
+          resolvedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -106,16 +119,27 @@ export async function readModerationDecision(
       statement: decision.statement,
       decidedAt: decidedAt.toISOString(),
       appealDeadline: new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
+      appeal:
+        decision.appeal_id === null
+          ? null
+          : {
+              id: decision.appeal_id,
+              outcome: decision.outcome as 'upheld' | 'reversed' | null,
+              statement: decision.resolver_statement,
+              resolvedAt: decision.resolved_at === null ? null : new Date(decision.resolved_at).toISOString(),
+            },
     },
     anchor,
   };
 }
 
 export function createModerationDecisionEffect(pool: Pool): Effect {
+  const appeals = createAppealEffect(pool);
   return {
     name: 'content_moderation_decision',
-    types: [takedownType],
+    types: [takedownType, ...appeals.types],
     async run(event) {
+      if (appeals.types.includes(event.type)) return appeals.run(event);
       if (event.type !== takedownType || !Value.Check(CONTENT_EVENTS[takedownType], event.data))
         throw new TypeError('Invalid moderation decision event');
       const data = event.data as {

@@ -737,6 +737,48 @@ CREATE TABLE content.media_variant (
 
 
 --
+-- Name: moderation_appeal; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.moderation_appeal (
+    route integer NOT NULL,
+    appeal_id uuid NOT NULL,
+    decision_id uuid NOT NULL,
+    appellant_account_id uuid NOT NULL,
+    statement text NOT NULL,
+    thread_id uuid NOT NULL,
+    board_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    outcome text,
+    resolver_account_id uuid,
+    resolver_statement text,
+    resolved_at timestamp with time zone,
+    CONSTRAINT moderation_appeal_check CHECK ((route = ((get_byte(uuid_send(appeal_id), 10) * 256) + get_byte(uuid_send(appeal_id), 11)))),
+    CONSTRAINT moderation_appeal_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT moderation_appeal_check2 CHECK ((((outcome IS NULL) AND (resolver_account_id IS NULL) AND (resolver_statement IS NULL) AND (resolved_at IS NULL)) OR ((outcome IS NOT NULL) AND (resolver_account_id IS NOT NULL) AND (resolver_statement IS NOT NULL) AND (resolved_at IS NOT NULL)))),
+    CONSTRAINT moderation_appeal_outcome_check CHECK ((outcome = ANY (ARRAY['upheld'::text, 'reversed'::text]))),
+    CONSTRAINT moderation_appeal_resolver_statement_check CHECK (((char_length(resolver_statement) >= 1) AND (char_length(resolver_statement) <= 2000))),
+    CONSTRAINT moderation_appeal_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT moderation_appeal_statement_check CHECK (((char_length(statement) >= 1) AND (char_length(statement) <= 2000)))
+);
+
+
+--
+-- Name: moderation_appeal_board; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.moderation_appeal_board (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    appeal_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    pending boolean NOT NULL,
+    CONSTRAINT moderation_appeal_board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT moderation_appeal_board_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: moderation_decision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1231,6 +1273,30 @@ ALTER TABLE ONLY content.media_variant
 
 
 --
+-- Name: moderation_appeal_board moderation_appeal_board_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_appeal_board
+    ADD CONSTRAINT moderation_appeal_board_pkey PRIMARY KEY (route, board_id, appeal_id);
+
+
+--
+-- Name: moderation_appeal moderation_appeal_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_appeal
+    ADD CONSTRAINT moderation_appeal_pkey PRIMARY KEY (route, appeal_id);
+
+
+--
+-- Name: moderation_appeal moderation_appeal_route_decision_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_appeal
+    ADD CONSTRAINT moderation_appeal_route_decision_id_key UNIQUE (route, decision_id);
+
+
+--
 -- Name: moderation_decision moderation_decision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1474,6 +1540,20 @@ END)));
 
 
 --
+-- Name: moderation_appeal_board_pending_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX moderation_appeal_board_pending_idx ON content.moderation_appeal_board USING btree (route, board_id, created_at DESC, appeal_id DESC) WHERE pending;
+
+
+--
+-- Name: moderation_appeal_thread_pending_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX moderation_appeal_thread_pending_idx ON content.moderation_appeal USING btree (route, thread_id, created_at DESC, appeal_id DESC) WHERE (outcome IS NULL);
+
+
+--
 -- Name: notice_recipient_created_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -1683,6 +1763,14 @@ ALTER TABLE ONLY content.board
 
 ALTER TABLE ONLY content.media_variant
     ADD CONSTRAINT media_variant_route_media_id_fkey FOREIGN KEY (route, media_id) REFERENCES content.media(route, media_id) ON DELETE CASCADE;
+
+
+--
+-- Name: moderation_appeal moderation_appeal_route_decision_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_appeal
+    ADD CONSTRAINT moderation_appeal_route_decision_id_fkey FOREIGN KEY (route, decision_id) REFERENCES content.moderation_decision(route, decision_id);
 
 
 --

@@ -217,6 +217,7 @@ describe('moderation decisions through HTTP and committed effects', () => {
         statement: reason.reason,
         decidedAt: new Date(notice.decided_at).toISOString(),
         appealDeadline: new Date(new Date(notice.decided_at).getTime() + 183 * 86400000).toISOString(),
+        appeal: null,
       });
       expect((await call('GET', path, undefined, undefined, fixture.principal)).body).toEqual(author.body);
       const stranger = await call('GET', path, undefined, undefined, fixture.recipient);

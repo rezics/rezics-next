@@ -830,6 +830,12 @@ declare const productEventTypes: {
         mediaId: Type.TString;
         securityRevision: Type.TString;
     }>;
+    readonly 'com.rezics.content.moderation.appeal-created.v1': Type.TObject<{
+        appealId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.moderation.appeal-resolved.v1': Type.TObject<{
+        appealId: Type.TString;
+    }>;
     readonly 'com.rezics.content.moderation.takedown.v1': Type.TObject<{
         targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
         targetId: Type.TString;

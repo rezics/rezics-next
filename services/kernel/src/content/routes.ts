@@ -8,6 +8,7 @@ import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { erasePostLogical } from './erase-post.ts';
 import { postEraseReceiptAccess } from './operations.ts';
+import { appealRoutes } from './appeal-routes.ts';
 import { moderationRoutes } from './moderation-routes.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -339,12 +340,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  const routes = moderationRoutes(
-    reportRoutes(
-      documentRoutes(
-        mediaImportRoutes(
-          mediaModerationRoutes(
-            sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+  const routes = appealRoutes(
+    moderationRoutes(
+      reportRoutes(
+        documentRoutes(
+          mediaImportRoutes(
+            mediaModerationRoutes(
+              sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+              dependencies,
+            ),
             dependencies,
           ),
           dependencies,
