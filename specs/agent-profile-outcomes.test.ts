@@ -178,17 +178,18 @@ test("the page read for a verified person's subject address answers 308 to the a
   expect(JSON.stringify(subject)).not.toContain(f.alice.handle);
 });
 
-test('the operator of a software agent reads no private field of the agent and cannot act as the agent without a grant', async () => {
+test("the operator of a software agent edits its profile through account:manage on the operator while the software's own bearer and an outsider are refused with no change", async () => {
   const f = await native().fixture();
   const credential = f.software.operator.credential;
   await publicOnly(f, f.software, credential);
   noPrivateValues(f, await denied(await native().request(credential, `${pathOf(f.software)}/preferences`)));
+  await ok(await patch(credential, f.software, { biography: 'Profile managed by the operator' }));
+  expect((await profile(f.software)).bio).toBe('Profile managed by the operator');
   const before = await native().inspect(f.software);
-  await denied(await patch(credential, f.software, { biography: 'Operator tried to act as software' }));
-  expect(await native().inspect(f.software)).toEqual(before);
-  // The software's own bearer is the positive control for the same action/resource.
-  await ok(await patch(f.software.credential, f.software, { biography: 'Software speaks for itself' }));
-  expect((await profile(f.software)).bio).toBe('Software speaks for itself');
+  for (const credential of [f.software.credential, f.bob.credential]) {
+    await denied(await patch(credential, f.software, { biography: 'Unauthorized profile change' }));
+    expect(await native().inspect(f.software)).toEqual(before);
+  }
 });
 
 test('an outsider reads no private field of any account', async () => {
