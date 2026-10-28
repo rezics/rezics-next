@@ -373,14 +373,22 @@ test('remote commands run with the lease off', async () => {
 test('weighted leases queue requests that exceed capacity and admit requests that fit together', async () => {
   const env = environment(3);
   const first = await acquireStackSlot('heavy', env, 2);
-  const waiterRun = Bun.spawn([process.execPath, '-e', `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('weighted-wait', process.env, 2); console.log('ready'); await Bun.stdin.text(); await s.release();`], { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+  const waiterRun = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('weighted-wait', process.env, 2); console.log('ready'); await Bun.stdin.text(); await s.release();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
   const stdout = waiterRun.stdout.getReader();
   await Bun.sleep(100);
   expect(waiterRun.exitCode).toBeNull();
   await first.release();
   const ready = await stdout.read();
   expect(new TextDecoder().decode(ready.value)).toContain('ready');
-  await waiterRun.stdin.end(); await waiterRun.exited;
+  await waiterRun.stdin.end();
+  await waiterRun.exited;
 
   const one = await acquireStackSlot('one', env, 1);
   const two = await acquireStackSlot('two', env, 2);
@@ -391,10 +399,17 @@ test('weighted leases queue requests that exceed capacity and admit requests tha
 test('a weighted holder killed with SIGKILL frees its full weight', async () => {
   const env = environment(3);
   const source = `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('kill-weight', process.env, 2); console.log('held'); await Bun.stdin.text();`;
-  const holder = Bun.spawn([process.execPath, '-e', source], { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+  const holder = Bun.spawn([process.execPath, '-e', source], {
+    cwd: repository,
+    env,
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const reader = holder.stdout.getReader();
   await reader.read();
-  holder.kill('SIGKILL'); await holder.exited;
+  holder.kill('SIGKILL');
+  await holder.exited;
   const next = await acquireStackSlot('after-kill', env, 3);
   expect(next.weight).toBe(3);
   await next.release();
@@ -403,13 +418,29 @@ test('a weighted holder killed with SIGKILL frees its full weight', async () => 
 test('a waiting heavy weighted ticket is not overtaken by a later light ticket', async () => {
   const env = environment(3);
   const holder = await acquireStackSlot('occupier', env, 2);
-  const heavy = Bun.spawn([process.execPath, '-e', `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('heavy-ticket', process.env, 2); console.log('heavy'); await Bun.stdin.text();`], { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+  const heavy = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('heavy-ticket', process.env, 2); console.log('heavy'); await Bun.stdin.text();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
   await Bun.sleep(100);
-  const light = Bun.spawn([process.execPath, '-e', `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('light-ticket', process.env, 1); console.log('light'); await Bun.stdin.text();`], { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+  const light = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('light-ticket', process.env, 1); console.log('light'); await Bun.stdin.text();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
   await Bun.sleep(100);
   await holder.release();
   const heavyText = new TextDecoder().decode((await heavy.stdout.getReader().read()).value);
   expect(heavyText).toContain('heavy');
   expect(light.exitCode).toBeNull();
-  heavy.kill('SIGTERM'); light.kill('SIGTERM'); await Promise.all([heavy.exited, light.exited]);
+  heavy.kill('SIGTERM');
+  light.kill('SIGTERM');
+  await Promise.all([heavy.exited, light.exited]);
 }, 20_000);

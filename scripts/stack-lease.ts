@@ -149,7 +149,8 @@ export async function acquireStackSlot(
   weight = 1,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
-  if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity) throw new Error(`Lease weight must be between 1 and capacity (${capacity}), received ${weight}`);
+  if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
+    throw new Error(`Lease weight must be between 1 and capacity (${capacity}), received ${weight}`);
   if (env.REZICS_STACK_LEASE === 'off' || env.REZICS_STACK_SLOT !== undefined) {
     return {
       index: null,
@@ -236,10 +237,17 @@ export async function acquireStackSlot(
             unlinkSync(ticket);
             const waitedMs = Math.floor(performance.now() - started);
             const indexes = acquired.map((entry) => entry.index);
-            console.error(weight === 1 ? `stack-lease: ${label} slot ${indexes[0]}/${capacity} after ${waitedMs} ms` : `stack-lease: ${label} slots ${indexes.join(',')} (${weight}/${capacity}) after ${waitedMs} ms`);
+            console.error(
+              weight === 1
+                ? `stack-lease: ${label} slot ${indexes[0]}/${capacity} after ${waitedMs} ms`
+                : `stack-lease: ${label} slots ${indexes.join(',')} (${weight}/${capacity}) after ${waitedMs} ms`,
+            );
             let released: Promise<void> | undefined;
             return {
-              index: indexes[0]!, capacity, weight, waitedMs,
+              index: indexes[0]!,
+              capacity,
+              weight,
+              waitedMs,
               env: { REZICS_STACK_SLOT: `${indexes[0]}/${capacity}` },
               release() {
                 return (released ??= (async () => {
