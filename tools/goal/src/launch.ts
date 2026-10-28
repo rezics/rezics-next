@@ -205,6 +205,7 @@ export function workerPrompt(
     task.brief.markdown,
     'A failure that also occurs on your base commit is not your blocker: when your acceptance command passes, report success and name it in your summary. A test that passes on your base and fails after your change is yours: fix it, wherever the fix belongs.',
     "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
+    'Never write under node_modules: bun install hardlinks package files from a shared cache, so an edit there changes the package for every worktree and check host. To instrument a dependency, copy it under .temp and load the copy through a preload or a patchedDependencies entry.',
     evidenceText ? `Continue from this retry manifest:\n${evidenceText}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length
