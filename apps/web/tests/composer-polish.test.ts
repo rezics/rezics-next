@@ -38,9 +38,29 @@ test('new thread body begins around eight lines, grows, and exposes supported fo
 
 test('composer defers kernel writes until send and retains existing refusal and upload handling', async () => {
   const composer = await read('../src/threads/composer.tsx');
+  const postComposer = composer.slice(
+    composer.indexOf('export function PostComposer'),
+    composer.indexOf('export function postEditFailureText'),
+  );
   expect(composer).toContain('onSubmit({ title, body: bodyRef.current');
   expect(composer).toContain('onSubmit({ body: bodyRef.current');
+  expect(postComposer.match(/\bonSubmit\(/gu)).toHaveLength(1);
   expect(composer).toContain('uploadReplyImage');
   expect(composer).toContain('refusalText(failure)');
   expect(composer).toContain('uploadRefusalText');
+});
+
+test('composer stories cover every requested state at phone and desktop widths', async () => {
+  const stories = await read('../src/stories/composer.stories.tsx');
+  for (const state of [
+    'ReplyEmpty',
+    'ReplyWithText',
+    'ReplyWithImage',
+    'ReplyRefusal',
+    'NewThreadEmpty',
+    'NewThreadLong',
+  ]) {
+    expect(stories).toContain(`export const ${state}:`);
+    expect(stories).toContain(`export const ${state}390:`);
+  }
 });
