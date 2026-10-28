@@ -519,27 +519,38 @@ export class MergeTrain {
     await this.drain(true);
   }
 
+  /** A detached train waits for the current owner, checking its code version while it waits. */
+  async runWaiting(): Promise<void> {
+    await this.drain(true, true);
+  }
+
   /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
   async pump(): Promise<void> {
     await this.drain(false);
   }
 
-  private async drain(failWhenInitiallyHeld: boolean): Promise<void> {
+  private async drain(failWhenInitiallyHeld: boolean, waitForLease = false): Promise<void> {
     const o = this.options;
-    if (o.codeIsCurrent && !o.codeIsCurrent()) {
-      await o.handOff?.();
-      return;
-    }
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
     let acquired = false;
     const retryDeferred = new Set<number>();
     for (;;) {
+      // Check immediately before every acquisition attempt. A process that turns stale while queued must
+      // leave the request for a fresh train instead of briefly taking the lease to discover that fact.
+      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+        await o.handOff?.();
+        return;
+      }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
         lease = acquireDirectoryLease(leasePath);
       } catch (error) {
         if (error instanceof LeaseHeldError) {
+          if (waitForLease) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            continue;
+          }
           if (failWhenInitiallyHeld && !acquired) throw error;
           return;
         }
