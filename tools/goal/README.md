@@ -322,10 +322,8 @@ Task worktrees exist while an attempt can use them. A background control-plane s
 cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
 20 (hosts without that file do not wait); a retry recreates a missing worktree from its task branch and installs its
 dependencies before launch.
-At dispatch, a task is also held after the earliest running task or landing task with an unacknowledged landing request
-from any Goal that declares the same concrete, non-derived file. The controller records that task in `after:` and reports
-the shared file. Directory and glob patterns, and files matched by `defaults.json` `derivedFiles`, do not trigger this
-rule. Automatically held tasks use the normal release path when their dependency integrates.
+Declared paths never hold a task: tasks that declare the same file run side by side and resolve any overlap when they
+rebase. Only `after:` holds a task.
 
 A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
 brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused while the branch does

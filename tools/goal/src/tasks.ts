@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import defaults from '../defaults.json';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
@@ -13,7 +12,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
-import { parseBrief, pathsOverlap, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
+import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
@@ -30,65 +29,6 @@ import type { Attempt, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
-const derivedFilePatterns = (defaults.derivedFiles as { path: string }[]).map(({ path }) => path);
-
-function concreteDeclaredFiles(paths: readonly string[]): string[] {
-  return paths.filter(
-    (path) => !/[*?]/.test(path) && !derivedFilePatterns.some((pattern) => pathsOverlap(path, pattern)),
-  );
-}
-
-function withDependency(brief: ReturnType<typeof parseBrief>, taskId: string): ReturnType<typeof parseBrief> {
-  if (brief.after.includes(taskId)) return brief;
-  const after = [...brief.after, taskId];
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(brief.markdown);
-  if (!match) throw new Error('brief needs Markdown front matter');
-  const newline = match[0].includes('\r\n') ? '\r\n' : '\n';
-  const lines = match[1]!.split(/\r?\n/);
-  const afterLine = lines.findIndex((line) => /^after\s*:/.test(line));
-  if (afterLine < 0) lines.push(`after: ${JSON.stringify(after)}`);
-  else {
-    let end = afterLine + 1;
-    while (end < lines.length && /^[\t ]+-/.test(lines[end]!)) end++;
-    lines.splice(afterLine, end - afterLine, `after: ${JSON.stringify(after)}`);
-  }
-  const end = (match.index ?? 0) + match[0].length;
-  return {
-    ...brief,
-    after,
-    markdown: `---${newline}${lines.join(newline)}${newline}---${brief.markdown.slice(end)}`,
-  };
-}
-
-type SharedWriter = { task: Task; file: string };
-
-function landingRequestPending(store: WorkerStore, task: Task): boolean {
-  const table = store.db
-    .query("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='landing_queue'")
-    .get();
-  if (!table) return true;
-  const request = store.db
-    .query('SELECT delivered FROM landing_queue WHERE task=? AND attempt=?')
-    .get(task.id, task.currentAttempt) as { delivered: number } | null;
-  return request?.delivered !== 1;
-}
-
-function earliestSharedWriter(
-  brief: ReturnType<typeof parseBrief>,
-  tasks: readonly Task[],
-  store: WorkerStore,
-): SharedWriter | undefined {
-  const newFiles = new Set(concreteDeclaredFiles(brief.paths));
-  if (!newFiles.size) return undefined;
-  for (const task of [...tasks].sort((a, b) => a.sequence - b.sequence)) {
-    if (task.state !== 'running' && task.state !== 'landing') continue;
-    if (task.state === 'landing' && !landingRequestPending(store, task)) continue;
-    const sharedFile = concreteDeclaredFiles(task.brief.paths).find((path) => newFiles.has(path));
-    if (sharedFile) return { task, file: sharedFile };
-  }
-  return undefined;
-}
-
 function normalizedBriefText(markdown: string): string {
   return markdown.replace(/\r\n?/g, '\n').trimEnd();
 }
@@ -365,8 +305,7 @@ export class WorkerTasks {
     // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
-      const sharedWriter = earliestSharedWriter(submittedBrief, this.store.tasks(), this.store);
-      const brief = sharedWriter ? withDependency(submittedBrief, sharedWriter.task.id) : submittedBrief;
+      const brief = submittedBrief;
       const base = this.taskBaseHead(brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
@@ -382,8 +321,6 @@ export class WorkerTasks {
         if (held) current.state = 'held';
       });
       reportFrozenFormatError(frozen.formatterError);
-      if (sharedWriter)
-        console.warn(`Dispatch held after task ${sharedWriter.task.id} for shared file ${sharedWriter.file}.`);
       return this.store.task(id);
     } finally {
       lease.release();
