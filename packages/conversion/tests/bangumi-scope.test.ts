@@ -112,7 +112,7 @@ test('identity/type dispatch is pure and never visits unknown or private subtree
   const attempts: string[] = [];
   const deny = () => { attempts.push('I/O'); throw new Error('Unexpected I/O'); };
   const spies = [
-    spyOn(globalThis, 'fetch').mockImplementation(deny),
+    spyOn(globalThis, 'fetch').mockImplementation(Object.assign(deny, { preconnect: deny })),
     spyOn(fs, 'readFileSync').mockImplementation(deny), spyOn(fs, 'writeFileSync').mockImplementation(deny),
     spyOn(promises, 'readFile').mockImplementation(deny), spyOn(promises, 'writeFile').mockImplementation(deny),
     spyOn(http, 'request').mockImplementation(deny), spyOn(https, 'request').mockImplementation(deny),
