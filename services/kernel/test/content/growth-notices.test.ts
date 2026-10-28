@@ -155,8 +155,8 @@ test('notice writes and bounded pages stay constant while other recipients and p
   });
   expectConstantNoticeCost(writeReport, 1);
 
-  const retentionWarmupAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
-  const retentionAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const retentionWarmupAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const retentionAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
   const warmupCutoff = new Date('2000-01-01T00:00:00Z');
   const cutoff = new Date('2000-01-02T00:00:00Z');
   const retentionReport = await checkGrowth(db, {
@@ -201,8 +201,8 @@ test('notice writes and bounded pages stay constant while other recipients and p
   });
   expectConstantNoticeCost(retentionReport, NOTICE_PAGE_SIZE);
 
-  const erasedWarmupAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
-  const erasedAccounts = new Map(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const erasedWarmupAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const erasedAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
   const erasureReport = await checkGrowth(db, {
     name: 'Account notice erasure page',
     scales,
