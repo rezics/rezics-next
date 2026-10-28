@@ -1,0 +1,79 @@
+{
+  "contract": "ratings/content",
+  "version": 1,
+  "titles": "All titles are controlled test data.",
+  "personas": {
+    "reader": "review author and protected Realm member",
+    "outsider": "unrelated active account without private read grants",
+    "moderator": "board moderation, grant revocation and private Realm management",
+    "voters": ["reader", "voter-two", "voter-three", "voter-four", "voter-five"],
+    "priorVoters": ["prior-one", "prior-two", "prior-three", "prior-four", "prior-five"],
+    "privateVoters": [
+      "private-one",
+      "private-two",
+      "private-three",
+      "private-four",
+      "private-five",
+      "private-six",
+      "private-seven",
+      "private-eight",
+      "private-nine",
+      "private-ten"
+    ],
+    "unpublishedVoter": "separate active voter, later suspended through HTTP"
+  },
+  "subjects": {
+    "subject": "Controlled reviewed work",
+    "otherSubject": "Controlled different review target",
+    "belowThresholdSubject": "Controlled work below five votes",
+    "priorSubjects": [
+      "prior-work-one",
+      "prior-work-two",
+      "prior-work-three",
+      "prior-work-four",
+      "prior-work-five",
+      "prior-work-six",
+      "prior-work-seven",
+      "prior-work-eight",
+      "prior-work-nine",
+      "prior-work-ten"
+    ]
+  },
+  "rating": {
+    "question": "released standard question, work grain",
+    "population": "Global",
+    "storedUnits": [0, 20],
+    "displayUnits": [0, 10],
+    "displayStep": 0.5,
+    "threshold": 5,
+    "thresholdVoteUnits": 8,
+    "priorVoteUnits": 12,
+    "priorCount": 50,
+    "privateVoteUnits": 20,
+    "privateRealm": "protected Realm with ten distinct extreme voters",
+    "privatePopulationRule": "The same votes also count in Global. Changing Realm membership alone must not change Global.",
+    "unpublished": "Pending effect delivery and an ineligible suspended voter; never seed aggregate rows."
+  },
+  "content": {
+    "publicReviewsBoard": "Global reviews board on a partition different from the authors",
+    "protectedReviewsBoard": "Global protected reviews board with native reader read/create grants and no anonymous read grant",
+    "reviews": [
+      "review-one",
+      "review-two",
+      "review-three",
+      "review-four",
+      "review-five",
+      "draft-review",
+      "protected-review",
+      "taken-down-review",
+      "other-subject-review"
+    ],
+    "licences": ["MIT", "CC-BY-4.0"],
+    "pageLimit": 2,
+    "boardSorts": ["hot", "active", "newest"],
+    "pageData": "Five HTTP-created discussion threads with five HTTP-created replies each; first and continuation pages",
+    "barrier": "After board authorization, before final result, timing only",
+    "revocations": ["moderator takes board down", "moderator revokes protected board read grant"],
+    "positiveControl": "Release the same held request without any access change"
+  }
+}

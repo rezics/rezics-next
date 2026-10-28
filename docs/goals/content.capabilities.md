@@ -1,0 +1,230 @@
+# Content capability acceptance
+
+This manifest covers the content-owned rows of [public scope](../scope.md) and the outcomes of
+[content and communities](content.md). Product rules remain with the
+[content](../../services/kernel/src/content/README.md),
+[community](../../services/kernel/src/community/README.md) and
+[rating](../../services/kernel/src/rating/README.md) owners. The
+[acceptance gap report](../research/api-acceptance-gaps.md) supplies fixture contract names and the missing user cases.
+
+Stages, in order, are **specified red**, **driver registered**, **implementation exposed**,
+**user-case acceptance passed**, and **promoted**. A registered native wrapper proves a binding exists; it does not
+establish a passing run or promotion. No passing revision or promotion evidence is claimed here. A capability with
+missing composed acceptance stays specified red even when its supporting APIs and bound suites exist.
+
+The shared `ratings/content` fixture is
+[content-user-cases.json](../../specs/fixtures/content-user-cases.json). It contains logical names, controlled titles,
+standard-question work targets, distinct-controller voters, fifty real Global prior votes, an extreme private Realm
+population, unpublished/ineligible votes, vote-citing reviews and paged discussions. Names map to HTTP-created IDs
+at runtime. The same person's vote counts in Global and each eligible Realm: the private Realm control changes
+membership, not the Global vote population. No fixture seeds votes, reviews, threads, aggregates or figures.
+
+The new [suite](../../specs/content-user-cases-outcomes.test.ts) and
+[driver contract](../../specs/content-user-cases-driver.ts) require an isolated migrated native kernel, real HTTP
+through production `createKernel.handle`, native Auth and Access, and production command, effect and relay
+boundaries. API responses alone supply assertions. Timing barriers never implement policy or redact results.
+
+## threads-and-boards
+
+Scope row: **Posts, threads and boards**. Stage: **specified red** for the complete capability.
+
+User job: readers, authors and moderators create, read, page and revise threads, posts, replies and immutable
+revisions on boards, with current disclosure, licences, references and media claims.
+
+Personas: anonymous, author, Realm member, outsider and moderator. Fixtures: `ratings/content` for paged discussions
+and deterministic revocation; the bound thread/disclosure/media suites retain their own native fixtures. Media
+claims are covered here, including uploader identity, parent disclosure and lifecycle.
+
+| Surface cell             | Scope and scenarios                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue                | In: the subject's discussion list, `test/content/subject-threads-http.test.ts`; bound thread/disclosure scenarios and `late-board-revocation` subject-thread reads.   |
+| Curated                  | Out: threads are not catalogue subjects or Collection members.                                                                                                        |
+| Everything without state | Out: threads are not catalogue subjects or Collection members.                                                                                                        |
+| Own state                | In: author activity thread/reply reads, including current disclosure and `late-board-revocation` author-activity reads. This is authored activity, not library state. |
+| Mounted Zone             | Out: a Zone mounts saved scopes and Collections, not boards, under public scope.                                                                                      |
+| TypeList                 | Out: threads are not catalogue subjects or Collection members.                                                                                                        |
+
+Scenarios and evidence on this base:
+
+- `content-thread-outcomes`, `content-disclosure-outcomes` and `content-media-outcomes` are bound by native wrappers
+  under `services/kernel/test/content/`; stage **driver registered**. These retain their frozen scenarios and fixture
+  rules without duplication.
+- Board pages by sort (`hot`, `active`, `newest`) have native HTTP coverage in `boards-http`, `board-ranking-http`
+  and `board-hot-http`; stage **implementation exposed**. Author activity reads have native `author-item-reads` and
+  `author-item-public-views` coverage; stage **implementation exposed**.
+- `late-board-revocation`: take the board down or revoke its protected read grant after the board check for thread,
+  post head, exact revision, subject-thread and author-activity reads. Final output must disclose no now-ineligible
+  item, summary, count, source or cursor material. Stage **specified red**; the deterministic composed binding for
+  these point reads is not established on this base.
+- `late-board-revocation-pages`: the new suite declares literal cases for hot, active and newest board first and
+  continuation pages, and thread post first and continuation pages. Each has a late board takedown, late protected
+  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered.
+
+Native acceptance commands, from the repository root:
+
+```sh
+bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts
+CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern late-board-revocation-pages
+```
+
+The second command requires the future real binding. Neither existing board sort tests nor the missing-driver
+verifier establish the late point-read or page outcomes.
+
+## realms-and-spaces
+
+Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capability.
+
+User job: community creators and managers create and revise Spaces and Realms, publish subjects, manage membership
+and boards, and enforce protected admission and participation immediately when someone is banned.
+
+Personas: anonymous, creator, manager, moderator, Realm member, banned member and outsider, including a banned
+member with an independent read grant. Fixtures: the bound community suite's native Space/Realm fixtures and the
+`ratings/content` protected Realm/board personas for shared content reads. The ban barrier additionally needs a
+member with no independent read grant and a separate independent-grant control.
+
+| Surface cell             | Scope and scenarios                                                                                                                |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue                | In: Realm subject publications through `community-outcomes`; `protected-ban-barrier` protects community-owned reads and admission. |
+| Curated                  | Out: Collection curation is owned by commerce; Realm publication does not define Collection membership.                            |
+| Everything without state | Out: library support unions are owned by commerce, not Realm membership.                                                           |
+| Own state                | Out: personal library state and inbox delivery are separate capabilities; Realm membership is community authority.                 |
+| Mounted Zone             | Out: Zone mount composition is owned by semantic; a Realm is not a mounted Collection.                                             |
+| TypeList                 | Out: configured subject lists are owned by semantic; Realm membership/publication is not a TypeList.                               |
+
+Scenarios:
+
+- `community-outcomes` is bound by `services/kernel/test/community/community-outcomes.test.ts`; stage
+  **driver registered**.
+- `protected-ban-barrier`: a ban denies protected reads, participation and admission from its authoritative T,
+  before removal work settles. A ban beats any independent read grant. Exercise both independent-grant and
+  no-independent-grant fixtures, with unrelated public reads as controls. Stage **specified red**: the required
+  native file `test/community/ban-protected-http.test.ts` is absent on this base; this manifest does not claim it runs.
+
+Native acceptance commands:
+
+```sh
+bun run --cwd services/kernel check test/community/community-outcomes.test.ts
+bun run --cwd services/kernel check test/community/ban-protected-http.test.ts
+```
+
+The second command names the required future barrier acceptance, not an existing passing check.
+
+## ratings-and-reviews
+
+Scope row: **Ratings and reviews**. Stage: **specified red** for the complete capability.
+
+User job: readers privately rate a subject and publish a review that may cite their vote, then understand honest
+public figures on subject pages and search cards without leaking anyone's vote or private Realm context.
+
+Personas: anonymous, reader/review author, other independent voters, outsider, private Realm member and moderator;
+include an account whose vote becomes ineligible while delivery is paused. Fixtures: `ratings/content`, using the
+released standard question, five-vote work threshold, fifty real Global prior votes, ten extreme private Realm voters,
+unpublished votes, paged reviews, a different subject target, draft/protected/taken-down posts and two licences.
+
+| Surface cell             | Scope and scenarios                                                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue                | In: subject page figures and search cards, `subject-rating-context`; subject review list and continuations, `review-from-vote`.        |
+| Curated                  | Out: search owns rating sort and the public aggregate is its only rating input; no new Collection sorting contract is introduced here. |
+| Everything without state | Out: search owns rating sort and its only rating input is the public aggregate.                                                        |
+| Own state                | In: the reader's private vote, tested by `subject-rating-context` and by vote changes in `review-from-vote`.                           |
+| Mounted Zone             | Out: search owns rating sort and the public aggregate is its only input; Zone composition is owned by semantic.                        |
+| TypeList                 | Out: search owns rating sort and the public aggregate is its only rating input; configured TypeLists stay with semantic.               |
+
+Scenarios:
+
+- Existing native vote and aggregate cases in `test/rating/vote-http.test.ts` and `test/rating/aggregate-http.test.ts`
+  remain the producer acceptance; stage **implementation exposed**. They are reused, not duplicated.
+- `review-from-vote`, stage **specified red**, has three literal cases in the new suite: PUT vote then POST review
+  and change vote while anonymous reads all relay continuations; publication-time citation survives vote changes;
+  hidden/protected posts stay out while immutable revisions and licences survive. All writes use the existing content
+  DTO, including `kind`, `subjectIds` and `voteCitation` with question, integer units and vote revision.
+- `subject-rating-context`, stage **specified red**, has four literal cases: subject page/search card agree on
+  standard question, Global population, units and count with a real prior; below-threshold/pending/ineligible votes
+  give honest insufficient-data/updating without a number; only the reader obtains their own vote; an extreme private
+  Realm population never substitutes for or moves Global. Native vote, aggregate, prior and figure workers produce
+  every figure. Numeric count remains allowed below threshold; mean and score do not.
+
+Native acceptance commands:
+
+```sh
+bun run --cwd services/kernel check test/rating/vote-http.test.ts test/rating/aggregate-http.test.ts
+CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern 'review-from-vote|subject-rating-context'
+```
+
+The second command awaits a real registered binding. Realm rating sorts remain deferred. Private Realm votes are
+not a separate copy of Global votes; changing only membership is the discriminating isolation control.
+
+## moderation-reports-appeals
+
+Scope row: **Moderation, reports and appeals**. Stage: **specified red**; the frozen notification suite is unbound.
+
+User job: reporters report harmful content, moderators take it down and resolve reports, and affected authors read
+the reason and appeal to an independent reviewer who can uphold or reverse the decision.
+
+Personas: reporter, author/appellant, moderator/decider, second moderator/reviewer, unrelated reader and anonymous.
+Fixtures: `ratings/content` real content targets and protected-board controls, plus the frozen notification suite's
+native report/decision/appeal fixture contract. Reports, decisions, appeals and notices must be created through APIs,
+not seeded.
+
+| Surface cell             | Scope and scenarios                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Catalogue                | Out: decision and appeal records are participant/moderator workflows, not catalogue subjects.            |
+| Curated                  | Out: moderation records are not Collection members.                                                      |
+| Everything without state | Out: moderation records are not library support facts.                                                   |
+| Own state                | In: recipient's inbox for moderation outcomes, including `report-to-appeal` decision/resolution notices. |
+| Mounted Zone             | Out: private moderation workflows are not mounted saved scopes or Collections.                           |
+| TypeList                 | Out: moderation records are not configured catalogue subject lists.                                      |
+
+`report-to-appeal` is the moderation cases in frozen
+[content-notification-outcomes.test.ts](../../specs/content-notification-outcomes.test.ts): takedown decision,
+report resolution, appeal uphold or reverse, and refusal of the original decider. Decision deadlines, denied and
+replayed transitions and restoration eligibility remain covered by that suite. A later binding must execute those
+existing cases; this manifest does not replace or duplicate them.
+
+Native acceptance command, requiring the future native notification binding:
+
+```sh
+CONTENT_NOTIFICATION_DRIVER=/absolute/path/to/native-notification-driver.ts bun test specs/content-notification-outcomes.test.ts
+```
+
+## notices
+
+Scope row: **Notifications**. Stage: **specified red**; the frozen notification suite is unbound.
+
+User job: recipients receive eligible in-app reply, mention and moderation notices, page their inbox, see bounded
+unread state and mark a notice seen without revealing another person's inbox.
+
+Personas: recipient, author/replier, mentioned account, protected member, outsider, moderator, unrelated reader and
+anonymous; include deleted recipients and preference/access changes before delivery. Fixtures: `ratings/content`
+content and protected Realm personas plus the frozen notification suite's native recipient/preference and delivery
+fixtures. Effects start paused; replay redelivers committed production events, never synthetic notices.
+
+| Surface cell             | Scope and scenarios                                                       |
+| ------------------------ | ------------------------------------------------------------------------- |
+| Catalogue                | Out: personal notices are not catalogue subjects.                         |
+| Curated                  | Out: personal notices are not Collection members.                         |
+| Everything without state | Out: personal notices are not library support facts.                      |
+| Own state                | In: recipient's inbox, `notice-delivery` including unread and seen state. |
+| Mounted Zone             | Out: private inboxes are not mounted saved scopes or Collections.         |
+| TypeList                 | Out: notices are not configured catalogue subject lists.                  |
+
+`notice-delivery` is the notice cases in the same frozen
+[notification suite](../../specs/content-notification-outcomes.test.ts): reply, mention, send-time access,
+preferences, replay, inbox, unread and seen. Access loss after delivery still prevents sensitive disclosure. No email
+requirement is added. Native acceptance uses the same notification command above with its future real binding.
+
+## Closed scope and verification
+
+**Articles, hosted works and media** stays closed behind grants until polished under [public scope](../scope.md);
+media claims are covered by `threads-and-boards`.
+
+Run the new native acceptance with a real binding as documented above. Until then the specification validation
+command is:
+
+```sh
+bunx oxfmt --check docs/goals/content.capabilities.md specs/content-user-cases-outcomes.test.ts specs/content-user-cases-driver.ts && bun specs/support/verify-outcome-suite.ts specs/content-user-cases-outcomes.test.ts CONTENT_USER_CASES_DRIVER 'Content user cases driver is required'
+```
+
+This checks every declared literal scenario fails with exactly the missing-driver error, with no skipped cases.
+It advances only **specified red**, never **user-case acceptance passed**. A future registered driver must pass the
+suite through real production boundaries before the capability advances; promotion needs recorded revision evidence.
