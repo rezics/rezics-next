@@ -62,14 +62,22 @@ async function pruneDeletes(search: OpenSearch, index: string) {
   expect(retained.status).toBe(409);
   expect(retained.error?.type).toBe('version_conflict_engine_exception');
 
-  // Native InternalEngine.flush prunes deleted tombstones using the processed checkpoint
-  // and gc_deletes cutoff (OpenSearch 3.9.0 InternalEngine.java:1719-1723,1753-1778).
-  // One primary, no replicas: the subject deletion precedes the probe deletion on this
-  // same engine. Force a flush after expiry; observe 409 -> 201, never infer GC from sleep.
-  await search.request('PUT', `/${index}/_settings`, { index: { gc_deletes: '0ms' } });
-  await Bun.sleep(10);
-  await search.request('POST', `/${index}/_flush`, undefined, { query: { force: true, wait_if_ongoing: true } });
-  const pruned = (await apply([probe('index', 1), {}])).items[0]!.index!;
+  // Native InternalEngine refresh/delete calls maybePruneDeletes, using the processed
+  // checkpoint and gc_deletes cutoff (OpenSearch 3.9.0 InternalEngine.java:1343-1349,
+  // 1523-1526,1753-1778). One primary, no replicas: the subject deletion precedes the
+  // probe deletion on this same engine. The engine's relative clock is cached, so a
+  // successful settings update/flush plus a short sleep does not establish expiry.
+  // Drive native refreshes and require observed 409 -> 201 within the existing 5s bound.
+  await search.request('PUT', `/${index}/_settings`, { index: { gc_deletes: '100ms' } });
+  const deadline = Date.now() + 5_000;
+  let pruned: Item;
+  do {
+    await search.request('POST', `/${index}/_refresh`);
+    pruned = (await apply([probe('index', 1), {}])).items[0]!.index!;
+    expect([201, 409]).toContain(pruned.status);
+    if (pruned.status === 201) break;
+    await Bun.sleep(50);
+  } while (Date.now() < deadline);
   expect(pruned.status).toBe(201);
   return { retained, pruned };
 }
