@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { EllipsisIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
+import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRatio, type CoverProps } from './cover.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
@@ -19,10 +19,12 @@ export interface ShelfListRowProps extends ShelfSelectionProps {
   meta?: ReactNode;
   status?: ReactNode;
   statusMenu?: ReactNode;
+  statusMenuEntries?: MenuEntry[];
   progress?: { value: number | null; label: string };
   stepper?: { onStep: (delta: number) => void; decreaseLabel: string; increaseLabel: string };
   date?: ReactNode;
   menu?: ReactNode;
+  menuEntries?: MenuEntry[];
   labels: { select: string; menu: string };
 }
 /** A shelf list landmark; shadcn has no shelf list layout. */
@@ -38,10 +40,12 @@ export function ShelfListRow({
   meta,
   status,
   statusMenu,
+  statusMenuEntries,
   progress,
   stepper,
   date,
   menu,
+  menuEntries,
   labels,
   selectable,
   selected = false,
@@ -55,11 +59,17 @@ export function ShelfListRow({
   };
   const chip =
     status != null &&
-    (statusMenu != null ? (
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>{status}</DropdownMenuTrigger>
-        <DropdownMenuContent>{statusMenu}</DropdownMenuContent>
-      </DropdownMenu>
+    (statusMenu != null || statusMenuEntries != null ? (
+      <Menu
+        title="Status"
+        trigger={
+          <Button variant="outline" size="sm">
+            {status}
+          </Button>
+        }
+        content={statusMenu}
+        entries={statusMenuEntries}
+      />
     ) : (
       status
     ));
@@ -165,13 +175,17 @@ export function ShelfListRow({
         )}
         <span className="text-xs text-muted-foreground">{date}</span>
       </div>
-      {menu != null && (
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={labels.menu} />}>
-            <EllipsisIcon aria-hidden />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>{menu}</DropdownMenuContent>
-        </DropdownMenu>
+      {(menu != null || menuEntries != null) && (
+        <Menu
+          title={labels.menu}
+          trigger={
+            <Button variant="ghost" size="icon-sm" aria-label={labels.menu}>
+              <EllipsisIcon aria-hidden />
+            </Button>
+          }
+          content={menu}
+          entries={menuEntries}
+        />
       )}
     </li>
   );

@@ -103,8 +103,8 @@ test('a reader rates with one control, sees their own vote and can clear it, usi
 
 test('reactions, the overflow menu with report, and the report dialog are built from shadcn primitives and import no Ark UI', () => {
   const expected: Record<string, string[]> = {
-    reactions: ['button', 'popover'],
-    'content-actions': ['alert-dialog', 'button', 'dropdown-menu'],
+    reactions: ['button'],
+    'content-actions': ['alert-dialog', 'button'],
     'report-dialog': ['button', 'dialog', 'radio-group', 'textarea'],
   };
   for (const [name, primitives] of Object.entries(expected)) {
@@ -112,4 +112,5 @@ test('reactions, the overflow menu with report, and the report dialog are built 
     // Neither the file nor anything it imports from this package may reach Ark UI.
     for (const file of closure(`${name}.tsx`)) expect(readFileSync(file, 'utf8'), file).not.toContain('@ark-ui');
   }
+  for (const name of ['reactions', 'content-actions']) expect(source(name)).toContain("from './menu.tsx'");
 });

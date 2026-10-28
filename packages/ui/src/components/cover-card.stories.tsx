@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { DropdownMenuItem } from '../shadcn/dropdown-menu.tsx';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { sharedRatio } from './cover.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
@@ -24,7 +23,7 @@ const cards = () =>
       secondary={index < 2 ? 'A creator' : undefined}
       progress={index === 0 ? { value: 0.42, label: '42%' } : undefined}
       state={index === 1 ? 'Reading' : undefined}
-      menu={index === 0 ? <DropdownMenuItem>Remove</DropdownMenuItem> : undefined}
+      menuEntries={index === 0 ? [{ type: 'destructive', label: 'Remove', onSelect: () => {} }] : undefined}
     />
   ));
 const meta = {
@@ -74,6 +73,15 @@ export const Grid: Story = {
     await expect(
       within(await settled(await screen.findByRole('menu'))).getByRole('menuitem', { name: 'Remove' }),
     ).toBeVisible();
+  },
+};
+export const MenuOpenPhone: Story = {
+  render: () => <CoverGrid ratio={ratio}>{cards()}</CoverGrid>,
+  parameters: { viewport: { defaultViewport: 'phone' } },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /More actions for/ }));
+    await expect(await screen.findByRole('dialog')).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Remove' })).toBeVisible();
   },
 };
 export const Row: Story = {

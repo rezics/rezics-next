@@ -22,6 +22,24 @@ The package uses shadcn's Rhea style on the Base UI primitives (`components.json
 - Whoever takes the issue runs `bun run shadcn:sync` here as an ordinary task. It re-adds every cloned component from `shadcn@latest`, refreshes `shadcn-registry.json` and `SHADCN.md` with `scripts/shadcn-index.ts`, pins dependencies exactly, updates the sync record and shows the diff. Review all changes and run `bun run check` before committing. Include `Closes #<issue-number>` in the sync commit message; the issue closes when the commit reaches the default branch. The sync never runs automatically, so people do not redo it in parallel.
 - To refresh only the capability index outside a sync, run `bun scripts/shadcn-index.ts`; `--offline` regenerates `SHADCN.md` from the committed registry snapshot.
 
+## Menu
+
+Use `Menu` from `@rezics/ui/menu` for package menus. It takes one ordered entry list for items, links, radio groups,
+submenu pages, separators and destructive actions. Below the `md` breakpoint, or with a coarse primary pointer, the
+menu opens as a bottom sheet with a title and touch rows at least 44px high. On wider fine-pointer screens it opens as
+a dropdown anchored to its trigger. Menu labels, including the title and Back control, come from the caller's native
+locale messages. A submenu becomes a sheet page; browser Back returns to the previous page and then closes the sheet.
+Selecting a radio value closes the menu once. Escape closes either form, and focus returns to the trigger.
+
+Callers use `Menu` or a component built on it; they never import shadcn's dropdown or drawer primitives to implement a
+menu. `editor-selection-menu.tsx` is a floating formatting toolbar over a text selection, not a menu. `cover.tsx`'s
+credit control is not a menu.
+
+- **Operation:** Render a menu and its entries.
+- **Touches:** No new reads; rendering only, over data the page already loaded.
+- **Bound:** Constant work per entry rendered.
+- **Growth check:** None; no read path changes.
+
 ## Editor and document body
 
 The rich-text editor keeps Tiptap and the document model (`@rezics/document`) and draws its controls from the shadcn primitives: `dropdown-menu` for the block menu, `toggle`, `button` and `tooltip` for the selection menu and the touch bar, `sheet` for the touch block picker, `command` for the slash menu, and `field` with `input` for the link and image forms. Two things stay in our own components, because shadcn has no equivalent: Tiptap's bubble menu places the selection and link menus against a range of text (a shadcn popover anchors to a trigger element), and the toolbar role with one tab stop and arrow-key travel is not in the registry.
@@ -32,7 +50,7 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 ## Content feedback
 
-`Reactions`, `ContentActions`, `ReportDialog` and the rating components are built from shadcn primitives (`button`, `popover`, `dropdown-menu`, `alert-dialog`, `dialog`, `radio-group`, `field`, `textarea`, `slider`, `badge`).
+`Reactions`, `ContentActions`, `ReportDialog` and the rating components use the shared `Menu` for choices and overflow actions, with shadcn primitives for buttons, confirmations, dialogs, fields, textareas, sliders and badges.
 
 - On a detail page the reaction cluster sits top right and reporting lives in the `ContentActions` overflow menu; there is no visible report button.
 - `Reactions` shows and offers every kind unless `kinds` narrows it: a subject admits like, love, laugh, insightful and sad, so its cluster passes those five and never shows upvote or downvote. `disabled` turns the chips and the React trigger off until the page has hydrated.

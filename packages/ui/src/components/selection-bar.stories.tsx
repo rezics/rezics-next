@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fireEvent, userEvent, within } from 'storybook/test';
+import { expect, fireEvent, screen, userEvent, within } from 'storybook/test';
 import { useSelection } from '../hooks/use-selection.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { SelectionBar } from './selection-bar.tsx';
@@ -56,5 +56,10 @@ export const Selection: Story = {
     await fireEvent.click(link);
     await expect(canvas.getByText('1 selected')).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
+    await userEvent.click(canvas.getByRole('button', { name: 'Select' }));
+    await userEvent.click(canvas.getByRole('link', { name: 'One' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'More' }));
+    await expect(await screen.findByRole('dialog')).toBeVisible();
   },
+  parameters: { viewport: { defaultViewport: 'phone' } },
 };

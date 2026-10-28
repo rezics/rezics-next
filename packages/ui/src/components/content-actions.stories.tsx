@@ -80,6 +80,15 @@ export const MenuKeyboard: Story = {
     await waitFor(() => expect(menu).not.toBeInTheDocument());
   },
 };
+export const MenuOpenPhone: Story = {
+  render: () => <StrangerActions />,
+  parameters: { viewport: { defaultViewport: 'phone' } },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
+    await expect(await screen.findByRole('dialog')).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Report' })).toBeVisible();
+  },
+};
 
 export const OwnerActions: Story = {
   args: {

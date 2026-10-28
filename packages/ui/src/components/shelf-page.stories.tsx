@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, screen, userEvent, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
 import { ShelfTabs, ShelfToolbar, ShelfTypeChips } from './shelf-toolbar.tsx';
@@ -142,6 +142,15 @@ type Story = StoryObj<typeof meta>;
 export const Overview: Story = {
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { name: 'Library' })).toBeVisible();
+  },
+};
+export const MenuOpenPhone: Story = {
+  render: () => <Page />,
+  parameters: { viewport: { defaultViewport: 'phone' } },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
+    await expect(await screen.findByRole('dialog', { name: 'Sort' })).toBeVisible();
+    await expect(screen.getByRole('combobox')).toBeVisible();
   },
 };
 export const InProgress: Story = { args: { initial: 'progress' } };

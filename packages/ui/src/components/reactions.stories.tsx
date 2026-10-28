@@ -94,11 +94,12 @@ function RejectingReactions() {
   );
 }
 
-const dialog = () => screen.getByRole('dialog', { name: 'Choose a reaction' });
+const dialog = () => screen.queryByRole('dialog') ?? screen.getByRole('menu');
 
 const openChoices = async (canvasElement: HTMLElement) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'React' }));
-  return settled(await screen.findByRole('dialog', { name: 'Choose a reaction' }));
+  await waitFor(() => expect(screen.queryByRole('dialog') ?? screen.queryByRole('menu')).not.toBeNull());
+  return settled(dialog());
 };
 
 /** Used color of a token, resolved the same way the pressed control resolves it. */
@@ -133,6 +134,14 @@ export const ChooseReaction: Story = {
     await expectInkBlue(within(dialog()).getByRole('button', { name: 'Like' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'true');
+  },
+};
+export const MenuOpenPhone: Story = {
+  render: () => <PendingReactions initialCounts={{ upvote: 8 }} initialValue={null} />,
+  parameters: { viewport: { defaultViewport: 'phone' } },
+  async play({ canvasElement }) {
+    const choices = await openChoices(canvasElement);
+    await expect(within(choices).getByRole('button', { name: 'Like' })).toBeVisible();
   },
 };
 

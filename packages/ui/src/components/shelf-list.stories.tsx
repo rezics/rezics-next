@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { DropdownMenuItem } from '../shadcn/dropdown-menu.tsx';
 import { settled, withSurface } from '../stories/support.tsx';
 import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 import { RelativeTime } from './relative-time.tsx';
@@ -26,6 +25,15 @@ export const Entries: Story = {
     await userEvent.keyboard('{Escape}');
   },
 };
+export const MenusOpenPhone: Story = {
+  render: () => <Example />,
+  parameters: { viewport: { defaultViewport: 'phone' } },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reading' }));
+    await expect(await screen.findByRole('dialog')).toBeVisible();
+    await expect(screen.getByRole('radio', { name: 'Completed' })).toBeVisible();
+  },
+};
 function Example() {
   const [selected, setSelected] = useState(false);
   const [count, setCount] = useState(3);
@@ -37,7 +45,18 @@ function Example() {
         title={subject.title}
         meta="A. Author · Book"
         status="Reading"
-        statusMenu={<DropdownMenuItem>Completed</DropdownMenuItem>}
+        statusMenuEntries={[
+          {
+            type: 'radio',
+            label: 'Status',
+            value: 'reading',
+            options: [
+              { value: 'reading', label: 'Reading' },
+              { value: 'completed', label: 'Completed' },
+            ],
+            onValueChange: () => {},
+          },
+        ]}
         progress={{ value: count / 12, label: `Ep ${count}/12` }}
         stepper={{
           onStep: (delta) => setCount((n) => Math.max(0, Math.min(12, n + delta))),
@@ -45,7 +64,7 @@ function Example() {
           increaseLabel: 'Increase progress',
         }}
         date={<RelativeTime value="2026-10-26T12:00:00Z" now={new Date('2026-10-27T12:00:00Z')} locale="en" />}
-        menu={<DropdownMenuItem>Remove</DropdownMenuItem>}
+        menuEntries={[{ type: 'destructive', label: 'Remove', onSelect: () => {} }]}
         labels={{ select: 'Select book', menu: 'More actions' }}
         selectable
         selected={selected}

@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react';
 import { useState } from 'react';
-import { EllipsisIcon, FlagIcon, LinkIcon, LoaderCircleIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { EllipsisIcon, LoaderCircleIcon } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,13 +12,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
+import { Menu } from './menu.tsx';
 import { ReportDialog, type ReportDialogLabels, type ReportSubmission } from './report-dialog.tsx';
 
 export const contentActionsLabels = {
@@ -63,8 +57,8 @@ export interface OtherContentActionsProps extends ContentActionsCommonProps {
 export type ContentActionsProps = OwnerContentActionsProps | OtherContentActionsProps;
 
 /**
- * The overflow menu of a piece of content. shadcn has no content-actions pattern; this composes `dropdown-menu`,
- * `alert-dialog` for confirming deletion, and the report dialog. The owner sees editing and deletion actions;
+ * The overflow menu of a piece of content. It composes the shared `Menu`, `alert-dialog` for confirming deletion,
+ * and the report dialog. The owner sees editing and deletion actions;
  * everyone else can report the content, so reporting never needs a visible button.
  */
 export function ContentActions(props: ContentActionsProps) {
@@ -92,41 +86,27 @@ export function ContentActions(props: ContentActionsProps) {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost" />}
-        >
-          <EllipsisIcon aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-44">
-          <DropdownMenuItem onClick={props.onCopyLink}>
-            <LinkIcon aria-hidden="true" />
-            {labels.copyLink}
-          </DropdownMenuItem>
-          {props.ownsContent ? (
-            <>
-              <DropdownMenuItem onClick={props.onEdit}>
-                <PencilIcon aria-hidden="true" />
-                {labels.edit}
-              </DropdownMenuItem>
-              {props.onDelete ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setDeleteOpen(true)} variant="destructive">
-                    <Trash2Icon aria-hidden="true" />
-                    {labels.delete}
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <DropdownMenuItem onClick={() => setReportOpen(true)}>
-              <FlagIcon aria-hidden="true" />
-              {labels.report}
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Menu
+        title={labels.moreActions}
+        backLabel={labels.cancel}
+        trigger={
+          <Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost">
+            <EllipsisIcon aria-hidden="true" />
+          </Button>
+        }
+        entries={[
+          { type: 'item', label: `${labels.copyLink}`, onSelect: props.onCopyLink },
+          ...(props.ownsContent
+            ? [{ type: 'item' as const, label: labels.edit, onSelect: props.onEdit }]
+            : [{ type: 'item' as const, label: labels.report, onSelect: () => setReportOpen(true) }]),
+          ...(props.ownsContent && props.onDelete
+            ? [
+                { type: 'separator' as const },
+                { type: 'destructive' as const, label: labels.delete, onSelect: () => setDeleteOpen(true) },
+              ]
+            : []),
+        ]}
+      />
 
       {props.ownsContent ? (
         props.onDelete ? (

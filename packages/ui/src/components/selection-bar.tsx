@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { ButtonGroup } from '../shadcn/button-group.tsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
+import { Menu } from './menu.tsx';
 
 export interface SelectionBarProps {
   count: number;
@@ -27,16 +27,15 @@ export function SelectionBar({ count, label, actions, onCancel, cancelLabel, mor
         </Button>
       </ButtonGroup>
       <div className="flex items-center gap-2 sm:hidden">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="outline" aria-label={moreLabel}>
-                ⋯
-              </Button>
-            }
-          />
-          <DropdownMenuContent>{actions}</DropdownMenuContent>
-        </DropdownMenu>
+        <Menu
+          title={moreLabel}
+          content={actions}
+          trigger={
+            <Button variant="outline" aria-label={moreLabel}>
+              ⋯
+            </Button>
+          }
+        />
         <Button variant="outline" onClick={onCancel}>
           {cancelLabel}
         </Button>

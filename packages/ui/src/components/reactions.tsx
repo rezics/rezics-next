@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from '@rezics/ui/shadcn/popover';
+import { Menu } from './menu.tsx';
 import { cn } from '../utils.ts';
 
 /** One reaction slot per person and target. Order is the display order. */
@@ -127,9 +127,6 @@ const chipClass = cn(
 
 const pressedClass =
   'border-primary/40 bg-primary/10 text-primary hover:border-primary/40 hover:bg-primary/15 hover:text-primary';
-
-const toggleClass =
-  'relative w-full justify-start px-3 transition-none pointer-coarse:after:absolute pointer-coarse:after:-inset-1';
 
 /**
  * Reactions on a thread or post. shadcn has no reaction cluster (it offers `toggle-group` for exclusive choices and
@@ -273,21 +270,15 @@ export const Reactions = (props: ReactionsProps) => {
           {labels.react}
         </a>
       ) : (
-        <Popover
-          modal={false}
-          onOpenChange={(_, details) => {
-            // The panel stays open for another choice; Escape or its trigger closes it.
-            if (details.reason === 'outside-press' || details.reason === 'focus-out') details.cancel();
-          }}
-        >
-          <PopoverTrigger render={<Button className="rounded-full" disabled={disabled} size="sm" variant="outline" />}>
-            {labels.react}
-          </PopoverTrigger>
-          <PopoverContent className="w-64 gap-2 p-3">
-            <PopoverHeader>
-              <PopoverTitle>{labels.choose}</PopoverTitle>
-            </PopoverHeader>
-            <div className="flex flex-col gap-1">
+        <Menu
+          title={labels.choose}
+          trigger={
+            <Button className="rounded-full" disabled={disabled} size="sm" variant="outline">
+              {labels.react}
+            </Button>
+          }
+          content={
+            <div className="flex w-64 flex-col gap-1 p-3">
               {kinds.map((kind) => {
                 const Icon = reactionIcons[kind];
                 const pressed = shown.value === kind;
@@ -295,7 +286,7 @@ export const Reactions = (props: ReactionsProps) => {
                 return (
                   <Button
                     aria-pressed={pressed}
-                    className={cn(toggleClass, pressed && pressedClass)}
+                    className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
                     key={kind}
                     onClick={() => select(kind)}
                     size="sm"
@@ -310,8 +301,8 @@ export const Reactions = (props: ReactionsProps) => {
                 );
               })}
             </div>
-          </PopoverContent>
-        </Popover>
+          }
+        />
       )}
       {failure !== null && (
         <p aria-label={failure} className="basis-full text-foreground text-sm" role="status">

@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button } from '../shadcn/button.tsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../shadcn/dropdown-menu.tsx';
+import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRadius, type CoverProps, type CoverRatio } from './cover.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
@@ -48,6 +48,7 @@ export interface CoverCardProps {
   /** Replaces `state` with the card's progress row; a null value keeps the position label without a bar. */
   progress?: { value: number | null; label: string };
   menu?: ReactNode;
+  menuEntries?: MenuEntry[];
   /** A caller-managed trigger placed at the start of the state row. */
   menuTrigger?: ReactNode;
   menuLabel?: string;
@@ -75,6 +76,7 @@ export function CoverCard({
   state,
   progress,
   menu,
+  menuEntries,
   menuTrigger,
   menuLabel,
   density: densityProp,
@@ -94,25 +96,25 @@ export function CoverCard({
   const small = density === 'small';
   const Link = link ?? 'a';
   const actions =
-    menu != null || menuTrigger != null ? (
+    menu != null || menuEntries != null || menuTrigger != null ? (
       <span data-slot="cover-card-actions" className="relative z-10 flex shrink-0 items-center">
         {menuTrigger ?? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0"
-                  aria-label={menuLabel ?? `More actions for ${title}`}
-                />
-              }
-            >
-              <EllipsisIcon aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>{menu}</DropdownMenuContent>
-          </DropdownMenu>
+          <Menu
+            title={menuLabel ?? `More actions for ${title}`}
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0"
+                aria-label={menuLabel ?? `More actions for ${title}`}
+              >
+                <EllipsisIcon aria-hidden />
+              </Button>
+            }
+            content={menu}
+            entries={menuEntries}
+          />
         )}
       </span>
     ) : null;

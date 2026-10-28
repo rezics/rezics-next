@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { Input } from '../shadcn/input.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
-import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '../shadcn/drawer.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
 import { Badge } from '../shadcn/badge.tsx';
+import { Menu } from './menu.tsx';
 
 type Option = { value: string; label: string };
 type Layout = 'grid' | 'list' | 'table';
@@ -233,14 +232,14 @@ export function ShelfToolbar(p: Props) {
           onChange={(e) => setSearch(e.target.value)}
           className="min-w-0 flex-1 sm:max-w-xs"
         />
-        <Drawer>
-          <DrawerTrigger render={<Button variant="outline" className="sm:hidden" />}>
-            {l.view} {badge}
-          </DrawerTrigger>
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>{l.view}</DrawerTitle>
-            </DrawerHeader>
+        <Menu
+          title={l.view}
+          trigger={
+            <Button variant="outline" className="sm:hidden">
+              {l.view} {badge}
+            </Button>
+          }
+          content={
             <Tabs defaultValue="sort" className="p-4">
               <TabsList>
                 <TabsTrigger value="sort">{l.sort}</TabsTrigger>
@@ -253,19 +252,19 @@ export function ShelfToolbar(p: Props) {
               <TabsContent value="filter">{filter}</TabsContent>
               <TabsContent value="display">{display}</TabsContent>
             </Tabs>
-          </DrawerContent>
-        </Drawer>
+          }
+        />
         <div className="hidden items-center gap-2 sm:flex">
-          <Popover>
-            <PopoverTrigger render={<Button variant="outline" />}>{l.sort}</PopoverTrigger>
-            <PopoverContent>{sort}</PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger render={<Button variant="outline" />}>
-              {l.filter} {badge}
-            </PopoverTrigger>
-            <PopoverContent>{filter}</PopoverContent>
-          </Popover>
+          <Menu title={l.sort} trigger={<Button variant="outline">{l.sort}</Button>} content={sort} />
+          <Menu
+            title={l.filter}
+            trigger={
+              <Button variant="outline">
+                {l.filter} {badge}
+              </Button>
+            }
+            content={filter}
+          />
           <ToggleGroup
             aria-label={l.layout}
             value={[p.layout]}
@@ -281,10 +280,7 @@ export function ShelfToolbar(p: Props) {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <Popover>
-            <PopoverTrigger render={<Button variant="outline" />}>{l.display}</PopoverTrigger>
-            <PopoverContent>{display}</PopoverContent>
-          </Popover>
+          <Menu title={l.display} trigger={<Button variant="outline">{l.display}</Button>} content={display} />
         </div>
         <Button variant="outline" onClick={p.onSelect}>
           {l.select}

@@ -40,6 +40,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const ItemMenuStory: Story = {
   name: 'Item Menu',
+  parameters: { viewport: { defaultViewport: 'phone' } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Item actions' }));
