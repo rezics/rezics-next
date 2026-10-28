@@ -32,7 +32,9 @@ export function assertCompleteSearch(body: unknown): void {
     throw new SearchUnavailableError('OpenSearch completion metadata is missing, malformed or timed out');
   }
   if (!completeShards(body._shards)) {
-    throw new SearchUnavailableError('OpenSearch shard completion metadata is missing, malformed, incomplete or failed');
+    throw new SearchUnavailableError(
+      'OpenSearch shard completion metadata is missing, malformed, incomplete or failed',
+    );
   }
   if ('terminated_early' in body && body.terminated_early !== false) {
     throw new SearchUnavailableError('OpenSearch terminated early or has malformed termination metadata');
