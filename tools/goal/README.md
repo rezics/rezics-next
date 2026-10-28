@@ -402,6 +402,29 @@ A manual smoke test for an authenticated local Codex manager is available withou
 CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smoke-codex-manager.ts
 ```
 
+## Pausing and resuming the Goal
+
+A pause stops spending allowance without losing work. Nothing is cancelled: tasks keep their worktrees, branches and
+briefs, and a stopped attempt's uncommitted changes are committed as leftovers on its next retry.
+
+To pause:
+
+1. Back up `<state>/capacity.json`, then write `{"maxWorkers": 0, "minAvailableMiB": 999999999}` to it. It is read on
+   every capacity check, so no worker starts, critical-path and stabilize starts included.
+2. Tell every manager to dispatch, retry, reshape, stop, cancel and gate nothing, and to bring its
+   `<state>/<goal>/CONTINUATION.md` up to date.
+3. Stop every running attempt with `stop <task>`, or let them finish when the remaining allowance allows it.
+4. Stop the managers whose engine must not run (`manager stop <manager>`); a stopped Codex manager resumes with
+   `manager renew <manager>`, which starts a fresh thread from its continuation file.
+5. `touch <state>/promotion.paused` to keep promotion from starting gates.
+6. Confirm no attempt is running or pending, no worker CLI process remains, and the main checkout's `tools/goal` matches
+   HEAD. Record the state, the reasons and the restart order in `<state>/PAUSED.md`.
+
+To resume, reverse the steps: set the pools' pacing (`policy.maxBurnPerHour`) and the worker cap, renew the stopped
+managers, tell every manager to resume and retry its stopped tasks, and remove `promotion.paused` once the gate fixes
+are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
+file.
+
 ## Measurements and historical imports
 
 Records contain task/class/profile/pool, routing version and experiment, timing, steps, critical-path flag, input,
