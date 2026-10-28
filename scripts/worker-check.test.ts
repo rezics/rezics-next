@@ -96,7 +96,11 @@ test('a finished check result remains readable by id after its worker session en
     const id = startWorkerCheck(['bun', '-e', 'console.error("finished failure marker"); process.exit(9)'], directory);
     // A separate invocation models a retry after the original worker has ended.
     const record = `${directory}/.temp/goal/checks/results/${id}.json`;
-    for (let attempt = 0; attempt < 200 && (!existsSync(record) || !readFileSync(record, 'utf8').includes('"finished"')); attempt++) {
+    for (
+      let attempt = 0;
+      attempt < 200 && (!existsSync(record) || !readFileSync(record, 'utf8').includes('"finished"'));
+      attempt++
+    ) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 25));
     }
     expect(readFileSync(record, 'utf8')).toContain('"finished"');

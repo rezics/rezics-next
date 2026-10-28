@@ -1,6 +1,18 @@
 #!/usr/bin/env bun
 import { spawn } from 'node:child_process';
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { checkWaitRecorder } from './remote-check.ts';
@@ -275,7 +287,8 @@ export async function waitWorkerCheck(
   const code = record.exitCode ?? 1;
   const absoluteLog = join(root, record.log);
   process.stdout.write(`check: exit status ${code}\n`);
-  if (code !== 0 && existsSync(absoluteLog)) process.stdout.write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
+  if (code !== 0 && existsSync(absoluteLog))
+    process.stdout.write(`check: failure summary\n${failureSummary(absoluteLog)}\n`);
   process.stdout.write(`check: log ${record.log}\n`);
   return code;
 }
