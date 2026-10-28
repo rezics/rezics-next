@@ -2,12 +2,14 @@ types:
   skos:Concept: '概念'
   skos:ConceptScheme: '概念体系'
 properties:
+  wdt:P7937: 創作物の形式
   skos:inScheme: '所属する概念体系'
   skos:broader: '上位概念'
   foaf:focus: '指し示す対象'
   schema:keywords: 'タグ'
   schema:genre: 'ジャンル'
 inverseProperties:
+  wdt:P7937: 'この形式の作品'
   skos:inScheme: 'この体系の概念'
   skos:broader: '下位概念'
   foaf:focus: 'この対象を表す概念'

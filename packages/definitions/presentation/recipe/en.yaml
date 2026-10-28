@@ -1,10 +1,13 @@
 types:
   schema:Recipe: recipe
 properties:
+  schema:suitableForDiet: 'suitable for diet'
   schema:recipeInstructions: instructions
   schema:recipeIngredient: ingredient
   schema:cookTime: cooking time
   schema:recipeYield: servings
+inverseProperties:
+  schema:suitableForDiet: 'Recipes for this diet'
 libraryProfiles:
   recipe.cooking:
     states:

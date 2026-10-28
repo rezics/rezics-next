@@ -12,12 +12,10 @@ properties:
   schema:numberOfEpisodes: 集数
   schema:startDate: 开始日期
   wdt:P449: 首播平台
-  wdt:P7937: 作品形式
   wdt:P973: 详情描述网址
 inverseProperties:
   schema:isPartOf: '集数'
   wdt:P449: '首播作品'
-  wdt:P7937: '此形式的作品'
 typeDescriptions:
   schema:TVSeason: '编播季'
   schema:TVSeries: '电视系列节目'

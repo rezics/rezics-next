@@ -2,6 +2,7 @@ types:
   schema:Book: 書籍
   bf:Instance: 版
 properties:
+  schema:wordCount: '単語数'
   schema:exampleOfWork: 原作品
   schema:isbn: ISBN-13
   schema:publisher: 出版社

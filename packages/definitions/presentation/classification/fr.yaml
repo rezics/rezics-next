@@ -2,12 +2,14 @@ types:
   skos:Concept: 'Concept'
   skos:ConceptScheme: 'Schéma de concepts'
 properties:
+  wdt:P7937: forme de l’œuvre
   skos:inScheme: 'dans le schéma'
   skos:broader: 'a pour concept générique'
   foaf:focus: 'sujet représenté'
   schema:keywords: 'mots-clés'
   schema:genre: 'genre'
 inverseProperties:
+  wdt:P7937: 'Œuvres de cette forme'
   skos:inScheme: 'Concepts de ce schéma'
   skos:broader: 'Concepts plus spécifiques'
   foaf:focus: 'Concepts représentant ce sujet'

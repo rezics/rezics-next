@@ -2,12 +2,14 @@ types:
   skos:Concept: '概念'
   skos:ConceptScheme: '概念体系'
 properties:
+  wdt:P7937: 作品形式
   skos:inScheme: '所属概念体系'
   skos:broader: '上位概念'
   foaf:focus: '代表的主体'
   schema:keywords: '标签'
   schema:genre: '类型'
 inverseProperties:
+  wdt:P7937: '此形式的作品'
   skos:inScheme: '此概念体系的概念'
   skos:broader: '下位概念'
   foaf:focus: '指向此主体的概念'

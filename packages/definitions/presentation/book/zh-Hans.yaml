@@ -2,6 +2,7 @@ types:
   schema:Book: '书籍'
   bf:Instance: '版本'
 properties:
+  schema:wordCount: '词数'
   schema:exampleOfWork: 版本或翻译原作
   schema:isbn: ISBN-13
   schema:publisher: 出版者

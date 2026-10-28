@@ -2,12 +2,14 @@ types:
   skos:Concept: 'Begriff'
   skos:ConceptScheme: 'Begriffssystem'
 properties:
+  wdt:P7937: künstlerische Form
   skos:inScheme: 'im Begriffssystem'
   skos:broader: 'hat Oberbegriff'
   foaf:focus: 'Bezugssubjekt'
   schema:keywords: 'Schlagwörter'
   schema:genre: 'Genre'
 inverseProperties:
+  wdt:P7937: 'Werke dieser Form'
   skos:inScheme: 'Begriffe dieses Schemas'
   skos:broader: 'Engere Begriffe'
   foaf:focus: 'Begriffe für dieses Subjekt'

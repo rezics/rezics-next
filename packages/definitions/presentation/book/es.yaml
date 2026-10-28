@@ -2,6 +2,7 @@ types:
   schema:Book: 'libro'
   bf:Instance: 'edición'
 properties:
+  schema:wordCount: 'número de palabras'
   schema:exampleOfWork: versión, edición o traducción de
   schema:isbn: ISBN-13
   schema:publisher: editorial

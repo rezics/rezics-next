@@ -502,11 +502,13 @@
         "schema:name",
         "schema:sameAs",
         "schema:url",
+        "schema:wordCount",
         "wdt:P155",
         "wdt:P179",
         "wdt:P361",
         "wdt:P5732",
-        "wdt:P648"
+        "wdt:P648",
+        "wdt:P7937"
       ],
       "facets": [
         "schema:author",
@@ -515,7 +517,9 @@
         "wdt:P179",
         "schema:datePublished",
         "schema:contributor",
-        "schema:inLanguage"
+        "schema:inLanguage",
+        "schema:wordCount",
+        "wdt:P7937"
       ],
       "coverRatio": "5:7",
       "schemaOrgType": "https://schema.org/Book",
@@ -1184,10 +1188,18 @@
         "schema:recipeInstructions",
         "schema:recipeYield",
         "schema:sameAs",
+        "schema:suitableForDiet",
         "schema:url",
         "wdt:P186"
       ],
-      "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"],
+      "facets": [
+        "schema:author",
+        "schema:keywords",
+        "schema:datePublished",
+        "schema:cookTime",
+        "schema:recipeYield",
+        "schema:suitableForDiet"
+      ],
       "coverRatio": "4:3",
       "schemaOrgType": "https://schema.org/Recipe",
       "library": {
@@ -1727,43 +1739,6 @@
         }
       }
     },
-    "wdt:P7937": {
-      "iri": "http://www.wikidata.org/prop/direct/P7937",
-      "labels": {
-        "de": "künstlerische Form",
-        "en": "form of creative work",
-        "es": "forma artística",
-        "fr": "forme de l’œuvre",
-        "ja": "創作物の形式",
-        "ko": "저작물의 형식",
-        "zh-Hans": "作品形式",
-        "zh-Hant": "作品形式"
-      },
-      "mappings": ["wd:P7937"],
-      "datatype": "wikibase-item",
-      "multivalued": true,
-      "qualifiers": [],
-      "value": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-      },
-      "relation": {
-        "group": "classification",
-        "order": "name",
-        "inverse": "rezics:workInForm",
-        "inverseLabels": {
-          "de": "Werke dieser Form",
-          "en": "Works in this form",
-          "es": "Obras de esta forma",
-          "fr": "Œuvres de cette forme",
-          "ja": "この形式の作品",
-          "ko": "이 형식의 작품",
-          "zh-Hans": "此形式的作品",
-          "zh-Hant": "此形式的作品"
-        }
-      },
-      "targets": ["skos:Concept"]
-    },
     "schema:exampleOfWork": {
       "iri": "http://schema.org/exampleOfWork",
       "labels": {
@@ -1941,6 +1916,47 @@
         }
       },
       "targets": ["schema:Organization", "schema:Person"]
+    },
+    "schema:wordCount": {
+      "iri": "http://schema.org/wordCount",
+      "labels": {
+        "de": "Wortanzahl",
+        "en": "word count",
+        "es": "número de palabras",
+        "fr": "nombre de mots",
+        "ja": "単語数",
+        "ko": "단어 수",
+        "zh-Hans": "词数",
+        "zh-Hant": "詞數"
+      },
+      "mappings": ["wd:P6570"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "lowerBound": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "upperBound": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": ["1"]
+          }
+        }
+      },
+      "units": ["1"],
+      "minimum": 0
     },
     "wdt:P6296": {
       "iri": "http://www.wikidata.org/prop/direct/P6296",
@@ -2303,6 +2319,43 @@
           "ko": "이 태그의 대상",
           "zh-Hans": "使用此标签的主体",
           "zh-Hant": "使用此標籤的主體"
+        }
+      },
+      "targets": ["skos:Concept"]
+    },
+    "wdt:P7937": {
+      "iri": "http://www.wikidata.org/prop/direct/P7937",
+      "labels": {
+        "de": "künstlerische Form",
+        "en": "form of creative work",
+        "es": "forma artística",
+        "fr": "forme de l’œuvre",
+        "ja": "創作物の形式",
+        "ko": "저작물의 형식",
+        "zh-Hans": "作品形式",
+        "zh-Hant": "作品形式"
+      },
+      "mappings": ["wd:P7937"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:workInForm",
+        "inverseLabels": {
+          "de": "Werke dieser Form",
+          "en": "Works in this form",
+          "es": "Obras de esta forma",
+          "fr": "Œuvres de cette forme",
+          "ja": "この形式の作品",
+          "ko": "이 형식의 작품",
+          "zh-Hans": "此形式的作品",
+          "zh-Hant": "此形式的作品"
         }
       },
       "targets": ["skos:Concept"]
@@ -4575,6 +4628,43 @@
       },
       "units": ["1"],
       "minimum": 1
+    },
+    "schema:suitableForDiet": {
+      "iri": "http://schema.org/suitableForDiet",
+      "labels": {
+        "de": "geeignet für Ernährungsform",
+        "en": "suitable for diet",
+        "es": "apto para la dieta",
+        "fr": "convient au régime alimentaire",
+        "ja": "対応する食事法",
+        "ko": "적합한 식단",
+        "zh-Hans": "适用饮食",
+        "zh-Hant": "適用飲食"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:recipeForDiet",
+        "inverseLabels": {
+          "de": "Rezepte für diese Ernährungsform",
+          "en": "Recipes for this diet",
+          "es": "Recetas para esta dieta",
+          "fr": "Recettes pour ce régime alimentaire",
+          "ja": "この食事法に対応するレシピ",
+          "ko": "이 식단에 적합한 레시피",
+          "zh-Hans": "适用此饮食的食谱",
+          "zh-Hant": "適用此飲食的食譜"
+        }
+      },
+      "targets": ["skos:Concept"]
     },
     "wdt:P2635": {
       "iri": "http://www.wikidata.org/prop/direct/P2635",

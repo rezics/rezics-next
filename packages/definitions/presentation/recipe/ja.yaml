@@ -1,10 +1,13 @@
 types:
   schema:Recipe: レシピ
 properties:
+  schema:suitableForDiet: '対応する食事法'
   schema:recipeInstructions: 作り方
   schema:recipeIngredient: 材料
   schema:cookTime: 調理時間
   schema:recipeYield: 人数
+inverseProperties:
+  schema:suitableForDiet: 'この食事法に対応するレシピ'
 libraryProfiles:
   recipe.cooking:
     states:

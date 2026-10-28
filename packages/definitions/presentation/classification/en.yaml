@@ -2,12 +2,14 @@ types:
   skos:Concept: 'Concept'
   skos:ConceptScheme: 'Concept Scheme'
 properties:
+  wdt:P7937: form of creative work
   skos:inScheme: 'is in scheme'
   skos:broader: 'has broader'
   foaf:focus: 'focus'
   schema:keywords: 'keywords'
   schema:genre: 'genre'
 inverseProperties:
+  wdt:P7937: 'Works in this form'
   skos:inScheme: 'Concepts in this scheme'
   skos:broader: 'Narrower concepts'
   foaf:focus: 'Concepts for this subject'

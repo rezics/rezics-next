@@ -2,12 +2,14 @@ types:
   skos:Concept: '개념'
   skos:ConceptScheme: '개념 체계'
 properties:
+  wdt:P7937: 저작물의 형식
   skos:inScheme: '소속 개념 체계'
   skos:broader: '상위 개념'
   foaf:focus: '가리키는 대상'
   schema:keywords: '태그'
   schema:genre: '장르'
 inverseProperties:
+  wdt:P7937: '이 형식의 작품'
   skos:inScheme: '이 체계의 개념'
   skos:broader: '하위 개념'
   foaf:focus: '이 대상을 나타내는 개념'

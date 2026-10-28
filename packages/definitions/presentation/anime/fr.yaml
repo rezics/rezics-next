@@ -12,12 +12,10 @@ properties:
   schema:numberOfEpisodes: nombre d’épisodes
   schema:startDate: date de début
   wdt:P449: diffuseur original
-  wdt:P7937: forme de l’œuvre
   wdt:P973: décrit à l’URL
 inverseProperties:
   schema:isPartOf: 'Épisodes'
   wdt:P449: 'Premières diffusions'
-  wdt:P7937: 'Œuvres de cette forme'
 typeDescriptions:
   schema:TVSeason: 'saison de série télévisée'
 libraryProfiles:
