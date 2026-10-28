@@ -41,16 +41,16 @@ Public pages were inspected on 2026-10-28. Revision links below pin Wikidata con
 API samples and pages without immutable revisions describe observations on that date,
 not guarantees about an older dump or future responses.
 
-| Source | Exact version or observation | Licence / use boundary |
-| --- | --- | --- |
-| [Schema.org wordCount](https://schema.org/wordCount) | Displayed development vocabulary V30.1, 2026-09-16 | Schema vocabulary CC BY-SA 3.0 under [terms](https://schema.org/docs/terms.html); not a licence for books |
-| [SKOS Reference](https://www.w3.org/TR/2009/REC-skos-reference-20090818/) | W3C Recommendation, 2009-08-18 | W3C document-use rules linked by the Recommendation |
-| [Unicode text segmentation](https://www.unicode.org/reports/tr29/tr29-47.html) | UAX #29 rev. 47, Unicode 17.0.0, 2025-08-17 | Unicode terms linked by the specification; no text-ingestion permission |
-| Wikidata entity/property revisions below | JSON `lastrevid` and `modified` checked | Structured data CC0; [Wikidata licensing](https://www.wikidata.org/wiki/Wikidata:Licensing); underlying cited texts retain their licences |
-| [Bangumi public-tag announcement](https://bgm.tv/group/topic/406595) | 2024-10-03 announcement; Book/Music launch update 2025-08-24 | Entry metadata terms below; discussion prose is not assumed reusable metadata |
-| [Bangumi Book public-tag catalogue](https://bgm.tv/wiki/tag/list?type=1) and public subject API | Live observation, 2026-10-28 | [Copyright statement](https://bgm.tv/about/copyright), updated 2022-10-04: wiki metadata CC BY-SA 3.0; images and user writing are separate |
-| [Bangumi server](https://github.com/bangumi/server/tree/1997713eafc51487cbea705b37011442f35539fa) | Reused `.reference/shelves/bangumi-server`, commit `1997713eafc51487cbea705b37011442f35539fa` | `LICENSE.txt`: AGPL-3.0; inspected source uses AGPL-3.0-only notices; read only |
-| [Narou API manual](https://dev.syosetu.com/man/api/) and [guidelines](https://dev.syosetu.com/site/guideline/) | Live observation, 2026-10-28 | Service-specific restrictions; no open-data licence established; not an approved import source |
+| Source                                                                                                         | Exact version or observation                                                                  | Licence / use boundary                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Schema.org wordCount](https://schema.org/wordCount)                                                           | Displayed development vocabulary V30.1, 2026-09-16                                            | Schema vocabulary CC BY-SA 3.0 under [terms](https://schema.org/docs/terms.html); not a licence for books                                   |
+| [SKOS Reference](https://www.w3.org/TR/2009/REC-skos-reference-20090818/)                                      | W3C Recommendation, 2009-08-18                                                                | W3C document-use rules linked by the Recommendation                                                                                         |
+| [Unicode text segmentation](https://www.unicode.org/reports/tr29/tr29-47.html)                                 | UAX #29 rev. 47, Unicode 17.0.0, 2025-08-17                                                   | Unicode terms linked by the specification; no text-ingestion permission                                                                     |
+| Wikidata entity/property revisions below                                                                       | JSON `lastrevid` and `modified` checked                                                       | Structured data CC0; [Wikidata licensing](https://www.wikidata.org/wiki/Wikidata:Licensing); underlying cited texts retain their licences   |
+| [Bangumi public-tag announcement](https://bgm.tv/group/topic/406595)                                           | 2024-10-03 announcement; Book/Music launch update 2025-08-24                                  | Entry metadata terms below; discussion prose is not assumed reusable metadata                                                               |
+| [Bangumi Book public-tag catalogue](https://bgm.tv/wiki/tag/list?type=1) and public subject API                | Live observation, 2026-10-28                                                                  | [Copyright statement](https://bgm.tv/about/copyright), updated 2022-10-04: wiki metadata CC BY-SA 3.0; images and user writing are separate |
+| [Bangumi server](https://github.com/bangumi/server/tree/1997713eafc51487cbea705b37011442f35539fa)              | Reused `.reference/shelves/bangumi-server`, commit `1997713eafc51487cbea705b37011442f35539fa` | `LICENSE.txt`: AGPL-3.0; inspected source uses AGPL-3.0-only notices; read only                                                             |
+| [Narou API manual](https://dev.syosetu.com/man/api/) and [guidelines](https://dev.syosetu.com/site/guideline/) | Live observation, 2026-10-28                                                                  | Service-specific restrictions; no open-data licence established; not an approved import source                                              |
 
 The shared reference index records reuse of Bangumi. No reference project was
 installed, built or executed. Source code is evidence for behaviour, not material
@@ -59,15 +59,15 @@ complete; no findings or producer claim below depend on that unreviewed source.
 
 ### Reviewed Wikidata revisions
 
-| Term | Revision; modified UTC | Reviewed relation and limitation |
-| --- | --- | --- |
-| [P7937 form of creative work](https://www.wikidata.org/w/index.php?title=Property:P7937&oldid=2556853748) | `2556853748`; 2026-10-14 08:19:18 | Exact property mapping to a generic work-form slot is appropriate; describes a work's structure, not a Book subtype or edition identity |
-| [Q747381 light novel](https://www.wikidata.org/w/index.php?title=Q747381&oldid=2548853139) | `2548853139`; 2026-09-23 16:10:04 | Exact external identity candidate for a Concept deliberately scoped to this Japanese literary form; broader than an individual title, narrower than novel |
-| [Q690342 harem](https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445) | `2554335445`; 2026-10-07 04:15:25 | Close candidate for public media-harem classification; not historical households or a work merely titled Harem; exact equivalence is not established for Bangumi's category |
-| [P136 genre](https://www.wikidata.org/w/index.php?title=Property:P136&oldid=2561161383) | `2561161383`; 2026-10-26 19:22:59 | Existing exact `schema:genre` mapping; not automatically `schema:keywords` |
-| [P921 main subject](https://www.wikidata.org/w/index.php?title=Property:P921&oldid=2558030149) | `2558030149`; 2026-10-17 16:34:39 | A work's subject matter; only close inventory correspondence to keywords, not an exact tag/genre equivalence |
-| [P6570 number of words](https://www.wikidata.org/w/index.php?title=Property:P6570&oldid=2527590037) | `2527590037`; 2026-08-05 10:54:50 | Exact property candidate for `schema:wordCount`, subject to counted-text scope and preserved qualifiers; quantity with dimensionless unit, integer, nonnegative constraints |
-| [P459 determination method](https://www.wikidata.org/w/index.php?title=Property:P459&oldid=2559696076) | `2559696076`; 2026-10-22 14:49:35 | Method qualifier candidate, not currently a bundled measurement property; item identity must be resolved |
+| Term                                                                                                      | Revision; modified UTC            | Reviewed relation and limitation                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [P7937 form of creative work](https://www.wikidata.org/w/index.php?title=Property:P7937&oldid=2556853748) | `2556853748`; 2026-10-14 08:19:18 | Exact property mapping to a generic work-form slot is appropriate; describes a work's structure, not a Book subtype or edition identity                                     |
+| [Q747381 light novel](https://www.wikidata.org/w/index.php?title=Q747381&oldid=2548853139)                | `2548853139`; 2026-09-23 16:10:04 | Exact external identity candidate for a Concept deliberately scoped to this Japanese literary form; broader than an individual title, narrower than novel                   |
+| [Q690342 harem](https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445)                      | `2554335445`; 2026-10-07 04:15:25 | Close candidate for public media-harem classification; not historical households or a work merely titled Harem; exact equivalence is not established for Bangumi's category |
+| [P136 genre](https://www.wikidata.org/w/index.php?title=Property:P136&oldid=2561161383)                   | `2561161383`; 2026-10-26 19:22:59 | Existing exact `schema:genre` mapping; not automatically `schema:keywords`                                                                                                  |
+| [P921 main subject](https://www.wikidata.org/w/index.php?title=Property:P921&oldid=2558030149)            | `2558030149`; 2026-10-17 16:34:39 | A work's subject matter; only close inventory correspondence to keywords, not an exact tag/genre equivalence                                                                |
+| [P6570 number of words](https://www.wikidata.org/w/index.php?title=Property:P6570&oldid=2527590037)       | `2527590037`; 2026-08-05 10:54:50 | Exact property candidate for `schema:wordCount`, subject to counted-text scope and preserved qualifiers; quantity with dimensionless unit, integer, nonnegative constraints |
+| [P459 determination method](https://www.wikidata.org/w/index.php?title=Property:P459&oldid=2559696076)    | `2559696076`; 2026-10-22 14:49:35 | Method qualifier candidate, not currently a bundled measurement property; item identity must be resolved                                                                    |
 
 Q747381's description, literary-form statements and narrower-than-novel relationship
 support the distinction from generic novels. Q690342's media-genre/theme statements,
@@ -103,11 +103,11 @@ sufficient for adopting the classification subjects without a second authority.
 
 Recommend these adoption records, with stable external keys and returned native IDs:
 
-| Adopted subject | Preferred labels | Meaning and scheme membership |
-| --- | --- | --- |
-| Harem classification Concept | en `harem`; zh-Hans `后宫型作品`; zh-Hant `後宮型作品` | The media-genre sense represented by Q690342, used as a classification of fiction, not historical harem subject matter. Review as a close mapping until category boundaries, including reverse harem, are explicitly reconciled. Member of an adopted public genre/tag scheme. |
-| Light-novel work-form Concept | en `light novel`; zh-Hans `轻小说`; zh-Hant `輕小說` | The Japanese illustrated, young-adult-oriented literary form represented by Q747381; no inference from all novels, language, publisher or length. Member of an adopted work-form scheme. |
-| Bangumi public-tag scheme and source Concept for 后宫 | Distinguish source-facing labels from canonical meanings | Use the inventory's source scheme key `https://rezics.com/schemes/bangumi/public-tags` as a reviewed external key, not a fabricated native route. Keep the source Concept distinct if exact equivalence to the adopted harem Concept is unresolved. |
+| Adopted subject                                       | Preferred labels                                         | Meaning and scheme membership                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Harem classification Concept                          | en `harem`; zh-Hans `后宫型作品`; zh-Hant `後宮型作品`   | The media-genre sense represented by Q690342, used as a classification of fiction, not historical harem subject matter. Review as a close mapping until category boundaries, including reverse harem, are explicitly reconciled. Member of an adopted public genre/tag scheme. |
+| Light-novel work-form Concept                         | en `light novel`; zh-Hans `轻小说`; zh-Hant `輕小說`     | The Japanese illustrated, young-adult-oriented literary form represented by Q747381; no inference from all novels, language, publisher or length. Member of an adopted work-form scheme.                                                                                       |
+| Bangumi public-tag scheme and source Concept for 后宫 | Distinguish source-facing labels from canonical meanings | Use the inventory's source scheme key `https://rezics.com/schemes/bangumi/public-tags` as a reviewed external key, not a fabricated native route. Keep the source Concept distinct if exact equivalence to the adopted harem Concept is unresolved.                            |
 
 These are proposed meanings for owner adoption, not already created native data.
 Do not add a finer romantic-trope rule from intuition. In particular, the reviewed
@@ -147,7 +147,7 @@ Pinned server evidence, using paths relative to the reused clone:
 Two small unauthenticated public API observations are sufficient to verify shape:
 
 ```json
-{"id":3567,"type":1,"name":"とある魔術の禁書目録 (9)","platform":"小说","meta_tags":[]}
+{ "id": 3567, "type": 1, "name": "とある魔術の禁書目録 (9)", "platform": "小说", "meta_tags": [] }
 ```
 
 Source: [subject 3567](https://api.bgm.tv/v0/subjects/3567), observed 2026-10-28.
@@ -155,7 +155,7 @@ The empty array proves neither absence of harem nor a negative light-novel judge
 The title's reputation is not a substitute for an explicit source classification.
 
 ```json
-{"id":1625,"type":2,"name":"カイバ","platform":"TV","meta_tags":["科幻","TV","日本","原创"]}
+{ "id": 1625, "type": 2, "name": "カイバ", "platform": "TV", "meta_tags": ["科幻", "TV", "日本", "原创"] }
 ```
 
 Source: [subject 1625](https://api.bgm.tv/v0/subjects/1625), observed 2026-10-28.
@@ -398,22 +398,22 @@ reviewed public harem Concepts; they are not external IDs or invented native UUI
 “Unknown” never satisfies a positive predicate or its negation. The rows are
 synthetic conformance inputs, explicitly not observations of imported books.
 
-| Case | Native facts / disclosed input | F1 | F2 | F3 |
-| --- | --- | --- | --- | --- |
-| A | Book, L, public H, words 1000001 | yes | yes | yes |
-| B | Book, L, public H, words 1000000 | yes | no | no |
-| C | Book, generic novel only, public H, words 1000001 | no positive LN evidence | yes | no |
-| D | Book without form, public H, words absent | unknown | unknown | unknown |
-| E | Book, L, public H, words absent, characters 1000001 only | yes | unknown | unknown |
-| F | Book, L, H withheld from viewer, words 1000001 visible | unknown | yes | unknown; do not reveal H |
-| G | Book, L, personal/private label harem only, words 1000001 | unknown catalogue H | yes | unknown |
-| H | Book, L, public H, word amount 1000001 with page/other unit | yes | reject input; no match | no match |
-| I | Source Book, L, public H; translated bf:Instance alone has words 1000001 | yes on source work | unknown on source work | unknown on source work |
-| J | Book, L, H; en/v1 has words 1000000; ja/v2 has words 1000001; query requires en/v1 | yes | no | no |
-| K | Book, L, H; word statement somevalue or novalue | yes | unknown | unknown |
-| L | Book, L, H; count negative, fractional or bounded | yes | reject exact-count admission | no qualifying count |
-| M | Book, L; no metadata H, but ordinary popularity tag 后宫 and infobox string | unknown | depends only on genuine word fact | no positive H evidence |
-| N | Book, L, public H; two word statements each missing a different required qualifier | yes | no matching complete statement | no |
+| Case | Native facts / disclosed input                                                     | F1                      | F2                                | F3                       |
+| ---- | ---------------------------------------------------------------------------------- | ----------------------- | --------------------------------- | ------------------------ |
+| A    | Book, L, public H, words 1000001                                                   | yes                     | yes                               | yes                      |
+| B    | Book, L, public H, words 1000000                                                   | yes                     | no                                | no                       |
+| C    | Book, generic novel only, public H, words 1000001                                  | no positive LN evidence | yes                               | no                       |
+| D    | Book without form, public H, words absent                                          | unknown                 | unknown                           | unknown                  |
+| E    | Book, L, public H, words absent, characters 1000001 only                           | yes                     | unknown                           | unknown                  |
+| F    | Book, L, H withheld from viewer, words 1000001 visible                             | unknown                 | yes                               | unknown; do not reveal H |
+| G    | Book, L, personal/private label harem only, words 1000001                          | unknown catalogue H     | yes                               | unknown                  |
+| H    | Book, L, public H, word amount 1000001 with page/other unit                        | yes                     | reject input; no match            | no match                 |
+| I    | Source Book, L, public H; translated bf:Instance alone has words 1000001           | yes on source work      | unknown on source work            | unknown on source work   |
+| J    | Book, L, H; en/v1 has words 1000000; ja/v2 has words 1000001; query requires en/v1 | yes                     | no                                | no                       |
+| K    | Book, L, H; word statement somevalue or novalue                                    | yes                     | unknown                           | unknown                  |
+| L    | Book, L, H; count negative, fractional or bounded                                  | yes                     | reject exact-count admission      | no qualifying count      |
+| M    | Book, L; no metadata H, but ordinary popularity tag 后宫 and infobox string        | unknown                 | depends only on genuine word fact | no positive H evidence   |
+| N    | Book, L, public H; two word statements each missing a different required qualifier | yes                     | no matching complete statement    | no                       |
 
 Case I's edition itself does not satisfy native Book-work membership. Cases J/N must
 not combine a value from one statement with qualifiers from another. Case F under
@@ -427,15 +427,15 @@ indexed populations. Those require the owning native acceptance slice.
 
 ## Exact binding and measurement handoff
 
-| Required term/fact | Binding to adopt / relation | Native holder, value and source contract | Present delivery gap |
-| --- | --- | --- | --- |
-| Book work | Existing `schema:Book` exact Q47461344 | Work, independent of bf:Instance edition | No change to identity/type meaning |
-| Light novel | Q747381 exact candidate for adopted literary-form Concept; P7937 exact work-form property | `workFormat` on Book; actual adopted Concept ID and explicit public source assertion | Book slot and resolved Concept/source assertion producer missing; Bangumi novel is insufficient |
-| Harem | Bangumi editor `meta_tags` 后宫 exact source-category assertion; Q690342 close canonical correspondence until reconciled | Adopted source/canonical Concept and scheme, disclosed catalogue statement; never a personal label | Reviewed scope adoption, native receipts and executable metadata-tag producer missing |
-| Genre versus keyword | Existing P136 exact genre; P921 only close keyword association | Emit according to the adopted property; no implicit double emission or label join | Filter must name accepted classification property/source scope |
-| Words | `schema:wordCount` exact candidate P6570 | Counted text/version/language on explicit holder; integer >=0, unit 1; method/scope/citation retained | No demonstrated qualifying native Book batch; qualifier-safe converter and trusted assertion producer needed |
-| Characters | Separate proposed local character-count term; external mapping unresolved | Same measurement envelope, declared character convention, integer >=0, unit 1; never words | Definition and trusted measurement producer missing; Narou is not an approved adapter |
-| Threshold / combined | `gte:1000001`, unit `1`; conjunction of independently supported predicates | Same-statement count qualifiers, correct holder and current disclosure | Grammar expressibility is not native proof or source coverage |
+| Required term/fact   | Binding to adopt / relation                                                                                              | Native holder, value and source contract                                                              | Present delivery gap                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Book work            | Existing `schema:Book` exact Q47461344                                                                                   | Work, independent of bf:Instance edition                                                              | No change to identity/type meaning                                                                           |
+| Light novel          | Q747381 exact candidate for adopted literary-form Concept; P7937 exact work-form property                                | `workFormat` on Book; actual adopted Concept ID and explicit public source assertion                  | Book slot and resolved Concept/source assertion producer missing; Bangumi novel is insufficient              |
+| Harem                | Bangumi editor `meta_tags` 后宫 exact source-category assertion; Q690342 close canonical correspondence until reconciled | Adopted source/canonical Concept and scheme, disclosed catalogue statement; never a personal label    | Reviewed scope adoption, native receipts and executable metadata-tag producer missing                        |
+| Genre versus keyword | Existing P136 exact genre; P921 only close keyword association                                                           | Emit according to the adopted property; no implicit double emission or label join                     | Filter must name accepted classification property/source scope                                               |
+| Words                | `schema:wordCount` exact candidate P6570                                                                                 | Counted text/version/language on explicit holder; integer >=0, unit 1; method/scope/citation retained | No demonstrated qualifying native Book batch; qualifier-safe converter and trusted assertion producer needed |
+| Characters           | Separate proposed local character-count term; external mapping unresolved                                                | Same measurement envelope, declared character convention, integer >=0, unit 1; never words            | Definition and trusted measurement producer missing; Narou is not an approved adapter                        |
+| Threshold / combined | `gte:1000001`, unit `1`; conjunction of independently supported predicates                                               | Same-statement count qualifiers, correct holder and current disclosure                                | Grammar expressibility is not native proof or source coverage                                                |
 
 **Missing producers for Semantic:** adopt the exact scope and source correspondence
 of H and L; create/resolve and adopt the real Concepts/schemes; define measured-text
