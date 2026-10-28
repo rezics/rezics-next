@@ -71,7 +71,7 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   text-decoration-line: underline;
 }
 
-/* Reply starts near five lines and a new thread near ten. Both grow, then scroll inside the viewport. */
+/* Reply starts as one line and a new thread starts near eight. Both grow, then scroll inside the viewport. */
 .thread-reply-editor [data-slot='rich-text-editor'],
 .thread-opening-editor [data-slot='rich-text-editor'] {
   display: flex;
@@ -91,11 +91,11 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
 }
 
 .thread-reply-editor .document-editor .tiptap {
-  min-height: 5lh;
+  min-height: 1lh;
 }
 
 .thread-opening-editor .document-editor .tiptap {
-  min-height: 10lh;
+  min-height: 8lh;
 }
 
 .thread-reply-fallback,
@@ -109,11 +109,11 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
 }
 
 .thread-reply-fallback {
-  min-height: calc(5lh + 1.5rem);
+  min-height: calc(1lh + 1.5rem);
 }
 
 .thread-opening-fallback {
-  min-height: calc(10lh + 1.5rem);
+  min-height: calc(8lh + 1.5rem);
 }
 
 /* Apply the saved rail width before React hydrates the expanded, reader-independent document. */

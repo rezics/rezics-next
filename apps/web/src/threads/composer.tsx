@@ -319,10 +319,16 @@ export function PostComposer<T>({
             onChange={updateBody}
             label={bodyLabel}
             {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}
+            {...(titleRequired ? { toolbar: 'always' as const } : {})}
             labels={labels}
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={
-              <Button type="submit" form={formId} disabled={!ready || submitting || pendingUploads > 0}>
+              <Button
+                type="submit"
+                form={formId}
+                className="disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100"
+                disabled={!ready || submitting || pendingUploads > 0}
+              >
                 {m.thread_write_send()}
               </Button>
             }
