@@ -1186,10 +1186,15 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (recoverAlreadyIntegrated()) return result;
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      // Use the task's recorded base so unrelated changes on its original integration branch do not affect routing.
-      if (recorded.goal === 'control-plane' && recorded.base && isAncestor(o.mainCheckout, recorded.base, tip)) {
-        const taskChanges = changedPathsBetween(o.mainCheckout, recorded.base, tip);
+      // A worker branch starts on dev and a retry moves it onto a newer dev, so its own changes are those after its
+      // fork from dev. The recorded base counted every landing in between: thousands of paths overflowed the diff and
+      // other goals' files kept every retried control-plane task off main. Only the commits after the fork replay.
+      let controlPlaneFork: string | undefined;
+      if (recorded.goal === 'control-plane' && recorded.target !== 'stabilize' && o.integrationBranch !== undefined) {
+        const fork = git(o.mainCheckout, 'merge-base', tip, `refs/heads/${o.integrationBranch}`);
+        const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+        if (controlPlane) controlPlaneFork = fork;
       }
       if (controlPlane) {
         integrationTarget = 'main';
@@ -1200,7 +1205,7 @@ export class MergeTrain {
       }
       // Recover an advance that committed before its outcome was saved.
       if (recoverAlreadyIntegrated()) return result;
-      const originalBase = git(o.mainCheckout, 'merge-base', tip, target());
+      const originalBase = controlPlaneFork ?? git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
       added = true;
