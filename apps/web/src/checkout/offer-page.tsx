@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -87,22 +88,24 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           <AlertDescription className="text-foreground">{note}</AlertDescription>
         </Alert>
       )}
-      <div>
-        {phase === 'retry' ? (
-          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
-            {m.offer_retry()}
-          </Button>
-        ) : phase === 'closed' ? null : (
-          <Button
-            size="lg"
-            className="w-full sm:w-auto"
-            disabled={phase !== 'ready' || session === 'unknown'}
-            onClick={() => void start()}
-          >
-            {m.offer_buy()}
-          </Button>
-        )}
-      </div>
+      <Exposure operation="order.create">
+        <div>
+          {phase === 'retry' ? (
+            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
+              {m.offer_retry()}
+            </Button>
+          ) : phase === 'closed' ? null : (
+            <Button
+              size="lg"
+              className="w-full sm:w-auto"
+              disabled={phase !== 'ready' || session === 'unknown'}
+              onClick={() => void start()}
+            >
+              {m.offer_buy()}
+            </Button>
+          )}
+        </div>
+      </Exposure>
     </article>
   );
 }

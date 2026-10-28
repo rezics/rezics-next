@@ -1,3 +1,4 @@
+import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
@@ -97,6 +98,7 @@ type ListSpec = {
 
 /** The first page of one of the account's lists. A preview links to the view; a view links to the next page. */
 function AccountList({ props, spec }: { props: Record<string, unknown>; spec: ListSpec }) {
+  const collectionPagesAdmitted = useOperation('account.collections');
   const state = useOverview(props.id);
   if (!state?.section || !state.value.account) return null;
   const { value, section } = state;
@@ -137,7 +139,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
           {title}
         </h2>
         {list}
-        {next && (
+        {next && (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
           <a
             data-slot="continuation"
             rel="next"
@@ -261,6 +263,7 @@ export function AccountThreads(props: Record<string, unknown>) {
 }
 
 export function AccountCollections(props: Record<string, unknown>) {
+  const readable = useOperation('collection.get');
   return (
     <AccountList
       props={props}
@@ -278,11 +281,17 @@ export function AccountCollections(props: Record<string, unknown>) {
             <li key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1">
               <p className="font-medium">
                 <span className={`${linkClass} ${linkColor} [&_a]:underline!`}>
-                  <Link
-                    href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                  >
-                    {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
-                  </Link>
+                  {readable ? (
+                    <Link
+                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                    >
+                      {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
+                    </Link>
+                  ) : typeof collection.title === 'string' && collection.title ? (
+                    collection.title
+                  ) : (
+                    value.unlabelled
+                  )}
                 </span>
                 {members !== undefined && (
                   <span className="text-sm font-normal text-muted-foreground">

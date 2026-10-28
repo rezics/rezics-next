@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -130,106 +131,110 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
             <p className="text-muted-foreground">{m.library_progress_empty()}</p>
           )}
           {page.next ? (
-            <nav>
-              <Link
-                to="/library/progress"
-                search={{ subjectId: page.subjectId, cursor: page.next }}
-                className={buttonClass}
-              >
-                {m.library_progress_more()}
-              </Link>
-            </nav>
-          ) : null}
-          <section aria-labelledby="start-progress-heading" className="space-y-5">
-            <h2 id="start-progress-heading" className="text-xl font-semibold">
-              {m.library_progress_start_heading()}
-            </h2>
-            <form className="max-w-xl space-y-5" onSubmit={onStart}>
-              <input type="hidden" name="idempotencyKey" value={key} />
-              {hydrated ? (
-                <>
-                  <input type="hidden" name="subjectId" value={subject} />
-                  <div className="space-y-2">
-                    <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                    <ProgressPicker value={chosen} onValueChange={setChosen} />
-                  </div>
-                </>
-              ) : (
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">{m.library_progress_subject()}</span>
-                  <Input name="subjectId" defaultValue={page.subjectId} />
-                </label>
-              )}
-              <fieldset className="space-y-3">
-                <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
-                <RadioGroup
-                  name="progress-mode"
-                  value={mode}
-                  onValueChange={(value) => setMode(value as ProgressMode)}
-                  className="flex flex-wrap gap-x-6 gap-y-3"
+            <Exposure operation="progress_session.list">
+              <nav>
+                <Link
+                  to="/library/progress"
+                  search={{ subjectId: page.subjectId, cursor: page.next }}
+                  className={buttonClass}
                 >
-                  {modeChoices.map((choice) => (
-                    <label key={choice.value} className="flex items-center gap-2 text-sm">
-                      <RadioGroupItem value={choice.value} />
-                      {choice.label()}
-                    </label>
-                  ))}
-                </RadioGroup>
-              </fieldset>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
-                  {hydrated ? (
-                    <Select
-                      value={unit}
-                      onValueChange={(value) => {
-                        if (value) setUnit(value as ProgressUnit);
-                      }}
-                    >
-                      <SelectTrigger id="progress-unit" className="w-full">
-                        <SelectValue>{unitLabel(unit)}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
+                  {m.library_progress_more()}
+                </Link>
+              </nav>
+            </Exposure>
+          ) : null}
+          <Exposure operation="progress_session.create">
+            <section aria-labelledby="start-progress-heading" className="space-y-5">
+              <h2 id="start-progress-heading" className="text-xl font-semibold">
+                {m.library_progress_start_heading()}
+              </h2>
+              <form className="max-w-xl space-y-5" onSubmit={onStart}>
+                <input type="hidden" name="idempotencyKey" value={key} />
+                {hydrated ? (
+                  <>
+                    <input type="hidden" name="subjectId" value={subject} />
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">{m.library_progress_subject()}</span>
+                      <ProgressPicker value={chosen} onValueChange={setChosen} />
+                    </div>
+                  </>
+                ) : (
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">{m.library_progress_subject()}</span>
+                    <Input name="subjectId" defaultValue={page.subjectId} />
+                  </label>
+                )}
+                <fieldset className="space-y-3">
+                  <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
+                  <RadioGroup
+                    name="progress-mode"
+                    value={mode}
+                    onValueChange={(value) => setMode(value as ProgressMode)}
+                    className="flex flex-wrap gap-x-6 gap-y-3"
+                  >
+                    {modeChoices.map((choice) => (
+                      <label key={choice.value} className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value={choice.value} />
+                        {choice.label()}
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </fieldset>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="progress-unit">{m.library_progress_unit()}</Label>
+                    {hydrated ? (
+                      <Select
+                        value={unit}
+                        onValueChange={(value) => {
+                          if (value) setUnit(value as ProgressUnit);
+                        }}
+                      >
+                        <SelectTrigger id="progress-unit" className="w-full">
+                          <SelectValue>{unitLabel(unit)}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unitChoices.map((choice) => (
+                            <SelectItem key={choice.value} value={choice.value}>
+                              {choice.label()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
                         {unitChoices.map((choice) => (
-                          <SelectItem key={choice.value} value={choice.value}>
+                          <option key={choice.value} value={choice.value}>
                             {choice.label()}
-                          </SelectItem>
+                          </option>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <select id="progress-unit" name="unit" className={fieldClass} defaultValue={unit}>
-                      {unitChoices.map((choice) => (
-                        <option key={choice.value} value={choice.value}>
-                          {choice.label()}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                      </select>
+                    )}
+                  </div>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">{m.library_progress_total()}</span>
+                    <Input
+                      name="total"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={total}
+                      disabled={mode !== 'scalar_amount'}
+                      onChange={(event) => setTotal(event.target.value)}
+                    />
+                  </label>
                 </div>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">{m.library_progress_total()}</span>
-                  <Input
-                    name="total"
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={total}
-                    disabled={mode !== 'scalar_amount'}
-                    onChange={(event) => setTotal(event.target.value)}
-                  />
-                </label>
-              </div>
-              {alert ? (
-                <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                  {alert}
-                </p>
-              ) : null}
-              <Button type="submit" disabled={pending}>
-                {m.library_progress_start()}
-              </Button>
-            </form>
-          </section>
+                {alert ? (
+                  <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                    {alert}
+                  </p>
+                ) : null}
+                <Button type="submit" disabled={pending}>
+                  {m.library_progress_start()}
+                </Button>
+              </form>
+            </section>
+          </Exposure>
         </>
       ) : (
         <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
@@ -239,6 +244,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
 }
 
 function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessions'][number]; ratio: CoverRatio }) {
+  const readable = useOperation('progress_session.read');
   const [session, setSession] = useState(initial);
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [pending, setPending] = useState(false);
@@ -274,13 +280,19 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div>
-          <Link
-            to="/library/progress/$id"
-            params={{ id: session.id }}
-            className="work-title line-clamp-2 text-lg font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
-          >
-            {session.subject?.label ?? m.library_subject_unavailable()}
-          </Link>
+          {readable ? (
+            <Link
+              to="/library/progress/$id"
+              params={{ id: session.id }}
+              className="work-title line-clamp-2 text-lg font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
+            >
+              {session.subject?.label ?? m.library_subject_unavailable()}
+            </Link>
+          ) : (
+            <span className="work-title line-clamp-2 text-lg font-medium">
+              {session.subject?.label ?? m.library_subject_unavailable()}
+            </span>
+          )}
           {session.subject?.typeLabel ? (
             <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
           ) : null}
@@ -290,51 +302,57 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
           value={progress?.percent == null ? null : progress.percent / 100}
           label={progress?.text ?? m.home_continue_in_progress()}
           menu={
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="relative z-10"
-                render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
-              >
-                <EllipsisIcon aria-hidden="true" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                {session.subject ? (
-                  <DropdownMenuItem
-                    render={
-                      <Link
-                        to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
-                        params={
-                          subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params
-                        }
-                      />
-                    }
-                  >
-                    {m.library_progress_open_subject()}
-                  </DropdownMenuItem>
-                ) : null}
-                {session.state === 'active' ? (
-                  <>
-                    <DropdownMenuItem onClick={() => setConfirming('complete')}>
-                      {m.library_progress_complete()}
+            <Exposure operation="progress_session.complete">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="relative z-10"
+                  render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
+                >
+                  <EllipsisIcon aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {session.subject ? (
+                    <DropdownMenuItem
+                      render={
+                        <Link
+                          to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
+                          params={
+                            subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params
+                          }
+                        />
+                      }
+                    >
+                      {m.library_progress_open_subject()}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setConfirming('abandon')}>
-                      {m.library_progress_abandon()}
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  ) : null}
+                  {session.state === 'active' ? (
+                    <>
+                      <DropdownMenuItem onClick={() => setConfirming('complete')}>
+                        {m.library_progress_complete()}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setConfirming('abandon')}>
+                        {m.library_progress_abandon()}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Exposure>
           }
         />
         {confirming ? (
-          <div className="relative z-10 flex flex-wrap gap-2">
-            <Button disabled={pending} onClick={() => void finish(confirming)}>
-              {confirming === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon()}
-            </Button>
-            <Button variant="outline" onClick={() => setConfirming(null)}>
-              {m.library_progress_cancel()}
-            </Button>
-          </div>
+          <Exposure operation="progress_session.complete">
+            <div className="relative z-10 flex flex-wrap gap-2">
+              <Button disabled={pending} onClick={() => void finish(confirming)}>
+                {confirming === 'complete'
+                  ? m.library_progress_confirm_complete()
+                  : m.library_progress_confirm_abandon()}
+              </Button>
+              <Button variant="outline" onClick={() => setConfirming(null)}>
+                {m.library_progress_cancel()}
+              </Button>
+            </div>
+          </Exposure>
         ) : null}
         {error ? (
           <p role="alert" className="relative text-sm">

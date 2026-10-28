@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -32,19 +33,23 @@ function Tabs({ state, locale, display }: { state: LibraryEntryState | null; loc
   ];
   return (
     <nav aria-label={m.library_states()} className="flex min-w-0 gap-1 overflow-x-auto border-b">
-      {tabs.map((tab) => (
-        <a
-          key={tab.state ?? 'all'}
-          href={shelfHref(locale, { state: tab.state, ...display })}
-          {...(state === tab.state ? { 'aria-current': 'page' as const } : {})}
-          className={tabClass}
-        >
-          {tab.label}
+      <Exposure operation="library_entry.list">
+        {tabs.map((tab) => (
+          <a
+            key={tab.state ?? 'all'}
+            href={shelfHref(locale, { state: tab.state, ...display })}
+            {...(state === tab.state ? { 'aria-current': 'page' as const } : {})}
+            className={tabClass}
+          >
+            {tab.label}
+          </a>
+        ))}
+      </Exposure>
+      <Exposure operation="collection.list">
+        <a href={`/${locale}/library/collections`} className={tabClass}>
+          {m.library_nav_collections()}
         </a>
-      ))}
-      <a href={`/${locale}/library/collections`} className={tabClass}>
-        {m.library_nav_collections()}
-      </a>
+      </Exposure>
     </nav>
   );
 }
@@ -147,19 +152,23 @@ function StatusTab({
           title={m.library_tab_empty_title({ status: stateLabel(page.state) })}
           description={m.library_tab_empty_description()}
           actions={
-            <a href={shelfHref(locale, display)} className={buttonVariants({ variant: 'outline' })}>
-              {m.library_view_all()}
-            </a>
+            <Exposure operation="library_entry.list">
+              <a href={shelfHref(locale, display)} className={buttonVariants({ variant: 'outline' })}>
+                {m.library_view_all()}
+              </a>
+            </Exposure>
           }
         />
       )}
       {page.next ? (
-        <a
-          href={shelfHref(locale, { state: page.state, ...display, cursor: page.next })}
-          className={buttonVariants({ variant: 'outline', size: 'lg' })}
-        >
-          {m.library_more()}
-        </a>
+        <Exposure operation="library_entry.list">
+          <a
+            href={shelfHref(locale, { state: page.state, ...display, cursor: page.next })}
+            className={buttonVariants({ variant: 'outline', size: 'lg' })}
+          >
+            {m.library_more()}
+          </a>
+        </Exposure>
       ) : null}
     </div>
   );
@@ -194,7 +203,9 @@ function SignedInLibrary({
       ) : (
         <>
           {page.state === null || page.entries.length ? (
-            <DisplayLinks state={page.state} locale={locale} display={display} />
+            <Exposure operation="library_entry.list">
+              <DisplayLinks state={page.state} locale={locale} display={display} />
+            </Exposure>
           ) : null}
           {page.state === null ? (
             <Overview page={page} locale={locale} display={display} />
@@ -225,12 +236,14 @@ export function PersonalLibraryPage({
         <SignedInLibrary page={page} cursor={cursor} locale={locale} display={display} />
       ) : (
         <p>
-          <a
-            href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/library`)}`}
-            className="text-primary underline-offset-4 hover:underline"
-          >
-            {m.library_sign_in()}
-          </a>
+          <Exposure operation="library_entry.list">
+            <a
+              href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/library`)}`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              {m.library_sign_in()}
+            </a>
+          </Exposure>
         </p>
       )}
     </div>

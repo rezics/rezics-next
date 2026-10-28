@@ -1,3 +1,4 @@
+import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
@@ -18,6 +19,7 @@ import type { ContinueEntry } from './continue-read';
  * drawn and CSS shows one, so the page does not depend on the script to choose.
  */
 export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
+  const admitted = useOperation('progress_session.list');
   const options = { locale: locale as Locale };
   const subjects = entries.map((entry) => ({
     entry,
@@ -34,7 +36,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
     return (
       <CoverCard
         key={entry.subjectId}
-        href={href}
+        {...(admitted ? { href } : {})}
         cover={{ subject, cover: coverOf(entry.summary), src: coverSrc }}
         title={title}
         {...(lang ? { titleLang: lang } : {})}

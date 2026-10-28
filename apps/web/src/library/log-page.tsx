@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-progress';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -105,22 +106,24 @@ export function PublishedLogPageView({ log, isOwner }: { log: PublishedLog; isOw
         </p>
       ) : null}
       {isOwner ? (
-        <div className="flex flex-wrap gap-3">
-          {!confirming ? (
-            <button type="button" className={buttonClass} onClick={() => setConfirming(true)}>
-              {m.library_logs_delete()}
-            </button>
-          ) : (
-            <>
-              <button type="button" className={buttonClass} disabled={pending} onClick={() => void remove()}>
-                {m.library_logs_confirm_delete()}
+        <Exposure operation="published_log.delete">
+          <div className="flex flex-wrap gap-3">
+            {!confirming ? (
+              <button type="button" className={buttonClass} onClick={() => setConfirming(true)}>
+                {m.library_logs_delete()}
               </button>
-              <button type="button" className={buttonClass} disabled={pending} onClick={() => setConfirming(false)}>
-                {m.library_logs_cancel()}
-              </button>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <button type="button" className={buttonClass} disabled={pending} onClick={() => void remove()}>
+                  {m.library_logs_confirm_delete()}
+                </button>
+                <button type="button" className={buttonClass} disabled={pending} onClick={() => setConfirming(false)}>
+                  {m.library_logs_cancel()}
+                </button>
+              </>
+            )}
+          </div>
+        </Exposure>
       ) : null}
     </article>
   );

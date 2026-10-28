@@ -1040,3 +1040,30 @@ language through the client's `accept-language`.
   feed reads, R2 operations and steps, plus the maximum families held by one step.
 - **Feeds:** Boards, threads, Realms and Spaces use their typed kernel sitemap feeds; stalled pages are detected by
   item order rather than cursor tokens.
+
+## Admitted controls
+
+`src/kernel/exposure.ts` maps the site's gated operation IDs to the groups declared in OpenAPI. Controls use
+`useOperation` or `Exposure` with an operation ID. Missing groups, pending reads and failed reads hide the controls;
+the kernel still enforces admission and the existing `platform_closed` responses handle a stale admitted set.
+
+Public renders share one anonymous exposure promise per isolate for 60 seconds, including failures and concurrent
+requests. This read uses no session or credential, so a session cookie cannot change the public admitted set. After
+hydration, a signed-in viewer uses one GET server function through TanStack Query, with a 60-second `staleTime` next
+to the session query. No personal admitted set enters the server-rendered query cache. Anonymous browser reads
+reuse the isolate's anonymous entry. The fake defaults to no admitted groups: set `Fixtures.admitted`, or call
+`setFakeAdmitted` for recorded stories. Storybook's `admitted` parameter selects the review set.
+
+### Exposure cost
+
+- **Touches:** One kernel `GET /v1/platform/exposure`, using the kernel's existing open-groups and held-gates reads.
+- **Bound:** At most one anonymous kernel read per isolate per 60 seconds; one viewer read per active query client
+  per 60 seconds, shared across controls and navigations. Neither bound grows with pages or stored data.
+- **Growth check:** `tests/closed-controls.test.ts` counts reads over ten anonymous server renders and a signed-in
+  load followed by three client navigations, and checks that public renders read no session RPCs.
+- **Visual check:** `Pages/Exposure` stories show the subject, personal library, progress and offer with all groups
+  admitted and with none, in either locale and at either viewport width.
+
+Public composition previews keep their readable content when a group is closed. Links to individual collections
+require `collection.get`; an account collection list's continuation requires `account.collections`, since later
+pages use that standalone operation rather than the public composition read.

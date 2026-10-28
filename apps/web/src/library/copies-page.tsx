@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
@@ -248,45 +249,53 @@ function CopyArticle({
         <SubjectIdentity subject={copy.subject} ratio={ratio} />
       </div>
       <CopySummary copy={copy} />
-      <form className="space-y-4" onSubmit={save}>
-        <StatusField value={status} onChange={setStatus} />
-        <TextField label={m.library_copy_location()} value={location} onChange={setLocation} />
-        <TextField label={m.library_copy_source()} value={source} onChange={setSource} />
-        <DateField
-          label={m.library_copy_acquired()}
-          hintId="copy-acquired-hint"
-          value={acquiredOn}
-          onChange={setAcquiredOn}
-        />
-        <DateField
-          label={m.library_copy_disposed()}
-          hintId="copy-disposed-hint"
-          value={disposedOn}
-          onChange={setDisposedOn}
-        />
-        <TextField label={m.library_copy_note()} value={note} onChange={setNote} />
-        {failure ? <p role="alert">{failure}</p> : null}
-        <div className="flex flex-wrap gap-3">
-          <button type="submit" className={button} disabled={pending}>
-            {m.library_copy_save()}
-          </button>
-          <button type="button" className={quiet} disabled={pending} onClick={() => setConfirming(true)}>
-            {m.library_copy_delete()}
-          </button>
-        </div>
-      </form>
-      {confirming ? (
-        <div role="alertdialog" aria-labelledby={questionId} className="space-y-3 rounded-lg border border-border p-4">
-          <p id={questionId}>{m.library_copy_delete_question()}</p>
+      <Exposure operation="copy.update">
+        <form className="space-y-4" onSubmit={save}>
+          <StatusField value={status} onChange={setStatus} />
+          <TextField label={m.library_copy_location()} value={location} onChange={setLocation} />
+          <TextField label={m.library_copy_source()} value={source} onChange={setSource} />
+          <DateField
+            label={m.library_copy_acquired()}
+            hintId="copy-acquired-hint"
+            value={acquiredOn}
+            onChange={setAcquiredOn}
+          />
+          <DateField
+            label={m.library_copy_disposed()}
+            hintId="copy-disposed-hint"
+            value={disposedOn}
+            onChange={setDisposedOn}
+          />
+          <TextField label={m.library_copy_note()} value={note} onChange={setNote} />
+          {failure ? <p role="alert">{failure}</p> : null}
           <div className="flex flex-wrap gap-3">
-            <button type="button" className={quiet} onClick={() => setConfirming(false)}>
-              {m.library_copy_cancel()}
+            <button type="submit" className={button} disabled={pending}>
+              {m.library_copy_save()}
             </button>
-            <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
-              {m.library_copy_delete_confirm()}
+            <button type="button" className={quiet} disabled={pending} onClick={() => setConfirming(true)}>
+              {m.library_copy_delete()}
             </button>
           </div>
-        </div>
+        </form>
+      </Exposure>
+      {confirming ? (
+        <Exposure operation="copy.delete">
+          <div
+            role="alertdialog"
+            aria-labelledby={questionId}
+            className="space-y-3 rounded-lg border border-border p-4"
+          >
+            <p id={questionId}>{m.library_copy_delete_question()}</p>
+            <div className="flex flex-wrap gap-3">
+              <button type="button" className={quiet} onClick={() => setConfirming(false)}>
+                {m.library_copy_cancel()}
+              </button>
+              <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
+                {m.library_copy_delete_confirm()}
+              </button>
+            </div>
+          </div>
+        </Exposure>
       ) : null}
     </article>
   );
@@ -358,48 +367,50 @@ function AddCopyForm({
   }
 
   return (
-    <form
-      aria-label={m.library_copy_add()}
-      data-idempotency-key={addKey}
-      className="space-y-4 rounded-xl border border-border/70 bg-card p-5"
-      onSubmit={submit}
-    >
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor={editionId}>
-          {m.library_copy_edition()}
-        </label>
-        <input
-          id={editionId}
-          className={control}
-          value={subjectId ?? edition}
-          readOnly={subjectId !== null}
-          autoComplete="off"
-          onChange={(event) => {
-            if (subjectId === null) setEdition(event.currentTarget.value);
-          }}
+    <Exposure operation="copy.create">
+      <form
+        aria-label={m.library_copy_add()}
+        data-idempotency-key={addKey}
+        className="space-y-4 rounded-xl border border-border/70 bg-card p-5"
+        onSubmit={submit}
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor={editionId}>
+            {m.library_copy_edition()}
+          </label>
+          <input
+            id={editionId}
+            className={control}
+            value={subjectId ?? edition}
+            readOnly={subjectId !== null}
+            autoComplete="off"
+            onChange={(event) => {
+              if (subjectId === null) setEdition(event.currentTarget.value);
+            }}
+          />
+        </div>
+        <StatusField value={status} onChange={setStatus} />
+        <TextField label={m.library_copy_location()} value={location} onChange={setLocation} />
+        <TextField label={m.library_copy_source()} value={source} onChange={setSource} />
+        <DateField
+          label={m.library_copy_acquired()}
+          hintId="copy-acquired-hint"
+          value={acquiredOn}
+          onChange={setAcquiredOn}
         />
-      </div>
-      <StatusField value={status} onChange={setStatus} />
-      <TextField label={m.library_copy_location()} value={location} onChange={setLocation} />
-      <TextField label={m.library_copy_source()} value={source} onChange={setSource} />
-      <DateField
-        label={m.library_copy_acquired()}
-        hintId="copy-acquired-hint"
-        value={acquiredOn}
-        onChange={setAcquiredOn}
-      />
-      <DateField
-        label={m.library_copy_disposed()}
-        hintId="copy-disposed-hint"
-        value={disposedOn}
-        onChange={setDisposedOn}
-      />
-      <TextField label={m.library_copy_note()} value={note} onChange={setNote} />
-      {failure ? <p role="alert">{failure}</p> : null}
-      <button type="submit" className={button} disabled={pending}>
-        {m.library_copy_add_submit()}
-      </button>
-    </form>
+        <DateField
+          label={m.library_copy_disposed()}
+          hintId="copy-disposed-hint"
+          value={disposedOn}
+          onChange={setDisposedOn}
+        />
+        <TextField label={m.library_copy_note()} value={note} onChange={setNote} />
+        {failure ? <p role="alert">{failure}</p> : null}
+        <button type="submit" className={button} disabled={pending}>
+          {m.library_copy_add_submit()}
+        </button>
+      </form>
+    </Exposure>
   );
 }
 
@@ -427,9 +438,11 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
           {page.subjectId ? (
             <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
               <span>{m.library_copy_filtered_heading({ title: subjectTitle ?? m.library_copy_this_edition() })}</span>
-              <Link to="/library/copies" search={{}} className="text-primary underline underline-offset-4">
-                {m.library_copy_all()}
-              </Link>
+              <Exposure operation="copy.list">
+                <Link to="/library/copies" search={{}} className="text-primary underline underline-offset-4">
+                  {m.library_copy_all()}
+                </Link>
+              </Exposure>
             </p>
           ) : null}
           {copies.length ? (
@@ -450,18 +463,20 @@ export function CopiesPage({ page }: { page: CopiesPageData }) {
             </p>
           )}
           {page.next ? (
-            <nav aria-label={m.library_copy_heading()}>
-              <Link
-                to="/library/copies"
-                search={{
-                  ...(page.subjectId ? { subjectId: page.subjectId } : {}),
-                  cursor: page.next,
-                }}
-                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-              >
-                {m.library_copy_more()}
-              </Link>
-            </nav>
+            <Exposure operation="copy.list">
+              <nav aria-label={m.library_copy_heading()}>
+                <Link
+                  to="/library/copies"
+                  search={{
+                    ...(page.subjectId ? { subjectId: page.subjectId } : {}),
+                    cursor: page.next,
+                  }}
+                  className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+                >
+                  {m.library_copy_more()}
+                </Link>
+              </nav>
+            </Exposure>
           ) : null}
           <AddCopyForm
             subjectId={page.subjectId}

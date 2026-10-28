@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -109,7 +110,8 @@ function moveWithin(members: CollectionMember[], memberId: string, after: string
 
 export function CollectionPage({ page }: { page: EditableCollectionPage }) {
   const router = useRouter();
-  const owner = page.visibility !== null;
+  const admitted = useOperation('collection.update');
+  const owner = page.visibility !== null && admitted;
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [editing, setEditing] = useState(false);
@@ -325,17 +327,19 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
         </p>
         {page.visibility ? <p data-visibility={page.visibility}>{visibilityLabel(page.visibility)}</p> : null}
         {following !== null ? (
-          <div className="flex flex-wrap items-center gap-3">
-            {following ? <p>{m.library_following()}</p> : null}
-            <button
-              className={buttonClass}
-              disabled={!hydrated || pending}
-              onClick={() => void toggleFollow()}
-              type="button"
-            >
-              {following ? m.library_follow_unfollow() : m.library_follow()}
-            </button>
-          </div>
+          <Exposure operation="follow.put">
+            <div className="flex flex-wrap items-center gap-3">
+              {following ? <p>{m.library_following()}</p> : null}
+              <button
+                className={buttonClass}
+                disabled={!hydrated || pending}
+                onClick={() => void toggleFollow()}
+                type="button"
+              >
+                {following ? m.library_follow_unfollow() : m.library_follow()}
+              </button>
+            </div>
+          </Exposure>
         ) : null}
         {owner && editing ? (
           <form className="space-y-4" onSubmit={(event) => void save(event)}>
@@ -407,16 +411,18 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
           <p className="text-muted-foreground">{m.library_collection_empty()}</p>
         )}
         {page.next ? (
-          <nav aria-label={m.library_collection_members()}>
-            <Link
-              to="/collections/$id"
-              params={{ id: page.id }}
-              search={{ cursor: page.next }}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-            >
-              {m.library_collection_more()}
-            </Link>
-          </nav>
+          <Exposure operation="collection_member.list">
+            <nav aria-label={m.library_collection_members()}>
+              <Link
+                to="/collections/$id"
+                params={{ id: page.id }}
+                search={{ cursor: page.next }}
+                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              >
+                {m.library_collection_more()}
+              </Link>
+            </nav>
+          </Exposure>
         ) : null}
       </section>
     </article>

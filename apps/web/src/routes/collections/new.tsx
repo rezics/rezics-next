@@ -1,3 +1,4 @@
+import { Exposure } from '../../kernel/exposure';
 import { useSession } from '../../session/query';
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -62,22 +63,24 @@ function NewCollectionPage() {
         <PageHeading>{m.library_collection_new()}</PageHeading>
       </header>
       {session === 'signed-in' ? (
-        <form className="space-y-6" onSubmit={(event) => void create(event)}>
-          <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
-          <label className="block">
-            {m.library_collection_title()}
-            <input className={fieldClass} maxLength={512} name="title" required />
-          </label>
-          <label className="block">
-            {m.library_collection_description()}
-            <textarea className={fieldClass} name="description" rows={4} />
-          </label>
-          <VisibilityField onChange={setVisibility} value={visibility} />
-          {failure ? <p role="alert">{failure}</p> : null}
-          <button className={buttonClass} disabled={!hydrated || pending || visibility === ''} type="submit">
-            {m.library_collection_create()}
-          </button>
-        </form>
+        <Exposure operation="collection.create">
+          <form className="space-y-6" onSubmit={(event) => void create(event)}>
+            <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
+            <label className="block">
+              {m.library_collection_title()}
+              <input className={fieldClass} maxLength={512} name="title" required />
+            </label>
+            <label className="block">
+              {m.library_collection_description()}
+              <textarea className={fieldClass} name="description" rows={4} />
+            </label>
+            <VisibilityField onChange={setVisibility} value={visibility} />
+            {failure ? <p role="alert">{failure}</p> : null}
+            <button className={buttonClass} disabled={!hydrated || pending || visibility === ''} type="submit">
+              {m.library_collection_create()}
+            </button>
+          </form>
+        </Exposure>
       ) : (
         <SignInPrompt returnTo={`/${getLocale()}/collections/new`} />
       )}

@@ -119,6 +119,7 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['purchases'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const verifyClient = async (form: URLSearchParams) => {

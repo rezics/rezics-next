@@ -229,6 +229,7 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['purchases'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -571,6 +572,7 @@ test(
       });
       await page.goto(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`);
       await page.locator('html[data-hydrated]').waitFor();
+      await buy(page).waitFor();
       expect(page.url()).toBe(`${await site()}${path}`);
       expect(await buy(page).count()).toBe(1);
       expect(starts()).toHaveLength(0);

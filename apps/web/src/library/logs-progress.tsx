@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { fullDateTime } from '../threads/byline';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -77,25 +78,27 @@ function PublishLog({ page }: { page: Extract<ProgressSessionPage, { signedIn: t
         {m.library_logs_publish_heading()}
       </h2>
       <p>{m.library_logs_description()}</p>
-      <form className="space-y-3" onSubmit={(event) => void submit(event)}>
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">{m.library_logs_publish_note()}</span>
-          <Textarea
-            aria-label={m.library_logs_publish_note()}
-            maxLength={1000}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-          />
-        </label>
-        {error ? (
-          <p role="alert" className="rounded-lg border border-border bg-card p-3">
-            {error}
-          </p>
-        ) : null}
-        <Button type="submit" disabled={pending}>
-          {m.library_logs_publish()}
-        </Button>
-      </form>
+      <Exposure operation="published_log.create">
+        <form className="space-y-3" onSubmit={(event) => void submit(event)}>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">{m.library_logs_publish_note()}</span>
+            <Textarea
+              aria-label={m.library_logs_publish_note()}
+              maxLength={1000}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          {error ? (
+            <p role="alert" className="rounded-lg border border-border bg-card p-3">
+              {error}
+            </p>
+          ) : null}
+          <Button type="submit" disabled={pending}>
+            {m.library_logs_publish()}
+          </Button>
+        </form>
+      </Exposure>
     </section>
   );
 }
@@ -140,13 +143,15 @@ function PublishedLogs({
               </p>
               {log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
               <p>
-                <Link
-                  to="/logs/$id"
-                  params={{ id: log.id }}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  {m.library_logs_open()}
-                </Link>
+                <Exposure operation="published_log.read">
+                  <Link
+                    to="/logs/$id"
+                    params={{ id: log.id }}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    {m.library_logs_open()}
+                  </Link>
+                </Exposure>
               </p>
             </li>
           ))}
@@ -155,18 +160,20 @@ function PublishedLogs({
         <p className="text-muted-foreground">{m.library_logs_empty()}</p>
       )}
       {page.next ? (
-        <Link
-          to="/library/progress/$id"
-          params={{ id: sessionId }}
-          search={{
-            logs: page.next,
-            ...(search.changes ? { changes: search.changes } : {}),
-            ...(search.units ? { units: search.units } : {}),
-          }}
-          className={buttonClass}
-        >
-          {m.library_logs_more()}
-        </Link>
+        <Exposure operation="published_log.list">
+          <Link
+            to="/library/progress/$id"
+            params={{ id: sessionId }}
+            search={{
+              logs: page.next,
+              ...(search.changes ? { changes: search.changes } : {}),
+              ...(search.units ? { units: search.units } : {}),
+            }}
+            className={buttonClass}
+          >
+            {m.library_logs_more()}
+          </Link>
+        </Exposure>
       ) : null}
     </section>
   );

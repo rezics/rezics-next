@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -18,15 +19,18 @@ function visibilityLabel(visibility: CollectionVisibility): string {
 
 export function MineCollectionsPageView({ page }: { page: MineCollectionsPage }) {
   const location = useLocation();
+  const readable = useOperation('collection.get');
   if (!page.signedIn) return <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />;
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading>{m.library_collections_heading()}</PageHeading>
-        <a href={`/${getLocale()}/collections/new`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-          {m.library_collection_new()}
-        </a>
+        <Exposure operation="collection.create">
+          <a href={`/${getLocale()}/collections/new`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            {m.library_collection_new()}
+          </a>
+        </Exposure>
       </header>
       {page.collections.length ? (
         <CoverGrid
@@ -37,7 +41,7 @@ export function MineCollectionsPageView({ page }: { page: MineCollectionsPage })
           {page.collections.map((collection) => (
             <CoverCard
               key={collection.id}
-              href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}`}
+              {...(readable ? { href: `/${getLocale()}/collections/${encodeURIComponent(collection.id)}` } : {})}
               title={collection.title}
               cover={{ subject: { id: collection.id, title: collection.title, types: [] }, cover: null, src: coverSrc }}
               secondary={m.library_collection_item_count({ count: collection.memberCount })}
@@ -49,15 +53,17 @@ export function MineCollectionsPageView({ page }: { page: MineCollectionsPage })
         <p className="text-muted-foreground">{m.library_collections_empty()}</p>
       )}
       {page.next ? (
-        <nav aria-label={m.library_collections_heading()}>
-          <Link
-            to="/library/collections"
-            search={{ cursor: page.next }}
-            className={buttonVariants({ variant: 'outline', size: 'lg' })}
-          >
-            {m.library_collection_more()}
-          </Link>
-        </nav>
+        <Exposure operation="collection.list">
+          <nav aria-label={m.library_collections_heading()}>
+            <Link
+              to="/library/collections"
+              search={{ cursor: page.next }}
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
+              {m.library_collection_more()}
+            </Link>
+          </nav>
+        </Exposure>
       ) : null}
     </article>
   );

@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
@@ -16,6 +17,8 @@ import { coverSubject } from './subject-row';
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   const { csrfToken } = useSession();
   const location = useLocation();
+  const canUnfollow = useOperation('follow.delete');
+  const canReadCollection = useOperation('collection.get');
   const [follows, setFollows] = useState(page.follows);
   const [pending, setPending] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
@@ -74,7 +77,7 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                     return (
                       <CoverCard
                         key={`${type}:${follow.targetId}`}
-                        {...(follow.target && type !== 'space'
+                        {...(follow.target && type !== 'space' && (type !== 'collection' || canReadCollection)
                           ? { href: `/${getLocale()}/${path}/${encodeURIComponent(follow.target.id)}` }
                           : {})}
                         title={subject.title}
@@ -105,12 +108,14 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                         }
                         menuLabel={m.library_follow_more_actions({ title: subject.title })}
                         menu={
-                          <DropdownMenuItem
-                            disabled={!csrfToken || pending !== null}
-                            onClick={() => void submit(follow)}
-                          >
-                            {m.library_follow_unfollow()}
-                          </DropdownMenuItem>
+                          canUnfollow ? (
+                            <DropdownMenuItem
+                              disabled={!csrfToken || pending !== null}
+                              onClick={() => void submit(follow)}
+                            >
+                              {m.library_follow_unfollow()}
+                            </DropdownMenuItem>
+                          ) : undefined
                         }
                       />
                     );
@@ -124,15 +129,17 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
         <p className="text-muted-foreground">{m.library_following_empty()}</p>
       )}
       {page.next ? (
-        <nav aria-label={m.library_following_heading()}>
-          <Link
-            to="/library/following"
-            search={{ cursor: page.next }}
-            className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-          >
-            {m.library_collection_more()}
-          </Link>
-        </nav>
+        <Exposure operation="follow.list">
+          <nav aria-label={m.library_following_heading()}>
+            <Link
+              to="/library/following"
+              search={{ cursor: page.next }}
+              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+            >
+              {m.library_collection_more()}
+            </Link>
+          </nav>
+        </Exposure>
       ) : null}
     </article>
   );

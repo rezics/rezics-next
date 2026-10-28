@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { slug } from '@rezics/definitions/slug';
 import { join } from 'node:path';
 import { createElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { VIEWS, type View } from '@rezics/composition';
@@ -91,7 +92,7 @@ const accounts: FixtureAccount[] = [
 ];
 
 const sent: string[] = [];
-const local = createFakeKernelFetch({ ...fixtures, subjects, accounts } as never);
+const local = createFakeKernelFetch({ ...fixtures, subjects, accounts, admitted: ['collections'] } as never);
 const client = createKernelClient('https://kernel.invalid', {
   fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
@@ -139,22 +140,29 @@ const render = (
   handle: string,
   view: View = 'overview',
   tabs?: ReturnType<typeof subjectTabs>,
-) =>
-  renderToString(
-    createElement(SubjectPage, {
-      page,
-      locale: 'en',
-      messages,
-      tabs: tabs ?? subjectTabs(page),
-      tabLabels: labels,
-      base: agentPath('en', handle),
-      view,
-      ...(view === 'overview'
-        ? {}
-        : { heading: { title: 'Agent', label: names[view], href: agentPath('en', handle) } }),
-      renderJsonLd: false,
-    } as never),
+  admitted = ['collections'],
+) => {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(['exposure', 'anonymous'], admitted);
+  return renderToString(
+    createElement(QueryClientProvider, {
+      client: queryClient,
+      children: createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages,
+        tabs: tabs ?? subjectTabs(page),
+        tabLabels: labels,
+        base: agentPath('en', handle),
+        view,
+        ...(view === 'overview'
+          ? {}
+          : { heading: { title: 'Agent', label: names[view], href: agentPath('en', handle) } }),
+        renderJsonLd: false,
+      } as never),
+    }),
   );
+};
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 const items = (html: string, slot: string) => (section(html, slot).match(/<li\b/g) ?? []).length;
@@ -326,4 +334,12 @@ test('an agent page is never routed inside a Realm or Zone', async () => {
     expect(link).toMatch(/^\/en\/(@haruka|subjects|threads|collections)(\/|$)/);
     expect(link).not.toMatch(/\/(realms|spaces)\//);
   }
+});
+
+test('a closed collections group hides the account collection continuation but keeps its public page content', async () => {
+  const page = await loaded('prolific', 'collections');
+  const html = render(page, 'prolific', 'collections', undefined, []);
+  expect(items(html, 'account-collections')).toBe(24);
+  expect(section(html, 'account-collections')).not.toContain('data-slot="continuation"');
+  expect(section(html, 'account-collections')).not.toContain('/en/collections/');
 });

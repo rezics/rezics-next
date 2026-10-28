@@ -36,6 +36,31 @@ export const sessionQuery = queryOptions({
   refetchOnReconnect: false,
 });
 
+// Exposure is a separate bounded read so a session result never grants a gate implicitly.
+const readViewerExposure = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('Cache-Control', 'private, no-store');
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, viewerCredential } = await import('./request');
+  const { readAdmitted } = await import('../kernel/exposure');
+  try {
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    return authorization ? await readAdmitted(authorization) : [];
+  } catch {
+    return [];
+  }
+});
+export const exposureQuery = queryOptions({
+  ...personalRead,
+  queryKey: ['exposure', 'viewer'],
+  queryFn: () => readViewerExposure(),
+  staleTime: 60_000,
+  retry: false,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+});
+
 const subscribe = () => () => {};
 type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null };
 

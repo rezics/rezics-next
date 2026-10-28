@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
 import { RelativeTime } from '@rezics/ui/relative-time';
@@ -91,6 +92,8 @@ function EntryMenu({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const admitted = useOperation('library_entry.put');
+  const progressAdmitted = useOperation('progress_session.list');
   const { entry } = row;
   const title = titleOf(entry);
   const subjectId = entry.subject?.id;
@@ -130,16 +133,21 @@ function EntryMenu({
             label: m.library_entry_copies(),
             onSelect: () => void navigate({ to: '/library/copies', search: { subjectId } }),
           },
-          {
-            type: 'item' as const,
-            label: m.library_entry_progress(),
-            onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
-          },
+          ...(progressAdmitted
+            ? [
+                {
+                  type: 'item' as const,
+                  label: m.library_entry_progress(),
+                  onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
+                },
+              ]
+            : []),
         ]
       : []),
     { type: 'separator' },
     { type: 'item', label: m.library_remove_from_library(), onSelect: () => controls.askRemove(entry.subjectId) },
   ];
+  if (!admitted) return children;
   return (
     <ItemMenu
       entries={entries}
@@ -218,6 +226,7 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
 }
 
 function ListView({ controls }: { controls: Controls }) {
+  const admitted = useOperation('library_entry.put');
   const { rows, locale, hydrated, pending } = controls;
   return (
     <ShelfList>
@@ -232,7 +241,9 @@ function ListView({ controls }: { controls: Controls }) {
             title={title}
             meta={entry.subject?.typeLabel}
             status={stateLabel(entry.state)}
-            {...(hydrated && !pending ? { statusMenu: <StatusRadios row={row} controls={controls} /> } : {})}
+            {...(admitted && hydrated && !pending
+              ? { statusMenu: <StatusRadios row={row} controls={controls} /> }
+              : {})}
             date={
               <span className="inline-flex items-center gap-1">
                 <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
@@ -249,6 +260,7 @@ function ListView({ controls }: { controls: Controls }) {
 }
 
 function TableView({ controls }: { controls: Controls }) {
+  const admitted = useOperation('library_entry.put');
   const { rows, locale, hydrated, pending } = controls;
   const columns: ShelfColumn[] = [
     { id: 'cover', label: '', visible: true },
@@ -265,7 +277,7 @@ function TableView({ controls }: { controls: Controls }) {
       title: titleOf(entry),
       cover: coverOf(entry),
       type: entry.subject?.typeLabel,
-      status: (
+      status: admitted ? (
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={!hydrated || pending} />}>
             {stateLabel(entry.state)}
@@ -275,6 +287,8 @@ function TableView({ controls }: { controls: Controls }) {
             <StatusRadios row={row} controls={controls} />
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : (
+        stateLabel(entry.state)
       ),
       lastActivity: (
         <span className="inline-flex items-center gap-1">
@@ -335,26 +349,28 @@ export function ShelfEntries({
           </div>
         </>
       ) : null}
-      <AlertDialog open={leaving !== undefined} onOpenChange={(open) => !open && shelfRows.cancelRemove()}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{m.library_remove_confirm()}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {leaving ? m.library_remove_description({ title: titleOf(leaving) }) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={shelfRows.pending}>{m.library_collection_cancel()}</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={shelfRows.pending}
-              onClick={() => void shelfRows.remove()}
-            >
-              {m.library_remove_submit()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Exposure operation="library_entry.delete">
+        <AlertDialog open={leaving !== undefined} onOpenChange={(open) => !open && shelfRows.cancelRemove()}>
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>{m.library_remove_confirm()}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {leaving ? m.library_remove_description({ title: titleOf(leaving) }) : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={shelfRows.pending}>{m.library_collection_cancel()}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={shelfRows.pending}
+                onClick={() => void shelfRows.remove()}
+              >
+                {m.library_remove_submit()}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Exposure>
     </>
   );
   if (!section) return body;
@@ -364,10 +380,12 @@ export function ShelfEntries({
         <h2 id={sectionId} className="text-xl font-semibold">
           {section.title}
         </h2>
-        <a href={section.href} className="text-sm text-primary underline-offset-4 hover:underline">
-          {m.library_view_all()}
-          <span className="sr-only"> {stateLabel(shelf)}</span>
-        </a>
+        <Exposure operation="library_entry.list">
+          <a href={section.href} className="text-sm text-primary underline-offset-4 hover:underline">
+            {m.library_view_all()}
+            <span className="sr-only"> {stateLabel(shelf)}</span>
+          </a>
+        </Exposure>
       </div>
       {body}
     </section>

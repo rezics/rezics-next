@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useState } from 'react';
@@ -79,19 +80,23 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
         <Alert role="status">
           <AlertDescription className="space-y-3 text-foreground">
             <p role="note">{m.order_canceled()}</p>
-            <a
-              href={`/${getLocale()}/offers/${order.offerId}`}
-              className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
-            >
-              {m.order_back()}
-            </a>
+            <Exposure operation="offer.get">
+              <a
+                href={`/${getLocale()}/offers/${order.offerId}`}
+                className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+              >
+                {m.order_back()}
+              </a>
+            </Exposure>
           </AlertDescription>
         </Alert>
       )}
       {gaveUp && pending && (
-        <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
-          {m.order_refresh()}
-        </Button>
+        <Exposure operation="order.get">
+          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
+            {m.order_refresh()}
+          </Button>
+        </Exposure>
       )}
     </article>
   );

@@ -1,3 +1,4 @@
+import { Exposure } from '../kernel/exposure';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import type { ReactNode } from 'react';
@@ -275,21 +276,23 @@ function SessionEditor({
               label={progress?.text ?? m.home_continue_in_progress()}
               menu={
                 session.state === 'active' ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
-                    >
-                      <EllipsisIcon aria-hidden="true" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setConfirming('complete')}>
-                        {m.library_progress_complete()}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setConfirming('abandon')}>
-                        {m.library_progress_abandon()}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Exposure operation="progress_session.complete">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()} />}
+                      >
+                        <EllipsisIcon aria-hidden="true" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => setConfirming('complete')}>
+                          {m.library_progress_complete()}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setConfirming('abandon')}>
+                          {m.library_progress_abandon()}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </Exposure>
                 ) : undefined
               }
             />
@@ -308,111 +311,113 @@ function SessionEditor({
           {alert}
         </p>
       ) : null}
-      <section aria-labelledby="record-progress-heading" className="space-y-4">
-        <h2 id="record-progress-heading" className="text-xl font-semibold">
-          {m.library_progress_record_heading()}
-        </h2>
-        {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
-        {session.state === 'active' && session.mode !== 'completed_units' ? (
-          <form
-            className="max-w-xl space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onRecord();
-            }}
-          >
-            {session.mode === 'scalar_amount' ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-                <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
-              </label>
-            ) : (
-              <>
-                <label className="block space-y-1">
-                  <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                  <Input value={locator} onChange={(event) => setLocator(event.target.value)} />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-sm font-medium">{m.library_progress_position()}</span>
-                  <Input value={position} onChange={(event) => setPosition(event.target.value)} />
-                </label>
-              </>
-            )}
-            <Button type="submit">{m.library_progress_record()}</Button>
-          </form>
-        ) : null}
-        {session.state === 'active' && session.mode === 'completed_units' ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor={addId} className="text-sm font-medium">
-                {m.library_progress_add_units()}
-              </label>
-              <Textarea
-                id={addId}
-                aria-describedby={addHint}
-                value={addText}
-                onChange={(event) => setAddText(event.target.value)}
-              />
-              <p id={addHint} className="text-sm text-muted-foreground">
-                {m.library_progress_batch_limit()}
-              </p>
-              <Button variant="outline" onClick={() => void onUnits('add')}>
-                {m.library_progress_add_units()}
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor={removeId} className="text-sm font-medium">
-                {m.library_progress_remove_units()}
-              </label>
-              <Textarea
-                id={removeId}
-                aria-describedby={removeHint}
-                value={removeText}
-                onChange={(event) => setRemoveText(event.target.value)}
-              />
-              <p id={removeHint} className="text-sm text-muted-foreground">
-                {m.library_progress_batch_limit()}
-              </p>
-              <Button variant="outline" onClick={() => void onUnits('remove')}>
-                {m.library_progress_remove_units()}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {session.state === 'active' && confirming ? (
-          <div className="flex flex-wrap gap-3">
-            {confirming === 'complete' ? (
-              <>
-                <Button variant="outline" onClick={() => void onFinish('complete')}>
-                  {m.library_progress_confirm_complete()}
-                </Button>
-                <Button variant="outline" onClick={() => setConfirming(null)}>
-                  {m.library_progress_cancel()}
-                </Button>
-              </>
-            ) : null}
-            {confirming === 'abandon' ? (
-              <>
-                <Button variant="outline" onClick={() => void onFinish('abandon')}>
-                  {m.library_progress_confirm_abandon()}
-                </Button>
-                <Button variant="outline" onClick={() => setConfirming(null)}>
-                  {m.library_progress_cancel()}
-                </Button>
-              </>
-            ) : null}
-          </div>
-        ) : session.state !== 'active' ? (
-          <p>
-            <a
-              href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
-              className="text-primary underline-offset-4 hover:underline"
+      <Exposure operation="progress_session.record">
+        <section aria-labelledby="record-progress-heading" className="space-y-4">
+          <h2 id="record-progress-heading" className="text-xl font-semibold">
+            {m.library_progress_record_heading()}
+          </h2>
+          {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
+          {session.state === 'active' && session.mode !== 'completed_units' ? (
+            <form
+              className="max-w-xl space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onRecord();
+              }}
             >
-              {m.library_progress_restart()}
-            </a>
-          </p>
-        ) : null}
-      </section>
+              {session.mode === 'scalar_amount' ? (
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium">{m.library_progress_amount()}</span>
+                  <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
+                </label>
+              ) : (
+                <>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium">{m.library_progress_locator()}</span>
+                    <Input value={locator} onChange={(event) => setLocator(event.target.value)} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium">{m.library_progress_position()}</span>
+                    <Input value={position} onChange={(event) => setPosition(event.target.value)} />
+                  </label>
+                </>
+              )}
+              <Button type="submit">{m.library_progress_record()}</Button>
+            </form>
+          ) : null}
+          {session.state === 'active' && session.mode === 'completed_units' ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor={addId} className="text-sm font-medium">
+                  {m.library_progress_add_units()}
+                </label>
+                <Textarea
+                  id={addId}
+                  aria-describedby={addHint}
+                  value={addText}
+                  onChange={(event) => setAddText(event.target.value)}
+                />
+                <p id={addHint} className="text-sm text-muted-foreground">
+                  {m.library_progress_batch_limit()}
+                </p>
+                <Button variant="outline" onClick={() => void onUnits('add')}>
+                  {m.library_progress_add_units()}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor={removeId} className="text-sm font-medium">
+                  {m.library_progress_remove_units()}
+                </label>
+                <Textarea
+                  id={removeId}
+                  aria-describedby={removeHint}
+                  value={removeText}
+                  onChange={(event) => setRemoveText(event.target.value)}
+                />
+                <p id={removeHint} className="text-sm text-muted-foreground">
+                  {m.library_progress_batch_limit()}
+                </p>
+                <Button variant="outline" onClick={() => void onUnits('remove')}>
+                  {m.library_progress_remove_units()}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {session.state === 'active' && confirming ? (
+            <div className="flex flex-wrap gap-3">
+              {confirming === 'complete' ? (
+                <>
+                  <Button variant="outline" onClick={() => void onFinish('complete')}>
+                    {m.library_progress_confirm_complete()}
+                  </Button>
+                  <Button variant="outline" onClick={() => setConfirming(null)}>
+                    {m.library_progress_cancel()}
+                  </Button>
+                </>
+              ) : null}
+              {confirming === 'abandon' ? (
+                <>
+                  <Button variant="outline" onClick={() => void onFinish('abandon')}>
+                    {m.library_progress_confirm_abandon()}
+                  </Button>
+                  <Button variant="outline" onClick={() => setConfirming(null)}>
+                    {m.library_progress_cancel()}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : session.state !== 'active' ? (
+            <p>
+              <a
+                href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                {m.library_progress_restart()}
+              </a>
+            </p>
+          ) : null}
+        </section>
+      </Exposure>
       <section role="region" aria-labelledby={changesHeading} className="space-y-3">
         <h2 id={changesHeading} className="text-xl font-semibold">
           {m.library_progress_changes()}
@@ -451,17 +456,19 @@ function SessionEditor({
           <p className="text-muted-foreground">{m.library_progress_changes_empty()}</p>
         )}
         {session.changesNext ? (
-          <Link
-            to="/library/progress/$id"
-            params={{ id: session.id }}
-            search={{
-              changes: session.changesNext,
-              ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
-            }}
-            className={buttonClass}
-          >
-            {m.library_progress_more()}
-          </Link>
+          <Exposure operation="progress_session.changes">
+            <Link
+              to="/library/progress/$id"
+              params={{ id: session.id }}
+              search={{
+                changes: session.changesNext,
+                ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+              }}
+              className={buttonClass}
+            >
+              {m.library_progress_more()}
+            </Link>
+          </Exposure>
         ) : null}
       </section>
       <section role="region" aria-labelledby={unitsHeading} className="space-y-3">
@@ -480,17 +487,19 @@ function SessionEditor({
           <p className="text-muted-foreground">{m.library_progress_units_empty()}</p>
         )}
         {session.unitsNext ? (
-          <Link
-            to="/library/progress/$id"
-            params={{ id: session.id }}
-            search={{
-              units: session.unitsNext,
-              ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-            }}
-            className={buttonClass}
-          >
-            {m.library_progress_more()}
-          </Link>
+          <Exposure operation="progress_session.units">
+            <Link
+              to="/library/progress/$id"
+              params={{ id: session.id }}
+              search={{
+                units: session.unitsNext,
+                ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+              }}
+              className={buttonClass}
+            >
+              {m.library_progress_more()}
+            </Link>
+          </Exposure>
         ) : null}
       </section>
       {children}

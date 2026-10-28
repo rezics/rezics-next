@@ -22,6 +22,7 @@ import { useSession } from '../session/query.ts';
 import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
 import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
+import { prepareExposure } from '../kernel/exposure';
 
 const setClosedResponseStatus = createIsomorphicFn()
   .server(() => setResponseStatus(403, 'Forbidden'))
@@ -35,6 +36,7 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
   credentialMode: ReadCredentialMode;
 }>()({
+  beforeLoad: ({ context }) => prepareExposure(context.queryClient),
   head: ({ matches }) => {
     const locale = getLocale();
     const last = matches.at(-1);

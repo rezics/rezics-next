@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from 'react';
 import { configure } from 'storybook/test';
 import { setLocale } from '../src/paraglide/runtime.js';
 import './preview.css';
+import { setFakeAdmitted } from '../src/kernel/fake';
 
 configure({ asyncUtilTimeout: 15_000 });
 
@@ -28,6 +29,16 @@ const preview: Preview = {
   parameters: { a11y: { test: 'error' } },
   decorators: [
     (Story, context) => {
+      setFakeAdmitted(
+        context.parameters.admitted ?? [
+          'selling',
+          'purchases',
+          'agent_verification',
+          'personal_library',
+          'reading_progress',
+          'collections',
+        ],
+      );
       const theme = context.globals.theme === 'dark' ? 'dark' : 'light';
       const locale = String(context.globals.locale ?? 'en');
       setLocale(locale as (typeof locales)[number], { reload: false });

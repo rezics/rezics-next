@@ -1,3 +1,4 @@
+import { useOperation } from '../../kernel/exposure';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -530,6 +531,7 @@ export function Credits(props: Record<string, unknown>) {
 }
 
 export function CollectionList(props: Record<string, unknown>) {
+  const readable = useOperation('collection.get');
   const state = useOverview(props.id);
   if (!state) return null;
   const { value, section } = state;
@@ -568,11 +570,17 @@ export function CollectionList(props: Record<string, unknown>) {
           return (
             <li key={typeof collection.id === 'string' ? collection.id : index}>
               <span className={`${linkClass} ${linkColor} font-medium`}>
-                <Link
-                  href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                >
-                  {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
-                </Link>
+                {readable ? (
+                  <Link
+                    href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                  >
+                    {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
+                  </Link>
+                ) : typeof collection.title === 'string' && collection.title ? (
+                  collection.title
+                ) : (
+                  value.unlabelled
+                )}
               </span>
               {name && (
                 <span className="text-sm text-muted-foreground"> · {m.subject_collection_by({ name }, options)}</span>

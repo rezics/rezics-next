@@ -80,6 +80,8 @@ const platformDigest = profileDigest(platformProfile);
 type FixtureSubject = Subject & { cover?: unknown };
 
 type Fixtures = {
+  /** Mounted groups the demo viewer may use; omitted groups are closed. */
+  admitted?: string[];
   subjects: FixtureSubject[];
   properties: { id: string; labels: Record<string, string> }[];
   redirects: Record<string, string>;
@@ -482,10 +484,22 @@ async function selectRecording(
   return Object.values(recordings).find((recording) => recording.query === text && recording.filterType === type);
 }
 
+/** Set before rendering a story to preview its admitted controls. Defaults to closed. */
+let fakeAdmitted: string[] = [];
+export function setFakeAdmitted(admitted: string[]): void {
+  fakeAdmitted = [...admitted];
+}
+function exposureResponse(request: Request, admitted = fakeAdmitted): Response | undefined {
+  if (request.method !== 'GET' || new URL(request.url).pathname !== '/v1/platform/exposure') return;
+  return Response.json({ admitted: [...new Set(admitted)].sort() }, { headers: { 'cache-control': 'no-store' } });
+}
+
 /** Replay committed API bodies through the same fetch boundary used by fixture-backed tests. */
 export function createRecordedKernelFetch(recordings: Record<string, KernelRecording>): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
+    const exposure = exposureResponse(request);
+    if (exposure) return exposure;
     const recording = await selectRecording(request, new URL(request.url).pathname, recordings);
     if (!recording) return new Response(null, { status: 404 });
     return recordedResponse(recording);
@@ -937,6 +951,8 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const fixtures = moduleFixtures;
     const request = new Request(input, init);
+    const exposure = exposureResponse(request, given.admitted);
+    if (exposure) return exposure;
     const url = new URL(request.url);
     const moduleRecording = await answerFakeRoute('fixture', request, undefined, fixtures);
     if (moduleRecording) return recordedResponse(moduleRecording);

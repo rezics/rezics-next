@@ -1,3 +1,4 @@
+import { Exposure, useOperation } from '../kernel/exposure';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
@@ -101,8 +102,9 @@ function destinationCurrent(pathname: string, to: (typeof destinations)[number][
   return pathname === to;
 }
 
-function offeredDestinations(session: ShellSession) {
-  return destinations.filter((item) => !('signedIn' in item) || session === 'signed-in');
+function useOfferedDestinations(session: ShellSession) {
+  const admitted = useOperation('library_entry.list');
+  return destinations.filter((item) => !('signedIn' in item) || (session === 'signed-in' && admitted));
 }
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
@@ -142,12 +144,13 @@ function Logo() {
 }
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
   const { setOpenMobile } = useSidebar();
+  const offered = useOfferedDestinations(session);
   return (
     <nav aria-label={m.shell_navigation()} className="flex min-h-0 w-full flex-1 flex-col">
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {offeredDestinations(session).map((item) => {
+            {offered.map((item) => {
               const Icon = item.icon;
               return (
                 <SidebarMenuItem key={item.to}>
@@ -209,11 +212,12 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Sh
   );
 }
 function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
+  const offered = useOfferedDestinations(session);
   return (
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
         <ul className="flex flex-wrap gap-1">
-          {offeredDestinations(session).map((item) => {
+          {offered.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.to}>
@@ -408,18 +412,24 @@ function SessionControl({ session, csrfToken }: { session: ShellSession; csrfTok
           aria-labelledby="account-menu-button"
           className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/5 outline-none dark:ring-foreground/10"
         >
-          <a href={`/${locale}/library`} className={accountMenuLinkClass}>
-            <Library aria-hidden="true" className="size-4" />
-            {m.library_nav_library()}
-          </a>
-          <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
-            <Folders aria-hidden="true" className="size-4" />
-            {m.library_nav_collections()}
-          </a>
-          <a href={`/${locale}/following`} className={accountMenuLinkClass}>
-            <Users aria-hidden="true" className="size-4" />
-            {m.library_nav_following()}
-          </a>
+          <Exposure operation="library_entry.list">
+            <a href={`/${locale}/library`} className={accountMenuLinkClass}>
+              <Library aria-hidden="true" className="size-4" />
+              {m.library_nav_library()}
+            </a>
+          </Exposure>
+          <Exposure operation="collection.list">
+            <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
+              <Folders aria-hidden="true" className="size-4" />
+              {m.library_nav_collections()}
+            </a>
+          </Exposure>
+          <Exposure operation="follow.list">
+            <a href={`/${locale}/following`} className={accountMenuLinkClass}>
+              <Users aria-hidden="true" className="size-4" />
+              {m.library_nav_following()}
+            </a>
+          </Exposure>
           <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
             <Settings aria-hidden="true" className="size-4" />
             {m.settings_heading()}
