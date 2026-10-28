@@ -50,7 +50,6 @@ const searchHit = t.Object(
 const searchResponse = t.Object(
   {
     subjects: t.Array(searchHit),
-    total: t.Object({ value: t.Integer(), relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]) }, object),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
   },
@@ -62,12 +61,10 @@ const facetResponse = t.Object(
       t.Object(
         {
           property: t.String(),
-          relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]),
           values: t.Array(
             t.Object(
               {
                 value: t.String(),
-                count: t.Integer(),
                 labels: t.Record(t.String(), t.String()),
               },
               object,
@@ -77,7 +74,6 @@ const facetResponse = t.Object(
         object,
       ),
     ),
-    total: t.Object({ value: t.Integer(), relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]) }, object),
     as_of: t.String({ format: 'date-time' }),
   },
   object,
@@ -130,7 +126,13 @@ export function searchRoutes<App>(
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             sort: t.Optional(
-              t.Union([t.Literal('relevance'), t.Literal('name'), t.Literal('id'), t.Literal('collections')]),
+              t.Union([
+                t.Literal('relevance'),
+                t.Literal('name'),
+                t.Literal('id'),
+                t.Literal('collections'),
+                t.Literal('rating'),
+              ]),
             ),
             limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
             cursor: t.Optional(t.String()),

@@ -233,6 +233,12 @@ function nativeQuery(
 }
 
 async function resolveGeneration(search: OpenSearch, prefix: string, requested?: number): Promise<number> {
+  // A trusted service pin already came from fresh alias metadata. Native phase reads
+  // validate existence of that concrete index, including empty results.
+  if (requested !== undefined) {
+    subjectIndexName(prefix, requested);
+    return requested;
+  }
   let state: Awaited<ReturnType<typeof subjectGenerations>>;
   try {
     state = await subjectGenerations(search, prefix);

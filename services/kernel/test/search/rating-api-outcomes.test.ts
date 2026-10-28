@@ -55,7 +55,6 @@ type Hit = Pick<Subject, 'id' | 'type' | 'labels'> & {
 };
 type Page = {
   subjects: Hit[];
-  total: { value: number; relation: 'exact' | 'lower_bound' };
   next: string | null;
   as_of: string;
 };
@@ -81,11 +80,9 @@ function page(response: HttpResponse, limit = 2): Page {
   expect(Array.isArray(result.subjects)).toBe(true);
   expect(result.subjects.length).toBeLessThanOrEqual(limit);
   expect(new Set(result.subjects.map((subject) => subject.id)).size).toBe(result.subjects.length);
-  expect(result.total).toEqual({
-    value: expect.any(Number),
-    relation: expect.stringMatching(/^(exact|lower_bound)$/),
-  });
-  expect(Number.isInteger(result.total.value) && result.total.value >= 0).toBe(true);
+  expect(result).not.toHaveProperty('total');
+  expect(result).not.toHaveProperty('count');
+  expect(result).not.toHaveProperty('count_relation');
   expect(result.next === null || (typeof result.next === 'string' && result.next.length > 0)).toBe(true);
   expect(result.as_of).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
   expect(Number.isFinite(Date.parse(result.as_of))).toBe(true);

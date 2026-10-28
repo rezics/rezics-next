@@ -7,6 +7,8 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import type { Pool } from 'pg';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -24,7 +26,7 @@ import {
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
-import { subjectGenerations, subjectIndexName } from './indices.ts';
+import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import {
   countFacets,
@@ -34,6 +36,8 @@ import {
   type SearchPlan,
   type SubjectHit,
 } from './query.ts';
+import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
+import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
@@ -122,7 +126,7 @@ function validate(request: SearchRequest) {
   }
 
   const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
-  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections')
+  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
   const limit = request.limit === undefined ? 20 : request.limit;
@@ -153,6 +157,7 @@ export function createSearchService({
   client,
   prefix,
   source,
+  ratings,
   cursors,
   facetSample = 10_000,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
@@ -162,6 +167,7 @@ export function createSearchService({
   client: OpenSearch;
   prefix: string;
   source: SubjectSource;
+  ratings?: PublicRatingSource;
   cursors: KeyRing;
   release?: () => Promise<FilterRelease | null>;
   facetSample?: number;
@@ -203,6 +209,82 @@ export function createSearchService({
       });
     aliasRead = read;
     return read;
+  }
+
+  async function ratingEpoch(): Promise<PublicRatingEpoch> {
+    try {
+      if (!ratings) throw indexNotReady();
+      const value = await ratings.epoch();
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        value.questionId !== STANDARD_QUESTION_ID ||
+        value.populationId !== GLOBAL_CONTEXT.id ||
+        !(value.priorEpoch === null || (Number.isSafeInteger(value.priorEpoch) && value.priorEpoch > 0))
+      )
+        throw indexNotReady();
+      return { questionId: value.questionId, populationId: value.populationId, priorEpoch: value.priorEpoch };
+    } catch {
+      throw indexNotReady();
+    }
+  }
+
+  async function freshGeneration(): Promise<number> {
+    try {
+      const { active, generations } = await subjectGenerations(client, prefix);
+      if (active === null || !Number.isSafeInteger(active) || active < 1 || !generations.includes(active))
+        throw indexNotReady();
+      return active;
+    } catch {
+      throw indexNotReady();
+    }
+  }
+
+  async function ratingCandidates(hits: Awaited<ReturnType<typeof searchSubjects>>['hits'], rating: PublicRatingEpoch) {
+    const accepted = new Set<(typeof hits)[number]>();
+    const partitions = new Map<number, string[]>();
+    for (const hit of hits) partitions.set(hit.partition, [...(partitions.get(hit.partition) ?? []), hit.id]);
+    for (const [partition, ids] of partitions) {
+      let snapshot;
+      try {
+        snapshot = await ratings!.read(partition, [...new Set(ids)]);
+        if (
+          snapshot.partition !== partition ||
+          typeof snapshot.position !== 'bigint' ||
+          snapshot.position < 0n ||
+          !(snapshot.figures instanceof Map) ||
+          [...snapshot.figures.keys()].some((id) => !ids.includes(id))
+        )
+          throw indexNotReady();
+      } catch {
+        throw indexNotReady();
+      }
+      for (const hit of hits.filter((hit) => hit.partition === partition)) {
+        const raw = snapshot.figures.get(hit.id);
+        let figure;
+        if (snapshot.figures.has(hit.id)) {
+          try {
+            figure = normalizePublicRatingFigure(raw, {
+              questionId: rating.questionId,
+              populationId: rating.populationId,
+              subjectId: hit.id,
+            });
+          } catch {
+            // A stale or unproven candidate is consumed, never reranked into the other phase.
+            continue;
+          }
+        }
+        const eligible =
+          rating.priorEpoch !== null && figure?.priorEpoch === rating.priorEpoch && figure.score !== null;
+        if (
+          hit.ratingPhase === 'scored'
+            ? eligible && figure!.score === hit.sort[0]
+            : hit.ratingPhase === 'unscored' && !eligible
+        )
+          accepted.add(hit);
+      }
+    }
+    return accepted;
   }
 
   async function generationOf(hits: readonly SubjectHit[]): Promise<number> {
@@ -267,14 +349,44 @@ export function createSearchService({
       // scope; the request/principal binding and keyset payload stay unchanged.
       const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
       let inexact = false;
-      let cursor = request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
+      let cursor =
+        request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
       if (cursor && !cursor.ok && cursor.reason === 'invalid') {
-        cursor = decodeSearchCursor(cursors, lowerBoundBinding, request.cursor!, now);
+        cursor = await decodeSearchCursor(cursors, lowerBoundBinding, request.cursor!, now);
         inexact = cursor.ok;
       }
       if (cursor && !cursor.ok) {
         if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
         invalid('/cursor', 'invalid_format');
+      }
+
+      // Authenticate the original operation/request/viewer before reading dynamic rating metadata.
+      const rating = sort === 'rating' ? await ratingEpoch() : undefined;
+      let ratingPhase: RatingPhase | undefined;
+      let ratingGeneration: number | undefined;
+      if (rating) {
+        if (request.cursor !== undefined) {
+          const decoded = await decodeRatingCursor(
+            cursors,
+            inexact ? lowerBoundBinding : binding,
+            rating,
+            request.cursor,
+            now,
+          );
+          if (!decoded.ok) {
+            if (decoded.reason === 'restart' || decoded.reason === 'expired')
+              throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+          cursor = decoded;
+          ratingPhase = decoded.phase;
+        }
+        ratingGeneration = await freshGeneration();
+        if (cursor?.ok && cursor.generation !== ratingGeneration) throw new ProblemError('search_restart_required');
+        if (
+          (await indexRequest(() => readSubjectSortFormat(client, prefix, ratingGeneration!))) !== SUBJECT_SORT_FORMAT
+        )
+          throw indexNotReady();
       }
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
@@ -299,12 +411,12 @@ export function createSearchService({
         sort,
       };
       let after = cursor?.after;
-      let generation = cursor?.generation;
-      let total;
+      let generation = ratingGeneration ?? cursor?.generation;
       let overflow = false;
       let exhausted = false;
       const results: SearchHit[] = [];
       const shown: IndexedSubject[] = [];
+      const emitted = new Set<string>();
       // Observe every checked snapshot, including rejected candidates: current overflow can
       // precede its indexed marker, so an exact candidate total would also be unsafe there.
       const disclosureSource: SubjectSource = overflowProperties.length
@@ -323,11 +435,17 @@ export function createSearchService({
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
-          searchSubjects(client, prefix, { ...plan, size, ...(after === undefined ? {} : { after }) }),
+          searchSubjects(client, prefix, {
+            ...plan,
+            size,
+            ...(after === undefined ? {} : { after }),
+            ...(rating ? { rating, generation: ratingGeneration!, ...(ratingPhase ? { ratingPhase } : {}) } : {}),
+          }),
         );
-        total ??= page.total;
         overflow ||= page.overflow === true;
-        const currentGeneration = await generationOf(page.hits);
+        if (rating && (!Number.isSafeInteger(page.generation) || page.generation! < 1)) throw indexNotReady();
+        const currentGeneration = rating ? page.generation! : await generationOf(page.hits);
+        if (rating && page.hits.length && (await generationOf(page.hits)) !== currentGeneration) throw indexNotReady();
         if (generation !== undefined && generation !== currentGeneration)
           throw new ProblemError('search_restart_required');
         generation = currentGeneration;
@@ -340,15 +458,25 @@ export function createSearchService({
           ),
         );
         inexact ||= relationRejected === true;
-        const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+        const ratingAccepted = rating ? await ratingCandidates(page.hits, rating) : undefined;
+        const subjects = new Map(
+          passed
+            .filter(({ hit }) => !ratingAccepted || ratingAccepted.has(hit))
+            .map(({ hit, subject }) => [hit, subject]),
+        );
         let consumed = 0;
         for (const hit of page.hits) {
-          const subject = subjects.get(hit);
+          const subject = emitted.has(hit.id) ? undefined : subjects.get(hit);
           // Consume rejected lookahead too, stopping before the next undisclosed hit.
           if (results.length === limit && subject) break;
           after = hit.sort;
+          if (rating) {
+            if (hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
+            ratingPhase = hit.ratingPhase;
+          }
           consumed++;
           if (subject) {
+            emitted.add(hit.id);
             results.push(projectHit(subject, hitOptions));
             shown.push(subject);
           }
@@ -362,20 +490,34 @@ export function createSearchService({
         );
         results.forEach((hit, index) => (hit.facts = facts[index]!));
       }
+      // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
+      const as_of = await asOf(generation!);
+      if (rating) {
+        const currentRating = await ratingEpoch();
+        const currentGeneration = await freshGeneration();
+        if (
+          currentRating.questionId !== rating.questionId ||
+          currentRating.populationId !== rating.populationId ||
+          currentRating.priorEpoch !== rating.priorEpoch ||
+          currentGeneration !== generation
+        )
+          throw new ProblemError('search_restart_required');
+      }
+      const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
       return {
         subjects: results,
-        // Overflow and live rejections make candidate totals unsafe. Only disclosed hits
-        // on this response prove a count without scanning beyond the bounded pages.
-        total: overflow || inexact ? { value: results.length, relation: 'lower_bound' as const } : total!,
         next: exhausted
           ? null
-          : encodeSearchCursor(
-              cursors,
-              overflow || inexact ? lowerBoundBinding : binding,
-              { generation: generation!, after: after! },
-              now,
-            ),
-        as_of: await asOf(generation!),
+          : rating
+            ? await encodeRatingCursor(
+                cursors,
+                cursorBinding,
+                rating,
+                { generation: generation!, phase: ratingPhase!, after: after! },
+                now,
+              )
+            : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
+        as_of,
       };
     },
 
@@ -422,9 +564,8 @@ export function createSearchService({
       return {
         facets: counted.facets.map((facet, index) => ({
           property: facet.property,
-          relation: facet.relation,
           values: facet.values
-            .flatMap(({ value, count }): FacetValue[] => {
+            .flatMap(({ value }): Omit<FacetValue, 'count'>[] => {
               if (facet.property === 'type') {
                 const available = typeFacetLabels(current, value);
                 const labels =
@@ -435,15 +576,14 @@ export function createSearchService({
                         undefined,
                       )
                     : available;
-                return labels ? [{ value, count, labels }] : [];
+                return labels ? [{ value, labels }] : [];
               }
-              if (coded.has(facet.property)) return [{ value, count, labels: {} }];
+              if (coded.has(facet.property)) return [{ value, labels: {} }];
               const subject = subjects.get(value);
-              return subject ? [{ value, count, labels: project(subject, languages).labels }] : [];
+              return subject ? [{ value, labels: project(subject, languages).labels }] : [];
             })
             .slice(0, facets[index]!.size),
         })),
-        total: counted.total,
         as_of: await asOf(await indexRequest(aliasGeneration)),
       };
     },
