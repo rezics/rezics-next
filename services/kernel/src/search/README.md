@@ -724,8 +724,9 @@ Search hits, item facts, facet values and suggestions use the same label choice.
 
 ## Canonical index coverage producer
 
-Status: adopted specification with unavailable stubs in `coverage.ts` and staged native acceptance in
-`test/search/canonical-coverage.test.ts`. Formatting acceptance does not establish native runtime delivery.
+Status: adopted specification with unavailable stubs in `coverage.ts` and `coverage-projection.ts`,
+and staged native acceptance in `test/search/canonical-coverage.test.ts` and
+`test/search/coverage-projection.test.ts`. Formatting acceptance does not establish native runtime delivery.
 The existing source, indexer, lifecycle and default worker have not acquired this protocol through these types.
 The original raw-prefix and scope admission tests remain unchanged. Search owns derived per-home coverage,
 apply attempts and physical lineage; Semantic's current generation/pending/obligations remain the sole identity
@@ -905,6 +906,98 @@ No Number conversion or new native position API is needed.
    targets are never reused; automatic index creation must be disabled for those write targets and verified in
    deployment acceptance. Physical UUID checking alone does not prevent a late name-targeted write. This protocol
    introduces neither permanent public tombstone documents nor a silent change to external-version deletes.
+
+### Internal projection seam and pending store correction
+
+`coverage-projection.ts` exports exactly `createCoverageProjection(options: ProjectionOptions):
+Pick<SubjectProjectionCoordinator, 'run'>`. Its `run(incarnation: IndexIncarnation, partition: number):
+Promise<BatchResult>` is the internal producer entry. `coverage.ts` constructs it once and delegates `run`;
+`populate` and `certify` remain unavailable. All imports from the public coverage module into the internal
+module are type-only. The factory currently throws retryable `index_not_ready` with `Retry-After: 1`;
+it does not allocate, enroll, observe native identity, call the engine or claim readiness.
+
+The only new indexer option is optional `aroundApply?: SubjectApplyGuard`, exported from `indexer.ts`:
+`(partition: number, envelopes: readonly Envelope[], apply: () => Promise<void>) => Promise<void>`.
+It runs INSIDE the existing `projectBatch.apply`, before the existing anchor selection/source/listing/document/
+bulk body. The callback executes that same body. With no hook, the existing path remains unchanged.
+There is no other envelope read, parser, event filter, document builder or worker. Admission rejects on busy
+or unavailable state; it must never return successfully without applying. The callback is single-use and cannot
+start after the guard returns. Duplicate invocation rejects the batch even if the guard catches that error;
+omitting apply also rejects. A successful guard cannot advance the checkpoint before its apply promise settles.
+These checks prevent accidental double application; they supply no durable coverage proof themselves.
+
+The actual producer will compose `createSubjectIndexer` with one guard and the real `createCoverageStore`.
+All authoritative controlled helper/runner/worker writers must eventually use that composition. The coordinator
+retains its enrolled attempt outside the guard so that it can record the actual returned `projectBatch` result.
+No apply invocation plus `busy` means checkpoint snapshot contention, with no new slot. Guard admission contention
+must return busy without advancing core; the coordinator handles its own internal admission rejection. After a
+visible apply, returned `busy` means lost checkpoint CAS, and completes that exact visible attempt as `lost`.
+A returned stopped valid prefix records `stopped`; the invalid tail is never included. Exceptions during apply
+or checkpoint settlement propagate and retain the actual known state, never an invented CAS result. A failed
+checkpoint call after visibility leaves a visible/pending slot for actual reconciliation, not safely aborted work.
+
+The first parsed envelope is checkpoint+1: `read-log.sql` generates every position and `parseRows` stops at a
+missing/invalid envelope or epoch transition. Enroll one durable slot before invoking the shared body, with
+`from = { epoch: first.epoch, position: first.position - 1n }` and `through` from the actual last parsed envelope
+in that SAME epoch. Never reread a moving checkpoint to reconstruct this range. Empty batches do not invoke the
+guard and allocate nothing. Nonempty batches without selected anchors still enroll before the shared body,
+then settle as no effect after the actual checkpoint result; they do not fabricate a source tuple or fence.
+
+**Required minimal additive storage correction, before implementing this producer:** the current store cannot
+release an enrolled slot when no engine write was sent, or complete a no-anchor apply without a source/fence.
+`outcome(visible)` requires both, `complete` requires visible, and every noncompleted slot blocks replacement.
+Marking these cases ambiguous would permanently strand ordinary native-pending retries. Add terminal
+`ApplyAttempt.outcome` values `aborted` and `skipped`, and one home/lifecycle/attempt-ID CAS method:
+`settleNoWrite(guard: HomeGuard, attemptId: string, result:
+{ outcome: 'aborted'; checkpoint: 'pending' } |
+{ outcome: 'skipped'; checkpoint: 'advanced' | 'lost' | 'stopped' }): Promise<HomeCoverage | null>`.
+It accepts enrolled/pending only, retains null attempt source, preserves existing current/fence/verified/
+coveredThrough, and makes the slot replaceable without authorizing promotion. `aborted` means positive local
+knowledge that NO mutating engine request started; `skipped` means the shared body selected no actions and the
+actual core outcome is known. This is a proposed additive follow-up contract; this specification does not change
+`coverage.ts` types, `CoverageStore`, existing tests or frozen storage files. Storage implementation/tests must
+adopt it before the producer uses it. Also allow the already nullable `outcome(visible).fence` to remain null
+when the real source tuple is known but no committed structural event fence has been observed. Visible sink
+completion and core CAS settlement must be recordable without inventing that fence. Such a row cannot promote;
+retain an existing matching committed fence when available, and never replace it with a source snapshot head.
+This relaxes only storage observation validation, not the requirement for genuine certification provenance.
+A process crash before recording safe abort remains conservatively enrolled;
+no lease or timeout proves that a request was never sent.
+
+Native unavailability, source/listing/normalization failure or changed native metadata before ANY mutating engine
+request permits safe abort and retry. After any chunk may have been submitted, failure/response loss is ambiguous,
+even if earlier chunks were confirmed visible. A throwing transport cannot prove non-dispatch. Partial writes,
+failed refreshes and uncertain later chunks cannot be safely aborted. Analysis/read-only metadata requests do not
+constitute document writes. All actual source chunks stay <=256; every chunk and any conflict winner must become
+visible before settling the envelope range. A 409 requires a checked refresh of the physical target and successful
+shard results; accepting the conflict status alone is insufficient.
+
+Within admission, use unchanged real `readIdentityHome` observations before and after EACH actual native source
+snapshot, on released home observations; compare partition/epoch/home/generation and require current pending zero.
+If they differ, discard those actions before HTTP and safely abort if no earlier chunk was submitted. Retain the
+actual source snapshot position only as the external version. A current native tuple observed at snapshot head
+cannot supply the committed structural fence: only genuine parsed `SUBJECT_IDENTITY_CHANGED` envelopes with
+own-home original and closed lossless decimal generation supply event fences. Match a known fence to its exact
+generation; if that fence is not known yet, keep source/fence evidence unavailable and require later contiguous
+catch-up. Do not stamp a newer native generation onto earlier selected anchors, guess a fence from source head,
+or create a Source wrapper that purports to supply native identity. No native/core public signature changes and
+no database client/transaction held across source or HTTP I/O are needed.
+
+`test/search/coverage-projection.test.ts` specifies the real hook boundary and coordinator: durable slot observable
+before source/bulk, separate competing instances, unrefreshed real 409 winner, safe source failure versus actual
+applied/response-lost ambiguity, real CAS loss via a competing unguarded apply, empty/link-only batches, stopped
+valid prefixes at gaps/invalid data, all >256 native anchors, and structural mutation around a real snapshot.
+Setup observes an actual physical UUID and uses real allocation/register for **populating** lineage only; it
+never supplies verified fields, promotes lineage, calls a readiness callback or claims Scope ready. The shared
+fixture first validates real commands/Access/source/engine. Missing native identity or producer/storage code
+leaves these exact tests red; formatting and typechecks are not evidence of runtime completion.
+
+The smallest implementation surface is `coverage-projection.ts` plus the existing `indexer.ts` apply body for
+phase observations, bounded chunking and checked write visibility; `coverage.ts` already delegates. Dependencies
+are the actual CoverageStore including the correction above, unchanged native home observations and atomic
+`SUBJECT_IDENTITY_CHANGED` producer/catalogue, existing `projectBatch`, native source/listing and shared engine
+write helpers. Runner/work/helper composition, population/lifecycle, certificate reader and native identity
+implementation remain separate follow-ups; this seam implements none of them.
 
 ### Helper setup and implementation slices
 

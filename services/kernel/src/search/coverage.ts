@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { createCoverageProjection } from './coverage-projection.ts';
 import type { BatchResult } from '../events/log.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -90,11 +91,10 @@ function unavailable(): never {
 }
 
 /** Honest specification stub. Neither helper nor worker can mint provenance through this module yet. */
-export function createSubjectProjectionCoordinator(_options: ProjectionOptions): SubjectProjectionCoordinator {
+export function createSubjectProjectionCoordinator(options: ProjectionOptions): SubjectProjectionCoordinator {
+  const projection = createCoverageProjection(options);
   return {
-    async run(_incarnation, _partition) {
-      unavailable();
-    },
+    run: projection.run,
     async populate(_incarnation) {
       unavailable();
     },
