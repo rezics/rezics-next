@@ -131,8 +131,9 @@ test('acknowledged cover survives partial success across reopen', async () => {
     expect(f.liveCovers()).toEqual([older, acknowledged.candidate].sort());
     const partial = f.requests.find(
       (request) =>
-        request.commands.some((command) => isCover(command) && command.op === 'retract' && command.candidate === older) &&
-        request.commands.some((command) => isCover(command) && command.op === 'propose'),
+        request.commands.some(
+          (command) => isCover(command) && command.op === 'retract' && command.candidate === older,
+        ) && request.commands.some((command) => isCover(command) && command.op === 'propose'),
     )!;
     expect(partial.commands).toHaveLength(2);
 
@@ -145,9 +146,11 @@ test('acknowledged cover survives partial success across reopen', async () => {
     expect(retry.commands[0]).toMatchObject({ op: 'retract', candidate: older });
     expect(retry.commands.some((command) => command.key === originalProposal.key)).toBe(false);
     expect(
-      f.requests.flatMap((request) => request.commands).filter((command) =>
-        isCover(command) && command.op === 'retract' && command.candidate === acknowledged.candidate,
-      ),
+      f.requests
+        .flatMap((request) => request.commands)
+        .filter(
+          (command) => isCover(command) && command.op === 'retract' && command.candidate === acknowledged.candidate,
+        ),
     ).toHaveLength(0);
     expect(f.effects.filter((command) => command.key === originalProposal.key)).toEqual([originalProposal]);
     expect(f.liveCovers()).toEqual([acknowledged.candidate]);
