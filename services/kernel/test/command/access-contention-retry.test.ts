@@ -10,6 +10,7 @@ import { problemResponse } from '../../src/http/problem.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+const concurrentPool = createPool(databaseUrl);
 const partition = 15;
 const eventType = 'com.rezics.fixture.access-contention.v1';
 registerEventTypes({ [eventType]: Type.Object({ attempt: Type.Integer() }, { additionalProperties: false }) });
@@ -21,6 +22,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query('DROP TABLE public.access_contention_lock');
   await pool.query('DROP TABLE public.access_contention_effect');
+  await concurrentPool.end();
   await pool.end();
 });
 
@@ -54,7 +56,7 @@ test('a serialization failure raised through an Access query inside a command tr
       await accessQuery.query('SELECT value FROM public.access_contention_lock WHERE id=$1', [lockId]);
       if (!conflictInjected) {
         conflictInjected = true;
-        const concurrent = await pool.connect();
+        const concurrent = await concurrentPool.connect();
         try {
           await concurrent.query('BEGIN');
           await concurrent.query('UPDATE public.access_contention_lock SET value=value+1 WHERE id=$1', [lockId]);
