@@ -206,7 +206,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       context(),
       () => new GrantDeniedError(),
     );
-    const input = { unitAmountMinor: body.unitAmountMinor };
+    const input = { offerId: id, unitAmountMinor: body.unitAmountMinor };
     if (!Number.isSafeInteger(input.unitAmountMinor) || input.unitAmountMinor <= 0)
       throw new TypeError('Invalid offer');
     return runCommand(
