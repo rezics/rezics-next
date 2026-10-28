@@ -369,11 +369,17 @@ export function readNativeCollectionRawPage(
 ) {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new RangeError('Native source limit must be 1..100');
+  if (!['member', 'entry', 'copy', 'session', 'label', 'output'].includes(input.driver))
+    throw new TypeError('Invalid native source driver');
   keyInput(input.after, input.driver);
   return call(pool, input, async (work) =>
     readOnly(pool, input.deadline, async (client) => {
       const current = await currentSource(client, metadata, work);
-      if ((current.authority === 'curated') !== (input.driver === 'member') || input.driver === 'output')
+      if (
+        (current.authority === 'curated') !== (input.driver === 'member') ||
+        input.driver === 'output' ||
+        (current.builtinKind === 'state' && input.driver !== 'entry')
+      )
         throw new ProblemError('dependency_unavailable');
       const query = input.driver === 'member' ? membersQuery : factsQuery;
       const rows = (
