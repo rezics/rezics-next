@@ -1,6 +1,16 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
+import { invocationKey, readEstimate } from './run-estimates.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const directories: string[] = [];
@@ -23,6 +33,9 @@ async function startRootTest(
   marker: string;
   goalMarker: string;
   waitFile: string;
+  fixture: string;
+  estimateDirectory: string;
+  rerun: () => Run;
   holder?: Bun.Subprocess<'pipe', 'ignore', 'ignore'>;
 }> {
   mkdirSync(join(repository, '.temp'), { recursive: true });
@@ -33,6 +46,7 @@ async function startRootTest(
   const marker = join(directory, 'environment');
   const goalMarker = join(directory, 'goal-environment');
   const waitFile = join(directory, 'attempt-waits');
+  const estimateDirectory = join(directory, 'estimates');
   const fixture = join(testDirectory, 'fixture.test.ts');
   writeFileSync(
     fixture,
@@ -51,6 +65,7 @@ async function startRootTest(
     ...process.env,
     REZICS_STACK_LEASE_DIR: join(directory, 'lease'),
     REZICS_STACK_SLOTS: '1',
+    REZICS_TEST_ESTIMATES_DIR: estimateDirectory,
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
@@ -64,7 +79,7 @@ async function startRootTest(
     writeFileSync(
       ssh,
       `#!/usr/bin/env bun\n` +
-        `import { existsSync } from 'node:fs';\n` +
+        `import { existsSync, writeFileSync } from 'node:fs';\n` +
         `const script = process.argv.at(-1) ?? '';\n` +
         `const state = process.env.FAKE_CHECK_HOST_DIR!;\n` +
         `if (script.includes('PROCESSORS')) {\n` +
@@ -72,6 +87,10 @@ async function startRootTest(
         `  process.exit(0);\n` +
         `}\n` +
         `if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {\n` +
+        `  const estimate = script.match(/# REMOTE_CHECK_ESTIMATE_MS ([^\\r\\n]+)/)?.[1] ?? 'missing';\n` +
+        `  const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'missing';\n` +
+        `  writeFileSync(state + '/estimate', estimate);\n` +
+        `  writeFileSync(state + '/slot-class', slotClass);\n` +
         `  if (!existsSync(state + '/release-slot')) process.exit(75);\n` +
         `  console.log('SLOTS 1');\n` +
         `  process.stdin.on('end', () => process.exit(0));\n` +
@@ -94,7 +113,7 @@ async function startRootTest(
             identity: '/keys/fake',
             memoryMaxGiB: 8,
             cpuQuotaPercent: 800,
-            slots: 1,
+            slots: 2,
           },
         ],
       }),
@@ -123,21 +142,35 @@ async function startRootTest(
     await waitFor(() => slotIsHeld(directory));
   }
 
-  const child = Bun.spawn([process.execPath, 'test', fixture], {
-    cwd: repository,
-    env,
-    stdin: 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const output = { stdout: '', stderr: '' };
-  const drain = async (stream: ReadableStream<Uint8Array>, key: 'stdout' | 'stderr') => {
-    for await (const chunk of stream) output[key] += new TextDecoder().decode(chunk);
+  const launch = (): Run => {
+    const child = Bun.spawn([process.execPath, 'test', fixture], {
+      cwd: repository,
+      env,
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const output = { stdout: '', stderr: '' };
+    const drain = async (stream: ReadableStream<Uint8Array>, key: 'stdout' | 'stderr') => {
+      for await (const chunk of stream) output[key] += new TextDecoder().decode(chunk);
+    };
+    const done = Promise.all([drain(child.stdout, 'stdout'), drain(child.stderr, 'stderr')]);
+    const run = { child, output, done };
+    runs.push(run);
+    return run;
   };
-  const done = Promise.all([drain(child.stdout, 'stdout'), drain(child.stderr, 'stderr')]);
-  const run = { child, output, done };
-  runs.push(run);
-  return { run, directory, marker, goalMarker, waitFile, ...(holder === undefined ? {} : { holder }) };
+  const run = launch();
+  return {
+    run,
+    directory,
+    marker,
+    goalMarker,
+    waitFile,
+    fixture,
+    estimateDirectory,
+    rerun: launch,
+    ...(holder === undefined ? {} : { holder }),
+  };
 }
 
 async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
@@ -210,6 +243,46 @@ test('a root bun test routed to a check host records its slot wait in the attemp
   expect(await run.child.exited).toBe(0);
   await run.done;
   expect(readFileSync(waitFile, 'utf8').trim()).toMatch(/^\d+(?:\n\d+)*$/);
+}, 30_000);
+
+test('a root bun test never run before sends no estimate', async () => {
+  const { run, directory, estimateDirectory, fixture } = await startRootTest('specs', { routeToCheckHost: true });
+  const invocation = invocationKey(repository, repository, [fixture])!;
+  const hostEstimate = join(directory, 'fake-check-host/estimate');
+  await waitFor(() => existsSync(hostEstimate) && run.output.stderr.includes('every check slot is busy; waiting'));
+  expect(readFileSync(hostEstimate, 'utf8')).toBe('none');
+
+  writeFileSync(join(directory, 'fake-check-host/release-slot'), 'release');
+  expect(await run.child.exited).toBe(0);
+  await run.done;
+  const recorded = readEstimate(estimateDirectory, invocation);
+  expect(Number.isSafeInteger(recorded)).toBe(true);
+  expect(recorded! >= 0).toBe(true);
+}, 30_000);
+
+test("a repeated root bun test sends the previous run's held time as its estimate", async () => {
+  const { run, directory, estimateDirectory, fixture, rerun } = await startRootTest('specs', {
+    routeToCheckHost: true,
+  });
+  const invocation = invocationKey(repository, repository, [fixture])!;
+  const hostEstimate = join(directory, 'fake-check-host/estimate');
+  await waitFor(() => run.output.stderr.includes('every check slot is busy; waiting'));
+  writeFileSync(join(directory, 'fake-check-host/release-slot'), 'release');
+  expect(await run.child.exited).toBe(0);
+  await run.done;
+
+  const previousHeldTime = readEstimate(estimateDirectory, invocation);
+  expect(Number.isSafeInteger(previousHeldTime)).toBe(true);
+  const hostsFile = join(directory, 'fake-check-host/hosts.json');
+  const hosts = JSON.parse(readFileSync(hostsFile, 'utf8')) as { hosts: Array<Record<string, unknown>> };
+  hosts.hosts[0]!.slots = 1;
+  writeFileSync(hostsFile, JSON.stringify(hosts));
+  unlinkSync(hostEstimate);
+  const repeated = rerun();
+  expect(await repeated.child.exited).toBe(0);
+  await repeated.done;
+  expect(readFileSync(hostEstimate, 'utf8')).toBe(String(previousHeldTime));
+  expect(readFileSync(join(directory, 'fake-check-host/slot-class'), 'utf8')).toBe('short');
 }, 30_000);
 
 test("a root bun test waiting for a stack slot records its wait in the attempt's wait file", async () => {

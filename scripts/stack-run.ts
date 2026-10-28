@@ -37,6 +37,8 @@ export type StackRun = {
   /** Host slots the run holds, for a run whose peak memory exceeds a host's per-slot share. Default 1. */
   slots?: number;
   estimateMs?: number;
+  /** Called after the host slot is acquired and the remote command is about to start. */
+  started?: (host: string) => void;
   /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it stays local unless it
    * declares returned paths.
    */
@@ -196,6 +198,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
         },
         started: (host) => {
           started = true;
+          run.started?.(host);
           console.error(`stack-run: ${run.label} on ${host}`);
         },
       },
