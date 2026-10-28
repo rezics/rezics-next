@@ -119,3 +119,43 @@ or web gate was run. The test was preserved exactly as carried; the only retry e
 
 No cited contract required reference-project source for this composition-only surface; none was copied or ported.
 No files outside the declared paths were changed.
+
+## Origin correction attempt
+
+Implementation revision: `4275a054995cac831494c4d862d437baaa8b7a94`.
+`services/importer/src/credentials.ts` now sends the normalized configured Auth origin as the `Origin` header on both
+`POST /signin/key` and `POST /token`. `runImportCli` already validates and normalizes `--auth` to an HTTPS origin.
+The request body, assertion audience, manual redirect handling, bounds and response/error handling are unchanged.
+
+Checks run through the worker wrapper:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-native-auth.test.ts
+bun scripts/worker-check.ts -- bun test services/importer/tests/cli-credentials-outcomes.test.ts
+bun scripts/worker-check.ts -- env IMPORT_CLI_CREDENTIALS_DRIVER=/home/edge/projects/rezics/worktrees/37d683a4-21c9-4a9a-a5ae-bb35eddf67b2/services/importer/tests/cli-credentials-driver.ts bun test --timeout 30000 specs/imports-cli-credentials.test.ts
+bun scripts/worker-check.ts -- bun run typecheck
+```
+
+The native acceptance exited **1** after 1 test and 91 expectations. The first CLI invocation completed with code 0,
+and the test reached its actual database effect inspection. It then failed before the same-input reopen because its
+frozen query selects `retracted` directly from `semantic.candidate`; that table has no such column in
+`services/kernel/db/semantic/schema.sql`. Retraction is represented separately and projected by
+`services/kernel/src/semantic/candidates-read-provenance.sql`. The test cannot proceed to the reopen, grant denial or
+restoration assertions without changing the frozen test or expanding this credential-only production change. No
+Origin rejection, missing producer, or credential error-policy conflict occurred in this execution. The native later
+transitions therefore remain unexecuted evidence.
+
+The importer CLI outcome wrapper exited **1** because its nested suite reported
+`IMPORT_CLI_CREDENTIALS_DRIVER is required: bind production importer CLI with fake Auth and API`. Running the
+credential outcome suite directly with the explicit driver path produced the same missing-environment error; its
+cases did not execute. These results do not establish a credential-outcome pass.
+
+Root typecheck exited **0**. Logs:
+
+- Native: `.temp/goal/checks/worker-check-2026-10-28T19-57-40.428Z-5a4fb45d.log`
+- CLI outcome wrapper: `.temp/goal/checks/worker-check-2026-10-28T20-10-12.123Z-102a086a.log`
+- CLI outcome direct suite: `.temp/goal/checks/worker-check-2026-10-28T20-50-49.868Z-a34b58eb.log`
+- Root typecheck: `.temp/goal/checks/worker-check-2026-10-28T20-21-20.807Z-71f3aa11.log`
+
+The implementation commit contains only the credential header change. No test, Auth policy, API behavior or frozen
+file was changed. Main or promotion evidence is not claimed.
