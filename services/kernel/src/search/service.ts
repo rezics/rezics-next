@@ -240,8 +240,13 @@ export function createSearchService({
     }
   }
 
-  async function ratingCandidates(hits: Awaited<ReturnType<typeof searchSubjects>>['hits'], rating: PublicRatingEpoch) {
-    const accepted = new Set<(typeof hits)[number]>();
+  async function ratingCandidates(
+    hits: Awaited<ReturnType<typeof searchSubjects>>['hits'],
+    rating: PublicRatingEpoch,
+    positions: ReadonlyMap<number, bigint>,
+  ) {
+    // Disclosure returns these same candidate objects through its smaller Hit interface.
+    const accepted = new Set<object>();
     const partitions = new Map<number, string[]>();
     for (const hit of hits) partitions.set(hit.partition, [...(partitions.get(hit.partition) ?? []), hit.id]);
     for (const [partition, ids] of partitions) {
@@ -252,6 +257,7 @@ export function createSearchService({
           snapshot.partition !== partition ||
           typeof snapshot.position !== 'bigint' ||
           snapshot.position < 0n ||
+          snapshot.position !== positions.get(partition) ||
           !(snapshot.figures instanceof Map) ||
           [...snapshot.figures.keys()].some((id) => !ids.includes(id))
         )
@@ -419,19 +425,26 @@ export function createSearchService({
       const emitted = new Set<string>();
       // Observe every checked snapshot, including rejected candidates: current overflow can
       // precede its indexed marker, so an exact candidate total would also be unsafe there.
-      const disclosureSource: SubjectSource = overflowProperties.length
-        ? {
-            async read(partition, ids) {
-              const snapshot = await source.read(partition, ids);
-              overflow ||= snapshot.subjects.some((subject) =>
-                subject.relationFacetOverflow?.some((property) => overflowProperties.includes(property)),
-              );
-              return snapshot;
-            },
-            count: (partition) => source.count(partition),
-            ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
-          }
-        : source;
+      const sourcePositions = new Map<number, bigint>();
+      const disclosureSource: SubjectSource =
+        overflowProperties.length || rating
+          ? {
+              async read(partition, ids) {
+                const snapshot = await source.read(partition, ids);
+                if (rating) {
+                  const previous = sourcePositions.get(partition);
+                  if (previous !== undefined && previous !== snapshot.position) throw indexNotReady();
+                  sourcePositions.set(partition, snapshot.position);
+                }
+                overflow ||= snapshot.subjects.some((subject) =>
+                  subject.relationFacetOverflow?.some((property) => overflowProperties.includes(property)),
+                );
+                return snapshot;
+              },
+              count: (partition) => source.count(partition),
+              ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
+            }
+          : source;
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
@@ -449,6 +462,7 @@ export function createSearchService({
         if (generation !== undefined && generation !== currentGeneration)
           throw new ProblemError('search_restart_required');
         generation = currentGeneration;
+        sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
           checkHits(
             disclosureSource,
@@ -458,7 +472,7 @@ export function createSearchService({
           ),
         );
         inexact ||= relationRejected === true;
-        const ratingAccepted = rating ? await ratingCandidates(page.hits, rating) : undefined;
+        const ratingAccepted = rating ? await ratingCandidates(page.hits, rating, sourcePositions) : undefined;
         const subjects = new Map(
           passed
             .filter(({ hit }) => !ratingAccepted || ratingAccepted.has(hit))

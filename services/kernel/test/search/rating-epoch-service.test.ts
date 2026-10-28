@@ -79,12 +79,15 @@ test('stale, wrong grain and newly eligible unscored figures are consumed withou
 });
 
 test('bounded refill stops after three rounds', async () => {
-  const d = await deployment(Array.from({ length: 220 }, (_, i) => ({ subject: book(i + 1), score: 8 })));
+  const d = await deployment(Array.from({ length: 620 }, (_, i) => ({ subject: book(i + 1), score: 8 })));
   // All indexed scores are stale; no synthesized current order or unbounded fill is permitted.
   d.figures.clear();
   const result = await d.search({ sort: 'rating', limit: 100 });
   expect(result.subjects).toEqual([]);
-  expect(d.counts().sizes.filter((n) => n > 0).length).toBeLessThanOrEqual(6);
+  expect(d.counts().sizes).toEqual([200, 0, 200, 0, 200, 0]);
+  expect(d.counts().aliasCalls).toBe(2);
+  expect(d.counts().freshnessCalls).toBe(1);
+  expect(result.next).toBeString();
   expect(d.counts().sizes.every((n) => n <= 200)).toBe(true);
   expect(d.counts().epochCalls).toBe(2);
 });
@@ -122,4 +125,12 @@ test('signed malformed phase is invalid and lower-bound operation continues with
   const result = await d.search({ sort: 'rating', limit: 1, cursor });
   expect(result.subjects.map((x) => x.id)).toEqual([book(2).id]);
   expect(result).not.toHaveProperty('total');
+});
+
+test('figures from a different native partition publication cannot justify current source disclosure', async () => {
+  const d = await deployment([{ subject: book(1), score: 8 }]);
+  d.onRead(async () => {
+    d.fake.advance(10);
+  });
+  await expect(d.search()).rejects.toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
 });

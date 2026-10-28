@@ -4,7 +4,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
-import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
+import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createSearchService, type SearchRequest } from '../../src/search/service.ts';
 import type { PublicRatingEpoch, PublicRatingFigure, PublicRatingSource } from '../../src/search/rating-source.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
@@ -74,7 +74,7 @@ export async function deployment(
       if (sourceFailure) throw new Error('native figures unavailable');
       return {
         partition,
-        position: 1n,
+        position: (await fake.read(partition, [])).position,
         figures: new Map(ids.flatMap((id) => (figures.has(id) ? [[id, figures.get(id)!]] : []))),
       };
     },
@@ -97,12 +97,12 @@ export async function deployment(
     await native.request('PUT', `/${index}/_mapping`, {
       properties: { rating_score: { type: 'double' }, rating_prior_epoch: { type: 'long' } },
     });
+    const lines: string[] = [];
     for (const { subject, score, epoch: indexedEpoch = 1 } of entries) {
       fake.put(subject);
-      await native.request(
-        'PUT',
-        `/${index}/_doc/${subject.id}`,
-        {
+      lines.push(
+        JSON.stringify({ index: { _index: index, _id: subject.id } }),
+        JSON.stringify({
           id: subject.id,
           partition: 10,
           security_revision: 1,
@@ -110,11 +110,11 @@ export async function deployment(
           name_sort: subject.labels[0]!.value.toLowerCase(),
           search_text: ['book'],
           ...(score === undefined ? {} : { rating_score: score, rating_prior_epoch: indexedEpoch }),
-        },
-        { query: { refresh: 'true' } },
+        }),
       );
       if (score !== undefined) figures.set(subject.id, figure(subject.id, score, indexedEpoch));
     }
+    if (lines.length) await native.bulk(`${lines.join('\n')}\n`, { query: { refresh: 'wait_for' } });
     await native.request('POST', '/_aliases', {
       actions: [
         ...(generation === 1 ? [] : [{ remove: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }]),
@@ -198,7 +198,8 @@ export async function deployment(
 }
 afterAll(async () => {
   for (const prefix of prefixes) {
-    await native.request('DELETE', `/${prefix}subjects-g*`);
+    for (const generation of (await subjectGenerations(native, prefix)).generations)
+      await native.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
     for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await native.request('DELETE', `/_scripts/${prefix}${name}`).catch(() => undefined);
   }
