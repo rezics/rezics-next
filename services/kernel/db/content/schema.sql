@@ -67,10 +67,10 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'Authored document identity must survive erasure' USING ERRCODE = '23514';
   END IF;
-  IF ROW(NEW.route, NEW.id, NEW.subject, NEW.candidate, NEW.revision, NEW.author_account_id, NEW.body_sha256,
+  IF ROW(NEW.route, NEW.id, NEW.subject, NEW.anchor, NEW.candidate, NEW.revision, NEW.author_account_id, NEW.body_sha256,
          NEW.licence, NEW.language, NEW.recorded_xid, NEW.recorded_at)
      IS DISTINCT FROM
-     ROW(OLD.route, OLD.id, OLD.subject, OLD.candidate, OLD.revision, OLD.author_account_id, OLD.body_sha256,
+     ROW(OLD.route, OLD.id, OLD.subject, OLD.anchor, OLD.candidate, OLD.revision, OLD.author_account_id, OLD.body_sha256,
          OLD.licence, OLD.language, OLD.recorded_xid, OLD.recorded_at)
      OR OLD.availability <> 'available' OR NEW.availability <> 'erased' OR NEW.body IS NOT NULL THEN
     RAISE EXCEPTION 'Authored documents are immutable except explicit erasure' USING ERRCODE = '23514';
@@ -534,6 +534,8 @@ CREATE TABLE content.authored_field (
     availability text NOT NULL,
     recorded_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
     recorded_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    anchor uuid,
+    CONSTRAINT authored_field_anchor_route_check CHECK (((anchor IS NULL) OR (route = ((get_byte(uuid_send(anchor), 10) * 256) + get_byte(uuid_send(anchor), 11))))),
     CONSTRAINT authored_field_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT authored_field_body_digest CHECK ((body_sha256 = sha256(body))),
     CONSTRAINT authored_field_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),

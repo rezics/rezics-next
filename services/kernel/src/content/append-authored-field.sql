@@ -1,5 +1,5 @@
 INSERT INTO content.authored_field
-  (route, id, subject, candidate, revision, author_account_id, body, body_sha256, licence, language, availability)
+  (route, id, subject, anchor, candidate, revision, author_account_id, body, body_sha256, licence, language, availability)
 VALUES
-  (:route::integer, :id::uuid, :subject::uuid, :candidate::uuid, :revision::bigint, :author_account_id::uuid,
+  (:route::integer, :id::uuid, :subject::uuid, :anchor::uuid, :candidate::uuid, :revision::bigint, :author_account_id::uuid,
    :body::bytea, :body_sha256::bytea, :licence::text, :language::text, 'available');

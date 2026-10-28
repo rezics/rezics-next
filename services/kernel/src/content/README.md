@@ -362,8 +362,11 @@ and time. Consumers key on `takedownId` and never assume one period per tuple.
 
 An authored field document stores the editor's canonical document body, SPDX licence and BCP 47 language in
 `content.authored_field`, beside the subject's route. Its row binds the body to the semantic subject, candidate and
-revision, and records the acting account as `author_account_id`. `appendAuthoredField` runs only inside the current
-authorized subject command and returns the document `{ id, digest }` for semantic to store as the statement value.
+revision, and records the acting account as `author_account_id`. `appendAuthoredField` requires a current execute command:
+without an anchor, its authorization resource must be the subject; with an anchor, the anchor must carry the subject's
+route and be declared by the command's live parent creation, without comparing the authorization resource to the subject.
+The row stores the declared anchor, or null for an anchorless append. It returns the document `{ id, digest }` for semantic
+to store as the statement value.
 The semantic command emits `com.rezics.content.authored-field.created.v1` with the document, subject, candidate and author IDs
 in the same transaction. Append also initializes the `content.authored_field.owner` Access role for the author at that
 command's authorization time; it carries `document:erase`.

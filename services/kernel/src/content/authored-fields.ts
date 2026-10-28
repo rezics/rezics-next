@@ -9,6 +9,7 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
+import { creationDeclares } from '../access/index.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError } from './commands.ts';
@@ -21,6 +22,8 @@ import type { RequestContext } from './model.ts';
 
 export type AuthoredFieldInput = Readonly<{
   subject: string;
+  /** UUID of the revision anchor declared by semantic in the current creation manifest. */
+  anchor?: string;
   /** Allocated semantic candidate UUID, scoped to the subject partition. */
   candidate: string;
   /** Actual positive semantic revision allocated before the field is appended. */
@@ -41,6 +44,7 @@ class Unchanged extends Error {}
 export type AuthoredFieldView = AuthoredFieldResult &
   Readonly<{
     subject: string;
+    anchor: string | null;
     candidate: string;
     revision: number;
     authorAccountId: string;
@@ -50,7 +54,9 @@ export type AuthoredFieldView = AuthoredFieldResult &
     body: Buffer | null;
   }>;
 
-/** Append in semantic's authorized subject command. The caller stores { id, digest } in its statement and emits the event. */
+/** Append in semantic's authorized subject or declared-anchor creation command.
+ * The caller stores { id, digest } in its statement and emits the event.
+ */
 export async function appendAuthoredField(
   tx: CommandTransaction,
   input: AuthoredFieldInput,
@@ -61,8 +67,9 @@ export async function appendAuthoredField(
     throw new RangeError('Authored subject must belong to the current command partition');
   if (
     command.authorization?.mode !== 'execute' ||
-    command.authorization.resource.id !== input.subject ||
-    command.authorization.resource.route !== route
+    (input.anchor === undefined
+      ? command.authorization.resource.id !== input.subject || command.authorization.resource.route !== route
+      : routeOf(input.anchor) !== route || !creationDeclares(tx, { route, id: input.anchor }))
   )
     throw new TypeError('Authored document requires current subject command authorization');
   if (routeOf(input.candidate) !== route) throw new RangeError('Authored candidate must carry the subject route');
@@ -103,6 +110,7 @@ export async function appendAuthoredField(
     route,
     id,
     subject: input.subject,
+    anchor: input.anchor ?? null,
     candidate: input.candidate,
     revision: input.revision,
     author_account_id: authorAccountId,
@@ -111,9 +119,8 @@ export async function appendAuthoredField(
     licence: document.licence,
     language: input.language,
   });
-  // The row's ID is allocated here, after the caller's semantic command has
-  // authorized this exact subject. Its owner role is installed in the same
-  // transaction and becomes effective at the command's authoritative T.
+  // The row's ID is allocated here after admission. Its owner role is installed
+  // in the same transaction and becomes effective at the command's authoritative T.
   const grantRows = await initializeAuthoredFieldOwner.run(tx, {
     route,
     resource_id: id,
@@ -202,6 +209,7 @@ export async function readAuthoredField(
     id: row.id,
     digest: row.digest,
     subject: row.subject,
+    anchor: row.anchor,
     candidate: row.candidate,
     revision: row.revision,
     authorAccountId: row.author_account_id,
