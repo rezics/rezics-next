@@ -31,7 +31,18 @@ type RankUpdate = {
   hot_rank: number;
 };
 
-/** Lemmy's rank formula, used with last activity for active and creation for hot. */
+/**
+ * Based on https://github.com/LemmyNet/lemmy, tag 0.19.21,
+ * crates/db_schema/replaceable_schema/utils.sql: r.hot_rank. With h = age in hours,
+ * Lemmy uses log10(max(2, score + 2)) / (h + 2)^1.8 for 0 < h < 168, otherwise 0.
+ * REZICS uses last activity for active and creation for hot, clamps h to 0, and
+ * retains the positive rank at exactly 168 h. Server transaction times make h <= 0
+ * an instant creation or clock skew; ranking those as newest avoids sinking new
+ * threads. The single-instant 168 h difference is retained to agree with the SQL
+ * function without a migration. Any future path accepting external creation or
+ * activity times must clamp them to the transaction time when writing: ranking
+ * trusts these times.
+ */
 export function lemmyActiveRank(score: number, activityAt: Date, at: Date): number {
   if (!Number.isInteger(score) || !Number.isFinite(activityAt.getTime()) || !Number.isFinite(at.getTime()))
     throw new TypeError('Invalid active rank input');
