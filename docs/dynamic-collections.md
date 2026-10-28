@@ -94,7 +94,7 @@ bound including engine work; otherwise prepare an indexed result in bounded step
 422 before enumeration. Typed parameterized range/qualifier SQL may execute the shared meaning. Existing integrated shelf-index helpers may supply
 bounded facts as adapters, but they do not own Collection membership or establish a second list authority. The Collection layer does
 not define a second property whitelist, copy private facts into Search, or add a private catalogue-holder directory. Unsupported
-filter or sort shapes return `422 unsupported_query`; they never fall back to an unadmitted request-time scan, cross-partition SQL join, or full-account
+filter or sort shapes return `422 unsupported_query`; they never fall back to an unadmitted request-time scan, [cross-partition SQL join](architecture.md#data-access), or full-account
 sort. Bounded retained preparation follows the shared contract. A sort must have a shared native order key and a stable subject-ID tiebreaker. Layout (`grid`, `list`, or `table`) is
 presentation state; it does not change membership, authorization, or server paging.
 

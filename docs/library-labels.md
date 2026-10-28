@@ -124,7 +124,7 @@ even when empty, without a new `GET /:id` or catalogue walk.
 `reading_progress` before private SQL. Parent metadata, assignment candidates and the <=100 subject-ID entry/session
 batch share one owner-partition repeatable-read snapshot. Release that checkout before the existing per-partition
 standard subject summaries. Use normal native authorization before receipt lookup, without transport pre-reads,
-cross-partition SQL, per-item HTTP, profile lookup/acceptance or a second list engine.
+[cross-partition SQL](architecture.md#data-access), per-item HTTP, profile lookup/acceptance or a second list engine.
 
 Every request first validates strict JSON against a closed, typed schema. Unknown fields, duplicate JSON object keys,
 string-to-number/boolean coercion, malformed IDs, and out-of-range revisions are rejected. Mutations require the

@@ -25,5 +25,16 @@ creating a privileged parallel write path. Test fixtures are not product write p
 Definitions own semantic vocabulary. Product modules own generic behaviour. Presentation configures how those
 capabilities appear. A value's representation does not determine its semantic meaning or authority.
 
+## Data access
+
+Writes are single-partition commands. A read may not join rows across partitions.
+
+A batched key read is not a join and is admitted for reads. It uses one statement per row kind, selecting by full
+keys with `(route, id) = ANY(keys)`, with no join between partitions. All of a read's batched statements run in one
+`REPEATABLE READ` snapshot per database, grouped by the database that holds the partitions. Partition rows are read
+the same way. A moved partition answers as it does for a single-partition read.
+
+Statement bounds for these reads are stated per database.
+
 First-public-scope boundaries live in [scope](scope.md). Detailed behaviour lives in the owning product document or
 module README.

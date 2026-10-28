@@ -302,7 +302,7 @@ owner. See [lifecycle.ts][lifecycle], [operator.ts][operator] and [Organization 
 Permission evaluation starts from the actor's membership inverse on the actor anchor, which is a superset,
 never membership authority. Join reserves the inverse first; leave removes authoritative membership first and
 the inverse last, through durable work. Only resource-matched organizations or Realms are verified through their
-own anchored current-membership reads, never a cross-partition join. Missing inverse coverage or a missing Realm
+own anchored current-membership reads, never a [cross-partition join](architecture.md#data-access). Missing inverse coverage or a missing Realm
 adapter fails closed. See [membership-inverse.ts][membership-inverse], [membership-work.ts][membership-work] and
 [permission.ts][permission]; [Membership work][access-membership] describes the Realm port.
 
