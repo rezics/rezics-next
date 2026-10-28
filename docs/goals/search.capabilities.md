@@ -18,13 +18,24 @@ Commands below identify existing evidence entry points for later owner checks; t
 Exact original titles and declared counts are in [the suite ledger](#original-suite-ledger).
 
 Every six-cell table covers public/private/unlisted source visibility and anonymous, editor, owner (Alice), other
-owner (Bob), delegated actor, unscoped actor, suspended-valid bearer and revoked/invalid credentials. Existing
-SearchDriver exposes only anonymous/editor/acceptor/suspended; PagesDriver adds curator instead of acceptor.
+owner (Bob), delegated actor, unscoped actor, the suspended account's pre-suspension bearer and revoked/invalid
+credentials. Existing SearchDriver exposes only anonymous/editor/acceptor/suspended; PagesDriver adds curator instead
+of acceptor.
 The other personas require real native fixture extensions; a public grant cannot stand in for them. Public output
 never borrows an editor's private authority. A grant on a Collection or Zone grants nothing in its sources.
-Bans beat independent grants. Suspended-valid means `403 account_suspended`, including public/unlisted reads;
-invalid/revoked credentials are distinct `401` outcomes and cannot downgrade to anonymous. These current rulings
-supersede the research report's earlier undecided ban variant, without editing frozen tests.
+Bans beat independent grants. The native suspended fixture is created by `createPersonas` in
+[personas.ts](../../services/kernel/test/support/personas.ts): it receives an ordinary Auth bearer, then the
+fixture suspends the account through the native account command ([suspension](../../services/kernel/src/access/suspension.ts),
+[authentication floor](../../services/kernel/src/access/authenticate.ts)). That pre-suspension bearer is rejected as
+`401 invalid_credentials` with `WWW-Authenticate: Bearer error="invalid_token"`; revoked credentials remain a
+separate 401 control, and neither downgrades to anonymous. Auth mints active accounts only; correct-password
+sign-in for a suspended account returns `403 ACCOUNT_SUSPENDED` without a session, while wrong-password sign-in
+remains ordinary 401. Accounts owns that sign-in producer case; its native acceptance receipt is pending. A kernel
+`403 account_suspended` for a hypothetical verified suspended bearer is defensive only. Search and Pages drivers
+bind the fixture's real suspended account ([Search supervisor](../../services/kernel/test/search/support/outcome-supervisor.ts)
+via the [Semantic outcome driver](../../services/kernel/test/semantic/outcome-driver.ts), and
+[Pages outcome driver](../../services/kernel/test/presentation/outcome-driver.ts)); see their outcome suites for
+current API evidence. These rulings supersede the earlier valid-suspended-persona interpretation.
 
 Shared producer/consumer boundaries: Semantic owns released meanings, complete selected-public projections,
 original/terminal identity and Zones; Imports owns reviewed provider mappings; Commerce owns common Collections,
@@ -244,7 +255,8 @@ Realm population belongs to Content, not seeded public score rows.
 **Frozen scenarios and binding:** RETAIN [native rating outcomes](../../services/kernel/test/search/native-rating-outcomes.test.ts),
 “real native votes publish Global scores through the default worker, relay and Search with current disclosure”
 (one declared case). It covers actual votes, threshold fall5→4→0 while paused, prior growth/end, zero ahead of null,
-name/id ties, order, old cursor epoch/generation409, tamper, hide/takedown, override rejection and suspended403.
+name/id ties, order, old cursor epoch/generation409, tamper, hide/takedown, override rejection and the suspended
+pre-suspension bearer 401.
 RETAIN four [rating API outcomes](../../services/kernel/test/search/rating-api-outcomes.test.ts):
 “Global rating null ties page by normalized name then id for anonymous and editor; suspended fails”; “Real signed
 rating cursors bind the entire request and principal and reject a reconciled generation change”; “Current hide and
@@ -551,7 +563,9 @@ Native command: `bun run --cwd services/kernel check test/presentation/outcomes.
   figures; retain the existing Global vote-to-worker-to-HTTP suite in full. Search admits its existing public sort
   and omits totals, including rating; internal accounting never becomes public totals.
 - Search/Commerce/Performance reconcile the frozen dynamic empty-success scenario with useful-page requirements
-  through the owning acceptance process. Search/Accounts reconcile original suspended401 with valid suspended403.
+  through the owning acceptance process. Accounts still owes its native correct-password suspended sign-in
+  acceptance receipt; Search's native old-bearer cases are 401 and the kernel verified-suspended 403 remains
+  defensive only.
   Search owns reconciliation of original exact-total/lower-bound assertions with current no-public-total transport;
   source contributor accounting remains useful internal evidence. Frozen files stay untouched in this inventory.
 - Search/Content/Semantic/Web adopt the context-bearing Source/presentation boundary and connect existing native

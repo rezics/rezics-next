@@ -134,8 +134,16 @@ uses the existing transport: complete common page 200, explicit preparation 202 
 503 Problem + Retry-After without cursor. No partial common page. Web follows at most four 202 steps then renders
 private/no-store preparing with continuation retained. Progress names retained preparation/current generation,
 never cached permissions, per-leaf verdicts or a client result vector. No schema/codec/status change is selected.
-Suspended valid bearers receive 403 `account_suspended`, including public/unlisted reads; missing/invalid/revoked
-credentials retain 401 where required and never downgrade silently.
+The native `createPersonas` suspended credential is a pre-suspension bearer: Accounts suspension advances the
+authentication floor before session revocation, so Search and Pages reject that old bearer with 401
+`invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"`; it never downgrades to anonymous. Auth
+mints active accounts only. A correct-password sign-in for a suspended account returns 403 `ACCOUNT_SUSPENDED`
+without issuing a session, while a wrong password remains ordinary 401; Accounts owns that native producer case,
+pending its native acceptance receipt. Kernel 403 `account_suspended` for a hypothetical verified suspended bearer
+is a defensive branch, not the native suspended-persona outcome. The canonical
+[personas fixture](../../test/support/personas.ts) provisions and suspends the account natively; Search binds it
+through its [supervisor](../../test/search/support/outcome-supervisor.ts) and [Semantic outcome driver](../../test/semantic/outcome-driver.ts),
+while Pages binds it through the [Pages outcome driver](../../test/presentation/outcome-driver.ts).
 
 The [integration audit](../../../../docs/research/semantic-integration-audit-zone-composition.md) establishes the
 resource substrate, not actual membership/page/default execution or Zone-specific withholding/purge/account/

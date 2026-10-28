@@ -403,12 +403,12 @@ test('publishing a profile needs the presentation grant', async () => {
   problem(await publish('editor', submitted), 403, 'forbidden');
   const suspendedPublish = await publish('suspended', submitted);
   const suspendedCreate = await write('suspended', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } });
-  expect([401, 403]).toContain(suspendedPublish.status);
+  expect(suspendedPublish.status).toBe(401);
   expect(suspendedPublish.status).toBe(suspendedCreate.status);
-  expect(suspendedPublish.body.code).toEqual(expect.any(String));
-  expect(suspendedPublish.body.code).toBe(suspendedCreate.body.code);
-  problem(suspendedPublish, suspendedPublish.status, String(suspendedPublish.body.code));
-  problem(suspendedCreate, suspendedCreate.status, String(suspendedCreate.body.code));
+  problem(suspendedPublish, 401, 'invalid_credentials');
+  problem(suspendedCreate, 401, 'invalid_credentials');
+  expect(suspendedPublish.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+  expect(suspendedCreate.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
   expect(await active()).toEqual(before);
   const digest = publishedDigest(await publish('curator', submitted), 201);
   expect(digest).not.toBe(before.digest);

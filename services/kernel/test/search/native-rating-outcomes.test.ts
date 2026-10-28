@@ -213,8 +213,10 @@ test('real native votes publish Global scores through the default worker, relay 
         expect(response.body.errors).toContainEqual({ pointer: `/${key}`, code: 'unknown_field' });
       }
     }
-    // Suspended has a real bearer and current account state; do not accept 401.
-    problem(await search({}, 'suspended'), 403, 'account_suspended');
+    // The native persona bearer predates suspension, so the authentication floor rejects it.
+    const suspended = await search({}, 'suspended');
+    problem(suspended, 401, 'invalid_credentials');
+    expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
 
     // Freeze an exact m=0, C=5 prior at fifty genuine counted answers. Every
     // asynchronous apply has a real source event; reuse voters across subjects.
