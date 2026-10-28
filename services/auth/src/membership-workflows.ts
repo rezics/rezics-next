@@ -60,7 +60,10 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
       async (...args: A) => {
         try {
           return await action(...args);
-        } catch {
+        } catch (error) {
+          console.error(
+            new Error(`Membership workflow step failed: ${name} (workflow ${DBOS.workflowID})`, { cause: error }),
+          );
           throw new Error(`Membership workflow step failed: ${name}`);
         }
       },
