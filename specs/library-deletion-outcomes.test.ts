@@ -152,16 +152,26 @@ test('authorized same-key delete and restore replay once but current revocation 
   expect(await driver.inspect(f)).toEqual(undone);
 });
 
-test('exact kernel day-thirty rejects undo even when a legal hold has prevented purge', async () => {
+test('exact kernel day-thirty rejects undo while real purge is parked after durable capture for every kind', async () => {
   for (const kind of kinds) {
     const f = await driver.seed(kind);
+    const pause = await driver.holdNextPurge('after-durable-capture');
     const tombstone = await deleted(f);
-    await driver.legalHold(tombstone, true);
+    await pause.reached;
     await driver.setTime(tombstone.restoreUntil!);
+    expect(await driver.now()).toBe(tombstone.restoreUntil);
     const before = await driver.inspect(f);
+    expect(before.target).not.toBeNull();
+    expect(before.rows.some((row) => row.id === f.target.id)).toBe(true);
     expect((await driver.restore('owner', tombstone, 'too-late')).response.status).toBe(409);
-    expect((await driver.inspect(f)).target).toEqual(before.target);
+    const after = await driver.inspect(f);
+    expect(after.target).toEqual(before.target);
+    expect(after.rows.filter((row) => row.id === f.target.id)).toEqual(
+      before.rows.filter((row) => row.id === f.target.id),
+    );
     await hidden(f);
+    await pause.resume();
+    await driver.drain();
   }
 });
 
@@ -222,22 +232,6 @@ test('automatic due purge needs no platform grant and explicit early purge canno
   const f = await driver.seed('copy');
   const tombstone = await deleted(f);
   expect((await driver.earlyPurge('platform', tombstone, 'explicit')).response.ok).toBe(true);
-  await driver.drain();
-  expect((await driver.inspect(f)).target).toBeNull();
-});
-
-test('legal hold rechecks at destructive commit and release makes due work runnable without renewed disclosure', async () => {
-  const f = await driver.seed('copy');
-  const tombstone = await deleted(f);
-  const pause = await driver.holdNextPurge();
-  await driver.setTime(tombstone.restoreUntil!);
-  await pause.reached;
-  await driver.legalHold(tombstone, true);
-  await pause.resume();
-  await driver.drain();
-  expect((await driver.inspect(f)).target?.values).toEqual(f.target.values);
-  await hidden(f);
-  await driver.legalHold(tombstone, false);
   await driver.drain();
   expect((await driver.inspect(f)).target).toBeNull();
 });
@@ -347,7 +341,6 @@ test('child before parent pages recover rollback and commit before enqueue witho
       expect(page.effects).toBeLessThanOrEqual(100);
       expect(page.bytes).toBeLessThanOrEqual(trace.pageByteLimit);
       expect(page.guard.generation).toBe(page.generation);
-      expect(page.guard.held).toBe(false);
       if (page.examinedKeys.length) expect(page.after).toBe(page.examinedKeys.at(-1)!);
     }
     const phases = trace.committed.map((p) => p.phase);
@@ -384,7 +377,7 @@ test('real SQL examined rows blocks and statements stay bounded at three legal g
     if (page.selection === 'partial-due-pending-index') expect(page.indexDefinition).toMatch(/\bWHERE\b/i);
     else expect(page.selection).toBe('source-page-before-filter');
     samples.push({ rows: page.rowsExamined, blocks: page.sharedBlocks, statements: page.statements });
-    expect((await driver.inspect(f)).target).toBeNull(); // held predecessors cannot starve it
+    expect((await driver.inspect(f)).target).toBeNull(); // retained/future-due/ineligible predecessors cannot starve it
   }
   expect(Math.max(...samples.map((s) => s.rows))).toBeLessThanOrEqual(Math.min(...samples.map((s) => s.rows)) + 100);
   expect(new Set(samples.map((s) => s.statements)).size).toBe(1);

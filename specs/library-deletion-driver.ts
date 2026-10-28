@@ -95,7 +95,7 @@ export interface PageTrace {
   phase: string;
   sequence: number;
   sourceLimit: number;
-  /** Actual selected source keys, including held/rejected rows and any lookahead. */
+  /** Actual selected source keys, including retained/ineligible rows and any lookahead. */
   examinedKeys: string[];
   after: string | null;
   rowsExamined: number;
@@ -104,7 +104,7 @@ export interface PageTrace {
   effects: number;
   bytes: number;
   /** Native transaction guard observations, not a driver's authorization decision. */
-  guard: { generation: number; time: string; dueAt: string; held: boolean; earlyGrant: boolean };
+  guard: { generation: number; time: string; dueAt: string; earlyGrant: boolean };
   /** Source SQL and EXPLAIN ANALYZE JSON, including filters/loops/buffers. */
   sourceSql: string;
   plan: Json;
@@ -139,7 +139,6 @@ export interface LibraryDeletionDriver {
   inspect(fixture: Fixture): Promise<Inspection>;
   /** Revoke real current owner authority without replacing issued credentials. */
   revokeOwner(): Promise<void>;
-  legalHold(target: Target, held: boolean): Promise<void>;
   drain(): Promise<void>;
   /** Exact actual page attempts/commits, including rolled-back attempts. */
   trace(): Promise<{ committed: PageTrace[]; rolledBack: PageTrace[]; pageByteLimit: number }>;
@@ -187,7 +186,7 @@ export interface LibraryDeletionDriver {
     privateSource: Json;
   }>;
   /** Same seeder at each legal geometric population, <=4096 total rows per axis;
-   * grow unrelated same-partition and held-before-due rows while fixing one P-row
+   * grow unrelated same-partition retained/future-due/ineligible predecessor rows while fixing one P-row
    * target page. Reset instrumentation AFTER production fixture commands.
    * No pre-deletion, mocked EXPLAIN, or counting only returned/deleted rows. */
   growthSeed(scale: number): Promise<Fixture>;
