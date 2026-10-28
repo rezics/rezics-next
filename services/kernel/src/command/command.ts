@@ -417,6 +417,7 @@ export async function runCommand<T>(
   const authorization = options.authorization;
   const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   let contentionAttempts = 0;
+  let lastAccessContention: AccessUnavailableError | undefined;
   while (Date.now() < deadline) {
     let time: AuthoritativeTime | undefined;
     try {
@@ -599,6 +600,7 @@ export async function runCommand<T>(
       if (error instanceof IdempotencyConflictError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
+      lastAccessContention = error instanceof AccessUnavailableError && reason === 'contention' ? error : undefined;
       if (error instanceof AccessUnavailableError && reason !== 'contention') throw error;
       if (reason === 'deadline') throw new CommandUnavailableError('deadline', partition);
       if (reason === 'contention') {
@@ -621,5 +623,6 @@ export async function runCommand<T>(
       if (time) times.delete(time);
     }
   }
+  if (lastAccessContention) throw lastAccessContention;
   throw new CommandUnavailableError('deadline', partition);
 }
