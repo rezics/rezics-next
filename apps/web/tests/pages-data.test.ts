@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { dataComponents, PageData, SubjectSources, type PageMessages } from '../src/features/pages/data.tsx';
@@ -121,7 +122,11 @@ test("data components render the subject read in the reader's locale", () => {
   expect(html).toMatch(/<p[^>]*lang="en"[^>]*>A novella<\/p>/);
   expect(text(html)).toContain('Le Petit Prince illustré');
   expect(html).toMatch(/<dt[^>]*>Auteur<\/dt>/);
-  expect(html).toMatch(new RegExp(`href="/fr/subjects/${author}"[^>]*>Antoine de &lt;Saint-Exupéry&gt;</a>`));
+  expect(html).toMatch(
+    new RegExp(
+      `href="/fr/subjects/${author}/${slug('Antoine de <Saint-Exupéry>')}"[^>]*>Antoine de &lt;Saint-Exupéry&gt;</a>`,
+    ),
+  );
   expect(text(html)).toMatch(/Role No value/);
   expect(text(html)).toMatch(/Pages 1\s?096/);
   expect(text(html)).toContain('978-0156012195');
@@ -139,12 +144,14 @@ test("data components render the subject read in the reader's locale", () => {
   );
   expect(sources.match(/href="https:\/\/example\.com\/a"/g)).toHaveLength(1);
   // The author is linked from the header and from the fact row.
-  expect(html.match(new RegExp(`href="/fr/subjects/${author}"`, 'g'))).toHaveLength(2);
+  expect(
+    html.match(new RegExp(`href="/fr/subjects/${author}/${slug('Antoine de <Saint-Exupéry>')}"`, 'g')),
+  ).toHaveLength(2);
   const order = ['Auteur', 'Pages', 'ISBN', 'Illustrator', 'Published', 'Œuvres', 'Fin'].map((needle) =>
     html.indexOf(needle),
   );
   expect(order.every((position, index) => position > 0 && (index === 0 || position > order[index - 1]!))).toBe(true);
-  expect(html).toMatch(new RegExp(`href="/fr/subjects/${work}"[^>]*>Vol de nuit</a>`));
+  expect(html).toMatch(new RegExp(`href="/fr/subjects/${work}/${slug('Vol de nuit')}"[^>]*>Vol de nuit</a>`));
   const english = render('en', ok);
   expect(english).toMatch(/<h1[^>]*>The Little Prince<\/h1>/);
   expect(english).toMatch(/<dt[^>]*>Author<\/dt>/);
@@ -200,7 +207,7 @@ test('values are text and links stay safe', () => {
       } as never),
     ),
   );
-  expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}"[^>]*data-router="yes"`));
+  expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}/${slug('Vol de nuit')}"[^>]*data-router="yes"`));
   expect(linked).toMatch(/<h1[^>]*>星の王子さま<\/h1>/);
   expect(linked).toMatch(/>Vol de nuit</);
 });

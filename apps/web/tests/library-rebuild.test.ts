@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
@@ -597,7 +598,7 @@ test(
     expect(cards).toHaveLength(3);
     expectImage(withTitle(cards, 'Zebra story'));
     expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="5:7"');
-    expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}"`);
+    expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}/${slug('Zebra story')}"`);
     expectPlaceholder(withTitle(cards, 'Apple story'));
     expectPlaceholder(withTitle(cards, 'Unavailable'));
     expect(main(gridPage.html)).not.toContain(hiddenSubjectId);
@@ -610,7 +611,7 @@ test(
     const first = withTitle(list, 'Zebra story');
     expectImage(first);
     expect(first).toContain('data-ratio="5:7"');
-    expect(first).toContain(`href="/en/subjects/${zebra.id}"`);
+    expect(first).toContain(`href="/en/subjects/${zebra.id}/${slug('Zebra story')}"`);
     expect(text(first)).toContain('Book');
     expect(text(first)).toContain('Completed');
     expectPlaceholder(withTitle(list, 'Apple story'));

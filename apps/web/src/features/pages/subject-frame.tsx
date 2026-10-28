@@ -7,6 +7,7 @@ import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary'
 import { originalLanguage, originalTitle } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { Subject } from '../../subject/types';
+import { subjectHref } from '../../subject/subject-href';
 import { pageText } from './data';
 import { dateText } from './overview';
 import { linkClass, linkColor, bestRank, isRecord, PlainLink, type PageLink, type Stmt } from './shared';
@@ -124,8 +125,8 @@ export function SubjectFrame({
   tabLabels: ViewTabLabels;
   view: View;
 }) {
-  const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(frame.id)}`;
   const title = frame.title.text || unlabelled;
+  const base = subjectHref({ id: frame.id, label: title }, locale).href;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">

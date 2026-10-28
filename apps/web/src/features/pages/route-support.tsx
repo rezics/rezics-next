@@ -3,18 +3,23 @@ import { m } from '../../paraglide/messages.js';
 import type { PageMessages } from './data';
 import type { LinkProps } from './shared';
 import type { ViewTabLabels } from './view-tabs';
+import { subjectHref } from '../../subject/subject-href';
 
 /** A link to a subject page navigates in the client; any other address is a plain anchor. */
 export function SubjectLink({ href, lang, className, children }: LinkProps) {
-  const id = /^\/[^/]+\/subjects\/([^/?#]+)$/.exec(href)?.[1];
-  if (!id)
+  const match = /^\/([^/]+)\/subjects\/([^/?#]+)\/([^/?#]+)$/.exec(href);
+  if (!match)
     return (
       <a href={href} lang={lang} className={className}>
         {children}
       </a>
     );
+  const locale = decodeURIComponent(match[1]!);
+  const id = decodeURIComponent(match[2]!);
+  const slug = decodeURIComponent(match[3]!);
+  const target = subjectHref({ id, label: slug }, locale);
   return (
-    <Link to="/subjects/$id" params={{ id: decodeURIComponent(id) }} lang={lang} className={className}>
+    <Link to={target.to} params={target.params} lang={lang} className={className}>
       {children}
     </Link>
   );

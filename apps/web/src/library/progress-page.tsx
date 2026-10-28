@@ -18,6 +18,7 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode, ProgressUnit } from './progress-reads';
@@ -298,7 +299,16 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 {session.subject ? (
-                  <DropdownMenuItem render={<Link to="/subjects/$id" params={{ id: session.subject.id }} />}>
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
+                        params={
+                          subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params
+                        }
+                      />
+                    }
+                  >
                     {m.library_progress_open_subject()}
                   </DropdownMenuItem>
                 ) : null}

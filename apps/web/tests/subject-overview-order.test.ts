@@ -204,6 +204,8 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       authorization: request.headers.get('authorization'),
     });
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`)
+      return createFakeKernelFetch(fixtures as never)(request);
     if (request.method === 'POST' && url.pathname === '/v1/pages:read')
       return createFakeKernelFetch(fixtures as never)(request);
     if (url.pathname === `/v1/subjects/${subjectId}/reactions` && request.method === 'GET')

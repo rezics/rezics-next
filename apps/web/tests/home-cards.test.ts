@@ -7,6 +7,7 @@ import { chromium, type Browser } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import { subjectHref } from '../src/subject/subject-href.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -557,7 +558,7 @@ test(
         const item = page.getByRole('menuitem', { name: await messageOf(locale, 'home_continue_open_subject') });
         await item.waitFor();
         expect(await page.getByRole('menuitem').count()).toBe(1);
-        expect(await item.getAttribute('href')).toBe(`/${locale}/subjects/${id(31)}`);
+        expect(await item.getAttribute('href')).toBe(subjectHref({ id: id(31), label: labels[31]! }, locale).href);
         await page.keyboard.press('Escape');
         await item.waitFor({ state: 'detached' });
       } finally {

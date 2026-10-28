@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { slug } from '@rezics/definitions/slug';
 
 const app = join(import.meta.dir, '..');
 const recorded = join(app, 'src/kernel/recorded');
@@ -106,7 +107,7 @@ test(
             const title = subject.labels[locale] ?? subject.labels.en!;
             const link = cards.getByRole('link', { name: title, exact: true });
             await link.waitFor();
-            expect(await link.getAttribute('href')).toBe(`/${locale}/subjects/${subject.id}`);
+            expect(await link.getAttribute('href')).toBe(`/${locale}/subjects/${subject.id}/${slug(title)}`);
             expect(await link.evaluate((element) => element.closest('article') !== null)).toBe(true);
           }
         } finally {

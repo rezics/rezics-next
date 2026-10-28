@@ -6,6 +6,8 @@ import { originalLanguage } from '../../subject/language';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject } from '../../subject/types';
+import { subjectHref } from '../../subject/subject-href';
+import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -99,7 +101,10 @@ export function pageRelationProperties(page: SubjectPageData): string[] {
 /** The subject's label, chosen with the same fallback the page heading uses. */
 export function subjectPageTitle(page: SubjectPageData, locale: string): string {
   const read = subjectBody(page);
-  return read ? pageText(read.subject.labels, locale, originalLanguage(read.subject)).text : '';
+  return read
+    ? pageText(read.subject.labels, locale, originalLanguage(read.subject)).text ||
+        m.subject_value_unlabelled({}, { locale: locale as never })
+    : '';
 }
 
 /** The subject's type CURIE, when its read succeeded. */
@@ -115,7 +120,9 @@ export function subjectPageJsonLd(page: SubjectPageData, locale: string): string
           subject: read.subject,
           related: read.related,
           locale,
-          url: `https://rezics.com/${locale}/subjects/${read.subject.id}`,
+          url: `https://rezics.com${
+            subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href
+          }`,
         }),
       )
     : undefined;
@@ -202,7 +209,14 @@ export function SubjectPage({
         tabs={tabs}
         active={view}
         locale={locale}
-        base={base ?? `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(page.subject ?? '')}`}
+        base={
+          base ??
+          heading?.href ??
+          subjectHref(
+            { id: read?.subject.id ?? page.subject ?? '', label: read ? subjectPageTitle(page, locale) : '' },
+            locale,
+          ).href
+        }
         labels={tabLabels}
       />
     ) : null;
@@ -228,6 +242,7 @@ export function SubjectPage({
         <PageData
           locale={locale}
           subject={page.subject}
+          {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
           {...(page.account ? { account: page.account } : {})}
           {...(base ? { base } : {})}
           document={page.document}

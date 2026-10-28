@@ -2,12 +2,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
-const rawCommand = process.argv.slice(2);
-const testCommand = rawCommand.indexOf('test');
-const command =
-  testCommand < 0
-    ? rawCommand
-    : rawCommand.map((argument, index) => (index > testCommand ? argument.replace(/^apps\/web\//u, '') : argument));
+const command = process.argv.slice(2);
 
 if (command.length === 0) {
   process.stderr.write('Usage: bun scripts/isolated.ts <command> [arguments...]\n');

@@ -7,6 +7,7 @@ import { authRequest } from '../src/session/routes.ts';
 import { prepareSession } from '../src/session/request.ts';
 import { mediaRequest } from '../src/media/index.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { slug } from '@rezics/definitions/slug';
 import fixtures from '../src/kernel/fixtures.json';
 import { threadHref } from '../src/threads/thread-href';
 
@@ -15,6 +16,7 @@ const cookieId = 'a'.repeat(43);
 const keyPair = await generateKeyPair('ES256', { extractable: true });
 const clientJwk = { ...(await exportJWK(keyPair.privateKey)), alg: 'ES256', kid: 'request-cost' };
 const subjectId = (fixtures.subjects[0] as { id: string }).id;
+const subjectSlug = slug((fixtures.subjects[0] as { labels: Record<string, string> }).labels.en!);
 const fakeKernel = createFakeKernelFetch(fixtures);
 const kernelCalls: string[] = [];
 const kernelAuthorizations: (string | null)[] = [];
@@ -314,15 +316,16 @@ test('subject page stays within its bound as s grows', async () => {
     subjectSize = s;
     kernelCalls.length = 0;
     kernelAuthorizations.length = 0;
-    const response = await fetch(`${origin}/en/subjects/${subjectId}`);
+    const response = await fetch(`${origin}/en/subjects/${subjectId}/${subjectSlug}`);
     expect(response.status).toBe(200);
-    // The type's name comes from the definitions release: at most the active pointer and the release, whatever s is.
+    // Agent subtype classification and the page's type label use a bounded definitions read, whatever s is.
     const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
-    expect(definitions.length).toBeLessThanOrEqual(2);
+    expect(definitions.length).toBeLessThanOrEqual(3);
     const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
-    expect(page).toHaveLength(3);
+    expect(page).toHaveLength(4);
     expect(page).toEqual(
       expect.arrayContaining([
+        `GET /v1/subjects/${subjectId}`,
         'POST /v1/pages:read',
         `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`,
         `GET /v1/subjects/${subjectId}/reactions`,

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { serializeJsonLd, subjectJsonLd } from '../src/features/pages/jsonld.ts';
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
@@ -79,7 +80,7 @@ const related = {
   [author]: { labels: { en: 'Natsume Sōseki', ja: '夏目漱石' } },
   [merged]: { labels: { en: 'Old record' }, redirect: survivor },
 };
-const url = `https://rezics.com/en/subjects/${id}`;
+const url = `https://rezics.com/en/subjects/${id}/${slug('Kokoro')}`;
 const build = (overrides: Record<string, unknown> = {}, locale = 'en') =>
   subjectJsonLd({ subject: { ...subject, ...overrides }, related, locale, url } as never) as Record<string, unknown>;
 

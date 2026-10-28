@@ -6,6 +6,7 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
+import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
 
@@ -74,7 +75,7 @@ function Published({ subjects }: { subjects: PublishedSubject[] }) {
           {titled.map(({ subject, cover }) => (
             <CoverCard
               key={subject.id}
-              href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject.id)}`}
+              href={subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}
               cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
               title={cover.title}
               secondary={subject.typeName}

@@ -2,6 +2,7 @@ import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
+import { subjectHref } from '../../subject/subject-href';
 import type { Item, RowValue } from './overview';
 import { SpoilerGate } from './values';
 
@@ -11,7 +12,7 @@ function ItemCard({ item, value }: { item: Item; value: RowValue }) {
   const card = (
     <CoverCard
       link={value.link}
-      href={`/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(item.id)}`}
+      href={subjectHref({ id: item.id, label: title }, value.locale).href}
       title={title}
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
       cover={{

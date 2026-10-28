@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
@@ -51,7 +52,7 @@ const labels: ViewTabLabels = {
   },
 };
 const coverLabels = { withheld: 'Withheld', reveal: 'Reveal', credit: 'Credit', via: 'via' };
-const overviewHref = `/en/subjects/${kokoro}`;
+const overviewHref = `/en/subjects/${kokoro}/${slug('The Little Prince')}`;
 
 /** The overview page with its subject read replaced by a subject that has an original title, a date and a cover. */
 function withSubject(page: SubjectPageData): SubjectPageData {

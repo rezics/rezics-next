@@ -200,6 +200,7 @@ const fake = Bun.serve({
     )
       await writeGate;
     const subjectRead = createFakeKernelFetch(fixtures as never);
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`) return subjectRead(request);
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return subjectRead(request);
     if (url.pathname === `/v1/libraryEntries/${subjectId}`) {
       if (request.method === 'GET')

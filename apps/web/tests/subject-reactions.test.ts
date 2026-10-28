@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 import fixtures from '../src/kernel/fixtures.json';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
@@ -17,7 +18,7 @@ const login = '__Host-rezics_login';
 const resource = 'https://api.rezics.test';
 const scopes = ['reaction:set'];
 const subjectId = fixtures.subjects[0]!.id;
-const subjectPath = `/en/subjects/${subjectId}`;
+const subjectPath = `/en/subjects/${subjectId}/${slug(fixtures.subjects[0]!.labels.en!)}`;
 
 const clientKeys = await generateKeyPair('ES256', { extractable: true });
 const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
@@ -187,8 +188,9 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       authorization: request.headers.get('authorization'),
     });
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read')
-      return createFakeKernelFetch(fixtures as never)(request);
+    const subjectRead = createFakeKernelFetch(fixtures as never);
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`) return subjectRead(request);
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') return subjectRead(request);
     if (url.pathname === `/v1/subjects/${subjectId}/reactions` && request.method === 'GET')
       return json({
         counts: Object.entries(counts).map(([kind, count]) => ({ kind, count })),

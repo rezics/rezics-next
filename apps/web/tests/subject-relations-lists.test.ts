@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
@@ -217,7 +218,7 @@ test('relations are grouped by relation group, each group with its count, cover,
   const derivation = groupBlock(html, 'derivation');
   expect(derivation.match(/<article\b/g)).toHaveLength(24);
   expect(text(derivation)).toContain('30+ total');
-  expect(derivation).toContain(`href="/en/subjects/${subjectId}/relations?property=wdt%3AP144"`);
+  expect(derivation).toContain(`href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=wdt%3AP144"`);
   expect(groupBlock(html, 'order')).not.toContain('/relations?property=');
 
   expect(text(groupBlock(html, 'world'))).toContain('1 total');
@@ -263,9 +264,13 @@ test('SubjectList and TypeList show an exact or at-least count and a See all lin
   );
   expect(lists).toHaveLength(3);
   expect(text(lists[0]!)).toContain('30 total');
-  expect(lists[0]).toContain(`href="/en/subjects/${subjectId}/relations?property=schema%3AexampleOfWork"`);
+  expect(lists[0]).toContain(
+    `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3AexampleOfWork"`,
+  );
   expect(text(lists[1]!)).toContain('40+ total');
-  expect(lists[1]).toContain(`href="/en/subjects/${subjectId}/relations?property=schema%3Aauthor"`);
+  expect(lists[1]).toContain(
+    `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3Aauthor"`,
+  );
   // A list that fits shows its count and no link to a view that would repeat it.
   expect(text(lists[2]!)).toContain('2 total');
   expect(lists[2]).not.toContain('data-slot="see-all"');

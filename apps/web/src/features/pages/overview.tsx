@@ -9,6 +9,7 @@ import { originalLanguage } from '../../subject/language';
 import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
+import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-read';
 import { CoverList } from './cover-list';
 import { listView } from './views';
@@ -33,6 +34,7 @@ export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<s
 export type OverviewValue = {
   locale: string;
   subject: string | null;
+  subjectLabel?: string;
   /** The account an agent page is for, and the address of its overview. */
   account?: { id: string; handle: string };
   agentBase?: string;
@@ -123,9 +125,12 @@ export function viewHref(value: OverviewValue, view: string, property?: string):
   )
     return `${value.agentBase}/${view}`;
   return value.subject
-    ? `/${encodeURIComponent(value.locale)}/subjects/${encodeURIComponent(value.subject)}/${view}${
-        property === undefined ? '' : `?property=${encodeURIComponent(property)}`
-      }`
+    ? subjectViewHref(
+        { id: value.subject, label: value.subjectLabel || value.unlabelled },
+        value.locale,
+        view,
+        property === undefined ? '' : `?property=${encodeURIComponent(property)}`,
+      )
     : null;
 }
 

@@ -2,6 +2,8 @@ import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject 
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
+import { subjectHref } from '../subject/subject-href';
+import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
 
@@ -66,17 +68,14 @@ export function SubjectIdentity({
   size?: CoverSize;
   children?: ReactNode;
 }) {
+  const href = subject ? subjectHref({ id: subject.id, label: subject.label }, getLocale()) : null;
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
       <SubjectCover subject={subject} ratio={ratio} size={size} />
       <div className="min-w-0 space-y-0.5">
         <p className="font-medium break-words">
           {subject ? (
-            <Link
-              to="/subjects/$id"
-              params={{ id: subject.id }}
-              className="text-primary underline-offset-4 hover:underline"
-            >
+            <Link to={href!.to} params={href!.params} className="text-primary underline-offset-4 hover:underline">
               {subject.label}
             </Link>
           ) : (

@@ -16,6 +16,7 @@ import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
+import { subjectHref } from '../../subject/subject-href';
 import type { PageDocument } from './render';
 import * as accounts from './account';
 import { accountOf } from './account-read';
@@ -163,7 +164,7 @@ function itemLink(id: string, labels: unknown, options: Options) {
   return (
     <span className={`${linkClass} ${label.text ? linkColor : 'text-muted-foreground'}`}>
       <Link
-        href={`/${encodeURIComponent(options.locale)}/subjects/${encodeURIComponent(id)}`}
+        href={subjectHref({ id, label: label.text || options.messages.unlabelled }, options.locale).href}
         {...(label.lang ? { lang: label.lang } : {})}
       >
         {label.text || options.messages.unlabelled}
@@ -542,6 +543,7 @@ function nodesOfType(content: readonly unknown[], type: string): { id: string; p
 export function PageData({
   locale,
   subject = null,
+  subjectLabel,
   account,
   base,
   document,
@@ -556,6 +558,7 @@ export function PageData({
 }: {
   locale: string;
   subject?: string | null;
+  subjectLabel?: string;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
   base?: string;
@@ -594,6 +597,7 @@ export function PageData({
     labels,
   };
   const prepared = new Map<string, PreparedRead>();
+  let overviewSubjectLabel = subjectLabel;
   let sources: Sources | null = null;
   for (const [key, planned] of Object.entries(plan.reads)) {
     const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
@@ -601,7 +605,14 @@ export function PageData({
     if (planned.kind === 'subject' && isRecord(result.body.subject) && isRecord(result.body.related)) {
       const read = prepareSubject(result.body as SubjectRead, options, shown);
       prepared.set(key, read);
-      if (planned.id === subject) sources = read.sources ?? null;
+      if (planned.id === subject) {
+        sources = read.sources ?? null;
+        if (overviewSubjectLabel === undefined) {
+          const body = result.body as SubjectRead;
+          overviewSubjectLabel =
+            pageText(body.subject.labels, locale, originalLanguage(body.subject)).text || resolved.unlabelled;
+        }
+      }
     } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
       const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
       const total = (result.body as SearchRead).total;
@@ -654,6 +665,7 @@ export function PageData({
   const overviewValue: overview.OverviewValue = {
     locale,
     subject,
+    ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),
     ...(account ? { account } : {}),
     ...(base !== undefined ? { agentBase: base } : {}),
     ...(profile ? { profile } : {}),
@@ -799,7 +811,7 @@ function TypeList(props: Record<string, unknown>) {
         {subjects.map(({ hit, text, subject }) => (
           <CoverCard
             key={hit.id}
-            href={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(hit.id)}`}
+            href={subjectHref({ id: hit.id, label: text.text || messages.unlabelled }, locale).href}
             cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
             title={text.text || messages.unlabelled}
             {...(text.lang ? { titleLang: text.lang } : {})}

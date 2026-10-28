@@ -259,6 +259,8 @@ then the total, and stops the server when it exits.
 
 **Statuses**: Loaders end with real statuses: `notFound()` for 404, with unknown, unreadable and removed ids answering alike; `redirect({ statusCode: 301 })` for moved pages and outdated slugs; and the closed page for 403. A page never answers 200 with an error inside.
 
+**Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
+
 **Caching**: Anonymous responses of public routes carry `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=600` and a weak `ETag`, never `Set-Cookie`. Server functions that read the session answer `private, no-store`.
 
 **Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.

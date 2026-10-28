@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
@@ -534,8 +535,12 @@ test(
     expect(visible(page.html)).toContain('Unavailable');
     expect(visible(page.html)).not.toContain(hiddenSubjectId);
     const found = links(page.html);
-    expect(found.find((link) => link.text === 'Zebra story')?.href).toBe(`/en/subjects/${id(11)}`);
-    expect(found.find((link) => link.text === 'Apple story')?.href).toBe(`/en/subjects/${id(12)}`);
+    expect(found.find((link) => link.text === 'Zebra story')?.href).toBe(
+      `/en/subjects/${id(11)}/${slug('Zebra story')}`,
+    );
+    expect(found.find((link) => link.text === 'Apple story')?.href).toBe(
+      `/en/subjects/${id(12)}/${slug('Apple story')}`,
+    );
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);
     const tab = (text: string) => found.find((link) => link.text === text);
     expect(tab('All')).toMatchObject({ href: '/en/library', current: true });

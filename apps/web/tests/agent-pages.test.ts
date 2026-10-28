@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -263,7 +264,7 @@ test("an account verified as a catalogue person or organization renders that sub
   expect(personHtml).toContain('River Atlas');
   expect(personHtml).toContain('Salt Roads');
   expect(personHtml).toContain('Captain Ume');
-  expect(personHtml).toContain(`href="/en/subjects/${id(0x6001)}"`);
+  expect(personHtml).toContain(`href="/en/subjects/${id(0x6001)}/${slug('River Atlas')}"`);
 
   const house = await loaded('lanternpress');
   expect(house.subject).toBe(publisher);

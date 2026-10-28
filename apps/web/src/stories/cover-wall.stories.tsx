@@ -3,6 +3,7 @@ import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { sharedRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
+import { subjectHref } from '../subject/subject-href';
 
 type Tile = {
   subject: CoverSubject;
@@ -129,7 +130,7 @@ function Wall({ density }: { density?: CoverDensity }) {
         {tiles.map(({ subject, creator, image, progress, state }) => (
           <CoverCard
             key={subject.id}
-            href={`/subjects/${subject.id}`}
+            href={subjectHref({ id: subject.id, label: subject.title }, 'en').href}
             title={subject.title}
             cover={{ subject, cover: image ? imageFor(subject) : null, src: imageSrc }}
             secondary={creator}

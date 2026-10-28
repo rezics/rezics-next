@@ -14,6 +14,7 @@ import { EllipsisIcon } from 'lucide-react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt, csrfHeaders } from '../threads/composer';
@@ -252,8 +253,8 @@ function SessionEditor({
               <p className="work-title text-2xl font-medium sm:text-3xl">
                 {session.subject ? (
                   <Link
-                    to="/subjects/$id"
-                    params={{ id: session.subject.id }}
+                    to={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).to}
+                    params={subjectHref({ id: session.subject.id, label: session.subject.label }, getLocale()).params}
                     className="underline-offset-4 hover:underline"
                   >
                     {session.subject.label}

@@ -10,6 +10,7 @@ import {
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
@@ -81,7 +82,7 @@ function LibraryStateSelect({
 
 /** Compact subject-level Library controls rendered in the page's template action slot. */
 export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
-  const action = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject.id)}`;
+  const action = subjectHref({ id: subject.id, label: subject.label }, locale).href;
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);

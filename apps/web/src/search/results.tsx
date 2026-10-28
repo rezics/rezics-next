@@ -4,6 +4,7 @@ import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@rezics/ui/shadcn/item';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
+import { subjectHref } from '../subject/subject-href';
 
 export type Fact =
   | { kind: 'item'; id: string; labels: Record<string, string> }
@@ -97,6 +98,7 @@ export function ResultList({
     <ItemGroup className="gap-2">
       {hits.map((hit) => {
         const label = localizedLabel(hit.labels, locale);
+        const subjectLink = subjectHref({ id: hit.id, label: label.text }, locale);
         const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
         const description = localizedLabel(hit.descriptions ?? {}, locale);
         const year = hitYear(hit.facts, yearProperties);
@@ -111,7 +113,13 @@ export function ResultList({
         return (
           <Item key={hit.id} role="listitem" variant="outline" className="items-start gap-4 flex-nowrap">
             <ItemMedia>
-              <Link to="/subjects/$id" params={{ id: hit.id }} tabIndex={-1} aria-hidden className="block rounded-lg">
+              <Link
+                to={subjectLink.to}
+                params={subjectLink.params}
+                tabIndex={-1}
+                aria-hidden
+                className="block rounded-lg"
+              >
                 <Cover
                   subject={coverSubject(hit.id, label.text, hit.summary, hit.type)}
                   cover={coverOf(hit.summary)}
@@ -125,8 +133,8 @@ export function ResultList({
             <ItemContent className="min-w-0">
               <ItemTitle className="line-clamp-none text-base">
                 <Link
-                  to="/subjects/$id"
-                  params={{ id: hit.id }}
+                  to={subjectLink.to}
+                  params={subjectLink.params}
                   lang={label.lang}
                   className="underline-offset-4 hover:underline"
                 >

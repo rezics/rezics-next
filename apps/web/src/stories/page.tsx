@@ -34,13 +34,17 @@ import libraryLogRecording from '../kernel/recorded/library-published-log.json';
 import libraryProgressSessionRecording from '../kernel/recorded/library-progress-session.json';
 import libraryProgressSessionsRecording from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
 
 export const pagePaths = {
   home: '/',
   shell: '/',
-  subject: `/subjects/${subjectRecording.subject.id}`,
+  subject: subjectHref(
+    { id: subjectRecording.subject.id, label: subjectRecording.subject.labels.en ?? 'Subject' },
+    'en',
+  ).href.replace(/^\/en/, ''),
   'missing-subject': `/subjects/${missingSubjectId}`,
   board: `/boards/${boardRecording.board.id}`,
   thread: threadHref(threadRecording.thread),

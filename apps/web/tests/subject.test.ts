@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient, type KernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 
@@ -163,10 +164,13 @@ test('the kernel client reads the local fixtures as the kernel serves them', asy
     effect_status: 'not_applicable',
     request_id: expect.any(String),
   });
-  // The client follows a merged subject's one redirect hop, so the read answers with the survivor.
+  // The kernel exposes its one redirect hop; the web route resolves the survivor before answering with its URL.
   const survivor = await client.subjects({ id: mergedId }).get();
-  expect(survivor.status).toBe(200);
-  expect(survivor.data!.subject).toEqual(kokoro);
+  expect(survivor.status).toBe(308);
+  expect(survivor.error).toMatchObject({
+    status: 308,
+    value: { redirect: { from: mergedId, to: kokoro.id } },
+  });
   expect(sent.slice(0, 3)).toEqual([kokoro.id, taketori.id, missingId].map((id) => `GET /v1/subjects/${id}`));
   expect(sent[3]).toBe(`GET /v1/subjects/${mergedId}`);
 });
@@ -189,7 +193,9 @@ test(
     expect(text).not.toContain(property('schema:numberOfPages').labels.en);
     // The author is linked from the header and from the fact row; both go to the same page.
     const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
-    expect(await author.getAttribute('href')).toBe(`/en/subjects/${soseki.id}`);
+    expect(await author.getAttribute('href')).toBe(
+      `/en/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`,
+    );
     // Only the best rank shows: the preferred genre, not the deprecated one.
     expect(text).toContain(novel.labels.en!);
     expect(text).not.toContain(shortStory.labels.en!);
@@ -229,7 +235,9 @@ test(
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.ko);
     // The author is linked from the header and from the fact row; both go to the same page.
     const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
-    expect(await author.getAttribute('href')).toBe(`/ko/subjects/${soseki.id}`);
+    expect(await author.getAttribute('href')).toBe(
+      `/ko/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`,
+    );
     expect(await author.evaluate((element) => element.closest('[lang]')?.getAttribute('lang'))).toBe('en');
     await page.context().close();
 
@@ -262,7 +270,9 @@ test(
       const text = await page.locator('main').innerText();
       expect(text).toContain(own.subject_value_unknown!);
       const unlabelled = page.getByRole('link', { name: own.subject_value_unlabelled!, exact: true });
-      expect(await unlabelled.getAttribute('href')).toBe(`/${locale}/subjects/${dangling}`);
+      expect(await unlabelled.getAttribute('href')).toBe(
+        `/${locale}/subjects/${dangling}/${encodeURIComponent(slug(own.subject_value_unlabelled!))}`,
+      );
       await page.context().close();
       // A value that is known to be absent is stated in Details, where the remaining facts are.
       page = await open(`/${locale}/subjects/${taketori.id}/details`, { javaScriptEnabled: false });
@@ -282,13 +292,17 @@ test(
   async () => {
     const origin = await site();
     const response = await fetch(`${origin}/ja/subjects/${mergedId}`, { redirect: 'manual' });
-    expect(response.status).toBe(308);
-    expect(new URL(response.headers.get('location')!, origin).pathname).toBe(`/ja/subjects/${kokoro.id}`);
+    expect(response.status).toBe(301);
+    expect(new URL(response.headers.get('location')!, origin).pathname).toBe(
+      `/ja/subjects/${kokoro.id}/${encodeURIComponent(slug(kokoro.labels.ja!))}`,
+    );
 
     // A value naming a merged subject links to the survivor, never to the merged id.
     const page = await open(`/ja/subjects/${taketori.id}`, { javaScriptEnabled: false });
     const genre = page.getByRole('link', { name: shortStory.labels.ja!, exact: true });
-    expect(await genre.getAttribute('href')).toBe(`/ja/subjects/${shortStory.id}`);
+    expect(await genre.getAttribute('href')).toBe(
+      `/ja/subjects/${shortStory.id}/${encodeURIComponent(slug(shortStory.labels.ja!))}`,
+    );
     expect(await page.locator(`a[href*="${mergedGenre}"]`).count()).toBe(0);
     await page.context().close();
   },
@@ -315,7 +329,7 @@ test(
       (window as unknown as { kept: boolean }).kept = true;
     });
     await page.getByRole('link', { name: soseki.labels.en!, exact: true }).first().click();
-    await page.waitForURL(`${origin}/en/subjects/${soseki.id}`);
+    await page.waitForURL(`${origin}/en/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`);
     await page.getByRole('heading', { level: 1, name: soseki.labels.en! }).waitFor();
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
     await page.context().close();

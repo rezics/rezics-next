@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { definitionPath, missingId, page, startPagesWorker } from './support/pages-worker-fixture.ts';
 
 let worker: Awaited<ReturnType<typeof startPagesWorker>> | undefined;
+const subjectPath = `${page.subject}/${slug(page.reads.r0.body.subject.labels.en)}`;
 beforeAll(async () => {
   worker = await startPagesWorker();
 }, 180_000);
@@ -32,6 +34,7 @@ function aggregateSince(start: number, id: string) {
           '/v1/pages:read',
           '/v1/definitions/active',
           definitionPath,
+          `/v1/subjects/${id}`,
           `/v1/subjects/${id}/reactions`,
           `/v1/subjects/${id}/collections`,
         ].includes(path),
@@ -43,7 +46,7 @@ function aggregateSince(start: number, id: string) {
 test('the real Workers SSR path renders the Puck composition before client JavaScript', async () => {
   await worker!.verify(async () => {
     const start = worker!.calls.length;
-    const { response, html } = await worker!.request(page.subject);
+    const { response, html } = await worker!.request(subjectPath);
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
     expect(html).toMatch(/^<!DOCTYPE html>/i);
@@ -87,7 +90,7 @@ test('the real Workers SSR path renders the Puck composition before client JavaS
 test('Workers HTML and JSON-LD use the same aggregate public subject representation', async () => {
   await worker!.verify(async () => {
     const start = worker!.calls.length;
-    const { response, html } = await worker!.request(page.subject);
+    const { response, html } = await worker!.request(subjectPath);
     expect(response.status).toBe(200);
     const main = mainMarkup(html);
     const scripts = [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
@@ -100,14 +103,14 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
       '@context': 'https://schema.org',
       '@type': 'Book',
       '@id': `https://rezics.com/id/${subject.id}`,
-      url: `https://rezics.com/en/subjects/${subject.id}`,
+      url: `https://rezics.com/en/subjects/${subject.id}/${slug(subject.labels.en)}`,
       name: subject.labels.en,
       description: subject.descriptions.en,
       author: { '@id': `https://rezics.com/id/${author}`, name: authorLabel },
       datePublished: '1943-04-06',
     });
     expect(main).toMatch(new RegExp(`<h1[^>]*>${jsonLd.name}</h1>`));
-    expect(main).toContain(`href="/en/subjects/${author}"`);
+    expect(main).toContain(`href="/en/subjects/${author}/${encodeURIComponent(slug(authorLabel))}"`);
     expect(main).toContain(`>${authorLabel}</a>`);
     expect(main).toContain('>author</');
     expect(main).toContain('April 6, 1943');
@@ -122,6 +125,10 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
     expect(absent.html).not.toContain('application/ld+json');
     expect(absent.html).not.toContain(worker!.privateSentinel);
     expect(absent.html).not.toContain(subject.labels.en);
-    aggregateSince(missingStart, missingId);
+    const missingCalls = worker!.calls.slice(missingStart);
+    expect(missingCalls.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: `/v1/subjects/${missingId}` },
+    ]);
+    expect(missingCalls.every(({ authorization, cookie }) => authorization === null && cookie === null)).toBe(true);
   });
 }, 60_000);

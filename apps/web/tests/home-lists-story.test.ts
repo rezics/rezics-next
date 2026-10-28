@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import { createRecordedKernelFetch, type KernelRecording } from '../src/kernel/fake.ts';
 import home from '../src/kernel/recorded/home-page.json';
 import { loadRoutePage, RoutePage } from '../src/features/pages/route.tsx';
@@ -53,7 +54,7 @@ test('the recorded home answers every vertical list with indexed subjects', asyn
   for (const hit of hits) {
     expect(hit.labels.en?.length).toBeGreaterThan(0);
     expect(hit.labels.ja?.length).toBeGreaterThan(0);
-    expect(html).toContain(`href="/ja/subjects/${hit.id}"`);
+    expect(html).toContain(`href="/ja/subjects/${hit.id}/${slug(hit.labels.ja!)}"`);
     expect(html).toContain(hit.labels.ja!);
   }
 });

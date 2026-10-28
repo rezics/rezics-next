@@ -4,15 +4,16 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectTitle, type ThreadSubject } from './subjects';
+import { subjectHref } from '../subject/subject-href';
 
 /** The subjects a thread is attached to, each as its cover frame and title linked to its page. */
 export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[] }) {
   if (subjects.length === 0) return null;
   const locale = getLocale();
-  const titled = subjects.map((subject) => ({
-    ...subject,
-    title: subjectTitle(subject, locale) ?? m.threads_untitled(),
-  }));
+  const titled = subjects.map((subject) => {
+    const title = subjectTitle(subject, locale) ?? m.threads_untitled();
+    return { ...subject, title, href: subjectHref({ id: subject.id, label: title }, locale) };
+  });
   const ratio = sharedRatio(titled);
   const labels = {
     withheld: m.thread_cover_withheld(),
@@ -37,8 +38,8 @@ export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[
             subject={subject}
           />
           <Link
-            to="/subjects/$id"
-            params={{ id: subject.id }}
+            to={subject.href.to}
+            params={subject.href.params}
             className="min-w-0 font-medium break-words underline-offset-4 hover:underline"
           >
             {subject.title}

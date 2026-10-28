@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import { fromMarkdown } from '@rezics/document';
 import {
   definedViews,
@@ -25,6 +26,7 @@ const platform = platformJson as unknown as PresentationProfile;
 const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const mushishi = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
 const nikujaga = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
+const path = (id: string, label: string, view?: string) => `/en/subjects/${id}/${slug(label)}${view ? `/${view}` : ''}`;
 const sent: string[] = [];
 const local = createFakeKernelFetch(fixtures as never);
 const client = createKernelClient('https://kernel.invalid', {
@@ -75,9 +77,11 @@ const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 
 test("each subject view is its own server-rendered URL under the subject's address, resolved from the template's per-view documents with generic fallback", async () => {
-  // The route is a sibling of the overview route, so a view lives at /subjects/<id>/<view>.
-  const route = await Bun.file(join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$view.tsx')).text();
-  expect(route).toContain("createFileRoute('/subjects/$id_/$view')");
+  // The route is a sibling of the overview route, so a view lives at /subjects/<id>/<slug>/<view>.
+  const route = await Bun.file(
+    join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$slug_.$view.tsx'),
+  ).text();
+  expect(route).toContain("createFileRoute('/subjects/$id_/$slug_/$view')");
   expect(route).toContain('loadViewPages(client, data.id, data.view)');
 
   sent.length = 0;
@@ -130,16 +134,16 @@ test("each subject view is its own server-rendered URL under the subject's addre
         heading: {
           title: 'Kokoro',
           label: labels.names[view],
-          href: `/en/subjects/${kokoro}`,
+          href: path(kokoro, 'Kokoro'),
         },
         renderJsonLd: false,
       } as never),
     );
     expect(html).toMatch(new RegExp(`<h1[^>]*>${labels.names[view]}</h1>`));
-    expect(html).toContain(`href="/en/subjects/${kokoro}"`);
+    expect(html).toContain(`href="${path(kokoro, 'Kokoro')}"`);
     expect(html).toMatch(
       new RegExp(
-        `<a[^>]*aria-selected="true"[^>]*href="/en/subjects/${kokoro}/${view}"|href="/en/subjects/${kokoro}/${view}"[^>]*aria-selected="true"`,
+        `<a[^>]*aria-selected="true"[^>]*href="${path(kokoro, 'Kokoro', view)}"|href="${path(kokoro, 'Kokoro', view)}"[^>]*aria-selected="true"`,
       ),
     );
   }
@@ -154,7 +158,7 @@ test("each subject view is its own server-rendered URL under the subject's addre
       heading: {
         title: 'Kokoro',
         label: 'Details',
-        href: `/en/subjects/${kokoro}`,
+        href: path(kokoro, 'Kokoro'),
       },
       renderJsonLd: false,
     } as never),
@@ -306,12 +310,12 @@ test('the host renders a tab bar of the views that have data in the documented o
   expect(bar).toContain('aria-label="Subject views"');
   const hrefs = [...bar.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
   expect(hrefs).toEqual([
-    `/en/subjects/${kokoro}`,
-    ...['reviews', 'discussion', 'lists', 'details'].map((view) => `/en/subjects/${kokoro}/${view}`),
+    path(kokoro, 'The Little Prince'),
+    ...['reviews', 'discussion', 'lists', 'details'].map((view) => path(kokoro, 'The Little Prince', view)),
   ]);
   expect(bar.match(/role="tab"/g)).toHaveLength(5);
   expect(bar).toMatch(
-    /aria-selected="true"[^>]*href="[^"]*\/subjects\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+"[^>]*aria-selected="true"/,
+    /aria-selected="true"[^>]*href="[^"]*\/subjects\/[^"/]+\/[^"/]+"|href="[^"]*\/subjects\/[^"/]+\/[^"/]+"[^>]*aria-selected="true"/,
   );
   expect(text(bar)).not.toContain('Editions 3');
   expect(text(bar)).toContain('Lists 9');
@@ -375,10 +379,10 @@ test('the platform overview follows the documented section order, ends with Sour
   expect(slots).not.toContain(-1);
   expect(slots).toEqual([...slots].sort((a, b) => a - b));
   const sources = section(html, 'subject-sources');
-  expect(sources).toContain(`href="/en/subjects/${kokoro}/details"`);
+  expect(sources).toContain(`href="${path(kokoro, 'The Little Prince', 'details')}"`);
   expect(html.lastIndexOf('<section')).toBe(html.indexOf(sources));
   // Previews link to the full views of their sections.
-  expect(section(html, 'collection-list')).toContain(`href="/en/subjects/${kokoro}/lists"`);
+  expect(section(html, 'collection-list')).toContain(`href="${path(kokoro, 'The Little Prince', 'lists')}"`);
 
   // The remaining facts are in Details, not in the overview.
   const overview = await loaded(kokoro);
@@ -423,8 +427,8 @@ test('a subject with only a title renders a complete page with the placeholder c
   expect(text(html)).toContain('Add what you know.');
   expect(html).toContain('data-slot="invitation"');
   expect(text(section(html, 'thread-list'))).toContain('Discussion');
-  expect(html).toContain(`href="/en/subjects/${mushishi}/discussion"`);
-  expect(html).toContain(`href="/en/subjects/${mushishi}/details"`);
+  expect(html).toContain(`href="${path(mushishi, 'Mushishi', 'discussion')}"`);
+  expect(html).toContain(`href="${path(mushishi, 'Mushishi', 'details')}"`);
   // Nothing raw: no identifier or property CURIE is shown.
   expect(text(html.replace(/<(?:a|link)\b[^>]*>/g, '<a>'))).not.toMatch(/schema:|wdt:|rezics:|0192f3a0/);
   // A subject with facts is not invited to add the first ones.

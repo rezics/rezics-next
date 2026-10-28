@@ -144,7 +144,7 @@ function byId(html: string, id: string) {
 }
 
 const rowCount = (section: string) =>
-  new Set([...section.matchAll(/href="\/en\/subjects\/([0-9a-f-]{36})"/g)].map((match) => match[1])).size;
+  new Set([...section.matchAll(/href="\/en\/subjects\/([0-9a-f-]{36})\/[^"/?#]+"/g)].map((match) => match[1])).size;
 
 test('an agent whose Characters and Works previews return every item has neither tab or See all link, and shows every item in the overview', () => {
   const agent = page(

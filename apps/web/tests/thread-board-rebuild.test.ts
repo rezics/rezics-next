@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page } from 'playwright';
 import { threadHref } from '../src/threads/thread-href';
 
@@ -391,7 +392,7 @@ test(
         [coveredSubject, 'The Little Prince'],
         [bareSubject, 'Night Flight'],
       ] as const) {
-        const link = page.locator(`main a[href="/en/subjects/${subject}"]`).first();
+        const link = page.locator(`main a[href="/en/subjects/${subject}/${slug(title)}"]`).first();
         expect(await link.innerText()).toContain(title);
       }
     } finally {

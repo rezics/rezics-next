@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { slug } from '@rezics/definitions/slug';
 import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
@@ -34,7 +35,7 @@ test('the home is the platform route template from one page read', async () => {
   expect(html).toMatch(/<input[^>]*name="q"/);
   expect(html).toContain('検索');
   expect(html).toContain('href="/ja/search?type=schema%3ABook"');
-  expect(html).toContain(`href="/ja/subjects/${kokoro}"`);
+  expect(html).toContain(`href="/ja/subjects/${kokoro}/${slug('こころ')}"`);
   expect(html).toContain('こころ');
   expect(html).toContain('"@type":"WebSite"');
   expect(html).toContain('"query-input":"required name=search_term_string"');

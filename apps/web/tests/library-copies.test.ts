@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 
 const app = join(import.meta.dir, '..');
@@ -503,7 +504,7 @@ test(
       expect(await main.getByRole('heading', { level: 1 }).innerText()).toBe('Copies');
       const first = article(page, 'First copy');
       expect(await first.getByRole('link', { name: 'Zebra story' }).getAttribute('href')).toBe(
-        `/en/subjects/${edition}`,
+        `/en/subjects/${edition}/${slug('Zebra story')}`,
       );
       // The fake serves no definitions, so the type has no name to show and its raw value stays out.
       expect(await first.innerText()).not.toContain('book');

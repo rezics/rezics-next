@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import { slug } from '@rezics/definitions/slug';
 import { agentAccount, demoAgentSubjects } from '../src/kernel/agent-fixtures.ts';
 import { createFakeKernelFetch, type FixtureAccount } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
@@ -223,7 +224,9 @@ test('subject previews render as cover cards: the cover first and edge to edge, 
   // Headings, counts and See all links stay as they were.
   const [, parts] = [...html.matchAll(/<section[^>]*data-slot="subject-list"[\s\S]*?<\/section>/g)].map((m) => m[0]);
   expect(text(parts!)).toContain('30 total');
-  expect(parts).toContain(`href="/en/subjects/${subjectId}/relations?property=schema%3AisPartOf"`);
+  expect(parts).toContain(
+    `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?property=schema%3AisPartOf"`,
+  );
   expect(cards(layouts(parts!).grid)).toHaveLength(2);
   expect(text(relationGroups)).toContain('Sequel');
   expect(text(relationGroups)).toContain('Adaptations');
@@ -288,7 +291,7 @@ test('every card is one link named by the subject title, and the row is reachabl
     expect(row).toMatch(/tabindex="0"/);
   }
   const editions = layouts(section(html, 'subject-list')).row;
-  expect(hrefsOf(editions)).toEqual([1, 2, 3].map((n) => `/en/subjects/${row(n)}`));
+  expect(hrefsOf(editions)).toEqual([1, 2, 3].map((n) => `/en/subjects/${row(n)}/${slug(`Holder ${n}`)}`));
 });
 
 test('a spoiler-hidden item keeps its reveal control on the card', () => {
@@ -312,7 +315,7 @@ test('the full relations view uses the responsive cover grid and keeps its conti
   const html = renderToString(
     createElement(RelationsView, {
       locale: 'en',
-      subject: subjectId,
+      subject: { id: subjectId, label: 'The Little Prince' },
       frame: null,
       data: { body, property: null },
       relations,
@@ -341,7 +344,9 @@ test('the full relations view uses the responsive cover grid and keeps its conti
   expect(titleOf(cards(html)[0]!)).toBe('Holder 1');
   expect(secondaryOf(cards(html)[0]!)).toBe('Sequel · 2015');
   expect(html).toContain(`data-slot="next-page"`);
-  expect(html).toContain(`href="/en/subjects/${subjectId}/relations?cursor=opaque-cursor"`);
+  expect(html).toContain(
+    `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?cursor=opaque-cursor"`,
+  );
   expect(text(html)).toContain('250 total');
 });
 

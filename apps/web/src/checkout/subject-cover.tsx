@@ -1,5 +1,6 @@
 import { Cover, type CoverSize, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { coverSrc } from '../media/cover-src';
+import { subjectHref } from '../subject/subject-href';
 
 /** The subject summary the kernel returns with an offer or an order, or null when the reader cannot see the subject. */
 export type SubjectSummary = {
@@ -22,7 +23,7 @@ export function subjectCover(
   return {
     subject: { id, title: summary?.label?.value ?? fallbackTitle, types: summary?.types ?? [] },
     cover: summary?.cover ?? null,
-    href: summary ? `/${locale}/subjects/${id}` : null,
+    href: summary ? subjectHref({ id, label: summary.label?.value ?? fallbackTitle }, locale).href : null,
   };
 }
 

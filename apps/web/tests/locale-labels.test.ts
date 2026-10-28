@@ -169,6 +169,12 @@ const fake = Bun.serve({
       const spec = target?.subject ? subjects.get(target.subject) : undefined;
       return spec ? json(pageFor(target!.subject!, spec)) : json(problem(404, 'not_found'), 404);
     }
+    const subjectMatch = /^\/v1\/subjects\/([^/]+)$/.exec(url.pathname);
+    if (request.method === 'GET' && subjectMatch) {
+      const subjectId = decodeURIComponent(subjectMatch[1]!);
+      const spec = subjects.get(subjectId);
+      return spec ? json(pageFor(subjectId, spec).reads.r0.body) : json(problem(404, 'not_found'), 404);
+    }
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST')
       return json({
         subjects: [{ id: id(701), type: book, labels: { en: 'Kokoro' } }],

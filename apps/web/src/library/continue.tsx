@@ -6,6 +6,7 @@ import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
+import { subjectHref } from '../subject/subject-href';
 import { progressView } from './progress-label';
 import type { ContinueEntry } from './continue-read';
 
@@ -46,7 +47,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         }
         menuLabel={m.home_continue_actions({ title }, options)}
         menu={
-          <DropdownMenuItem render={<a href={`/${locale}/subjects/${encodeURIComponent(entry.subjectId)}`} />}>
+          <DropdownMenuItem render={<a href={subjectHref({ id: entry.subjectId, label: title }, locale).href} />}>
             {m.home_continue_open_subject({}, options)}
           </DropdownMenuItem>
         }

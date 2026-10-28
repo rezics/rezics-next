@@ -27,6 +27,7 @@ import { ChevronDownIcon, EllipsisIcon } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 import { shelfSectionOrder, type LibraryEntryState, type PersonalLibraryEntry } from './entries-read';
 import { coverSubject, rowRatio } from './subject-row';
 import type { ShelfLayout, ShelfSize } from './shelf-params';
@@ -70,7 +71,9 @@ type Controls = ReturnType<typeof useShelfRows> & { locale: string; hydrated: bo
 
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
   // A subject nobody can read has no page; its card stays on the library.
-  return entry.subject ? `/${locale}/subjects/${encodeURIComponent(entry.subject.id)}` : `/${locale}/library`;
+  return entry.subject
+    ? subjectHref({ id: entry.subject.id, label: entry.subject.label }, locale).href
+    : `/${locale}/library`;
 }
 
 /** The item menu of one entry: change its status, open its subject, remove it. */
@@ -110,7 +113,12 @@ function EntryMenu({
           {
             type: 'item' as const,
             label: m.library_menu_open(),
-            onSelect: () => void navigate({ to: '/subjects/$id', params: { id: subjectId } }),
+            onSelect: () => {
+              if (entry.subject) {
+                const href = subjectHref({ id: entry.subject.id, label: entry.subject.label }, controls.locale);
+                void navigate({ to: href.to, params: href.params });
+              }
+            },
           },
         ]
       : []),

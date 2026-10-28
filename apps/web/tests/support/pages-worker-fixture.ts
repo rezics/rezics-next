@@ -71,6 +71,7 @@ export async function startPagesWorker() {
         if (request.method === 'GET') {
           if (path === '/v1/definitions/active') return json(active);
           if (path === definitionPath) return json(release);
+          if (path === `/v1/subjects/${page.subject}`) return Response.json(page.reads.r0.body);
           if (path === `/v1/subjects/${page.subject}/reactions`) return json(reactions);
         }
         return json(missing);

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { slug } from '@rezics/definitions/slug';
 import { fromMarkdown } from '@rezics/document';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import platform from '@rezics/composition/profiles/platform.json';
@@ -179,7 +180,9 @@ test("the subject header shows the cover at the type's ratio, the title in the r
   expect(text(header)).toContain('April 6, 1943');
   expect(text(header)).not.toContain('schema:Book');
   // The principal creator is linked from the header, before any fact row.
-  expect(header).toMatch(new RegExp(`href="/en/subjects/${authorId}"[^>]*>Antoine de Saint-Exupéry</a>`));
+  expect(header).toMatch(
+    new RegExp(`href="/en/subjects/${authorId}/${slug('Antoine de Saint-Exupéry')}"[^>]*>Antoine de Saint-Exupéry</a>`),
+  );
 
   // The frame follows the subject's type: a character is a 3:4 portrait, a recipe 4:3.
   const character = render(
@@ -240,14 +243,14 @@ test("the cover's credit is a caption at lg and listed again in Sources at the e
   expect(section).toContain('href="https://openlibrary.org/"');
   expect(section).toContain('href="https://example.com/isbn"');
   expect(text(section)).toContain('978-0156012195');
-  expect(section).toContain(`href="/en/subjects/${subjectId}/details"`);
+  expect(section).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/details"`);
   // A source is listed once, not under its fact as well.
   expect(html.match(/href="https:\/\/example\.com\/isbn"/g)).toHaveLength(1);
 
   // Without a cover credit or sources, there is nothing to list but the way to Details.
   const plain = render(pageOf({ subject: subject([]), summary: null }));
   expect(plain).not.toContain('<figcaption');
-  expect(plain).toContain(`href="/en/subjects/${subjectId}/details"`);
+  expect(plain).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/details"`);
 });
 
 test('a media value renders through Cover and a document value through the document renderer, never as an id or an empty row', () => {

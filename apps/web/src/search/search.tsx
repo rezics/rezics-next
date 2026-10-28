@@ -26,6 +26,7 @@ import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject } from '../media/summary';
+import { subjectHref } from '../subject/subject-href';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { hitYear, localizedLabel, ResultList, SubjectMeta, type Fact, type ResultHit } from './results.tsx';
@@ -624,7 +625,8 @@ export function ShellSearch() {
         onValueChange={(item: SuggestionItem | null) => {
           if (!item) return;
           setInputValue('');
-          void navigate({ to: '/subjects/$id', params: { id: item.value } });
+          const target = subjectHref({ id: item.value, label: item.label }, locale);
+          void navigate({ to: target.to, params: target.params });
         }}
       >
         <ComboboxInput

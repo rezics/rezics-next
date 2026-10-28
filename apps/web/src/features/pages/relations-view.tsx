@@ -8,6 +8,7 @@ import { CoverList } from './cover-list';
 import { countText, GROUP_TITLES, holderItems, yearText, type Item, type RowValue } from './overview';
 import { ViewHeading } from './subject-frame';
 import { loadSubjectPage } from './subject';
+import { subjectViewHref, type SubjectHrefInput } from '../../subject/subject-href';
 
 /** One page of the subject's relations: one property when `property` is given, otherwise every property. */
 export type RelationsViewData = {
@@ -39,12 +40,12 @@ export async function readRelationsPage(
   return { overview, links };
 }
 
-function viewHref(locale: string, subject: string, property: string | null, cursor?: string): string {
+function viewHref(locale: string, subject: SubjectHrefInput, property: string | null, cursor?: string): string {
   const params = new URLSearchParams();
   if (property) params.set('property', property);
   if (cursor) params.set('cursor', cursor);
   const query = params.toString();
-  return `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/relations${query ? `?${query}` : ''}`;
+  return subjectViewHref(subject, locale, 'relations', query ? `?${query}` : '');
 }
 
 /**
@@ -60,7 +61,7 @@ export function RelationsView({
   value,
 }: {
   locale: string;
-  subject: string;
+  subject: SubjectHrefInput;
   /** The subject's compact header and the view tabs. */
   frame: ReactNode;
   data: RelationsViewData;

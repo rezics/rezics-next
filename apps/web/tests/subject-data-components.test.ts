@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { fromMarkdown } from '@rezics/document';
@@ -172,7 +173,9 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   // Each card is drawn once for the phone row and once for the grid.
   expect(relations.match(/<article\b/g)).toHaveLength(24);
   expect(text(relations)).toContain('30 total');
-  expect(relations).toContain(`href="/en/subjects/${subjectId}/relations?property=wdt%3AP155"`);
+  expect(relations).toContain(
+    `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?property=wdt%3AP155"`,
+  );
 
   const characters = section(html, 'appearances');
   expect(text(characters)).toContain('The Fox');
@@ -182,16 +185,16 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
 
   const credits = section(html, 'credits');
   expect(text(credits)).toContain('40+ total');
-  expect(credits).toContain(`href="/en/subjects/${subjectId}/credits"`);
+  expect(credits).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/credits"`);
 
   const lists = section(html, 'collection-list');
   expect(lists.match(/Shelf \d/g)).toHaveLength(6);
   expect(text(lists)).toContain('9 total');
-  expect(lists).toContain(`href="/en/subjects/${subjectId}/lists"`);
+  expect(lists).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/lists"`);
 
   const sources = section(html, 'subject-sources');
   expect(text(sources)).toContain('Reynal & Hitchcock');
-  expect(sources).toContain(`href="/en/subjects/${subjectId}/details"`);
+  expect(sources).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/details"`);
   expect(html.match(/data-slot="subject-sources"/g)).toHaveLength(1);
 });
 
@@ -207,7 +210,7 @@ test('RatingSummary, ThreadList and ReviewList render an honest empty or unavail
     const block = section(html, slot);
     expect(block).toContain('data-state="unavailable"');
     expect(text(block)).toMatch(/not open yet/);
-    expect(block).toContain(`href="/en/subjects/${subjectId}/${view}"`);
+    expect(block).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/${view}"`);
   }
 });
 

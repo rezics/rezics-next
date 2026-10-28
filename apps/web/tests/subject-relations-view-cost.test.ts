@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { slug } from '@rezics/definitions/slug';
 import { RelationsView } from '../src/features/pages/relations-view.tsx';
 import { PlainLink } from '../src/features/pages/shared.tsx';
 import { defaultReader } from '../src/subject/reader.ts';
@@ -33,7 +34,7 @@ const render = (count: number) =>
   renderToString(
     createElement(RelationsView, {
       locale: 'en',
-      subject,
+      subject: { id: subject, label: 'The Little Prince' },
       title: 'The Little Prince',
       data: { body: page(count), property: null },
       relations: { 'wdt:P155': { label: 'Sequel', group: 'order', symmetric: false } },
@@ -53,7 +54,9 @@ test('the relations view renders one page of the continuation however large the 
   const views = sizes.map(render);
   for (const html of views) {
     expect(html.match(/<article\b/g)).toHaveLength(100);
-    expect(html).toContain(`href="/en/subjects/${subject}/relations?cursor=opaque-cursor"`);
+    expect(html).toContain(
+      `href="/en/subjects/${subject}/${slug('The Little Prince')}/relations?cursor=opaque-cursor"`,
+    );
   }
   expect(views[1]).toContain('10,000+ total');
   expect(views[2]).toContain('1,000,000+ total');

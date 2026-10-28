@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page } from 'playwright';
 import { waitForPersonalRead } from './session-token';
 
@@ -608,10 +609,18 @@ test(
     });
     expect(body).not.toContain('Erased board secret');
     expect(
-      anchors.some((anchor) => anchor.href === `/en/subjects/${id(401)}` && anchor.text.includes('Zebra Chronicle')),
+      anchors.some(
+        (anchor) =>
+          anchor.href === `/en/subjects/${id(401)}/${slug('Zebra Chronicle')}` &&
+          anchor.text.includes('Zebra Chronicle'),
+      ),
     ).toBe(true);
     expect(
-      anchors.some((anchor) => anchor.href === `/en/subjects/${id(402)}` && anchor.text.includes('Bare Placeholder')),
+      anchors.some(
+        (anchor) =>
+          anchor.href === `/en/subjects/${id(402)}/${slug('Bare Placeholder')}` &&
+          anchor.text.includes('Bare Placeholder'),
+      ),
     ).toBe(true);
     // Published subjects are covers: one with an image from the media route, one with the placeholder.
     expect([...body.matchAll(/data-slot="cover"/g)]).toHaveLength(2);

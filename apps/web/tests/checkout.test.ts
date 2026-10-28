@@ -8,6 +8,7 @@ import type { KernelClient } from '@rezics/client';
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -750,7 +751,7 @@ test(
   timeout,
 );
 
-const subjectPath = (locale: string) => `/${locale}/subjects/${id(90)}`;
+const subjectPath = (locale: string) => `/${locale}/subjects/${id(90)}/${slug(bookLabels[locale] ?? bookLabels.en!)}`;
 
 test(
   "an offer page draws the subject it sells through Cover with its title in the visitor's language and links to the subject's page",

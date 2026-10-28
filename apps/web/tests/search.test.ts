@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
+import { slug } from '@rezics/definitions/slug';
 import type { KernelClient } from '@rezics/client';
 import fixtures from '../src/kernel/fixtures.json';
 
@@ -194,10 +195,10 @@ test(
       const main = page.getByRole('main');
       expect(await main.getByRole('link', { name: first.labels.en!, exact: true }).count()).toBe(1);
       expect(await main.getByRole('link', { name: first.labels.en!, exact: true }).getAttribute('href')).toBe(
-        `/en/subjects/${first.id}`,
+        `/en/subjects/${first.id}/${slug(first.labels.en!)}`,
       );
       expect(await main.getByRole('link', { name: second.labels.en!, exact: true }).getAttribute('href')).toBe(
-        `/en/subjects/${second.id}`,
+        `/en/subjects/${second.id}/${slug(second.labels.en!)}`,
       );
       expect(searches(before)).toHaveLength(1);
       expect(searches(before)[0]).toMatchObject({ method: 'POST', body: { text: query } });
@@ -212,7 +213,7 @@ test(
       expect(searches(before)).toHaveLength(2);
       expect(searches(before)[1]).toMatchObject({ method: 'POST', body: { text: query, cursor } });
       expect(await main.getByRole('link', { name: third.labels.en!, exact: true }).getAttribute('href')).toBe(
-        `/en/subjects/${third.id}`,
+        `/en/subjects/${third.id}/${slug(third.labels.en!)}`,
       );
       expect(await main.getByRole('link', { name: /more/i }).count()).toBe(0);
     } finally {
@@ -287,8 +288,8 @@ test(
       await input.press('ArrowUp');
       await input.press('ArrowDown');
       await input.press('Enter');
-      await page.waitForURL(`${await site()}/ja/subjects/${second.id}`);
-      expect(new URL(page.url()).pathname).toBe(`/ja/subjects/${second.id}`);
+      await page.waitForURL(`${await site()}/ja/subjects/${second.id}/${slug(second.labels.en!)}`);
+      expect(new URL(page.url()).pathname).toBe(`/ja/subjects/${second.id}/${slug(second.labels.en!)}`);
       expect(searches(before)).toHaveLength(0);
     } finally {
       await page.context().close();

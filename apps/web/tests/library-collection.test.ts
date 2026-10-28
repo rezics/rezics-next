@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -549,8 +550,8 @@ test(
     const found = links(page.html);
     const zebra = found.find((link) => link.text === 'Zebra story');
     const apple = found.find((link) => link.text === 'Apple story');
-    expect(zebra?.href).toBe(`/en/subjects/${id(11)}`);
-    expect(apple?.href).toBe(`/en/subjects/${id(12)}`);
+    expect(zebra?.href).toBe(`/en/subjects/${id(11)}/${slug('Zebra story')}`);
+    expect(apple?.href).toBe(`/en/subjects/${id(12)}/${slug('Apple story')}`);
     // The fake serves no definitions, so the type has no name to show and its raw value stays out.
     expect(main(page.html)).not.toContain('book');
     expect(main(page.html)).toContain('Unavailable');

@@ -913,6 +913,11 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
         ),
       );
     if (request.method === 'POST' && url.pathname === '/v1/pages:read') return pageRead(fixtures, request);
+    if (request.method === 'GET' && url.pathname === '/v1/accounts' && url.searchParams.has('agent')) {
+      const subjectId = url.searchParams.get('agent');
+      const account = fixtures.accounts?.find((item) => item.subject === subjectId && item.state === 'active');
+      return Response.json({ accounts: account ? [accountProfile(fixtures, account)] : [], next: null });
+    }
     const list = /^\/v1\/accounts\/([^/]+)\/(posts|threads|collections)$/.exec(url.pathname);
     if (request.method === 'GET' && list) {
       const owner = fixtures.accounts?.find(
@@ -930,7 +935,14 @@ export function createFakeKernelFetch(given: Fixtures): typeof fetch {
     }
     const match = /^\/v1\/subjects\/([^/]+)$/.exec(url.pathname);
     if (request.method !== 'GET' || !match) return notFound();
-    const payload = subjectPayload(fixtures, decodeURIComponent(match[1]!));
+    const id = decodeURIComponent(match[1]!);
+    const survivor = fixtures.redirects[id];
+    if (survivor)
+      return Response.json(
+        { redirect: { from: id, to: survivor } },
+        { status: 308, headers: { location: `/v1/subjects/${encodeURIComponent(survivor)}` } },
+      );
+    const payload = subjectPayload(fixtures, id);
     return payload ? Response.json(payload) : notFound();
   }) as typeof fetch;
 }
