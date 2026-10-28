@@ -29,7 +29,9 @@ export async function createFigureFixture(
     partitions > 4096
   )
     throw new TypeError('Invalid figure fixture subject or partition count');
-  const driver = await createCommunityDriver({ databaseUrl: options.databaseUrl });
+  const driver = await createCommunityDriver(
+    options.databaseUrl === undefined ? {} : { databaseUrl: options.databaseUrl },
+  );
   let cleanupDatabase: GrowthDatabase | undefined;
   try {
     const setup = await driver.provision();
@@ -158,7 +160,9 @@ export async function createFigureFixture(
     const figure = async (subjectId: string) => {
       const response = await checked({ actor: null, method: 'GET', path: `/v1/subjects/${subjectId}/figure` });
       const body = (await response.json()) as { figure: PublicFigureView };
-      return { ...body, etag: response.headers.get('etag') };
+      const etag = response.headers.get('etag');
+      if (etag === null) throw new Error('Public figure response is missing its revision ETag');
+      return { ...body, etag };
     };
     const published = async (subjectId: string, count: number, populationId = GLOBAL_CONTEXT.id) => {
       const deadline = Date.now() + 60_000;
