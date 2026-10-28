@@ -130,7 +130,6 @@ async function createNativeContentSystemWithOptions(
       instant = parsed;
     };
     let nativeAuth: AuthService;
-    let access: ReturnType<typeof createAccess>;
     // Kernel resolves Access on a live request, after all routes are mounted.
     // This same instance authenticates fixture credentials on this exact pool.
     const kernel = createKernel({
@@ -148,7 +147,7 @@ async function createNativeContentSystemWithOptions(
     });
     const actions = actionCatalogue(kernel);
     let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
-    access = createAccess({
+    const access = createAccess({
       actions,
       clock,
       realmRoleReader: (client, input) => {
