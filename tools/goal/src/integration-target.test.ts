@@ -89,9 +89,16 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
     expect(git(h.root, 'merge-base', '--is-ancestor', stabilize, dev)).toBe('');
     expect(checks).toEqual(
       expect.arrayContaining([
+        ['bun', 'install', '--frozen-lockfile'],
+        ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
         ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
         ['bun', 'test', 'tools/goal/src'],
       ]),
+    );
+    // A train worktree starts with nothing installed, so the installs come before the checks that need them.
+    const index = (command: string[]) => checks.findIndex((check) => JSON.stringify(check) === JSON.stringify(command));
+    expect(index(['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'])).toBeLessThan(
+      index(['bun', 'run', '--cwd', 'tools/goal', 'typecheck']),
     );
     expect(h.store.task(task.id).state).toBe('merged');
     expect(h.outcomes[0]?.mergedCommit).toBe(main);
@@ -265,7 +272,7 @@ test('a main advance during control-plane checks is preserved by compare-and-swa
     const stabilize = h.head('stabilize');
     const dev = h.head('dev');
     expect(raced).toBe(true);
-    expect(checkRuns).toBe(4);
+    expect(checkRuns).toBe(8); // Four control-plane checks, run again after the compare-and-swap retry.
     expect(git(h.root, 'merge-base', '--is-ancestor', racedHead, main)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', main, stabilize)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', stabilize, dev)).toBe('');
