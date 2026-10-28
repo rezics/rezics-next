@@ -16,6 +16,7 @@ export const PROBLEMS = {
   invalid_signature: { status: 400, title: 'Invalid Signature', retryable: false },
   idempotency_conflict: { status: 422, title: 'Idempotency Key Reused', retryable: false },
   too_many_events: { status: 422, title: 'Too Many Events', retryable: false },
+  unsupported_library_profile: { status: 422, title: 'Unsupported Library Profile', retryable: false },
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
   invalid_credentials: { status: 401, title: 'Invalid Credentials', retryable: false },
   forbidden: { status: 403, title: 'Forbidden', retryable: false },
