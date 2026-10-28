@@ -15,14 +15,18 @@ export function removeAttemptContainers(taskId: string, attempt: number): void {
   try {
     const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=${label}`], { encoding: 'utf8' });
     if (listed.error || listed.status !== 0) {
-      logRemovalError(`Could not list worker containers for ${label}: ${listed.error ?? listed.stderr ?? listed.status}`);
+      logRemovalError(
+        `Could not list worker containers for ${label}: ${listed.error ?? listed.stderr ?? listed.status}`,
+      );
       return;
     }
     const ids = listed.stdout.trim().split(/\s+/).filter(Boolean);
     if (!ids.length) return;
     const removed = spawnSync('docker', ['rm', '-f', ...ids], { encoding: 'utf8' });
     if (removed.error || removed.status !== 0)
-      logRemovalError(`Could not remove worker containers for ${label}: ${removed.error ?? removed.stderr ?? removed.status}`);
+      logRemovalError(
+        `Could not remove worker containers for ${label}: ${removed.error ?? removed.stderr ?? removed.status}`,
+      );
   } catch (error) {
     logRemovalError(`Could not remove worker containers for ${label}: ${String(error)}`);
   }

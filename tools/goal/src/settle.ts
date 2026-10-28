@@ -126,10 +126,15 @@ export async function settle(
             check.command,
             task.worktree,
             `${store.attempt(ref).logPath}.affected-${index}.log`,
-            workerEnvironment(pool, {
-              ...attemptEnvironment(task, ref, tasks.settings.stateDirectory),
-              KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
-            }, process.env, task.worktree),
+            workerEnvironment(
+              pool,
+              {
+                ...attemptEnvironment(task, ref, tasks.settings.stateDirectory),
+                KERNEL_CHECK_SKIP_STALE_CLEANUP: '1',
+              },
+              process.env,
+              task.worktree,
+            ),
           );
           store.updateAttempt(ref, (attempt) => {
             (attempt.affectedTests ??= []).push(result);

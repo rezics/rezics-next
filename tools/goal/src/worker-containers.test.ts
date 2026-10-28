@@ -21,49 +21,52 @@ function executable(path: string, body: string): void {
   chmodSync(path, 0o755);
 }
 
-test.serial("a worker's environment uses the worktree wrapper, which forwards all container starts with slice and attempt labels", () => {
-  const box = sandbox();
-  try {
-    const worktree = join(box.directory, 'worktree');
-    const wrapperDirectory = join(worktree, 'scripts/check-host');
-    const realDocker = join(box.directory, 'bin/docker');
-    const records = join(box.directory, 'docker-args');
-    mkdirSync(wrapperDirectory, { recursive: true });
-    mkdirSync(dirname(realDocker), { recursive: true });
-    copyFileSync(wrapper, join(wrapperDirectory, 'docker'));
-    chmodSync(join(wrapperDirectory, 'docker'), 0o755);
-    executable(realDocker, `#!/bin/sh\nprintf '<%s>' "$@" >> "$DOCKER_ARGS"\nprintf '\\n' >> "$DOCKER_ARGS"\n`);
-    const env = workerEnvironment(
-      { cli: 'codex', configDirectory: '/config' } as never,
-      { GOAL_TASK_ID: 'task-7', GOAL_ATTEMPT: '3' },
-      { PATH: `${dirname(realDocker)}:/bin:/usr/bin`, DOCKER_ARGS: records },
-      worktree,
-    );
-    expect(env.PATH?.split(':')[0]).toBe(wrapperDirectory);
-    expect(env.PATH?.split(':')).toContain(dirname(realDocker));
-    const starts = [
-      ['run', '--rm', 'image'],
-      ['create', 'image'],
-      ['container', 'run', '--rm', 'image'],
-      ['container', 'create', 'image'],
-    ];
-    for (const args of starts) {
-      const result = spawnSync('docker', args, { cwd: worktree, env, encoding: 'utf8' });
-      expect(result.status).toBe(0);
+test.serial(
+  "a worker's environment uses the worktree wrapper, which forwards all container starts with slice and attempt labels",
+  () => {
+    const box = sandbox();
+    try {
+      const worktree = join(box.directory, 'worktree');
+      const wrapperDirectory = join(worktree, 'scripts/check-host');
+      const realDocker = join(box.directory, 'bin/docker');
+      const records = join(box.directory, 'docker-args');
+      mkdirSync(wrapperDirectory, { recursive: true });
+      mkdirSync(dirname(realDocker), { recursive: true });
+      copyFileSync(wrapper, join(wrapperDirectory, 'docker'));
+      chmodSync(join(wrapperDirectory, 'docker'), 0o755);
+      executable(realDocker, `#!/bin/sh\nprintf '<%s>' "$@" >> "$DOCKER_ARGS"\nprintf '\\n' >> "$DOCKER_ARGS"\n`);
+      const env = workerEnvironment(
+        { cli: 'codex', configDirectory: '/config' } as never,
+        { GOAL_TASK_ID: 'task-7', GOAL_ATTEMPT: '3' },
+        { PATH: `${dirname(realDocker)}:/bin:/usr/bin`, DOCKER_ARGS: records },
+        worktree,
+      );
+      expect(env.PATH?.split(':')[0]).toBe(wrapperDirectory);
+      expect(env.PATH?.split(':')).toContain(dirname(realDocker));
+      const starts = [
+        ['run', '--rm', 'image'],
+        ['create', 'image'],
+        ['container', 'run', '--rm', 'image'],
+        ['container', 'create', 'image'],
+      ];
+      for (const args of starts) {
+        const result = spawnSync('docker', args, { cwd: worktree, env, encoding: 'utf8' });
+        expect(result.status).toBe(0);
+      }
+      const rows = readFileSync(records, 'utf8').trim().split('\n');
+      expect(rows).toHaveLength(4);
+      for (const [index, args] of starts.entries()) {
+        const forwarded = rows[index]!;
+        expect(forwarded.startsWith(`<${args[0]}>`)).toBe(true);
+        expect(forwarded).toContain('<--cgroup-parent=rezics-check.slice>');
+        expect(forwarded).toContain('<--label><rezics.worker.attempt=task-7/3>');
+        expect(forwarded).toContain(`<${args.at(-1)}>`);
+      }
+    } finally {
+      box.close();
     }
-    const rows = readFileSync(records, 'utf8').trim().split('\n');
-    expect(rows).toHaveLength(4);
-    for (const [index, args] of starts.entries()) {
-      const forwarded = rows[index]!;
-      expect(forwarded.startsWith(`<${args[0]}>`)).toBe(true);
-      expect(forwarded).toContain('<--cgroup-parent=rezics-check.slice>');
-      expect(forwarded).toContain('<--label><rezics.worker.attempt=task-7/3>');
-      expect(forwarded).toContain(`<${args.at(-1)}>`);
-    }
-  } finally {
-    box.close();
-  }
-});
+  },
+);
 
 test.serial('attempt cleanup lists by the exact attempt label and removes only returned containers', () => {
   const box = sandbox();
@@ -98,53 +101,57 @@ test.serial('attempt cleanup lists by the exact attempt label and removes only r
   }
 });
 
-test.serial('success, failure, stop and cancel exits all clean their attempt containers during settlement', async () => {
-  const box = sandbox();
-  const bin = join(box.directory, 'bin');
-  const docker = join(bin, 'docker');
-  const rmLog = join(box.directory, 'removed');
-  const previousPath = process.env.PATH;
-  const harnesses = [
-    harness(),
-    harness('#!/usr/bin/env bun\nprocess.exit(2);\n'),
-    harness('#!/usr/bin/env bun\nsetInterval(() => {}, 1000);\n'),
-    harness('#!/usr/bin/env bun\nsetInterval(() => {}, 1000);\n'),
-  ];
-  try {
-    mkdirSync(bin);
-    executable(
-      docker,
-      `#!/bin/sh\ncase "$1" in\n  ps) printf 'owned\\n' ;;\n  rm) printf '%s\\n' "$*" >> '${rmLog}' ;;\n  *) exit 2 ;;\nesac\n`,
-    );
-    process.env.PATH = `${bin}:${previousPath ?? ''}`;
-    for (const [index, h] of harnesses.entries()) {
-      const task = h.tasks.dispatch(h.briefFile);
-      const running = await h.tasks.retry(task.id);
-      if (index < 2) {
-        await running.exited;
-        await settle(h.tasks, running, { enqueue() {} });
-        expect(h.store.attempt(running.attempt).state).toBe('exited');
-        expect(Boolean(h.store.attempt(running.attempt).failureKind)).toBe(index === 1);
-      } else {
-        if (index === 2) await h.tasks.stop(task.id);
-        else await h.tasks.cancel(task.id);
-        await running.exited;
-        await expect(settle(h.tasks, running, { enqueue() {} })).rejects.toThrow();
+test.serial(
+  'success, failure, stop and cancel exits all clean their attempt containers during settlement',
+  async () => {
+    const box = sandbox();
+    const bin = join(box.directory, 'bin');
+    const docker = join(bin, 'docker');
+    const rmLog = join(box.directory, 'removed');
+    const previousPath = process.env.PATH;
+    const harnesses = [
+      harness(),
+      harness('#!/usr/bin/env bun\nprocess.exit(2);\n'),
+      harness('#!/usr/bin/env bun\nsetInterval(() => {}, 1000);\n'),
+      harness('#!/usr/bin/env bun\nsetInterval(() => {}, 1000);\n'),
+    ];
+    try {
+      mkdirSync(bin);
+      executable(
+        docker,
+        `#!/bin/sh\ncase "$1" in\n  ps) printf 'owned\\n' ;;\n  rm) printf '%s\\n' "$*" >> '${rmLog}' ;;\n  *) exit 2 ;;\nesac\n`,
+      );
+      process.env.PATH = `${bin}:${previousPath ?? ''}`;
+      for (const [index, h] of harnesses.entries()) {
+        const task = h.tasks.dispatch(h.briefFile);
+        const running = await h.tasks.retry(task.id);
+        if (index < 2) {
+          await running.exited;
+          await settle(h.tasks, running, { enqueue() {} });
+          expect(h.store.attempt(running.attempt).state).toBe('exited');
+          expect(Boolean(h.store.attempt(running.attempt).failureKind)).toBe(index === 1);
+        } else {
+          if (index === 2) await h.tasks.stop(task.id);
+          else await h.tasks.cancel(task.id);
+          await running.exited;
+          await expect(settle(h.tasks, running, { enqueue() {} })).rejects.toThrow();
+        }
       }
+      expect(readFileSync(rmLog, 'utf8').trim().split('\n')).toEqual([
+        'rm -f owned',
+        'rm -f owned',
+        'rm -f owned',
+        'rm -f owned',
+      ]);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      for (const h of harnesses) h.dispose();
+      box.close();
     }
-    expect(readFileSync(rmLog, 'utf8').trim().split('\n')).toEqual([
-      'rm -f owned',
-      'rm -f owned',
-      'rm -f owned',
-      'rm -f owned',
-    ]);
-  } finally {
-    if (previousPath === undefined) delete process.env.PATH;
-    else process.env.PATH = previousPath;
-    for (const h of harnesses) h.dispose();
-    box.close();
-  }
-}, 30_000);
+  },
+  30_000,
+);
 
 test.serial('docker cleanup errors are logged and do not escape attempt settlement', () => {
   const box = sandbox();
