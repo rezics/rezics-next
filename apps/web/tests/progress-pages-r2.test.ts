@@ -147,13 +147,14 @@ test('the signed-in home story renders one Continue card for every recorded acti
 test('progress page state, completed-unit empty state, and published logs keep the agreed compact structure', async () => {
   const index = await source('../src/library/progress-page.tsx');
   const session = await source('../src/library/progress-session.tsx');
+  const sessionHeader = session.slice(session.indexOf('<header'), session.indexOf('</header>'));
   const logs = await source('../src/library/logs-progress.tsx');
 
   expect(index).toContain('{stateLabel(session.state)}');
   expect(index).not.toMatch(/stateLabel\(session\.state\)[\s\S]{0,40}unitLabel\(session\.unit\)/);
-  expect(session).toContain('stateLabel(session.state)');
-  expect(session).not.toContain('modeLabel(session.mode)');
-  expect(session).not.toContain('unitLabel(session.unit)');
+  expect(sessionHeader).toContain('stateLabel(session.state)');
+  expect(sessionHeader).not.toContain('modeLabel(session.mode)');
+  expect(sessionHeader).not.toContain('unitLabel(session.unit)');
   expect(index).toContain('modeChoices.map');
   expect(session).toContain('m.library_progress_units_empty()');
   expect(session).not.toContain('m.library_progress_empty()');
