@@ -130,6 +130,22 @@ beforeAll(async () => {
   subjects.rawFirst = await book('First raw key', false, 0, 0);
   subjects.rawSecond = await book('Second raw key', false, 0, 0);
   subjects.public = await book('Public', true);
+  const target = (
+    await post('/v1/subjects', { type: 'schema:Person', labels: { en: 'Current relation target' } }, 201, keyIn(0, 1))
+  ).subject;
+  subjects.currentHidden = (
+    await post(
+      '/v1/subjects',
+      {
+        type: 'schema:Book',
+        labels: { en: 'Cached relation identity' },
+        statements: { 'schema:author': [statement('schema:author', target.id)] },
+      },
+      201,
+      keyIn(0, 1),
+    )
+  ).subject;
+  await post(`/v1/subjects/${target.id}:hide`, { reason: 'Current target gate, with no Relay delivery' });
   subjects.title = await book('Labels only');
   subjects.pending = await book('Proposal only');
   await proposal(subjects.pending.id);
@@ -242,9 +258,25 @@ test('independent real HTTP traversal needs only native store and source primiti
     ],
     lastModified: new Date(origin).toISOString(),
   });
-  for (const name of ['title', 'pending', 'unselected', 'private', 'hiddenFact', 'hidden', 'removed', 'merged']) {
+  for (const name of [
+    'title',
+    'pending',
+    'unselected',
+    'private',
+    'hiddenFact',
+    'hidden',
+    'currentHidden',
+    'removed',
+    'merged',
+  ]) {
     expect(whole.subjectPages.map((s) => s.id)).not.toContain(subjects[name].id);
   }
+  const native = await app.handle(new Request(`http://kernel.test/v1/subjects/${subjects.currentHidden.id}`));
+  expect(native.status).toBe(200);
+  const current = (await native.json()) as any;
+  expect((current.subject.statements['schema:author'] ?? []).map((s: any) => s.id)).not.toContain(
+    subjects.currentHidden.statements['schema:author'][0].id,
+  );
   expect(whole.subjectPages.map((s) => s.id)).not.toContain(subjects.later.id);
   const english = await page(1000, undefined, {
     authorization: `Bearer ${real.bearer('editor')}`,
