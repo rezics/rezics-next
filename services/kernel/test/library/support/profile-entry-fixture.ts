@@ -14,6 +14,7 @@ import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createLifecycleInternals, type ProvisioningEvidence } from '../../../src/access/lifecycle.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
@@ -75,7 +76,7 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
-export async function createProfileEntryFixture() {
+export async function createProfileEntryFixture(options: { clock?: KernelClock } = {}) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
@@ -89,6 +90,7 @@ export async function createProfileEntryFixture() {
       pool,
       tokens,
       routeKey,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
       requestDeadlineMs: 30_000,
       access(config) {
         return (access = admittedAccess(config));
@@ -118,7 +120,7 @@ export async function createProfileEntryFixture() {
       }
       throw new Error('Native Semantic link projection did not drain');
     }
-    const commands = createEntryCommands({ pool, access, tokens });
+    const commands = createEntryCommands({ pool, access, tokens, ...options });
     const context = (actor: AccountActor) => ({ pool, actor, deadline: deadlineFor(30_000) });
 
     // This trusted adapter establishes test identities at the documented native provisioning
@@ -127,6 +129,7 @@ export async function createProfileEntryFixture() {
     const lifecycle = createLifecycleInternals({
       pool,
       routeKey,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
       provisioningEvidence: async (proof) =>
         typeof proof === 'object' && proof !== null ? (proofs.get(proof) ?? null) : null,
       recoveryEvidence: async () => null,
@@ -169,7 +172,7 @@ export async function createProfileEntryFixture() {
     const owner = await identity(entryScopes);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
+    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });
     const grant = (resource: Resource, subject: string, actions: string[]) =>
       grants.create(context(steward.actor), {
         resource,
@@ -357,10 +360,13 @@ export async function createProfileEntryFixture() {
       },
       unknownSubject: () => newId(0x6e31),
       async suspend(accountId: string) {
-        await createSuspensionCommands({ pool, access, clock: () => new Date() }).suspend(context(steward.actor), {
-          accountId,
-          key: entryKey(),
-        });
+        await createSuspensionCommands({ pool, access, clock: options.clock ?? (() => new Date()) }).suspend(
+          context(steward.actor),
+          {
+            accountId,
+            key: entryKey(),
+          },
+        );
       },
       async revokeIdentity(accountId: string) {
         await lifecycle.raiseFence({ accountId, key: entryKey() });
