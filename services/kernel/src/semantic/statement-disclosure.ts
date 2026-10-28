@@ -26,7 +26,14 @@ import readVisibility from './read-visibility.sql';
 const NIL = '00000000-0000-0000-0000-000000000000';
 export type StatementReader = { account: string; moderator: (client: CommandTransaction) => Promise<boolean> };
 const PUBLIC_READER = Symbol('public statement reader');
-const readers = new AsyncLocalStorage<StatementReader | typeof PUBLIC_READER>();
+type ReaderScope = StatementReader & { refreshAuthorization?: () => Promise<void> };
+const readers = new AsyncLocalStorage<ReaderScope | typeof PUBLIC_READER>();
+
+/** Prepare audience evidence outside the source checkout after every freshness wait. */
+export async function refreshStatementReaderAuthorization(): Promise<void> {
+  const reader = readers.getStore();
+  if (reader && reader !== PUBLIC_READER) await reader.refreshAuthorization?.();
+}
 /** Restrict disclosure throughout nested hydration without changing caller authority. */
 export function withPublicStatementReader<T>(fn: () => T): T {
   return readers.run(PUBLIC_READER, fn);
@@ -52,10 +59,12 @@ export async function readStatementAs<T>(
     check = await prepareCheck();
     permission = undefined;
   };
-  return withStatementReader(
-    { account: actor.accountId, moderator: (client) => (permission ??= check(client as PoolClient)) },
-    () => read(refreshAuthorization),
-  );
+  const reader: ReaderScope = {
+    account: actor.accountId,
+    moderator: (client) => (permission ??= check(client as PoolClient)),
+    refreshAuthorization,
+  };
+  return withStatementReader(reader, () => read(refreshAuthorization));
 }
 export async function statementAudience(client: CommandTransaction) {
   const reader = readers.getStore();

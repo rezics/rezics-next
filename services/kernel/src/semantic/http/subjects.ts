@@ -674,12 +674,12 @@ function subjectRoutes(
           return (await pending)(client);
         };
         const result = await admission.run('normal', job, () =>
-          readStatementAs(pool, access(), actor, job.deadline, async (refreshStatementAuthorization) =>
+          readStatementAs(pool, access(), actor, job.deadline, () =>
             readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
               languages,
               authorize: authorizeSummary,
               prepareAuthorization: async () => {
-                await refreshStatementAuthorization();
+                checksById.clear();
                 return authorize(subjectResource);
               },
               seen: [...session.components],
@@ -1850,6 +1850,8 @@ function subjectRoutes(
                 },
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 authorize: check,
+                prepareAuthorization: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
+                deadline: job.deadline,
                 seen,
                 caughtUp,
               }),
@@ -1972,6 +1974,8 @@ function subjectRoutes(
                   return relatedCheck(client);
                 },
                 authorize: check,
+                prepareAuthorization: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
+                deadline: job.deadline,
                 seen,
                 caughtUp,
               }),

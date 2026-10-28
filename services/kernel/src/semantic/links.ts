@@ -1,4 +1,4 @@
-import { privateLinks } from './statement-disclosure.ts';
+import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import type { Release } from '@rezics/definitions';
@@ -26,6 +26,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
+import type { AccessCheck } from '../request/access.ts';
 import { SubjectNotFoundError } from './candidates.ts';
 import { moveMergePage } from './merge-moves.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
@@ -894,6 +895,8 @@ export async function listSubjectLinks(
     release?: Release;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
+    prepareAuthorization?: () => Promise<AccessCheck>;
+    deadline?: number;
     seen: readonly SessionComponent[];
     caughtUp?: boolean;
   },
@@ -925,11 +928,14 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const freshnessDeadline = deadlineFor(FRESHNESS_WAIT_MS);
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const freshnessDeadline = Math.min(deadline, deadlineFor(FRESHNESS_WAIT_MS));
   let caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, freshnessDeadline));
-  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const readPage = async () =>
-    await withReadTransaction<{
+  const readPage = async (refreshAuthorization = true) => {
+    if (refreshAuthorization) await refreshStatementReaderAuthorization();
+    const authorize =
+      refreshAuthorization && options.prepareAuthorization ? await options.prepareAuthorization() : options.authorize;
+    return withReadTransaction<{
       page: SubjectLinksPage;
       scannedMembers: string[];
     }>(pool, async (client) => {
@@ -937,8 +943,7 @@ export async function listSubjectLinks(
       const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
         visibility: string;
       } | null;
-      if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
+      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
       const redirect = await redirectOf(client, options.subject);
       if (redirect) throw new SubjectRedirectError(options.subject, redirect);
       await client.query('SET LOCAL enable_seqscan = off');
@@ -1061,7 +1066,8 @@ export async function listSubjectLinks(
         scannedMembers,
       };
     });
-  let snapshot = await readPage();
+  };
+  let snapshot = await readPage(options.caughtUp === undefined);
   let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
   while (pendingMembers.length) {
     if (Date.now() >= deadline) {
@@ -1154,6 +1160,8 @@ export async function listSubjectRelations(
     cursor?: string;
     release: Release;
     authorize: (client: PoolClient) => Promise<boolean>;
+    prepareAuthorization?: () => Promise<AccessCheck>;
+    deadline?: number;
     authorizeSummary?: SummaryDependencies['authorize'];
     seen: readonly SessionComponent[];
     caughtUp?: boolean;
@@ -1186,15 +1194,19 @@ export async function listSubjectRelations(
     if (!validRelationAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
-  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject, deadline));
+  if (options.caughtUp === undefined) await refreshStatementReaderAuthorization();
+  const authorize =
+    options.caughtUp === undefined && options.prepareAuthorization
+      ? await options.prepareAuthorization()
+      : options.authorize;
   const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
       visibility: string;
     } | null;
-    if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
-      throw new SubjectNotFoundError();
+    if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
     const redirect = await redirectOf(client, options.subject);
     if (redirect) throw new SubjectRedirectError(options.subject, redirect);
     await client.query('SET LOCAL enable_seqscan = off');

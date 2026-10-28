@@ -1,4 +1,9 @@
-import { disclosureAccount, keepStatementPrivate, privateLinks } from './statement-disclosure.ts';
+import {
+  disclosureAccount,
+  keepStatementPrivate,
+  privateLinks,
+  refreshStatementReaderAuthorization,
+} from './statement-disclosure.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { activeRelease } from './definitions.ts';
 import { withReadTransaction } from './read.ts';
@@ -443,6 +448,7 @@ export async function readSubject(
   const deadline = summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const seen = [...(summaries.seen ?? []), preflight.component];
   await waitForSubjectLinks(pool, seen, id, deadline);
+  await refreshStatementReaderAuthorization();
   let finalAuthorize = summaries.prepareAuthorization ? await summaries.prepareAuthorization() : authorize;
   let expectedRevision = preflight.revision;
   let expectedSecurityRevision = preflight.securityRevision;
@@ -564,6 +570,7 @@ export async function readSubject(
     requireAccessDeadline(deadline);
     await waitForSubjectLinks(pool, [...(summaries.seen ?? []), snapshot.component], id, deadline);
     requireAccessDeadline(deadline);
+    await refreshStatementReaderAuthorization();
     if (summaries.prepareAuthorization) finalAuthorize = await summaries.prepareAuthorization();
     snapshot = await readSnapshot();
   }
