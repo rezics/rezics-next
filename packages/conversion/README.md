@@ -241,13 +241,26 @@ Source binding audit: [`bangumi.ts`](src/bangumi.ts) has a static type lookup;
 [`open-library.ts`](src/open-library.ts) has scalar limits and calendar constants.
 [`wikidata.ts`](src/wikidata.ts) builds vocabulary mapping/type lookups once
 from the bundled release and only reads them during conversion. These are
-static vocabulary inputs, not retained records. All record projections,
-diagnostic arrays, title maps, proposal/asset arrays, and helper closures are
-created inside each call. [`support.ts`](src/support.ts) keeps scalar limits
-and a stateless hash helper at module scope; snapshot stacks, copies, and
-ancestor sets are local to a call. No converter retains per-record module or
-closure state across calls. This source audit supports the state claim;
-deterministic output alone would not detect a hidden unused cache.
+static vocabulary inputs, not retained records. Record projections,
+diagnostic arrays, title maps, proposal/asset arrays, and other conversion
+work data are created inside each call. [`support.ts`](src/support.ts) also
+has bounded cross-call memoization: `textDocument` stores up to 64 entries in
+a module-level `Map`, keyed by exact input text, and returns the same deeply
+frozen snapshot reference on a hit. When full, it deletes the oldest inserted
+key before adding a new one; reads do not refresh insertion order. The module-
+level `checkCoverIntent` validator remembers up to 256 accepted bodies as
+canonical JSON text in a `Set`, so object member order does not affect a hit.
+It stores only bodies with no violations and at most 8192 characters of
+canonical text, evicting the oldest accepted key when full; bodies without
+canonical text or over that limit are checked without being remembered. These
+are bounded snapshots and accepted-body keys, not unbounded per-record state.
+`support.test.ts` checks text-document output equality and size/error
+boundaries, not reference identity or eviction. `logical-growth.test.ts`
+checks that fixed serialized conversion output is unchanged after batches of
+unrelated records; it supports deterministic observable output, not absence
+of retained state. The source audit establishes the memoization bounds,
+eviction, and stored representations; serialized output tests cannot prove
+that no unused cache exists.
 
 [`logical-growth.test.ts`](tests/logical-growth.test.ts) calls the four actual
 exports with native `ConversionInput`, context, and registered revision options.
