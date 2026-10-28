@@ -25,18 +25,21 @@ import { readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Profile, Settings, Task } from './types.ts';
-import { parseFrozenFiles, type FrozenFile } from './frozen.ts';
+import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 
 function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
   return (task as FrozenTask).frozenFiles ?? [];
 }
+type FrozenCommit = { files: FrozenFile[]; formatterError?: string };
+
 function commitFrozenFiles(
   worktree: string,
   files: readonly FrozenFile[],
+  formatCommand: readonly string[],
   previous: readonly Pick<FrozenFile, 'path' | 'hash'>[] = [],
-): void {
+): FrozenCommit {
   const current = new Map(files.map((file) => [file.path, file]));
   const touched = new Set([...previous.map((file) => file.path), ...current.keys()]);
   for (const path of touched) {
@@ -60,14 +63,38 @@ function commitFrozenFiles(
       writeFileSync(target, file.content, 'utf8');
     } else if (existsSync(target)) rmSync(target, { force: true });
   }
-  if (!touched.size) return;
+  if (!touched.size) return { files: [] };
+  let formatterError: string | undefined;
+  const formatterAvailable = !formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!);
+  if (current.size && formatterAvailable) {
+    const formatted = spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...current.keys()], {
+      cwd: worktree,
+      encoding: 'utf8',
+    });
+    if (formatted.status !== 0) {
+      formatterError =
+        `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`.trim() ||
+        formatted.error?.message ||
+        `formatter exited with status ${formatted.status}`;
+      // Some formatters write earlier files before failing on a later one. A rejected brief must remain byte-for-byte
+      // intact so its hashes and the manager's repair target still describe the source the worker received.
+      for (const file of files) writeFileSync(join(worktree, file.path), file.content, 'utf8');
+    }
+  }
+  const committedFiles = formatterError
+    ? [...files]
+    : files.map((file) => frozenFile(file.path, readFileSync(join(worktree, file.path))));
   const existing = [...current.keys()];
   if (existing.length) git(worktree, ['add', '-A', '--', ...existing]);
   const removed = previous.map((file) => file.path).filter((path) => !current.has(path));
   if (removed.length) git(worktree, ['add', '-u', '--', ...removed]);
   const status = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: worktree });
-  if (status.status === 0) return;
-  git(worktree, ['commit', '-m', 'test: frozen acceptance files']);
+  if (status.status !== 0) git(worktree, ['commit', '-m', 'test: frozen acceptance files']);
+  return { files: committedFiles, ...(formatterError ? { formatterError } : {}) };
+}
+
+function reportFrozenFormatError(error: string | undefined): void {
+  if (error) console.error(`Frozen acceptance formatter failed:\n${error}`);
 }
 
 export function git(cwd: string, args: string[]): string {
@@ -264,13 +291,14 @@ export class WorkerTasks {
       writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
       git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
       installWorktreeDependencies(worktree);
-      commitFrozenFiles(worktree, files);
+      const frozen = commitFrozenFiles(worktree, files, this.settings.formatCommand);
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
-        (current as FrozenTask).frozenFiles = files.map(({ path, hash }) => ({ path, hash }));
+        (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         if (held) current.state = 'held';
       });
+      reportFrozenFormatError(frozen.formatterError);
       return this.store.task(id);
     } finally {
       lease.release();
@@ -546,10 +574,11 @@ export class WorkerTasks {
         setupStep = 'committing frozen acceptance files';
         const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
         const priorFiles = frozenFiles(task);
-        commitFrozenFiles(task.worktree, frozenBlocks, priorFiles);
+        const frozen = commitFrozenFiles(task.worktree, frozenBlocks, this.settings.formatCommand, priorFiles);
         task = this.store.updateTask(next, (current) => {
-          (current as FrozenTask).frozenFiles = frozenBlocks.map(({ path, hash }) => ({ path, hash }));
+          (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         });
+        reportFrozenFormatError(frozen.formatterError);
         setupStep = `rebasing onto current ${task.brief.target === 'stabilize' ? this.settings.stabilizeBranch : this.settings.integrationBranch}`;
         const integration = this.taskBaseHead(task.brief);
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);
