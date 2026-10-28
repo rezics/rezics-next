@@ -542,10 +542,9 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `rezics.kernel.check.pid=${pid}`,
     '-p',
     '127.0.0.1::5432',
-    // Six concurrent test databases, growth seeds at three scales and up to max_wal_size of WAL outgrew 1g, and every
-    // later file then failed to create its database. tmpfs only takes memory for what is written.
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=8g',
+    // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+    '--mount',
+    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -569,9 +568,9 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
   ]);
 }
 
-export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
+export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand: DockerCommand = docker): void {
   // One listing carries each owner, so a concurrent run that exits meanwhile cannot fail an inspect.
-  const rows = docker([
+  const rows = dockerCommand([
     'ps',
     '-a',
     '--filter',
@@ -587,7 +586,11 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
       process.kill(Number(owner), 0);
     } catch {
       // Removing a container that is already gone is the outcome we want.
-      spawnSync('docker', ['rm', '-f', id!], { cwd: directory, encoding: 'utf8' });
+      try {
+        dockerCommand(['rm', '-f', '-v', id!]);
+      } catch {
+        // A concurrent cleanup may already have removed it.
+      }
     }
   }
 }
@@ -599,7 +602,7 @@ export function cleanup(
   for (const id of containers) {
     if (!id) continue;
     try {
-      dockerCommand(['rm', '-f', id]);
+      dockerCommand(['rm', '-f', '-v', id]);
     } catch (error) {
       console.error(error);
     }

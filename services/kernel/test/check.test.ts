@@ -142,7 +142,7 @@ test("the check's PostgreSQL container keeps its logs when it exits early and is
 
   cleanup(['search-container', postgresContainer], stubDocker);
   expect(calls.slice(1)).toEqual([
-    ['rm', '-f', 'search-container'],
-    ['rm', '-f', 'postgres-container'],
+    ['rm', '-f', '-v', 'search-container'],
+    ['rm', '-f', '-v', 'postgres-container'],
   ]);
 });
