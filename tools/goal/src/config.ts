@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import type { Pool, Settings } from './types.ts';
+import type { DerivedFile, Pool, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
 
 import type { Database } from 'bun:sqlite';
@@ -26,7 +26,6 @@ import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
-export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
   return value.map((item, index) => {
@@ -136,6 +135,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'formatCommand',
       'integrationChecks',
       'affectedTests',
+      'derivedFiles',
       'codex',
       'routingFile',
       'riskAreasFile',
@@ -249,6 +249,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
       'affectedTests',
     ),
+    derivedFiles: readDerivedFiles(local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),
@@ -381,7 +382,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     queue,
     fence: store,
     sink: job,
-    derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+    derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
     promote: () => promoteNow(),
     runGate,
     gateIdentity: JSON.stringify(settings.gate),
@@ -394,7 +395,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       settings,
       job,
       runGate: promotionGate,
-      derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+      derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
       ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
     });
   }

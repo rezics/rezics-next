@@ -40,7 +40,8 @@ test('integration admits a branch whose only out-of-scope changes are derived fi
 test('staging derived files skips one whose deletion is already staged', () => {
   const h = integrationHarness();
   try {
-    const orphan = 'packages/client/src/kernel/orphan.d.ts', kept = 'packages/client/src/kernel/kept.d.ts';
+    const orphan = 'packages/client/src/kernel/orphan.d.ts',
+      kept = 'packages/client/src/kernel/kept.d.ts';
     commitFixture(h, { [orphan]: 'orphan\n', [kept]: 'kept\n' });
     git(h.root, 'rm', '-q', '--', orphan);
     writeFileSync(join(h.root, kept), 'regenerated\n');
@@ -52,20 +53,26 @@ test('staging derived files skips one whose deletion is already staged', () => {
   }
 });
 
-test('a rebase conflict in a promotion derived file takes the dev side', async () => {
+test('a rebase conflict in a promotion derived file regenerates it on the dev side', async () => {
   const h = integrationHarness();
   try {
     const generated = 'contracts/openapi.json';
     commitFixture(h, { [generated]: 'base contract\n' });
     h.ensureDev();
+    const regenerate = join(h.settings.stateDirectory, 'regenerate-openapi.mjs');
+    writeFileSync(
+      regenerate,
+      `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(generated)}, 'regenerated contract\\n');`,
+    );
+    h.settings.derivedFiles = [{ path: generated, stage: 'promotion', command: [process.execPath, regenerate] }];
     const task = h.dispatch(generated);
     await h.start(task);
     const dev = h.advanceDev(generated, 'dev contract\n');
     await h.train(undefined, false);
 
     expect(h.outcomes[0]?.passed).toBe(true);
-    expect(h.head()).toBe(dev);
-    expect(git(h.root, 'show', `dev:${generated}`)).toBe('dev contract');
+    expect(h.head()).not.toBe(dev);
+    expect(git(h.root, 'show', `dev:${generated}`)).toBe('regenerated contract');
   } finally {
     h.dispose();
   }
