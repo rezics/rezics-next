@@ -129,8 +129,7 @@ test('notice writes and bounded pages stay constant while other recipients and p
     warmups: 1,
     async grow(_growthDb, scale) {
       const atRoute = routeAtScale(scale);
-      for (const account of recipients(atRoute))
-        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
       for (const account of otherPartitionRecipients(atRoute))
         await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
@@ -169,8 +168,7 @@ test('notice writes and bounded pages stay constant while other recipients and p
       const atRoute = routeAtScale(scale);
       await seedNotices(retentionWarmupAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('1999-12-31T00:00:00Z'));
       await seedNotices(retentionAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2000-01-01T12:00:00Z'));
-      for (const account of recipients(atRoute))
-        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
       for (const account of otherPartitionRecipients(atRoute))
         await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
@@ -213,8 +211,7 @@ test('notice writes and bounded pages stay constant while other recipients and p
       const atRoute = routeAtScale(scale);
       await seedNotices(erasedWarmupAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
       await seedNotices(erasedAccounts.get(scale)!, NOTICE_PAGE_SIZE, new Date('2026-10-01T00:00:00Z'));
-      for (const account of recipients(atRoute))
-        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
       for (const account of otherPartitionRecipients(atRoute))
         await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
     },
@@ -237,7 +234,9 @@ test('notice writes and bounded pages stay constant while other recipients and p
       expectNoPlannerSettings(result.statements);
     },
     async operation(growthDb, scale) {
-      const result = await observed(growthDb.pool, () => deleteAccountNoticePage(growthDb.pool, erasedAccounts.get(scale)!));
+      const result = await observed(growthDb.pool, () =>
+        deleteAccountNoticePage(growthDb.pool, erasedAccounts.get(scale)!),
+      );
       expect(result.value).toBe(NOTICE_PAGE_SIZE);
       expectNoPlannerSettings(result.statements);
     },
