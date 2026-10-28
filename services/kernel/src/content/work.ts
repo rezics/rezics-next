@@ -55,6 +55,16 @@ const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
 const STEP_RETRY_DELAY_SECONDS = 1;
 
+/** DBOS retries count attempts, so eleven attempts provide ten exponentially growing waits. */
+export function contentStepRetryOptions(intervalSeconds = STEP_RETRY_DELAY_SECONDS) {
+  return {
+    retriesAllowed: true,
+    intervalSeconds,
+    backoffRate: 2,
+    maxAttempts: 11,
+  } as const;
+}
+
 type ContentWorkOptions = Readonly<{
   storage: MediaStorage;
   access: Access;
@@ -110,12 +120,7 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
-  const retry = {
-    retriesAllowed: true,
-    intervalSeconds: options.stepRetryDelaySeconds ?? STEP_RETRY_DELAY_SECONDS,
-    backoffRate: 1,
-    maxAttempts: 100,
-  } as const;
+  const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }

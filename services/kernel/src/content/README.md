@@ -390,6 +390,12 @@ deletion and authorized replay return 204 with the stored session position.
 
 ## Cost
 
+### Step retries
+
+- Touches: the step's own work once per attempt; no new statements.
+- Bound: at most 11 attempts per step; 1023 s of waits.
+- Growth check: none; per-attempt rows and statements are unchanged and covered by the existing work growth tests.
+
 ### Authored field document append and read
 
 - **Touches:** Validate and hash at most 2 MiB of canonical document bytes; insert one authored-field row by primary key in the subject's partition and emit one event in the caller's command. `readAuthoredField` performs one exact primary-key read, including tombstones.
