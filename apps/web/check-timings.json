@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-10-27T05:52:37.749Z",
+  "recorded": "2026-10-28T12:02:40.856Z",
   "files": {
     "tests/page-stories.test.ts": {
       "wall": 98.4664,
@@ -52,550 +52,550 @@
       ]
     },
     "tests/library-copies-cost.test.ts": {
-      "wall": 0.0588,
+      "wall": 3.4509,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0454,
+      "outsideTests": 3.3973,
       "result": "pass",
       "tests": [
         {
           "name": "copies stay within their bound as the copy list grows",
-          "time": 0.013387
+          "time": 0.053647
         }
       ]
     },
     "tests/library-collection-cost.test.ts": {
-      "wall": 0.0441,
+      "wall": 4.3934,
       "create": 0,
-      "drop": 0,
-      "outsideTests": 0.0379,
+      "drop": 0.0001,
+      "outsideTests": 4.3693,
       "result": "pass",
       "tests": [
         {
           "name": "collection page stays within its bound as its member page grows",
-          "time": 0.006177
+          "time": 0.024122
         }
       ]
     },
     "tests/composition-imports.test.ts": {
-      "wall": 0.0954,
-      "create": 0,
+      "wall": 1.102,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.019,
+      "outsideTests": 0.8809,
       "result": "pass",
       "tests": [
         {
           "name": "the website imports composition only through its package entry",
-          "time": 0.076386
+          "time": 0.22113
         }
       ]
     },
     "tests/curate-presentation.test.ts": {
-      "wall": 0.0732,
-      "create": 0,
+      "wall": 1.118,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.0683,
+      "outsideTests": 1.0908,
       "result": "pass",
       "tests": [
         {
           "name": "a curator sees every template of the active profile",
-          "time": 0.000116
+          "time": 0.000268
         },
         {
           "name": "editing a template replaces or inserts it in order and never mutates the profile",
-          "time": 0.000342
+          "time": 0.001493
         },
         {
           "name": "publishing sends the profile, then activates it at the head the curator loaded",
-          "time": 0.002642
+          "time": 0.006224
         },
         {
           "name": "a stale head, an invalid profile and a refusal come back as reasons",
-          "time": 0.001237
+          "time": 0.005978
         },
         {
           "name": "the curation route is mounted and its scopes are documented",
-          "time": 0.000523
+          "time": 0.01322
         }
       ]
     },
     "tests/home-page.test.ts": {
-      "wall": 0.65,
+      "wall": 5.123,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.6041,
+      "outsideTests": 4.9318,
       "result": "pass",
       "tests": [
         {
           "name": "the home is the platform route template from one page read",
-          "time": 0.04493
+          "time": 0.189388
         },
         {
           "name": "a kernel without a home page falls back to the static home",
-          "time": 0.000706
+          "time": 0.001279
         },
         {
           "name": "the home route renders the route page",
-          "time": 0.000262
+          "time": 0.000532
         }
       ]
     },
     "tests/library-entries-cost.test.ts": {
-      "wall": 0.0514,
+      "wall": 2.9929,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0441,
+      "outsideTests": 2.9429,
       "result": "pass",
       "tests": [
         {
           "name": "personal library view and state change stay within their bounds as entries grow",
-          "time": 0.007313
+          "time": 0.050001
         }
       ]
     },
     "tests/home-continue-cost.test.ts": {
-      "wall": 0.4753,
-      "create": 0,
+      "wall": 5.0441,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.4638,
+      "outsideTests": 4.872,
       "result": "pass",
       "tests": [
         {
           "name": "the home page reads the library once per view whatever the size of the library",
-          "time": 0.01151
+          "time": 0.172063
         }
       ]
     },
     "tests/library-mine-cost.test.ts": {
-      "wall": 0.053,
+      "wall": 2.8,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0461,
+      "outsideTests": 2.7831,
       "result": "pass",
       "tests": [
         {
           "name": "my collections and following stay within their bound as list size grows",
-          "time": 0.006876
+          "time": 0.016915
         }
       ]
     },
     "tests/home-story.test.ts": {
-      "wall": 0.6075,
+      "wall": 5.8678,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5442,
+      "outsideTests": 5.5655,
       "result": "pass",
       "tests": [
         {
           "name": "the recorded home read replays as the kernel answered it",
-          "time": 0.063314
+          "time": 0.302295
         }
       ]
     },
     "tests/home-heading.test.ts": {
-      "wall": 0.5939,
+      "wall": 5.7071,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5184,
+      "outsideTests": 5.5144,
       "result": "pass",
       "tests": [
         {
           "name": "a level-1 heading is the page heading, and a page has at most one",
-          "time": 0.006358
+          "time": 0.006806
         },
         {
           "name": "the platform home opens with its heading and keeps a personal slot for signed-in visitors",
-          "time": 0.048525
+          "time": 0.04667
         },
         {
           "name": "the route page shows the template heading as its only h1 and lets the host fill the personal slot",
-          "time": 0.020608
+          "time": 0.139232
         }
       ]
     },
     "tests/library-logs-cost.test.ts": {
-      "wall": 0.0512,
+      "wall": 2.8667,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.043,
+      "outsideTests": 2.8541,
       "result": "pass",
       "tests": [
         {
           "name": "published log reads and writes stay within their bound as an account log list grows",
-          "time": 0.008248
+          "time": 0.012585
         }
       ]
     },
     "tests/home-lists-story.test.ts": {
-      "wall": 0.6196,
+      "wall": 5.7133,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5558,
+      "outsideTests": 5.4669,
       "result": "pass",
       "tests": [
         {
           "name": "the recorded home answers every vertical list with indexed subjects",
-          "time": 0.063811
+          "time": 0.246404
         }
       ]
     },
     "tests/messages.test.ts": {
-      "wall": 0.0196,
+      "wall": 0.6009,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0142,
+      "outsideTests": 0.5688,
       "result": "pass",
       "tests": [
         {
           "name": "every locale's site messages have the same keys, sorted by key",
-          "time": 0.005428
+          "time": 0.032101
         }
       ]
     },
     "tests/media-client.test.ts": {
-      "wall": 0.0113,
+      "wall": 0.9199,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0101,
+      "outsideTests": 0.9102,
       "result": "pass",
       "tests": [
         {
           "name": "the media routes call the kernel only through its client",
-          "time": 0.001161
+          "time": 0.009684
         }
       ]
     },
     "tests/library-progress-cost.test.ts": {
-      "wall": 0.0467,
+      "wall": 2.7199,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0365,
+      "outsideTests": 2.6919,
       "result": "pass",
       "tests": [
         {
           "name": "reading progress stays within its bound as its pages and unit batches grow",
-          "time": 0.010207
+          "time": 0.028013
         }
       ]
     },
     "tests/library-subject-slot-cost.test.ts": {
-      "wall": 0.0502,
+      "wall": 2.2817,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0391,
+      "outsideTests": 2.2575,
       "result": "pass",
       "tests": [
         {
           "name": "subject library slot stays within its bound as its collections grow",
-          "time": 0.011055
+          "time": 0.02424
         }
       ]
     },
     "tests/pages-jsonld.test.ts": {
-      "wall": 0.0761,
+      "wall": 1.6159,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0738,
+      "outsideTests": 1.605,
       "result": "pass",
       "tests": [
         {
           "name": "a subject's public representation becomes schema.org JSON-LD",
-          "time": 0.001002
+          "time": 0.002559
         },
         {
           "name": "only values the representation discloses are emitted",
-          "time": 0.000777
+          "time": 0.004231
         },
         {
           "name": "types outside schema.org keep their meaning as an additional type",
-          "time": 0.000296
+          "time": 0.003151
         },
         {
           "name": "the serialized JSON-LD cannot close its script element",
-          "time": 0.000258
+          "time": 0.000916
         }
       ]
     },
     "tests/pages-editor-home.test.ts": {
-      "wall": 0.0785,
+      "wall": 1.8084,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0759,
+      "outsideTests": 1.8046,
       "result": "pass",
       "tests": [
         {
           "name": "the editor edits link lists and type lists",
-          "time": 0.002644
+          "time": 0.003809
         }
       ]
     },
     "tests/pages-editor.test.ts": {
-      "wall": 0.0917,
+      "wall": 1.5976,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0868,
+      "outsideTests": 1.5858,
       "result": "fail",
       "tests": [
         {
           "name": "the editor's fields come from the registry",
-          "time": 0.000642
+          "time": 0.001096
         },
         {
           "name": "an edited page becomes a composition document",
-          "time": 0.003314
+          "time": 0.008478
         },
         {
           "name": "publishing refuses a document the platform would refuse",
-          "time": 0.000994
+          "time": 0.002185
         }
       ]
     },
     "tests/pages-render.test.ts": {
-      "wall": 0.1131,
+      "wall": 3.7276,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0545,
+      "outsideTests": 1.0405,
       "result": "pass",
       "tests": [
         {
           "name": "a composition renders through Puck with named slot content in document order",
-          "time": 0.010121
+          "time": 0.04336
         },
         {
           "name": "a node whose type has no component renders nothing and the rest of the page still renders",
-          "time": 0.000996
+          "time": 0.016968
         },
         {
           "name": "the render path's initial load stays within 24 KiB",
-          "time": 0.047435
+          "time": 2.626785
         }
       ]
     },
     "tests/post-editing-cost.test.ts": {
-      "wall": 0.0321,
+      "wall": 0.7188,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0257,
+      "outsideTests": 0.6882,
       "result": "pass",
       "tests": [
         {
           "name": "post edits keep K/D/R/A fixed as post data grows",
-          "time": 0.005743
+          "time": 0.028176
         },
         {
           "name": "post deletions keep K/D/R/A fixed as post data grows",
-          "time": 0.00061
+          "time": 0.00238
         }
       ]
     },
     "tests/pages-data.test.ts": {
-      "wall": 0.6781,
+      "wall": 6.5459,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5743,
+      "outsideTests": 6.3471,
       "result": "pass",
       "tests": [
         {
           "name": "data components render the subject read in the reader's locale",
-          "time": 0.090064
+          "time": 0.14687
         },
         {
           "name": "a failed read says so under its heading and an empty one leaves its component out",
-          "time": 0.004955
+          "time": 0.010429
         },
         {
           "name": "values are text and links stay safe",
-          "time": 0.008787
+          "time": 0.04147
         }
       ]
     },
     "tests/pages-actions.test.ts": {
-      "wall": 0.6003,
+      "wall": 6.5935,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5433,
+      "outsideTests": 6.486,
       "result": "pass",
       "tests": [
         {
           "name": "the site renders its subject controls in the header actions slot",
-          "time": 0.049093
+          "time": 0.093035
         },
         {
           "name": "without site controls the actions slot leaves no markup",
-          "time": 0.007938
+          "time": 0.014515
         }
       ]
     },
     "tests/reactions-cost.test.ts": {
-      "wall": 0.0456,
+      "wall": 1.372,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0381,
+      "outsideTests": 1.3558,
       "result": "pass",
       "tests": [
         {
           "name": "thread page reads stay within their bound as s grows",
-          "time": 0.004848
+          "time": 0.010485
         },
         {
           "name": "setting or clearing a reaction stays within its bound as s grows",
-          "time": 0.002647
+          "time": 0.005744
         }
       ]
     },
     "tests/platform-closed-cost.test.ts": {
-      "wall": 0.3697,
+      "wall": 5.0784,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.3665,
+      "outsideTests": 5.0677,
       "result": "pass",
       "tests": [
         {
           "name": "closed page reads keep K/D/R/A fixed as existing page data grows",
-          "time": 0.003155
+          "time": 0.010667
         }
       ]
     },
     "tests/report-cost.test.ts": {
-      "wall": 0.0405,
+      "wall": 1.1787,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0312,
+      "outsideTests": 1.158,
       "result": "pass",
       "tests": [
         {
           "name": "report submission keeps K/D/R/A fixed as stored reports and sessions grow",
-          "time": 0.009343
+          "time": 0.020693
         }
       ]
     },
     "tests/pages-layout.test.ts": {
-      "wall": 0.4285,
+      "wall": 5.6513,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.4161,
+      "outsideTests": 5.5996,
       "result": "pass",
       "tests": [
         {
           "name": "the page definitions come from the platform registry",
-          "time": 0.000202
+          "time": 0.00077
         },
         {
           "name": "a layout page renders landmarks, headings and text with the appearance tokens",
-          "time": 0.011129
+          "time": 0.047131
         },
         {
           "name": "unknown tokens, slot names and levels fall back instead of reaching the markup",
-          "time": 0.001117
+          "time": 0.00379
         }
       ]
     },
     "tests/subject-route.test.ts": {
-      "wall": 0.0126,
+      "wall": 1.9623,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0117,
+      "outsideTests": 1.9601,
       "result": "pass",
       "tests": [
         {
           "name": "the subject route renders the page model",
-          "time": 0.000941
+          "time": 0.00216
         }
       ]
     },
     "tests/workspace-imports.test.ts": {
-      "wall": 0.0715,
+      "wall": 6.2507,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0137,
+      "outsideTests": 0.7583,
       "result": "pass",
       "tests": [
         {
           "name": "workspace imports apps/web declares every @rezics package it imports",
-          "time": 0.037802
+          "time": 2.34682
         },
         {
           "name": "workspace imports apps/auth declares every @rezics package it imports",
-          "time": 0.007002
+          "time": 2.57566
         },
         {
           "name": "workspace imports packages/ui declares every @rezics package it imports",
-          "time": 0.012095
+          "time": 0.486868
         },
         {
           "name": "workspace imports packages/document declares every @rezics package it imports",
-          "time": 0.000666
+          "time": 0.082223
         },
         {
           "name": "workspace imports the scan sees static, dynamic and side-effect imports and re-exports",
-          "time": 0.000235
+          "time": 0.000855
         }
       ]
     },
     "tests/format.test.ts": {
-      "wall": 0.5085,
-      "create": 0,
-      "drop": 0,
-      "outsideTests": 0.014,
+      "wall": 4.544,
+      "create": 0.0008,
+      "drop": 0.0003,
+      "outsideTests": 0.7139,
       "result": "pass",
       "tests": [
         {
           "name": "apps/web follows the repository format",
-          "time": 0.185503
+          "time": 2.05348
         },
         {
           "name": "apps/web checks the format in its own check",
-          "time": 0.000575
+          "time": 0.002919
         },
         {
           "name": "packages/ui follows the repository format",
-          "time": 0.167286
+          "time": 0.847016
         },
         {
           "name": "packages/ui checks the format in its own check",
-          "time": 0.000496
+          "time": 0.007688
         },
         {
           "name": "packages/document follows the repository format",
-          "time": 0.140415
+          "time": 0.918426
         },
         {
           "name": "packages/document checks the format in its own check",
-          "time": 0.000217
+          "time": 0.000534
         }
       ]
     },
     "tests/subject-page-read.test.ts": {
-      "wall": 0.7278,
+      "wall": 10.0084,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.6459,
+      "outsideTests": 9.5489,
       "result": "pass",
       "tests": [
         {
           "name": "a subject page is one page read rendered from its template",
-          "time": 0.080918
+          "time": 0.456471
         },
         {
           "name": "merged and missing subjects are told apart",
-          "time": 0.001005
+          "time": 0.003063
         }
       ]
     },
     "tests/subject-story.test.ts": {
-      "wall": 0.6119,
+      "wall": 9.1845,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5186,
+      "outsideTests": 8.8058,
       "result": "pass",
       "tests": [
         {
           "name": "the recorded page read replays as the kernel answered it",
-          "time": 0.0041
+          "time": 0.078183
         },
         {
           "name": "the subject story renders the real subject page",
-          "time": 0.089217
+          "time": 0.300503
         }
       ]
     },
@@ -1959,61 +1959,61 @@
       ]
     },
     "tests/library-summary.test.ts": {
-      "wall": 0.0481,
+      "wall": 1.7313,
       "create": 0,
-      "drop": 0,
-      "outsideTests": 0.045,
+      "drop": 0.0005,
+      "outsideTests": 1.7247,
       "result": "pass",
       "tests": [
         {
           "name": "a collection presents localized subject summary labels while hidden subjects remain absent",
-          "time": 0.003075
+          "time": 0.006587
         }
       ]
     },
     "tests/settings-page-cost.test.ts": {
-      "wall": 0.0495,
+      "wall": 1.5217,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0445,
+      "outsideTests": 1.5098,
       "result": "pass",
       "tests": [
         {
           "name": "the settings page stays within its bound as the stored version grows",
-          "time": 0.00321
+          "time": 0.005156
         },
         {
           "name": "a settings change is one write however often the settings changed before",
-          "time": 0.001392
+          "time": 0.005907
         },
         {
           "name": "three repeated loads each cost the same",
-          "time": 0.000393
+          "time": 0.000818
         }
       ]
     },
     "tests/bylines-cost.test.ts": {
-      "wall": 0.0682,
-      "create": 0,
+      "wall": 2.0782,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.047,
-      "result": "pass",
+      "outsideTests": 1.9576,
+      "result": "fail",
       "tests": [
         {
           "name": "a thread or board page reads its authors in one request at every size",
-          "time": 0.018335
+          "time": 0.101627
         },
         {
           "name": "an empty board makes no identity read",
-          "time": 0.000625
+          "time": 0.000804
         },
         {
           "name": "a later thread page includes its starter and skips erased post identities",
-          "time": 0.000532
+          "time": 0.014862
         },
         {
           "name": "failed optional identities leave both page reads intact without retries",
-          "time": 0.001683
+          "time": 0.003279
         }
       ]
     },
@@ -2068,27 +2068,27 @@
       ]
     },
     "tests/subject-page-core.test.ts": {
-      "wall": 0.715,
+      "wall": 9.4115,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5002,
+      "outsideTests": 8.3105,
       "result": "pass",
       "tests": [
         {
           "name": "the subject header shows the cover at the type's ratio, the title in the reader's language with the original beside it, type, date and principal creators",
-          "time": 0.108703
+          "time": 0.568415
         },
         {
           "name": "the cover's credit is a caption at lg and listed again in Sources at the end of the overview",
-          "time": 0.012003
+          "time": 0.043809
         },
         {
           "name": "a media value renders through Cover and a document value through the document renderer, never as an id or an empty row",
-          "time": 0.066223
+          "time": 0.178363
         },
         {
           "name": "a value or entry above the reader's spoiler level is hidden behind a reveal control, and the spoiler level is not printed as a qualifier",
-          "time": 0.027885
+          "time": 0.31046
         }
       ]
     },
@@ -2122,220 +2122,220 @@
       ]
     },
     "tests/threads-subjects-cost.test.ts": {
-      "wall": 0.0508,
+      "wall": 0.9584,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0172,
+      "outsideTests": 0.806,
       "result": "pass",
       "tests": [
         {
           "name": "a thread page reads at most four of its subjects, together, whatever the number attached",
-          "time": 0.027708
+          "time": 0.109166
         },
         {
           "name": "a subject that cannot be read is left out and the others stay",
-          "time": 0.005758
+          "time": 0.042923
         },
         {
           "name": "a title follows the page language, then the kernel label, then English",
-          "time": 0.000086
+          "time": 0.000277
         }
       ]
     },
     "tests/library-collection-editing-cost.test.ts": {
-      "wall": 0.0597,
+      "wall": 3.6577,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0462,
+      "outsideTests": 3.6187,
       "result": "pass",
       "tests": [
         {
           "name": "collection editing stays within its bound as the collection grows",
-          "time": 0.013533
+          "time": 0.039032
         }
       ]
     },
     "tests/realm-pages-cost.test.ts": {
-      "wall": 0.0572,
+      "wall": 1.9749,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0434,
+      "outsideTests": 1.9122,
       "result": "pass",
       "tests": [
         {
           "name": "the Realm page reads its fixed set once, however many boards, publications and memberships there are",
-          "time": 0.009512
+          "time": 0.055719
         },
         {
           "name": "the Realm page of a Space without an address is read from the same fixed set",
-          "time": 0.001761
+          "time": 0.003653
         },
         {
           "name": "a Realm link of a Space with an address costs two reads",
-          "time": 0.000509
+          "time": 0.000541
         },
         {
           "name": "my Realms is one page read, however many Realms the person has joined",
-          "time": 0.000707
+          "time": 0.000912
         },
         {
           "name": "joining or leaving is one write",
-          "time": 0.001283
+          "time": 0.001917
         }
       ]
     },
     "tests/subject-relations-view-cost.test.ts": {
-      "wall": 0.568,
+      "wall": 9.4155,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.4843,
+      "outsideTests": 8.8011,
       "result": "pass",
       "tests": [
         {
           "name": "the relations view renders one page of the continuation however large the relation count grows",
-          "time": 0.083748
+          "time": 0.614419
         }
       ]
     },
     "tests/subject-relations-lists.test.ts": {
-      "wall": 0.6064,
+      "wall": 8.6997,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5174,
+      "outsideTests": 7.9285,
       "result": "pass",
       "tests": [
         {
           "name": "relations show from the reader's side with the property's inverse label, symmetric ones under the same label on both sides",
-          "time": 0.058367
+          "time": 0.276428
         },
         {
           "name": "relations are grouped by relation group, each group with its count, cover, title, label and date, and series order shown as order",
-          "time": 0.01492
+          "time": 0.131259
         },
         {
           "name": "SubjectList and TypeList show an exact or at-least count and a See all link to a paged view",
-          "time": 0.011916
+          "time": 0.328005
         },
         {
           "name": "inverse lists are ordered by their declared key (series position, credit order, date) before name",
-          "time": 0.003835
+          "time": 0.035509
         }
       ]
     },
     "tests/subject-views.test.ts": {
-      "wall": 0.8138,
+      "wall": 7.7597,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5909,
-      "result": "fail",
+      "outsideTests": 7.186,
+      "result": "pass",
       "tests": [
         {
           "name": "each subject view is its own server-rendered URL under the subject's address, resolved from the template's per-view documents with generic fallback",
-          "time": 0.014008
+          "time": 0.171085
         },
         {
           "name": "the host renders a tab bar of the views that have data in the documented order, with counts, scrolling on phones without wrapping",
-          "time": 0.078874
+          "time": 0.11338
         },
         {
           "name": "the platform overview follows the documented section order, ends with Sources and a Details link, and Details holds the remaining facts",
-          "time": 0.044042
+          "time": 0.118436
         },
         {
           "name": "a subject with only a title renders a complete page with the placeholder cover, an invitation to add facts and Discussion",
-          "time": 0.086001
+          "time": 0.170803
         }
       ]
     },
     "tests/subject-data-components.test.ts": {
-      "wall": 0.7334,
+      "wall": 8.6748,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.5536,
+      "outsideTests": 8.2671,
       "result": "pass",
       "tests": [
         {
           "name": "Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and Sources render from their page reads with a bounded preview, a count and a link to the full view",
-          "time": 0.089418
+          "time": 0.211285
         },
         {
           "name": "RatingSummary, ThreadList and ReviewList render an honest empty or unavailable state with an invitation until their reads exist",
-          "time": 0.015301
+          "time": 0.054656
         },
         {
           "name": "a data component never renders an id, a media id or a property CURIE",
-          "time": 0.053516
+          "time": 0.068541
         },
         {
           "name": "a failed section read says so with a retry and the rest of the page renders",
-          "time": 0.021596
+          "time": 0.073236
         }
       ]
     },
     "tests/agent-pages-cost.test.ts": {
-      "wall": 1.0669,
-      "create": 0,
+      "wall": 5.9825,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.5736,
+      "outsideTests": 4.8358,
       "result": "pass",
       "tests": [
         {
           "name": "an agent page reads and renders what its limits bound at 1, 10 and 100 threads, posts and collections (1)",
-          "time": 0.124104
+          "time": 0.514067
         },
         {
           "name": "an agent page reads and renders what its limits bound at 1, 10 and 100 threads, posts and collections (10)",
-          "time": 0.171824
+          "time": 0.298257
         },
         {
           "name": "an agent page reads and renders what its limits bound at 1, 10 and 100 threads, posts and collections (100)",
-          "time": 0.197386
+          "time": 0.334372
         }
       ]
     },
     "tests/agent-pages.test.ts": {
-      "wall": 1.0789,
-      "create": 0,
+      "wall": 6.3649,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.5854,
+      "outsideTests": 5.137,
       "result": "pass",
       "tests": [
         {
           "name": "/@handle renders the agent's subject page, with the account's display name, avatar, bio and links in the header",
-          "time": 0.137406
+          "time": 0.46605
         },
         {
           "name": "an agent with an account offers Posts, Reviews and Collections views beside Works and Characters, each a bounded page with a continuation",
-          "time": 0.269648
+          "time": 0.571348
         },
         {
           "name": "an account verified as a catalogue person or organization renders that subject's page at /@handle",
-          "time": 0.042359
+          "time": 0.075517
         },
         {
           "name": "an unknown handle, a reserved handle and a deleted account answer the same not-found page",
-          "time": 0.006439
+          "time": 0.01462
         },
         {
           "name": "an agent page is never routed inside a Realm or Zone",
-          "time": 0.037695
+          "time": 0.10032
         }
       ]
     },
     "tests/check-lease.test.ts": {
-      "wall": 1.6175,
-      "create": 0,
+      "wall": 12.303,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 0.0216,
-      "result": "pass",
+      "outsideTests": 1.945,
+      "result": "fail",
       "tests": [
         {
           "name": "leases every stack-heavy file while pure unit files run outside the isolated wrapper",
-          "time": 1.148811
+          "time": 2.891165
         },
         {
           "name": "serializes stack-heavy files inside an inherited single slot without taking another slot",
-          "time": 0.447088
+          "time": 7.466852
         }
       ]
     },
@@ -2390,27 +2390,15 @@
       ]
     },
     "tests/home-continue-row.test.ts": {
-      "wall": 232.0767,
-      "create": 0,
+      "wall": 2.0641,
+      "create": 0.0008,
       "drop": 0,
-      "outsideTests": 174.1264,
+      "outsideTests": 2.0609,
       "result": "pass",
       "tests": [
         {
-          "name": "each Continue card shows the progress the kernel returned, as its unit and total with the percent, or the amount alone without a total",
-          "time": 46.88646
-        },
-        {
-          "name": "a Continue card is one link to continue and holds no separate button",
-          "time": 4.323233
-        },
-        {
-          "name": "on a phone Continue is one horizontally scrolling row of compact cards, and the search box and the first catalogue row start in the first viewport",
-          "time": 6.738887
-        },
-        {
           "name": "the home story's Continue entries cover a total of episodes, pages without a total, a percent and a session without an amount",
-          "time": 0.001764
+          "time": 0.003221
         }
       ]
     },
@@ -2494,44 +2482,44 @@
       ]
     },
     "tests/legacy-imports.test.ts": {
-      "wall": 0.1136,
+      "wall": 3.3059,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.0188,
-      "result": "pass",
+      "outsideTests": 2.4829,
+      "result": "fail",
       "tests": [
         {
           "name": "no site source imports a legacy @rezics/ui component that has a shadcn counterpart",
-          "time": 0.090451
+          "time": 0.787407
         },
         {
           "name": "the search typeahead keeps its keyboard behaviour and suggestions with covers on the shadcn combobox",
-          "time": 0.001794
+          "time": 0.002756
         },
         {
           "name": "bylines show the author's avatar or initials through the shadcn avatar",
-          "time": 0.002584
+          "time": 0.032807
         }
       ]
     },
     "tests/subject-view-frame.test.ts": {
-      "wall": 0.7653,
+      "wall": 7.7141,
       "create": 0,
       "drop": 0,
-      "outsideTests": 0.66,
+      "outsideTests": 7.349,
       "result": "pass",
       "tests": [
         {
           "name": "every subject view URL renders the compact subject header: xs cover, title linking to the overview, original title, type and date",
-          "time": 0.071191
+          "time": 0.218608
         },
         {
           "name": "every subject view renders the same sticky view tabs as the overview with the current view marked active and its count",
-          "time": 0.023535
+          "time": 0.10711
         },
         {
           "name": "the compact header and tabs render without JavaScript and add no kernel read beyond what the view already makes",
-          "time": 0.010569
+          "time": 0.039423
         }
       ]
     },
@@ -2561,6 +2549,476 @@
         {
           "name": "reading a subject costs one counts read, plus one own-reaction read when signed in, at 1, 10 and 100 reactions",
           "time": 22.458425
+        }
+      ]
+    },
+    "tests/cover-lists.test.ts": {
+      "wall": 5.9955,
+      "create": 0.0008,
+      "drop": 0,
+      "outsideTests": 4.8606,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "subject previews render as cover cards: the cover first and edge to edge, the title and one secondary line",
+          "time": 0.445251
+        },
+        {
+          "name": "one ratio is shared by the covers of a list",
+          "time": 0.277528
+        },
+        {
+          "name": "below sm a preview is one snapping row of at least two and a half cards at 390 wide; from sm up it is a grid",
+          "time": 0.035367
+        },
+        {
+          "name": "every card is one link named by the subject title, and the row is reachable and scrollable by keyboard",
+          "time": 0.045967
+        },
+        {
+          "name": "a spoiler-hidden item keeps its reveal control on the card",
+          "time": 0.077829
+        },
+        {
+          "name": "the full relations view uses the responsive cover grid and keeps its continuation link",
+          "time": 0.014488
+        },
+        {
+          "name": "agent pages show works and characters as cover cards",
+          "time": 0.238468
+        }
+      ]
+    },
+    "tests/library-progress-subjects.test.ts": {
+      "wall": 1.72,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.7181,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a missing session summary reuses the matching log summary by subject id",
+          "time": 0.001247
+        },
+        {
+          "name": "the session cover wins when another read carries a different cover for that subject",
+          "time": 0.000055
+        },
+        {
+          "name": "index rows reuse matching summaries even when those summaries have no image",
+          "time": 0.000632
+        }
+      ]
+    },
+    "tests/page-head.test.ts": {
+      "wall": 1.3512,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.3449,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "canonical and reciprocal alternates use configured origin and page paths",
+          "time": 0.004952
+        },
+        {
+          "name": "page head creates descriptive metadata and safely serialized structured data",
+          "time": 0.001017
+        },
+        {
+          "name": "public origin must be an absolute HTTP origin",
+          "time": 0.000335
+        }
+      ]
+    },
+    "tests/progress-rows.test.ts": {
+      "wall": 0.849,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.841,
+      "result": "fail",
+      "tests": [
+        {
+          "name": "the progress index and session use the shared progress row",
+          "time": 0.002716
+        },
+        {
+          "name": "session completion and abandonment are offered in the progress row menu",
+          "time": 0.000583
+        },
+        {
+          "name": "published logs show state and relative time without progress bars",
+          "time": 0.004703
+        }
+      ]
+    },
+    "tests/routing-readme.test.ts": {
+      "wall": 0.6829,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.68,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "routing reference the SEO link reaches the Routing section and its links resolve",
+          "time": 0.001485
+        },
+        {
+          "name": "routing reference locale URLs",
+          "time": 0.000757
+        },
+        {
+          "name": "routing reference public and signed-in routes",
+          "time": 0.000115
+        },
+        {
+          "name": "routing reference data reads",
+          "time": 0.000094
+        },
+        {
+          "name": "routing reference search params",
+          "time": 0.00004
+        },
+        {
+          "name": "routing reference head",
+          "time": 0.00006
+        },
+        {
+          "name": "routing reference statuses",
+          "time": 0.0001
+        },
+        {
+          "name": "routing reference caching",
+          "time": 0.000088
+        },
+        {
+          "name": "routing reference origin",
+          "time": 0.000036
+        },
+        {
+          "name": "routing reference pending and errors",
+          "time": 0.000084
+        }
+      ]
+    },
+    "tests/realm-join.test.ts": {
+      "wall": 4.0388,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 3.9892,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "signed-out visitors get the same Join action in the same place, linked to sign-in and back to this page",
+          "time": 0.049567
+        }
+      ]
+    },
+    "tests/progress-pages-r2.test.ts": {
+      "wall": 4.4031,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.7872,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "one shared progress formatter uses the localized unit forms and shares",
+          "time": 0.023775
+        },
+        {
+          "name": "cursor positions use their locator as the row label on the pages and Continue card",
+          "time": 0.000851
+        },
+        {
+          "name": "a known share and its label share one row, while an unknown share has no empty bar",
+          "time": 0.019196
+        },
+        {
+          "name": "the signed-in home story renders one Continue card for every recorded active session up to the row limit",
+          "time": 2.546345
+        },
+        {
+          "name": "progress page state, completed-unit empty state, and published logs keep the agreed compact structure",
+          "time": 0.025736
+        }
+      ]
+    },
+    "tests/screenshot-output.test.ts": {
+      "wall": 1.8436,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.8305,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a remote screenshot run writes to the workspace-relative path it returns",
+          "time": 0.013052
+        }
+      ]
+    },
+    "tests/review-compose.test.ts": {
+      "wall": 3.0997,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 3.0517,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "review writes include one subject and an exact vote citation while discussions keep their old payload",
+          "time": 0.002444
+        },
+        {
+          "name": "a reviews board requires one picked or preset subject and publishes a review thread",
+          "time": 0.003018
+        },
+        {
+          "name": "a review can cite the author's current vote and sends its question, units and revision",
+          "time": 0.000365
+        },
+        {
+          "name": "a duplicate live review links to the existing review",
+          "time": 0.00014
+        },
+        {
+          "name": "a second live review returns the matching review id from the subject index",
+          "time": 0.001338
+        },
+        {
+          "name": "the subject Reviews view offers board selection to members and a sign-in prompt to visitors",
+          "time": 0.000214
+        },
+        {
+          "name": "review writing uses one current vote and bounded Realm and board pages",
+          "time": 0.00022
+        },
+        {
+          "name": "review writing adds exactly one vote read and one My Realms read",
+          "time": 0.011455
+        },
+        {
+          "name": "review interface copy is present in all eight locales",
+          "time": 0.028824
+        }
+      ]
+    },
+    "tests/space-cards.test.ts": {
+      "wall": 0.2846,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.2835,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "Space and Realm render their published subjects with the shared cover row and cards",
+          "time": 0.001081
+        }
+      ]
+    },
+    "tests/sitemap-feeds.test.ts": {
+      "wall": 0.9811,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.139,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "sitemapFeeds loads board, thread, Realm and Space feeds with canonical page families",
+          "time": 0.159666
+        },
+        {
+          "name": "random opaque cursors do not stop advancing feeds, and reads stay at one per 1,000 items",
+          "time": 0.258335
+        },
+        {
+          "name": "keyed segment state stays bounded as the feed grows",
+          "time": 0.41069
+        },
+        {
+          "name": "legacy segment state resumes without carrying cursor history into progress checks",
+          "time": 0.003579
+        },
+        {
+          "name": "item-order stalls fail for keyed feeds and repeated thread ids, regardless of cursor tokens",
+          "time": 0.00886
+        },
+        {
+          "name": "an expired 400 cursor still restarts the feed exactly once",
+          "time": 0.000964
+        }
+      ]
+    },
+    "tests/sitemap-export.test.ts": {
+      "wall": 2.874,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.979,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an export reads short and empty pages from three feeds until next is null and publishes each family once",
+          "time": 0.033605
+        },
+        {
+          "name": "unchanged files keep their upload time, and changing one feed rewrites only that feed file",
+          "time": 0.022611
+        },
+        {
+          "name": "a feed that fails after retries leaves the previous index and every file it lists untouched",
+          "time": 0.008068
+        },
+        {
+          "name": "a rejected cursor restarts that feed once, while a stalled feed and a second rejection fail",
+          "time": 0.013006
+        },
+        {
+          "name": "daily starts use one UTC id, and an export with an older index ETag cannot replace a newer publication",
+          "time": 0.009419
+        },
+        {
+          "name": "unlisted shard files are kept until seven days after their last published listing",
+          "time": 0.009902
+        },
+        {
+          "name": "feed reads, R2 operations and bounded step batches grow linearly through 300,000 families",
+          "time": 1.798399
+        }
+      ]
+    },
+    "tests/sitemap-lastmod.test.ts": {
+      "wall": 2.4154,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5979,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "a family without lastmod is written as eight url entries with their alternates and no lastmod element, and a family with one keeps it",
+          "time": 0.010771
+        },
+        {
+          "name": "a family whose lastmod is present but not a valid time still throws, naming the family",
+          "time": 0.001074
+        },
+        {
+          "name": "the shard bytes, limits and digest for families that all carry lastmod are unchanged from base",
+          "time": 1.805632
+        }
+      ]
+    },
+    "tests/subject-header-description.test.ts": {
+      "wall": 8.323,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 8.0152,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "the subject page header shows no description, and the recorded paraphrased summary appears once in About",
+          "time": 0.173542
+        },
+        {
+          "name": "a subject without a summary in any language shows the description once as About prose, with its foreign language tag",
+          "time": 0.043159
+        },
+        {
+          "name": "in zh-Hans, the recorded subject with English texts shows the English language tag once, in About",
+          "time": 0.025755
+        },
+        {
+          "name": "a summary in another language takes precedence over a description in the reader language",
+          "time": 0.029315
+        },
+        {
+          "name": "About omits prose when the subject has neither summary nor description",
+          "time": 0.012069
+        },
+        {
+          "name": "meta description, JSON-LD, search and card snippets keep the description unchanged from base",
+          "time": 0.023969
+        }
+      ]
+    },
+    "tests/type-labels.test.ts": {
+      "wall": 0.5555,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 0.5016,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "web source never derives a displayed name from a type identifier local name",
+          "time": 0.053912
+        }
+      ]
+    },
+    "tests/thread-page-frame.test.ts": {
+      "wall": 1.2025,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.1287,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "reads the thread board once regardless of post count and tolerates a missing board",
+          "time": 0.071929
+        },
+        {
+          "name": "the thread head, subjects, composer and post anchors provide a compact accessible frame",
+          "time": 0.001881
+        }
+      ]
+    },
+    "tests/view-tabs-fit.test.ts": {
+      "wall": 6.9369,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 6.54,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "an agent whose Characters and Works previews return every item has neither tab or See all link, and shows every item in the overview",
+          "time": 0.32315
+        },
+        {
+          "name": "a subject view stays tabbed with its count and See all link when its preview is partial or inexact",
+          "time": 0.065586
+        },
+        {
+          "name": "Overview, Reviews, Discussion and Details remain tabbed, and loading a view without a tab still renders it",
+          "time": 0.008184
+        }
+      ]
+    },
+    "tests/sitemap-pack.test.ts": {
+      "wall": 23.9922,
+      "create": 0,
+      "drop": 0,
+      "outsideTests": 1.0555,
+      "result": "pass",
+      "tests": [
+        {
+          "name": "packShards writes a dated family's eight locale URLs as entries, each with lastmod and eight reciprocal xhtml:link alternates built by pageLinks, escaped, with no x-default, changefreq or priority",
+          "time": 0.008563
+        },
+        {
+          "name": "a shard closes before a family that would exceed 3,000 families or 40,000,000 uncompressed bytes including the wrapper, a family never spans two shards, and a family that cannot fit an empty shard throws",
+          "time": 14.655903
+        },
+        {
+          "name": "a family missing a locale, a duplicate URL, an invalid lastmod or an origin that is not absolute https throws",
+          "time": 0.020487
+        },
+        {
+          "name": "each shard is gzip whose decompressed bytes are the counted XML, with a digest that is equal for equal input and differs otherwise",
+          "time": 0.036606
+        },
+        {
+          "name": "sitemapIndexXml writes a flat index of loc and lastmod and throws above 50,000 entries",
+          "time": 1.212294
+        },
+        {
+          "name": "growth check: shard count and uncompressed bytes grow linearly in families and no shard exceeds its limits",
+          "time": 7.00282
         }
       ]
     }
