@@ -61,6 +61,23 @@ test('actual curated first/deep source seeks and exact original probes retain bo
   expect(created.status).toBe(201);
   const id = (await created.json()).collection.id as string,
     subject = await native.createSubject('game');
+  // Keep every source relation above the small-table sequential-scan crossover at the first scale.
+  // These are actual native commands, so no synthetic positive Collection or membership authority is seeded.
+  for (let n = 0; n < 1024; n++) {
+    const unrelated = await native.send(owner.bearer, 'POST', '/v1/collections', {
+      title: 'Unrelated source ' + n,
+      visibility: 'private',
+    });
+    expect(unrelated.status).toBe(201);
+    const unrelatedId = (await unrelated.json()).collection.id as string;
+    expect(
+      (
+        await native.send(owner.bearer, 'POST', `/v1/collections/${unrelatedId}/members`, {
+          subjectId: subject,
+        })
+      ).status,
+    ).toBe(201);
+  }
   let metadata!: NativeCollectionMetadata,
     after: CanonicalRangeKey | null = null;
   await checkGrowth(db, {
