@@ -10,6 +10,99 @@ afterEach(() => {
   for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
+function memoryPolicy(totalKiB: number, memoryMax = String(24 * 1024 ** 3), checkStatus = 0) {
+  const calls: { command: string; args: string[] }[] = [];
+  const reports: string[] = [];
+  let reads = 0;
+  const run: NonNullable<ConstructorParameters<typeof WorkerSlice>[0]> = (command, args) => {
+    calls.push({ command, args });
+    const probe = args[0] === 'show';
+    const stdout = Buffer.from(probe ? memoryMax : '');
+    const stderr = Buffer.alloc(0);
+    return { pid: 1, output: [null, stdout, stderr], stdout, stderr, status: probe ? checkStatus : 0, signal: null };
+  };
+  const worker = new WorkerSlice(run, () => {
+    reads++;
+    return `MemTotal: ${totalKiB} kB\nMemFree: 1 kB\n`;
+  });
+  return {
+    calls,
+    reports,
+    reads: () => reads,
+    launch: (env: NodeJS.ProcessEnv = {}) =>
+      worker.launch(
+        'memory-policy',
+        1,
+        'true',
+        [],
+        { env },
+        () => false,
+        (message) => reports.push(message),
+      ),
+  };
+}
+
+test("configuring the worker slice sets MemoryHigh to total memory minus the local check slice's MemoryMax minus a 14 GiB reserve, never below a quarter of total memory, in the same call as the CPU and IO weights", () => {
+  for (const [totalGiB, checkGiB, expectedGiB] of [
+    [62, 24, 24],
+    [62, 60, 16],
+    [8, 24, 2],
+  ]) {
+    const policy = memoryPolicy(totalGiB! * 1024 ** 2 + 1023, String(checkGiB! * 1024 ** 3));
+    policy.launch();
+    policy.launch();
+    expect(policy.calls.filter(({ command }) => command === 'systemctl')).toEqual([
+      { command: 'systemctl', args: ['show', 'rezics-check.slice', '-p', 'MemoryMax', '--value'] },
+      {
+        command: 'systemctl',
+        args: [
+          '--user',
+          'set-property',
+          '--runtime',
+          WORKER_SLICE,
+          `CPUWeight=${WORKER_CPU_WEIGHT}`,
+          `IOWeight=${WORKER_IO_WEIGHT}`,
+          `MemoryHigh=${expectedGiB}G`,
+        ],
+      },
+    ]);
+    expect(policy.reads()).toBe(1);
+    expect(policy.calls.filter(({ command }) => command === 'systemd-run')).toHaveLength(2);
+    expect(policy.reports).toEqual([]);
+  }
+});
+
+test('a host without a local check slice, or whose check slice has no MemoryMax, subtracts only the reserve', () => {
+  for (const [value, status] of [
+    ['infinity', 0],
+    ['', 0],
+    ['\n', 0],
+    [String(24 * 1024 ** 3), 1],
+  ] as const) {
+    const policy = memoryPolicy(62 * 1024 ** 2, value, status);
+    policy.launch();
+    expect(policy.calls[1]!.args.at(-1)).toBe('MemoryHigh=48G');
+    expect(policy.reports).toEqual([]);
+  }
+});
+
+test('REZICS_WORKER_MEMORY_HIGH_GIB overrides the derived value, and a value that is not a positive integer fails configuration with a message naming the variable', () => {
+  const override = memoryPolicy(62 * 1024 ** 2);
+  override.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '31' });
+  expect(override.calls[0]!.args.at(-1)).toBe('MemoryHigh=31G');
+  expect(override.reads()).toBe(0);
+  expect(override.reports).toEqual([]);
+
+  for (const value of ['', '0', '-1', '1.5', 'NaN', 'infinity', ' 31 ', '1G', '9007199254740992']) {
+    const invalid = memoryPolicy(62 * 1024 ** 2);
+    expect(invalid.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: value }).status).toBe(0);
+    expect(invalid.calls).toEqual([{ command: 'true', args: [] }]);
+    expect(invalid.reads()).toBe(0);
+    expect(invalid.reports).toHaveLength(1);
+    expect(invalid.reports[0]).toContain('REZICS_WORKER_MEMORY_HIGH_GIB must be a positive integer');
+  }
+});
+
 function fakeSystemd(options: { systemctl?: string; systemdRun?: string; memoryMax?: string | null } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'worker-slice-'));
   temporary.push(directory);

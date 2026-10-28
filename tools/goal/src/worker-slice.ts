@@ -6,7 +6,7 @@ export const WORKER_CPU_WEIGHT = 50;
 export const WORKER_IO_WEIGHT = 50;
 export const WORKER_SLICE = 'rezics-workers.slice';
 const GIB = 1024 ** 3;
-// Reserve 14 GiB for the check host's floor and the managers, control plane and containers.
+// Total GiB minus local check MemoryMax minus 14 GiB (10 GiB floor + 4 GiB for managers, control plane and containers), at least a quarter of total.
 const WORKER_MEMORY_RESERVE_GIB = 14;
 const CHECK_SLICE = 'rezics-check.slice';
 
@@ -87,11 +87,10 @@ export class WorkerSlice {
     } else {
       const totalMatch = /^MemTotal:\s+(\d+)\s+kB$/m.exec(this.readMeminfo());
       const totalGiB = totalMatch ? Math.floor((Number(totalMatch[1]) * 1024) / GIB) : 0;
-      const check = this.run(
-        'systemctl',
-        ['show', CHECK_SLICE, '-p', 'MemoryMax', '--value'],
-        { ...options, stdio: ['ignore', 'pipe', 'pipe'] },
-      );
+      const check = this.run('systemctl', ['show', CHECK_SLICE, '-p', 'MemoryMax', '--value'], {
+        ...options,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       const checkValue = check.status === 0 && !check.error ? check.stdout?.toString().trim() : '';
       const checkBytes = /^\d+$/.test(checkValue ?? '') ? Number(checkValue) : 0;
       const checkGiB = Math.floor(checkBytes / GIB);
