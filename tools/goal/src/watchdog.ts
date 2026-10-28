@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
+import { sameProcess } from './process.ts';
 import { CHECK_HOST_TRANSPORT, MODEL_AT_CAPACITY, POOL_EXHAUSTED } from './records.ts';
 import type { WorkerStore } from './store.ts';
 
@@ -306,6 +307,7 @@ export function violations(
     if (!task.currentAttempt || !['running', 'ready'].includes(task.state)) continue;
     const attempt = store.attempt({ taskId: task.id, attempt: task.currentAttempt });
     if (attempt.state !== 'exited' || !attempt.endedAt) continue;
+    if (attempt.driver && sameProcess(attempt.driver)) continue;
     const idle = now - Date.parse(attempt.endedAt);
     if (idle < NO_WORKER_MS) continue;
     const intent = pending.has(`${task.id}:${attempt.attempt}`);

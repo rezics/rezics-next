@@ -301,12 +301,13 @@ function isAncestor(cwd: string, ancestor: string, descendant: string): boolean 
   return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd }).status === 0;
 }
 
-function changedPathsBetween(cwd: string, base: string, head: string): string[] {
+export function changedPathsBetween(cwd: string, base: string, head: string): string[] {
   const changed = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], {
     cwd,
     encoding: 'utf8',
   });
-  if (changed.status !== 0) throw new Error(changed.stderr.trim() || 'Cannot read task changes');
+  if (changed.status !== 0)
+    throw new Error(changed.stderr?.trim() || changed.error?.message || 'Cannot read task changes');
   return changed.stdout.split('\0').filter(Boolean);
 }
 
@@ -502,6 +503,14 @@ type BatchLandingResult = {
   deferredIds: number[];
   skippedIds: number[];
 };
+
+type SpawnTextResult = {
+  status: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  error?: Error;
+};
+type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
 
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
@@ -1625,29 +1634,34 @@ export class MergeTrain {
     sourceBranch: string,
     targetBranch: string,
     logPath: string,
+    runSync: SpawnText = spawnSync,
   ): { commit?: string; conflicts?: string[]; error?: string } {
     const checkout = this.options.mainCheckout;
     const targetRef = `refs/heads/${targetBranch}`;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const targetResult = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+      const targetResult = runSync('git', ['rev-parse', '--verify', targetRef], {
         cwd: checkout,
         encoding: 'utf8',
       });
-      if (targetResult.status !== 0)
-        return { error: `branch ${targetBranch} does not exist: ${targetResult.stderr.trim() || 'missing ref'}` };
-      const targetHead = targetResult.stdout.trim();
+      if (targetResult.status !== 0) {
+        const detail = targetResult.stderr?.trim() || targetResult.error?.message || 'missing ref';
+        return {
+          error: `branch ${targetBranch} does not exist: ${detail}`,
+        };
+      }
+      const targetHead = targetResult.stdout?.trim() ?? '';
       if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
 
       const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
       mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
       try {
         git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
-        const merged = spawnSync(
+        const merged = runSync(
           'git',
           ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
           { cwd: tree, encoding: 'utf8' },
         );
-        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}`;
+        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}` || merged.error?.message || '';
         if (merged.status !== 0) {
           const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
           try {

@@ -6,7 +6,7 @@ import type { FirstFailure } from './contracts.ts';
 
 export function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(result.stderr.trim() || result.error?.message || `git ${args[0]} failed`);
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
 
