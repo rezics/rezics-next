@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { commandTime, DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -11,7 +11,13 @@ import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { listSubjectLinks, listSubjectRelations, linkProjection } from '../../src/semantic/links.ts';
+import {
+  listSubjectLinks,
+  listSubjectRelations,
+  linkProjection,
+  type SubjectLinksPage,
+  type SubjectRelationsPage,
+} from '../../src/semantic/links.ts';
 import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { moveMergePage } from '../../src/semantic/merge-moves.ts';
@@ -149,23 +155,24 @@ async function call(
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
-async function expireIssuedProof(observer: SqlObserver) {
+async function expireIssuedProof(observer: SqlObserver, waitStarted: string) {
   const issued = observer.records.filter(({ statement }) => statement === readPermissionTime.sql).at(-1);
-  expect(issued).toBeDefined();
-  const expires = Date.parse(issued!.executedAt) + 1100;
+  // HTTP list routes already wait before preparing evidence. Native list callers and
+  // subject reads issue real evidence before this barrier, whose lifetime must expire.
+  const expires = Date.parse(issued?.executedAt ?? waitStarted) + 1100;
   while (Date.now() < expires) await Bun.sleep(Math.min(20, expires - Date.now()));
 }
 async function held<T>(observer: SqlObserver, statement: string, run: () => Promise<T>, during: () => Promise<void>) {
   const barrier = observer.hold({ statement }, 'after');
   const result = run();
   try {
-    await Promise.race([
+    const boundary = await Promise.race([
       barrier.entered,
       result.then(() => {
         throw new Error('Read completed before native barrier');
       }),
     ]);
-    await expireIssuedProof(observer);
+    await expireIssuedProof(observer, boundary.executedAt);
     await during();
   } finally {
     barrier.release();
@@ -228,7 +235,7 @@ for (const kind of ['links', 'relations'] as const) {
                 { pool, deadline },
               );
             const check = await prepareAuthorization();
-            return readStatementAs(pool, access, as, deadline, () => {
+            return readStatementAs<SubjectLinksPage | SubjectRelationsPage>(pool, access, as, deadline, () => {
               const options = {
                 subject: subject.id,
                 property,
@@ -250,6 +257,9 @@ for (const kind of ['links', 'relations'] as const) {
       else expect(result.relations).toHaveLength(1);
       expect(result.freshness.caught_up).toBe(true);
       const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
+      expect(
+        observer.records.slice(0, wait).filter(({ statement }) => statement === readPermissionTime.sql),
+      ).toHaveLength(2);
       expect(
         observer.records.slice(wait + 1).filter(({ statement }) => statement === readPermissionTime.sql),
       ).toHaveLength(2);
@@ -279,7 +289,7 @@ test('pending inbound merge member retry prepares fresh primary and audience evi
     resource: { route: 0, id: GLOBAL_CONTEXT },
     denied: () => new Error('Merge denied'),
     authorize: async (client, attempt) => {
-      if (!(await mergeCheck(client, commandTime(attempt)))) throw new Error('Merge denied');
+      if (!(await mergeCheck(client, attempt.time))) throw new Error('Merge denied');
       return 'execute';
     },
   };
@@ -394,7 +404,7 @@ for (const kind of ['links', 'relations'] as const) {
                   resource: { route: 0, id: GLOBAL_CONTEXT },
                   denied: () => new Error('Merge denied'),
                   authorize: async (client, attempt) => {
-                    if (!(await check(client, commandTime(attempt)))) throw new Error('Merge denied');
+                    if (!(await check(client, attempt.time))) throw new Error('Merge denied');
                     return 'execute';
                   },
                 },
