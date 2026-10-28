@@ -31,6 +31,7 @@ let account: Awaited<ReturnType<(typeof import('../../src/access/account-data.ts
 let requestDeadlineMs = 5000;
 const context = () => ({ pool, deadline: Date.now() + requestDeadlineMs });
 let advanceDurableFailureClock: (() => void) | undefined;
+let advanceCommandFailureClock: (() => void) | undefined;
 const actions = new Map([
   ['subject:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
@@ -372,15 +373,7 @@ const commandEvidenceSites = new Set([
 for (const [site, invoke] of Object.entries(sites)) {
   for (const [name, error, reason] of faults) {
     test(`${site}: ${name} closes the request without effects`, async () => {
-      requestDeadlineMs =
-        reason === 'contention'
-          ? (site === 'resource anchor validate' && name === '55P03') ||
-            (site === 'standing parent validate' && name === '40001')
-            ? 3000
-            : commandEvidenceSites.has(site)
-              ? 1000
-              : 250
-          : 5000;
+      requestDeadlineMs = reason === 'contention' ? 250 : 5000;
       const cause = error();
       let calls = 0;
       const before = await effects(site.startsWith('durable') ? durable.db.pool : pool);
@@ -391,11 +384,21 @@ for (const [site, invoke] of Object.entries(sites)) {
       });
       let caught: unknown;
       let result: unknown;
+      const realNow = Date.now;
+      let simulatedNow = realNow();
+      if (reason === 'contention' && commandEvidenceSites.has(site)) {
+        const deadline = simulatedNow + requestDeadlineMs;
+        Date.now = () => simulatedNow;
+        advanceCommandFailureClock = () => {
+          simulatedNow = deadline + 1;
+        };
+      }
       try {
         result = await invoke(async () => {
           calls++;
           if (reason === 'contention') {
             advanceDurableFailureClock?.();
+            advanceCommandFailureClock?.();
             throw new AccessUnavailableError('contention');
           }
           throw cause;
@@ -404,6 +407,8 @@ for (const [site, invoke] of Object.entries(sites)) {
         caught = error;
       } finally {
         log.mockRestore();
+        advanceCommandFailureClock = undefined;
+        Date.now = realNow;
         requestDeadlineMs = 5000;
       }
       expect(calls).toBeGreaterThan(0);
