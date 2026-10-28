@@ -8,6 +8,7 @@ import { createResourcePublicEligibility } from '../access/public-eligibility.ts
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
@@ -86,18 +87,15 @@ class ViewReader {
     async function readAnchor(anchorId: string) {
       const route = routeOf(anchorId);
       if (route === null) return null;
-      const check = await accessCheck(
-        access,
-        actor,
-        'subject:read',
-        {
-          route,
-          id: anchorId,
-          eligibility: subjectReadEligibility({ route, id: anchorId }),
-        },
-        { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-      );
+      const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const resource = {
+        route,
+        id: anchorId,
+        eligibility: subjectReadEligibility({ route, id: anchorId }),
+      };
+      const check = await accessCheck(access, actor, 'subject:read', resource, { pool, deadline });
       return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, undefined, {
+        prepareAuthorization: () => accessCheck(access, actor, 'subject:read', resource, { pool, deadline }),
         async authorize(client, id, batch) {
           const route = routeOf(id);
           if (route === null) return false;

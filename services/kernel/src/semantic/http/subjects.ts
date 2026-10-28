@@ -655,7 +655,8 @@ function subjectRoutes(
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
-        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
+        const check = await authorize(subjectResource);
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
         const checksById = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
         const authorizeSummary: import('../summaries.ts').SummaryDependencies['authorize'] = async (
@@ -673,10 +674,14 @@ function subjectRoutes(
           return (await pending)(client);
         };
         const result = await admission.run('normal', job, () =>
-          readStatementAs(pool, access(), actor, job.deadline, () =>
+          readStatementAs(pool, access(), actor, job.deadline, async (refreshStatementAuthorization) =>
             readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
               languages,
               authorize: authorizeSummary,
+              prepareAuthorization: async () => {
+                await refreshStatementAuthorization();
+                return authorize(subjectResource);
+              },
               seen: [...session.components],
               deadline: job.deadline,
             }),

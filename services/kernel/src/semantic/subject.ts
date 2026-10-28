@@ -18,6 +18,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { fencedIds } from './fences.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
@@ -41,6 +42,7 @@ import readLabelsStatement from './read-labels.sql';
 import readLabelChoicesStatement from './read-label-choices.sql';
 import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
+import readSubjectIdentity from './read-subject-identity.sql';
 import readTypesStatement from './read-item-types.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import { readRelease as getRelease } from './definitions.ts';
@@ -310,6 +312,7 @@ export async function writeSubject(
 type SubjectReadRow = {
   id: string;
   account: string | null;
+  security_revision: string;
   redirect: string | null;
   type: string;
   revision: number;
@@ -393,6 +396,7 @@ export async function readSubject(
   summaries: {
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
+    prepareAuthorization?: () => Promise<AccessCheck>;
     seen?: readonly { partition: number; epoch: number; position: bigint }[];
     deadline?: number;
   } = {},
@@ -407,40 +411,67 @@ export async function readSubject(
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
+  const preflight = await withReadTransaction(pool, async (client) => {
+    const identity = (await readSubjectIdentity.run(client, {
+      route,
+      subject_id: id,
+      partition_no: partitionOf(route),
+    })) as {
+      visibility: string;
+      securityRevision: string;
+      redirect: string | null;
+      partitionNo: number;
+      epoch: number;
+      position: string;
+      revision: number | null;
+    } | null;
+    if (!identity || identity.visibility !== 'visible') return null;
+    if (!(await authorize(client))) return null;
+    if (identity.redirect) throw new SubjectRedirectError(id, identity.redirect);
+    return {
+      component: {
+        partition: identity.partitionNo,
+        epoch: identity.epoch,
+        position: BigInt(identity.position),
+      },
+      revision: identity.revision,
+      securityRevision: identity.securityRevision,
+    };
+  });
+  if (!preflight) return null;
   const active = await activeRelease(pool);
-  const observed = await withConnection(pool, (client) => readPartition(client, partitionOf(route)));
-  if (observed && observed.position > 0n)
-    await waitForSubjectLinks(
-      pool,
-      [
-        ...(summaries.seen ?? []),
-        { partition: observed.partitionNo, epoch: observed.epoch, position: observed.position },
-      ],
-      id,
-      summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
-    );
-  const snapshot = await withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    if (!partition) {
-      return null;
-    }
-    const rows = listed(
-      (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[] | SubjectReadRow | null,
-    );
-    if (!rows.length) {
-      return null;
-    }
-    const allowed = await authorize(client);
-    if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
-    const stored = await getRelease(client, rows[0]!.release);
-    if (!stored) throw new Error('Subject revision release is missing');
-    // The Context's own relation types show with the subject's release; reads never register the digest.
-    const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
-    const release = layer.release;
-    let statementFacts: FactRow[] = [];
-    const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
-    const relationCounts: Record<string, number> = {};
-    if (allowed) {
+  const deadline = summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const seen = [...(summaries.seen ?? []), preflight.component];
+  await waitForSubjectLinks(pool, seen, id, deadline);
+  let finalAuthorize = summaries.prepareAuthorization ? await summaries.prepareAuthorization() : authorize;
+  let expectedRevision = preflight.revision;
+  let expectedSecurityRevision = preflight.securityRevision;
+  const readSnapshot = () =>
+    withReadTransaction(pool, async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) return null;
+      const rows = listed(
+        (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[] | SubjectReadRow | null,
+      );
+      if (!rows.length) return null;
+      const allowed = await finalAuthorize(client);
+      if (!allowed) return null;
+      if (rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
+      if (rows[0]!.revision !== expectedRevision || rows[0]!.security_revision !== expectedSecurityRevision)
+        return {
+          freshnessRetry: true as const,
+          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+          revision: rows[0]!.revision,
+          securityRevision: rows[0]!.security_revision,
+        };
+      const stored = await getRelease(client, rows[0]!.release);
+      if (!stored) throw new Error('Subject revision release is missing');
+      // The Context's own relation types show with the subject's release; reads never register the digest.
+      const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
+      const release = layer.release;
+      let statementFacts: FactRow[] = [];
+      const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
+      const relationCounts: Record<string, number> = {};
       const properties = release.types[rows[0]!.type]!.properties;
       if (properties.some((property) => isRelationProperty(release, property)))
         await client.query('SET LOCAL enable_seqscan = off');
@@ -515,18 +546,27 @@ export async function readSubject(
         }
       }
       if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
-    }
-    if (!allowed) return null;
-    return {
-      rows,
-      statementFacts,
-      release,
-      layerDigest: layer.digest,
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      resolution,
-      relationCounts,
-    };
-  });
+      return {
+        freshnessRetry: false as const,
+        rows,
+        statementFacts,
+        release,
+        layerDigest: layer.digest,
+        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+        resolution,
+        relationCounts,
+      };
+    });
+  let snapshot = await readSnapshot();
+  while (snapshot?.freshnessRetry) {
+    expectedRevision = snapshot.revision;
+    expectedSecurityRevision = snapshot.securityRevision;
+    requireAccessDeadline(deadline);
+    await waitForSubjectLinks(pool, [...(summaries.seen ?? []), snapshot.component], id, deadline);
+    requireAccessDeadline(deadline);
+    if (summaries.prepareAuthorization) finalAuthorize = await summaries.prepareAuthorization();
+    snapshot = await readSnapshot();
+  }
   if (!snapshot) return null;
   const { rows, component, release, layerDigest, statementFacts, resolution, relationCounts } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);

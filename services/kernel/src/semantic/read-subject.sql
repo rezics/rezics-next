@@ -2,6 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id
 )
 SELECT s.subject_id::text AS id, s.type, account.account_id::text AS account,
+       s.security_revision::text AS security_revision,
        redirect.target::text AS redirect, latest.revision, latest.release,
        r.revision AS fact_revision, r.release AS fact_release,
        f.slot_id::text AS slot_id, f.log_seq, f.operation, f.kind,

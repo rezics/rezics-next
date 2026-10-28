@@ -41,20 +41,20 @@ export async function readStatementAs<T>(
   access: Access,
   actor: Actor,
   deadline: number,
-  read: () => Promise<T>,
+  read: (refreshAuthorization: () => Promise<void>) => Promise<T>,
 ): Promise<T> {
-  if (readers.getStore() === PUBLIC_READER || actor.kind !== 'account') return read();
-  const check = await accessCheck(
-    access,
-    actor,
-    'moderation:hide',
-    { route: 0, id: GLOBAL_CONTEXT },
-    { pool, deadline },
-  );
+  if (readers.getStore() === PUBLIC_READER || actor.kind !== 'account') return read(async () => {});
+  const prepareCheck = () =>
+    accessCheck(access, actor, 'moderation:hide', { route: 0, id: GLOBAL_CONTEXT }, { pool, deadline });
+  let check = await prepareCheck();
   let permission: Promise<boolean> | undefined;
+  const refreshAuthorization = async () => {
+    check = await prepareCheck();
+    permission = undefined;
+  };
   return withStatementReader(
     { account: actor.accountId, moderator: (client) => (permission ??= check(client as PoolClient)) },
-    read,
+    () => read(refreshAuthorization),
   );
 }
 export async function statementAudience(client: CommandTransaction) {
