@@ -28,6 +28,7 @@ import {
 } from './membership.ts';
 import readRealmSpace from './ban-realm.sql';
 import createOperation from './membership-operation-create.sql';
+import currentBan from './ban-current.sql';
 
 export const REALM_JOIN_WORKFLOW = 'community.join';
 export const REALM_LEAVE_WORKFLOW = 'community.leave';
@@ -185,6 +186,11 @@ async function acceptOperation(
       const at = authoritativeTimeValue(command.time);
       const realm = await readRealmSpace.run(tx, { route, realm_id: intent.realmId, at });
       if (!realm || realm.spaceId !== intent.spaceId) throw new GrantDeniedError();
+      if (
+        kind === 'join' &&
+        (await currentBan.run(tx, { route, realm_id: intent.realmId, account_id: intent.memberAccountId, at }))
+      )
+        throw new GrantDeniedError();
       const sourceDigest = membershipSourceDigest(operation, target, facts);
       const record: DurableInitiatorRecord = {
         operation,
