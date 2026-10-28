@@ -107,7 +107,9 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
       '-c',
       `tool_output_token_limit=${codex.toolOutputTokens}`,
       '-c',
-      `service_tier=${JSON.stringify(profile.serviceTier ?? codex.serviceTier)}`,
+      // Only settings choose the tier: Fast spends included allowance 2.5 times as fast, so neither a routing profile nor
+      // the profile a retry keeps from an earlier attempt can select it.
+      `service_tier=${JSON.stringify(codex.serviceTier)}`,
       ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
       '-c',
       'features.multi_agent=false',

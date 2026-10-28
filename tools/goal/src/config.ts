@@ -84,6 +84,11 @@ function positive(value: unknown, label: string, zero = false): number {
     throw new Error(`invalid ${label}`);
   return value;
 }
+/** A burn ceiling is percent of the weekly window per hour; sustainable ceilings are below 1. */
+function burnCeiling(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error('invalid maxBurnPerHour');
+  return value;
+}
 function positiveInteger(value: unknown, label: string): number {
   const parsed = positive(value, label);
   if (!Number.isInteger(parsed)) throw new Error(`invalid ${label}`);
@@ -222,7 +227,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
           : { reservePerHour: positive(policy.reservePerHour, 'reservePerHour') }),
         ...(policy.maxBurnPerHour === undefined
           ? {}
-          : { maxBurnPerHour: positive(policy.maxBurnPerHour, 'maxBurnPerHour') }),
+          : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
       },
     };
   });
