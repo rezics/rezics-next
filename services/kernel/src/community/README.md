@@ -88,15 +88,6 @@ when the new visibility is protected, in the same transaction as `realm.updated`
 `PUT /v1/realms/{realmId}/bans/{accountId}` opens a Realm-owned ban record and
 `realm_ban` identity denials for `realm:join` and `realm:participate` at the command's T.
 `banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
-A target holding the Realm's owner or moderator resource role is refused with 409 and
-must have the role removed first. From T, a protected Realm's read eligibility checks
-one indexed current-ban key in its own partition and refuses every grant for a banned
-account. The Realm, carried Realm ID, boards, threads, posts and publications are hidden
-even while removal is pending or an independent read grant remains. Public reads still
-answer exactly as for an anonymous reader. A read identity denial would also veto public
-eligibility, so protected reads consult the ban record instead. Join and add-member acceptance and membership
-publication refuse a currently banned target without writing an operation, membership,
-grant or follow. After unban, join and add-member work again.
 An existing member is removed by Accounts' native leave workflow: publish closes the
 Realm interval before release clears the account's inverse slot. The workflow is keyed
 by the ban. Its operation commits the moderator as initiator (see Durable initiators
@@ -283,7 +274,7 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 ### Join a Realm
 
-- Touches: One acceptance command (admission, one Realm point read, one current-ban point read, one operation insert, the creation receipt), then the membership workflow's own bounded reserve and publish steps, each adding one initiator restoration, then one follow point upsert on the member's account partition. Member publication rechecks the current-ban key before writing.
+- Touches: One acceptance command (admission, one Realm point read, one operation insert, the creation receipt), then the membership workflow's own bounded reserve and publish steps, each adding one initiator restoration, then one follow point upsert on the member's account partition.
 - Bound: O(1) rows and statements per step, plus Access and one restoration; O(log R) blocks. No scan of members.
 - Growth check: `test/community/growth-join.test.ts`, "Join a Realm has constant rows and statements as Realms and its members grow", at scales 1, 4 and 16 (500, 2000 and 8000 seeded neighbours); zero sequential scans.
 
@@ -313,7 +304,7 @@ A missing Realm, or one that is not yet active at T, has no proof.
 
 ### Ban an account
 
-- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, one bounded owner/moderator probe through Access's grant keys, plus a member interval point read and, when present, one removal acceptance command (one operation insert) and one native leave workflow keyed by the ban.
+- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, plus a member interval point read and, when present, one removal acceptance command (one operation insert) and one native leave workflow keyed by the ban.
 - Bound: O(1) rows and statements in the ban command, plus Access and one leave workflow; O(log R) blocks. No scan of members, bans or content.
 - Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
 
@@ -328,9 +319,3 @@ A missing Realm, or one that is not yet active at T, has no proof.
 - Touches: One admission and Realm authorization; one current-ban keyset seek of L rows, with one lookahead row for the next cursor.
 - Bound: O(L) rows and O(1) statements, plus Access; O(log R + L) blocks. Historical intervals and other Realms do not widen the window.
 - Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 256, 1024 and 4096 neighbouring Realms, each with one ban and one member, around a fixed probe; zero sequential scans.
-
-### Protected Realm read and admission ban check
-
-- Touches: One current-ban point read by route, Realm and account in the Realm partition, at the read or command's T. Protected read eligibility applies it before the independent grant branch; public reads skip it. Join and add-member check before accepting an operation, and membership publication rechecks before writing.
-- Bound: O(1) rows and statements; O(log B) blocks for B bans. Closed history does not widen the current key.
-- Growth check: `test/community/growth-ban.test.ts`, "protected read and admission ban probes stay bounded as bans in one Realm grow", at 256, 1024 and 4096 bans around fixed present and absent probes; zero sequential scans.

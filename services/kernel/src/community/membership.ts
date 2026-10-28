@@ -18,7 +18,6 @@ import type { RealmMembershipCommands } from '../access/membership-work.ts';
 import type { MembershipRoleProof, RealmRoleReader } from '../access/permission.ts';
 import {
   authoritativeTimeValue,
-  mintReadTime,
   principalCommandIdentity,
   runCommand,
   type CommandAuthorization,
@@ -46,7 +45,6 @@ import readChangeRow from './membership-read-change.sql';
 import readCurrent from './membership-current.sql';
 import readRoles from './membership-role.sql';
 import readRealmHead from './realm-read.sql';
-import currentBan from './ban-current.sql';
 import readOperationRow from './membership-operation-read.sql';
 import readOperationReceipt from './membership-operation-receipt.sql';
 
@@ -291,22 +289,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(input.role !== null || actor.accountId === input.memberAccountId);
     const action = actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
     const check = await accessCheck(access, actor, action, { route, id: input.principal.id }, { ...request, pool });
-    denyUnless(
-      await withConnection(pool, async (client) => {
-        const time = await mintReadTime(client, config.clock);
-        if (
-          input.role === 'member' &&
-          (await currentBan.run(client, {
-            route,
-            realm_id: input.principal.id,
-            account_id: input.memberAccountId,
-            at: authoritativeTimeValue(time),
-          }))
-        )
-          throw new GrantDeniedError();
-        return check(client, time);
-      }),
-    );
+    denyUnless(await withConnection(pool, (client) => check(client)));
     return request;
   }
 
@@ -581,11 +564,6 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         const at = authoritativeTimeValue(command.time);
         const active = await readOne(realmActive.run(tx, { route, id: realmId, at }));
         denyUnless(text(active, 'realmId') === realmId);
-        if (
-          role === 'member' &&
-          (await currentBan.run(tx, { route, realm_id: realmId, account_id: input.memberAccountId, at }))
-        )
-          throw new GrantDeniedError();
         const written = await writeMembership(tx, {
           route,
           realmId,
