@@ -60,12 +60,12 @@ test('a request queued while the holder drains is landed by the holder after it 
     s.queue.enqueue(first);
 
     const leasePath = join(s.options.stateDirectory, 'train.lease');
-    const next = s.queue.next.bind(s.queue);
+    const nextBatch = s.queue.nextBatch.bind(s.queue);
     let observeRelease = true;
     let holderCheckedAfterRelease = false;
-    s.queue.next = () => {
+    s.queue.nextBatch = (...args) => {
       if (observeRelease && !existsSync(leasePath)) holderCheckedAfterRelease = true;
-      return next();
+      return nextBatch(...args);
     };
 
     let queuedDuringRelease = false;

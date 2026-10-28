@@ -523,7 +523,7 @@ export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
   async run(): Promise<void> {
-    await this.drain(true);
+    await this.drainBoth(true);
   }
 
   /**
@@ -532,25 +532,42 @@ export class MergeTrain {
    * version before each request, and the host's sweep starts a train for any request left behind.
    */
   async runWaiting(): Promise<void> {
-    await this.drain(false);
+    await this.drainBoth(false);
   }
 
   /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
   async pump(): Promise<void> {
-    await this.drain(false);
+    await this.drainBoth(false);
   }
 
-  private async drain(failWhenInitiallyHeld: boolean): Promise<void> {
+  private async drainBoth(failWhenInitiallyHeld: boolean): Promise<void> {
+    let handOff: Promise<void> | undefined;
+    const handOffOnce = () => {
+      handOff ??= Promise.resolve(this.options.handOff?.());
+      return handOff;
+    };
+    const start = (lane: 'main' | 'dev') =>
+      new Promise<void>((resolve, reject) => {
+        setTimeout(() => this.drain(lane, failWhenInitiallyHeld, handOffOnce).then(resolve, reject), 0);
+      });
+    await Promise.all([start('main'), start('dev')]);
+  }
+
+  private async drain(
+    lane: 'main' | 'dev',
+    failWhenInitiallyHeld: boolean,
+    handOff: () => Promise<void>,
+  ): Promise<void> {
     const o = this.options;
     mkdirSync(o.stateDirectory, { recursive: true });
-    const leasePath = join(o.stateDirectory, 'train.lease');
+    const leasePath = join(o.stateDirectory, lane === 'main' ? 'train-main.lease' : 'train.lease');
     let acquired = false;
     const retryDeferred = new Set<number>();
     for (;;) {
       // Check immediately before every acquisition attempt. A process that turns stale while queued must
       // leave the request for a fresh train instead of briefly taking the lease to discover that fact.
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
-        await o.handOff?.();
+        await handOff();
         return;
       }
       let lease: ReturnType<typeof acquireDirectoryLease>;
@@ -568,15 +585,15 @@ export class MergeTrain {
       const deferred = new Set<number>();
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
-          await o.handOff?.();
+          await handOff();
           return;
         }
         for (;;) {
           if (o.codeIsCurrent && !o.codeIsCurrent()) {
-            await o.handOff?.();
+            await handOff();
             return;
           }
-          const entry = o.queue.nextBatch(1, [...deferred])[0];
+          const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
           if (!entry) break;
           try {
             if (entry.outcome) {
@@ -587,7 +604,7 @@ export class MergeTrain {
             }
             o.fence.assertCurrent(entry.request);
             const batchSize = o.integration?.batchSize ?? 1;
-            const selected = o.queue.nextBatch(batchSize, [...deferred]);
+            const selected = o.queue.nextBatch(batchSize, [...deferred], lane);
             const batch: LandingEntry[] = [];
             for (const candidate of selected) {
               if (candidate.outcome || !this.canBatch(candidate)) break;
@@ -647,12 +664,12 @@ export class MergeTrain {
       }
 
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
-        await o.handOff?.();
+        await handOff();
         return;
       }
       // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
-      if (o.queue.nextBatch(1, [...deferred]).length) continue;
-      if (o.queue.next()) {
+      if (o.queue.nextBatch(1, [...deferred], lane).length) continue;
+      if (o.queue.nextBatch(1, [], lane).length) {
         if (deferred.size) {
           if (roundHead !== this.integrationHead()) continue;
           return;
@@ -661,10 +678,10 @@ export class MergeTrain {
       }
       await o.promote?.();
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
-        await o.handOff?.();
+        await handOff();
         return;
       }
-      if (!o.queue.next()) return;
+      if (!o.queue.nextBatch(1, [], lane).length) return;
     }
   }
 
@@ -1171,7 +1188,11 @@ export class MergeTrain {
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
     let integrationTarget: IntegrationTarget =
-      recorded.target === 'stabilize' ? 'stabilize' : o.integrationBranch !== undefined ? 'integration' : 'main';
+      recorded.target === 'stabilize'
+        ? 'stabilize'
+        : recorded.target === 'main' || o.integrationBranch === undefined
+          ? 'main'
+          : 'integration';
     let targetBranch =
       integrationTarget === 'stabilize'
         ? (o.stabilizeBranch ?? localBranchSettings(o.mainCheckout).stabilizeBranch ?? 'stabilize')

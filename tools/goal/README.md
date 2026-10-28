@@ -29,11 +29,14 @@ formatter output so the manager can repair the brief. The train checks hashes be
 integration if a worker changes a frozen file.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
-enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
-the lease to drain a request that arrived during shutdown. Detached train processes wait for the lease and recheck the
-control-plane version while they wait. Every process records the Git object id for `main:tools/goal` when it starts;
-a stale train finishes its active landing, releases the lease and hands the remaining queue to current code before it
-can take another request. Pumps used by short commands still return quietly when another process holds the lease.
+enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
+requests use `train.lease`. The two lanes select and order their own requests, so a long control-plane landing on
+`main` can run alongside a dev landing. Each lane remains serial. A train releases its lease and checks its lane's
+queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
+the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
+`main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
+queue to current code before it can take another request. Pumps used by short commands still return quietly when
+another process holds the lane lease.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
 A stale manager host restarts after finishing its active request and recovers persisted sessions.
 
