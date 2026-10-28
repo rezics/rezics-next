@@ -87,10 +87,11 @@ original language and then `en`.
 ### Page read
 
 A subject target follows its merge survivor, then resolves current verification through Access's public agent lookup.
-For a verified active or suspended account it answers `308` directly to the account's handle page, preserving the view,
+For a verified active account it answers `308` directly to the account's handle page, preserving the view,
 languages and query. The JSON body is `{ redirect: { from: subjectId, to: handle } }`; `Location` names
 `/v1/pages:read` with an encoded JSON `target` query parameter replacing the POST body's target when followed.
-Never verified, pending, released, revoked and deleted accounts do not redirect or disclose an account handle.
+Never verified, pending, suspended, released, revoked and deleted accounts do not redirect or disclose an account handle.
+When no active verified account resolves, the subject page clears the account reference in its embedded subject read.
 Subject reads and account reads retain their existing behavior.
 
 An account without a named subject uses `schema:Organization` for an organization, `schema:SoftwareApplication` for

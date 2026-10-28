@@ -65,6 +65,7 @@ as catalogue subjects (an author imported from a source), as accounts, or both. 
 - **One agent, one page.** An account is an agent. When an account is verified as a catalogue person or
   organization, the two are one agent with one page at the account's `/@handle`; the subject's address redirects
   there. An agent without an account keeps its subject address. The page is the same either way.
+  While the account is suspended its page is not served, and the subject's address serves the subject page.
 - **Views.** An agent's page is a subject page: Works (credits by role) and Characters come from the graph; an agent
   with an account adds its public posts, reviews and collections; an organization adds its members and, if it
   chooses, the accounts that speak for it. The view rules above apply unchanged.

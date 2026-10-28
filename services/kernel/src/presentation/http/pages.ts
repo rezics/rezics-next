@@ -320,9 +320,7 @@ export function pageRoutes<App>(
           if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, false);
           subject = probed.subject;
           if ('subject' in target) {
-            const [agent] = await admission.run('normal', job, () =>
-              readPublicAccountByAgent(pool, probed.subject.id, { includeSuspended: true }),
-            );
+            const [agent] = await admission.run('normal', job, () => readPublicAccountByAgent(pool, probed.subject.id));
             if (agent && agent.state !== 'deleted' && agent.handle !== null) {
               const location = new URL(request.url);
               location.pathname = customMethodPath(location.pathname);
@@ -418,7 +416,14 @@ async function pageAnswer(input: {
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     const result = results.get(canonicalize(descriptor)!);
     if (!result) throw new Error('Page read did not return a result');
-    reads[key] = result;
+    // A subject page without an active verified account must not name an account through its subject read.
+    reads[key] =
+      input.account === null &&
+      descriptor.kind === 'subject' &&
+      descriptor.id === input.subject &&
+      isRecord(result.body)
+        ? { ...result, body: { ...result.body, account: null } }
+        : result;
   }
 
   return respond(

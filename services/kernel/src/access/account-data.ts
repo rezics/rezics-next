@@ -97,7 +97,6 @@ export async function readPublicAccountByHandle(
 export async function readPublicAccountByAgent(
   client: Pool,
   subjectId: string,
-  { includeSuspended = false }: { includeSuspended?: boolean } = {},
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   const route = routeOf(subjectId);
   if (route === null) return [];
@@ -106,13 +105,7 @@ export async function readPublicAccountByAgent(
   const accountRoute = routeOf(pointer.accountId);
   if (accountRoute === null) return [];
   const row = await publicRead.run(client, { route: accountRoute, account_id: pointer.accountId });
-  if (
-    !row ||
-    (row.state !== 'active' && !(includeSuspended && row.state === 'suspended')) ||
-    !row.agentVerified ||
-    row.agentSubjectId !== subjectId
-  )
-    return [];
+  if (!row || row.state !== 'active' || !row.agentVerified || row.agentSubjectId !== subjectId) return [];
   return publicIdentityForAccount(client, row);
 }
 

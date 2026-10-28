@@ -263,8 +263,8 @@ async function page(target: Record<string, unknown>, query = '', languages?: str
   return post(`/v1/pages:read${query}`, undefined, { target, ...(languages ? { languages } : {}) });
 }
 
-async function expectSubjectPage(subject: string) {
-  const answer = await page({ subject });
+async function expectSubjectPage(subject: string, view?: string) {
+  const answer = await page({ subject, ...(view ? { view } : {}) });
   expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.response.headers.get('location')).toBeNull();
   expect(answer.body.subject).toBe(subject);
@@ -401,17 +401,29 @@ test('deletion never redirects or names the old handle, including while the comm
   expect((await page({ account: account.handle })).response.status).toBe(404);
 });
 
-test('a suspended verified person still redirects while account reads retain their existing behavior', async () => {
+test('a suspended verified person serves the subject page until reinstatement restores the handle redirect', async () => {
   const { account, subject } = await verified();
   const suspended = await post(`/v1/accounts/${account.id}:suspend`, await bearer(staff), { reason: 'Page test' });
   expect(suspended.response.status).toBe(200);
-  const followed = await expectRedirect(subject, account.handle, 'details');
-  expect(followed.body.account).toBe(account.id);
+  for (const view of [undefined, 'details']) {
+    const answer = await expectSubjectPage(subject, view);
+    expect(JSON.stringify(answer.body)).not.toContain(account.id);
+    expect(JSON.stringify(answer.body)).not.toContain(account.handle);
+  }
   expect((await get(`/v1/accounts?agent=${subject}`)).body).toEqual({ accounts: [], next: null });
   expect((await get(`/v1/accounts?handle=${account.handle}`)).body.accounts[0]).toMatchObject({
     id: account.id,
     state: 'active',
   });
+  const reinstated = await post(`/v1/accounts/${account.id}:reinstate`, await bearer(staff), {});
+  expect(reinstated.response.status, JSON.stringify(reinstated.body)).toBe(200);
+  for (const view of [undefined, 'details']) {
+    const followed = await expectRedirect(subject, account.handle, view);
+    expect(followed.body.account).toBe(account.id);
+  }
+  expect((await get(`/v1/accounts?agent=${subject}`)).body.accounts).toEqual([
+    expect.objectContaining({ id: account.id, handle: account.handle, state: 'active' }),
+  ]);
 });
 
 test('unnamed software, person and organization accounts use their agent templates and public identity fields', async () => {
