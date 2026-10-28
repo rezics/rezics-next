@@ -2360,7 +2360,12 @@ test('a remote run copies the declared output paths back after it ends, also whe
 
 test('copying outputs back accepts vanished files and reports their count', async () => {
   const { env, events } = scenario({
-    a: { available: 8e9, present: ['.temp/screenshots'], rsyncBackExit: 24, vanishedFiles: ['.temp/screenshots/old.png'] },
+    a: {
+      available: 8e9,
+      present: ['.temp/screenshots'],
+      rsyncBackExit: 24,
+      vanishedFiles: ['.temp/screenshots/old.png'],
+    },
   });
   const result = await remote(env, workspace(), ['true'], ['--returns', '.temp/screenshots']);
 

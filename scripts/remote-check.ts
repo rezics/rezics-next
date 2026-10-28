@@ -1213,7 +1213,10 @@ async function finished(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal
   }
 }
 
-async function finishedRsync(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal): Promise<{ code: number; stderr: string }> {
+async function finishedRsync(
+  child: ReturnType<typeof Bun.spawn>,
+  signal: AbortSignal,
+): Promise<{ code: number; stderr: string }> {
   const stderrStream = child.stderr;
   let stderr = '';
   const forwardStderr = async (): Promise<void> => {
