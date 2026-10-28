@@ -71,7 +71,7 @@ native partition fencing and a receipt/outbox commit after the body. A receipt r
 Its core partition fence guards routing/writability, not provider observation order. `noEffect` explicitly
 asserts no domain writes. DBOS and core sharing one database/pool does not make their transactions atomic.
 `src/commerce/store.ts:284–365` locks order and entitlement revisions for a changed decision only;
-that protects competing native writes, but the revision is currently read *after* the provider read.
+that protects competing native writes, but the revision is currently read _after_ the provider read.
 
 ## What partition concurrency actually guarantees
 
@@ -82,24 +82,24 @@ marks claimed rows PENDING with `owner_xid`. Heads order by priority, creation t
 `workerConcurrency` is per executor; PENDING exclusion supplies cross-executor partition exclusion. The general path
 at `2670–2840` also counts PENDING rows and uses transactional conflict handling for shared budgets.
 
-| Situation | Verified guarantee and limit |
-| --- | --- |
-| Normal execution | One admitted PENDING workflow per queue/Session key; ordinary awaited read then apply bodies serialize. Different keys may run concurrently. |
-| Real process death | The JavaScript body is gone. PostgreSQL can still finish or roll back an already submitted transaction; native locking/receipts must settle that ambiguity. |
-| Executor recovery | `reenqueueWorkflowsForRecovery` (`1143–1160`) changes matching PENDING rows to ENQUEUED and clears ownership. Queue admission runs again. This is not a physical-process-death certificate. |
-| Failed workflow | Uncaught failure records ERROR and ends PENDING occupancy. Pending recovery does not retry ERROR. Maximum recovery exhaustion is a separate terminal status. |
-| Resume | `resumeWorkflows` (`1391–1425`) ignores SUCCESS and ERROR; it resets other existing statuses, including CANCELLED/exhausted/PENDING. Missing IDs throw. Default is the internal queue, not the original queue. |
-| Fork | `bulkForkWorkflows` (`1695–1838`) creates a new identity, copies outputs with function ID below the cut, and leaves the original runnable. Default queue is internal; partition key defaults to null. |
-| Rewind | `rewindWorkflow` (`1606–1688`) requires terminal status, deletes outputs from the cut onward and re-enqueues the same ID. Cancel-first does not prove the old body stopped. Queue/key default to internal/null. |
-| Cancellation | `cancelWorkflows` (`1363–1387`) sets CANCELLED and clears owner/queue on non-SUCCESS/non-ERROR rows. The partition's PENDING occupancy disappears immediately. |
-| Workflow timeout | `cancelTimedOutWorkflows` (`2619–2646`) cancels active rows similarly; cancellation is status, not forced termination of user code. |
-| Step timeout | Executor `601–634` races the attempt against a timer. It can retry while the abandoned async body is alive. Exhaustion can record ERROR and free occupancy. |
+| Situation          | Verified guarantee and limit                                                                                                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Normal execution   | One admitted PENDING workflow per queue/Session key; ordinary awaited read then apply bodies serialize. Different keys may run concurrently.                                                                    |
+| Real process death | The JavaScript body is gone. PostgreSQL can still finish or roll back an already submitted transaction; native locking/receipts must settle that ambiguity.                                                     |
+| Executor recovery  | `reenqueueWorkflowsForRecovery` (`1143–1160`) changes matching PENDING rows to ENQUEUED and clears ownership. Queue admission runs again. This is not a physical-process-death certificate.                     |
+| Failed workflow    | Uncaught failure records ERROR and ends PENDING occupancy. Pending recovery does not retry ERROR. Maximum recovery exhaustion is a separate terminal status.                                                    |
+| Resume             | `resumeWorkflows` (`1391–1425`) ignores SUCCESS and ERROR; it resets other existing statuses, including CANCELLED/exhausted/PENDING. Missing IDs throw. Default is the internal queue, not the original queue.  |
+| Fork               | `bulkForkWorkflows` (`1695–1838`) creates a new identity, copies outputs with function ID below the cut, and leaves the original runnable. Default queue is internal; partition key defaults to null.           |
+| Rewind             | `rewindWorkflow` (`1606–1688`) requires terminal status, deletes outputs from the cut onward and re-enqueues the same ID. Cancel-first does not prove the old body stopped. Queue/key default to internal/null. |
+| Cancellation       | `cancelWorkflows` (`1363–1387`) sets CANCELLED and clears owner/queue on non-SUCCESS/non-ERROR rows. The partition's PENDING occupancy disappears immediately.                                                  |
+| Workflow timeout   | `cancelTimedOutWorkflows` (`2619–2646`) cancels active rows similarly; cancellation is status, not forced termination of user code.                                                                             |
+| Step timeout       | Executor `601–634` races the attempt against a timer. It can retry while the abandoned async body is alive. Exhaustion can record ERROR and free occupancy.                                                     |
 
 Cancellation watches expose `DBOS.stepStatus.cancelSignal`; `timeoutSignal` belongs to each step attempt.
 The executor awaits an uncooperative body on ordinary cancellation, so that process may still count it
 against its local worker budget. Other workers, or spare local capacity, can nevertheless admit the next
 Session workflow after the DB row leaves PENDING. Step timeout discards the late result without joining
-the body; a retry can overlap even while the *same* workflow remains PENDING. Both therefore permit slot
+the body; a retry can overlap even while the _same_ workflow remains PENDING. Both therefore permit slot
 reuse before provider/PG work is gone. See SDK executor `588–730` and the official step-timeout reference.
 
 SDK `recordOperationResultInternal` (`3831–3891`) locks/checks `owner_xid` before writing a step result;
@@ -136,7 +136,7 @@ These are source-derived sequences, not reproduced failures. Label native state 
 3. **Combined step alone, live obsolete body:** W reads A and is delayed before native apply. Cancel W:
    SDK clears PENDING/owner/queue but does not stop its body. V reads B and makes the newer no-op above
    (or applies a refund with equal/backward times). Release W: `runCommand` can commit A with W's unused intent
-   receipt. Its later DBOS step-output write fails ownership, *after* the native effect. Step timeout can
+   receipt. Its later DBOS step-output write fails ownership, _after_ the native effect. Step timeout can
    produce the same sequence with overlapping attempts and one workflow ID; a no-op V leaves no receipt
    for that ID either. An ERROR terminal result can coexist with a late native effect.
 
@@ -158,14 +158,14 @@ on `applyCheckoutSnapshot(snapshot,intent,{orderId,sessionId,revision})`.
    Point-read/lock the order; require its immutable recorded Session. Increment revision using a conditional
    PK update; preserve settlement and provider metadata. Emit the existing order-updated event through
    `runCommand`. This is a real coordination mutation, including when settlement will be unchanged.
-   Claim receipt, if used, has a fresh attempt key generated *inside* the combined step invocation; it must
+   Claim receipt, if used, has a fresh attempt key generated _inside_ the combined step invocation; it must
    not reuse the stable apply key. Internal SQL retries can reuse this one attempt key.
 2. Finish that command and release its connection. Only then obtain the complete provider snapshot. Keep
    claim, provider read and apply inside one registered step; neither claim nor snapshot is a separate
    memoized step. A new invocation/timeout retry claims again and reads again. An ambiguous claim commit
    is harmless: abandon its token and claim anew before reading; never read with an unacknowledged token.
 3. Apply with the existing stable native intent receipt. After receipt replay handling, lock the order
-   *before* deciding even a no-op; require the Session and exact claimed revision under that lock.
+   _before_ deciding even a no-op; require the Session and exact claimed revision under that lock.
    Then read the bounded settlement neighbourhood and use existing native writes/events/receipt atomically.
    A mismatch returns an explicit superseded outcome with no business write, or throws a nonretryable
    superseded error; it must never refresh the token while keeping the old snapshot. Prefer the explicit
@@ -229,7 +229,7 @@ lines/statements with its own receipt. Terminal privacy/minimization still needs
 this fence does not authorize retaining personal data or rebuilding erased account relations.
 
 `effects.workerConcurrency=8` does not cap abandoned async bodies. For a physical resource bound, hold a
-small process-local refresh permit until the *actual body* settles, including abandoned timeout bodies;
+small process-local refresh permit until the _actual body_ settles, including abandoned timeout bodies;
 cap permits at the existing effects worker capacity and reject excess admission rather than create an
 unbounded waiting list. This capacity guard supplies no ordering, recovery or durable state. Keep it around
 the whole combined body and each resolver call, releasing before awaiting children; do not release on the DBOS
@@ -288,20 +288,20 @@ HTTP response bytes before release; `pay`, `refund`, `failRefund`, `dispute`, `u
 states. Observe `WorkClient.getWorkflow/listWorkflowSteps`, receipts, outbox, order/entitlement and accounting
 through native fixtures/APIs. Driver barriers/delays/worker kills may control timing, never implement policy.
 
-| Sequence | Required observation |
-| --- | --- |
-| Concurrent same Session, then different Sessions | Normal same-key read/apply order serializes; different keys progress under shared capacity; actual queue/key inspected. |
-| Park A after provider capture; cancel A; deliver B; release A | B's claim wins even if B is business unchanged; A cannot revoke/restore afterward. Repeat with spare worker/process capacity and step timeout retry. |
-| Timed-out body blocked at native order lock | Retry/B claims and applies; released old transaction rolls back or reports superseded. Late DBOS-result discard alone is insufficient evidence. |
-| Cached split-read recovery/fork | Reproduce the two counterexamples using actual checkpoint IDs; ERROR resume remains ERROR. New combined flow rereads at the cut; copying a completed combined step causes no apply. |
-| Cancel/resume; terminal rewind; fork | Explicit effects queue/key, both same and new native identities; original may remain alive. Exhausted-recovery resume works; SUCCESS/ERROR resume does not rerun. |
-| Crash after read, before native commit | Kill only owned worker, await its exit; restart default runtime. Provider reads increase and new truth wins; no stale saved read reused. |
-| Crash after native commit, before DBOS acknowledgement | Test-only acknowledgement barrier after observing the real native commit; kill/restart. One business effect, existing stable receipt replay, no duplicated balance/royalty line. |
-| New no-op; equal/backward `observedAt`; later refund | Claim persists despite apply rollback; native ordering is independent of clock. Paid state is retained while refund/dispute revokes benefit. |
-| Duplicate valid events and forged signature | Same event/child/receipt effect once; forgeries enqueue/apply nothing. Include valid event with foreign Session/order binding and captured-price mismatch. |
-| Missed late refund/dispute on paid order | New authenticated known-order repair or recovered provider event produces a new refresh identity and updates financial evidence/benefit; no scan. |
-| Terminal buyer during delayed application, terminal creator | Race real Access tombstone with native apply; no grant/restore/private resurrection after barrier. Permitted buyer/creator financial truth still converges idempotently. |
-| Resource/shape limits | Existing 256/257 transaction cases, null balance transactions, refund reversal/dispute reinstatement, pagination failures and retry overload retain fail-closed behavior. |
+| Sequence                                                      | Required observation                                                                                                                                                                |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concurrent same Session, then different Sessions              | Normal same-key read/apply order serializes; different keys progress under shared capacity; actual queue/key inspected.                                                             |
+| Park A after provider capture; cancel A; deliver B; release A | B's claim wins even if B is business unchanged; A cannot revoke/restore afterward. Repeat with spare worker/process capacity and step timeout retry.                                |
+| Timed-out body blocked at native order lock                   | Retry/B claims and applies; released old transaction rolls back or reports superseded. Late DBOS-result discard alone is insufficient evidence.                                     |
+| Cached split-read recovery/fork                               | Reproduce the two counterexamples using actual checkpoint IDs; ERROR resume remains ERROR. New combined flow rereads at the cut; copying a completed combined step causes no apply. |
+| Cancel/resume; terminal rewind; fork                          | Explicit effects queue/key, both same and new native identities; original may remain alive. Exhausted-recovery resume works; SUCCESS/ERROR resume does not rerun.                   |
+| Crash after read, before native commit                        | Kill only owned worker, await its exit; restart default runtime. Provider reads increase and new truth wins; no stale saved read reused.                                            |
+| Crash after native commit, before DBOS acknowledgement        | Test-only acknowledgement barrier after observing the real native commit; kill/restart. One business effect, existing stable receipt replay, no duplicated balance/royalty line.    |
+| New no-op; equal/backward `observedAt`; later refund          | Claim persists despite apply rollback; native ordering is independent of clock. Paid state is retained while refund/dispute revokes benefit.                                        |
+| Duplicate valid events and forged signature                   | Same event/child/receipt effect once; forgeries enqueue/apply nothing. Include valid event with foreign Session/order binding and captured-price mismatch.                          |
+| Missed late refund/dispute on paid order                      | New authenticated known-order repair or recovered provider event produces a new refresh identity and updates financial evidence/benefit; no scan.                                   |
+| Terminal buyer during delayed application, terminal creator   | Race real Access tombstone with native apply; no grant/restore/private resurrection after barrier. Permitted buyer/creator financial truth still converges idempotently.            |
+| Resource/shape limits                                         | Existing 256/257 transaction cases, null balance transactions, refund reversal/dispute reinstatement, pagination failures and retry overload retain fail-closed behavior.           |
 
 Existing `checkout-workflow.test.ts:96` and `work.test.ts:178` assert cached-read recovery (including one
 provider read). That expectation conflicts with fresh precommit replay; the acceptance owner must reconcile
