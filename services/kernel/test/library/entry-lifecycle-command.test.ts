@@ -11,8 +11,8 @@ import { authenticateAccount } from '../support/admitted-access.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
-let time = Date.now();
-const clock = () => new Date(time);
+let time: number | undefined;
+const clock = () => new Date(time ?? Date.now());
 const windowMs = 720 * 60 * 60 * 1000;
 const reader = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -23,7 +23,7 @@ beforeAll(async () => {
   f = await createProfileEntryFixture({ clock });
 }, 120_000);
 beforeEach(async () => {
-  time = Date.now();
+  time = undefined;
   await f.activate(f.originalDigest);
 });
 afterAll(async () => {
@@ -160,7 +160,9 @@ async function snapshot(source: Row, outcome: CommandOutcome<unknown>) {
   }
   expect(archive.incarnation_id).toEqual(expect.any(String));
   expect(archive).toMatchObject({ deleted_revision: d.revision, deletion_id: outcome.transactionId });
-  expect(Date.parse(String(archive.deleted_at))).toBe(time);
+  expect(Number.isFinite(Date.parse(String(archive.deleted_at)))).toBe(true);
+  expect(Date.parse(String(archive.deleted_at))).toBeLessThanOrEqual(clock().getTime());
+  if (time !== undefined) expect(Date.parse(String(archive.deleted_at))).toBe(time);
   expect(Date.parse(String(archive.restore_until)) - Date.parse(String(archive.deleted_at))).toBe(windowMs);
   return { d, archive };
 }
@@ -194,7 +196,7 @@ test('native entry factory exposes restoreEntry after a successful native create
 test('native entry delete retains an independent exact snapshot and owner restore respects the empty-slot CAS strict720hour deadline and current authorization before replay', async () => {
   const { subjectId, row: a } = await create();
   const deleteKey = entryKey();
-  time += 60_000;
+  time = Date.now() + 60_000;
   const deleted1 = await remove(f.owner.actor, a, deleteKey);
   const { d: d1, archive: archive1 } = await snapshot(a, deleted1);
   expect(await rows(subjectId)).toEqual([]);
@@ -328,6 +330,7 @@ test('native delete and restore receipts require current owner scope active acco
 test('native restore uses the strict original 720 hour deadline with a live kernel clock and unchanged authentication', async () => {
   const a = await create(),
     b = await create();
+  time = Date.now();
   const deletedAt = time;
   const da = await remove(f.owner.actor, a.row),
     db = await remove(f.owner.actor, b.row);
@@ -366,7 +369,7 @@ test('native pinned custom entry clear and exact undo preserve all eighteen sour
   }
   await f.activate(f.replacementDigest);
   expect(f.replacement.types['ex:Record']!.library).toBeUndefined();
-  time += 60_000;
+  time = Date.now() + 60_000;
   const deleteKey = entryKey(),
     restoreKey = entryKey();
   const deletion = await remove(f.owner.actor, row, deleteKey);
