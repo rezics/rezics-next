@@ -686,7 +686,7 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       await running.kill();
       running = undefined;
       store.fail(false);
-      running = await worker(store);
+      running = await worker(store, databaseUrl, { CONTENT_TEST_NOW: now });
       await result(schedule);
       expect(
         store.deletes.slice(deletesAfterFirstSweep).filter((key) => !key.startsWith(`m/${pending.mediaId}/`)),
