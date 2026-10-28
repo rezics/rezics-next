@@ -4,8 +4,10 @@ import type { Pool } from 'pg';
 import type { AuthoritativeTime, CommandTransaction } from '../command/command.ts';
 import type { SourceFenceTuple } from '../content/source-fences.ts';
 import type { Partition } from '../partition/partition.ts';
-import type { Access } from '../request/access.ts';
-import type { FilterStatement } from '@rezics/filter';
+import type { Access, AccessContext } from '../request/access.ts';
+import type { KernelClock } from '../clock.ts';
+import type { TextNode } from '../search/text.ts';
+import type { FilterDocument, FilterStatement } from '@rezics/filter';
 import type { SearchPlan } from '../search/query.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import type { Statement } from './item.ts';
@@ -69,8 +71,10 @@ export type PublicFilterProjectionRecord = Readonly<{
   source: Source | null;
   /** Native value/qualifiers retain datatype, units, unknown values and association. */
   statement: Statement;
-  /** Existing matcher representation; never the only identity or provenance. */
-  indexed: IndexedStatement;
+  /** null when ANY native value/qualifier cannot be represented losslessly by the scalar matcher.
+   * Keep the record and full Statement. null is unresolved evidence, never false or absence under NOT.
+   */
+  indexed: IndexedStatement | null;
   dependencies: readonly PublicFilterDependency[];
 }>;
 
@@ -82,6 +86,7 @@ export type PublicFilterProjectionRequest = Readonly<{
   /** Includes rejects, rereads and lookahead; 1..1000, not just output LIMIT. */
   inputLimit: number;
   frontier: PublicFilterProjectionFrontier | null;
+  context: PublicFilterReadContext;
 }>;
 
 type Unready = Readonly<{
@@ -118,11 +123,39 @@ export type PublicFilterProjectionPage =
   | Unready
   | Unavailable;
 
-/** Keys are released filter properties or actual Search order declarations, never labels/Concept IDs. */
+/** Source input identities derived by the existing admitted grammar/compiler, never matched_queries. */
 export type PublicFilterDependencyKey =
   | Readonly<{ kind: 'property'; property: FilterStatement['property'] }>
   | Readonly<{ kind: 'type' }>
-  | Readonly<{ kind: 'order'; order: SearchPlan['sort'] }>;
+  | Readonly<{ kind: 'order'; order: SearchPlan['sort'] }>
+  | Readonly<{ kind: 'field'; field: 'labels' | 'aliases' | 'descriptions' | 'name_sort' | 'id' }>
+  | Readonly<{ kind: 'function'; input: 'public_collection_count' | 'public_rating' }>;
+
+/** Trusted Search admission output. Saved nodes are expanded by @rezics/filter admission,
+ * not another parser here. Keys close over EVERY branch of these actual ASTs and sort inputs.
+ */
+export type PublicFilterQueryRequirements = Readonly<{
+  filter: FilterDocument | null;
+  text: TextNode | null;
+  order: SearchPlan['sort'];
+  filterAndOrderKeys: readonly PublicFilterDependencyKey[];
+}>;
+
+/** Search-owned retained locator, validated against the actual query execution and ACK storage.
+ * A string supplied by an HTTP caller, or a live ACK substituted for a PIT, is not evidence.
+ */
+export type PublicFilterQueriedObservation = Readonly<{
+  consumer: PublicFilterConsumer;
+  snapshot:
+    | Readonly<{ kind: 'live'; observation: string }>
+    | Readonly<{ kind: 'pit'; observation: string; pit: string }>
+    | Readonly<{ kind: 'prepared'; observation: string; build: string; generation: bigint }>;
+}>;
+
+export type PublicFilterReturnedSubject = Readonly<{ subject: string; terminal: string }>;
+
+/** Shared caller deadline; fresh native T is minted inside each read, never accepted from JSON. */
+export type PublicFilterReadContext = Pick<AccessContext, 'deadline'>;
 
 /** Internal routing includes selected but ineligible inputs; never publish these IDs as public facts. */
 export type PublicFilterRepairLocator = Readonly<{
@@ -162,6 +195,7 @@ export type PrivacyReductionLogRequest = Readonly<{
   after: bigint;
   through: bigint;
   inputLimit: number;
+  context: PublicFilterReadContext;
 }>;
 export type PrivacyReductionLogPage =
   | Readonly<{
@@ -189,14 +223,20 @@ export type PublicFilterConsumer = Readonly<{
 /** Native retained consistent cut, NOT a wall clock, UUID order, head vector or permission certificate. */
 export type PrivacyReductionStart = Readonly<{ observation: string }>;
 export type PrivacyReductionObservationRequest =
-  | Readonly<{ kind: 'home'; partition: PublicFilterHome }>
-  | Readonly<{
+  | Readonly<{ kind: 'home'; partition: PublicFilterHome; context: PublicFilterReadContext }>
+  | (Readonly<{
       kind: 'population';
-      /** null means NO acknowledgement exists: every nonzero head is behind. */
-      consumer: PublicFilterConsumer | null;
+      requirements: PublicFilterQueryRequirements;
+      /** Empty before execution; final revalidation includes ALL returned original/terminal pairs. */
+      returnedSubjects: readonly PublicFilterReturnedSubject[];
+      context: PublicFilterReadContext;
       /** null records the start; otherwise revalidate that exact native cut. */
       start: PrivacyReductionStart | null;
-    }>;
+    }> &
+      (
+        | Readonly<{ consumer: null; queried: null }>
+        | Readonly<{ consumer: PublicFilterConsumer; queried: PublicFilterQueriedObservation }>
+      ));
 export type PrivacyReductionObservation =
   | Readonly<{
       status: 'home';
@@ -212,6 +252,15 @@ export type PrivacyReductionObservation =
       changed: readonly PrivacyReductionHead[];
       /** False means native foreign routing cannot establish irrelevance; queries prepare. */
       routingComplete: boolean;
+      /** At most one summary per (home, phase), prioritizing unresolved then filter_or_order.
+       * Bounded home summaries from the SAME indexed narrowed read, not a later all-log scan.
+       * Query keys cover excluded subjects too; own-row checks additionally cover all their keys.
+       */
+      blocking: readonly Readonly<{
+        head: PrivacyReductionHead;
+        scope: 'filter_or_order' | 'returned_subject' | 'unresolved';
+        phase: 'pending' | 'changed';
+      }>[];
       cost: PublicFilterCost;
     }>
   | Unready
@@ -228,6 +277,8 @@ export type PublicFilterSourceFactory = (
     pool: Pool;
     routeKey: Uint8Array;
     access: Access;
+    /** Same validated clock installed in createKernel/Access; not an independent test clock. */
+    clock: KernelClock;
   }>,
 ) => PublicFilterSource;
 
@@ -237,17 +288,15 @@ export type RecordPrivacyReduction = (
   reduction: PrivacyReduction,
 ) => Promise<PrivacyReductionLogEntry>;
 
-/** Evidence requirements only. Search owns actual ACK storage/writer and admission interfaces. */
+/** Evidence description only; not caller booleans authorizing ACK. Search owns the writer.
+ * Each locator is checked against native retained state for this exact queried observation.
+ */
 export type PublicFilterAcknowledgementNeeds = Readonly<{
-  consumer: PublicFilterConsumer;
+  queried: PublicFilterQueriedObservation;
   started: PrivacyReductionStart;
   revalidated: PrivacyReductionObservation;
-  filterAndOrderKeys: readonly PublicFilterDependencyKey[];
-  returnedSubjects: readonly string[];
-  /** Contiguous prefixes established by actual native ACK reads for this consumer. */
+  requirements: PublicFilterQueryRequirements;
+  returnedSubjects: readonly PublicFilterReturnedSubject[];
+  /** Contiguous local AND foreign refresh-visible prefixes, read from actual consumer storage. */
   refreshVisible: readonly PrivacyReductionHead[];
-  dependentForeignRepairComplete: boolean;
-  dependencyRegistrationComplete: boolean;
-  sourceAndSinkVersionsFenced: boolean;
-  identityEpochPending: boolean;
 }>;

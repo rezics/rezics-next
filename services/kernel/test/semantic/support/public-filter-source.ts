@@ -1,6 +1,10 @@
 import { expect } from 'bun:test';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { systemClock } from '../../../src/clock.ts';
+import { deadlineFor } from '../../../src/request/deadline.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../../../src/command/command.ts';
+import type { PublicFilterQueryRequirements } from '../../../src/semantic/public-filter-source-contract.ts';
 import { randomUUID } from 'node:crypto';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
@@ -20,6 +24,24 @@ import type {
 } from '../../../src/semantic/public-filter-source-contract.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createRealAccess } from '../real-access.ts';
+
+export const readContext = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
+export const diagnosticRequirements: PublicFilterQueryRequirements = {
+  filter: null,
+  text: null,
+  order: 'id',
+  filterAndOrderKeys: [
+    { kind: 'field', field: 'id' },
+    { kind: 'order', order: 'id' },
+  ],
+};
+
+/** Existing concrete-only cases must fail if a producer unexpectedly drops scalar coverage. */
+export function indexed(record: PublicFilterProjectionRecord) {
+  expect(record.indexed, `Unexpected unresolved native statement ${record.candidate}`).not.toBeNull();
+  if (record.indexed === null) throw new Error('Concrete fixture lost indexed representation');
+  return record.indexed;
+}
 
 export const producerModule = '../../../src/semantic/public-filter-source.ts';
 export async function nativeProducer(): Promise<{
@@ -52,7 +74,10 @@ export const actions = [
   'collection:create',
   'collection:update',
 ];
-export const snak = (id: string, content: unknown) => ({ property: { id }, value: { type: 'value', content } });
+export const snak = (id: string, content: unknown) => ({
+  property: { id },
+  value: { type: 'value' as const, content },
+});
 export const statement = (id: string, content: unknown, qualifiers: ReturnType<typeof snak>[] = []) => ({
   ...snak(id, content),
   qualifiers,
@@ -77,7 +102,7 @@ export async function fixture() {
       labels: { en: name },
     };
   }
-  release.properties['schema:author']!.qualifiers = ['ex:left', 'ex:right'];
+  release.properties['schema:author']!.qualifiers = ['ex:left', 'ex:right', 'wdt:P1114'];
   release.properties['ex:credit'] = {
     ...structuredClone(release.properties['schema:author']!),
     iri: 'https://example.test/credit',
@@ -93,6 +118,7 @@ export async function fixture() {
     pool: db.pool,
     routeKey,
     access: real.access,
+    clock: systemClock,
     writeRate: createWriteRateLimiter({
       secret: 'public-filter-native-fixture',
       overrides: JSON.stringify(
@@ -154,7 +180,12 @@ export async function fixture() {
     await post('/v1/definitions/releases', { release });
     await post(`/v1/definitions/releases/${digest}:activate`, { expected_head: active?.head ?? null });
   }
-  const config = { pool: db.pool, routeKey, access: real.access({ actions: actionCatalogue(kernel) }) };
+  const config = {
+    pool: db.pool,
+    routeKey,
+    clock: systemClock,
+    access: real.access({ actions: actionCatalogue(kernel), clock: systemClock }),
+  };
   const meaning: PublicFilterProjectionMeaning = { digest, release, type: 'schema:Book' };
   return { db, real, accounts, config, meaning, create, propose, post, call, close: () => db.close() };
 }
@@ -162,7 +193,7 @@ export type Fixture = Awaited<ReturnType<typeof fixture>>;
 export const home = (subject: string) => partitionOf(routeOf(subject)!);
 
 export async function head(source: PublicFilterSource, partition: number): Promise<PrivacyReductionHead> {
-  const page = await source.readPrivacyReductionHeads({ kind: 'home', partition });
+  const page = await source.readPrivacyReductionHeads({ kind: 'home', partition, context: readContext() });
   expect(page.status).toBe('home');
   if (page.status !== 'home') throw new Error(`Native privacy head ${page.status}`);
   expect(page.head.partition).toBe(partition);
@@ -207,7 +238,13 @@ export async function complete(
   let inputKeys = 0;
   for (;;) {
     const page = await capturedStep(f.db, () =>
-      source.readPublicFilterProjectionPage({ subject, meaning: f.meaning, inputLimit: 16, frontier }),
+      source.readPublicFilterProjectionPage({
+        subject,
+        meaning: f.meaning,
+        inputLimit: 16,
+        frontier,
+        context: readContext(),
+      }),
     );
     expect(['progress', 'complete']).toContain(page.status);
     if (page.status !== 'progress' && page.status !== 'complete') throw new Error(`Native projection ${page.status}`);

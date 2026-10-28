@@ -1,6 +1,6 @@
 # Complete public filter source and privacy reduction log
 
-This is a closed future native producer boundary, owned by Semantic and submitted to Search for review before
+This is the future native producer specification, owned by Semantic and submitted to Search for review before
 implementation. The adjacent TypeScript file exports types only. It does not implement or compose a source,
 compiler, preparation runner, acknowledgement writer, database schema or permission service. Native acceptance is
 intentionally red until actual producers exist. Search review and runtime/default/API/three-scale evidence remain
@@ -73,10 +73,17 @@ empty result. Genuine existing label-only subjects can complete an empty facet s
 public facets only after a complete current native observation; its safety dependency still matters to queries.
 
 `PublicFilterProjectionRecord` preserves `subject`, `terminal`, actual `slot`, `candidate`, selected `rank` and `ordinal`, native
-revision/release, original revision `source`, typed native `statement` and matcher `indexed` representation.
+revision/release, original revision `source`, typed native `statement` and nullable matcher `indexed` representation.
 `statement.id` equals candidate; `statement.rezics` preserves its pin/revision. Qualifiers remain attached to this
 statement. Typed native values preserve exact quantity amount/unit and unknown values even where existing indexed
-scalar matching has a narrower representation. Unknown coverage never becomes false under NOT. No arbitrary group
+scalar matching has a narrower representation. `indexed: null` is REQUIRED for somevalue/novalue or any qualifier whose datatype/value cannot be
+represented without loss by `IndexedStatement`. This includes a concrete item with a quantity qualifier; do not
+copy only its item qualifiers and claim completeness. The native record remains present with exact identity,
+release pin, rank, ordinal, units, references and source. Null is unresolved matcher coverage, never absence.
+A complete native stream and a complete scalar-matcher representation are different properties. Search must
+preserve unresolved coverage through its existing Boolean planner (`not_proven`), including NOT, until its admitted
+native plan can evaluate that evidence. It cannot call the scalar matcher on a filtered empty list and negate false.
+Unknown coverage never becomes false under NOT. No arbitrary group
 representative may replace hidden original support.
 
 Dependencies include original AND terminal subject keys, selection slot/candidate (including disclosure,
@@ -117,6 +124,36 @@ cannot return 16 records after reading an unbounded hidden prefix. It returns `p
 a strictly advanced retained frontier. `complete` closes all pages of that exact generation, including all-hidden
 and absent cases. Consumers stage progress; they cannot disclose negatives from intermediate pages. No 128-value
 sample or 32-witness ceiling can truncate completeness. No repeated start-at-zero strategy is admitted.
+
+## Native read clock, deadline and Access
+
+The factory requires `clock: KernelClock` from `clock.ts`, the SAME validated domain clock installed by
+`http/kernel.ts:createKernel` and `createKernelAccessResolver` into Access. Every read request carries
+`PublicFilterReadContext` (`Pick<AccessContext, 'deadline'>`); a public page shares the existing absolute request
+wall-time deadline from `request/deadline.ts`, including waits, start, execution and final observation. Worker
+steps establish their own bounded step deadline through that same seam before starting work. No retry or frontier
+resume extends a page deadline; a subsequent page is a new operation, never reuse of expired evidence.
+
+Use actual `access.prepare/preparePage` before resource checkout, AFTER all freshness/owner waits, immediately
+before applying the read transaction; prepare afresh on every retry. Use `mintReadTime(client, clock)` on that
+native read transaction and pass that opaque `AuthoritativeTime` to `Access.authorize/authorizePage`; never cast a
+Date/string into T. Applying commands instead use `runCommand`'s fresh attempt T and
+`accessCommandAuthorization` preparation. Evidence is bound to that attempt, deadline and resource/page; foreign
+reads release their own checkouts before the next owner or sink. `requireAccessDeadline`, existing statement
+timeouts and actual wall time bound execution; domain clock injection does not extend authentication or TTLs.
+
+Public reads use the existing `Actor` anonymous branch and owning-module public-read eligibility capability
+(`access/eligibility.ts:createResourcePublicEligibility`), proving current publication/container state at T through
+installed Access. There is no new public actor token or trusted editor fallback. `statementAudience`'s default
+public audience alone is insufficient inside an editor AsyncLocal scope: explicitly select public disclosure via
+that owning seam; never install a fake account or moderator verdict. That explicit override and complete bounded
+public-read implementation are still missing integration work, not an existing exported Core public-authority
+factory. These actual Core/Access seams define the context without inventing a capability that this base lacks.
+`mintReadTime` itself executes `command/read-time.sql`; its work is charged, never free clock metadata. Public
+projection/Access transactions use that existing seam. Internal privacy-head observations disclose no public
+facts and do not mint another permission T or reuse a projection's allow. Their own native cut is separate from
+T. If an observation implementation needs extra clock/Access/owner statements, those count within the SAME
+two-statement page ceiling; the current helpers alone are not a proof that such a plan exists.
 
 ## Authoritative per-home privacy log
 
@@ -162,16 +199,43 @@ unselected candidate, successful replay and genuine noEffect. Whole-query safety
 
 `PrivacyReductionLogEntry.impacts` is a bounded union: `subject` affects EVERY key of that original subject;
 `keys` records affected source keys; `dependency` records the authoritative foreign locator requiring complete
-reverse routing. `affected` preserves bounded cause/provenance; it is not a list of copied facts. Both arrays share
-the append's 1000-key input ceiling. Index affected keys and subject-wide scope, not translated labels or invented
-catalogue IDs. `PublicFilterDependencyKey.property` uses `FilterStatement['property']` from `@rezics/filter`;
-the `type` branch matches `FilterDocument.type`/`FactClause.facet: 'type'`; `order` uses actual
-`search/query.ts:SearchPlan['sort']` (`relevance/name/id/collections/rating`). These are dependency identities,
-not a second grammar or an assertion that all these orders are admitted. Actual `currentClauseKey` includes
-values/ranges/qualifiers for matcher identity; reduction routing uses the affected containing source property,
-including changes to any qualifier on that statement. Saved filters must already be expanded by admission.
-Order dependencies include the admitted order's actual inputs (including name/id tie breakers); incomplete
-mapping cannot be noEffect. No property whitelist is introduced here.
+reverse routing. `affected` preserves bounded cause/provenance; it is not copied facts. Both arrays share the
+append's 1000-key input ceiling. Index subject-wide scope and affected source inputs, never translated labels.
+
+`PublicFilterQueryRequirements` carries the actual admitted `FilterDocument`, actual `TextNode`, actual
+`SearchPlan['sort']` and the server-extracted `filterAndOrderKeys`. These are existing grammar types, not a new
+interpreter. Admission expands saved filters through `@rezics/filter` using the immutable accepted release; a
+remaining `saved` node or an incomplete closure rejects/prepares. Requirements are bound to the retained queried
+observation and validated by trusted Search admission, never accepted as an HTTP caller's assertion of relevance.
+Do not use only `matched_queries`, positive leaves, returned candidates or a released-property whitelist.
+
+Closure is the union over the FULL admitted trees, regardless of Boolean truth or engine matches:
+
+- `and` and `or`: union every child; `not`: recurse unchanged. `type`: include `type`; `statement.in` and
+  `statement.range`: include the containing `property`, including every same-statement qualifier dependency.
+  Qualifier changes map to the containing source property, not only their own qualifier property. Saved expansion
+  contributes every expanded branch and retains the accepted release/read-definition binding.
+- `TextNode.term/phrase`: include `field:labels`, `field:aliases`, `field:descriptions`; `and/or/not`: recurse
+  through every child, including negative/unreported text. Actual `text.ts:parseText/compileText` and
+  `db/search/indices/subjects.json` define search_text from names (labels AND aliases) and descriptions. Text with
+  `order:id` still has these dependencies; relevance is not the only order with text membership inputs.
+- Include the actual `order` key and `field:id` tie-breaker for EVERY admitted order. `name` additionally includes
+  `field:name_sort` and `field:labels`, covering all language choices, missing/overlong-name behavior and fallback.
+  `collections` includes `function:public_collection_count` (current public Collection membership/eligibility),
+  plus the name closure and id. `rating` includes `function:public_rating` (published Global score, threshold,
+  standard question/population/prior epoch and scored/unscored phases), plus native name/id fallback inputs.
+  `relevance` includes every actual score/boost input of the admitted text/plan and id; `id` includes id.
+  Inspect actual sort declarations in `query.ts` and `rating-query.ts` rather than inferring functional inputs
+  from order spelling. New admitted input paths require extending this ONE closure before publication.
+- Returned field language/alias/description fallback choices and original/terminal identity remain current-row
+  disclosure dependencies even where no query text/order reads them. Every returned row gets subject-wide
+  reduction checks; no fixed language whitelist or missing translation may prove irrelevance.
+
+A `subject` impact intersects any nonempty query closure, for that subject anywhere in the admitted population,
+including excluded subjects. For returned originals AND terminals it also intersects the own-row check even if
+its changed fields are outside query keys. A `keys` impact intersects query closure by source-input identity, or
+intersects ALL keys for a returned original/terminal. A foreign `dependency` must first resolve to every affected
+SOURCE key through complete internal routing; unresolved routing is never noEffect.
 
 A query waits only for unacknowledged reductions whose affected keys occur in its FILTER OR ORDER. Every returned
 row additionally checks unacknowledged reductions of ITS OWN SUBJECT. A subject-wide foreign target reduction
@@ -192,16 +256,33 @@ identity where inapplicable. The operation must read actual ACK state; request f
 positions or callback truth. `consumer: null` means NO ACK exists and all nonzero heads are behind. It cannot
 pretend history is caught up. An unknown non-null registration is unready, not an empty successful observation.
 
+The population request carries `requirements`, `returnedSubjects`, `queried` and fixed `context.deadline` on
+BOTH reads, not merely in a later ACK description. `queried` binds the actual physical consumer plus the exact
+live observation, immutable PIT, or prepared build/generation read by execution. Its retained observation locator
+is resolved/validated by Search against native registration and query execution, including accepted meaning and
+read definition. Aliases, caller strings and a latest live-index ACK cannot certify an older PIT/prepared snapshot.
+`queried:null` with `consumer:null` is producer diagnostics ONLY; it cannot admit a public query.
+Before execution the returned set is empty; immediately before disclosure it contains every returned original AND
+terminal. Start evidence binds requirements/queried identity; final rows add own-row checks without dropping the
+population checks. Changing requirements, target, PIT/build/generation, accepted meaning or deadline requires a new
+start/execution. An unrecognized observation, lost binding or absent consumer is unready for public admission.
+
 With `start: null`, `observed.start` identifies a retained native consistent start cut. Revalidation passes that
-same token, returning current `unacknowledged` and `changed` home heads. `coverage: all_native_homes` means current
+same token, returning relevant current `unacknowledged` and `changed` home heads plus `blocking` summaries.
+Heads are narrowed by query keys AND returned originals/terminals through the native indexed path. Each summary
+names a home, pending/changed phase and filter_or_order/returned_subject/unresolved scope. At most one summary per
+(home, phase) uses unresolved first, then filter_or_order, then returned_subject when scopes overlap; this is not an unbounded impact list. Unknown routing returns unresolved and cannot
+admit. Relevant changes remain in `changed` and `blocking` even after current ACK removed pending work. `coverage: all_native_homes` means current
 complete logical coverage, NOT an array of every home. `changed` contains homes with reductions committed since
 the start even if already repaired/ACKed now; it is empty at start. Duplicate heads are not emitted within either
 array; a home may occur in both. Both arrays use current epochs/lossless positions. `routingComplete: false`
 prevents a complete irrelevance classification. Partial coverage, expired/lost start evidence, ownership movement
 or missing retained change history is unready/unavailable. A token never authorizes disclosure on its own.
 
-Search records this actual start evidence before execution, reads the relevant log intervals and compares actual
-contiguous ACKs, then revalidates immediately before disclosure. Changed relevant heads prepare/restart even if
+Search records this actual start evidence before execution, comparing contiguous ACKs for that exact queried
+observation, then revalidates immediately before disclosure. Relevant pending/changed classification and own-row
+checks are part of the two observation reads. Log paging is asynchronous repair work; it is NOT an uncharged
+per-query fallback that scans history after enumerating heads. All reads compose into the same page allowance. Changed relevant heads prepare/restart even if
 current ACK covers them: the earlier engine result might still contain the removed evidence. Irrelevant changes
 may proceed only under complete source-key routing plus returned-subject checks. No saved allow, wall-clock or
 UUID ordering substitutes for the native cut. Independent pending identity epoch also prepares. The final
@@ -352,3 +433,35 @@ Performance reviews native physical captures. The manager obtains co-owner revie
   owner/alias/deep-page and composed16-read/128-slot cases, actual repair/ACK latency and served share that does not
   fall as reduction arrival grows with population. Existing Source256 checks or this type-only fixture are not
   that evidence. Report exact missing primitive/capture before claiming feasibility or growth success.
+
+### Co-owner review boundary and remaining evidence
+
+The exact amended names are `PublicFilterQueryRequirements`, `PublicFilterQueriedObservation`,
+`PublicFilterReturnedSubject`, `PublicFilterReadContext`, nullable `PublicFilterProjectionRecord.indexed`,
+`PrivacyReductionObservationRequest.population.{queried,requirements,returnedSubjects,context}` and
+`PrivacyReductionObservation.observed.blocking`. These replace the insufficient consumer/start-only request and
+caller-boolean ACK description in the SAME specification. They are submitted for Search co-owner review; they do
+not approve executable ABI consumption. No second compiler, consumer fixture ABI, safety store or ACK writer is
+created. Existing implementations covered by native user cases continue independently.
+
+Additional native producer acceptance now retains actual somevalue/novalue and quantity qualifiers, public
+foreign-qualifier withholding, a deterministic tuple/subject-home collision with ALL ordered unique log entries,
+and narrowed irrelevant-key/own-row/excluded-NOT cases. The latter includes two captured zero-relevant-pending
+reads sharing <=2 statements and <=64 examined rows. A consumer-null diagnostic with unrelated pending work is
+NOT a genuinely registered caught-up Search consumer.
+
+Still REQUIRED before implementation approval: co-owner review of these exact types, a real Search registered
+consumer/query pause/refresh-ACK seam, caught-up registered-consumer capture, and a native reduce-then-ACK schedule
+that pauses after capturing engine/PIT/prepared data, commits a relevant reduction, refreshes BOTH local and
+foreign repairs, advances the actual physical ACK, proves final pending empty, and STILL observes the changed
+reduction and prepares/restarts the old query. Repeat with irrelevant keys (serve) and own-row changes (prepare),
+including negative/order excluded subjects. This cannot be replaced with manufactured ACK rows, boolean callbacks
+or an invented test consumer export. The existing Search driver has no such observation/ACK/pause boundary;
+its indexing pause and ordinary checkpoint do not supply it. This is the exact remaining acceptance prerequisite,
+not a claim that the new diagnostic covers the race.
+
+The producer prerequisite remains the commit-visible indexed changed cut, consumer-specific behind relation,
+atomic registration/ACK composition and native retained-cut/availability lifecycle described above. Per-home
+sequences, UUIDs and precommit allocation do not close it. Default integration, public API cases and actual
+served-share at 64/512/4096 with rising reduction rates remain unimplemented/unexecuted. Neither helper success
+nor this specification claims public default queries, the main gate, native feasibility or the remaining matrix.

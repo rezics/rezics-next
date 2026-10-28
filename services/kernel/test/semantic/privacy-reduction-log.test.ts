@@ -5,6 +5,8 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { capture, costOf } from '../support/growth.ts';
 import {
   complete,
+  diagnosticRequirements,
+  readContext,
   capturedStep,
   fixture,
   head,
@@ -24,7 +26,15 @@ test(name, async () => {
   const f = await fixture();
   try {
     const source = publicFilterSource(f.config);
-    const subject = await f.create('schema:Book');
+    // Force the formerly random collision through the actual route function; retain all tuple entries.
+    const { tupleRoute } = await import('../../src/content/imported-contract.ts');
+    const collisionHome = partitionOf(tupleRoute(f.config.routeKey, 'native', 'privacy'));
+    let subjectKey: string;
+    for (let attempt = 0; ; attempt++) {
+      subjectKey = `collision-${attempt}`;
+      if (partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, subjectKey).route) === collisionHome) break;
+    }
+    const subject = await f.create('schema:Book', {}, subjectKey);
     const partition = home(subject);
     const before = await head(source, partition);
     const key = randomUUID();
@@ -51,9 +61,9 @@ test(name, async () => {
       }),
     ]);
     expect(concurrent).toHaveLength(2);
-    const { tupleRoute } = await import('../../src/content/imported-contract.ts');
     const tupleHome = partitionOf(tupleRoute(f.config.routeKey, 'native', 'privacy'));
     const tupleHead = await head(source, tupleHome);
+    expect(tupleHome).toBe(partition);
     expect(tupleHead.position > 0n).toBe(true);
     const last = await head(source, partition);
     expect(last.position > after.position).toBe(true);
@@ -62,6 +72,7 @@ test(name, async () => {
     for (let step = 0; step < 100; step++) {
       const page = await capturedStep(f.db, () =>
         source.readPrivacyReductionPage({
+          context: readContext(),
           partition,
           epoch: last.epoch,
           after: cursor,
@@ -90,12 +101,17 @@ test(name, async () => {
       entries.every((entry, index) => index === 0 || entry.head.position > entries[index - 1]!.head.position),
     ).toBe(true);
     expect(
-      entries.every((entry) => entry.affected.some((key) => key.kind === 'subject' && key.subject === subject)),
+      entries
+        .filter((entry) => entry.cause === 'subject')
+        .every((entry) => entry.affected.some((key) => key.kind === 'subject' && key.subject === subject)),
     ).toBe(true);
     expect(
-      entries.every((entry) => entry.impacts.some((impact) => impact.kind === 'subject' && impact.subject === subject)),
+      entries
+        .filter((entry) => entry.cause === 'subject')
+        .every((entry) => entry.impacts.some((impact) => impact.kind === 'subject' && impact.subject === subject)),
     ).toBe(true);
     const tupleLog = await source.readPrivacyReductionPage({
+      context: readContext(),
       partition: tupleHome,
       epoch: tupleHead.epoch,
       after: 0n,
@@ -118,6 +134,8 @@ test(name, async () => {
         ),
       ).toBe(true);
 
+    expect(entries.some((entry) => entry.cause === 'sourceTuple')).toBe(true);
+    expect(entries).toHaveLength(3);
     const stable = await head(source, partition);
     await runCommand(f.db.pool, { partition }, async () => noEffect({ unchanged: true }));
     expect(await head(source, partition)).toEqual(stable);
@@ -178,11 +196,16 @@ test('native efficient privacy observation covers all 4096 genuine homes and exc
       await f.post(`/v1/subjects/${id}:hide`, { reason: 'Real home privacy history' });
     }
     // No registered consumer means no ACK at all, not a fabricated caught-up consumer.
+    const context = readContext();
     const before = await capture(
       f.db,
       () =>
         source.readPrivacyReductionHeads({
           kind: 'population',
+          context,
+          queried: null,
+          requirements: diagnosticRequirements,
+          returnedSubjects: [],
           consumer: null,
           start: null,
         }),
@@ -203,6 +226,10 @@ test('native efficient privacy observation covers all 4096 genuine homes and exc
       () =>
         source.readPrivacyReductionHeads({
           kind: 'population',
+          context,
+          queried: null,
+          requirements: diagnosticRequirements,
+          returnedSubjects: [],
           consumer: null,
           start: before.value.status === 'observed' ? before.value.start : null,
         }),
@@ -286,6 +313,95 @@ test('native consent and Collection reductions invalidate their actual home imme
     );
     expect(changed.status).toBe(200);
     expect((await head(source, collectionHome)).position > initial.position).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+test('native narrowed observations cover irrelevant keys excluded subjects and own-row reductions within the caught-up page budget', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const source = publicFilterSource(f.config);
+    const author = await f.create();
+    const subject = await f.create('schema:Book', {
+      'schema:author': [statement('schema:author', author)],
+      'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
+    });
+    const projected = await complete(f, source, subject);
+    const language = projected.records.find((record) => record.statement.property.id === 'schema:inLanguage')!;
+    expect(language).toBeDefined();
+    const requirements = {
+      filter: { not: { statement: { property: 'schema:author', in: [author] } } },
+      text: null,
+      order: 'id' as const,
+      filterAndOrderKeys: [
+        { kind: 'property' as const, property: 'schema:author' },
+        { kind: 'field' as const, field: 'id' as const },
+        { kind: 'order' as const, order: 'id' as const },
+      ],
+    };
+    await f.post(`/v1/subjects/${subject}/candidates/${language.candidate}:hide`, { reason: 'Unrelated source key' });
+    const context = readContext();
+    const request = {
+      kind: 'population' as const,
+      consumer: null,
+      queried: null,
+      requirements,
+      returnedSubjects: [],
+      context,
+      start: null,
+    };
+    const start = await capture(f.db, () => source.readPrivacyReductionHeads(request), { includeBackends: true });
+    expect(start.value.status).toBe('observed');
+    if (start.value.status !== 'observed') throw new Error('Missing native narrowed start');
+    expect(start.value.routingComplete).toBe(true);
+    expect(start.value.blocking).toEqual([]);
+    expect(start.value.unacknowledged).toEqual([]);
+    const final = await capture(
+      f.db,
+      () =>
+        source.readPrivacyReductionHeads({
+          ...request,
+          start: start.value.status === 'observed' ? start.value.start : null,
+        }),
+      { includeBackends: true },
+    );
+    expect(final.value.status).toBe('observed');
+    if (final.value.status !== 'observed') throw new Error('Missing native narrowed final');
+    expect(final.value.blocking).toEqual([]);
+    expect(final.value.changed).toEqual([]);
+    const work = [start, final].map((measured) => costOf(measured.capture));
+    expect(work.reduce((sum, cost) => sum + cost.statements, 0)).toBeLessThanOrEqual(2);
+    expect(work.reduce((sum, cost) => sum + cost.rows, 0)).toBeLessThanOrEqual(64);
+    // A returned row needs ALL its own keys even when the query did not depend on that property.
+    const own = await source.readPrivacyReductionHeads({
+      ...request,
+      returnedSubjects: [{ subject, terminal: subject }],
+    });
+    expect(own.status).toBe('observed');
+    if (own.status !== 'observed') throw new Error('Missing own-row reduction observation');
+    expect(
+      own.blocking.some(
+        (entry) =>
+          entry.scope === 'returned_subject' && entry.phase === 'pending' && entry.head.partition === home(subject),
+      ),
+    ).toBe(true);
+    // No returned candidates: stale NOT exclusions still require the whole relevant population.
+    const authorRecord = projected.records.find((record) => record.statement.property.id === 'schema:author')!;
+    await f.post(`/v1/subjects/${subject}/candidates/${authorRecord.candidate}:hide`, {
+      reason: 'Excluded subject lost relevant evidence',
+    });
+    const excluded = await source.readPrivacyReductionHeads({ ...request, start: start.value.start });
+    expect(excluded.status).toBe('observed');
+    if (excluded.status !== 'observed') throw new Error('Missing excluded-subject reduction observation');
+    expect(
+      excluded.blocking.some(
+        (entry) =>
+          entry.scope === 'filter_or_order' && entry.phase === 'changed' && entry.head.partition === home(subject),
+      ),
+    ).toBe(true);
+    expect(excluded.changed.some((entry) => entry.partition === home(subject))).toBe(true);
   } finally {
     await f.close();
   }
