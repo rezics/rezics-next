@@ -5,7 +5,15 @@ import { settled, withSurface } from '../stories/support.tsx';
 import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 import { RelativeTime } from './relative-time.tsx';
 
-const subject = { id: 'book', title: 'A long journey through the city of stars', types: ['schema:Book'] };
+const subject = {
+  id: 'book',
+  title: 'A long journey through the city of stars and the people who changed its history',
+  types: ['schema:Book'],
+};
+const examples = [
+  { id: 'book', title: subject.title, ratio: '2:3' as const, types: ['schema:Book'] },
+  { id: 'game', title: '星を越えて — 彼方の記憶をたどる旅', ratio: '16:9' as const, types: ['schema:VideoGame'] },
+];
 const meta = { title: 'Rezics UI/Shelf List', component: ShelfList, decorators: [withSurface] } satisfies Meta<
   typeof ShelfList
 >;
@@ -40,37 +48,45 @@ function Example() {
   const [count, setCount] = useState(3);
   return (
     <ShelfList>
-      <ShelfListRow
-        href="/book"
-        cover={{ subject, cover: null, src: () => '' }}
-        title={subject.title}
-        meta="A. Author · Book"
-        status="Reading"
-        statusMenuEntries={[
-          {
-            type: 'radio',
-            label: 'Status',
-            value: 'reading',
-            options: [
-              { value: 'reading', label: 'Reading' },
-              { value: 'completed', label: 'Completed' },
-            ],
-            onValueChange: () => {},
-          },
-        ]}
-        progress={{ value: count / 12, label: `Ep ${count}/12` }}
-        stepper={{
-          onStep: (delta) => setCount((n) => Math.max(0, Math.min(12, n + delta))),
-          decreaseLabel: 'Decrease progress',
-          increaseLabel: 'Increase progress',
-        }}
-        date={<RelativeTime value="2026-10-26T12:00:00Z" now={new Date('2026-10-27T12:00:00Z')} locale="en" />}
-        menuEntries={[{ type: 'destructive', label: 'Remove', onSelect: () => {} }]}
-        labels={{ select: 'Select book', menu: 'More actions' }}
-        selectable
-        selected={selected}
-        onSelectedChange={setSelected}
-      />
+{examples.map((entry, index) => {
+        const rowSubject = { id: entry.id, title: entry.title, types: entry.types };
+        return (
+          <ShelfListRow
+            key={entry.id}
+            href={`/${entry.id}`}
+            cover={{ subject: rowSubject, cover: null, src: () => '', ratio: entry.ratio }}
+            title={entry.title}
+            titleLang={index === 0 ? 'en' : 'ja'}
+            meta={index === 0 ? 'A. Author · Book' : 'Studio · Video game'}
+            status={index === 0 ? 'Reading' : 'Playing'}
+            statusMenuEntries={[
+              {
+                type: 'radio',
+                label: 'Status',
+                value: index === 0 ? 'reading' : 'playing',
+                options: [
+                  { value: index === 0 ? 'reading' : 'playing', label: index === 0 ? 'Reading' : 'Playing' },
+                  { value: 'completed', label: 'Completed' },
+                ],
+                onValueChange: () => {},
+              },
+            ]}
+            progress={{ value: count / 12, label: `Ep ${count}/12` }}
+            stepper={{
+              onStep: (delta) => setCount((n) => Math.max(0, Math.min(12, n + delta))),
+              decreaseLabel: 'Decrease progress',
+              increaseLabel: 'Increase progress',
+            }}
+            date={<RelativeTime value="2026-10-26T12:00:00Z" now={new Date('2026-10-27T12:00:00Z')} locale="en" />}
+            menuEntries={[{ type: 'destructive', label: 'Remove', onSelect: () => {} }]}
+            labels={{ select: `Select ${entry.id}`, menu: 'More actions' }}
+            selectable
+            selected={selected}
+            onSelectedChange={setSelected}
+            forceOverlay={index === 0}
+          />
+        );
+      })}
     </ShelfList>
   );
 }

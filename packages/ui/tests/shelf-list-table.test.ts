@@ -39,13 +39,17 @@ test('list row renders its cover, one title link, state, actions and mobile layo
     'Decrease',
     'Increase',
     'aria-checked="true"',
-    'w-12',
+    'w-[72px]',
+    'sm:w-24',
     'style="aspect-ratio:5 / 7"',
     'sm:line-clamp-1',
     'line-clamp-2',
     'sm:hidden',
   ])
     expect(html).toContain(text);
+  expect(html).not.toContain('divide-y');
+  expect(html).not.toContain('h-32');
+  expect(html).not.toContain('sm:h-24');
 });
 
 test('table renders visible columns, sticky sortable header and caller supplied editors', () => {
