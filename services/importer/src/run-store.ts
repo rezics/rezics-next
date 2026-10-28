@@ -601,8 +601,7 @@ export class RunStore<Projection = BatchStatement[]> {
       exact(input, ['complete'], ['skipped']);
       const skipped = input.skipped ?? 0;
       if (!Number.isSafeInteger(skipped) || skipped < 0) fail();
-    }
-    else {
+    } else {
       exact(input, ['complete', 'reason']);
       if (input.complete !== false || !['malformed', 'truncated'].includes(input.reason)) fail();
     }

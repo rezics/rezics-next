@@ -808,9 +808,19 @@ function resultFor(
   if (run.status === 'committed')
     return { code: 0, stdout: `Import complete: ${summary}\n`, stderr: '', openHandles: 0 };
   if (run.status === 'invalid-dump')
-    return { code: 2, stdout: '', stderr: diagnostic('Input is incomplete or invalid.', counts, run.skipped), openHandles: 0 };
+    return {
+      code: 2,
+      stdout: '',
+      stderr: diagnostic('Input is incomplete or invalid.', counts, run.skipped),
+      openHandles: 0,
+    };
   if (run.status === 'mass-disappearance')
-    return { code: 3, stdout: '', stderr: diagnostic('Disappearance threshold exceeded.', counts, run.skipped), openHandles: 0 };
+    return {
+      code: 3,
+      stdout: '',
+      stderr: diagnostic('Disappearance threshold exceeded.', counts, run.skipped),
+      openHandles: 0,
+    };
   if (run.status === 'busy')
     return {
       code: 5,
@@ -826,7 +836,12 @@ function resultFor(
       openHandles: 0,
     };
   if (httpStatus === 401 || httpStatus === 403)
-    return { code: 4, stdout: '', stderr: diagnostic('Import authorization was denied.', counts, run.skipped), openHandles: 0 };
+    return {
+      code: 4,
+      stdout: '',
+      stderr: diagnostic('Import authorization was denied.', counts, run.skipped),
+      openHandles: 0,
+    };
   return {
     code: 1,
     stdout: '',
