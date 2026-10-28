@@ -850,7 +850,8 @@ L is the sum of log(2 + cardinality) over touched tables: a B-tree probe is cons
 in rows and logarithmic in blocks; fixed index/constraint writes cost O(L) blocks.
 Bounds assume ordinary vacuum maintenance, fixed row/crypto sizes and no unbounded
 lock wait; these describe access paths, not timings or forced planner choices.
-Scopes are capped at 100 entries of 128 characters and HTTP bodies at 16 KiB.
+Scope lists use the known-scope bound computed at service creation (1,000 entries
+without a mounted catalogue), with 128 characters per scope and HTTP bodies at 16 KiB.
 Each owner/session/credential projection is fixed size; bulk projections are counted.
 Trusted Access authorization/read/invalidation calls are constant per anchored effect;
 their backing-store costs are outside this Auth derivation, as is workflow orchestration.
