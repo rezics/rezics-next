@@ -212,6 +212,39 @@ test('production Search API and default Search module use their real configured 
     });
     expect(await readFacts()).toEqual([{ kind: 'code', value: 'en' }]);
 
+    // Source tuple fences do not currently enqueue the indexer's affected-anchor event.
+    // A real ordinary subject-anchor mutation makes the paused default worker reread
+    // this subject so this caller proof can observe the current keyed Source result.
+    const anchor = await post(
+      '/v1/subjects:batchWrite',
+      {
+        commands: [
+          {
+            op: 'propose',
+            key: 'ordinary-anchor',
+            source: provenance(`production-anchor-${randomUUID()}`),
+            subject: id,
+            statement: {
+              property: { id: 'schema:inLanguage' },
+              value: { type: 'value', content: 'fr' },
+              references: [
+                {
+                  parts: [
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: 'https://openlibrary.org/works/ordinary-anchor' },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      importer.bearer,
+    );
+    expect(anchor.results[0].status).toBe(201);
+
     worker.resume();
     await eventually(async () => {
       const response = await search.request<{ hits: { hits: { _source: { id: string; statements: string[] } }[] } }>(
