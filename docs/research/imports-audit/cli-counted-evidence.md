@@ -58,7 +58,7 @@ exported observation; no additional caller or outside-declared-path change was n
 
 ## Verification
 
-The required commands will run once each after the final source formatting and a commit:
+The required commands were submitted once each after source formatting and a commit:
 
 ```sh
 bun scripts/worker-check.ts -- bun test services/importer/tests/cli-outcomes.test.ts
@@ -68,7 +68,7 @@ bun scripts/worker-check.ts -- bun scripts/typecheck.ts
 The unchanged wrapper executes the entire portable suite with its real binding, checks its
 actual child pass count against source declarations, requires child exit 0 and 0 failures,
 and rejects skips/todos. The portable suite is never run unbound. Terminal results are
-recorded below after completion; no native Auth or source-statistics suite is rerun.
+recorded below; no native Auth or source-statistics suite is rerun.
 
 ## Before/after evidence
 
@@ -133,11 +133,11 @@ index dc2fa338ff..d63ad2e5c5 100644
 
 Before SHA-256: `2fbd6ba7979255d96a61037e06121803f2b85bb04b31677f3e9066c9f95a6dee`
 
-After SHA-256: `c23ce72f4c0f2286ea413130ff855303e8e0673a7ead227ff889c174d37bca3e`
+After SHA-256: `51c168bf9898ad11105cf6303a4997e6c74719507331ba981f4da144f09a4707`
 
 ```diff
 diff --git a/specs/imports-cli.test.ts b/specs/imports-cli.test.ts
-index c5f593e379..af241f910d 100644
+index c5f593e379..8c3159886d 100644
 --- a/specs/imports-cli.test.ts
 +++ b/specs/imports-cli.test.ts
 @@ -9,7 +9,12 @@ import {
@@ -168,22 +168,25 @@ index c5f593e379..af241f910d 100644
      for (const statement of result.sql) expect(statement.sql).not.toMatch(/\bCOUNT\s*\(|\bOFFSET\b/i);
      for (const request of result.requests) {
        expect(new URL(request.url).origin).toBe(origin);
-@@ -493,8 +499,24 @@ test('overlapping same-source invocations report busy while a different source r
+@@ -493,8 +499,27 @@ test('overlapping same-source invocations report busy while a different source r
 
  test('fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes', async () => {
    await scenario(async (h) => {
 -    const fixed: GrowthSample[] = [];
 -    const streaming: GrowthSample[] = [];
-+    const fixedCheck: CountedCheck<Execution> = {
-+      read: (result) => result.counts,
++    const fixedCheck: CountedCheck = {
++      read: (result) => (result as Execution).counts,
 +      bounds: { 'sqlite statements': 'constant', 'sqlite returned rows': 'constant' },
 +      slack: {
 +        'sqlite statements': { absolute: 0, relative: 0 },
 +        'sqlite returned rows': { absolute: 2, relative: 0.1 },
 +      },
 +    };
-+    const streamingCheck: CountedCheck<Execution> = {
-+      read: (result) => ({ 'input bytes': result.input.bytes, 'input records': result.input.records }),
++    const streamingCheck: CountedCheck = {
++      read: (result) => {
++        const { input } = result as Execution;
++        return { 'input bytes': input.bytes, 'input records': input.records };
++      },
 +      bounds: { 'input bytes': 'linear', 'input records': 'linear' },
 +      slack: {
 +        'input bytes': { absolute: 2, relative: 0.1 },
@@ -195,7 +198,7 @@ index c5f593e379..af241f910d 100644
      for (const scale of [1, 8, 64]) {
        h.state = resolve(h.directory, `scale-${scale}.sqlite`);
        await h.driver.seed(h.state, scale);
-@@ -512,7 +534,7 @@ test('fixed changes retain indexed bounded costs across three state scales and s
+@@ -512,7 +537,7 @@ test('fixed changes retain indexed bounded costs across three state scales and s
            expect(statement.plan.length).toBeGreaterThan(0);
          }
        }
@@ -204,7 +207,7 @@ index c5f593e379..af241f910d 100644
        const text = Array.from({ length: scale }, (_, i) => record('wikidata', 'Streaming title', 100 + i)).join('');
        const stream = await h.run('wikidata', { stdin: chunks(text, scale) });
        // A disjoint snapshot intentionally trips mass protection after the streaming pass.
-@@ -520,9 +542,9 @@ test('fixed changes retain indexed bounded costs across three state scales and s
+@@ -520,9 +545,9 @@ test('fixed changes retain indexed bounded costs across three state scales and s
        expect(stream.input).toMatchObject({ bytes: encode(text).length, records: scale, passes: 1 });
        expect(stream.input.peakBufferedBytes).toBeLessThanOrEqual(65536 * 2);
        expect(stream.input.maxPageRecords).toBeLessThanOrEqual(100);
@@ -307,3 +310,29 @@ All 13 scenario names are byte-for-byte unchanged:
 - abort after durable preparation closes handles and replays original journal keys on rerun
 - overlapping same-source invocations report busy while a different source remains runnable
 - fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes
+
+## Terminal results
+
+The focused wrapper ran at committed revision `372d553019` and exited 1:
+
+```text
+bun test v1.4.4-canary.1 (a0cc096ce)
+
+services/importer/tests/cli-outcomes.test.ts:
+killed 1 dangling process
+(fail) all import CLI outcomes pass with real source pipeline [120030.41ms]
+  ^ this test timed out after 120000ms.
+
+ 0 pass
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [120.05s]
+```
+
+Local complete log: `.temp/goal/checks/worker-check-2026-10-29T13-32-33.925Z-9c3cf4af.log`.
+The wrapper did not return its child's output before its unchanged timeout, so none of the
+13 child results is claimed as passing. There was no runtime rerun or timeout/host change.
+Subsequent source review corrected only the reader parameter annotations to the shared
+`CountedCheck` default (`unknown`, narrowed to `Execution`); this erases to the same runtime
+JavaScript. The full diffs and hashes above describe that final source, not an earlier variant.
+Root typecheck terminal evidence is pending.

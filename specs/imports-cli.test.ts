@@ -499,16 +499,19 @@ test('overlapping same-source invocations report busy while a different source r
 
 test('fixed changes retain indexed bounded costs across three state scales and streaming stays proportional to supplied bytes', async () => {
   await scenario(async (h) => {
-    const fixedCheck: CountedCheck<Execution> = {
-      read: (result) => result.counts,
+    const fixedCheck: CountedCheck = {
+      read: (result) => (result as Execution).counts,
       bounds: { 'sqlite statements': 'constant', 'sqlite returned rows': 'constant' },
       slack: {
         'sqlite statements': { absolute: 0, relative: 0 },
         'sqlite returned rows': { absolute: 2, relative: 0.1 },
       },
     };
-    const streamingCheck: CountedCheck<Execution> = {
-      read: (result) => ({ 'input bytes': result.input.bytes, 'input records': result.input.records }),
+    const streamingCheck: CountedCheck = {
+      read: (result) => {
+        const { input } = result as Execution;
+        return { 'input bytes': input.bytes, 'input records': input.records };
+      },
       bounds: { 'input bytes': 'linear', 'input records': 'linear' },
       slack: {
         'input bytes': { absolute: 2, relative: 0.1 },
