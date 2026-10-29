@@ -115,7 +115,7 @@ test('registry closes over exactly three artifact types and minimizer version on
 });
 
 test('role union covers the complete account inventory with stable independent bits', () => {
-  expect({ ...ACCOUNT_ROLE_BITS }).toEqual(inventory);
+  expect(ACCOUNT_ROLE_BITS as Record<string, number>).toEqual(inventory as Record<string, number>);
   expect(new Set(Object.values(ACCOUNT_ROLE_BITS)).size).toBe(Object.keys(inventory).length);
   expect(encodeRoles(ACCOUNT_ROLES)).toBe(ALL_ACCOUNT_ROLES);
   expect(decodeRoles(ALL_ACCOUNT_ROLES)).toEqual(ACCOUNT_ROLES);
