@@ -249,15 +249,19 @@ export const identityEpochStore: IdentityEpochStore = {
       )
     ).rows[0];
     if (!source) throw new TypeError('initializeSubject requires the same native creation transaction');
+    // A birth mapping is tied to the actual source-home fence that commits revision 1. Zero is
+    // not a current epoch, and a process-local/default value would let a moved home look current.
+    const owner = await readPartition(tx, command.partition);
+    if (!owner || owner.writeState !== 'active') throw unavailable();
     await tx.query(
       `INSERT INTO semantic.identity_epoch_mapping(route,original,terminal,epoch,origin,recorded_transaction_id)
-      VALUES ($1,$2,$2,0,'creation',$3)`,
-      [originalRoute, original, source.recorded_transaction_id],
+      VALUES ($1,$2,$2,$3,'creation',$4)`,
+      [originalRoute, original, owner.epoch, source.recorded_transaction_id],
     );
     await tx.query(
       `INSERT INTO semantic.identity_epoch_home_gate(route,destination,original,terminal,epoch,recorded_transaction_id)
-      VALUES ($1,$2,$2,$2,0,$3)`,
-      [originalRoute, original, source.recorded_transaction_id],
+      VALUES ($1,$2,$2,$2,$3,$4)`,
+      [originalRoute, original, owner.epoch, source.recorded_transaction_id],
     );
     registerCommandCallback(tx, async (transactionId) => {
       if (transactionId !== source.recorded_transaction_id)
