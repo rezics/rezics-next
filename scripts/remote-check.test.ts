@@ -969,7 +969,9 @@ test('compile cache: each remote run keeps Node compile cache inside its own run
     expect(cachePath).toBe(`${runDirectories[index]}/bun-runtime-transpiler-cache`);
     expect(script).toContain(`export NODE_COMPILE_CACHE=${runDirectories[index]}/.temp/node-compile-cache`);
     expect(script).not.toContain('/tmp/node-compile-cache');
-    expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
+    expect(script.indexOf('export NODE_COMPILE_CACHE')).toBeLessThan(
+      script.indexOf('"$bun" install --frozen-lockfile'),
+    );
   }
 });
 
@@ -1338,7 +1340,9 @@ test('a host with less than 4 GiB MemAvailable is skipped and logged with its av
 });
 
 test('tmp floor: the probe reports free /tmp bytes and inodes, and missing values make it invalid', async () => {
-  const { env, events } = scenario({ a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES } });
+  const { env, events } = scenario({
+    a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES },
+  });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
@@ -1349,11 +1353,19 @@ test('tmp floor: the probe reports free /tmp bytes and inodes, and missing value
   expect(probe).toContain('TMP_INODES');
 
   for (const missing of ['omitTmpBytes', 'omitTmpInodes'] as const) {
-    const invalid = scenario({ invalid: { available: 16 * 2 ** 30, [missing]: true }, ready: { available: 16 * 2 ** 30 } });
+    const invalid = scenario({
+      invalid: { available: 16 * 2 ** 30, [missing]: true },
+      ready: { available: 16 * 2 ** 30 },
+    });
     const admitted = await remote(invalid.env, workspace(), ['true']);
     expect(admitted.code).toBe(0);
     expect(invalid.events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
-    expect(invalid.events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@invalid.test');
+    expect(
+      invalid
+        .events()
+        .filter((event) => event.kind === 'slot')
+        .map((event) => event.address),
+    ).not.toContain('ops@invalid.test');
   }
 });
 
@@ -1367,8 +1379,14 @@ test('tmp floor: a host under the free byte floor is skipped for a ready host', 
 
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
-  expect(result.stderr).toContain(`skipped low: /tmp ${freeBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`);
-  expect(events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@low.test');
+  expect(result.stderr).toContain(
+    `skipped low: /tmp ${freeBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`,
+  );
+  expect(
+    events()
+      .filter((event) => event.kind === 'slot')
+      .map((event) => event.address),
+  ).not.toContain('ops@low.test');
 });
 
 test('tmp floor: a host under the free inode floor is skipped even with enough free bytes', async () => {
@@ -1381,12 +1399,20 @@ test('tmp floor: a host under the free inode floor is skipped even with enough f
 
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
-  expect(result.stderr).toContain(`skipped low: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`);
-  expect(events().filter((event) => event.kind === 'slot').map((event) => event.address)).not.toContain('ops@low.test');
+  expect(result.stderr).toContain(
+    `skipped low: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`,
+  );
+  expect(
+    events()
+      .filter((event) => event.kind === 'slot')
+      .map((event) => event.address),
+  ).not.toContain('ops@low.test');
 });
 
 test('tmp floor: a host at the byte and inode floors is admitted', async () => {
-  const { env, events } = scenario({ a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES } });
+  const { env, events } = scenario({
+    a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES, tmpInodes: CHECK_HOST_MIN_TMP_INODES },
+  });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
