@@ -84,6 +84,40 @@ test('every DAO fill allocates an owner-routed identity and legacy null reads an
   }
 });
 
+test('owner HTTP reads expose a legacy null without stamping and guardless updates retain it', async () => {
+  const subjectId = await f.createSubject('game'),
+    path = '/v1/libraryEntries/' + subjectId;
+  await f.commands.putEntry(f.owner.actor, subjectId, { state: 'playing' }, entryKey());
+  await f.pool.query(
+    'UPDATE library.entry SET incarnation_id=NULL WHERE route=$1 AND account_id=$2 AND subject_id=$3',
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, subjectId],
+  );
+  const before = await f.inspect();
+  const read = await f.send('owner', 'GET', path);
+  expect(read.status).toBe(200);
+  expect((await read.json()).libraryEntry.incarnationId).toBeNull();
+  const page = await f.send('owner', 'GET', '/v1/libraryEntries?limit=100');
+  expect(page.status).toBe(200);
+  expect(
+    (await page.json()).libraryEntries.find((entry: { subjectId: string }) => entry.subjectId === subjectId)
+      .incarnationId,
+  ).toBeNull();
+  expect(await f.inspect()).toEqual(before);
+  expect(
+    (
+      await f.send('owner', 'PUT', path, {
+        state: 'playing',
+        revision: 1,
+        incarnationId: newId(routeOf(f.owner.actor.accountId)!),
+      })
+    ).status,
+  ).toBe(409);
+  expect(await f.inspect()).toEqual(before);
+  const changed = await f.send('owner', 'PUT', path, { state: 'playing', revision: 1 });
+  expect(changed.status).toBe(200);
+  expect((await changed.json()).libraryEntry.incarnationId).toBeNull();
+});
+
 test('omitted guards keep the original digest and receipt JSON without synthesizing identity', async () => {
   const subjectId = await f.createSubject('game'),
     key = entryKey();
