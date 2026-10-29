@@ -507,6 +507,11 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Site shell (navigation column and header)
 
+- The header owns the site's one search field, centred within a bounded 40rem width on desktop. Pages do not render
+  their own query field. A route may supply a removable scope chip; removing it widens the query, and Backspace in an
+  empty field removes it. Scope conditions enter the shared filter protocol only when the kernel supports that kind.
+  The field's filter button opens the current search filters, with the active condition count; on phones the header
+  search button opens a full-screen search view with the same query and filter controls.
 - **Touches:** A nonce-bearing inline head script applies theme and navigation cookies before first paint. The
   shell renders three fixed destinations, header controls and one navigation column; the column background and
   link underlines are CSS. The account slot reserves the same space while session state is unknown

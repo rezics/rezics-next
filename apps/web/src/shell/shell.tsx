@@ -2,6 +2,7 @@ import { useOperation } from '../kernel/exposure';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@rezics/ui/shadcn/dialog';
 import {
   Sidebar,
   SidebarContent,
@@ -519,6 +520,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const router = useRouter();
   const [railCollapsed, setRailCollapsed] = useState(false);
+  const [phoneSearchOpen, setPhoneSearchOpen] = useState(false);
   useLayoutEffect(() => {
     setRailCollapsed(document.documentElement.dataset.nav === 'collapsed');
   }, []);
@@ -563,12 +565,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             session={session}
           />
           <Logo />
+          <div className="pointer-events-none absolute inset-x-0 mx-auto hidden w-full max-w-[40rem] px-40 md:block">
+            <div className="pointer-events-auto"><ShellSearch /></div>
+          </div>
           <div className="ms-auto flex items-center gap-2">
-            {location.pathname !== '/' && location.pathname !== '/search' ? (
-              <div className="hidden md:block">
+            <Dialog open={phoneSearchOpen} onOpenChange={setPhoneSearchOpen}>
+              <DialogTrigger render={<Button className={cn('md:hidden', headerControlClass)} variant="ghost" size="icon-lg" aria-label={m.search_label()} />}>
+                <Search aria-hidden="true" />
+              </DialogTrigger>
+              <DialogContent className="inset-0 h-svh w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-4 md:hidden">
+                <DialogTitle className="sr-only">{m.search_label()}</DialogTitle>
                 <ShellSearch />
-              </div>
-            ) : null}
+              </DialogContent>
+            </Dialog>
             <LanguageControl />
             <ThemeControl />
             <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">

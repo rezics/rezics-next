@@ -4,7 +4,7 @@ import type { KernelClient } from '@rezics/client';
 import { Cover, sharedRatio } from '@rezics/ui/cover';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@rezics/ui/shadcn/drawer';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@rezics/ui/shadcn/drawer';
 import {
   Combobox,
   ComboboxContent,
@@ -15,12 +15,12 @@ import {
 } from '@rezics/ui/shadcn/combobox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { cn } from '@rezics/ui/utils';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
@@ -368,8 +368,7 @@ function searchHref(
 
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 
-export function SearchPage({ query, data }: { query: string; data?: SearchPageData }) {
-  const [formQuery, setFormQuery] = useState(query);
+export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
   const [hydrated, setHydrated] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const locale = getLocale();
@@ -380,7 +379,11 @@ export function SearchPage({ query, data }: { query: string; data?: SearchPageDa
   const activeFilterCount =
     (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
   useEffect(() => setHydrated(true), []);
-  useEffect(() => setFormQuery(query), [query]);
+  useEffect(() => {
+    const open = () => setFiltersOpen(true);
+    window.addEventListener('rezics:open-search-filters', open);
+    return () => window.removeEventListener('rezics:open-search-filters', open);
+  }, []);
 
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
@@ -388,7 +391,7 @@ export function SearchPage({ query, data }: { query: string; data?: SearchPageDa
   const hasFilterPanel = Boolean(
     query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
   );
-  const results = renderResults(query, result, locale, type, selectedFacets, data);
+  const results = renderResults(query, cursor, result, locale, type, selectedFacets, data);
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
@@ -526,25 +529,6 @@ export function SearchPage({ query, data }: { query: string; data?: SearchPageDa
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
-      <form id="search-form" method="get" action={`/${locale}/search`} className="space-y-5">
-        <div className="flex gap-2">
-          <Label className="sr-only" htmlFor="search-query">
-            {m.search_label()}
-          </Label>
-          <Input
-            id="search-query"
-            name="q"
-            value={formQuery}
-            onChange={(event) => setFormQuery(event.target.value)}
-            className="h-10 min-w-0 flex-1"
-          />
-          <Button type="submit" size="lg" className="h-10 px-4">
-            {m.search_submit()}
-          </Button>
-        </div>
-        {type && <input type="hidden" name="type" value={type} />}
-        {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
-      </form>
       {hasFilterPanel ? (
         <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
           <form
@@ -553,17 +537,12 @@ export function SearchPage({ query, data }: { query: string; data?: SearchPageDa
             action={`/${locale}/search`}
             className="hidden lg:block lg:col-start-1 lg:row-start-1"
           >
-            <Collapsible defaultOpen className="rounded-xl border border-border/60 p-4">
-              <CollapsibleTrigger className="hidden">
-                {m.search_filters()} ({number.format(activeFilterCount)})
-              </CollapsibleTrigger>
+            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen} className="rounded-xl border border-border/60 p-4">
+              <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
               <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
             </Collapsible>
           </form>
           <Drawer open={filtersOpen} onOpenChange={setFiltersOpen}>
-            <DrawerTrigger className={`${buttonVariants({ variant: 'outline' })} w-full justify-between lg:hidden`}>
-              {m.search_filters()} ({number.format(activeFilterCount)})
-            </DrawerTrigger>
             <DrawerContent className="lg:hidden">
               <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
                 <DrawerHeader>
@@ -683,13 +662,45 @@ type SuggestionItem = {
   suggestion: SuggestionResult['subjects'][number];
 };
 
-export function ShellSearch() {
+export type SearchScopeKind = 'Library' | 'Collection' | 'Realm' | 'Zone' | 'Agent';
+export type SearchScope = { kind: SearchScopeKind; id: string; name: string; image?: string };
+let sharedSearchText = '';
+
+/** Route context can declare these when the shared filter protocol supports the condition. */
+export function ScopeChip({ scope, onRemove }: { scope: SearchScope; onRemove: () => void }) {
+  return (
+    <span className="inline-flex max-w-48 shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs">
+      {scope.image ? <img src={scope.image} alt="" className="size-5 rounded-full object-cover" /> :
+        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-primary/10 font-semibold">{scope.name.slice(0, 1)}</span>}
+      <span className="truncate">{scope.name}</span>
+      <button type="button" aria-label={`Remove ${scope.name} scope`} className="grid size-5 shrink-0 place-items-center rounded-full hover:bg-background" onClick={onRemove}>
+        <X aria-hidden="true" className="size-3" />
+      </button>
+    </span>
+  );
+}
+
+export function ShellSearch(): ReactElement;
+export function ShellSearch(props: { scope?: SearchScope; activeConditions?: number }): ReactElement;
+export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchScope; activeConditions?: number } = {}) {
   const locale = getLocale();
   const navigate = useNavigate();
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(sharedSearchText);
   const [items, setItems] = useState<SuggestionItem[]>([]);
   const [types, setTypes] = useState<SuggestionResult['types']>({});
   const [failed, setFailed] = useState(false);
+  const [currentScope, setCurrentScope] = useState(scope);
+  useEffect(() => setCurrentScope(scope), [scope]);
+  useEffect(() => {
+    const sync = (event: Event) => setInputValue((event as CustomEvent<string>).detail);
+    window.addEventListener('rezics:search-query-change', sync);
+    return () => window.removeEventListener('rezics:search-query-change', sync);
+  }, []);
+  const changeText = (value: string) => {
+    sharedSearchText = value;
+    setInputValue(value);
+    window.dispatchEvent(new CustomEvent('rezics:search-query-change', { detail: value }));
+  };
   useEffect(() => {
     const value = inputValue.trim();
     setFailed(false);
@@ -735,7 +746,7 @@ export function ShellSearch() {
     if (inputValue.trim())
       void navigate({
         to: '/search',
-        search: { q: inputValue.trim(), type: undefined, cursor: undefined },
+          search: { q: inputValue.trim(), type: undefined, cursor: undefined },
       });
   };
   // One frame for the list, so covers of mixed types line up.
@@ -744,7 +755,8 @@ export function ShellSearch() {
   );
   return (
     // Without JavaScript the box is a plain form to the search page.
-    <form method="get" action={`/${locale}/search`}>
+    <form method="get" action={`/${locale}/search`} className="flex w-full items-center gap-1 rounded-full border bg-background px-2">
+      {currentScope && <ScopeChip scope={currentScope} onRemove={() => setCurrentScope(undefined)} />}
       <Combobox
         items={items}
         filter={null}
@@ -752,28 +764,36 @@ export function ShellSearch() {
         inputValue={inputValue}
         onInputValueChange={(value, details) => {
           // Choosing a suggestion would write its title into the box; the box is cleared on choosing instead.
-          if (details.reason !== 'item-press') setInputValue(value);
+          if (details.reason !== 'item-press') changeText(value);
         }}
         onValueChange={(item: SuggestionItem | null) => {
           if (!item) return;
-          setInputValue('');
+          changeText('');
           const target = subjectHref({ id: item.value, label: item.label }, locale);
           void navigate({ to: target.to, params: target.params });
         }}
       >
         <ComboboxInput
           name="q"
-          className="h-9 w-28 text-sm sm:w-44"
+          className="h-9 w-full text-sm"
           aria-label={m.search_label()}
           placeholder={m.search_placeholder()}
           showTrigger={false}
           onKeyDown={(event) => {
+            if (event.key === 'Backspace' && !event.currentTarget.value && currentScope) {
+              event.preventDefault();
+              setCurrentScope(undefined);
+            }
             if (event.key === 'Enter' && !event.currentTarget.getAttribute('aria-activedescendant')) {
               event.preventDefault();
               submit();
             }
           }}
         />
+        <button type="button" aria-label={`Filters (${activeConditions})`} className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent" onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}>
+          <SlidersHorizontal aria-hidden="true" className="size-4" />
+          <span className="sr-only">{activeConditions}</span>
+        </button>
         <ComboboxContent className="w-80">
           <ComboboxEmpty>{failed ? m.search_suggestions_failed() : m.search_no_suggestions()}</ComboboxEmpty>
           <ComboboxList>

@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
-import { Input } from '../shadcn/input.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
 import { Badge } from '../shadcn/badge.tsx';
@@ -121,17 +120,6 @@ type Props = {
 /** Shelf controls combine shadcn primitives; the registry has no shelf toolbar. */
 export function ShelfToolbar(p: Props) {
   const { labels: l } = p;
-  const [search, setSearch] = useState(p.search);
-  const callback = useRef(p.onSearch);
-  callback.current = p.onSearch;
-  useEffect(() => {
-    setSearch(p.search);
-  }, [p.search]);
-  useEffect(() => {
-    if (search === p.search) return;
-    const timer = setTimeout(() => callback.current(search), 300);
-    return () => clearTimeout(timer);
-  }, [search, p.search]);
   const sort = (
     <div className="grid gap-3">
       <label className="grid gap-1 text-sm">
@@ -224,14 +212,6 @@ export function ShelfToolbar(p: Props) {
   return (
     <div className="space-y-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Input
-          type="search"
-          aria-label={l.search}
-          placeholder={l.search}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="min-w-0 flex-1 sm:max-w-xs"
-        />
         <Menu
           title={l.view}
           trigger={
