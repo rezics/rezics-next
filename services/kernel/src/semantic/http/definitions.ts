@@ -11,6 +11,7 @@ import { AuthenticationError, type Access, type AccessFactory } from '../../requ
 import { globalReadEligibility } from '../eligibility.ts';
 import { publicContextEligibility } from '../context.ts';
 import { routeOf } from '../../route/route.ts';
+import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
 import { activateExtension, activeExtension, ExtensionInputError, publishExtension } from '../extensions.ts';
 import {
@@ -90,6 +91,7 @@ export function definitionRoutes(
           'x-action': 'definitions:publish',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          'x-body-limit': MAX_BODY_LIMIT,
           security: [{ bearerAuth: [] }],
         },
       },
