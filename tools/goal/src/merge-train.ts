@@ -311,7 +311,9 @@ const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
   ['bun', 'install', '--frozen-lockfile'],
   ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
   ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-  ['bun', 'test', 'tools/goal/src'],
+  // Under check-host load (60-75 on 2026-10-29) git-heavy tests took over bun's 5 s default and refused unrelated
+  // landings; 30 s per test keeps a real hang visible.
+  ['bun', 'test', '--timeout', '30000', 'tools/goal/src'],
 ];
 
 function isAncestor(cwd: string, ancestor: string, descendant: string): boolean {
@@ -1638,7 +1640,12 @@ export class MergeTrain {
               appendFileSync(logPath, `Rerunning failed control-plane test files alone: ${files.join(' ')}\n`);
               const branchFailures: { file: string; result: Awaited<ReturnType<typeof runIntegrationChecks>> }[] = [];
               for (const file of files) {
-                const result = await runIntegrationChecks([['bun', 'test', file]], trainTree, logPath, runGate);
+                const result = await runIntegrationChecks(
+                  [['bun', 'test', '--timeout', '30000', file]],
+                  trainTree,
+                  logPath,
+                  runGate,
+                );
                 if (!result.passed) branchFailures.push({ file, result });
               }
               if (!branchFailures.length) {
@@ -1671,7 +1678,7 @@ export class MergeTrain {
                         continue;
                       }
                       const baseline = await runIntegrationChecks(
-                        [['bun', 'test', failure.file]],
+                        [['bun', 'test', '--timeout', '30000', failure.file]],
                         baselineTree,
                         logPath,
                         runGate,
