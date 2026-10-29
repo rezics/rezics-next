@@ -44,7 +44,8 @@ WHERE NOT suppressed
   AND (SELECT r_context_id FROM input) <> '00000000-0000-8000-8000-000000000000'::uuid
 ORDER BY order_key, sort_subject, sort_statement
 LIMIT (SELECT r_page_limit FROM input)
-  ) merged
+)
+) merged
 )
 SELECT link.property, link.statement_id::text AS statement, link.slot_id::text AS slot,
        NULLIF(link.target_subject_id, '00000000-0000-0000-0000-000000000000'::uuid)::text AS target,
