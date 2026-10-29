@@ -17,7 +17,7 @@ if (process.env[workerEnvironment] === '1') {
 } else {
   const maximumAttempts = 3;
   for (let attempt = 1; attempt <= maximumAttempts; attempt++) {
-    const child = Bun.spawn([process.execPath, import.meta.filename], {
+    const child = Bun.spawn([process.execPath, ...process.execArgv, import.meta.filename], {
       cwd: process.cwd(),
       env: { ...process.env, [workerEnvironment]: '1' },
       stdout: 'pipe',
