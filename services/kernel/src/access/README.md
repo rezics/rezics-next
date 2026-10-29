@@ -112,9 +112,6 @@ Deleting a verified account first queues the durable verification reversal. Its 
 restored account node from the current account row, erasing the label after unmerge, page removal and Access cleanup
 complete. Replayed events and reversal steps converge on the current state.
 
-Cost: one anchored account point read and one Semantic ensure command in the node's partition, after any reversal;
-rows and statements stay constant per event. `test/access/growth-account-agent-effect.test.ts` covers this bound.
-
 Run `bun services/kernel/scripts/ensure-account-agents.ts` during deployment after activating the global definition
 release to backfill active, unfenced accounts, including those skipped before a release was active.
 It scans in `(route, account_id)` keyset order with pages of 100, releases each page before issuing its per-account
@@ -253,11 +250,6 @@ If approval or reversal is pending, the effect retries until that work completes
 An old activation or rename delivery also converges from the deleted row. No catalogue agent remains linked after
 cleanup; independently held catalogue facts and links remain Semantic's responsibility.
 
-Cost: reversal touches one account point read/update per Access step and one exact pointer deletion. Access rows
-and statements stay constant. The merge and unmerge run through Semantic's serialized identity job; no stored
-reference is moved or rewritten. Reversal coverage is in `test/access/agent-verification-reversal.test.ts`, alongside
-Semantic's reversal tests.
-
 The handle identity read returns `subject: { id, label, type }` for an active account, using its derived account agent
 until verification and the catalogue subject afterward. It returns `verified: false` or `true` accordingly; a deleted
 account returns `subject: null` and `verified: false`.
@@ -391,9 +383,6 @@ role reader, so a Realm-group grant denies. Under the lock the same anchored rea
 verifies the evidence, locking the subject and the operator in route-then-id order. A missing management decision or any
 refusal advances nothing. An exact replay of a committed floor advance returns its receipt without this decision.
 
-Cost: the decision is the opening's own evidence, one human, operator, subject and membership point read plus the
-evaluator's anchored reads, O(log R) with R = N + U*t + M, and one locked account read for the operator.
-
 Both barriers advance the floor and fence the account in the same update, so Access holds the new floor, the fence
 and the receipt before Auth applies any effect. A barrier always advances the floor: a reduction is possible on an
 account that is already fenced, such as an owner an operator fenced. It raises the fence and sets its receipt only when
@@ -447,15 +436,6 @@ A concurrent first admission that loses a ledger race rolls back its entire debi
 and raises the same transient error; retry observes the committed admission.
 Crash loss of the UNLOGGED ledger may charge again and is accepted.
 
-Cost: a chunk call executes one statement and touches at most one exact ledger
-key and one exact counter key in the initiator's route. Rows and statements are
-constant; blocks are logarithmic in live history. The existing expiry worker uses
-one statement on one route, deleting at most 1,000 counter and ledger rows combined
-(counters first), retaining the existing strict 48-hour cleanup grace. Ledger
-admission still expires at the counter window boundary. Growth checks in
-`test/access/growth-write-rate-chunk.test.ts` use scales 256, 1024 and 4096, seed in
-`grow` and default warmups, for admission, retry and expired/live ledger history.
-
 ## Durable initiators
 
 Sessions and durable actor snapshots admit at most 512 consented scopes, each at most 128 ASCII bytes,
@@ -471,8 +451,7 @@ facts: route, creation time, private tier and operator. It applies authenticatio
 class rules at this step's T, valid only through this step's deadline.
 A denied restore publishes no rate identity. A chunk then uses `spendChunk` in
 command preparation as described above; a refused chunk sleeps durably before
-restoring and retrying its unchanged index. Cost: no additional read or statement;
-`test/access/growth-durable-initiator.test.ts` retains its existing bounds.
+restoring and retrying its unchanged index.
 
 `createInitiatorRestorer({pool,access,readOperation,readConsent})` restores a genuine native account identity for a later person-attributed action. `readConsent` is mandatory trusted server composition using `createAuthConsentReader` from `auth-consent.ts`: the Auth-owned private listener, its exact HTTPS Tunnel/Access URL and service token configuration stay at their respective homes. Kernel receives current consent facts through that authenticated channel, never an Auth pool, signing key, cookie or runtime. The reader checks the exact actor/client consent, current client ceiling/readiness/reduction and the selected consent's pending restriction on every invocation. No epoch-only fallback exists.
 
@@ -1430,6 +1409,7 @@ Bounds hold for a fixed admitted neighbourhood: account batches are at most 100,
 | Public profile by handle | Exact handle claim lookup followed by the current account projection. | Constant rows/statements; logarithmic blocks in account and handle histories. | `test/access/growth-account-handle-read.test.ts`: “public profile by handle stays bounded as accounts and handle claims grow” |
 | Public profile by agent | Exact verified subject pointer lookup followed by the current account projection. | Constant rows/statements; logarithmic blocks in account and subject pointer histories. | `test/access/growth-agent-page-lookup.test.ts`: “agent page lookup stays within its bound as unrelated verified subjects grow” |
 | Agent pages | One indexed agent page with account-state validation. | Rows linear in page limit; constant statements; logarithmic blocks in listed and unlisted accounts. | `test/access/growth-agent-pages.test.ts`: “agent pages stay bounded as listed and unlisted accounts grow” |
+| Public change time | The existing account update compares only public identity fields and advances `public_changed_at` in that same row write. | Constant rows/statements per account update; no history read or additional statement. | `test/access/growth-agent-pages.test.ts`: “public change time stays bounded as accounts grow” |
 | Organization speakers page | One bounded range of active speaker assignments and the corresponding account evidence. | Rows linear in page limit; constant statements; logarithmic blocks in assignments and accounts. | `test/access/growth-organization-speakers.test.ts`: “organization speakers page stays bounded as unrelated and revoked assignments grow” |
 | Account Realm page | One membership keyset page at fixed limit, with account and Realm membership anchors. | Rows linear in page limit; constant statements; logarithmic blocks in memberships. | `test/access/growth-account-realms.test.ts`: “account Realm pages stay bounded as this and other accounts' memberships grow at a fixed limit” |
 | Public activity views | Full-key batch read for at most 20 accounts over at most four partitions. | Constant statements per relation kind; rows linear in the fixed batch; logarithmic blocks in account history. | `test/access/growth-account-public-views.test.ts`: “public view flags for 20 accounts across 4 partitions stay bounded as accounts grow” |
@@ -1437,6 +1417,7 @@ Bounds hold for a fixed admitted neighbourhood: account batches are at most 100,
 | Write rate counter and ordinary/batch admission | One atomic counter upsert for the admitted identity/scope, plus bounded batch units (maximum 100). | Constant rows and statements; logarithmic blocks in counter keys as unrelated and hot-scope counters grow. | `test/access/growth-write-rate.test.ts`: “actual ordinary and batch100 admission use one point statement as unrelated and hot-scope counters grow” |
 | Mounted write rate stage | Route declaration lookup and one native rate-counter statement. | Constant statements and rows for the mounted route; logarithmic blocks as declarations and background counter rows grow. | `test/access/growth-write-rate-route.test.ts`: “mounted declarations and one native counter statement stay bounded as routes and background rows grow” |
 | Write rate counter expiry | One route-led expiry-index delete limited by the configured batch. | Rows linear in the fixed batch; one statement; logarithmic blocks in counter history. | `test/access/write-rate-expiry.test.ts`: “one native statement uses the route-led expiry index and remains bounded through common-seed growth” |
+| Durable write rate chunk | One exact ledger key and one exact counter key per chunk; expiry deletes at most 1,000 combined rows on one route. | Constant rows/statements per chunk; expiry rows linear in the fixed batch; logarithmic blocks in live ledger and counter history. | `test/access/growth-write-rate-chunk.test.ts`: “chunk ${mode} stays constant as identities, operations and recorded chunks grow”; “ledger expiry is one bounded statement as expired and live chunk history grows” |
 | Command actor admission | One account seek per attempt, plus fixed receipt/attempt evidence for the selected mode. | Constant rows and statements per attempt; logarithmic blocks in account history. | `test/access/growth-command-admission.test.ts`: “${mode} command admission adds one account seek per attempt at all three growth scales” |
 | Parent creation authorization | Exact parent role/grant proof for the requested child creation. | Constant rows and statements; logarithmic blocks in grant history G. | `test/access/growth-permission.test.ts`: “Parent creation authorization stays within its bound as G grows” |
 | Standing parent grant installation | Parent and account anchors plus bounded exact grant writes. | Constant rows and statements; logarithmic blocks in grant history Gt. | `test/access/growth-commands.test.ts`: “Standing parent installation stays within its bound as Gt grows” |
@@ -1468,7 +1449,7 @@ Bounds hold for a fixed admitted neighbourhood: account batches are at most 100,
 | Workflow approvals and approved identity | Exact approval/account keys and up to K command events; sweep reads a bounded approval page. | Constant rows/statements per fixed K and page; logarithmic blocks in accounts and receipts. | `test/access/growth-workflow-approvals.test.ts`: “${mode} stays bounded as ${population} grows with K fixed” |
 | Committed cleanup continuation | One exact continuation lookup or fixed fanout page completion and operated account keys. | Constant rows/statements per fixed page; logarithmic blocks in continuation and account history. | `test/access/growth-committed-continuation.test.ts`: “one fanout page completion stays bounded as unrelated continuations and operated accounts grow” |
 | Account preferences | One account preference point read or one preference-key write; notification checks use the same exact account/key. | Constant rows/statements; logarithmic blocks as accounts with stored preferences grow. | `test/access/growth-preferences.test.ts`: “preferences read stays constant as accounts with stored preferences grow”; “setting a maximal shelf stays constant as accounts with stored preferences grow”; “notificationAllowed stays constant as accounts grow” |
-| Rating counting keys | Exact account/operation rating-counter key reads and writes. | Constant rows/statements per account; logarithmic blocks as accounts and operated accounts grow. | `test/access/growth-rating-counter.test.ts`: “counting keys stay constant as accounts and operated accounts grow” |
+| Rating counting keys | One controller-version point read and HMAC per vote; a relation transfer adds one controller-version write and one outbox row, without enumerating votes or responsibilities. | Constant rows/statements per account; logarithmic blocks in account and relation history. | `test/access/growth-rating-counter.test.ts`: “counting keys stay constant as accounts and operated accounts grow” |
 | Account agent effect | One account point read and one Semantic ensure command in the node partition. | Constant rows/statements per event; logarithmic blocks in accounts and subjects. | `test/access/growth-account-agent-effect.test.ts`: “account agent effect growth stays within its bound at [256, 1024, 4096]” |
 | Agent verification requests and pending page | One anchored account read, unique pending probe and request insert; pending pages read at most limit + 1 indexed rows. | Constant rows/statements per request; page rows linear in page limit; logarithmic blocks in request history. | `test/access/growth-agent-verification.test.ts`: “agent verification request stays bounded as decided requests grow”; “pending agent verification page stays bounded as decided requests grow” |
 | Share account lock | One account primary-key read with `FOR SHARE`, held until the caller's transaction commits or rolls back. | Constant row and statement; logarithmic blocks in account index, independent of partition history. | Missing: the existing serialization test checks locking, not growth under unrelated same-partition account growth. |
@@ -1487,8 +1468,6 @@ Bounds hold for a fixed admitted neighbourhood: account batches are at most 100,
 | Provisioning proof | `createRegistrationProofBindings({pool,referenceKeys: KeyRing})`: `createProvisioningReference({input,outcome})` takes the exact `createPending` input `{accountId,key,handle,reservationId}` and awaited native `CommandOutcome`; `verifyProvisioningReceipt(reference)` verifies one core receipt via the trusted reader. Fixed internal principal, `access.actor-pending`, derived partition and route-prefixed key; digest, transaction, epoch/position and response must agree. `registration-proof-account.sql` binds the pending actor, handle, reservation, expiry and creation transaction, enforcing expiry at PostgreSQL time regardless of cleanup. | In stored data S: constant rows/statements, `O(log S)` buffers; at most 1 receipt, 1 account and 1 partition epoch/fence read. 3 data statements plus BEGIN/COMMIT; invalid keys/digests stop earlier. Seal input/output <=4096 chars. References confer no Auth authority/completion; no registry or Auth credential read. | `test/access/growth-registration-proof.test.ts`: “reference lookup is bounded across receipt history” |
 | Open interval lookups | one exact probe using the partial open-key btree or a temporal GiST key (`resource_denial_pkey`, `resource_denial_permission` or `resource_role_grant_pkey`). The base-table probe keeps both `upper_inf(valid)` and `valid @> T`, so the btree selects only the open row and GiST also excludes closed intervals for that key. Ending a denial repeats the time condition on the update. An insert also runs the temporal primary-key exclusion check. | O(log R) per statement, constant rows and statements, independent of one key's closed history and unrelated keys under any selected index. | `test/access/growth-open-interval-history.test.ts`: “denial lookup stays bounded as recent closed history grows (${statistics})”; “denial lookup stays bounded as unrelated keys grow (${statistics})”; “repeated group role grants stay bounded as unrelated keys grow (${statistics})” |
 | Governance bootstrap | one native Global command to install the governance role and its receipt/outbox, followed by a separately authorized standing-parent command for `organization:create`. Replays recheck the role installation marker and the standing-parent marker; a conflicting operator is refused before the second command. | constant rows and statements at fixed actor and Global anchors, with logarithmic buffers as unrelated accounts and Global grants grow. The integrated check observes four account rows on first install/replay and one on refusal; refusal performs only the initial command attempt. | `test/access/growth-bootstrap-governance.test.ts`: “checkGrowth 1x/8x/64x ${mode}: native operator command and exact child CLI use bounded seeks” |
-| Close organization | Organization account, hold and saturated-owner reads, actor's exact owner membership and one cleanup checkpoint; no member enumeration. | Constant rows and statements independent of member count; logarithmic blocks in organization and membership indexes. | `test/access/growth-organization-close.test.ts`: “close has constant rows and statements as target and unrelated memberships grow” |
-| Open interval lookup | One exact partial-B-tree or temporal GiST probe for the requested denial or role key; writes update only the matching open interval. | Constant rows and statements; logarithmic blocks in interval indexes, independent of closed history for the key and unrelated keys. | `test/access/growth-open-interval-history.test.ts`: “denial lookup stays bounded as recent closed history grows (${statistics})”; “denial lookup stays bounded as unrelated keys grow (${statistics})”; “repeated group role grants stay bounded as unrelated keys grow (${statistics})” |
 
 Semantic identity job steps and participant-owned erasure cleanup have no row because those operations are not implemented on this base.
 
@@ -1635,11 +1614,6 @@ Outbox consumers may retry delivery and must deduplicate by the event ID or thei
 not an exactly-once invocation guarantee. Rating handles it with its paged recount. Neither the controller nor either
 counting key appears in this event. Account erasure continues to use its existing lifecycle events.
 
-Cost: one statement returning one account relation version plus one HMAC per vote; rows and statements are constant,
-with logarithmic index blocks in accounts and relation history. A transfer adds one fixed controller-version write
-and one outbox row; it never enumerates votes or responsibilities. `test/access/growth-rating-counter.test.ts` uses
-the shared harness at 256, 1024 and 4096, seeding accounts and operated accounts in `grow` with default warmups.
-
 ## Agent pages
 
 `GET /v1/agent-pages?cursor=&limit=` returns `{ agentPages, next }`, where each item is
@@ -1660,19 +1634,6 @@ visibility guards. Other updates, unchanged public values and direct timestamp a
 preserve it. Keep the trigger's comparison aligned with that read.
 The feed's `lastModified` covers the account's own identity;
 activity lists on the handle page belong to their owning modules and are outside this feed.
-
-Cost:
-
-- Agent pages touch one key-ordered range of at most limit + 1 partial-index entries.
-  Rows are O(limit), blocks O(limit + log N), independent of unlisted accounts.
-  `test/access/growth-agent-pages.test.ts`, “agent pages stay bounded as listed and unlisted accounts grow”,
-  grows listed, pending, fenced and deleted accounts in `grow` at scales [256, 1024, 4096],
-  with a fixed limit and one warm-up per scale.
-- Public change time compares only the updated account row inside its existing update:
-  constant work per update and no extra statement.
-  `test/access/growth-agent-pages.test.ts`, “public change time stays bounded as accounts grow”,
-  measures a profile update against the same account populations at scales [256, 1024, 4096]
-  with one warm-up per scale.
 
 ## Deletion
 
