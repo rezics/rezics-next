@@ -1,4 +1,5 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
+import { releaseDigest, validateRelease } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import {
   CommandUnavailableError,
@@ -263,6 +264,28 @@ test('production bundled publish phase distributions with the fixture worker qui
         });
       }
       expect(samples.length).toBeGreaterThan(0);
+      if (load === 'quiet') {
+        // Separate this request's synchronous definitions work from scheduler and database waits.
+        for (let index = 0; index < 20; index++) {
+          const started = performance.now();
+          const cpu = process.cpuUsage();
+          expect(validateRelease(bundledRelease)).toEqual([]);
+          const validated = performance.now();
+          expect(releaseDigest(bundledRelease)).toMatch(/^sha256:/);
+          const ended = performance.now();
+          const used = process.cpuUsage(cpu);
+          console.log(
+            JSON.stringify({
+              event: 'release_own_work',
+              index,
+              validation_ms: validated - started,
+              digest_ms: ended - validated,
+              elapsed_ms: ended - started,
+              cpu_ms: (used.user + used.system) / 1000,
+            }),
+          );
+        }
+      }
       const percentile = (values: number[], p: number) =>
         values.toSorted((a, b) => a - b)[Math.ceil(values.length * p) - 1];
       const distribution = Object.fromEntries(
