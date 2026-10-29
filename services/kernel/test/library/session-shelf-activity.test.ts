@@ -4,6 +4,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { compileSessionProfile, sessionScopes } from './support/session-profile-fixture.ts';
+import { seedSessionActivityBackground, seedSessionActivityReceipts } from './support/session-activity-background.ts';
 
 let db: GrowthDatabase;
 let native: NativeProfileFixture;
@@ -188,6 +189,11 @@ test('native writers wait on the subject head before acquiring the session lock'
 test('profiled session head activity point work remains constant across unrelated same-owner sessions heads and history', async () => {
   const subject = await native.createSubject('game');
   await native.commands.putEntry(owner.actor, subject, { state: 'planned' }, entryKey());
+  // A fixed foreign-owner population keeps every scale on the same physical point-read path.
+  // It never adds work to the measured commands or changes the same-owner growth axis.
+  const foreign = newId(route());
+  await seedSessionActivityBackground(db, route(), foreign, 4096, new Date(time));
+  await seedSessionActivityReceipts(db, route(), foreign);
   const report = await checkGrowth(db, {
     name: 'native profiled session activity journey',
     rule: 'series',
@@ -195,26 +201,7 @@ test('profiled session head activity point work remains constant across unrelate
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
     async grow(database, scale, previous) {
-      // Background only: every measured positive fact below is created by the actual native command.
-      const ids = Array.from({ length: scale - previous }, () => newId(route()));
-      const subjects = ids.map(() => newId(0x7b20));
-      await database.admin.query(
-        `INSERT INTO library.progress_session
-        (route, session_id, account_id, subject_id, mode, unit, completed_unit_count, state, revision, started_at, transaction_id, last_changed_at)
-        SELECT $1, id, $2, subject, 'scalar_amount', 'minute', 0, 'abandoned', 2, $5, id, $5
-        FROM unnest($3::uuid[], $4::uuid[]) AS background(id, subject)`,
-        [route(), owner.actor.accountId, ids, subjects, new Date(time)],
-      );
-      await database.admin.query(
-        `INSERT INTO library.progress_head (route, account_id, subject_id, last_changed_at)
-        SELECT $1, $2, subject, $4 FROM unnest($3::uuid[]) AS subject`,
-        [route(), owner.actor.accountId, subjects, new Date(time)],
-      );
-      await database.admin.query(
-        `INSERT INTO library.progress_change (route, session_id, change_no, intent, recorded_at, transaction_id)
-        SELECT $1, id, 2, '{"amount":"1"}'::jsonb, $3, id FROM unnest($2::uuid[]) AS id`,
-        [route(), ids, new Date(time)],
-      );
+      await seedSessionActivityBackground(database, route(), owner.actor.accountId, scale - previous, new Date(time));
     },
     async operation() {
       tick();
@@ -231,4 +218,8 @@ test('profiled session head activity point work remains constant across unrelate
   });
   expect(report.rule).toBe('series');
   expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
+  for (const sample of report.samples)
+    for (const [relation, cost] of Object.entries(sample.cost.relations))
+      if (relation.startsWith('library.progress_') || relation === 'core.receipt')
+        expect(cost.sequentialScans, `${relation} at ${sample.scale}`).toBe(0);
 }, 120_000);

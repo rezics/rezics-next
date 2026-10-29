@@ -914,7 +914,9 @@ Where a named test does not call the operation, or does not grow the rows that o
   All helper and nested trigger statements are charged; there is no owner/history walk or free metadata work.
 - Growth check: `test/library/session-shelf-activity.test.ts` measures the actual prepared start/record/complete/
   start/abandon journey with `checkGrowth`, explicit `rule: series`, at 64/512/4096 unrelated same-owner sessions,
-  heads and history rows. The capture includes Core, Access, source/profile, helpers and nested trigger SQL.
+  heads and history rows. A fixed foreign-owner background of 4096 sessions/heads/history rows and receipts keeps
+  small-table planner transitions outside that axis; every sample also asserts indexed progress/receipt reads.
+  The capture includes Core, Access, source/profile, helpers and nested trigger SQL.
 
 ### Session record
 
