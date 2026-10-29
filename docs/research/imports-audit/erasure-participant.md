@@ -115,6 +115,14 @@ were needed. The complete patch is the committed diff; no live predecessor proce
 The following admission and final SHA-256 values identify the actual files. All runtime/default-registration,
 native support and frozen files remain byte-identical. Only the permitted acceptance and fixture child differ.
 
+On retry, both exact prescribed submissions above were run again from the committed revision `6700b4cd01`.
+Each still exited 1 with `Invalid check id: --`, before allocating a check ID or executing its command.
+Inspection of the current runner confirms that its `--run` branch still passes the next argument directly to
+the existing-check runner, whose UUID validator rejects `--`. No slot or live check exists. The retry leaves
+the acceptance and child unchanged, and re-reading every file in the hash inventory below confirmed all
+recorded final hashes. The missing submission interface continues to prevent native acceptance and typecheck
+evidence; no runtime assertion has been reached.
+
 | Path | Admission SHA-256 | Final SHA-256 |
 | --- | --- | --- |
 | `services/kernel/src/worker.ts` | `d0d22175231ed96e618a9d10811383c47bcc0008fc0a6b2c17c574105e1617c8` | `d0d22175231ed96e618a9d10811383c47bcc0008fc0a6b2c17c574105e1617c8` |
