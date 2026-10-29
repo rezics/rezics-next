@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
+import { onCheckHost } from './stack-run.ts';
 import {
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
@@ -828,6 +829,12 @@ test('the package cache failure lists at most ten changed run-relative paths', (
 test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally and runs them on the host with the most free capacity', async () => {
   const { env, events } = scenario({ a: { available: 4e9 }, b: { available: 30e9 } });
   const result = await kernelCheck(env);
+  if (onCheckHost(kernel)) {
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('stack-run: kernel check local, already on a check host');
+    expect(events().filter((event) => event.kind === 'run')).toEqual([]);
+    return;
+  }
 
   expect(result.code, result.stderr).toBe(0);
   const seen = events();
@@ -1380,14 +1387,31 @@ test('an rsync exit 24 completes the upload and changing build outputs stay out 
 });
 
 test('pre-command SSH and rsync transport failures retry with backoff on another host', async () => {
-  for (const code of [10, 12, 30, 35]) {
+  const retryCases = [10, 12, 30, 35].map((code) => {
     const { env, events } = scenario({
       a: { available: 8e9, rsyncFailures: 1, rsyncFailureCode: code },
       b: { available: 8e9 },
     });
     env.REMOTE_CHECK_POLL_MS = '1';
     env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
-    const result = await remote(env, workspace(), ['true']);
+    const result = remote(env, workspace(), ['true']);
+    return { code, env, events, result };
+  });
+  const ssh = scenario({
+    a: { available: 8e9, preCommandFailures: 1 },
+    b: { available: 8e9 },
+  });
+  ssh.env.REMOTE_CHECK_POLL_MS = '1';
+  ssh.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const sshResult = remote(ssh.env, workspace(), ['true']);
+  const exhausted = scenario({ a: { available: 8e9, rsyncFailures: 5, rsyncFailureCode: 30 } });
+  exhausted.env.REMOTE_CHECK_POLL_MS = '1';
+  exhausted.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const exhaustedResult = remote(exhausted.env, workspace(), ['true']);
+  await Promise.all([...retryCases.map(({ result }) => result), sshResult, exhaustedResult]);
+
+  for (const { code, events, result: resultPromise } of retryCases) {
+    const result = await resultPromise;
     expect(result.code).toBe(0);
     expect(
       events()
@@ -1402,13 +1426,7 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
     ).toEqual(['ops@b.test']);
   }
 
-  const ssh = scenario({
-    a: { available: 8e9, preCommandFailures: 1 },
-    b: { available: 8e9 },
-  });
-  ssh.env.REMOTE_CHECK_POLL_MS = '1';
-  ssh.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
-  const result = await remote(ssh.env, workspace(), ['true']);
+  const result = await sshResult;
   expect(result.code).toBe(0);
   expect(result.stderr).toContain('retrying transport failure on a with code 255');
   expect(
@@ -1418,10 +1436,7 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
       .map((event) => event.address),
   ).toEqual(['ops@b.test']);
 
-  const exhausted = scenario({ a: { available: 8e9, rsyncFailures: 5, rsyncFailureCode: 30 } });
-  exhausted.env.REMOTE_CHECK_POLL_MS = '1';
-  exhausted.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
-  const failed = await remote(exhausted.env, workspace(), ['true']);
+  const failed = await exhaustedResult;
   expect(failed.code).toBe(75);
   expect(exhausted.events().filter((event) => event.kind === 'rsync')).toHaveLength(3);
   expect(failed.stderr.match(/retrying transport failure on a with code 30/g)).toHaveLength(2);
@@ -2983,9 +2998,16 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
   expect(missing.events().some((event) => event.kind === 'docker')).toBe(true);
   expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
 
-  // KERNEL_CHECK_ON_REMOTE does not mean this process is on a check host. The shared decision still places the run.
+  // The flag does not itself force local placement; actual check-host location still takes precedence.
   const onRemote = scenario({ a: { available: 4e9 } });
   const placed = await kernelCheck({ ...onRemote.env, KERNEL_CHECK_ON_REMOTE: '1' });
+  if (onCheckHost(kernel)) {
+    expect(placed.code).not.toBe(0);
+    expect(placed.stderr).toContain('stack-run: kernel check local, already on a check host');
+    expect(onRemote.events().some((event) => event.kind === 'docker')).toBe(true);
+    expect(onRemote.events().some((event) => event.kind === 'run')).toBe(false);
+    return;
+  }
   expect(placed.code, placed.stderr).toBe(0);
   expect(placed.stderr).toContain('stack-run: kernel check on a');
   expect(onRemote.events().some((event) => event.kind === 'docker')).toBe(false);
