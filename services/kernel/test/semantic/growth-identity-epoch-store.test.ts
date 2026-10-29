@@ -22,7 +22,12 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
   real = await createRealAccess(db.admin, { editor: newId(route) }, ['subject:create', 'subject:read']);
-  access = real.access({ actions: new Map([['subject:create', { anonymous: false }], ['subject:read', { anonymous: true }]]) });
+  access = real.access({
+    actions: new Map([
+      ['subject:create', { anonymous: false }],
+      ['subject:read', { anonymous: true }],
+    ]),
+  });
   actor = await access.authenticate(real.bearer('editor'), { pool: db.pool, deadline: Date.now() + 5000 });
   await real.grant(globalResource, 'editor', 'subject:create');
 });
