@@ -30,16 +30,16 @@ No additional typed caller needs changing. Pure conversion can still omit work/a
 
 ## Units, classes, tolerances and ceilings
 
-| Evidence | Actual observation | N/history | M | Absolute / relative slack | Ceiling |
-| --- | --- | --- | --- | --- | --- |
-| Canonical PostgreSQL rows | `costOf(c.postgres).rows` | constant | linear | 2 / 10% | existing shared bound |
-| Canonical PostgreSQL statements | `costOf(c.postgres).statements` | constant | linear | 0 / 0 | existing shared bound |
-| Canonical PostgreSQL blocks | `costOf(c.postgres).blocks` | logarithmic | linear | 4 / 50% | existing shared bound |
-| sqlite returned rows | sum actual `rowsReturned` | constant | linear | 2 / 10% | existing indexed proof |
-| sqlite executions | actual SQLite execution count, controls included | constant | linear | 0 / 0 | 1456 + 144I + 32M |
-| network requests | actual captured plus manually observed sends | constant | linear | 2 / 10% | 101-command rejection retains <=1 |
-| derived PG examined plus ModifyTable rows | canonical examined rows + sum `rowsAppended` | constant | linear | 2 / 10% | existing derived inequality |
-| derived PG client calls plus raw plans | complete PG client-call count + raw plan count | constant | linear | 0 / 0 | 4000 + 1000I + 256M |
+| Evidence                                  | Actual observation                               | N/history   | M      | Absolute / relative slack | Ceiling                           |
+| ----------------------------------------- | ------------------------------------------------ | ----------- | ------ | ------------------------- | --------------------------------- |
+| Canonical PostgreSQL rows                 | `costOf(c.postgres).rows`                        | constant    | linear | 2 / 10%                   | existing shared bound             |
+| Canonical PostgreSQL statements           | `costOf(c.postgres).statements`                  | constant    | linear | 0 / 0                     | existing shared bound             |
+| Canonical PostgreSQL blocks               | `costOf(c.postgres).blocks`                      | logarithmic | linear | 4 / 50%                   | existing shared bound             |
+| sqlite returned rows                      | sum actual `rowsReturned`                        | constant    | linear | 2 / 10%                   | existing indexed proof            |
+| sqlite executions                         | actual SQLite execution count, controls included | constant    | linear | 0 / 0                     | 1456 + 144I + 32M                 |
+| network requests                          | actual captured plus manually observed sends     | constant    | linear | 2 / 10%                   | 101-command rejection retains <=1 |
+| derived PG examined plus ModifyTable rows | canonical examined rows + sum `rowsAppended`     | constant    | linear | 2 / 10%                   | existing derived inequality       |
+| derived PG client calls plus raw plans    | complete PG client-call count + raw plan count   | constant    | linear | 0 / 0                     | 4000 + 1000I + 256M               |
 
 `rowsAppended` remains the existing ModifyTable Actual Rows * Actual Loops derivation, including extra matching
 native plans assigned to the last successful call. It is not independent affected-row truth. The raw statements,
@@ -50,11 +50,11 @@ zero slack, and retain real PG constant rows/statements and logarithmic blocks a
 
 The unchanged static terms are:
 
-| Method/source | Fixed | Per I | Per M | Derivation retained |
-| --- | ---: | ---: | ---: | --- |
-| RunStore stage/classify/dispatch/acknowledge, `services/importer/src/run-store.ts` | 1200 | 80 | 0 | begin/stage/seal/pageStaged/key/plan/acknowledge/finalize bounded point/page branches; record loop per I |
-| RecordBindings, `services/importer/src/record-bindings.ts` | 256 | 64 | 32 | bootstrap prepare/ACK 6+6; first proposal 9+7; later 8+7; transaction controls included |
-| Kernel/Auth/Access/receipt/fence/content, `services/kernel/src/http/kernel.ts` and access callees | 4000 | 1000 | 256 | bounded authenticated request, actor, permission, receipt, fence and routed-content branches, client calls plus raw plans |
+| Method/source                                                                                     | Fixed | Per I | Per M | Derivation retained                                                                                                       |
+| ------------------------------------------------------------------------------------------------- | ----: | ----: | ----: | ------------------------------------------------------------------------------------------------------------------------- |
+| RunStore stage/classify/dispatch/acknowledge, `services/importer/src/run-store.ts`                |  1200 |    80 |     0 | begin/stage/seal/pageStaged/key/plan/acknowledge/finalize bounded point/page branches; record loop per I                  |
+| RecordBindings, `services/importer/src/record-bindings.ts`                                        |   256 |    64 |    32 | bootstrap prepare/ACK 6+6; first proposal 9+7; later 8+7; transaction controls included                                   |
+| Kernel/Auth/Access/receipt/fence/content, `services/kernel/src/http/kernel.ts` and access callees |  4000 |  1000 |   256 | bounded authenticated request, actor, permission, receipt, fence and routed-content branches, client calls plus raw plans |
 
 The new named acceptance case freezes these coefficient sums at every scenario and verifies native raw Capture
 immutability, exact canonical cost, and exact separate count identities. Existing methods and coefficients are
@@ -99,11 +99,11 @@ bun scripts/worker-check.ts -- test -s docs/research/imports-audit/native-compos
 
 Tested executable revision: `2093ab2dfa` (subsequent changes only record evidence in this report).
 
-| Command | Result | Evidence |
-| --- | --- | --- |
-| Focused kernel command above | exit 1 | `.temp/goal/checks/worker-check-2026-10-29T14-34-09.976Z-104fb41c.log` |
+| Command                                       | Result | Evidence                                                               |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| Focused kernel command above                  | exit 1 | `.temp/goal/checks/worker-check-2026-10-29T14-34-09.976Z-104fb41c.log` |
 | Root `bun run typecheck` through worker-check | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T14-34-24.381Z-05d36756.log` |
-| Report-presence acceptance | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T15-09-19.552Z-fd8f10ae.log` |
+| Report-presence acceptance                    | exit 0 | `.temp/goal/checks/worker-check-2026-10-29T15-09-19.552Z-fd8f10ae.log` |
 
 The focused command queued for **575.216 s** before acquiring host b; waiting was not treated as a failure.
 The initial API child completed **22 pass / 1 fail / 20374 assertions**, failing its fixed-growth case in setup
@@ -161,15 +161,15 @@ These are sums of the emitted SQL histograms and the HTTP diagnostic array, not 
 entries are labelled as such rather than asserted to be canonical statements or rows; returned-row totals and
 canonical rows/blocks are not emitted by that diagnostic. No missing observation is filled with zero.
 
-| Axis | N | History | M | SQLite executions | PG foreground SQL executions | PG plan-text entries | HTTP diagnostic attempts |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| baseline-shared | 32 | 32 | 1 | 142 | 308 | 222 | 10 |
-| n | 128 | 32 | 1 | 142 | 308 | 222 | 10 |
-| n | 512 | 32 | 1 | 142 | 308 | 222 | 10 |
-| history | 32 | 128 | 1 | 142 | 308 | 222 | 10 |
-| history | 32 | 512 | 1 | 142 | 308 | 222 | 10 |
-| fields | 32 | 32 | 8 | 142 | 308 | 222 | 10 |
-| fields | 32 | 32 | 64 | 142 | 308 | 222 | 10 |
+| Axis            |   N | History |   M | SQLite executions | PG foreground SQL executions | PG plan-text entries | HTTP diagnostic attempts |
+| --------------- | --: | ------: | --: | ----------------: | ---------------------------: | -------------------: | -----------------------: |
+| baseline-shared |  32 |      32 |   1 |               142 |                          308 |                  222 |                       10 |
+| n               | 128 |      32 |   1 |               142 |                          308 |                  222 |                       10 |
+| n               | 512 |      32 |   1 |               142 |                          308 |                  222 |                       10 |
+| history         |  32 |     128 |   1 |               142 |                          308 |                  222 |                       10 |
+| history         |  32 |     512 |   1 |               142 |                          308 |                  222 |                       10 |
+| fields          |  32 |      32 |   8 |               142 |                          308 |                  222 |                       10 |
+| fields          |  32 |      32 |  64 |               142 |                          308 |                  222 |                       10 |
 
 The unchanged ceilings apply to actual SQLite executions and the separately derived PG client-calls-plus-raw-plans
 unit. The fixed diagnostic counts do not establish server batch-width series or global native cost success.
