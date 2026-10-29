@@ -68,8 +68,8 @@ function live(snapshot: Awaited<ReturnType<typeof inspect>>, count: number) {
 // Every positive business fact below uses released definitions and real native commands.
 test('actual native follow writers atomically retain per-original source replacement revisions pending age and own outgoing counter changes while replay no-op explicit-unfollow precedence rollback and bigint overflow preserve exact source truth', async () => {
   const owner = fixture.owner.actor;
-  const first = await fixture.createSubject('game', 'Explicit source');
-  const second = await fixture.createSubject('game', 'Library source');
+  const first = await fixture.createSubject('game');
+  const second = await fixture.createSubject('game');
   expect(await inspect()).toEqual({ owner: [], sources: [] });
   const key = entryKey();
   const response = await fixture.send('owner', 'PUT', `/v1/follows/${first}`, undefined, key);
@@ -118,7 +118,7 @@ test('actual native follow writers atomically retain per-original source replace
   const spaceOwner = await fixture.identity([...owner.scopes, 'space:create', 'space:read']);
   const grants = createGrantCommands({ pool: db.pool, access: fixture.access, managementAction: 'access:grant' });
   await grants.create(
-    { actor: fixture.steward.actor, deadline: deadlineFor(30_000) },
+    { pool: db.pool, actor: fixture.steward.actor, deadline: deadlineFor(30_000) },
     {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: spaceOwner.actor.accountId },
@@ -273,7 +273,7 @@ test('primitive-only old prepared source SQL cutover retains incomplete legacy c
 // below are the actual native writer against the same released subject and account.
 test('native source hook rows and statements stay constant with logarithmic blocks as unrelated owners targets and own negative history grow', async () => {
   const owner = fixture.owner.actor;
-  const target = await fixture.createSubject('game', 'Fixed growth source');
+  const target = await fixture.createSubject('game');
   await follows.follow(owner, target, entryKey());
   await follows.unfollow(owner, target, entryKey());
   const samples: GrowthSample[] = [];
