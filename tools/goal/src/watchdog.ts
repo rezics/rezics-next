@@ -452,9 +452,9 @@ export function watch(
   } else delete state.stabilizeBehindSince;
   let count = 0;
   for (const violation of found) {
-    const last = state.alerts[violation.key] ? Date.parse(state.alerts[violation.key]!) : 0;
-    if (now - last < ALERT_EVERY_MS) continue;
     const attemptAlert = longAttempts.find((alert) => alert.key === violation.key);
+    const last = state.alerts[violation.key] ? Date.parse(state.alerts[violation.key]!) : 0;
+    if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < ALERT_EVERY_MS) continue;
     deliver(
       attemptAlert
         ? violation.summary

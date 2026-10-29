@@ -70,6 +70,8 @@ test('an attempt over the default two hour limit reports its duration, commits, 
     expect(delivered[0]!.summary).toContain(commands.slice(-10).join(' | '));
     expect(delivered[0]!.summary).not.toContain(commands[0]!);
     expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
+    expect(runWatch(store, state, delivered, now + 3 * 60 * 60_000)).toBe(0);
+    expect(delivered).toHaveLength(1);
   } finally {
     repo.close();
   }
@@ -95,6 +97,7 @@ test('repeated process inspection in recent commands reports polling once when n
     expect(delivered.map(({ summary }) => summary).join('\n')).toContain('Polling:');
     expect(delivered[1]).toMatchObject({ managerId: 'manager-a', kind: 'stalled' });
     expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
+    expect(runWatch(store, state, delivered, now + 3 * 60 * 60_000)).toBe(0);
     expect(delivered.filter(({ summary }) => summary.startsWith('Polling:'))).toHaveLength(1);
   } finally {
     repo.close();
