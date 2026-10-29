@@ -358,7 +358,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sink: job,
     derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
     promote: () => promoteNow(),
-    verify: () => verifyDev({ settings, store, inbox, runGate: promotionGate }),
     runGate,
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
@@ -490,6 +489,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     promote: () => promoteNow(),
+    verify: () => verifyDev({ settings, store, inbox, runGate: promotionGate }),
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
       await job.recoverOrphans(options);
       await afterSettle();

@@ -64,8 +64,8 @@ function infraFailure(output: string, timedOut: boolean): boolean {
 
 export type DevVerifierOptions = {
   settings: Settings;
-  store: WorkerStore;
-  inbox: SqliteManagerInbox;
+  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask'>;
+  inbox: Pick<SqliteManagerInbox, 'deliver'>;
   runGate?: GateRunner;
 };
 
