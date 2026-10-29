@@ -40,8 +40,12 @@ Authorize the current source before candidate work, through ordinary native reso
 Unknown, deleted, unreadable private and denied sources remain concealed `not_found`, with no metadata/candidate
 leak. Essential unavailable evidence is preparation/readiness, not a false empty source or silently omitted mount.
 Known unreadable mounts disclose no ID, label, description, count, source position or cursor-visible metadata.
-Suspended valid bearers receive 403 `account_suspended` everywhere, including public/unlisted reads. Missing,
-invalid or revoked credentials use 401 where required; no anonymous-floor exception for suspension.
+Suspension advances the authentication floor and fences existing sessions before revocation. A pre-suspension bearer
+is rejected before any Source actor is created with HTTP 401 `invalid_credentials` and
+`WWW-Authenticate: Bearer error="invalid_token"`; revoked credentials also use 401 where required. Auth issues no
+valid native suspended bearer: correct-password sign-in returns 403 `ACCOUNT_SUSPENDED` without a session, while a
+wrong password remains ordinary 401. Kernel's verified-suspended 403 `account_suspended` branch is defensive only,
+not a native fixture persona. Do not substitute anonymous access for a suspended bearer.
 
 Every later call reauthorizes actor and source and checks actual current original AND terminal eligibility,
 Access, consent, foreign targets and tuple fences. A Zone mount, terminal grant, prepared handle, indexed row or
