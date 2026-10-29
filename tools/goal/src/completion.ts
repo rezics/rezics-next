@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gateRunner, git, type GateRunner } from './merge.ts';
 import type { CompletionEvidence } from './managers.ts';
+import { validateGoalCapabilities } from './capabilities.ts';
 
 export type GoalCondition = { taskIds: readonly string[]; gate: readonly string[] };
 export type CompletionOptions = {
@@ -26,6 +27,8 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
       return { passed: false, summary, evidencePath };
     };
     try {
+      const capabilityErrors = validateGoalCapabilities(options.mainCheckout, goal);
+      if (capabilityErrors.length) return fail(`Capability manifest incomplete: ${capabilityErrors.join('; ')}`);
       const initial = options.condition(goal);
       const condition = { taskIds: [...initial.taskIds], gate: [...initial.gate] };
       const missing = async () => {

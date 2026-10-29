@@ -1,5 +1,20 @@
 # goal
 
+## Capability completion
+
+Each Goal that owns an `In` row in `docs/scope.md` has `docs/goals/<goal>.capabilities.md`. It contains a Markdown table
+with these exact columns: `Scope row`, `User job`, `Personas`, `Fixture data`, `catalogue`, `curated`,
+`Everything without state`, `own state`, `mounted Zone`, `TypeList`, and `Native acceptance command`. Each scope row
+appears once. Each surface cell contains one or more `scenario:<exact native test name>` entries separated by
+semicolons, or a `reason:<why this surface does not apply>` entry. Commands are JSON argv arrays in inline code, for
+example `["bun","test","specs/example.test.ts"]`. The table is parsed at manager completion and promotion;
+every `In` row owned by the Goal must appear, and every row must include a user job, personas, fixture data, all six
+surface decisions and a native command.
+
+Promotion runs each distinct registered command once for the candidate revision using Bun's JUnit reporter. Every
+listed scenario must appear by its exact test name in that report and must have no failure, skip or todo. Results are
+cached with the candidate revision, so the same command is not repeated for that revision.
+
 One Bun control plane owns worker dispatch, attempt records, the landing train and manager sessions. Every module uses
 one local SQLite file, independent of the product database. `config.ts` composes the real worker fence, outcome sink,
 landing queue, manager inbox, train and completion checker. Production commands need no runtime module or plugin.
