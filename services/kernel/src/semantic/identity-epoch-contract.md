@@ -315,78 +315,6 @@ observation. After releasing the home, control resolves that ACTUAL record by tr
 takes receiving custody. Lost ACK redelivers the same receipt. Receipt or function `complete` alone is not proof.
 No arbitrary callbacks, caller booleans, request-selected participant or default noData ACK is legal.
 
-### Complete Library canonical coverage under the fixed participant
-
-The SAME version-1 `library-private-follow-counts` identity participant covers every canonical directory,
-candidate, support, first-apply registration, follow, total, pending/published fence and prior-effect custody.
-All six member, entry, label, session, copy and output drivers are included, with working/ready bases, accepted
-meaning and exhaustion evidence. Owner state chooses the highest live native `entry.owner_write_seq`, preserves
-conflicts, unions labels and keeps sessions/copies distinct. That sequence increments in the SAME successful
-set/clear/Undo transaction; Undo is a new write despite historic dates. The delivered
-[owner sequence prerequisite](../library/owner-write-sequence.md) supplies
-`allocateOwnerWriteSeq(tx: CommandTransaction, accountId: string): Promise<bigint>`, private
-`library.owner_write_counter (route,account_id)` and nullable positive `owner_write_seq` columns on live/archive
-entries. It performs indexed initialization and increment in two statements in the same authorized owner command;
-replay skips allocation and failed/noEffect allocation rolls back. These are actual primitives, not missing
-schema or an invented callable. Production entry set/clear/Undo writers and bounded legacy migration/cutover
-remain missing: null legacy sequences are not ready or ordered. Successful equal-value set still allocates;
-archive sequences never compete as live state and Undo allocates afresh. Timestamps, UUIDs,
-`type_source_position`, per-slot revisions or invented legacy ordering cannot substitute. Clear and replay retain
-their native meaning. The counter requires its own exact Library terminal cleanup after T fences writers;
-Semantic reference exhaustion cannot certify that cleanup.
-
-Directory discovery is structural `(original,scope)` existence/extrema, not one locator per fact. It covers never-
-positive first apply and hidden/excluded/order support too. Its EOF requires drained native registrations and
-custodied OLD/NEW work. Follow support is per `(canonical target,follower)`; totals change at 0-to-1/1-to-0 only.
-Derived pairs/support/totals live in target home, stored follows in source owner home. Current account terminal
-fences remain separate. Actual follow ACK with directory incomplete MUST refuse publication; an interrupted legacy
-canonical_source_fact insert without a follow ACK does not establish this negative. No third identity participant,
-follow-only ACK or transfer to the Library A5 erasure participant is allowed.
-
-The final coordinator composes native STORE/mapping and these TWO fixed producers, reconciles native custody and
-publishes once. Existing WorkModule.register/WorkContext.addEffects, DBOS registerStep/registerWorkflow,
-WorkClient.enqueue stable job workflow ID with return-existing, composeWork, KERNEL_WORK_MODULES and startWorker
-own launch/lifecycle. No second scheduler/engine. STORE/mapping depend on native primitives; producers depend on
-STORE; final composition imports producers. Neither producer waits for/imports the coordinator. Caller handoff
-comes last. Actual revised exports/signatures remain unfrozen until Cost confirmation.
-A permanent ID names a catalogue original and is never reused. Creation needs actual Global `subject:create`,
-including import batch authority where applicable, and writes native revision 1 independently of Search.
-Only duplicate identity is mergeable. Editions, translations and formats retain separate identities and relations.
-Every published redirect is direct to an active terminal. A requested larger-UUID survivor is legal.
-
-One durable structural job serializes merge, unmerge, repoint and both account-agent operations across the catalogue.
-The exact union of the affected groups, including their terminals, is admitted at **4096 originals maximum per
-resulting group**, before pending epoch, revision, redirect, mapping, index, participant or outbox effects.
-Two input IDs do not imply two originals. Unmerge binds the prior `undoJob` and the original to restore to self; its verificationReceipt is non-null only
-for an Accounts reversal. Repoint moves one original to the named terminal. A split checks all resulting groups; overlapping membership counts once.
-Overflow is `identity_group_overflow`. Missing/incomplete/moved ownership cannot become a small or empty group.
-No structural effects occur while another job is pending; another intent receives `identity_epoch_busy` and retries
-with current truth. The same immutable receipt and intent find the same job instead of allocating another epoch.
-Conflicting reuse is the existing idempotency conflict. Authorization still precedes receipt lookup.
-
-The control command commits the pending epoch, immutable admitted intent, affected-original work index and durable
-wakeup before structural effects begin. It retains the last published epoch. No lease, workflow timeout, ordinary
-projection checkpoint, elapsed time or failed I/O can mark completion. A crash remains pending; resumption starts
-from the committed frontier and exact job identity. Publish once, only after mapping/index maintenance and both
-fixed participants have actual durable ACKs for that job and epoch. Failure leaves truthful pending state.
-
-Canonical lists prepare while pending; their signed cursors bind the published epoch and restart after a change.
-An affected point reports pending while its required mapping is unready. Unaffected points and fresh creation remain
-usable without waiting for the catalogue's list barrier. Mapping explicitly depends on one bounded current-control
-observation and coherent epoch revalidation, with released source connections as specified below. Source privacy and eligibility are independent
-of job completion: both the original and terminal need current native admission. A public terminal never exposes
-a hidden original; an arbitrary representative cannot stand for all originals. Preparation must find the last
-eligible original through maintained support, without a page-local deduplication claim or repeated home sweep.
-
-Entries, labels, sessions, copies, follows and Collection occurrences keep stored ORIGINAL IDs, notes, dates, order
-and multiplicity, with each original still addressable for editing. Only derived mappings, support and canonical
-indexes re-key. New writes resolve the current terminal with native admission. Canonical state chooses the highest
-native `entry.owner_write_seq`, retaining conflicts, unions labels and keeps sessions/copies distinct. The owner
-partition counter increments in the SAME successful set, clear or Undo transaction; Undo is a NEW write despite
-historic user dates and retained accepting pin. Epoch maintenance reads that sequence and never allocates it.
-The actual Commerce counter/schema/helper producer is missing. No timestamp, UUID, per-slot revision,
-`type_source_position`, zero initialization or invented legacy backfill order can substitute for it.
-
 ## Exact existing callable compatibility
 
 `merges.ts` exports `mergeSubjects(pool: Pool, options)` with `subjects: string[]`, optional `survivor`, actual
@@ -602,6 +530,74 @@ Accounts and ordinary callers bind last, after their actual response contracts a
 
 ### Complete Library canonical coverage under the fixed participant
 
+The SAME version-1 `library-private-follow-counts` identity participant covers every canonical directory,
+candidate, support, first-apply registration, follow, total, pending/published fence and prior-effect custody.
+All six member, entry, label, session, copy and output drivers are included, with working/ready bases, accepted
+meaning and exhaustion evidence. Owner state chooses the highest live native `entry.owner_write_seq`, preserves
+conflicts, unions labels and keeps sessions/copies distinct. That sequence increments in the SAME successful
+set/clear/Undo transaction; Undo is a new write despite historic dates. The delivered
+[owner sequence prerequisite](../library/owner-write-sequence.md) supplies
+`allocateOwnerWriteSeq(tx: CommandTransaction, accountId: string): Promise<bigint>`, private
+`library.owner_write_counter (route,account_id)` and nullable positive `owner_write_seq` columns on live/archive
+entries. It performs indexed initialization and increment in two statements in the same authorized owner command;
+replay skips allocation and failed/noEffect allocation rolls back. These are actual primitives, not missing
+schema or an invented callable. Production entry set/clear/Undo writers and bounded legacy migration/cutover
+remain missing: null legacy sequences are not ready or ordered. Successful equal-value set still allocates;
+archive sequences never compete as live state and Undo allocates afresh. Timestamps, UUIDs,
+`type_source_position`, per-slot revisions or invented legacy ordering cannot substitute. Clear and replay retain
+their native meaning. The counter requires its own exact Library terminal cleanup after T fences writers;
+Semantic reference exhaustion cannot certify that cleanup.
+
+Directory discovery is structural `(original,scope)` existence/extrema, not one locator per fact. It covers never-
+positive first apply and hidden/excluded/order support too. Its EOF requires drained native registrations and
+custodied OLD/NEW work. Follow support is per `(canonical target,follower)`; totals change at 0-to-1/1-to-0 only.
+Derived pairs/support/totals live in target home, stored follows in source owner home. Current account terminal
+fences remain separate. Actual follow ACK with directory incomplete MUST refuse publication; an interrupted legacy
+canonical_source_fact insert without a follow ACK does not establish this negative. No third identity participant,
+follow-only ACK or transfer to the Library A5 erasure participant is allowed.
+
+The final coordinator composes native STORE/mapping and these TWO fixed producers, reconciles native custody and
+publishes once. Existing WorkModule.register/WorkContext.addEffects, DBOS registerStep/registerWorkflow,
+WorkClient.enqueue stable job workflow ID with return-existing, composeWork, KERNEL_WORK_MODULES and startWorker
+own launch/lifecycle. No second scheduler/engine. STORE/mapping depend on native primitives; producers depend on
+STORE; final composition imports producers. Neither producer waits for/imports the coordinator. Caller handoff comes after the native producers and fixed participants are bound.
+A permanent ID names a catalogue original and is never reused. Creation needs actual Global `subject:create`,
+including import batch authority where applicable, and writes native revision 1 independently of Search.
+Only duplicate identity is mergeable. Editions, translations and formats retain separate identities and relations.
+Every published redirect is direct to an active terminal. A requested larger-UUID survivor is legal.
+
+Structural jobs cover merge, unmerge, repoint and account-agent changes. Overlapping changed groups serialize; disjoint changed groups can make concurrent progress under ordered control-resource acquisition.
+The exact union of the affected groups, including their terminals, is admitted at **4096 originals maximum per
+resulting group**, before pending epoch, revision, redirect, mapping, index, participant or outbox effects.
+Two input IDs do not imply two originals. Unmerge binds the prior `undoJob` and the original to restore to self; its verificationReceipt is non-null only
+for an Accounts reversal. Repoint moves one original to the named terminal. A split checks all resulting groups; overlapping membership counts once.
+Overflow is `identity_group_overflow`. Missing/incomplete/moved ownership cannot become a small or empty group.
+No structural effect overlaps a job that changes the same group; an overlapping intent receives `identity_epoch_busy` and retries with current truth. Disjoint groups remain independently admissible. The same immutable receipt and intent find the same job instead of allocating another epoch.
+Conflicting reuse is the existing idempotency conflict. Authorization still precedes receipt lookup.
+
+The control command commits the pending epoch, immutable admitted intent, affected-original work index and durable
+wakeup before structural effects begin. It retains the last published epoch. No lease, workflow timeout, ordinary
+projection checkpoint, elapsed time or failed I/O can mark completion. A crash remains pending; resumption starts
+from the committed frontier and exact job identity. Publish once, only after mapping/index maintenance and both
+fixed participants have actual durable ACKs for that job and epoch. Failure leaves truthful pending state.
+
+Canonical lists prepare while pending; their signed cursors bind the published epoch and restart after a change.
+An affected point reports pending while its required mapping is unready. Unaffected points and fresh creation remain
+usable without waiting for the catalogue's list barrier. Mapping explicitly depends on one bounded current-control
+observation and coherent epoch revalidation, with released source connections as specified below. Source privacy and eligibility are independent
+of job completion: both the original and terminal need current native admission. A public terminal never exposes
+a hidden original; an arbitrary representative cannot stand for all originals. Preparation must find the last
+eligible original through maintained support, without a page-local deduplication claim or repeated home sweep.
+
+Entries, labels, sessions, copies, follows and Collection occurrences keep stored ORIGINAL IDs, notes, dates, order
+and multiplicity, with each original still addressable for editing. Only derived mappings, support and canonical
+indexes re-key. New writes resolve the current terminal with native admission. Canonical state chooses the highest
+native `entry.owner_write_seq`, retaining conflicts, unions labels and keeps sessions/copies distinct. The owner
+partition counter increments in the SAME successful set, clear or Undo transaction; Undo is a NEW write despite
+historic user dates and retained accepting pin. Epoch maintenance reads that sequence and never allocates it.
+The actual Commerce counter/schema/helper producer is missing. No timestamp, UUID, per-slot revision,
+`type_source_position`, zero initialization or invented legacy backfill order can substitute for it.
+
 The fixed version-1 `library-private-follow-counts` step covers EVERY Library canonical record. Its historical
 name does not restrict its ACK to follows. There is no third participant, identity job, queue, component shape,
 transaction-ID shape or callback ABI. The same job/epoch/input descriptor and native receipt protocol applies.
@@ -778,167 +774,6 @@ missing. Do not invent their schema, participant paths or barrier exports to mak
 These are missing controlled observation/lifecycle prerequisites, not proposed test-only completion APIs. The owning
 STORE/coordinator, Search, Library and Accounts producers must supply actual controls before these schedules can be
 frozen. Do not revive identity-basis, home vectors or per-page replay as a substitute.
-
-## Cost
-
-### Admit structural intent
-
-- Touches: native authorization/receipt/control point, indexed complete group cardinalities and retained affected work.
-- Bound: exact maintained cardinality points before effects; retained affected work <=4096 originals per resulting
-  group, produced in bounded native steps. The cap does not authorize a request-time all-home scan. No link-degree scan.
-- Growth check: retain the native 64/512/4096 group axis; independently grow unrelated subjects, owner pools,
-  group/history/receipts/outbox and denied/replay paths. Capture actual rows, points, statements, bytes and blocks.
-  Existing numbers are not changed; final measured budgets need Performance capture, not this type-only document.
-
-### Poll an ordinary identity operation
-
-- Touches: current native account/Global merge authority and original/terminal disclosure, indexed operation/job,
-  published control epoch and the durable result after publication.
-- Bound: indexed operation/control and current eligibility points; no affected-original response vector, participant
-  enumeration, all-home sweep or reusable allow. Reuse the native Access and publication bounds above.
-- Growth check: pending/completed, unknown/denied, revoked authority and hidden original while unrelated jobs,
-  receipts, groups and history grow independently. Full measured native evidence remains required.
-
-### Advance mapping or participant step
-
-- Touches: one <=100-row indexed raw page, retained frontier/intent, exact scoped home effects and durable receipts;
-  release each home before another home or engine. Search additionally captures actual engine work/bytes/incarnation.
-- Bound: follow the [kernel's bounded job step limits](../../README.md#bounded-job-steps). Total retained work follows changed finite input and link/support
-  degree, independently of request-page cost. Every reread, lookahead, retry and discarded row is charged.
-- Growth check: first/deep/empty/replay/denied paths across three native scales, separately growing unrelated data
-  and history while selected neighbourhood stays fixed. Measure native rows/points/statements/bytes/blocks/engine
-  calls and retained work, including two-home crash schedules and Library pages of 100/101. No planner pins or
-  altered 64/512/4096 axes/captures; actual owner pools and current source-account locks are required.
-
-### Publish and observe
-
-- Touches: exact control/job and fixed participant-version ACK receipts; point readers release source mapping before the fixed-control pending observation
-  and coherent epoch probe, then revalidate source and native original/terminal eligibility. Canonical readers inspect published epoch and maintained canonical indexes.
-- Bound: fixed participant count and indexed job/control points; no per-page 4096-home sweeps, whole follow/source
-  scans, cached allow or stored-personal-reference moves. Incomplete ACK/readiness cannot manufacture a ready zero.
-- Growth check: affected/unaffected points, publication/replay and cursor restart while unrelated groups, histories,
-  private support and completed workflow state grow independently. Full native growth evidence remains required.
-
-### Library canonical directory and first-apply custody
-
-- Touches: the SAME affected-input pages, indexed original-to-owner/source/driver/fact directory, owner candidates,
-  all canonical driver records and source working/ready bases, follow pair/support/totals, old/new home gates,
-  current source-account fences, expected effect manifest, native receipts and released control custody.
-- Bound: charge raw directory fanout BEFORE filtering/deduplication, including empty seeks and concurrent first
-  registrations; fanout follows finite relevant support, never all owners. One rekey locator has two input reads
-  (affected original and directory locator), two directory changes (OLD removal/NEW insertion), two candidate
-  changes, two canonical support changes, two fence effects, and at least four native receipt/custody writes for
-  the old/new effects: at least 14 raw row touches before metadata and retries. Consequently a page containing
-  c metadata/frontier/owner/account/receipt/outbox rows admits AT MOST floor((100-c)/14) such locators; extra
-  driver/follow/total or native receipt rows reduce it further. This is a ceiling, not a claim that 14 suffices
-  for every driver. Each native one-home effect command includes BEGIN/SERIALIZABLE setup, native time, owner
-  checks, gate/claim, effect SQL, callbacks, native fence, receipt/outbox and COMMIT. Every statement is charged;
-  batching OLD/NEW keys cannot erase their raw row cost. At most one indexed HOME handoff-state lookup per guarded
-  write remains mandatory; first-absent gate uniqueness/locking and source-account terminal locks are additional
-  work under existing bounds. Directory EOF needs a bounded indexed empty seek plus all pending registrations
-  and deliveries in custody, not a returned empty page alone. Retained space includes one directory row per live
-  source-support locator, negative work until safe minimization, both halves of each unfinished rekey, and the
-  minimized per-effect completion/custody skeleton. Native B-tree/MVCC/catalogue/physical bytes are measured.
-  Keep 100 raw rows/page, 100 pages/segment, 5000ms command deadline, eight scalars/2048 cursor JSON bytes and
-  4096 workflow bytes. Owner operational transaction costs require the actual Accounts Core producer; existing
-  `noEffect` is not an allowance to omit that transaction, its durable intent or source/control delivery.
-- Growth check: fixed selected support while unrelated owners, directory rows, original groups, completed jobs and
-  receipt history grow 1/8/64; separately 64/512/4096 originals and 100/101 raw support boundaries. Native first,
-  deep, empty, replay, OLD/NEW key deletion, concurrent first apply on either side of gate insertion, terminal
-  purge, source->custody->ACK crash and follow-complete/directory-incomplete publication refusal are mandatory.
-  Capture all source/Library/control pools, statements, rows, index/heap/catalogue blocks, payload bytes and live
-  retained evidence. No new participant, sweep, global creation lock, deadline allowance or passed budget follows
-  from these proposed bounds; Performance reviews actual formatted rows before runtime release.
-
-### Released mapping control observation
-
-- Touches: existing Pool, native source owner/mapping/creation basis, ONE fixed pending-membership indexed probe,
-  ONE coherent epoch/current-original indexed probe, and final source owner/basis revalidation. These are named,
-  charged CONTROL READs. Existing original/terminal privacy and Access work remains independently charged.
-- Bound: one attempt uses at most three released read snapshots. Existing `withReadTransaction` costs BEGIN,
-  SET LOCAL timeout and COMMIT per snapshot (nine statements), plus one owner point and one mapping/basis point
-  at each source visit (four statements), plus one control owner point and two indexed probes (three statements):
-  **16 statements**, or 11 if pending returns before final source visit. Combine native provenance/gate fields
-  in those point records, not extra queries. Each control probe returns at most one basis per requested original;
-  the pending descriptor has at most two input references and constant exceptions. A batched page has the same
-  two control statements, not two statements per ID, and <=100 total raw basis records INCLUDING both probes,
-  owner/descriptor rows and lookahead; reduce the requested batch accordingly. No second engine/helper/budget.
-  Indexed depth is bounded by actual membership/epoch B-tree height; heap/index blocks and physical bytes include
-  transaction setup, initial catalogue/plan reads, cold/warm owner checks and final revalidation. This statement
-  envelope is a proposed implementation constraint, not evidence that missing runtime meets existing budgets.
-- Growth check: pending memberships and published epochs independently 1/8/64 at fixed requested originals,
-  actual pools and fixed privacy data. Capture rows, statements, index/heap/catalogue blocks and bytes for source
-  miss/unready/moved, control miss/unready/moved, pending-after-source, publication-between-reads, newer pending,
-  unaffected and Search-absent fresh-self paths. Constant returned rows/statements and constant or logarithmic
-  physical index work must fit the existing declared budget; no remote availability exclusion or cache/TTL.
-
-### Immutable current generation and bounded reclamation
-
-- Touches: current-original indexed locator, its ONE flat sealed generation, shared-budget keyset input pages;
-  retained generations, indexed reference counts, native minimizer/custody records and reclamation frontier/receipt.
-- Bound: current access reads no parent/ancestor/history and at most 100 raw entries including lookahead, overlap
-  and retries. At fixed current group count G, retain at most G+4 full generations and 4096(G+4) membership rows,
-  plus actual index/tuple/page overhead. If B is the measured physical bytes per membership plus its index entries,
-  full payload is <=4096(G+4)B plus G+4 generation headers/index entries; R minimized obligations and L scoped
-  effects add their actual retained bytes, not zero. One reclamation command locks one retired generation/header,
-  checks its indexed live-reference count, reads/deletes a keyset batch and commits one frontier/native receipt
-  and wakeup. Budget owner/header/ref/frontier/receipt rows first; if that consumes c raw rows, delete at most
-  floor((100-c)/2) members, charging both selected and deleted rows. The point-header transaction work and all
-  ref/minimizer lookups count, including a refused live-reference attempt. Reclaim header only after an indexed
-  empty page and zero references in the same locked command. A crash replays that native receipt/frontier; no
-  saved empty result can close a later generation or skip a newly retained reference. Reference acquisition is
-  serialized with retirement; no hidden full-generation copy or unbounded cascade/delete is allowed.
-- Growth check: independently grow earlier completed job history 1/8/64 with current generation fixed; first,
-  deep, empty, replay, live-reference refusal, native minimizer and crash-before/after-frontier paths. Grow G and
-  R/L separately, recording retained rows/bytes/index blocks, all statements/transaction/catalogue reads and raw
-  deletions. Reclamation advances bounded steps over the retained-generation index, never scans all history.
-  Backpressure preserves this finite full-generation bound; it is not a passed Performance budget or time expiry.
-
-### Final handoff guard
-
-- Touches: guarded native source write, existing source barrier/claims/command fence and the home's handoff state;
-  deferred SAME-transaction guard at commit, with old writer and queued continuation scope retained in custody.
-- Bound: at most ONE indexed HOME handoff-state lookup per guarded write, including its deferred check; use the
-  same transaction's captured basis/lock, not a second lookup or global effect permission. Key-changing updates
-  charge both OLD/NEW capture rows; deletion retains a negative key. Installation/catalogue locks and waiting
-  are measured separately from completed work and cannot be represented as a constant trigger-function call.
-  If implementation probes active transactions, there is NO assumed bound on active XIDs: charge each probe and
-  preserve the required fixed-data 1/8/64 OPEN native `pg_current_xact_id()` transaction axis. A timeout is WAITING,
-  never successful handoff. No active-XID axis is imposed on a mechanism that does not inspect active XIDs.
-- Growth check: old DML before barrier, old/queued work after final handoff, first absent gate racing insertion,
-  same-position wrong TX, wrong owner/scope and unfinished previous page. Capture statement/row/index/physical
-  work with actual owner pools; include the active-XID axis exactly when the chosen native mechanism needs it.
-
-### Birth, topology, custody, admission and effects
-
-- Touches: real `writeSubject`/import claim and named/unnamed account-agent creation; native source barrier,
-  indexed base/member/dirty schedules for all 4096 owner epochs; source export, control custody, exact-head ACK;
-  immutable input/header/cardinality refs, pending+intent+wakeup; scoped effects and native complete receipts.
-- Bound: birth adds one self mapping in the SAME source transaction as revision 1; source fence/claim/receipt
-  work remains charged and rollback removes both. No control/Search checkout or statement outside account home.
-  Bootstrap scheduling keyset-reads at most 100 raw owner slots per step (including empty homes), persists exact
-  owner epochs/cuts, and releases source before control. It cannot claim closure in fewer than ceil(4096/100)
-  owner-slot pages, and actual metadata/lookahead rows reduce each page's capacity. For every saved page custody
-  requires a source export read, control insert/receipt/frontier command, then released exact-head source ACK
-  command: THREE transactions, never a free export ACK. If c native metadata/receipt/frontier rows are touched,
-  payload allowance is floor((100-c)/k), where k counts EACH payload read, retained copy and effect/ACK row in
-  that step; c and k must be captured from the actual calls, not excluded. Admission uses <=2 sealed group
-  headers/counts plus <=2 retained input refs, one intent/job, one pending descriptor and one native wakeup,
-  atomically; no 4096-row admission insert. Existing authorization-before-receipt, native command fence/time,
-  receipt lookup/write and all outbox/catalogue statements are additive and measured. Exact all-result group
-  counts enforce 4096 admitted/4097 refused before ALL effects. Mapping/effect steps reserve metadata then
-  divide the remaining 100 raw allowance across input, OLD/NEW capture, effect, frontier and native receipt
-  writes. A statement returning zero still counts, and replay/retry consumes the same shared allowance.
-  Every operation keeps 100 rows/page, 100 pages/segment, 5000ms command deadline, <=8 scalar/2048-byte cursor
-  JSON, <=4096 workflow bytes. No request/workflow original vector, planner pin or larger allowance.
-- Growth check: preserve original native 64/512/4096 groups, actual account creation growth and actual pools;
-  all4096/empty/missing/moved owners, lower-key births/deletions/key moves, dirty h+1 after export/control ACK,
-  source->custody->ACK crash, saved empty replay, same-effect fence and complete prior-effect custody. Record
-  native statement counts from runCommand/read transactions INCLUDING authorization, transaction setup, native
-  time/fence/receipt/outbox, catalogue/index/heap blocks, physical payload/index bytes and retained history.
-  The shared limits are unchanged even though this baseline kernel README lacks its planned Bounded job steps
-  subsection. These are derived admission/work ceilings for review; actual producers and Performance evidence
-  remain required before runtime activation. Deadline bounds waiting and does not waive work bounds.
 
 ## Inspected native evidence
 
