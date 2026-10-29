@@ -1,4 +1,5 @@
-import { toOpenAPISchema, unwrapSchema } from '@elysia/openapi';
+import { toOpenAPISchema } from '@elysia/openapi';
+import { unwrapSchema } from '@elysia/openapi/openapi';
 import type { AnyElysia } from 'elysia/base';
 import { customMethodPath } from './custom-method.ts';
 import { PROBLEMS, type ProblemCode } from './problem.ts';
