@@ -47,7 +47,7 @@ Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and appe
 
 Kernel, Auth and web test lanes run each test file in a separate `bun test` process and print its output when it
 finishes. The runner uses Bun's dot reporter so stdout and stderr arrive on their original streams as tests complete.
-Files with recorded times run longest first. Timings use the shared main-checkout directory; set
+Files with recorded times run longest first, followed by files without a record. Timings use the shared main-checkout directory; set
 `<SERVICE>_CHECK_TIMINGS` to choose another directory. Remote check commands explicitly set the kernel and Auth
 timing directories under their disposable rsynced checkout because it has no `.git`; other callers without git
 metadata must set their service's variable if they need timings. It prints a heartbeat every 60
@@ -57,6 +57,9 @@ minutes. The wall bound is the larger of 30 minutes and three times the recorded
 get 2 hours. Reaching either bound stops the process group, drops its database, and fails that file as its own task
 failure with the bound, recorded times and last 40 output lines. Such a stopped file is not retried as a load or
 growth failure, and its prior timing record is retained.
+Capture observes child exit and stream completion once each, allowing either to finish first. It keeps one active
+wait timer while work remains. After a bound sends SIGTERM, the process group receives SIGKILL after 10 seconds
+even if its leader has exited; output draining is limited to one further second before the readers are cancelled.
 
 `bun scripts/worker-check.ts -- <command...>` prints `check: id <id>` as soon as its detached check starts.
 Use `bun scripts/worker-check.ts --wait <id>` to wait for up to 10 minutes. Exit status 75 with

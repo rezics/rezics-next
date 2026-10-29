@@ -491,7 +491,7 @@ export function readLatest(directory: string): Record<string, FileTiming> {
   }
 }
 
-/** Files with no recorded time first, then the rest by descending wall time; ties by name. */
+/** Recorded files by descending wall time, then files with no recorded time; ties by name. */
 export function orderFiles(
   service: string,
   files: string[],
@@ -502,7 +502,7 @@ export function orderFiles(
   if (env[variable(service, 'ORDER')] === 'name') return byName;
   const wall = (file: string): number => {
     const value = latest[file]?.wall;
-    return typeof value === 'number' && Number.isFinite(value) ? value : Infinity;
+    return typeof value === 'number' && Number.isFinite(value) ? value : -Infinity;
   };
   return byName.sort((a, b) => wall(b) - wall(a));
 }
@@ -679,6 +679,43 @@ export async function capture(
       reader.releaseLock();
     }
   });
+  let childStatus: number | undefined;
+  let readersDone = false;
+  let completionFailure: { error: unknown } | undefined;
+  let wake: (() => void) | undefined;
+  // Observe each completion once. Racing a pending promise on every timer tick
+  // retains reactions; racing an already completed one can starve native exit events.
+  const childComplete = child.exited.then(
+    (status) => {
+      childStatus = status;
+      wake?.();
+    },
+    (error: unknown) => {
+      completionFailure = { error };
+      wake?.();
+    },
+  );
+  const readersComplete = Promise.all(readers).then(
+    () => {
+      readersDone = true;
+      wake?.();
+    },
+    (error: unknown) => {
+      readersDone = true;
+      completionFailure = { error };
+      wake?.();
+    },
+  );
+  const waitForUpdate = (milliseconds: number): Promise<void> =>
+    new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        wake = undefined;
+        resolve();
+      };
+      const timer = setTimeout(finish, milliseconds);
+      wake = finish;
+    });
   const stop = async () => {
     try {
       process.kill(-child.pid, 'SIGTERM');
@@ -695,29 +732,31 @@ export async function capture(
     try {
       process.kill(-child.pid, 'SIGKILL');
     } catch {}
-    await child.exited;
-    await Promise.race([
-      Promise.all(readers),
-      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
-    ]);
+    await childComplete;
+    const readerDeadline = Date.now() + 1_000;
+    while (!readersDone && Date.now() < readerDeadline) {
+      await waitForUpdate(readerDeadline - Date.now());
+    }
     for (const reader of readersByStream) {
       try {
-        await reader.cancel();
+        // Cancellation must not extend the bounded drain wait.
+        void reader.cancel().catch(() => {});
       } catch {}
     }
   };
   if (!bounds) {
-    const status = await child.exited;
-    await Promise.all(readers);
-    return { status, output };
+    await Promise.all([childComplete, readersComplete]);
+    if (completionFailure) throw completionFailure.error;
+    return { status: childStatus!, output };
   }
   const interval = bounds.progressInterval ?? captureDefaults.progressInterval;
   let heartbeat = Date.now() + interval * 1000;
-  let childStatus: number | undefined;
-  let readersDone = false;
-  const readersComplete = Promise.all(readers).then(() => { readersDone = true; });
-  void child.exited.then((status) => { childStatus = status; });
   while (true) {
+    if (completionFailure) {
+      await stop();
+      throw completionFailure.error;
+    }
+    if (childStatus !== undefined && readersDone) return { status: childStatus, output };
     const now = Date.now();
     const elapsed = (now - started) / 1000;
     if (now - lastOutput >= bounds.silence * 1000) {
@@ -738,12 +777,7 @@ export async function capture(
       1,
       Math.min(250, heartbeat - now, bounds.silence * 1000 - (now - lastOutput), bounds.wall * 1000 - (now - started)),
     );
-    if (childStatus !== undefined && readersDone) return { status: childStatus, output };
-    await Promise.race([
-      ...(childStatus === undefined ? [child.exited.then((status) => { childStatus = status; })] : []),
-      readersComplete,
-      new Promise<{ status?: never }>((resolve) => setTimeout(() => resolve({}), waitMs)),
-    ]);
+    await waitForUpdate(waitMs);
   }
   await stop();
   // stop() bounds readers after killing the complete process group.
