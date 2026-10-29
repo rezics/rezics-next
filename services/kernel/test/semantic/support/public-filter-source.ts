@@ -373,6 +373,7 @@ export async function assertPageCapture(
     const rest = text.replace(/^\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//, '');
     expect(/\/\* semantic\.(privacy-start|privacy-final|own-rows) \*\//.test(rest)).toBe(false);
   }
+  expect(whole.statements.filter((text) => role(text) === 'own-rows').length).toBeLessThanOrEqual(1);
   const privacy = costOf(coverage);
   expect(privacy.plans).toBe(coverage.statements.length);
   expect(privacy.statements).toBeLessThanOrEqual(2);

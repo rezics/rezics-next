@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { capture, costOf } from '../support/growth.ts';
+import { capture } from '../support/growth.ts';
 import {
   complete,
   readContext,
