@@ -63,10 +63,7 @@ test('ordinary Filter outcomes keep stable one-level order own-data access and m
     facets: ['schema:datePublished'],
   };
   release.types['grow:Root']!.bases = ['grow:Base'];
-  expect(facetProperties(release, ['grow:Root', 'grow:Base'])).toEqual([
-    'grow:code',
-    'schema:datePublished',
-  ]);
+  expect(facetProperties(release, ['grow:Root', 'grow:Base'])).toEqual(['grow:code', 'schema:datePublished']);
   expect(facetProperties(release, ['grow:Root'])).toEqual(['grow:code', 'schema:datePublished']);
   release.types['grow:Root']!.facets = [];
   release.types['grow:Root']!.bases = [];

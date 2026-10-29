@@ -89,8 +89,7 @@ test('ordinary native outcomes retain catalogue, one-level facets and cheap limi
   for (const [key, saved] of Object.entries(release.filters ?? {})) {
     if (!key.startsWith('construction')) continue;
     const and = saved.filter as unknown as { and?: { statement?: { property: string; in: string[] } }[] };
-    for (const child of and.and ?? [])
-      if (child.statement?.property === 'grow:code') child.statement.in = ['a'];
+    for (const child of and.and ?? []) if (child.statement?.property === 'grow:code') child.statement.in = ['a'];
   }
   release.properties['grow:code']!.value = { type: 'string', minLength: 1, maxLength: 1500, pattern: '^(a+)+$' };
   expect(validateRelease(release)).toEqual([

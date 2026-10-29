@@ -300,11 +300,7 @@ async function probe(): Promise<Evidence> {
       'if (seen.has(hash)) add(pointer);',
       `if ((${counter}.uniqueArrays.has(value) && ${counter}.duplicateProbes++, seen.has(hash))) add(pointer);`,
     );
-    construction = replaceOnce(
-      construction,
-      'const hash = Hash(member);',
-      'const hash = Hash(member);',
-    );
+    construction = replaceOnce(construction, 'const hash = Hash(member);', 'const hash = Hash(member);');
     construction = replaceOnce(
       construction,
       'seen.add(hash);',
