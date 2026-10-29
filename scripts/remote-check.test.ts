@@ -418,7 +418,7 @@ if (script.includes('/proc/loadavg')) {
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_LANDING_MARKER')) {
   const id = script.match(/# REMOTE_CHECK_LANDING_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
-  const slots = Number(script.match(/# REMOTE_CHECK_LANDING_COUNT (\d+)/)?.[1] ?? 0);
+  const slots = Number(script.split('\\n').find((line) => line.startsWith('# REMOTE_CHECK_LANDING_COUNT '))?.split(' ').at(-1) ?? 0);
   const arrivalOrder = script.split('\\n').find((line) => line.startsWith('# REMOTE_CHECK_LANDING_ARRIVAL '))?.split(' ').at(-1) ?? '0';
   const marker = dir + '/' + landingMarkerPrefix + id;
   if (existsSync(marker)) process.exit(75);
