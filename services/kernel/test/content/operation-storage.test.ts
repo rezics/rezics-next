@@ -364,6 +364,26 @@ const population: Population = {
       })),
     'content.operation': [{ ...operation, operation_id: id(`unrelated-operation-${ordinal}`) }],
   }),
+  async finish(admin, { from, to }) {
+    const ids = Array.from({ length: to - from }, (_, offset) => id(`unrelated-operation-${from + offset}`));
+    // Seed the insert-and-bind history too: each fresh measured identity grows from pending to the wider bound row.
+    await admin.query(
+      `UPDATE content.operation o
+       SET native_workflow_id=i.workflow_id,source_epoch=$3,source_partition=$4,
+           source_position=$5,source_event_index=$6
+       FROM unnest($1::uuid[],$2::text[]) AS i(operation_id,workflow_id)
+       WHERE o.route=$7 AND o.operation_id=i.operation_id`,
+      [
+        ids,
+        ids.map((operationId) => contentWorkWorkflowId(source, 2, 'authorErase', operationId)),
+        source.epoch,
+        source.partition,
+        source.position.toString(),
+        2,
+        route,
+      ],
+    );
+  },
 };
 
 test('endpoint and status reads use bounded exact keys', async () => {
@@ -398,7 +418,7 @@ test('checkGrowth stays independent of unrelated operations and author history',
     } finally {
       client.release();
     }
-    // Fresh operations (including the warm-up) share a representative committed lookup history.
+    // Fresh operations (including the warm-up) share a committed history of equivalent inserts and bindings.
     const baseline = 4096;
     await seed(db, population, { from: 0, to: baseline });
     const assertIndex = async (sql: string, values: unknown[], index: string, keys: string[]) => {
