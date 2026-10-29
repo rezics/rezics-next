@@ -122,10 +122,13 @@ test("account Realm pages stay bounded as this and other accounts' memberships g
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     rule: 'series',
-    indexProbes: 81,
+    // Five measured reads × (one inverse range seek + 20 role probes + 20 realm:read probes).
+    indexProbes: 205,
     warmups: 1,
     async grow(database, scale, previous) {
       if (previous === 0) {
+        // Retained inverse rows represent membership history production reads by account and kind;
+        // unrelated accounts' history ensures the account-route index is already populated.
         const inverseDecoys = Array.from({ length: 4096 }, (_, index) => id(accountRoute, 10_000 + index));
         await database.admin.query(
           `INSERT INTO access.account(route, account_id, kind, state, transaction_id, public_views,

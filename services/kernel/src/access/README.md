@@ -907,7 +907,7 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 ### Final permission check
 
 - Touches: `permission-check.sql` re-probes the exact direct, active-accounts and admitted group role keys at evaluator T using grant/role-grant GiST primary keys and `resource_denial_permission`. Scope and optional principal grants intersect; denials and expired/missing group proofs fail closed. One result per requested id (one id for a single check), no writes or inverse/role rereads. The verified domain floor supplies public eligibility; anonymous input has no subject keys and does not scan denials.
-- Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G, logarithmic blocks at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
+- Bound: `Q`: one formula statement (plus time when not supplied and optional domain verifier); O(1+J) bounded probe rows, O(1) result. Integrated P+Q: constant rows/statements in G; blocks are the sum of independently indexed grant, role-grant and denial probes, with discrete index-depth transitions at fixed J; at most linear in admitted J through cap1000 per identity. Role expansion adds R-dependent probes, not H/O enumeration. Permission and operator evidence use the shared real-time TTL helper; elapsed evidence returns 503 without effects. No added reads.
 - Growth check: `test/access/growth-evaluator.test.ts`: independent G and K checks, production pool, K through cap1000. `test/access/access-deadlines.test.ts`.
 
 ### Generic / parent creation authorization
@@ -1102,7 +1102,7 @@ is backfilled from accounts already verified when the migration runs. Reversal o
   display name and operator are withheld, and `automated` is false. Pending accounts are absent and no private field is
   selected.
 - Touches: one statement (`public-identity-page.sql`); at most 100 `account_pkey(route, account_id)` probes on `access.account`.
-- Bound: O(k log N) for k <= 100 requested ids and N accounts; constant statements; rows at most k.
+- Bound: the sum of at most k independently indexed `account_pkey` probes, O(k log N) for k <= 100 requested ids and N accounts, with discrete index-depth transitions; constant statements; rows at most k.
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
   logarithmic buffers.
@@ -1237,8 +1237,8 @@ refill after skips, so it may return fewer than `limit` items.
 - Touches: one account primary-key probe for the opt-in and inverse-completeness gate; one `membership_inverse_pkey`
   range of at most `limit + 1` Realm rows in the account's partition; then, for each scanned candidate, one registered
   Realm role read and one `realm:read` authorization, each anchored in that Realm's partition. Checks run in sequence.
-- Bound: rows and statements O(limit); blocks O(limit × log R), the sum of the inverse range seek and each
-  candidate's indexed role and authorization reads. This remains independent of other accounts' memberships and of
+- Bound: rows and statements O(limit); blocks are the sum of one indexed inverse range seek and each candidate's
+  indexed role and authorization probes, O((1 + 2 × limit) log R) with discrete index-depth transitions. This remains independent of other accounts' memberships and of
   this account's Realms beyond the page.
 - Growth check: `test/access/growth-account-realms.test.ts`,
   `account Realm pages stay bounded as this and other accounts' memberships grow at a fixed limit`, seeded in `grow`

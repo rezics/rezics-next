@@ -29,6 +29,7 @@ test('a fixed 100-account public identity batch stays bounded as unrelated accou
     scales: [1, 8, 64],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     rule: 'series',
+    // One measured batch × one account_pkey probe for each of the 100 requested identities.
     indexProbes: 100,
     repetitions: 1,
     async grow(database, scale, previous) {
