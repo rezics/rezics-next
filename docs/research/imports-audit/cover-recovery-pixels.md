@@ -163,3 +163,10 @@ launches (the focused native test and affected kernel typecheck, as listed above
 exact error. This exhausts the initial attempt and two retries. No check IDs were created and no test,
 typecheck or artifact command executed. No frozen assertion, helper, product or runner change is made.
 The current attempt is blocked by check submission tooling; historical passing evidence is unchanged.
+
+### Retry from the supplied manifest
+
+At committed revision `71818df6ab2a1525a91c743c19cf88c50112bf9f`, the mandated artifact launch was
+retried before relying on the earlier failure. It exited 1 with `Invalid check id: --`; no check ID was
+created. Current `scripts/worker-check.ts` still dispatches `--run` to `runRecordedCheck(args[1])`,
+so the required separator is parsed as a record ID. The frozen native test remains untouched.
