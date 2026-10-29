@@ -274,8 +274,8 @@ export type RunningWorker = { child?: ChildProcess; exited: Promise<WorkerExit>;
  * becomes a session leader. The intermediate process publishes the wrapper's pid before it exits. When the CLI ends,
  * the wrapper records its exit code or signal beside the run log.
  */
-const WRAPPER = `import os,sys,json,signal,subprocess
-exit_path,pid_path=sys.argv[1:3]
+const WRAPPER = `import os,sys,json,signal,subprocess,time
+exit_path,pid_path,start_path=sys.argv[1:4]
 r,w=os.pipe()
 if os.fork():
  os.close(w)
@@ -287,9 +287,11 @@ os.close(r)
 os.setsid()
 os.write(w,str(os.getpid()).encode())
 os.close(w)
+deadline=time.monotonic()+30
+while not os.path.exists(start_path) and time.monotonic()<deadline: time.sleep(.01)
 code,sig=None,None
 try:
- status=subprocess.Popen(sys.argv[3:]).wait()
+ status=subprocess.Popen(sys.argv[4:]).wait()
  if status<0: sig=signal.Signals(-status).name
  else: code=status
 except OSError:
@@ -425,8 +427,9 @@ export async function launch(
   store.assertCurrent(attempt);
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),
-    pidPath = `${attempt.logPath}.pid`;
-  for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
+    pidPath = `${attempt.logPath}.pid`,
+    startPath = `${attempt.logPath}.start`;
+  for (const path of [exitPath, `${exitPath}.tmp`, pidPath, startPath]) rmSync(path, { force: true });
   const out = openSync(attempt.logPath, 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
   const [program, args] = launchCommand({
@@ -454,7 +457,7 @@ export async function launch(
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
       if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree }))
         throw new Error(`Worker CLI not found: ${program}`);
-      const wrapperArgs = ['-c', WRAPPER, exitPath, pidPath, program, ...args];
+      const wrapperArgs = ['-c', WRAPPER, exitPath, pidPath, startPath, program, ...args];
       const startOptions: SpawnSyncOptions = {
         cwd: task.worktree,
         stdio: ['ignore', out, err],
@@ -485,6 +488,8 @@ export async function launch(
     closeSync(out);
     closeSync(err);
   }
+  // Let the caller observe the published running state before the worker can change its branch.
+  setImmediate(() => writeFileSync(startPath, ''));
   const saved = store.attempt(attempt);
   const exited = waitForWorkerExit(saved.process, attempt.logPath);
   void exited.catch(() => {});
