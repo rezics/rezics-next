@@ -132,7 +132,7 @@ export async function runWorkerCheck(
   const root = resolve(cwd);
   const command = resolveRepositoryBun(argv, root);
   const file = recordedLog ?? logPath(root);
-  const descriptor = openSync(file, recordedLog ? 'w' : 'wx', 0o600);
+  const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   const env = { ...process.env };
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
@@ -535,6 +535,7 @@ async function rerunInterruptedCheck(
   remainingMs: number,
   monitor: CheckMonitor,
 ): Promise<number> {
+  const rerunStarted = Date.now();
   const host = record.runnerHost ?? hostname();
   const oldLog = record.log;
   if ((record.reruns ?? 0) >= 1) {
@@ -572,7 +573,7 @@ async function rerunInterruptedCheck(
     writeRecord(record);
   });
   child.unref();
-  return waitWorkerCheck(id, root, remainingMs, {
+  return waitWorkerCheck(id, root, Math.max(0, remainingMs - (Date.now() - rerunStarted)), {
     ...monitor,
     ...(monitor.rerunStallMs === undefined ? {} : { stallMs: monitor.rerunStallMs }),
   });
