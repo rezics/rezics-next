@@ -163,7 +163,7 @@
           "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
           "type": "schema:Book",
           "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-          "label": { "value": "The Little Prince", "language": "en" },
+          "label": { "value": "Le Petit Prince", "language": "fr" },
           "creativeWork": true,
           "cover": null
         },
@@ -175,14 +175,14 @@
           "context": "00000000-0000-8000-8000-000000000000",
           "resolution": {},
           "labels": {
-            "de": "Der kleine Prinz",
             "ja": "星の王子さま",
+            "zh-Hans": "小王子",
+            "de": "Der kleine Prinz",
+            "ko": "어린 왕자",
+            "es": "El Principito",
             "zh-Hant": "小王子",
             "en": "The Little Prince",
-            "es": "El Principito",
-            "fr": "Le Petit Prince",
-            "ko": "어린 왕자",
-            "zh-Hans": "小王子"
+            "fr": "Le Petit Prince"
           },
           "descriptions": {
             "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
@@ -448,7 +448,8 @@
             "wdt:P155": 0,
             "wdt:P179": 0,
             "wdt:P361": 0
-          }
+          },
+          "cover": null
         },
         "account": null,
         "related": {
@@ -610,7 +611,7 @@
               "id": "01a17a3b-08ba-770d-b3f3-2254d514d768",
               "type": "bf:Instance",
               "types": ["bf:Instance", "schema:CreativeWork", "schema:Thing"],
-              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "en" },
+              "label": { "value": "Le Petit Prince (Gallimard, 1946)", "language": "fr" },
               "creativeWork": true,
               "cover": null
             }

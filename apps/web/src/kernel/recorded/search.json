@@ -3,23 +3,15 @@
     {
       "id": "01a1773a-f700-7078-8000-000000000001",
       "type": "schema:Book",
-      "labels": { "en": "The Tale of Genji", "ja": "源氏物語" },
+      "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
       "summary": null,
-      "descriptions": {}
+      "descriptions": {},
+      "cover": null
     },
     {
       "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
       "type": "schema:Book",
-      "labels": {
-        "de": "Der kleine Prinz",
-        "en": "The Little Prince",
-        "es": "El Principito",
-        "fr": "Le Petit Prince",
-        "ja": "星の王子さま",
-        "ko": "어린 왕자",
-        "zh-Hans": "小王子",
-        "zh-Hant": "小王子"
-      },
+      "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
       "summary": {
         "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
         "type": "schema:Book",
@@ -33,7 +25,8 @@
         "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
         "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
         "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。"
-      }
+      },
+      "cover": null
     }
   ],
   "total": { "value": 2, "relation": "exact" },

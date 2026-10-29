@@ -9,7 +9,7 @@
         "creativeWork": true,
         "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
         "type": "schema:Book",
-        "label": "Snow Country",
+        "label": { "value": "Snow Country", "language": "en" },
         "types": ["schema:Book"],
         "cover": null
       }
@@ -23,7 +23,7 @@
         "creativeWork": true,
         "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
         "type": "schema:Book",
-        "label": "The Tale of Genji",
+        "label": { "value": "The Tale of Genji", "language": "en" },
         "types": ["schema:Book"],
         "cover": null
       }
@@ -37,7 +37,7 @@
         "creativeWork": true,
         "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
         "type": "schema:Book",
-        "label": "The Little Prince",
+        "label": { "value": "Le Petit Prince", "language": "fr" },
         "types": ["schema:Book"],
         "cover": null
       }
@@ -51,7 +51,7 @@
         "creativeWork": true,
         "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
         "type": "schema:Book",
-        "label": "Kokoro",
+        "label": { "value": "Kokoro", "language": "en" },
         "types": ["schema:Book"],
         "cover": null
       }

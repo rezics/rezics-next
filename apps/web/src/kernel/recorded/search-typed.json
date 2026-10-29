@@ -4,14 +4,14 @@
       "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
       "type": "schema:Book",
       "labels": {
-        "de": "Der kleine Prinz",
         "en": "The Little Prince",
-        "es": "El Principito",
-        "fr": "Le Petit Prince",
+        "zh-Hans": "小王子",
+        "zh-Hant": "小王子",
         "ja": "星の王子さま",
         "ko": "어린 왕자",
-        "zh-Hans": "小王子",
-        "zh-Hant": "小王子"
+        "de": "Der kleine Prinz",
+        "fr": "Le Petit Prince",
+        "es": "El Principito"
       },
       "descriptions": {
         "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.",
@@ -60,21 +60,9 @@
         "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
         "creativeWork": true,
         "label": { "value": "The Little Prince", "language": "en" },
-        "cover": {
-          "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0101",
-          "width": 640,
-          "height": 960,
-          "placeholder": { "thumbhash": "", "color": "#3b4a6b" },
-          "variants": [{ "format": "webp", "width": 320 }],
-          "focalPoint": null,
-          "credit": {
-            "rightsHolder": "Rezics fixture art",
-            "via": { "name": "Rezics", "url": "https://rezics.com" },
-            "license": "CC0-1.0",
-            "obligations": []
-          }
-        }
-      }
+        "cover": null
+      },
+      "cover": null
     }
   ],
   "total": { "value": 1, "relation": "exact" },

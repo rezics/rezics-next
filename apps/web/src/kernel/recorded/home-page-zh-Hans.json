@@ -125,14 +125,14 @@
             "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
             "type": "schema:Book",
             "labels": {
-              "de": "Der kleine Prinz",
               "en": "The Little Prince",
-              "es": "El Principito",
-              "fr": "Le Petit Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
               "ja": "星の王子さま",
               "ko": "어린 왕자",
-              "zh-Hans": "小王子",
-              "zh-Hant": "小王子"
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
             },
             "summary": {
               "id": "01a186da-0514-7685-9a80-18f46d3d3c91",
@@ -146,68 +146,97 @@
           {
             "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
             "type": "schema:Book",
-            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である" },
-            "summary": null
+            "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
+            },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-6bd9-706f-b395-987536454933",
             "type": "schema:Book",
-            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である" },
-            "summary": null
+            "labels": {
+              "de": "Der kleine Prinz",
+              "en": "The Little Prince",
+              "es": "El Principito",
+              "fr": "Le Petit Prince",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子"
+            },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
             "type": "schema:Book",
-            "labels": { "en": "Kokoro", "ja": "こころ" },
-            "summary": null
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である", "zh-Hans": "我是猫" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
             "type": "schema:Book",
-            "labels": { "en": "Kokoro", "ja": "こころ" },
-            "summary": null
+            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である", "zh-Hans": "我是猫" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7078-8000-000000000003",
             "type": "schema:Book",
-            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森" },
-            "summary": null
+            "labels": { "en": "Kokoro", "ja": "こころ", "zh-Hans": "心" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-6bab-705b-935e-d6dc0cacd82d",
             "type": "schema:Book",
-            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森" },
-            "summary": null
+            "labels": { "en": "Kokoro", "ja": "こころ", "zh-Hans": "心" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
             "type": "schema:Book",
-            "labels": { "en": "Snow Country", "ja": "雪国" },
-            "summary": null
+            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森", "zh-Hans": "挪威的森林" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
             "type": "schema:Book",
-            "labels": { "en": "The Little Prince", "ja": "星の王子さま" },
-            "summary": null
+            "labels": { "en": "Norwegian Wood", "ja": "ノルウェイの森", "zh-Hans": "挪威的森林" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
             "type": "schema:Book",
-            "labels": { "en": "The Little Prince", "ja": "星の王子さま" },
-            "summary": null
+            "labels": { "en": "Snow Country", "ja": "雪国", "zh-Hans": "雪国" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7078-8000-000000000001",
             "type": "schema:Book",
-            "labels": { "en": "The Tale of Genji", "ja": "源氏物語" },
-            "summary": null
+            "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
             "type": "schema:Book",
-            "labels": { "en": "The Tale of Genji", "ja": "源氏物語" },
-            "summary": null
+            "labels": { "en": "The Tale of Genji", "ja": "源氏物語", "zh-Hans": "源氏物语" },
+            "summary": null,
+            "cover": null
           }
         ],
         "next": null,
@@ -221,14 +250,16 @@
           {
             "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
             "type": "schema:TVSeries",
-            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン" },
-            "summary": null
+            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン", "zh-Hans": "葬送的芙莉莲" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
             "type": "schema:TVSeries",
-            "labels": { "en": "Mushishi", "ja": "蟲師" },
-            "summary": null
+            "labels": { "en": "Mushishi", "ja": "蟲師", "zh-Hans": "虫师" },
+            "summary": null,
+            "cover": null
           }
         ],
         "next": null,
@@ -242,14 +273,16 @@
           {
             "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
             "type": "wd:Q689445",
-            "labels": { "en": "Clannad", "ja": "クラナド" },
-            "summary": null
+            "labels": { "en": "Clannad", "ja": "クラナド", "zh-Hans": "CLANNAD" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7075-8008-6f06740bee6d",
             "type": "wd:Q689445",
-            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート" },
-            "summary": null
+            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート", "zh-Hans": "命运石之门" },
+            "summary": null,
+            "cover": null
           }
         ],
         "next": null,
@@ -263,14 +296,16 @@
           {
             "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
             "type": "schema:Recipe",
-            "labels": { "en": "Nikujaga", "ja": "肉じゃが" },
-            "summary": null
+            "labels": { "en": "Nikujaga", "ja": "肉じゃが", "zh-Hans": "土豆炖肉" },
+            "summary": null,
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7077-883e-8b0879393d7d",
             "type": "schema:Recipe",
-            "labels": { "en": "Shakshuka", "ja": "シャクシュカ" },
-            "summary": null
+            "labels": { "en": "Shakshuka", "ja": "シャクシュカ", "zh-Hans": "沙克舒卡" },
+            "summary": null,
+            "cover": null
           }
         ],
         "next": null,

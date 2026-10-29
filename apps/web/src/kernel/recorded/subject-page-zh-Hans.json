@@ -190,14 +190,14 @@
             "wdt:P361": 0
           },
           "labels": {
-            "fr": "Le Petit Prince",
-            "de": "Der kleine Prinz",
-            "es": "El Principito",
             "ja": "星の王子さま",
-            "ko": "어린 왕자",
-            "zh-Hant": "小王子",
             "zh-Hans": "小王子",
-            "en": "The Little Prince"
+            "de": "Der kleine Prinz",
+            "ko": "어린 왕자",
+            "es": "El Principito",
+            "zh-Hant": "小王子",
+            "en": "The Little Prince",
+            "fr": "Le Petit Prince"
           },
           "descriptions": {
             "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。",

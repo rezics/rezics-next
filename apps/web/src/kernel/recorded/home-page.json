@@ -125,6 +125,52 @@
             "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
             "type": "schema:Book",
             "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
+            },
+            "summary": {
+              "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "creativeWork": true,
+              "label": { "value": "The Little Prince", "language": "en" },
+              "cover": null
+            },
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
+            "type": "schema:Book",
+            "labels": {
+              "en": "The Little Prince",
+              "zh-Hans": "小王子",
+              "zh-Hant": "小王子",
+              "ja": "星の王子さま",
+              "ko": "어린 왕자",
+              "de": "Der kleine Prinz",
+              "fr": "Le Petit Prince",
+              "es": "El Principito"
+            },
+            "summary": {
+              "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
+              "type": "schema:Book",
+              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+              "creativeWork": true,
+              "label": { "value": "I Am a Cat", "language": "en" },
+              "cover": null
+            },
+            "cover": null
+          },
+          {
+            "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
+            "type": "schema:Book",
+            "labels": {
               "de": "Der kleine Prinz",
               "en": "The Little Prince",
               "es": "El Principito",
@@ -135,52 +181,14 @@
               "zh-Hant": "小王子"
             },
             "summary": {
-              "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
-              "type": "schema:Book",
-              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "creativeWork": true,
-              "label": { "value": "The Little Prince", "language": "en" },
-              "cover": null
-            }
-          },
-          {
-            "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
-            "type": "schema:Book",
-            "labels": { "en": "I Am a Cat", "ja": "吾輩は猫である" },
-            "summary": {
-              "id": "01a1773a-f700-7071-b5ef-2b02f7d0e8c6",
-              "type": "schema:Book",
-              "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-              "creativeWork": true,
-              "label": { "value": "I Am a Cat", "language": "en" },
-              "cover": null
-            }
-          },
-          {
-            "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
-            "type": "schema:Book",
-            "labels": { "en": "Kokoro", "ja": "こころ" },
-            "summary": {
               "id": "01a1773a-f6ff-7684-8e44-1a013af60d4b",
               "type": "schema:Book",
               "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
-              "label": { "value": "Kokoro", "language": "en" },
-              "cover": {
-                "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003",
-                "width": 640,
-                "height": 960,
-                "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
-                "variants": [{ "format": "webp", "width": 320 }],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "Rezics fixture art",
-                  "via": { "name": "Rezics", "url": "https://rezics.com" },
-                  "license": "CC0-1.0",
-                  "obligations": []
-                }
-              }
-            }
+              "label": { "value": "Le Petit Prince", "language": "fr" },
+              "cover": null
+            },
+            "cover": null
           }
         ],
         "total": { "value": 3, "relation": "exact" },
@@ -195,7 +203,7 @@
           {
             "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
             "type": "schema:TVSeries",
-            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン" },
+            "labels": { "en": "Frieren: Beyond Journey's End", "ja": "葬送のフリーレン", "zh-Hans": "葬送的芙莉莲" },
             "summary": {
               "id": "01a1773a-f700-7073-bcc1-4d04f35ff67a",
               "type": "schema:TVSeries",
@@ -203,33 +211,22 @@
               "creativeWork": true,
               "label": { "value": "Frieren: Beyond Journey's End", "language": "en" },
               "cover": null
-            }
+            },
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
             "type": "schema:TVSeries",
-            "labels": { "en": "Mushishi", "ja": "蟲師" },
+            "labels": { "en": "Mushishi", "ja": "蟲師", "zh-Hans": "虫师" },
             "summary": {
               "id": "01a1773a-f700-7072-b9eb-3c03e51c0440",
               "type": "schema:TVSeries",
               "types": ["schema:TVSeries", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
               "label": { "value": "Mushishi", "language": "en" },
-              "cover": {
-                "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0005",
-                "width": 640,
-                "height": 960,
-                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
-                "variants": [{ "format": "webp", "width": 320 }],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "Rezics fixture art",
-                  "via": { "name": "Rezics", "url": "https://rezics.com" },
-                  "license": "CC0-1.0",
-                  "obligations": []
-                }
-              }
-            }
+              "cover": null
+            },
+            "cover": null
           }
         ],
         "total": { "value": 2, "relation": "exact" },
@@ -244,7 +241,7 @@
           {
             "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
             "type": "wd:Q689445",
-            "labels": { "en": "Clannad", "ja": "クラナド" },
+            "labels": { "en": "Clannad", "ja": "クラナド", "zh-Hans": "CLANNAD" },
             "summary": {
               "id": "01a1773a-f700-7074-b1ee-5e05671d3be3",
               "type": "wd:Q689445",
@@ -252,33 +249,22 @@
               "creativeWork": true,
               "label": { "value": "Clannad", "language": "en" },
               "cover": null
-            }
+            },
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7075-8008-6f06740bee6d",
             "type": "wd:Q689445",
-            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート" },
+            "labels": { "en": "Steins Gate", "ja": "シュタインズ・ゲート", "zh-Hans": "命运石之门" },
             "summary": {
               "id": "01a1773a-f700-7075-8008-6f06740bee6d",
               "type": "wd:Q689445",
               "types": ["wd:Q689445", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
               "label": { "value": "Steins Gate", "language": "en" },
-              "cover": {
-                "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0007",
-                "width": 600,
-                "height": 800,
-                "placeholder": { "thumbhash": "", "color": "#5d4a2f" },
-                "variants": [{ "format": "webp", "width": 320 }],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "Rezics fixture art",
-                  "via": { "name": "Rezics", "url": "https://rezics.com" },
-                  "license": "CC0-1.0",
-                  "obligations": []
-                }
-              }
-            }
+              "cover": null
+            },
+            "cover": null
           }
         ],
         "total": { "value": 2, "relation": "exact" },
@@ -293,7 +279,7 @@
           {
             "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
             "type": "schema:Recipe",
-            "labels": { "en": "Nikujaga", "ja": "肉じゃが" },
+            "labels": { "en": "Nikujaga", "ja": "肉じゃが", "zh-Hans": "土豆炖肉" },
             "summary": {
               "id": "01a1773a-f700-7076-b2d2-7a07a9d7104f",
               "type": "schema:Recipe",
@@ -301,33 +287,22 @@
               "creativeWork": true,
               "label": { "value": "Nikujaga", "language": "en" },
               "cover": null
-            }
+            },
+            "cover": null
           },
           {
             "id": "01a1773a-f700-7077-883e-8b0879393d7d",
             "type": "schema:Recipe",
-            "labels": { "en": "Shakshuka", "ja": "シャクシュカ" },
+            "labels": { "en": "Shakshuka", "ja": "シャクシュカ", "zh-Hans": "沙克舒卡" },
             "summary": {
               "id": "01a1773a-f700-7077-883e-8b0879393d7d",
               "type": "schema:Recipe",
               "types": ["schema:Recipe", "schema:CreativeWork", "schema:Thing"],
               "creativeWork": true,
               "label": { "value": "Shakshuka", "language": "en" },
-              "cover": {
-                "media": "0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0009",
-                "width": 800,
-                "height": 600,
-                "placeholder": { "thumbhash": "", "color": "#2f5d50" },
-                "variants": [{ "format": "webp", "width": 320 }],
-                "focalPoint": null,
-                "credit": {
-                  "rightsHolder": "Rezics fixture art",
-                  "via": { "name": "Rezics", "url": "https://rezics.com" },
-                  "license": "CC0-1.0",
-                  "obligations": []
-                }
-              }
-            }
+              "cover": null
+            },
+            "cover": null
           }
         ],
         "total": { "value": 2, "relation": "exact" },
