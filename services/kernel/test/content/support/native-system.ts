@@ -228,14 +228,15 @@ async function createNativeContentSystemWithOptions(
     const ordinaryClient = { id: `${namespace}_ordinary`, kind: 'first-party' as const };
     // Auth validates both the issued consent and the registered client ceiling
     // when a durable step restores its initiator.
-    const registeredOrdinaryScopes = Object.freeze(
-      ordinaryScopes ? [...ordinaryScopes] : [...actions.keys()].filter((action) => action !== 'media:complete').sort(),
-    );
+    const ordinaryScopeList = ordinaryScopes
+      ? [...ordinaryScopes]
+      : [...actions.keys()].filter((action) => action !== 'media:complete').sort();
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
-      scopes: registeredOrdinaryScopes,
+      scopes: ordinaryScopeList,
     });
+    const registeredOrdinaryScopes = Object.freeze(ordinaryScopeList);
     await host.start();
 
     const requestAuth = async (path: string, body: unknown, cookie = '') => {
