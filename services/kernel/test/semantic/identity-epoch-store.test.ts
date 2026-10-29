@@ -6,7 +6,6 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { writeSubject } from '../../src/semantic/subject.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import {
-  prepareIdentityEpochAdmission,
   stepIdentityEpochAdmission,
   cancelIdentityEpochAdmission,
   acquireIdentityEpochAdmissionHome,
@@ -463,7 +462,7 @@ test('ordered PREPARING recovery and cancellation keep P=1 local, including unce
         command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
       } as const,
     };
-    return { input, job: await prepareIdentityEpochAdmission(f.pool, authority, input) };
+    return { input, job: await store.prepareAdmission(f.pool, authority, input) };
   };
   // A terminal admitted job at the highest resource waits for real participants, never a lease.
   const occupiedA = await create('Highest occupied A', 0x6330);
@@ -477,7 +476,7 @@ test('ordered PREPARING recovery and cancellation keep P=1 local, including unce
   const highB = await create('High upper group', 0x6330);
   const high = await prepare(highB, highA);
   expect(home(high.job.jobId)).toBe(home(highA));
-  expect(await prepareIdentityEpochAdmission(f.pool, authority, high.input)).toEqual(high.job);
+  expect(await store.prepareAdmission(f.pool, authority, high.input)).toEqual(high.job);
   expect(await store.readMapping(f.pool, highA)).toEqual({ state: 'pending', original: highA, job: high.job });
   await stepIdentityEpochAdmission(f.pool, high.job); // Real first-home receipt moves into job custody.
   await expect(stepIdentityEpochAdmission(f.pool, high.job)).rejects.toMatchObject({

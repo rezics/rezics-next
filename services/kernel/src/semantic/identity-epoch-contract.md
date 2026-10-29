@@ -891,7 +891,7 @@ singleton from a missing control row. Current mapping observation does not wait 
 ### Flat generations, retention and local reclaim
 
 For each partition q, let Gq and Aq be its current groups and originals. At EVERY durable/crash/replay/abandon step,
-full generations are at most **Gq + 4P**, and physically retained memberships at most **Aq + 4P·4096**. Count actual
+full generations are at most **Gq + 4P**, and physically retained memberships at most **Aq + 4P·4096**. With P=1 these bounds are **Gq + 4** and **Aq + 16384**. Count actual
 physical home, not logical job locator. Bootstrap uses actual native source group/original counts for Gq/Aq, never only the count of already sealed
 new headers. Source legacy memberships, their retained exports and new shadow rows are included in the physical
 copy ledger before each allocation. A bootstrap that cannot reserve the next bounded copy must reclaim or pause

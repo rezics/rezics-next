@@ -29,8 +29,6 @@ import {
   runCommand,
   noEffect,
   IdempotencyConflictError,
-  type CommandBasis,
-  type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -49,13 +47,8 @@ import {
 } from './identity-epoch-store.ts';
 import type { IdentityIntent, IdentityReceipt, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
 
-export type IdentityAdmissionInput = Readonly<{ intent: IdentityIntent; receipt: IdentityReceipt }>;
-export type IdentityAdmissionAuthority = Readonly<{
-  basis?: CommandBasis;
-  authorization?: CommandAuthorization;
-  deadline?: number;
-  clock?: () => Date;
-}>;
+export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
+import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
   state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';

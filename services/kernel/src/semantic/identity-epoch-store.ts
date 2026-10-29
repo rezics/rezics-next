@@ -44,7 +44,7 @@ import {
   IdempotencyConflictError,
   type CommandTransaction,
 } from '../command/command.ts';
-import { identityHomeAvailable } from './identity-epoch-admission.ts';
+import { identityHomeAvailable, prepareIdentityEpochAdmission } from './identity-epoch-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
@@ -202,6 +202,7 @@ async function readJob(tx: CommandTransaction, job: IdentityJobRef): Promise<Ide
 export const identityEpochStore: IdentityEpochStore = {
   // Compatibility for topology observations only; actual job homes are encoded by their native routed IDs.
   controlPartition: IDENTITY_EPOCH_CONTROL_PARTITION,
+  prepareAdmission: prepareIdentityEpochAdmission,
   async readEpoch(tx, partition = 0) {
     const owner = await readPartition(tx, partition);
     if (!owner) return { state: 'unavailable', reason: 'missing-owner' };

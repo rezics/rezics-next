@@ -1,6 +1,12 @@
 /** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
-import type { CommandReceipt, CommandResult, CommandTransaction } from '../command/command.ts';
+import type {
+  CommandBasis,
+  CommandAuthorization,
+  CommandReceipt,
+  CommandResult,
+  CommandTransaction,
+} from '../command/command.ts';
 import type { mergeSubjects } from './merges.ts';
 import type { verifyAccountAgent, unverifyAccountAgent } from './account-agents.ts';
 
@@ -99,6 +105,13 @@ export type IdentityEffect =
  * Every mutation uses currentCommand(tx), its real owner and native time.
  * Pool methods release each home before acquiring another home or engine.
  */
+export type IdentityAdmissionInput = Readonly<{ intent: IdentityIntent; receipt: IdentityReceipt }>;
+export type IdentityAdmissionAuthority = Readonly<{
+  basis?: CommandBasis;
+  authorization?: CommandAuthorization;
+  deadline?: number;
+  clock?: () => Date;
+}>;
 export type IdentityEpochStore = Readonly<{
   /** Bootstrap topology home. Job control homes are encoded in native job IDs. */
   controlPartition: number;
@@ -112,7 +125,17 @@ export type IdentityEpochStore = Readonly<{
   readMapping(pool: Pool, original: string): Promise<IdentityMapping>;
   /** Same producer and snapshot shared across a bounded page; no per-ID control probes. */
   readMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
-  /** Exact maintained group cardinality (including the terminal), cap 4096 BEFORE any effect.
+  /** Released-home admission producer. Returns durable preparation, never public completion.
+   * Double-collects source/current generation bases before any effect, then reserves the FIRST ordered home.
+   * Bounded stepIdentityEpochAdmission takes actual receiving receipts into native job custody.
+   */
+  prepareAdmission(
+    pool: Pool,
+    authority: IdentityAdmissionAuthority,
+    input: IdentityAdmissionInput,
+  ): Promise<IdentityJobRef>;
+  /** Colocated command path; cross-home inputs use prepareAdmission.
+   * Exact maintained group cardinality (including the terminal), cap 4096 BEFORE any effect.
    * Busy conflicts without a second pending epoch. Repeated identical receipt returns the same job.
    * Emits native durable wakeup in the same command as pending + immutable intent.
    */
