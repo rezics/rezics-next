@@ -10,7 +10,6 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runOnCheckHost } from './stack-run.ts';
 
@@ -172,7 +171,7 @@ let counter = 0;
 
 beforeAll(() => {
   // Keep fixture workspaces outside the remote run root. The acceptance file may itself run on a check host.
-  root = mkdtempSync(join(tmpdir(), 'stack-run-test-'));
+  root = mkdtempSync(join('/tmp', 'stack-run-test-'));
   mkdirSync(join(root, 'bin'));
   for (const [name, source] of [
     ['ssh', fakeSsh],
