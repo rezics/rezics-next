@@ -42,11 +42,12 @@ export function DecisionTime({
 
 export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPage; now?: number }) {
   const [decision, setDecision] = useState(page.decision);
+  const [clockNow, setClockNow] = useState(now);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const locale = getLocale();
-  const allowed = canAppealDecision(decision, page.target.authorId ?? null, page.viewerId, now);
+  const allowed = canAppealDecision(decision, page.target.authorId ?? null, page.viewerId, clockNow);
   const count = Array.from(text).length;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -58,6 +59,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
       const result = await appealDecision({ data: { id: decision.id, statement: text } });
       if (result.state === 'pending' || result.state === 'updated') {
         setDecision(result.decision);
+        setClockNow(Date.now());
         setText('');
       } else if (result.state === 'invalid') {
         setText(result.text);
@@ -79,7 +81,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
         </h2>
         <p className="mt-3 whitespace-pre-wrap leading-7">{decision.statement}</p>
         <p className="mt-4 text-sm text-muted-foreground">
-          {m.decision_decided_label()} <DecisionTime instant={decision.decidedAt} now={now} locale={locale} />
+          {m.decision_decided_label()} <DecisionTime instant={decision.decidedAt} now={clockNow} locale={locale} />
         </p>
       </section>
       <section className="mt-8" aria-labelledby="decision-applies">
@@ -97,7 +99,8 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
           {m.decision_appeal_heading()}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          {m.decision_deadline_label()} <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+          {m.decision_deadline_label()}{' '}
+          <DecisionTime instant={decision.appealDeadline} now={clockNow} locale={locale} />
         </p>
         {decision.appeal ? (
           <AppealState appeal={decision.appeal} />
@@ -127,7 +130,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
               {saving ? m.decision_appeal_sending() : m.decision_appeal_submit()}
             </Button>
           </form>
-        ) : page.viewerId === page.target.authorId && now > Date.parse(decision.appealDeadline) ? (
+        ) : page.viewerId === page.target.authorId && clockNow > Date.parse(decision.appealDeadline) ? (
           <p className="mt-4 text-sm text-muted-foreground">{m.decision_appeal_expired()}</p>
         ) : null}
       </section>

@@ -120,8 +120,8 @@ test('decision presentation shows reasons, target and times, with appeal UI only
   const open = renderToStaticMarkup(createElement(DecisionPageView, { page, now: Date.parse(decidedAt) }));
   expect(open).toContain(decision.statement);
   expect(open).toContain('Affected post');
-  expect(open).toContain('datetime="' + decidedAt + '"');
-  expect(open).toContain('datetime="' + decision.appealDeadline + '"');
+  expect(open).toContain('dateTime="' + decidedAt + '"');
+  expect(open).toContain('dateTime="' + decision.appealDeadline + '"');
   expect(open).toContain('appeal-statement');
   expect(open).toContain('2,000');
 
