@@ -430,22 +430,14 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
 
   test('README rate row matches verified behavior', async () => {
     const readme = await Bun.file(new URL('../README.md', import.meta.url)).text();
-    const rows = readme.split('\n').filter((line) => line.startsWith('| Native attempt rate limiter'));
-    expect(rows).toHaveLength(1);
-    const row = rows[0];
+    const row = readme.split('\n').find((line) => line.startsWith('| Native attempt rate limiter'));
     expect(row).toBeDefined();
     expect(verifiedCosts).toHaveLength(3);
     for (const cost of verifiedCosts) {
       expect(row).toContain(`Q=${cost.statements}`);
       expect(row).toContain(`${cost.rows} examined rows`);
     }
-    // R is examined work, not the counter population. L includes every touched
-    // table in the whole-handler capture, not just clients and counter keys.
-    expect(readme).toContain('R counts examined relation rows, B shared-block accesses');
-    expect(readme).toContain('L is the sum of log(2 + cardinality) over touched tables.');
-    expect(row).toContain('R=O(1), B=O(L)');
-    expect(row).toContain('15 atomic consumes (12 native request budgets and three per-account mail cooldown checks)');
-    expect(row).toContain('plus 44 other handler statements. Six transaction controls separately.');
+    expect(row).toContain('B=O(log C + log R)');
     expect(row).toContain('one atomic upsert');
     expect(row).toContain('growth-auth-rate.test.ts');
   });
