@@ -7,8 +7,8 @@ const bounds = { rows: 'constant', blocks: 'constant', statements: 'constant' } 
 const vacuum = 'VACUUM (INDEX_CLEANUP ON) "dbos"."workflow_status"';
 
 test('checkGrowth measures a database that has no dbos schema', async () => {
-  const db = await openGrowthDatabase();
   const queries = spyOn(pg.Client.prototype, 'query');
+  const db = await openGrowthDatabase();
   try {
     // The kernel check gives this file its own migrated database, including DBOS.
     await db.admin.query('DROP SCHEMA IF EXISTS dbos CASCADE');
@@ -34,8 +34,8 @@ test('checkGrowth measures a database that has no dbos schema', async () => {
 });
 
 test('checkGrowth settles dbos.workflow_status before measured repetitions once the schema exists', async () => {
-  const db = await openGrowthDatabase();
   const queries = spyOn(pg.Client.prototype, 'query');
+  const db = await openGrowthDatabase();
   const vacuumCounts: number[] = [];
   let created = false;
   try {
