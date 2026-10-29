@@ -6,83 +6,94 @@ function storyFixture(): string | null {
 }
 
 const accountRoute = /^\/v1\/accounts\/[^/]+\/notifications(?:\/count)?$/;
+const storyActor = '01a17a3b-0884-721b-91ef-d7ffd7bb58f0';
+const storyThread = '01a17a3b-0884-721b-91ef-d7ffd7bb58f1';
+const storyPost = '01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
+const storyReport = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
+const storyDecision = '01a17a3b-0884-721b-91ef-d7ffd7bb58f4';
 const fixtures = {
   mixed: [
     {
-      id: 'notice-reply',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5801',
       kind: 'reply',
       createdAt: '2026-10-29T09:45:00.000Z',
-      actorId: 'Momo',
-      threadId: 'thread-1',
-      postId: 'post-reply',
+      actorId: storyActor,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
       unread: true,
     },
     {
-      id: 'notice-report',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
       kind: 'moderation_decision',
       createdAt: '2026-10-28T08:00:00.000Z',
       actorId: null,
       threadId: null,
       postId: null,
       decisionId: null,
-      reportId: 'report-1',
+      reportId: storyReport,
       unread: true,
     },
     {
-      id: 'notice-decision',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5803',
       kind: 'moderation_decision',
       createdAt: '2026-10-26T08:00:00.000Z',
       actorId: null,
       threadId: null,
       postId: null,
-      decisionId: 'decision-1',
+      decisionId: storyDecision,
       reportId: null,
       unread: false,
     },
   ],
   unavailable: [
     {
-      id: 'notice-unavailable',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5804',
       kind: 'moderation_decision',
       createdAt: '2026-10-29T09:45:00.000Z',
       actorId: null,
       threadId: null,
       postId: null,
-      decisionId: 'missing-decision',
+      decisionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58f5',
       reportId: null,
       unread: false,
     },
   ],
   many: [
     {
-      id: 'notice-many',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5805',
       kind: 'reply',
       createdAt: '2026-10-29T09:45:00.000Z',
-      actorId: 'Momo',
-      threadId: 'thread-1',
-      postId: 'post-reply',
+      actorId: storyActor,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
       unread: true,
     },
   ],
   'row-overlay': [
     {
-      id: 'notice-overlay',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5806',
       kind: 'reply',
       createdAt: '2026-10-29T09:45:00.000Z',
-      actorId: 'Momo',
-      threadId: 'thread-1',
-      postId: 'post-reply',
+      actorId: storyActor,
+      threadId: storyThread,
+      postId: storyPost,
+      decisionId: null,
+      reportId: null,
       unread: true,
     },
     {
-      id: 'notice-report-overlay',
+      id: '01a17a3b-0884-721b-91ef-d7ffd7bb5807',
       kind: 'moderation_decision',
       createdAt: '2026-10-28T08:00:00.000Z',
       actorId: null,
       threadId: null,
       postId: null,
       decisionId: null,
-      reportId: 'report-1',
+      reportId: storyReport,
       unread: false,
     },
   ],
@@ -113,23 +124,23 @@ const list: FakeRoute = {
 const storyTargets: FakeRoute[] = [
   {
     method: 'GET',
-    path: /^\/v1\/posts\/post-reply$/,
+    path: new RegExp(`^/v1/posts/${storyPost}$`),
     story: () => ({
       status: 200,
       post: {
-        threadId: 'thread-1',
+        threadId: storyThread,
         body: { type: 'doc', content: [{ type: 'text', text: 'The last train leaves at midnight.' }] },
       },
     }),
   },
   {
     method: 'GET',
-    path: /^\/v1\/reports\/report-1$/,
+    path: new RegExp(`^/v1/reports/${storyReport}$`),
     story: () => ({ status: 200, report: { outcome: 'actioned' } }),
   },
   {
     method: 'GET',
-    path: /^\/v1\/moderation-decisions\/decision-1$/,
+    path: new RegExp(`^/v1/moderation-decisions/${storyDecision}$`),
     story: () => ({ status: 200, statement: 'A moderation decision is ready to read.' }),
   },
 ];
