@@ -7,7 +7,8 @@ const reads = await readFile(new URL('../src/library/reads.ts', import.meta.url)
 
 test('Collection page uses localized metadata and a localized relative time', () => {
   expect(page).toContain('<PageHeading>{page.title}</PageHeading>');
-  expect(page).toContain('<AccountRef account={page.curator} />');
+  expect(page).toContain('page.curator.displayName ?? page.curator.handle');
+  expect(page).toContain('@{page.curator.handle}');
   expect(page).toContain('<RelativeTime');
   expect(page).not.toContain('<time {...{ datetime: page.updatedAt }}>{page.updatedAt}</time>');
 });
