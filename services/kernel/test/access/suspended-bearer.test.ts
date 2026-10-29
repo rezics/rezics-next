@@ -26,21 +26,16 @@ beforeAll(async () => {
     ['/account', 'account:manage', 'public'],
     ['/gated', 'account:manage', 'gate:defensive_suspension'],
   ] as const) {
-    app.get(
-      path,
-      {
-        detail: {
-          operationId: `fixture.${path.slice(1)}`,
-          'x-action': action,
-          'x-exposure': exposure,
-          security: [{ bearerAuth: [] }],
-        },
-      },
-      () => {
-        handlerCalls++;
-        return { value: 'unreachable' };
-      },
-    );
+    const detail = {
+      operationId: `fixture.${path.slice(1)}`,
+      'x-action': action,
+      'x-exposure': exposure,
+      security: [{ bearerAuth: [] }],
+    };
+    app.get(path, { detail }, () => {
+      handlerCalls++;
+      return { value: 'unreachable' };
+    });
   }
 }, 120_000);
 

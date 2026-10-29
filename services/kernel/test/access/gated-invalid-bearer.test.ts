@@ -51,24 +51,19 @@ beforeAll(async () => {
     [gatedPath, `gate:${group}`, 'gated_read'],
     [publicPath, 'public', 'public_read'],
   ] as const) {
-    kernel.get(
-      path,
-      {
-        detail: {
-          operationId: `fixture.${operation}`,
-          'x-action': 'fixture:read',
-          'x-exposure': exposure,
-          security: [{ bearerAuth: [] }],
-        },
-      },
-      async ({ actor }) => {
-        if (actor.kind === 'anonymous') throw new AuthenticationError(401, 'Bearer');
-        handlerCalls++;
-        await pool.query('SELECT 1');
-        domainReads++;
-        return { value: 'fixture' };
-      },
-    );
+    const detail = {
+      operationId: `fixture.${operation}`,
+      'x-action': 'fixture:read',
+      'x-exposure': exposure,
+      security: [{ bearerAuth: [] }],
+    };
+    kernel.get(path, { detail }, async ({ actor }) => {
+      if (actor.kind === 'anonymous') throw new AuthenticationError(401, 'Bearer');
+      handlerCalls++;
+      await pool.query('SELECT 1');
+      domainReads++;
+      return { value: 'fixture' };
+    });
   }
   personas = await createPersonas(kernel, { version: 1, pool, auth });
 }, 120_000);
