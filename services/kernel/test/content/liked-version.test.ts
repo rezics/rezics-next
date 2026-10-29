@@ -160,7 +160,7 @@ test('the trigger cutover waits for open reaction writers and fires for statemen
     await writer.query('BEGIN');
     await writer.query(reactionSlot.sql, values(newId(f.targetRoute), 'like'));
     const migration = await Bun.file(new URL(`../../db/content/migrations/${migrationName}`, import.meta.url)).text();
-    const trigger = migration.split('-- migrate:down')[0]!.match(/CREATE TRIGGER[\s\S]*?;/)?.[0];
+    const trigger = migration.split('-- migrate:down')[0]!.match(/^CREATE TRIGGER[\s\S]*?;/m)?.[0];
     if (!trigger) throw new Error('Migration must create the reaction trigger');
     const pid = (await ddl.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
     installing = ddl.query(trigger);
