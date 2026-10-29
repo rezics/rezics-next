@@ -135,5 +135,7 @@ test('checkGrowth keeps Global authorization bounded as unrelated resources, gra
   );
   expect(grantScans.length).toBeGreaterThan(0);
   expect(grantScans.every((node) => node['Node Type'] !== 'Seq Scan')).toBe(true);
-  expect(nodes.some((node) => node['Index Name'] === 'resource_grant_pkey')).toBe(true);
+  const temporalGrantProbes = grantScans.filter((node) => node['Index Name'] === 'resource_grant_pkey');
+  expect(temporalGrantProbes.length).toBeGreaterThan(0);
+  expect(temporalGrantProbes.every((node) => String(node['Index Cond']).includes('valid @>'))).toBe(true);
 }, 90_000);
