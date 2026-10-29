@@ -566,7 +566,9 @@ test('growth profile: a GROWTH_PROFILE outside the worktree is a usage error nam
     const command = localCommand(fixture.localMarker);
     const commandClass = checkClass(command, fixture.root);
     for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
-    await expect(runWorkerCheck(command, fixture.root, false)).rejects.toThrow(`GROWTH_PROFILE must be inside the worktree: ${outside}`);
+    await expect(runWorkerCheck(command, fixture.root, false)).rejects.toThrow(
+      `GROWTH_PROFILE must be inside the worktree: ${outside}`,
+    );
     expect(existsSync(fixture.remoteEvents)).toBe(false);
   } finally {
     for (const key of [

@@ -272,14 +272,7 @@ export async function runWorkerCheck(
     const remoteCommand =
       growthProfileRelative === undefined
         ? [...argv]
-        : [
-            'sh',
-            '-c',
-            'export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"',
-            'sh',
-            growthProfileRelative,
-            ...argv,
-          ];
+        : ['sh', '-c', 'export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"', 'sh', growthProfileRelative, ...argv];
     const remote = spawn(
       resolveRepositoryBun(['bun'], root)[0]!,
       [
