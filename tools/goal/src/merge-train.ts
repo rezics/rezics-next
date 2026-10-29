@@ -1262,6 +1262,7 @@ export class MergeTrain {
                 : await (o.runGate ?? gateRunner())(command, memberTree, member.result.logPath);
               const changed = git(memberTree, 'rev-parse', 'HEAD') !== finalCandidate || changedWorkingFiles(memberTree).length > 0;
               if (changed) accepted = { ...accepted, passed: false, output: accepted.output || 'Acceptance command changed its worktree' };
+              if (accepted.passed && !cached) passedAcceptance.set(key, { output: accepted.output, command });
               for (const entry of pending) o.fence.assertCurrent(entry.request);
               if (target() !== base) {
                 retry = true;
@@ -1274,7 +1275,7 @@ export class MergeTrain {
                   timedOut: accepted.timedOut,
                   failedCommand: command,
                 };
-              } else if (!cached) passedAcceptance.set(key, { output: accepted.output, command });
+              }
             } catch (error) {
               if (error instanceof StaleAttemptError) throw error;
               failedBatch = {

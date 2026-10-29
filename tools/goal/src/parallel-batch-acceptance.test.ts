@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
@@ -116,6 +117,46 @@ test('batch acceptance concurrency respects its configured limit', async () => {
 
     expect(peak).toBe(2);
     expect(h.outcomes.map(({ passed }) => passed)).toEqual([true, true, true, true]);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a dev move that keeps the final candidate tree reuses passing batch acceptance results', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const first = h.dispatch('restart-first.ts', [], ['accept-first']);
+    const second = h.dispatch('restart-second.ts', [], ['accept-second']);
+    await h.start(first);
+    await h.start(second);
+    const commands: string[] = [];
+    let moved = false;
+
+    await h.train(async (command) => {
+      commands.push(command.join(' '));
+      if (!moved) {
+        moved = true;
+        const oldHead = git(h.root, 'rev-parse', 'dev');
+        const mover = join(h.settings.worktreeRoot, `dev-empty-move-${randomUUID()}`);
+        git(h.root, 'worktree', 'add', '--detach', mover, oldHead);
+        try {
+          git(mover, 'commit', '--allow-empty', '-m', 'Advance dev without changing its tree');
+          git(h.root, 'update-ref', 'refs/heads/dev', git(mover, 'rev-parse', 'HEAD'), oldHead);
+        } finally {
+          git(h.root, 'worktree', 'remove', '--force', mover);
+        }
+      }
+      return { passed: true, output: '', timedOut: false };
+    });
+
+    expect(commands.sort()).toEqual(['accept-first', 'accept-second']);
+    expect(h.outcomes.map(({ passed }) => passed)).toEqual([true, true]);
+    expect(
+      [first, second].every(({ id }) =>
+        readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8').includes('Acceptance reused'),
+      ),
+    ).toBe(true);
   } finally {
     h.dispose();
   }
