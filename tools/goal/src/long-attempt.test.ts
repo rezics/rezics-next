@@ -152,7 +152,7 @@ test('command lifecycle entries count once and polling stays reported after a ch
     for (let index = 0; index < 10; index++) record(`poll-${index}`, 'ps -ef');
     expect(runWatch(store, state, delivered)).toBe(0);
     expect(delivered).toHaveLength(1);
-    expect(delivered[0]).toStartWith('Polling:');
+    expect(delivered[0]).toMatchObject({ summary: expect.stringContaining('Polling:') });
   } finally {
     repo.close();
   }
