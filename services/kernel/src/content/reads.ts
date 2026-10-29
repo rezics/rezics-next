@@ -20,6 +20,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { isErasedPlaceholder } from './model.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import readThreadPlace from './read-thread-place.sql';
+import currentBan from '../community/ban-current.sql';
 import type {
   Anchored,
   BoardId,
@@ -249,10 +250,29 @@ async function prepare(
       async prepare() {
         return evidence;
       },
-      async verify({ client }) {
+      async verify({ client, actor, at }) {
         const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
         if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
           throw new ContentNotFoundError();
+        if (
+          current.kind === 'board' &&
+          current.realm_id &&
+          current.visibility !== 'published' &&
+          actor.kind === 'account'
+        ) {
+          // Assignment references are authenticated before disclosure. Check both
+          // fixed identities, independently of the grant's subject or membership.
+          const principal = actor.requestedBy?.split(':')[3];
+          const accounts = new Set([actor.accountId, ...(principal ? [principal] : [])]);
+          for (const accountId of accounts) {
+            const parameters = { route: route(current.id), realm_id: current.realm_id, account_id: accountId, at };
+            const bans = await client.query(
+              currentBan.sql,
+              currentBan.params.map((name) => parameters[name as keyof typeof parameters]),
+            );
+            if (bans.rows.length !== 0) throw new ContentNotFoundError();
+          }
+        }
         // Erased public slots still require the requested scope from account tokens.
         if (placeholder && context.actor.kind === 'account' && !context.actor.scopes.includes(action)) return false;
         return (
@@ -279,25 +299,29 @@ async function prepare(
   return accessCheck(dependencies.access, context.actor, action, resourceWithEligibility, accessContext);
 }
 
-export async function readBoard(
+async function observeBoard(
   dependencies: ContentReadDependencies,
   boardId: BoardId,
   context: ReadContext,
-): Promise<Anchored<BoardView | null>> {
+): Promise<{ result: Anchored<BoardView | null>; recheck: () => Promise<boolean> }> {
   const observed = await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId));
   const row = observed.value;
   const check = row ? await prepare(dependencies, row, context, observed) : null;
-  return snapshot(dependencies, boardId, context, async (client) => {
+  const checked = async (client: AccessClient): Promise<Row | null> => {
     const current = await point(client, 'board', boardId);
-    if (
-      !row ||
-      !current ||
-      signature(row) !== signature(current) ||
-      !admissible(current, context, false) ||
-      !check ||
-      !(await check(client))
-    )
+    if (!row || !current || signature(row) !== signature(current) || !admissible(current, context, false) || !check)
       return null;
+    try {
+      return (await check(client)) ? current : null;
+    } catch (error) {
+      // A hard board denial conceals this candidate, including in filtered lists.
+      if (error instanceof ContentNotFoundError) return null;
+      throw error;
+    }
+  };
+  const result = await snapshot(dependencies, boardId, context, async (client): Promise<BoardView | null> => {
+    const current = await checked(client);
+    if (!current) return null;
     return {
       id: current.id,
       realmId: current.realm_id ?? null,
@@ -310,6 +334,21 @@ export async function readBoard(
       createdAt: current.created_at.toISOString(),
     };
   });
+  return {
+    result,
+    // Preserve the first row and its prepared Access check; never refresh the
+    // baseline after a privacy reduction or share a proof across items.
+    recheck: async () =>
+      (await snapshot(dependencies, boardId, context, async (client) => !!(await checked(client)))).value,
+  };
+}
+
+export async function readBoard(
+  dependencies: ContentReadDependencies,
+  boardId: BoardId,
+  context: ReadContext,
+): Promise<Anchored<BoardView | null>> {
+  return (await observeBoard(dependencies, boardId, context)).result;
 }
 
 async function disclose(
@@ -330,7 +369,10 @@ async function disclose(
     return chain(client, threadId, postId, revisionId);
   });
   const initial = observed.value;
-  const board = initial?.thread.board_id ? await readBoard(dependencies, initial.thread.board_id, context) : null;
+  const boardObservation = initial?.thread.board_id
+    ? await observeBoard(dependencies, initial.thread.board_id, context)
+    : null;
+  const board = boardObservation?.result;
   const erased =
     !!initial && (initial.posts[0]?.availability === 'erased' || initial.revision?.availability === 'erased');
   const rows = initial ? [initial.thread, ...initial.posts] : [];
@@ -355,7 +397,7 @@ async function disclose(
       );
     }
   }
-  return snapshot(dependencies, threadId, context, async (client) => {
+  const disclosed = await snapshot<PostEntry | ThreadView | null>(dependencies, threadId, context, async (client) => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
@@ -418,6 +460,11 @@ async function disclose(
       firstPost: item,
     };
   });
+  // Release the thread connection before the independently anchored board
+  // snapshot, including when the pool has only one connection. Bytes and keys
+  // leave this function only after both authorities have passed their final check.
+  if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
+  return disclosed;
 }
 
 function erasedPlaceholder(post: Row): ErasedPlaceholder {
