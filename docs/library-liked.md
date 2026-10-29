@@ -149,21 +149,26 @@ real revoked suspended bearer. No driver injection, model, permission map, fake 
 skip or caught-as-pass path supplies acceptance.
 
 The committed shared fixture opens Collections through its actual internal governor. It also exports
-`setup.openFeatures(['personal_library','reading_progress'])`, `setup.spaceCreation('alice')` and
-`inspect(sql, values?)`. The cases consume these actual exports on the same fixture: open the two required
-personal families for entry/session/copy controls, give the named Alice account the separate Global
-`space:create` setup capability for the real thread/post control, and inspect the owned kernel database
-through its native repeatable-read, read-only transaction. Space creation is separately privileged, not an
-exposure gate. No consumer grant loop, duplicate community bootstrap or second fixture supplies authority.
+`setup.openFeatures(['personal_library','reading_progress'])`, `setup.spaceCreation('alice')`,
+`setup.realmCreation('alice')` and `inspect(sql, values?)`. The cases consume these actual exports on the same
+fixture: open the two required personal families for entry/session/copy controls; use the named Alice account's
+separate Global `space:create` and `realm:create` setup capabilities; and inspect the owned kernel database
+through its native repeatable-read, read-only transaction. For the thread/post control, create its community
+Context through the actual editor HTTP route, then create a Space and Realm through their actual HTTP routes.
+Space creation is separately privileged, not an exposure gate. Realm creation setup supplies only Global
+`realm:create`; Space management and Context readability remain independently enforced by native Access.
+No consumer grant loop, duplicate community bootstrap or second fixture supplies authority.
 
 Exact setup prerequisites are working native Auth/Access/default kernel, the bundled active definitions
 release, Collections opening and the two requested personal-family openings returning 200 through the actual
-governor, Content's installed Global active-account reaction standing, and the shared named-persona Space
-setup admitting Alice's ordinary Space creation. Actual Realm, board-scheme selection, board, thread and
-first-post commands must succeed for the discussion control. SQL inspection must operate read-only on that
-fixture's owned database. A setup 403, `platform_closed` or unavailable setup capability is a shared prerequisite
-failure, not a reached missing-Liked assertion or evidence that an owner should be denied. Preserve its actual
-status/problem and report the missing input distinctly; never compensate with injected policy or SQL writes.
+governor, Content's installed Global active-account reaction standing, and the shared named-persona Space and
+Realm setup admitting Alice's ordinary creation requests. The thread/post case creates a real community
+Context as editor and uses that Context ID in the Realm request; it does not substitute Global Context or widen
+the setup grant. Actual Realm, board-scheme selection, board, thread and first-post commands must succeed for
+the discussion control. SQL inspection must operate read-only on that fixture's owned database. A setup 403,
+`platform_closed` or unavailable setup capability is a shared prerequisite failure, not a reached missing-Liked
+assertion or evidence that an owner should be denied. Preserve its actual status/problem and report the missing
+input distinctly; never compensate with injected policy or SQL writes.
 
 The native cases compare full header/grant/resource-initialization/receipt/outbox rows around repeated GETs,
 allowing only the common derived-cache exception. They also compare actual entry/session/holding/label,
