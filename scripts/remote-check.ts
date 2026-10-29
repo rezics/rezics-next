@@ -73,6 +73,9 @@ const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../pack
 const PINNED_BUN_VERSION = repositoryPackage.packageManager?.startsWith('bun@')
   ? repositoryPackage.packageManager.slice(4)
   : '';
+const pinnedBun = Bun.spawnSync([join(import.meta.dir, '../node_modules/.bin/bun'), '--revision']);
+if (pinnedBun.exitCode !== 0) throw new Error('Could not read pinned Bun revision');
+const PINNED_BUN_REVISION = pinnedBun.stdout.toString().trim();
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
@@ -592,7 +595,8 @@ export function runScript(id: string, directory: string, cwd: string, command: s
   const systemdScript = `host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
     expected_bun=${quote(PINNED_BUN_VERSION)}
-    if ! /usr/local/bin/bun --eval 'process.exit(Bun.version === process.argv[1] ? 0 : 1)' "$expected_bun"; then
+    expected_revision=${quote(PINNED_BUN_REVISION)}
+    if ! /usr/local/bin/bun --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
       echo "remote-check: check-host Bun does not match packageManager $expected_bun" >&2
       exit 1
     fi
@@ -602,7 +606,7 @@ export function runScript(id: string, directory: string, cwd: string, command: s
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
-      if ! "$PWD/node_modules/.bin/bun" --eval 'process.exit(Bun.version === process.argv[1] ? 0 : 1)' "$expected_bun"; then
+      if ! "$PWD/node_modules/.bin/bun" --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$expected_revision"; then
         echo "remote-check: installed Bun does not match packageManager $expected_bun" >&2
         exit 1
       fi

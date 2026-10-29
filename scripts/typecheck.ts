@@ -3,6 +3,7 @@
 // schemas, is shared, then removed.
 import { dirname, join, relative, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { resolveBunCommand } from './gate.ts';
 
 export type StartedDatabase = {
@@ -43,7 +44,10 @@ export function resolveTypecheckCommand(command: string[], root: string, executa
     packageManager?: string;
   };
   const expected = manifest.packageManager?.startsWith('bun@') ? manifest.packageManager.slice(4) : '';
-  const pinned = Bun.version === expected ? executable : join(root, 'node_modules/.bin/bun');
+  const revision = spawnSync(join(root, 'node_modules/.bin/bun'), ['--revision'], { encoding: 'utf8' });
+  if (revision.error || revision.status !== 0) throw revision.error ?? new Error('Could not read pinned Bun revision');
+  const pinned = Bun.revision === revision.stdout.trim() ? executable : join(root, 'node_modules/.bin/bun');
+  if (!expected) throw new Error('package.json packageManager must pin Bun');
   return [pinned, ...command.slice(1)];
 }
 

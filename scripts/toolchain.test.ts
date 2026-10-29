@@ -60,19 +60,20 @@ test('the gate invokes the installed Bun explicitly instead of Bun.spawn selecti
 
 test('worker checks select the pinned repository Bun and remote checks verify both Bun executables', async () => {
   const manifest = await Bun.file(join(root, 'package.json')).json();
-  const workerCommand = resolveRepositoryBun(['bun', '--version'], root);
+  const workerCommand = resolveRepositoryBun(['bun', '--revision'], root);
   const worker = run(workerCommand);
   expect(worker.code, worker.error).toBe(0);
-  expect(worker.output.trim()).toBe(manifest.devDependencies.bun);
+  expect(worker.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
 
-  const typecheckCommand = resolveTypecheckCommand(['bun', '--version'], root);
+  const typecheckCommand = resolveTypecheckCommand(['bun', '--revision'], root);
   const typecheckBun = run(typecheckCommand);
   expect(typecheckBun.code, typecheckBun.error).toBe(0);
-  expect(typecheckBun.output.trim()).toBe(manifest.devDependencies.bun);
+  expect(typecheckBun.output.trim()).toBe('a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b');
 
   const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
   expect(remote).toContain(`/usr/local/bin/bun --eval`);
   expect(remote).toContain(`expected_bun='${manifest.packageManager.slice(4)}'`);
+  expect(remote).toContain('Bun.revision === process.argv[1]');
   expect(remote).toContain('"$PWD/node_modules/.bin/bun" --eval');
   expect(remote).toContain('/usr/local/bin/bun install --frozen-lockfile');
 });

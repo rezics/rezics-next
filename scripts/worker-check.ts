@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   accessSync,
   closeSync,
@@ -342,8 +342,10 @@ export function resolveRepositoryBun(command: readonly string[], root: string, e
     packageManager?: string;
   };
   const expected = manifest.packageManager?.startsWith('bun@') ? manifest.packageManager.slice(4) : '';
-  const actual = typeof Bun === 'undefined' ? '' : Bun.version;
-  const pinned = actual === expected ? executable : join(root, 'node_modules/.bin/bun');
+  if (!expected) throw new Error('package.json packageManager must pin Bun');
+  const revision = spawnSync(join(root, 'node_modules/.bin/bun'), ['--revision'], { encoding: 'utf8' });
+  if (revision.error || revision.status !== 0) throw revision.error ?? new Error('Could not read pinned Bun revision');
+  const pinned = Bun.revision === revision.stdout.trim() ? executable : join(root, 'node_modules/.bin/bun');
   return [pinned, ...command.slice(1)];
 }
 
