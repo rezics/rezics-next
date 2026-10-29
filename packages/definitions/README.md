@@ -12,13 +12,16 @@ facets, datatype-specific members, fixed value schemas, context defaults, saved
 filters, and regular-expression safety. A facet is an item, a time, a quantity, or
 a code: a `string` whose release definition has a `pattern`. Pattern checks use
 one shared structural admission policy and recheck 4.5.0's in-process synchronous
-entry point. Safety verdicts have no wall-clock deadline. Admission permits at most
+entry point in an isolated VM context. The pinned browser checker's `performance.now`
+is a private counter, with a budget of 100,000 native cancellation checkpoints
+per expression; it never reads or patches the host clock. This also bounds DFA
+construction, which has no native size cap. Safety verdicts have no wall-clock deadline. Admission permits at most
 256 source characters, 16 nested groups, repetition endpoints of 64, a sum of 128
 repetition endpoints, and 128 expanded structural units (including group and
 quantifier overhead). Nested repetitions multiply their costs before analysis.
 Backreferences, named groups, Unicode properties, lookbehind, and lookahead of
 more than one character atom are refused. All shipped value schemas fit this profile.
-The checker caps graph construction at 256 transitions and accepts only an
+The checker caps graph construction at 1,024 transitions and accepts only an
 `automaton` safe verdict. Its `auto` selection is used because the pinned version
 bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
 refuses limit failures and fuzz fallback before seeding or matching. Recall attack

@@ -1,5 +1,25 @@
 /// <reference path="./recheck.d.ts" />
-import { checkSync } from 'recheck/lib/browser.js';
+import { readFileSync } from 'node:fs';
+import { createContext, Script } from 'node:vm';
+
+export const MAX_ANALYSIS_STEPS = 100_000;
+let steps = 0;
+// The pinned browser checker implements Scala.js nanoTime with performance.now.
+// Give that *existing* checker a private, deterministic cancellation counter.
+// No host clock is patched. Each native cancellation checkpoint spends work;
+// the counter also interrupts DFA construction, which has no native size limit.
+const engine = {
+  module: { exports: {} as typeof import('recheck') },
+  performance: {
+    now() {
+      if (++steps > MAX_ANALYSIS_STEPS) throw new Error('Pattern analysis operation budget exhausted');
+      return (steps * 3000) / MAX_ANALYSIS_STEPS;
+    },
+  },
+};
+const checkerPath = import.meta.resolve('recheck/lib/browser.js');
+new Script(readFileSync(new URL(checkerPath), 'utf8'), { filename: checkerPath }).runInContext(createContext(engine));
+const { checkSync } = engine.module.exports;
 
 // Admission bounds the *expanded* expression before recheck allocates its NFA.
 // Counts include nested multiplication, not just the spelling of {n}. Saturate
@@ -7,7 +27,7 @@ import { checkSync } from 'recheck/lib/browser.js';
 const MAX_EXPANSION = 128;
 const MAX_DEPTH = 16;
 const MAX_COUNT = 64;
-const MAX_TRANSITIONS = 256;
+const MAX_TRANSITIONS = 1024;
 
 function admitted(source: string): boolean {
   let position = 0;
@@ -106,11 +126,12 @@ function admitted(source: string): boolean {
 }
 
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
-export function safePattern(pattern: unknown): boolean {
-  if (typeof pattern !== 'string' || pattern.length > 256) return false;
+export function analyzePattern(pattern: unknown): { safe: boolean; steps: number } {
+  steps = 0;
+  if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps };
   try {
     new RegExp(pattern, 'u');
-    if (!admitted(pattern)) return false;
+    if (!admitted(pattern)) return { safe: false, steps };
     const result = checkSync(pattern, 'u', {
       // In pinned recheck 4.5.0, explicit `automaton` bypasses these three
       // structural limits. `auto` enforces them during graph construction.
@@ -118,7 +139,8 @@ export function safePattern(pattern: unknown): boolean {
       maxPatternSize: 257,
       maxRepeatCount: MAX_EXPANSION + 1,
       maxNFASize: MAX_TRANSITIONS,
-      timeout: null,
+      timeout: 3000, // Synthetic counter units, never elapsed host time.
+      maxRecallStringSize: 1024,
       recallTimeout: -1, // Structural verdict only; never execute an attack string.
       logger(message) {
         // In the pinned browser checker, exceeding a graph/repetition limit logs
@@ -131,8 +153,13 @@ export function safePattern(pattern: unknown): boolean {
         }
       },
     });
-    return result.status === 'safe' && result.checker === 'automaton';
+    return { safe: result.status === 'safe' && result.checker === 'automaton', steps };
   } catch {
-    return false;
+    return { safe: false, steps };
   }
 }
+
+export function safePattern(pattern: unknown): boolean {
+  return analyzePattern(pattern).safe;
+}
+

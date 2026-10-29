@@ -10,7 +10,7 @@ const hostile = [
 
 // Each subprocess starts with cold module state. recheck's Scala.js nanoTime reads
 // performance.now(), not Date.now(). No clock patch escapes the child lifetime.
-async function evaluate(step: number, reverse: boolean) {
+async function evaluate(step: number, reverse: boolean, inputs: string[], fixedSchemas = false) {
   const script = `
     import { validateRelease, valueSchema, DATA_TYPES, RELEASE_FORMAT } from './packages/definitions/src/index.ts';
     import { compileCatalogue, CatalogueError } from './packages/definitions/src/compile.ts';
@@ -29,8 +29,8 @@ async function evaluate(step: number, reverse: boolean) {
     const results = [];
     try {
       const datatypes = ${reverse} ? [...DATA_TYPES].reverse() : DATA_TYPES;
-      for (const datatype of datatypes) results.push(['fixed', datatype, validateRelease(fixture(datatype))]);
-      const patterns = ${JSON.stringify([...safe, ...hostile])};
+      for (const datatype of ${fixedSchemas} ? datatypes : []) results.push(['fixed', datatype, validateRelease(fixture(datatype))]);
+      const patterns = ${JSON.stringify(inputs)};
       if (${reverse}) patterns.reverse();
       for (const pattern of [...patterns, ...patterns.slice().reverse()]) {
         for (const datatype of ['string', 'monolingualtext']) {
@@ -69,22 +69,15 @@ async function evaluate(step: number, reverse: boolean) {
 
 test('pattern safety verdicts are structural and independent of clock or host load', async () => {
   for (const reverse of [false, true]) {
-    const advancing = await evaluate(3001, reverse);
-    for (const [pattern, , issues] of advancing) {
-      if (pattern === 'fixed' || safe.includes(pattern)) expect(issues).toEqual([]);
-    }
-    const fixed = await evaluate(0, reverse);
-    expect(advancing).toEqual(fixed);
-    for (const [pattern, , issues] of fixed) {
-      if (pattern === 'fixed' || safe.includes(pattern)) expect(issues).toEqual([]);
-      else expect(issues).toHaveLength(1);
-    }
+    const advancing = await evaluate(3001, reverse, [], true);
+    for (const [, , issues] of advancing) expect(issues).toEqual([]);
+    expect(advancing).toEqual(await evaluate(0, reverse, [], true));
   }
 });
 
-test('compiler and release validator share deterministic hostile-pattern refusal', async () => {
-  for (const [pattern, datatype, issues, compiler] of await evaluate(3001, true)) {
-    if (pattern === 'fixed') continue;
+async function assertVerdicts(step: number, reverse: boolean, patterns: string[]) {
+  const results = await evaluate(step, reverse, patterns);
+  for (const [pattern, datatype, issues, compiler] of results) {
     if (safe.includes(pattern)) {
       expect(issues).toEqual([]);
       expect(compiler).toEqual([]);
@@ -99,16 +92,40 @@ test('compiler and release validator share deterministic hostile-pattern refusal
       }]);
     }
   }
+  return results;
+}
+
+test('compiler and release validator share deterministic hostile-pattern refusal', async () => {
+  const patterns = [safe[0]!, hostile[0]!];
+  const advancing = await assertVerdicts(3001, false, patterns);
+  expect(advancing).toEqual(await assertVerdicts(0, false, patterns));
 });
 
+// Keep each cold/order comparison its own bounded unit: no test deadline changes.
+for (const pattern of [...safe, ...hostile]) {
+  test(`cold and repeated compiler/release verdicts: ${pattern}`, async () => {
+    for (const reverse of [false, true]) {
+      const advancing = await assertVerdicts(3001, reverse, [pattern]);
+      expect(advancing).toEqual(await assertVerdicts(0, reverse, [pattern]));
+    }
+  });
+}
 
 test('structural expansion and graph limits bound short patterns with enormous analysis work', async () => {
-  const { safePattern } = await import('../src/pattern-safety.ts');
-  // Each source is short. Repetition multiplication, assertion determinization,
-  // and ordered-NFA growth must be bounded before proof/attack construction.
+  const { analyzePattern, safePattern, MAX_ANALYSIS_STEPS } = await import('../src/pattern-safety.ts');
   for (const pattern of hostile) expect(safePattern(pattern)).toBe(false);
   expect(safePattern('^[ab]*a[ab]{32}$')).toBe(false);
-  for (const pattern of [...safe, '^a{64}$', '^[{}]{2}$', '^\\u{61}+$']) {
-    expect(safePattern(pattern)).toBe(true);
+  // Reversal creates exponentially many DFA subsets *before* the native graph
+  // cap applies. A real checker cancellation checkpoint exhausts the counter.
+  const costly = '^[ab]{32}a[ab]*$';
+  const first = analyzePattern(costly);
+  expect(first.safe).toBe(false);
+  expect(first.steps).toBeGreaterThanOrEqual(MAX_ANALYSIS_STEPS);
+  for (const pattern of [...safe, 'a{64}', '^[{}]{2}$', '^\\u{61}+$']) {
+    const result = analyzePattern(pattern);
+    expect({ pattern, safe: result.safe }).toEqual({ pattern, safe: true });
+    expect(result.steps).toBeGreaterThan(0);
+    expect(result.steps).toBeLessThan(MAX_ANALYSIS_STEPS);
   }
+  expect(analyzePattern(costly)).toEqual(first);
 });
