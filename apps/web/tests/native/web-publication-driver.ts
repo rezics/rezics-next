@@ -431,8 +431,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       await stack.restartWeb({ publicOrigin: origin });
       publicOrigin = origin;
     },
-    async interrupt(kind) {
-      throw new Error(`interrupt is delivered by a later task: ${kind}`);
+    async interrupt() {
+      throw new Error('interrupt is delivered by a later task');
     },
     async nativeSearch() {
       throw new Error('nativeSearch is delivered by a later task');
