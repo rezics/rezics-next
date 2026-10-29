@@ -244,6 +244,15 @@ function inspectsProcesses(command: string): boolean {
   return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);
 }
 
+function commitCount(task: Task): number {
+  const result = spawnSync('git', ['-C', task.worktree, 'rev-list', '--count', `${task.base}..HEAD`], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  const count = Number(result.stdout?.trim());
+  return result.status === 0 && Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
 function longAttemptIncidents(
   store: Pick<WorkerStore, 'attempt'>,
   tasks: Task[],
@@ -264,22 +273,26 @@ function longAttemptIncidents(
     if (!Number.isFinite(elapsed)) continue;
     const commands = recentCommands(attempt);
     const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
-    const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
-    if (elapsed >= Math.max(1, limitFor(task)))
+    const longRunning = elapsed >= Math.max(1, limitFor(task));
+    const processCommands = commands.filter(inspectsProcesses);
+    const polling = !waitsForCheck && processCommands.length >= 2;
+    if (longRunning || polling) {
+      const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commitCount(task)} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
+      if (longRunning)
       found.push({
         key: `long-attempt:${task.id}:${attempt.attempt}`,
         managerId: task.brief.manager,
         kind: 'stalled',
         summary: `Long attempt: ${common}; last ${commands.length} commands: ${commands.length ? commands.join(' | ') : '(none recorded)'}`,
       });
-    const processCommands = commands.filter(inspectsProcesses);
-    if (!waitsForCheck && processCommands.length >= 2)
-      found.push({
+      if (polling)
+        found.push({
         key: `attempt-polling:${task.id}:${attempt.attempt}`,
         managerId: task.brief.manager,
         kind: 'stalled',
         summary: `Polling: ${common}; recent commands repeatedly inspect processes (${processCommands.join(' | ')}) instead of waiting through scripts/worker-check.ts`,
-      });
+        });
+    }
   }
   return found;
 }
