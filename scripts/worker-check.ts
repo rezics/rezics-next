@@ -8,6 +8,7 @@ import {
   fstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
   statSync,
@@ -52,6 +53,7 @@ type CheckRecord = {
 };
 
 const LOG_STALL_MS = 10 * 60 * 1000;
+const CPU_PROGRESS_INTERVAL_MS = 60_000;
 const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const WAIT_POLL_MS = 25;
 
@@ -61,6 +63,46 @@ type CheckMonitor = {
   rerunStallMs?: number;
   write?: (text: string) => void;
 };
+
+/** Sum Linux process CPU ticks for a command and all descendants, or return undefined when procfs is unavailable. */
+export function processTreeCpuTicks(rootPid: number, procRoot = '/proc'): number | undefined {
+  try {
+    const children = new Map<number, number[]>();
+    const ticks = new Map<number, number>();
+    for (const entry of readdirSync(procRoot)) {
+      if (!/^\d+$/.test(entry)) continue;
+      const pid = Number(entry);
+      try {
+        const stat = readFileSync(join(procRoot, entry, 'stat'), 'utf8');
+        const close = stat.lastIndexOf(')');
+        if (close < 0) continue;
+        const fields = stat.slice(close + 2).trim().split(/\s+/);
+        const parent = Number(fields[1]);
+        const cpuTicks = Number(fields[11]) + Number(fields[12]);
+        if (!Number.isInteger(parent) || !Number.isFinite(cpuTicks)) continue;
+        ticks.set(pid, cpuTicks);
+        const siblings = children.get(parent) ?? [];
+        siblings.push(pid);
+        children.set(parent, siblings);
+      } catch {
+        // Processes can disappear between listing procfs and reading their stat file.
+      }
+    }
+    const pending = [rootPid];
+    const seen = new Set<number>();
+    let total = 0;
+    while (pending.length) {
+      const pid = pending.pop()!;
+      if (seen.has(pid)) continue;
+      seen.add(pid);
+      total += ticks.get(pid) ?? 0;
+      pending.push(...(children.get(pid) ?? []));
+    }
+    return ticks.has(rootPid) ? total : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function recordPath(cwd: string, id: string): string {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error(`Invalid check id: ${id}`);
@@ -309,6 +351,19 @@ export async function runWorkerCheck(
   child.stderr?.on('data', save);
   wait.begin();
 
+  let reportedCpuTicks = 0;
+  const progressIntervalMs = Number(process.env.REZICS_CHECK_PROGRESS_INTERVAL_MS) || CPU_PROGRESS_INTERVAL_MS;
+  const procRoot = process.env.REZICS_CHECK_PROC_ROOT || '/proc';
+  if (process.env.REZICS_CHECK_PROGRESS_PID_FILE) {
+    writeFileSync(process.env.REZICS_CHECK_PROGRESS_PID_FILE, String(child.pid));
+  }
+  const progressTimer = setInterval(() => {
+    const cpuTicks = processTreeCpuTicks(child.pid!, procRoot);
+    if (cpuTicks === undefined || cpuTicks - reportedCpuTicks < 100) return;
+    reportedCpuTicks = cpuTicks;
+    writeSync(descriptor, `worker-check: running, ${Math.floor(cpuTicks / 100)} CPU seconds\n`);
+  }, progressIntervalMs);
+
   let signalNumber: number | undefined;
   const forwarders = Object.entries(SIGNALS).map(([signal, number]) => {
     const name = signal as keyof typeof SIGNALS;
@@ -330,6 +385,7 @@ export async function runWorkerCheck(
       });
     });
   } finally {
+    clearInterval(progressTimer);
     for (const [name, forward] of forwarders) process.off(name, forward);
     wait.stop();
     closeSync(descriptor);

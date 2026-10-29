@@ -43,6 +43,7 @@ Memory admission and remote slot waits write their current capacity state to std
 and at least every 60 seconds. Silence is measured from the log's modification time across successive waits.
 A recorded local runner whose pid no longer exists is detected immediately; a record from another host, an unrelated pid or a record
 without a runner pid is judged only by log growth. A silent verified local runner's process group is stopped first.
+Quiet commands stay alive through CPU progress lines. A command that is idle (no output and no CPU) for 10 minutes is stopped.
 The rerun gets a fresh log and records its reason, host and old log; its own exit status follows the infrastructure
 line. Treat that infrastructure line as a `tool` blocker, even if the rerun passed. A completed command that exits
 75 prints `check: exit status 75`, while a wait that yields prints `check: still running`.

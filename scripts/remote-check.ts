@@ -51,6 +51,8 @@ export type RemoteCheck = {
   maxMs?: number;
   /** Test seam for the client heartbeat cadence. */
   livenessIntervalMs?: number;
+  /** Test seam for CPU progress reporting while the remote command is quiet. */
+  progressIntervalMs?: number;
   /** Allows the promotion gate to use all but one slot of its host. */
   gate?: boolean;
   pollMs?: number;
@@ -684,7 +686,14 @@ ${removeDirectory ? 'rm -rf -- "$run_directory"' : ''}`;
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
  * starts is the one that adds the slice, whatever the workspace is.
  */
-export function runScript(id: string, directory: string, cwd: string, command: string[], hostName: string): string {
+export function runScript(
+  id: string,
+  directory: string,
+  cwd: string,
+  command: string[],
+  hostName: string,
+  progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
+): string {
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
@@ -749,8 +758,54 @@ export function runScript(id: string, directory: string, cwd: string, command: s
       if [ "$code" -eq 0 ]; then
         command_started=$(date +%s%N)
         touch ${quote(`${directory}/command-started`)}
-        "$@"
+        slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+        progress_pid=
+        command_pid=
+        stop_progress() {
+          [ -z "$progress_pid" ] || kill "$progress_pid" 2>/dev/null || true
+          [ -z "$progress_pid" ] || wait "$progress_pid" 2>/dev/null || true
+          progress_pid=
+        }
+        trap 'stop_progress' EXIT
+        trap 'stop_progress; if [ -n "$command_pid" ]; then kill "$command_pid" 2>/dev/null || true; wait "$command_pid" 2>/dev/null || true; fi' HUP INT TERM
+        case "$slice_cgroup" in
+          /*)
+            cpu_stat="/sys/fs/cgroup$slice_cgroup/cpu.stat"
+            progress_interval=${progressIntervalMs}
+            progress_seconds=$(awk -v ms="$progress_interval" 'BEGIN { printf "%.3f", ms / 1000 }')
+            (
+              sleep_pid=
+              stop_sleep() {
+                [ -z "$sleep_pid" ] || kill "$sleep_pid" 2>/dev/null || true
+                [ -z "$sleep_pid" ] || wait "$sleep_pid" 2>/dev/null || true
+              }
+              trap 'stop_sleep; exit 0' HUP INT TERM
+              usage=$(awk '$1 == "usage_usec" { print $2 }' "$cpu_stat" 2>/dev/null)
+              last_usage=\${usage:-0}
+              while :; do
+                sleep "$progress_seconds" &
+                sleep_pid=$!
+                wait "$sleep_pid" || break
+                sleep_pid=
+                usage=$(awk '$1 == "usage_usec" { print $2 }' "$cpu_stat" 2>/dev/null)
+                case "$usage" in ''|*[!0-9]*) continue ;; esac
+                if [ "$((usage - last_usage))" -ge 1000000 ]; then
+                  cpu_seconds=$((usage / 1000000))
+                  printf 'remote-check: running on %s, %s CPU seconds\\n' "$host" "$cpu_seconds" >&2
+                  last_usage=$usage
+                fi
+              done
+            ) &
+            progress_pid=$!
+            ;;
+        esac
+        "$@" &
+        command_pid=$!
+        wait "$command_pid"
         code=$?
+        command_pid=
+        stop_progress
+        trap - EXIT HUP INT TERM
         command_finished=$(date +%s%N)
         awk -v elapsed="$((command_finished - command_started))" -v host="$host" 'BEGIN { printf "remote-check: command %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
         ${installedPackageCacheCheck(directory, hostName)}
@@ -1822,7 +1877,7 @@ async function runLeased(
         'ssh',
         ...sshOptions(host),
         host.address,
-        runScript(id, directory, options.cwd ?? '.', options.command, host.name),
+        runScript(id, directory, options.cwd ?? '.', options.command, host.name, options.progressIntervalMs),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );

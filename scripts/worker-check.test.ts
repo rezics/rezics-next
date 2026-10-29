@@ -13,7 +13,7 @@ import {
 import { join } from 'node:path';
 import { hostname } from 'node:os';
 import { acquireStackSlot } from './stack-lease.ts';
-import { runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
+import { processTreeCpuTicks, runWorkerCheck, startWorkerCheck, waitWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
@@ -627,6 +627,98 @@ test('a silent verified runner and its command are stopped before the detached r
         return true;
       }
     });
+  });
+});
+
+test('CPU sampling follows parent links, includes descendants and excludes unrelated processes', () => {
+  const root = recoveryFixture();
+  const stat = (pid: number, parent: number, user: number, system: number) => {
+    mkdirSync(join(root, String(pid)));
+    writeFileSync(
+      join(root, String(pid), 'stat'),
+      `${pid} (command with ) parentheses) S ${parent} 0 0 0 0 0 0 0 0 0 ${user} ${system}\n`,
+    );
+  };
+  stat(10, 1, 0, 0);
+  stat(11, 10, 110, 20);
+  stat(12, 11, 30, 40);
+  stat(13, 1, 500, 600);
+  mkdirSync(join(root, '14')); // A process that exited before its stat could be read.
+  expect(processTreeCpuTicks(10, root)).toBe(200);
+  expect(processTreeCpuTicks(11, root)).toBe(200);
+  expect(processTreeCpuTicks(99, root)).toBeUndefined();
+  expect(processTreeCpuTicks(10, join(root, 'unavailable'))).toBeUndefined();
+});
+
+test('a quiet local command with CPU progress is not stopped as stalled and its runner ends cleanly', async () => {
+  const root = recoveryFixture();
+  const marker = join(root, 'progress-pid');
+  const procRoot = join(root, 'fake-proc');
+  mkdirSync(procRoot);
+  const oldInterval = process.env.REZICS_CHECK_PROGRESS_INTERVAL_MS;
+  const oldProcRoot = process.env.REZICS_CHECK_PROC_ROOT;
+  const oldPidFile = process.env.REZICS_CHECK_PROGRESS_PID_FILE;
+  process.env.REZICS_CHECK_PROGRESS_INTERVAL_MS = '5';
+  process.env.REZICS_CHECK_PROC_ROOT = procRoot;
+  process.env.REZICS_CHECK_PROGRESS_PID_FILE = marker;
+  try {
+    await withQuietAdmission(async () => {
+      const id = startWorkerCheck(
+        ['bun', '-e', 'const end = Date.now() + 700; while (Date.now() < end) {}'],
+        root,
+      );
+      const resultPath = join(root, '.temp/goal/checks/results', `${id}.json`);
+      const originalLog = JSON.parse(readFileSync(resultPath, 'utf8')).log as string;
+      await untilRecorded(() => existsSync(marker));
+      const commandPid = Number(readFileSync(marker, 'utf8'));
+      mkdirSync(join(procRoot, String(commandPid)));
+      const stat = ['S', '1', '0', '0', '0', '0', '0', '0', '0', '0', '0', '160', '0'].join(' ');
+      const statFile = join(procRoot, String(commandPid), 'stat');
+      writeFileSync(statFile, `${commandPid} (quiet-command) ${stat}\n`);
+      expect(processTreeCpuTicks(commandPid, procRoot)).toBe(160);
+      let fakeTicks = 160;
+      const cpuProgress = setInterval(() => {
+        fakeTicks += 100;
+        const advancingStat = ['S', '1', '0', '0', '0', '0', '0', '0', '0', '0', '0', String(fakeTicks), '0'].join(' ');
+        writeFileSync(statFile, `${commandPid} (quiet-command) ${advancingStat}\n`);
+      }, 20);
+      const out: string[] = [];
+      const result = await waitWorkerCheck(id, root, 2_000, { stallMs: 200, pollMs: 5, write: (line) => out.push(line) });
+      clearInterval(cpuProgress);
+      const record = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
+      const log = readFileSync(join(root, originalLog), 'utf8');
+      expect(result, `${out.join('')}\n${log}`).toBe(0);
+      expect(out.join('')).not.toContain('infrastructure failure');
+      expect(record.reruns).toBeUndefined();
+      expect(readFileSync(join(root, record.log), 'utf8')).toContain('worker-check: running, 1 CPU seconds');
+      await untilRecorded(() => !existsSync(`/proc/${commandPid}`));
+      const runnerPid = record.runnerPid as number;
+      await untilRecorded(() => {
+        try {
+          return readFileSync(`/proc/${runnerPid}/stat`, 'utf8').split(') ')[1]!.startsWith('Z');
+        } catch {
+          return true;
+        }
+      });
+    });
+  } finally {
+    if (oldInterval === undefined) delete process.env.REZICS_CHECK_PROGRESS_INTERVAL_MS;
+    else process.env.REZICS_CHECK_PROGRESS_INTERVAL_MS = oldInterval;
+    if (oldProcRoot === undefined) delete process.env.REZICS_CHECK_PROC_ROOT;
+    else process.env.REZICS_CHECK_PROC_ROOT = oldProcRoot;
+    if (oldPidFile === undefined) delete process.env.REZICS_CHECK_PROGRESS_PID_FILE;
+    else process.env.REZICS_CHECK_PROGRESS_PID_FILE = oldPidFile;
+  }
+});
+
+test('a quiet local command with no CPU progress is stopped by the stall rule', async () => {
+  const root = recoveryFixture();
+  await withQuietAdmission(async () => {
+    const id = startWorkerCheck(['bun', '-e', 'setInterval(() => {}, 1000)'], root);
+    const out: string[] = [];
+    expect(await waitWorkerCheck(id, root, 2_000, { stallMs: 50, rerunStallMs: 50, pollMs: 5, write: (line) => out.push(line) })).toBe(1);
+    expect(out.join('')).toContain('infrastructure failure (log did not grow for 50 ms)');
+    expect(readFileSync(join(root, JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).log), 'utf8')).not.toContain('worker-check: running');
   });
 });
 

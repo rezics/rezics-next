@@ -28,8 +28,8 @@ import {
   installedPackageCacheCheck,
   returnsProbe,
   readHosts,
-  selectSlotClass,
   runScript,
+  selectSlotClass,
   workspaceFiles,
 } from './remote-check.ts';
 
@@ -3036,7 +3036,7 @@ function runFixture(systemdMode: 'systemd-259' | 'old' = 'systemd-259') {
   mkdirSync(pinnedBunDirectory);
   const source = `#!${process.execPath}
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 const directory = process.env.RUN_FIXTURE!;
 const command = process.argv[1]!.split('/').at(-1);
 const args = process.argv.slice(2);
@@ -3079,6 +3079,18 @@ if (command === 'systemd-run') {
   if (args[0] === 'is-active') process.exit(args.at(-1) === 'rezics-check-active-run.scope' ? 0 : 3);
 } else if (command === 'date') {
   console.log(args[0] === '+%s' ? (state.now ?? Math.floor(Date.now() / 1000)) : state.ticks++ * 1000000000);
+} else if (command === 'sleep') {
+  appendFileSync(directory + '/sleep-pids', process.pid + '\\n');
+  const increment = Number(process.env.PROGRESS_INCREMENT ?? 0);
+  if (increment) {
+    const path = cgroup(process.env.REZICS_CHECK_SLICE!);
+    const previous = Number(readFileSync(path + '/cpu.stat', 'utf8').match(/usage_usec (\\d+)/)![1]);
+    writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + increment) + '\\n');
+  }
+  const waiting = spawn('/bin/sleep', args, { stdio: 'ignore' });
+  process.on('SIGTERM', () => waiting.kill('SIGTERM'));
+  process.on('SIGINT', () => waiting.kill('SIGINT'));
+  process.exit(await new Promise<number>((resolve) => waiting.on('exit', (code) => resolve(code ?? 0))));
 } else if (command === 'bun') {
   process.exit(args[0] === '--eval' ? 0 : Number(process.env.INSTALL_EXIT ?? 0));
 } else if (command === 'docker') {
@@ -3105,7 +3117,7 @@ if (command === 'systemd-run') {
 }
 writeFileSync(stateFile, JSON.stringify(state));
 `;
-  for (const command of ['systemd-run', 'systemctl', 'docker', 'date']) {
+  for (const command of ['systemd-run', 'systemctl', 'docker', 'date', 'sleep']) {
     writeFileSync(join(bin, command), source);
     chmodSync(join(bin, command), 0o755);
   }
@@ -3195,6 +3207,49 @@ test('the run checks installed packages after the command and before recording i
   expect(command).toBeGreaterThan(marker);
   expect(packageCheck).toBeGreaterThan(command);
   expect(exitStatus).toBeGreaterThan(packageCheck);
+});
+
+test('a quiet remote command reports CPU progress and the progress loop exits with it', () => {
+  const fixture = runFixture();
+  const script = runScript('remote-progress', '/srv/rezics-check/runs/remote-progress', '.', ['/bin/sleep', '0.35'], 'check-a', 10);
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toMatch(/remote-check: running on check-a, \d+ CPU seconds/);
+  const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
+  expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
+});
+
+test('a quiet remote command without CPU progress writes no progress line', () => {
+  const fixture = runFixture();
+  const script = runScript('remote-idle', '/srv/rezics-check/runs/remote-idle', '.', ['/bin/sleep', '0.3'], 'check-a', 10);
+  const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'check-a' });
+  expect(result.status).toBe(0);
+  expect(result.stderr).not.toContain('remote-check: running on check-a');
+  const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
+  expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
+});
+
+test('remote CPU reports accumulate subsecond work across intervals', () => {
+  const fixture = runFixture();
+  // End after six completed samples, independent of process startup time on a loaded host.
+  const command = ['sh', '-c', 'until [ -f "$1" ] && [ "$(wc -l < "$1")" -ge 7 ]; do /bin/sleep 0.005; done', 'progress-command', '/srv/rezics-check/sleep-pids'];
+  const script = runScript('remote-fractional', '/srv/rezics-check/runs/remote-fractional', '.', command, 'check-a', 10);
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'check-a' });
+  expect(result.status, result.stderr).toBe(0);
+  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)].map((match) => Number(match[1]));
+  expect(reports.length).toBeGreaterThanOrEqual(2);
+  expect(reports.every((seconds, index) => index === 0 || seconds > reports[index - 1]!)).toBe(true);
+  expect(result.stderr.lastIndexOf('remote-check: running on')).toBeLessThan(result.stderr.indexOf('remote-check: command'));
+});
+
+test('a signal to the remote command wrapper reaps its progress loop and sleeper', () => {
+  const fixture = runFixture();
+  const script = runScript('remote-signal', '/srv/rezics-check/runs/remote-signal', '.', ['sh', '-c', '/bin/sleep 0.15; kill -TERM "$PPID"; exec /bin/sleep 0.5'], 'check-a', 10);
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
+  expect(result.status, result.stderr).toBe(143);
+  const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
+  expect(pids.length).toBeGreaterThan(0);
+  expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
 });
 
 test('each run and every container it starts share one run slice', async () => {
