@@ -195,3 +195,11 @@ bun scripts/worker-check.ts --run -- test -s docs/research/imports-audit/cover-r
 It exited 1 with `Invalid check id: --` before creating a check ID or running the command.
 The current CLI still interprets the separator as an existing record ID in its `--run` branch.
 This is a fresh submission-tool failure; historical native evidence above is not a current execution.
+
+At committed revision `e4b505d879`, the mandated focused native-file and affected kernel typecheck
+launches were the two retries. Both exited 1 with the identical `Invalid check id: --` error before
+creating any check ID. The initial attempt and two retries are exhausted. No check was queued or
+executed, and no new assertion count, native command or receipt is claimed. The test's frozen SHA-256
+remains `751500e9c56f1b840f5f149d56b511537638867388976bcb245f55bedd72d171`.
+Only this report changed; the witness-only contract's prohibition on helper/product edits is preserved.
+Current acceptance validation remains blocked by the required check submission tool.
