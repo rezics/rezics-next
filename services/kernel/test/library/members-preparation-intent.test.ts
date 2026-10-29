@@ -178,7 +178,7 @@ test('native insufficient scope and pre-suspension bearer retain existing HTTP d
   const unscoped = await native.personas.unscoped(
     'collection:read',
     { route: routeOf(f.collectionId)!, id: f.collectionId },
-    native.personas.alice,
+    native.personas.staff,
   );
   const denied = await capture(native.db, async () => {
     const scoped = await native.actor(unscoped);
