@@ -2315,18 +2315,18 @@ test('containers started on a check host run under its capped cgroup slice', () 
 });
 
 test('a remote run takes all requested slots in one session on one host and releases them all', async () => {
-  // b and a have one resource-backed slot each; c has enough resources after three failed takes.
+  // a and b each have room for one legacy slot reservation; c is reachable after three injected take failures.
   const { env, events } = scenario({
-    a: { available: 4.5e9, slots: 4 },
-    b: { available: 4.5e9, slots: 4 },
-    c: { available: 30e9, slots: 4, busy: 3 },
+    a: { available: 4.5e9, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, slots: 4 },
+    b: { available: 4.5e9, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, slots: 4 },
+    c: { available: 30e9, memoryMax: 30 * 2 ** 30, memoryMaxGiB: 30, slots: 4, busy: 3 },
   });
   const result = await remote(env, workspace(), ['bun', 'test'], ['--slots', '2']);
   expect(result.code).toBe(0);
 
   const seen = events();
   const on = (host: string) => seen.filter((event) => event.address === `ops@${host}.test`);
-  // b and a cannot serve this run; c wins by available memory and takes both slots in one SSH session.
+  // b and a cannot serve this run; c takes both slots in one SSH session after its injected busy responses.
   expect(on('b').filter((event) => event.kind === 'slot')).toEqual([]);
   expect(on('c').filter((event) => event.kind === 'reservation')).toHaveLength(0);
   expect(on('c').filter((event) => event.kind === 'slot' && event.granted === false)).toHaveLength(3);
@@ -2360,12 +2360,12 @@ test('a multi-slot reservation blocks new runs when existing work already fills 
     a: { available: 0, slots: 4, cpuQuotaPercent: 800 },
     b: {
       available: 20e9,
+      memoryMax: 6 * 2 ** 30,
+      memoryMaxGiB: 6,
       slots: 4,
       cpuQuotaPercent: 800,
       hang: true,
       hangRuns: 1,
-      memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroomAfterHang: 20e9,
     },
   });
   const waitFile = join(env.FAKE_DIR!, 'multi-wait-ms');
@@ -2413,8 +2413,7 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
   const { env, events } = scenario({
     b: {
       available: 20e9,
-      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroomOnHang: 20e9,
+      memoryHeadroom: 20e9,
       slots: 6,
       cpuQuotaPercent: 1200,
       hang: true,
@@ -2425,51 +2424,34 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
   let multi: ReturnType<typeof startRemote> | undefined;
   const singles: ReturnType<typeof startRemote>[] = [];
   try {
+    for (let index = 0; index < 4; index += 1) {
+      singles.push(startRemote(env, workspaceDirectory, ['sh', '-c', `echo single-${index}`]));
+    }
+    await waitFor(() => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 4);
     multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
     await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
-    const holdMultiGrant = join(env.FAKE_DIR!, 'ops_b_test.hold-multi-grant');
-    // Keep the waiter pending while single-slot runs fill only its unreserved remainder.
-    writeFileSync(holdMultiGrant, 'hold');
-    for (let index = 0; index < 4; index += 1) {
-      singles.push(
-        startRemote(
-          { ...env, GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, `remainder-${index}-wait-ms`) },
-          workspaceDirectory,
-          ['sh', '-c', `echo single-${index}`],
-        ),
-      );
-    }
-    await waitFor(
-      () => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 3,
+    const blockedSingle = startRemote(
+      { ...env, GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, 'blocked-single-wait-ms') },
+      workspaceDirectory,
+      ['sh', '-c', 'echo blocked-single'],
     );
-    await waitFor(() => singles.some((_, index) => existsSync(join(env.FAKE_DIR!, `remainder-${index}-wait-ms`))));
-    const whileWaiting = events();
-    expect(whileWaiting.some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
-      false,
-    );
-    expect(whileWaiting.some((event) => event.kind === 'multi-marker-release')).toBe(false);
-    const admittedSingles = whileWaiting.filter((event) => event.kind === 'slot' && event.granted);
-    expect(admittedSingles).toHaveLength(3);
-    expect(
-      admittedSingles.every((event) => String(event.script).includes('# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT 3')),
-    ).toBe(true);
+    singles.push(blockedSingle);
+    await waitFor(() => existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')));
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(false);
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(false);
 
-    rmSync(holdMultiGrant, { force: true });
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
-    );
-
-    const started = events().filter((event) => event.kind === 'run' && event.address === 'ops@b.test');
-    expect(started.filter((event) => /echo single-/.test(String(event.script)))).toHaveLength(3);
-    expect(started.filter((event) => String(event.script).includes('echo multi-run'))).toHaveLength(1);
-    expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(5);
-    expect(multi.child.exitCode).toBeNull();
+    singles[0]!.child.kill('SIGTERM');
+    await singles[0]!.child.exited;
+    singles[1]!.child.kill('SIGTERM');
+    await singles[1]!.child.exited;
+    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')));
+    expect(await multi.child.exited).toBe(0);
+    expect(events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script)))).toHaveLength(4);
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(false);
   } finally {
     for (const run of [...singles, multi]) {
       if (!run) continue;
-      try {
-        run.child.kill('SIGTERM');
-      } catch {}
+      try { run.child.kill('SIGTERM'); } catch {}
     }
     for (const run of [...singles, multi]) {
       if (!run) continue;
@@ -2483,11 +2465,11 @@ test('a multi-slot waiter that stops waiting releases its reservation', async ()
   const { env, events } = scenario({
     a: {
       available: 20e9,
+      memoryMax: 6 * 2 ** 30,
+      memoryMaxGiB: 6,
       slots: 4,
       hang: true,
       hangRuns: 1,
-      memoryHeadroomOnHang: CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroomAfterHang: 20e9,
     },
   });
   const waitFile = join(env.FAKE_DIR!, 'multi-wait-ms');
