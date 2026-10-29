@@ -223,7 +223,7 @@ export async function openDisappearanceCli() {
         );
         expect(subjects.rows).toEqual([{ subject_id: id }]);
         const rows = await runtime.database.admin.query(
-          'SELECT revision,transaction_id,kind FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100',
+          'SELECT revision,recorded_transaction_id,kind FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100',
           [routeOf(id), id],
         );
         expect(rows.rows.length).toBeLessThan(100);
