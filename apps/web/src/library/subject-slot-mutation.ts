@@ -5,7 +5,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { changePersonalLibraryEntry, removePersonalLibraryEntry } from './entries-read';
 import { libraryEntryStatesWrite, type LibraryEntryStateWrite } from './subject-slot';
-import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from './subject-slot';
+import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectSlotEntry } from './subject-slot';
 
 const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 

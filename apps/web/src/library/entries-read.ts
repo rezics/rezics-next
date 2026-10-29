@@ -128,7 +128,7 @@ type IncarnationLibraryClient = {
   libraryEntries: (params: { subjectId: string }) => {
     put: (
       body: { state: LibraryEntryStateWrite; revision?: number; incarnationId?: string },
-      options: { headers: { authorization: string; 'idempotency-key': string } },
+      options: { headers: { 'idempotency-key': string } },
     ) => Promise<{
       status?: number;
       error?: { status?: number; value?: unknown } | null;
@@ -138,7 +138,7 @@ type IncarnationLibraryClient = {
       body: undefined,
       options: {
         query: { revision: number; incarnationId?: string };
-        headers: { authorization: string; 'idempotency-key': string };
+        headers: { 'idempotency-key': string };
       },
     ) => Promise<{ status?: number; error?: { status?: number; value?: unknown } | null }>;
   };
@@ -258,7 +258,7 @@ export async function changePersonalLibraryEntry(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
-    const entryClient = (client as unknown as IncarnationLibraryClient)
+    const result = await (client as unknown as IncarnationLibraryClient)
       .libraryEntries({ subjectId: input.subjectId })
       .put(
         {
