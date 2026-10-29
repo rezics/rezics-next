@@ -39,7 +39,8 @@ export async function deletePersona(
   const actingHuman = input.actingHuman ?? persona;
   const client = await options.auth.authPool.query<{ client_id: string; scopes: string[] }>(
     `SELECT c.client_id,c.scopes FROM auth_consent consent JOIN auth_client c USING(client_id)
-     WHERE consent.account_id=$1 ORDER BY c.client_id LIMIT 1`,
+     WHERE consent.account_id=$1 AND 'account:delete'=ANY(consent.scopes)
+       AND 'account:delete'=ANY(c.scopes) ORDER BY c.client_id LIMIT 1`,
     [actingHuman.accountId],
   );
   const clientId = client.rows[0]?.client_id;
