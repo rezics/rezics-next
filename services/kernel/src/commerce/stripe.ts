@@ -98,7 +98,8 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
 
   async function call<T>(requests: number, input: unknown, operation: (stripe: Stripe) => Promise<T>): Promise<T> {
     try {
-      const transport = stripeTransport({ timeoutMs, retries, requests, signal: config.signal });
+      const signal = config.signal;
+      const transport = stripeTransport({ timeoutMs, retries, requests, ...(signal === undefined ? {} : { signal }) });
       return await transport.run(async () => {
         transport.inspectInput({ input, apiKey: config.apiKey, host: config.host });
         // One SDK instance binds the supported fetch hook to this physical operation, including retries/pages.

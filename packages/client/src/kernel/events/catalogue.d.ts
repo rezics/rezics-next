@@ -678,6 +678,18 @@ declare const productEventTypes: {
     readonly 'com.rezics.community.account-records.erased.v1': Type.TObject<{
         accountId: Type.TString;
     }>;
+    readonly 'com.rezics.community.revision-locator.indexed.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
+    readonly 'com.rezics.community.revision-locators.removed.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
+    readonly 'com.rezics.community.revisions.erased.v1': Type.TObject<{
+        accountId: Type.TString;
+        found: Type.TInteger;
+    }>;
     readonly 'com.rezics.community.space.created.v1': Type.TObject<{
         spaceId: Type.TString;
         revisionId: Type.TString;

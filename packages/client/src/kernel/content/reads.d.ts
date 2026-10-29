@@ -82,6 +82,9 @@ export declare function readThread(dependencies: ContentReadDependencies, thread
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
  * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
 export declare function readSubjectThread(dependencies: ContentReadDependencies, threadId: ThreadId, subjectId: string, placeId: string, context: ReadContext): Promise<Anchored<ThreadView | null>>;
+/** Send-time disclosure uses the ordinary read resources and current account standing,
+ * without constructing a bearer principal. Release every observation before Access checks. */
+export declare function postReadableByAccount(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, accountId: string, threadId: string, postId: string, context: Pick<ReadContext, 'deadline'>): Promise<boolean>;
 export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<PostEntry | null>>;
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<RevisionView>>;
