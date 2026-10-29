@@ -149,3 +149,7 @@ Canary `cli-credentials-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expe
 wrapper proves 9 child passes. No failures. Receipt `7245f589-abf2-48c1-8e37-6457f72d761a`;
 measurement log `.temp/goal/checks/worker-check-2026-10-29T05-01-34.952Z-f2fd68fa.log`.
 The credential pair is complete. Next: canary `cli-outcomes`, then previous; remaining two pairs UNEXECUTED.
+
+Canary `cli-outcomes` completed exit 0: outer 1 pass, 0 fail, 5 expectations, proving 13 child passes.
+No failures. Receipt `73164a74-d59b-4372-8e14-ab1c9662ad3b`; measurement log
+`.temp/goal/checks/worker-check-2026-10-29T05-01-45.049Z-3af3a6d5.log`. Next: previous half.
