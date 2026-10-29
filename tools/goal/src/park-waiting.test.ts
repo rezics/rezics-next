@@ -129,15 +129,16 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
       branch: 'worker/test',
       brief: { markdown: 'Check the change.', kind: 'implementation' },
     } as unknown as Task;
-    // The protocol is explicit even when this old fixture has no check runner file.
+    // A base without the check runner (main, where control-plane tasks start) runs its checks directly.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(bare).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(bare).toContain('{"status":"waiting","checks":["<id>",...]}');
-    expect(bare).toContain('Never poll');
+    expect(bare).toContain('this base has no check runner');
+    expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(prompt).toBe(bare);
+    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
+    expect(prompt).toContain('{"status":"waiting","checks":["<id>",...]}');
+    expect(prompt).toContain('Never poll');
   } finally {
     h.dispose();
   }
