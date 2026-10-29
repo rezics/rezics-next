@@ -505,6 +505,22 @@ test('landing priority: workers drop landing and report it once, and other value
   expect(invalid.events()).toEqual([]);
 }, 30_000);
 
+test('critical priority: worker environments preserve critical through stackRun and check entry points', async () => {
+  const { env, events } = scenario({ a: { available: 20e9 } });
+  const result = await stack({ ...env, REMOTE_CHECK_PRIORITY: 'critical', GOAL_TASK_ID: 'worker' }, ['true']);
+  expect(result.code).toBe(0);
+  expect(result.stderr).toContain('stack-run: the run priority critical on a');
+  expect(events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_PRIORITY critical',
+  );
+  const kernel = readFileSync(join(repository, 'services/kernel/scripts/check.ts'), 'utf8');
+  const auth = readFileSync(join(repository, 'services/auth/scripts/check.ts'), 'utf8');
+  const web = readFileSync(join(repository, 'apps/web/scripts/check.ts'), 'utf8');
+  expect(kernel).toContain('    env,\n  );');
+  expect(auth).toContain('process.exitCode = await stackRun(');
+  expect(web).toContain('options.env ?? process.env');
+});
+
 test('a worker does not run locally after a reachable host fails during workspace sync', async () => {
   const { env, lease, events } = scenario({ a: { available: 30e9 } });
   const result = await stack({ ...env, GOAL_TASK_ID: 'worker', FAKE_RSYNC_FAIL: '1' }, local);

@@ -4116,3 +4116,17 @@ test('landing priority: invalid values are usage errors and direct CLI admission
   expect(runScript).toContain('remote-check: run priority %s on %s');
   expect(runScript).toContain('landing a');
 });
+
+test('critical priority: critical direct runs carry their class through admission and records', async () => {
+  const valid = scenario({ a: { available: 8e9 } });
+  const result = await remote({ ...valid.env, REMOTE_CHECK_PRIORITY: 'critical' }, workspace());
+  expect(result.code).toBe(0);
+  expect(valid.events().find((event) => event.kind === 'slot' && event.granted)?.script).toContain(
+    '# REMOTE_CHECK_PRIORITY critical',
+  );
+  expect(result.stderr).toContain('run priority critical on a');
+  const invalid = scenario({ a: { available: 8e9 } });
+  const refused = await remote({ ...invalid.env, REMOTE_CHECK_PRIORITY: 'urgent' }, workspace());
+  expect(refused.code).toBe(1);
+  expect(refused.stderr).toContain('REMOTE_CHECK_PRIORITY must be landing or critical');
+});
