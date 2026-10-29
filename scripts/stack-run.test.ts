@@ -80,7 +80,9 @@ if (script.includes('MemAvailable')) {
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
   log({ kind: 'base' });
   console.log('BASE -\\nAGE -\\nZSTD 0');
-} else if (script.includes('REMOTE_CHECK_SLOT_') || script.includes('flock')) {
+} else if (script.includes('REMOTE_CHECK_BASE_REFRESH')) {
+  log({ kind: 'base-refresh' });
+} else if (script.includes('REMOTE_CHECK_SLOT_')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
