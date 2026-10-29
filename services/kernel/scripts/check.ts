@@ -878,7 +878,8 @@ async function main(): Promise<void> {
       partial: plan.files !== null,
       createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
       dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
-      environment: (database) => fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
+      environment: (database) =>
+        fileEnvironment(env, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
       onFileComplete: (outcome, timing) => {
         if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
         else outputByFile.delete(outcome.file);
