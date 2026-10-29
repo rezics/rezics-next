@@ -35,7 +35,7 @@ const filter = { type: { in: ['schema:Book'] } };
 const oldRequest = { text: 'Boundedbaseline', sort: 'name' as const, limit: 1 };
 const deployments: { prefix: string; runner: Awaited<ReturnType<typeof startSearchIndexing>> }[] = [];
 
-type Page = { subjects: { id: string; labels: Record<string, string> }[]; next: string | null; total: unknown };
+type Page = { subjects: { id: string; labels: Record<string, string> }[]; next: string | null };
 async function eventually(check: () => Promise<boolean>) {
   const deadline = Date.now() + 30_000;
   while (!(await check())) {
@@ -241,7 +241,8 @@ async function boundedTraversal(prefix: string, generation: number) {
     let rounds = 0;
     do {
       const result = await page(application, { filter, sort, limit: 1, ...(cursor ? { cursor } : {}) });
-      expect(result.total).toEqual({ value: subjects.length, relation: 'exact' });
+      for (const field of ['total', 'count', 'counts', 'lower_bound', 'estimate'])
+        expect(result).not.toHaveProperty(field);
       seen.push(...result.subjects.map(({ id }) => id));
       cursor = result.next ?? undefined;
       if (cursor) {
