@@ -62,3 +62,41 @@ test('git in a test directory that is not a repository fails instead of reaching
     t.close();
   }
 });
+
+test('a test that runs git init under bisect run cannot reinitialise the repository that started it', () => {
+  const t = temporaryDirectory();
+  try {
+    const repository = join(t.path, 'repository');
+    mkdirSync(repository);
+    expect(spawnSync('git', ['init', '-q', repository]).status).toBe(0);
+    writeFileSync(
+      join(t.path, 'bunfig.toml'),
+      `[test]\npreload = [${JSON.stringify(join(import.meta.dir, 'test-environment.ts'))}]\n`,
+    );
+    writeFileSync(
+      join(t.path, 'init.test.ts'),
+      `
+      import { expect, test } from 'bun:test';
+      import { spawnSync } from 'node:child_process';
+      import { mkdtempSync } from 'node:fs';
+      import { join } from 'node:path';
+      test('git init in a scratch directory starts a new repository', () => {
+        expect(process.env).not.toHaveProperty('GIT_DIR');
+        const scratch = mkdtempSync(join(${JSON.stringify(t.path)}, 'scratch-'));
+        expect(spawnSync('git', ['init', '-q'], { cwd: scratch }).status).toBe(0);
+      });
+    `,
+    );
+    // Git exports these to the commands that bisect run, rebase --exec and hooks start.
+    const result = spawnSync(process.execPath, ['test', './init.test.ts'], {
+      cwd: t.path,
+      env: { ...process.env, GIT_DIR: join(repository, '.git'), GIT_WORK_TREE: repository, GIT_PREFIX: '' },
+      encoding: 'utf8',
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const bare = spawnSync('git', ['config', 'core.bare'], { cwd: repository, encoding: 'utf8' });
+    expect(bare.stdout.trim()).toBe('false');
+  } finally {
+    t.close();
+  }
+});
