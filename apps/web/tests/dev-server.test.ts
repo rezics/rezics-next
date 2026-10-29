@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
-import ts from 'typescript';
 import { startDevServer, type DevServerOptions } from './support/dev-server.ts';
 
 const root = join(import.meta.dir, '../../..');
@@ -210,26 +209,40 @@ test('hydration and search SEO use the shared starter and preserve their startup
   }
 });
 
+function testModuleImports(source: string): string[] {
+  // Keep type-only imports visible to the scanner as well as runtime imports.
+  const imports = source
+    .replace(/\bimport\s+type(?=\s|\{)/g, 'import')
+    .replace(/\bexport\s+type(?=\s*[{*])/g, 'export')
+    .replace(
+      /(\b(?:import|export)\s*\{)([^}]*)(\}\s*from)/g,
+      (_, before: string, names: string, after: string) => before + names.replace(/\btype\s+/g, '') + after,
+    );
+  return new Bun.Transpiler({ loader: 'tsx' })
+    .scanImports(imports)
+    .map(({ path }) => path)
+    .filter((path) => /\.test(?:\.ts)?$/.test(path));
+}
+
+test('the source scan sees static, type-only and dynamic imports without treating strings as imports', () => {
+  expect(
+    testModuleImports(`
+    import './static.test';
+    import type { Fixture } from './types.test.ts';
+    import { type Other } from './inline.test.ts';
+    export type { Reused } from './exported.test.ts';
+    const lazy = import(/* a comment */ './lazy.test.ts');
+    const text = "import './not-an-import.test.ts'";
+  `).sort(),
+  ).toEqual(['./exported.test.ts', './inline.test.ts', './lazy.test.ts', './static.test', './types.test.ts']);
+});
+
 test('no web or UI test imports another test module, statically or with import()', async () => {
   const violations: string[] = [];
   for (const directory of ['apps/web/tests', 'packages/ui/tests']) {
     for (const file of new Bun.Glob('**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}').scanSync({ cwd: join(root, directory) })) {
-      const source = ts.createSourceFile(
-        file,
-        await Bun.file(join(root, directory, file)).text(),
-        ts.ScriptTarget.Latest,
-        true,
-      );
-      function inspect(node: ts.Node) {
-        let specifier: ts.Expression | undefined;
-        if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) specifier = node.moduleSpecifier;
-        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
-          specifier = node.arguments[0];
-        if (specifier && ts.isStringLiteralLike(specifier) && /\.test(?:\.ts)?$/.test(specifier.text))
-          violations.push(`${directory}/${file}: ${specifier.text}`);
-        ts.forEachChild(node, inspect);
-      }
-      inspect(source);
+      const source = await Bun.file(join(root, directory, file)).text();
+      for (const specifier of testModuleImports(source)) violations.push(`${directory}/${file}: ${specifier}`);
     }
   }
   expect(violations).toEqual([]);
