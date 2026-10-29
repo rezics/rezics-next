@@ -534,7 +534,7 @@ function MemberRowControls({
         ) : null}
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="block min-w-48 flex-1">
+        <label className="block min-w-0 flex-1">
           {m.library_member_note()}
           <textarea
             className={fieldClass}
@@ -670,7 +670,7 @@ function MemberRow({
             ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="block min-w-0 flex-1">
+            <label className="block min-w-48 flex-1">
               {m.library_member_note()}
               <textarea
                 className={fieldClass}
