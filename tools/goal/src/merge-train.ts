@@ -1351,7 +1351,7 @@ export class MergeTrain {
     let added = false;
     const runGate = o.runGate ?? gateRunner();
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
-    const recoverAlreadyIntegrated = (): boolean => {
+    const recoverAlreadyIntegrated = async (): Promise<boolean> => {
       if (!entry.candidate) return false;
       try {
         git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
@@ -1367,7 +1367,14 @@ export class MergeTrain {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
-        this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        await this.mergeStabilizedCommitIntoDev(
+          entry.candidate,
+          trainTree,
+          request.taskId,
+          recorded.manager,
+          logPath,
+          runGate,
+        );
       }
       return true;
     };
@@ -1375,7 +1382,7 @@ export class MergeTrain {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      if (recoverAlreadyIntegrated()) return finish();
+      if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       if (workspace && sharedStore) {
         sharedSource = tip;
