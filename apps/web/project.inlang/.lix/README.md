@@ -26,11 +26,11 @@ Applications and agents can query Lix programmatically with the
 For example, open a filesystem-backed repository and list its files:
 
 ```js
-import { openLix } from "@lix-js/sdk";
-import { FilesystemStorage } from "@lix-js/storage-filesystem";
+import { openLix } from '@lix-js/sdk';
+import { FilesystemStorage } from '@lix-js/storage-filesystem';
 
-const lix = await openLix({ storage: new FilesystemStorage({ path: "." }) });
-const files = await lix.execute("SELECT path FROM lix_file ORDER BY path");
+const lix = await openLix({ storage: new FilesystemStorage({ path: '.' }) });
+const files = await lix.execute('SELECT path FROM lix_file ORDER BY path');
 console.log(files.rows.map((row) => row.path));
 await lix.close();
 ```

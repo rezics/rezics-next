@@ -101,7 +101,13 @@ The capture records exactly one PUT with real status 200 and returned mean 8.1,
 count 20, source date/licence/attribution intact, and a persisted receipt:
 
 ```json
-{"partition_no":1210,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-58058c0cfe2a","command_kind":"rating.source_statistic.write","idempotency_key":"vndb:v123:d677da99d170a365b64452e4872ca72bcd3f46a0ba1878d157fcaf7c6bb788fd"}
+{
+  "partition_no": 1210,
+  "principal_kind": "account",
+  "principal_id": "764ada75-62ac-8c41-a37c-58058c0cfe2a",
+  "command_kind": "rating.source_statistic.write",
+  "idempotency_key": "vndb:v123:d677da99d170a365b64452e4872ca72bcd3f46a0ba1878d157fcaf7c6bb788fd"
+}
 ```
 
 The ordinary Importer's empty-plan branch at
@@ -118,7 +124,13 @@ captured one actual status-200 statistic response with mean 7.35 and marked
 `responseLost: true` only after finding the persisted receipt:
 
 ```json
-{"partition_no":3920,"principal_kind":"account","principal_id":"764ada75-62ac-8c41-a37c-44288c0cfe2a","command_kind":"rating.source_statistic.write","idempotency_key":"vndb:v123:c31277a492cb1976a61d6382473dfdb48d29a5dd8a41b9d3af1c5deabe330c57"}
+{
+  "partition_no": 3920,
+  "principal_kind": "account",
+  "principal_id": "764ada75-62ac-8c41-a37c-44288c0cfe2a",
+  "command_kind": "rating.source_statistic.write",
+  "idempotency_key": "vndb:v123:c31277a492cb1976a61d6382473dfdb48d29a5dd8a41b9d3af1c5deabe330c57"
+}
 ```
 
 No second PUT occurred; the run returned the same unresolved-work diagnostic.
