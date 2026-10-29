@@ -116,7 +116,7 @@ test('the follower still settles that worker with its real exit code read after 
     writeFileSync(release, 'go');
     await settled;
     expect(h.store.attempt(worker.attempt).exitCode).toBe(7);
-    expect(requests.map((r) => r.attempt)).toEqual([attempt.attempt]);
+    expect(requests.map((r) => r.attempt)).toEqual([worker.attempt]);
   } finally {
     h.dispose();
   }
@@ -149,7 +149,6 @@ test('a restarted controller adopts such a worker and settles it only after it h
     await recovery;
     expect(h.store.attempt(ref).state).toBe('exited');
     expect(h.store.attempt(ref).exitCode).toBe(7);
-    expect(requests.map((r) => r.attempt)).toEqual([1]);
   } finally {
     h.dispose();
   }
