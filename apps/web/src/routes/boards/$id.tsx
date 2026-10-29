@@ -7,7 +7,7 @@ import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { boardPageHead } from '../../threads/thread-head';
-import { rememberThreadSlug, threadSlug, threadTitle } from '../../threads/thread-href';
+import { rememberThreadSlug, threadLocation, threadSlug, threadTitle } from '../../threads/thread-href';
 import { boardPageQuery } from '../../threads/thread-queries';
 import { threadActivity } from '../../threads/activity';
 import { SignInPrompt } from '../../threads/composer';
