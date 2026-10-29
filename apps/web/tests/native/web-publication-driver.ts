@@ -46,6 +46,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
   let closed: Promise<void> | undefined;
   const request: WebPublicationDriver['request'] = (url, persona, headers) => stack.request(url, persona, headers);
   const provision = async (data: typeof import('../../../../specs/fixtures/web-publication.json')) => {
+    const started = performance.now();
     assertReleasedDefinitions();
     const active = await stack.kernel('/v1/definitions/active');
     if (!active.ok) throw new Error(`Could not read released definition: ${active.status} ${await active.text()}`);
@@ -67,8 +68,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       }
       entries.push({ key: `${view}-withheld`, type: 'schema:Book', label: `${view} withheld`, descriptions: undefined });
     }
-    for (let start = 0; start < entries.length; start += 100) {
-      const batch = entries.slice(start, start + 100);
+    const batches = Array.from({ length: Math.ceil(entries.length / 100) }, (_, index) => entries.slice(index * 100, index * 100 + 100));
+    await Promise.all(batches.map(async (batch) => {
       const commands = batch.map(({ key, type, label, descriptions }) => ({
         op: 'create',
         key,
@@ -96,7 +97,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           throw new Error(`Could not create fixture subject ${item.key}: API status ${item.status}`);
         created.set(item.key, { id: item.value.id, label: entry.label, type: entry.type });
       }
-    }
+    }));
 
     const urlFor = (key: string, locale = 'en') => {
       const subject = created.get(key);
@@ -135,6 +136,9 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
       sitemap,
     };
+    console.info(
+      `web-publication-driver-growth: setup=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
+    );
     return fixture;
   };
 

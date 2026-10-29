@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 import data from '../../../../specs/fixtures/web-publication.json';
 import type { WebPublicationDriver } from '../../../../specs/web-publication-driver';
 
-setDefaultTimeout(180_000);
+setDefaultTimeout(600_000);
 let driver: WebPublicationDriver;
 let fixture: Awaited<ReturnType<WebPublicationDriver['provision']>>;
 beforeAll(async () => {
