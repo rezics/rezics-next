@@ -206,17 +206,7 @@
       }
     ]
   },
-  "views": [
-    "overview",
-    "editions",
-    "characters",
-    "credits",
-    "relations",
-    "reviews",
-    "discussion",
-    "lists",
-    "details"
-  ],
+  "views": ["overview", "editions", "characters", "credits", "relations", "reviews", "discussion", "lists", "details"],
   "reads": {
     "r0": {
       "status": 200,
@@ -245,10 +235,7 @@
             "es": "novela de Natsume Sōseki publicada en 1914"
           },
           "aliases": {
-            "ja": [
-              "こゝろ",
-              "心"
-            ]
+            "ja": ["こゝろ", "心"]
           },
           "statements": {
             "schema:author": [
